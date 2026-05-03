@@ -149,26 +149,38 @@ export function TripWorkspacePage() {
     )
   }
 
+  const isMapView = view === 'map'
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <header className="shrink-0 space-y-3">
+    <div
+      className={`flex h-full min-h-0 flex-col overflow-hidden ${
+        isMapView ? 'gap-2 pb-0' : 'gap-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+      }`}
+    >
+      <header className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回首页"
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            className={`${isMapView ? 'size-9' : 'size-10'} flex items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]`}
             onClick={() => navigateTo('home')}
             type="button"
           >
-            <ArrowLeft className="size-5" />
+            <ArrowLeft className={isMapView ? 'size-4' : 'size-5'} />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-sky-600">{trip.destination || '目的地未定'}</p>
-            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">{trip.title}</h1>
-            <p className="truncate text-xs text-slate-500">{formatDateRange(trip.startDate, trip.endDate)}</p>
+            <p className="truncate text-xs font-semibold text-sky-600">
+              {isMapView && selectedDay ? formatShortWorkspaceDate(selectedDay.date) : trip.destination || '目的地未定'}
+            </p>
+            <h1 className={`truncate font-semibold leading-tight text-slate-950 ${isMapView ? 'text-base' : 'text-xl'}`}>
+              {trip.title}
+            </h1>
+            <p className="truncate text-xs text-slate-500">
+              {isMapView && selectedDay ? selectedDay.title : formatDateRange(trip.startDate, trip.endDate)}
+            </p>
           </div>
           <TripMoreMenu tripId={trip.id} />
         </div>
-        <TripCover trip={trip} variant="compact" />
+        {!isMapView ? <TripCover trip={trip} variant="compact" /> : null}
       </header>
 
       {days.length === 0 ? (
@@ -197,11 +209,18 @@ export function TripWorkspacePage() {
         </div>
       ) : selectedDay ? (
         <>
-          <div className="shrink-0 space-y-3">
-            <DaySelector days={days} onSelectDay={handleSelectDay} selectedDayId={selectedDay.id} />
-            <div className="grid grid-cols-2 rounded-2xl bg-white p-1.5 ring-1 ring-slate-200/80">
-              <ViewButton active={view === 'schedule'} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} />
-              <ViewButton active={view === 'map'} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} />
+          <div className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>
+            <DaySelector
+              days={days}
+              density={isMapView ? 'compact' : 'regular'}
+              onSelectDay={handleSelectDay}
+              selectedDayId={selectedDay.id}
+            />
+            <div className={`grid grid-cols-2 bg-white ring-1 ring-slate-200/80 ${
+              isMapView ? 'rounded-xl p-1' : 'rounded-2xl p-1.5'
+            }`}>
+              <ViewButton active={view === 'schedule'} compact={isMapView} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} />
+              <ViewButton active={view === 'map'} compact={isMapView} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} />
             </div>
           </div>
 
@@ -220,7 +239,7 @@ export function TripWorkspacePage() {
               />
             </div>
           ) : (
-            <div className="-mx-4 min-h-0 flex-1 overflow-hidden">
+            <div className="relative -mx-4 min-h-0 flex-1 overflow-hidden">
               <DayMapView
                 day={selectedDay}
                 embedded
@@ -252,18 +271,22 @@ export function TripWorkspacePage() {
 
 function ViewButton({
   active,
+  compact = false,
   icon,
   label,
   onClick,
 }: {
   active: boolean
+  compact?: boolean
   icon: ReactNode
   label: string
   onClick: () => void
 }) {
   return (
     <button
-      className={`flex min-h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition active:scale-[0.98] ${
+      className={`flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[0.98] ${
+        compact ? 'min-h-8 text-xs' : 'min-h-10 text-sm'
+      } ${
         active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500'
       }`}
       onClick={onClick}
@@ -303,6 +326,19 @@ function normalizeView(value: string | null): WorkspaceView {
 function formatDateKey(date: Date) {
   const pad = (value: number) => value.toString().padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function formatShortWorkspaceDate(date: string) {
+  const parsed = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) {
+    return '日期未定'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(parsed)
 }
 
 function SkeletonLine({ className = '' }: { className?: string }) {

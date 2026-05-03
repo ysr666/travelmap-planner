@@ -16,6 +16,7 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { TripNav } from '../components/AppShell'
@@ -32,6 +33,7 @@ export function DayTimelinePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<ItineraryItem | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -121,12 +123,12 @@ export function DayTimelinePage() {
     }
   }
 
-  async function handleDeleteItem(item: ItineraryItem) {
-    const confirmed = window.confirm(`确定删除「${item.title}」吗？绑定到该行程点的票据记录也会删除。`)
-    if (!confirmed) {
+  async function confirmDeleteItem() {
+    if (!pendingDeleteItem) {
       return
     }
 
+    const item = pendingDeleteItem
     setDeletingItemId(item.id)
     setActionError(null)
     try {
@@ -134,6 +136,7 @@ export function DayTimelinePage() {
       if (editingItem?.id === item.id) {
         setEditingItem(null)
       }
+      setPendingDeleteItem(null)
       await refreshDay()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除行程点失败')
@@ -314,7 +317,7 @@ export function DayTimelinePage() {
                             className="min-h-9 rounded-xl px-3 text-red-600"
                             disabled={deletingItemId === item.id}
                             icon={<Trash2 className="size-4" />}
-                            onClick={() => void handleDeleteItem(item)}
+                            onClick={() => setPendingDeleteItem(item)}
                             variant="secondary"
                           >
                             删除
@@ -329,6 +332,20 @@ export function DayTimelinePage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        body="删除后，绑定到该行程点的票据记录也会被移除。"
+        confirmLabel="删除行程点"
+        loading={Boolean(deletingItemId)}
+        onCancel={() => {
+          if (!deletingItemId) {
+            setPendingDeleteItem(null)
+          }
+        }}
+        onConfirm={() => void confirmDeleteItem()}
+        open={Boolean(pendingDeleteItem)}
+        title={pendingDeleteItem ? `确认删除「${pendingDeleteItem.title}」吗？` : '确认删除这个行程点吗？'}
+      />
     </div>
   )
 }

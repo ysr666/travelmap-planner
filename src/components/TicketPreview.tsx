@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Copy, ExternalLink, FileArchive, LoaderCircle, Share2, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
 import {
-  formatFileSize,
+  describeTicketMetaLine,
   getTicketDisplayTitle,
   getTicketStorageMode,
   isValidExternalUrl,
-  ticketFileTypeLabels,
   ticketStorageModeLabels,
 } from '../lib/tickets'
 import type { TicketMeta } from '../types'
@@ -117,7 +116,7 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
           <p className="text-xs font-semibold text-sky-600">{ticketStorageModeLabels[storageMode]}</p>
           <h3 className="mt-1 truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
           <p className="mt-1 truncate text-xs text-slate-400">
-            {ticket.fileName} · {ticketFileTypeLabels[ticket.fileType]} · {formatFileSize(ticket.size)}
+            {ticket.fileName} · {describeTicketMetaLine(ticket)}
           </p>
         </div>
         <button

@@ -16,11 +16,13 @@ import { TicketPreview } from '../components/TicketPreview'
 import { TripNav } from '../components/AppShell'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { describeItemTime } from '../lib/itinerary'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
+  describeTicketMetaLine,
   formatFileSize,
   formatTicketCreatedAt,
   getTicketDisplayTitle,
@@ -29,9 +31,7 @@ import {
   getTicketStorageMode,
   isValidExternalUrl,
   normalizeTicketFileName,
-  ticketFileTypeLabels,
   ticketScopeLabels,
-  ticketStorageModeLabels,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
@@ -99,6 +99,8 @@ export function TicketLibraryPage() {
   const [fileInputKey, setFileInputKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
+  const [pendingDeleteTicket, setPendingDeleteTicket] = useState<TicketMeta | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -295,21 +297,25 @@ export function TicketLibraryPage() {
     }
   }
 
-  async function handleDeleteTicket(ticket: TicketMeta) {
-    const confirmed = window.confirm(`确认删除「${getTicketDisplayTitle(ticket)}」吗？本机文件和绑定关系都会删除。`)
-    if (!confirmed) {
+  async function confirmDeleteTicket() {
+    if (!pendingDeleteTicket) {
       return
     }
 
+    const ticket = pendingDeleteTicket
     setActionError(null)
+    setDeletingTicketId(ticket.id)
     try {
       await deleteTicket(ticket.id)
       if (previewTicket?.id === ticket.id) {
         setPreviewTicket(null)
       }
+      setPendingDeleteTicket(null)
       await refreshLibrary()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除票据失败')
+    } finally {
+      setDeletingTicketId(null)
     }
   }
 
@@ -518,7 +524,7 @@ export function TicketLibraryPage() {
               <TicketCard
                 bindingLabel={describeTicketBinding(ticket, itemById)}
                 key={ticket.id}
-                onDelete={() => void handleDeleteTicket(ticket)}
+                onDelete={() => setPendingDeleteTicket(ticket)}
                 onPreview={() => setPreviewTicket(ticket)}
                 ticket={ticket}
               />
@@ -534,6 +540,24 @@ export function TicketLibraryPage() {
           ticket={previewTicket}
         />
       ) : null}
+
+      <ConfirmDialog
+        body="删除后，本机票据文件、元数据和行程点绑定关系都会被移除。"
+        confirmLabel="删除票据"
+        loading={Boolean(deletingTicketId)}
+        onCancel={() => {
+          if (!deletingTicketId) {
+            setPendingDeleteTicket(null)
+          }
+        }}
+        onConfirm={() => void confirmDeleteTicket()}
+        open={Boolean(pendingDeleteTicket)}
+        title={
+          pendingDeleteTicket
+            ? `确认删除「${getTicketDisplayTitle(pendingDeleteTicket)}」吗？`
+            : '确认删除这个票据吗？'
+        }
+      />
     </div>
   )
 }
@@ -562,9 +586,7 @@ function TicketCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
           <p className="mt-1 truncate text-xs leading-5 text-slate-500">{ticket.fileName}</p>
-          <p className="text-xs leading-5 text-slate-400">
-            {ticketFileTypeLabels[ticket.fileType]} · {ticketStorageModeLabels[storageMode]} · {formatFileSize(ticket.size)}
-          </p>
+          <p className="text-xs leading-5 text-slate-400">{describeTicketMetaLine(ticket)}</p>
           <p className="text-xs text-slate-400">{formatTicketCreatedAt(ticket.createdAt)}</p>
         </div>
       </div>

@@ -13,9 +13,9 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'TravelMap Planner',
-        short_name: 'TravelMap',
-        description: '出国旅行行程、地图、交通段和票据管理工具',
+        name: '旅图 TripMap',
+        short_name: '旅图',
+        description: '本地优先的出国旅行行程、地图路线、交通记录与票据管理工具。',
         lang: 'zh-CN',
         start_url: '/#/home',
         scope: '/',

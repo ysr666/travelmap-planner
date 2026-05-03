@@ -1,5 +1,5 @@
 export { db } from './database'
-export { ensureSeedData } from './seed'
+export { createDemoTrip } from './seed'
 export {
   createDay,
   createItineraryItem,

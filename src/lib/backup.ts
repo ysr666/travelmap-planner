@@ -1,4 +1,4 @@
-import JSZip from 'jszip'
+import type JSZip from 'jszip'
 import {
   getTicketBlob,
   getTrip,
@@ -11,12 +11,12 @@ import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
 
 const SCHEMA_VERSION = 1
-const APP_NAME = 'TravelMap Planner'
+const APP_NAME = '旅图 TripMap'
 const JSON_SPACE = 2
 
 export type BackupManifest = {
   schemaVersion: 1
-  appName: typeof APP_NAME
+  appName: string
   exportedAt: string
   tripId: string
   tripTitle: string
@@ -38,6 +38,7 @@ type BackupPayload = {
 }
 
 export async function exportTripBackup(tripId: string): Promise<Blob> {
+  const JSZip = (await import('jszip')).default
   const trip = await getTrip(tripId)
   if (!trip) {
     throw new Error('没有找到要导出的旅行。')
@@ -91,6 +92,7 @@ export async function exportTripBackup(tripId: string): Promise<Blob> {
 
 export async function importTripBackup(file: File): Promise<ImportTripBackupResult> {
   const warnings = validateImportFile(file)
+  const JSZip = (await import('jszip')).default
   const zip = await JSZip.loadAsync(file)
   const manifest = await readJsonFile<BackupManifest>(zip, 'manifest.json')
   validateManifest(manifest)

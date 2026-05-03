@@ -75,11 +75,33 @@ export function isValidExternalUrl(value: string) {
 }
 
 export function formatFileSize(size: number) {
+  if (size <= 0) {
+    return '0 KB'
+  }
+
   if (size >= 1024 * 1024) {
     return `${(size / 1024 / 1024).toFixed(1)} MB`
   }
 
-  return `${Math.max(1, Math.round(size / 1024))} KB`
+  return `${Math.ceil(size / 1024)} KB`
+}
+
+export function describeTicketStorage(ticket: TicketMeta) {
+  const storageMode = getTicketStorageMode(ticket)
+
+  if (storageMode === 'reference') {
+    return '未保存文件副本'
+  }
+
+  if (storageMode === 'external') {
+    return '外部链接'
+  }
+
+  return `保存文件副本 · ${formatFileSize(ticket.size)}`
+}
+
+export function describeTicketMetaLine(ticket: TicketMeta) {
+  return `${ticketFileTypeLabels[ticket.fileType]} · ${describeTicketStorage(ticket)}`
 }
 
 function normalizeDisplayText(value: string | undefined) {

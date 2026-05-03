@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CalendarDays, MapPinned, Plus, Trash2, Upload } from 'lucide-react'
-import { createTrip, deleteTripCascade, ensureSeedData, listTrips } from '../db'
+import { createDemoTrip, createTrip, deleteTripCascade, listTrips } from '../db'
 import { navigateTo } from '../lib/routes'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
 
@@ -30,7 +31,9 @@ export function HomePage() {
   const [isCreating, setIsCreating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCreatingDemo, setIsCreatingDemo] = useState(false)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
+  const [pendingDeleteTrip, setPendingDeleteTrip] = useState<Trip | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -56,7 +59,6 @@ export function HomePage() {
       setIsLoading(true)
       setError(null)
       try {
-        await ensureSeedData()
         const nextTrips = await listTrips()
         if (isMounted) {
           setTrips(nextTrips)
@@ -122,16 +124,30 @@ export function HomePage() {
     }
   }
 
-  async function handleDeleteTrip(trip: Trip) {
-    const confirmed = window.confirm(`确定删除「${trip.title}」吗？相关日程、行程点和票据记录会一并删除。`)
-    if (!confirmed) {
+  async function handleCreateDemoTrip() {
+    setIsCreatingDemo(true)
+    setError(null)
+    try {
+      await createDemoTrip()
+      await refreshTrips()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '创建示例旅行失败')
+    } finally {
+      setIsCreatingDemo(false)
+    }
+  }
+
+  async function confirmDeleteTrip() {
+    if (!pendingDeleteTrip) {
       return
     }
 
+    const trip = pendingDeleteTrip
     setDeletingTripId(trip.id)
     setError(null)
     try {
       await deleteTripCascade(trip.id)
+      setPendingDeleteTrip(null)
       await refreshTrips()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '删除旅行失败')
@@ -251,11 +267,21 @@ export function HomePage() {
               ) : null}
 
               {!isLoading && !hasTrips ? (
-                <EmptyState
-                  body="点击新建旅行，创建后会写入本机 IndexedDB。"
-                  icon={<CalendarDays className="size-6" />}
-                  title="还没有旅行"
-                />
+                <div className="space-y-3">
+                  <EmptyState
+                    body="新用户不会自动生成示例数据。你可以新建旅行，也可以手动创建一个东京示例用于体验地图和时间轴。"
+                    icon={<CalendarDays className="size-6" />}
+                    title="还没有旅行"
+                  />
+                  <Button
+                    className="w-full"
+                    loading={isCreatingDemo}
+                    onClick={() => void handleCreateDemoTrip()}
+                    variant="secondary"
+                  >
+                    创建示例旅行
+                  </Button>
+                </div>
               ) : null}
 
               {!isLoading && hasTrips ? (
@@ -263,7 +289,7 @@ export function HomePage() {
                   {trips.map((trip, index) => (
                     <TripCard
                       key={trip.id}
-                      onDelete={() => void handleDeleteTrip(trip)}
+                      onDelete={() => setPendingDeleteTrip(trip)}
                       onOpen={() => navigateTo('overview', { tripId: trip.id })}
                       trip={trip}
                       variantIndex={index}
@@ -299,6 +325,20 @@ export function HomePage() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        body="删除后，本机保存的日程、行程点、票据元数据、票据文件和绑定关系都会被移除。"
+        confirmLabel="删除旅行"
+        loading={Boolean(deletingTripId)}
+        onCancel={() => {
+          if (!deletingTripId) {
+            setPendingDeleteTrip(null)
+          }
+        }}
+        onConfirm={() => void confirmDeleteTrip()}
+        open={Boolean(pendingDeleteTrip)}
+        title={pendingDeleteTrip ? `确认删除「${pendingDeleteTrip.title}」吗？` : '确认删除这个旅行吗？'}
+      />
     </div>
   )
 }

@@ -1,5 +1,3 @@
-import type { LucideIcon } from 'lucide-react'
-
 export type TransportMode = 'walk' | 'transit' | 'car' | 'train' | 'flight' | 'other'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
@@ -80,46 +78,3 @@ export type RouteId =
   | 'item'
   | 'tickets'
   | 'settings'
-
-export type NavItem = {
-  id: RouteId
-  label: string
-  icon: LucideIcon
-}
-
-export type MockTrip = {
-  title: string
-  destination: string
-  dateRange: string
-  notes: string
-  days: MockDay[]
-}
-
-export type MockDay = {
-  id: string
-  label: string
-  date: string
-  title: string
-  itemCount: number
-}
-
-export type MockItineraryItem = {
-  id: string
-  order: number
-  title: string
-  time: string
-  location: string
-  address: string
-  transportMode: string
-  notes: string
-  hasCoordinates: boolean
-  ticketCount: number
-}
-
-export type MockTicket = {
-  id: string
-  title: string
-  type: 'image' | 'pdf' | 'qr'
-  size: string
-  linkedTo: string
-}

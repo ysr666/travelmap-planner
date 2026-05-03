@@ -2,12 +2,7 @@ import { db } from './database'
 import { createId } from './ids'
 import type { Day, ItineraryItem, Trip } from '../types'
 
-export async function ensureSeedData() {
-  const tripCount = await db.trips.count()
-  if (tripCount > 0) {
-    return
-  }
-
+export async function createDemoTrip() {
   const now = Date.now()
   const tripId = createId('trip')
   const dayOneId = createId('day')
@@ -134,4 +129,6 @@ export async function ensureSeedData() {
     await db.days.bulkAdd(days)
     await db.itineraryItems.bulkAdd(items)
   })
+
+  return trip
 }

@@ -21,16 +21,14 @@ import { describeItemTime, describePreviousTransport, transportModeLabels } from
 import { formatDate } from '../lib/dates'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
-  formatFileSize,
+  describeTicketMetaLine,
   formatTicketCreatedAt,
   getTicketDisplayTitle,
-  getTicketStorageMode,
-  ticketFileTypeLabels,
-  ticketStorageModeLabels,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -51,6 +49,7 @@ export function ItemDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -136,13 +135,8 @@ export function ItemDetailPage() {
     }
   }
 
-  async function handleDeleteItem() {
+  async function confirmDeleteItem() {
     if (!item || !trip || !day) {
-      return
-    }
-
-    const confirmed = window.confirm(`确定删除「${item.title}」吗？绑定到该行程点的票据记录也会删除。`)
-    if (!confirmed) {
       return
     }
 
@@ -150,6 +144,7 @@ export function ItemDetailPage() {
     setActionError(null)
     try {
       await deleteItineraryItemCascade(item.id)
+      setIsDeleteConfirmOpen(false)
       navigateTo('timeline', { tripId: trip.id, dayId: day.id })
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除行程点失败')
@@ -262,7 +257,7 @@ export function ItemDetailPage() {
             className="text-red-600"
             disabled={isDeleting}
             icon={<Trash2 className="size-4" />}
-            onClick={() => void handleDeleteItem()}
+            onClick={() => setIsDeleteConfirmOpen(true)}
             variant="secondary"
           >
             删除
@@ -304,7 +299,7 @@ export function ItemDetailPage() {
           <Card className="divide-y divide-slate-100 py-1">
             {tickets.map((ticket) => (
               <ListRow
-                detail={`${ticketFileTypeLabels[ticket.fileType]} · ${ticketStorageModeLabels[getTicketStorageMode(ticket)]} · ${formatFileSize(ticket.size)} · ${formatTicketCreatedAt(ticket.createdAt)}`}
+                detail={`${describeTicketMetaLine(ticket)} · ${formatTicketCreatedAt(ticket.createdAt)}`}
                 icon={<FileText className="size-5" />}
                 key={ticket.id}
                 meta="查看"
@@ -331,6 +326,20 @@ export function ItemDetailPage() {
           ticket={previewTicket}
         />
       ) : null}
+
+      <ConfirmDialog
+        body="删除后，绑定到该行程点的票据记录也会被移除。"
+        confirmLabel="删除行程点"
+        loading={isDeleting}
+        onCancel={() => {
+          if (!isDeleting) {
+            setIsDeleteConfirmOpen(false)
+          }
+        }}
+        onConfirm={() => void confirmDeleteItem()}
+        open={isDeleteConfirmOpen}
+        title={`确认删除「${item.title}」吗？`}
+      />
     </div>
   )
 }

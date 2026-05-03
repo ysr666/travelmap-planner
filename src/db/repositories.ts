@@ -1,0 +1,414 @@
+import { db } from './database'
+import Dexie from 'dexie'
+import { createId } from './ids'
+import { sortItineraryItems } from '../lib/itinerary'
+import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
+
+type CreateTripInput = Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateTripPatch = Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
+
+type CreateDayInput = Omit<Day, 'id'>
+type UpdateDayPatch = Partial<Omit<Day, 'id' | 'tripId'>>
+
+type CreateItineraryItemInput = Omit<ItineraryItem, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateItineraryItemPatch = Partial<
+  Omit<ItineraryItem, 'id' | 'tripId' | 'dayId' | 'createdAt' | 'updatedAt'>
+>
+
+type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
+
+export type ImportTripBackupRecordsInput = {
+  trip: Trip
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  ticketBlobs: TicketBlob[]
+  importedTitleSuffix: string
+}
+
+export async function createTrip(input: CreateTripInput) {
+  const now = Date.now()
+  const trip: Trip = {
+    ...input,
+    id: createId('trip'),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.trips.add(trip)
+  return trip
+}
+
+export async function listTrips() {
+  return db.trips.orderBy('updatedAt').reverse().toArray()
+}
+
+export async function getTrip(tripId: string) {
+  return db.trips.get(tripId)
+}
+
+export async function updateTrip(tripId: string, patch: UpdateTripPatch) {
+  await db.trips.update(tripId, {
+    ...patch,
+    updatedAt: Date.now(),
+  })
+  return getTrip(tripId)
+}
+
+export async function deleteTripCascade(tripId: string) {
+  await db.transaction(
+    'rw',
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    async () => {
+      const [items, ticketMetas] = await Promise.all([
+        db.itineraryItems.where('tripId').equals(tripId).toArray(),
+        db.ticketMetas.where('tripId').equals(tripId).toArray(),
+      ])
+      const itemIds = items.map((item) => item.id)
+      const ticketIds = ticketMetas.map((ticket) => ticket.id)
+
+      await Promise.all([
+        db.trips.delete(tripId),
+        db.days.where('tripId').equals(tripId).delete(),
+        itemIds.length > 0 ? db.itineraryItems.bulkDelete(itemIds) : Promise.resolve(),
+        ticketIds.length > 0 ? db.ticketMetas.bulkDelete(ticketIds) : Promise.resolve(),
+        ticketIds.length > 0 ? db.ticketBlobs.bulkDelete(ticketIds) : Promise.resolve(),
+      ])
+    },
+  )
+}
+
+export async function createDay(input: CreateDayInput) {
+  const day: Day = {
+    ...input,
+    id: createId('day'),
+  }
+
+  await db.days.add(day)
+  await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  return day
+}
+
+export async function listDaysByTrip(tripId: string) {
+  return db.days.where('[tripId+sortOrder]').between([tripId, DexieMinKey], [tripId, DexieMaxKey]).toArray()
+}
+
+export async function getDay(dayId: string) {
+  return db.days.get(dayId)
+}
+
+export async function updateDay(dayId: string, patch: UpdateDayPatch) {
+  const day = await db.days.get(dayId)
+  if (!day) {
+    return undefined
+  }
+
+  await db.transaction('rw', db.days, db.trips, async () => {
+    await db.days.update(dayId, patch)
+    await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  })
+
+  return getDay(dayId)
+}
+
+export async function deleteDayCascade(dayId: string) {
+  await db.transaction(
+    'rw',
+    [db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.trips],
+    async () => {
+      const day = await db.days.get(dayId)
+      if (!day) {
+        return
+      }
+
+      const items = await db.itineraryItems.where('dayId').equals(dayId).toArray()
+      const itemIds = items.map((item) => item.id)
+      const itemIdSet = new Set(itemIds)
+      const ticketMetas = await db.ticketMetas
+        .where('tripId')
+        .equals(day.tripId)
+        .filter((ticket) => Boolean(ticket.itemId && itemIdSet.has(ticket.itemId)))
+        .toArray()
+      const ticketIds = ticketMetas.map((ticket) => ticket.id)
+
+      await Promise.all([
+        db.days.delete(dayId),
+        itemIds.length > 0 ? db.itineraryItems.bulkDelete(itemIds) : Promise.resolve(),
+        ticketIds.length > 0 ? db.ticketMetas.bulkDelete(ticketIds) : Promise.resolve(),
+        ticketIds.length > 0 ? db.ticketBlobs.bulkDelete(ticketIds) : Promise.resolve(),
+        db.trips.update(day.tripId, { updatedAt: Date.now() }),
+      ])
+    },
+  )
+}
+
+export async function createItineraryItem(input: CreateItineraryItemInput) {
+  const now = Date.now()
+  const item: ItineraryItem = {
+    ...input,
+    id: createId('item'),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.transaction('rw', db.itineraryItems, db.trips, async () => {
+    await db.itineraryItems.add(item)
+    await db.trips.update(item.tripId, { updatedAt: now })
+  })
+
+  return item
+}
+
+export async function listItemsByDay(dayId: string) {
+  const items = await db.itineraryItems
+    .where('[dayId+sortOrder]')
+    .between([dayId, DexieMinKey], [dayId, DexieMaxKey])
+    .toArray()
+  return sortItineraryItems(items)
+}
+
+export async function listItemsByTrip(tripId: string) {
+  const items = await db.itineraryItems.where('tripId').equals(tripId).toArray()
+  return sortItineraryItems(items)
+}
+
+export async function getItineraryItem(itemId: string) {
+  return db.itineraryItems.get(itemId)
+}
+
+export async function updateItineraryItem(itemId: string, patch: UpdateItineraryItemPatch) {
+  const item = await db.itineraryItems.get(itemId)
+  if (!item) {
+    return undefined
+  }
+
+  const updatedAt = Date.now()
+  await db.transaction('rw', db.itineraryItems, db.trips, async () => {
+    await db.itineraryItems.update(itemId, {
+      ...patch,
+      updatedAt,
+    })
+    await db.trips.update(item.tripId, { updatedAt })
+  })
+
+  return getItineraryItem(itemId)
+}
+
+export async function deleteItineraryItemCascade(itemId: string) {
+  await db.transaction(
+    'rw',
+    db.itineraryItems,
+    db.ticketMetas,
+    db.ticketBlobs,
+    db.trips,
+    async () => {
+      const item = await db.itineraryItems.get(itemId)
+      if (!item) {
+        return
+      }
+
+      const ticketMetas = await db.ticketMetas.where('itemId').equals(itemId).toArray()
+      const ticketIds = ticketMetas.map((ticket) => ticket.id)
+
+      await Promise.all([
+        db.itineraryItems.delete(itemId),
+        ticketIds.length > 0 ? db.ticketMetas.bulkDelete(ticketIds) : Promise.resolve(),
+        ticketIds.length > 0 ? db.ticketBlobs.bulkDelete(ticketIds) : Promise.resolve(),
+        db.trips.update(item.tripId, { updatedAt: Date.now() }),
+      ])
+    },
+  )
+}
+
+export async function createTicketMeta(input: CreateTicketMetaInput) {
+  const now = Date.now()
+  const ticket: TicketMeta = {
+    ...input,
+    id: createId('ticket'),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.transaction('rw', db.ticketMetas, db.trips, async () => {
+    await db.ticketMetas.add(ticket)
+    await db.trips.update(ticket.tripId, { updatedAt: now })
+  })
+
+  return ticket
+}
+
+export async function saveTicketBlob(ticketId: string, blob: Blob) {
+  const record: TicketBlob = { ticketId, blob }
+  await db.ticketBlobs.put(record)
+  return record
+}
+
+export async function getTicketMeta(ticketId: string) {
+  return db.ticketMetas.get(ticketId)
+}
+
+export async function getTicketBlob(ticketId: string) {
+  return db.ticketBlobs.get(ticketId)
+}
+
+export async function listTicketsByTrip(tripId: string) {
+  const tickets = await db.ticketMetas.where('tripId').equals(tripId).toArray()
+  return tickets.sort((first, second) => second.createdAt - first.createdAt)
+}
+
+export async function listTicketsByItem(itemId: string) {
+  const tickets = await db.ticketMetas.where('itemId').equals(itemId).toArray()
+  return tickets.sort((first, second) => second.createdAt - first.createdAt)
+}
+
+export async function deleteTicket(ticketId: string) {
+  await db.transaction(
+    'rw',
+    db.ticketMetas,
+    db.ticketBlobs,
+    db.itineraryItems,
+    db.trips,
+    async () => {
+      const ticket = await db.ticketMetas.get(ticketId)
+      const now = Date.now()
+
+      await Promise.all([db.ticketMetas.delete(ticketId), db.ticketBlobs.delete(ticketId)])
+
+      const itemUpdates = await db.itineraryItems
+        .filter((item) => item.ticketIds.includes(ticketId))
+        .toArray()
+
+      await Promise.all(
+        itemUpdates.map((item) =>
+          db.itineraryItems.update(item.id, {
+            ticketIds: item.ticketIds.filter((id) => id !== ticketId),
+            updatedAt: now,
+          }),
+        ),
+      )
+
+      if (ticket) {
+        await db.trips.update(ticket.tripId, { updatedAt: now })
+      }
+    },
+  )
+}
+
+export async function importTripBackupRecords({
+  trip,
+  days,
+  itineraryItems,
+  ticketMetas,
+  ticketBlobs,
+  importedTitleSuffix,
+}: ImportTripBackupRecordsInput): Promise<{ remapped: boolean; title: string; tripId: string }> {
+  assertUniqueIds('Day', days.map((day) => day.id))
+  assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
+  assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+
+  const result = await db.transaction(
+    'rw',
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    async () => {
+      const dayIds = days.map((day) => day.id)
+      const itemIds = itineraryItems.map((item) => item.id)
+      const ticketIds = ticketMetas.map((ticket) => ticket.id)
+
+      const [existingTrip, existingDays, existingItems, existingTicketMetas, existingTicketBlobs] =
+        await Promise.all([
+          db.trips.get(trip.id),
+          dayIds.length > 0 ? db.days.bulkGet(dayIds) : Promise.resolve([]),
+          itemIds.length > 0 ? db.itineraryItems.bulkGet(itemIds) : Promise.resolve([]),
+          ticketIds.length > 0 ? db.ticketMetas.bulkGet(ticketIds) : Promise.resolve([]),
+          ticketIds.length > 0 ? db.ticketBlobs.bulkGet(ticketIds) : Promise.resolve([]),
+        ])
+
+      const hasConflict =
+        Boolean(existingTrip) ||
+        existingDays.some(Boolean) ||
+        existingItems.some(Boolean) ||
+        existingTicketMetas.some(Boolean) ||
+        existingTicketBlobs.some(Boolean)
+
+      const nextTripId = hasConflict ? createId('trip') : trip.id
+      const dayIdMap = new Map(days.map((day) => [day.id, hasConflict ? createId('day') : day.id]))
+      const itemIdMap = new Map(
+        itineraryItems.map((item) => [item.id, hasConflict ? createId('item') : item.id]),
+      )
+      const ticketIdMap = new Map(
+        ticketMetas.map((ticket) => [ticket.id, hasConflict ? createId('ticket') : ticket.id]),
+      )
+
+      const nextTrip: Trip = {
+        ...trip,
+        id: nextTripId,
+        title: hasConflict ? `${trip.title}（导入 ${importedTitleSuffix}）` : trip.title,
+      }
+      const nextDays: Day[] = days.map((day) => ({
+        ...day,
+        id: requireMappedId(dayIdMap, day.id),
+        tripId: nextTripId,
+      }))
+      const nextItems: ItineraryItem[] = itineraryItems.map((item) => ({
+        ...item,
+        id: requireMappedId(itemIdMap, item.id),
+        tripId: nextTripId,
+        dayId: requireMappedId(dayIdMap, item.dayId),
+        ticketIds: item.ticketIds
+          .map((ticketId) => ticketIdMap.get(ticketId))
+          .filter((ticketId): ticketId is string => Boolean(ticketId)),
+      }))
+      const nextTicketMetas: TicketMeta[] = ticketMetas.map((ticket) => ({
+        ...ticket,
+        id: requireMappedId(ticketIdMap, ticket.id),
+        tripId: nextTripId,
+        itemId: ticket.itemId ? itemIdMap.get(ticket.itemId) : undefined,
+      }))
+      const nextTicketBlobs: TicketBlob[] = ticketBlobs
+        .map((ticketBlob) => {
+          const nextTicketId = ticketIdMap.get(ticketBlob.ticketId)
+          return nextTicketId ? { ...ticketBlob, ticketId: nextTicketId } : undefined
+        })
+        .filter((ticketBlob): ticketBlob is TicketBlob => Boolean(ticketBlob))
+
+      await db.trips.add(nextTrip)
+      if (nextDays.length > 0) {
+        await db.days.bulkAdd(nextDays)
+      }
+      if (nextItems.length > 0) {
+        await db.itineraryItems.bulkAdd(nextItems)
+      }
+      if (nextTicketMetas.length > 0) {
+        await db.ticketMetas.bulkAdd(nextTicketMetas)
+      }
+      if (nextTicketBlobs.length > 0) {
+        await db.ticketBlobs.bulkAdd(nextTicketBlobs)
+      }
+
+      return { remapped: hasConflict, title: nextTrip.title, tripId: nextTrip.id }
+    },
+  )
+
+  return result
+}
+
+const DexieMinKey = Dexie.minKey
+const DexieMaxKey = Dexie.maxKey
+
+function assertUniqueIds(label: string, ids: string[]) {
+  const seen = new Set<string>()
+  for (const id of ids) {
+    if (seen.has(id)) {
+      throw new Error(`${label} 备份数据存在重复 ID：${id}`)
+    }
+    seen.add(id)
+  }
+}
+
+function requireMappedId(idMap: Map<string, string>, id: string) {
+  const mappedId = idMap.get(id)
+  if (!mappedId) {
+    throw new Error(`备份数据引用了不存在的 ID：${id}`)
+  }
+  return mappedId
+}

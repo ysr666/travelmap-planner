@@ -1,0 +1,510 @@
+import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FileArchive, FileImage, FileText, HardDrive, Trash2, Upload } from 'lucide-react'
+import {
+  createTicketMeta,
+  deleteTicket,
+  getItineraryItem,
+  getTrip,
+  listDaysByTrip,
+  listItemsByTrip,
+  listTicketsByTrip,
+  saveTicketBlob,
+  updateItineraryItem,
+} from '../db'
+import { TicketPreview } from '../components/TicketPreview'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/EmptyState'
+import { SectionHeader } from '../components/ui/SectionHeader'
+import { describeItemTime } from '../lib/itinerary'
+import { getRouteParams, navigateTo } from '../lib/routes'
+import {
+  formatFileSize,
+  formatTicketCreatedAt,
+  getTicketFileType,
+  getTicketScope,
+  ticketFileTypeLabels,
+  ticketScopeLabels,
+} from '../lib/tickets'
+import type { Day, ItineraryItem, TicketMeta, TicketScope, Trip } from '../types'
+
+type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
+type StorageEstimateState = {
+  usage?: number
+  quota?: number
+}
+
+const filterOptions: Array<{ value: TicketFilter; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'image', label: '图片' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'other', label: '其他' },
+  { value: 'unassigned', label: '未绑定' },
+]
+
+const ticketIcons: Record<TicketMeta['fileType'], ReactNode> = {
+  image: <FileImage className="size-5" />,
+  pdf: <FileText className="size-5" />,
+  other: <FileArchive className="size-5" />,
+}
+
+export function TicketLibraryPage() {
+  const params = getRouteParams()
+  const tripId = params.get('tripId')
+  const initialItemId = params.get('itemId')
+  const [trip, setTrip] = useState<Trip | null>(null)
+  const [days, setDays] = useState<Day[]>([])
+  const [items, setItems] = useState<ItineraryItem[]>([])
+  const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [note, setNote] = useState('')
+  const [bindingTarget, setBindingTarget] = useState<TicketScope | `item:${string}`>('trip')
+  const [filter, setFilter] = useState<TicketFilter>('all')
+  const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
+  const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
+  const [fileInputKey, setFileInputKey] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const itemById = useMemo(() => {
+    return new Map(items.map((item) => [item.id, item]))
+  }, [items])
+
+  const bindingOptions = useMemo(() => {
+    return days.flatMap((day, dayIndex) =>
+      items
+        .filter((item) => item.dayId === day.id)
+        .map((item) => ({
+          id: item.id,
+          label: `Day ${dayIndex + 1} · ${describeItemTime(item)} · ${item.title}`,
+        })),
+    )
+  }, [days, items])
+
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((ticket) => {
+      if (filter === 'all') {
+        return true
+      }
+
+      if (filter === 'unassigned') {
+        return getTicketScope(ticket) === 'unassigned'
+      }
+
+      return ticket.fileType === filter
+    })
+  }, [filter, tickets])
+
+  const defaultBindingTarget = useCallback(
+    (loadedItems: ItineraryItem[]) => {
+      if (initialItemId && loadedItems.some((item) => item.id === initialItemId)) {
+        return `item:${initialItemId}` as const
+      }
+
+      return 'trip'
+    },
+    [initialItemId],
+  )
+
+  const refreshLibrary = useCallback(async () => {
+    if (!tripId) {
+      setTrip(null)
+      setDays([])
+      setItems([])
+      setTickets([])
+      setLoadError('缺少旅行 ID，请从旅行总览进入票据库。')
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    setLoadError(null)
+    setActionError(null)
+    try {
+      const foundTrip = await getTrip(tripId)
+      if (!foundTrip) {
+        setTrip(null)
+        setDays([])
+        setItems([])
+        setTickets([])
+        setLoadError('没有找到这个旅行，请返回首页重新选择。')
+        return
+      }
+
+      const [foundDays, foundItems, foundTickets] = await Promise.all([
+        listDaysByTrip(tripId),
+        listItemsByTrip(tripId),
+        listTicketsByTrip(tripId),
+      ])
+      setTrip(foundTrip)
+      setDays(foundDays)
+      setItems(foundItems)
+      setTickets(foundTickets)
+      setBindingTarget(defaultBindingTarget(foundItems))
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : '读取票据库失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [defaultBindingTarget, tripId])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void refreshLibrary(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [refreshLibrary])
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadStorageEstimate() {
+      if (!navigator.storage?.estimate) {
+        return
+      }
+
+      const estimate = await navigator.storage.estimate()
+      if (isActive) {
+        setStorageEstimate({ quota: estimate.quota, usage: estimate.usage })
+      }
+    }
+
+    void loadStorageEstimate()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  async function handleUpload() {
+    if (!trip || !selectedFile) {
+      setActionError('请选择要上传的文件。')
+      return
+    }
+
+    if (
+      selectedFile.size > 20 * 1024 * 1024 &&
+      !window.confirm('这个文件超过 20MB，可能占用较多本地空间。仍然继续保存到本机浏览器吗？')
+    ) {
+      return
+    }
+
+    setIsUploading(true)
+    setActionError(null)
+    let createdTicketId: string | null = null
+
+    try {
+      const itemId = bindingTarget.startsWith('item:') ? bindingTarget.slice(5) : undefined
+      const scope: TicketScope = itemId ? 'item' : (bindingTarget as TicketScope)
+      const ticket = await createTicketMeta({
+        fileName: selectedFile.name,
+        fileType: getTicketFileType(selectedFile),
+        itemId,
+        mimeType: selectedFile.type || 'application/octet-stream',
+        note: normalizeOptional(note),
+        scope,
+        size: selectedFile.size,
+        tripId: trip.id,
+      })
+      createdTicketId = ticket.id
+
+      await saveTicketBlob(ticket.id, selectedFile)
+
+      if (itemId) {
+        const item = await getItineraryItem(itemId)
+        if (!item || item.tripId !== trip.id) {
+          throw new Error('绑定的行程点不存在，票据已回滚。')
+        }
+
+        const nextTicketIds = item.ticketIds.includes(ticket.id)
+          ? item.ticketIds
+          : [...item.ticketIds, ticket.id]
+        const updatedItem = await updateItineraryItem(item.id, { ticketIds: nextTicketIds })
+        if (!updatedItem) {
+          throw new Error('绑定到行程点失败，票据已回滚。')
+        }
+      }
+
+      setSelectedFile(null)
+      setNote('')
+      setFileInputKey((current) => current + 1)
+      await refreshLibrary()
+    } catch (caught) {
+      if (createdTicketId) {
+        await deleteTicket(createdTicketId)
+      }
+      setActionError(caught instanceof Error ? caught.message : '上传票据失败')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleDeleteTicket(ticket: TicketMeta) {
+    const confirmed = window.confirm(`确认删除「${ticket.fileName}」吗？本机文件和绑定关系都会删除。`)
+    if (!confirmed) {
+      return
+    }
+
+    setActionError(null)
+    try {
+      await deleteTicket(ticket.id)
+      if (previewTicket?.id === ticket.id) {
+        setPreviewTicket(null)
+      }
+      await refreshLibrary()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '删除票据失败')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <Card className="space-y-3">
+          <SkeletonLine className="w-2/3" />
+          <SkeletonLine className="w-full" />
+          <SkeletonLine className="w-1/2" />
+        </Card>
+      </div>
+    )
+  }
+
+  if (loadError || !trip) {
+    return (
+      <div className="space-y-5">
+        <EmptyState
+          body={loadError || '请从旅行总览进入票据库。'}
+          icon={<FileArchive className="size-6" />}
+          title="无法打开票据库"
+        />
+        <Button className="w-full" onClick={() => navigateTo('home')} variant="secondary">
+          返回首页
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card className="space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-sky-600">{trip.title}</p>
+          <h2 className="mt-1 text-2xl font-bold text-slate-950">票据和订单</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            图片、PDF 和其他文件只保存在本机浏览器 IndexedDB。
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
+          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。Phase 5
+          会加入 zip 备份；重要旅行出发前必须导出备份到 iCloud Drive。
+        </div>
+
+        {storageEstimate ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            <HardDrive className="size-4 text-slate-400" />
+            <span>
+              已用 {formatStorageSize(storageEstimate.usage)} / 可用 {formatStorageSize(storageEstimate.quota)}
+            </span>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="flex size-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+            <Upload className="size-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-950">上传票据</h3>
+            <p className="text-xs text-slate-500">单个文件建议不超过 20MB。</p>
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="text-sm font-semibold text-slate-700">文件 *</span>
+          <input
+            className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+            key={fileInputKey}
+            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-semibold text-slate-700">绑定对象</span>
+          <select
+            className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            onChange={(event) => setBindingTarget(event.target.value as TicketScope | `item:${string}`)}
+            value={bindingTarget}
+          >
+            <option value="trip">整个旅行：机票、酒店、保险等</option>
+            <option value="unassigned">不绑定：暂时未分类</option>
+            {bindingOptions.map((option) => (
+              <option key={option.id} value={`item:${option.id}`}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-semibold text-slate-700">备注</span>
+          <textarea
+            className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="例如：酒店订单、门票二维码、登机牌"
+            value={note}
+          />
+        </label>
+
+        {selectedFile ? (
+          <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
+          </p>
+        ) : null}
+
+        {actionError ? (
+          <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+            {actionError}
+          </p>
+        ) : null}
+
+        <Button
+          className="w-full"
+          disabled={!selectedFile}
+          icon={<Upload className="size-4" />}
+          loading={isUploading}
+          onClick={() => void handleUpload()}
+        >
+          保存到本机
+        </Button>
+      </Card>
+
+      <section className="space-y-3">
+        <SectionHeader title="票据库" />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {filterOptions.map((option) => (
+            <button
+              className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-semibold ${
+                filter === option.value ? 'bg-[#1677ff] text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'
+              }`}
+              key={option.value}
+              onClick={() => setFilter(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {filteredTickets.length === 0 ? (
+          <EmptyState
+            body="上传图片、PDF 或其他旅行文件后，会显示在这里。"
+            icon={<FileArchive className="size-6" />}
+            title="暂无票据"
+          />
+        ) : (
+          <div className="space-y-3">
+            {filteredTickets.map((ticket) => (
+              <TicketCard
+                bindingLabel={describeTicketBinding(ticket, itemById)}
+                key={ticket.id}
+                onDelete={() => void handleDeleteTicket(ticket)}
+                onPreview={() => setPreviewTicket(ticket)}
+                ticket={ticket}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {previewTicket ? (
+        <TicketPreview
+          key={previewTicket.id}
+          onClose={() => setPreviewTicket(null)}
+          ticket={previewTicket}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function TicketCard({
+  ticket,
+  bindingLabel,
+  onPreview,
+  onDelete,
+}: {
+  ticket: TicketMeta
+  bindingLabel: string
+  onPreview: () => void
+  onDelete: () => void
+}) {
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+          {ticketIcons[ticket.fileType]}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-bold text-slate-950">{ticket.fileName}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {ticketFileTypeLabels[ticket.fileType]} · {ticket.mimeType || '未知类型'} · {formatFileSize(ticket.size)}
+          </p>
+          <p className="text-xs text-slate-400">{formatTicketCreatedAt(ticket.createdAt)}</p>
+        </div>
+      </div>
+
+      {ticket.note ? (
+        <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500">
+          {ticket.note}
+        </p>
+      ) : null}
+
+      <p className="text-xs font-semibold text-slate-500">{bindingLabel}</p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button className="min-h-10 rounded-xl" onClick={onPreview} variant="secondary">
+          查看
+        </Button>
+        <Button
+          className="min-h-10 rounded-xl text-red-600"
+          icon={<Trash2 className="size-4" />}
+          onClick={onDelete}
+          variant="secondary"
+        >
+          删除
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function describeTicketBinding(ticket: TicketMeta, itemById: Map<string, ItineraryItem>) {
+  const scope = getTicketScope(ticket)
+  if (scope === 'item') {
+    const item = ticket.itemId ? itemById.get(ticket.itemId) : undefined
+    return item ? `${ticketScopeLabels.item}：${item.title}` : '绑定到行程点（记录缺失）'
+  }
+
+  return ticketScopeLabels[scope]
+}
+
+function normalizeOptional(value: string) {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function formatStorageSize(size?: number) {
+  if (!size) {
+    return '未知'
+  }
+
+  return formatFileSize(size)
+}
+
+function SkeletonLine({ className = '' }: { className?: string }) {
+  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
+}

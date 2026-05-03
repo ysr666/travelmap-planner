@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TravelMap Planner">
+  <rect width="512" height="512" rx="112" fill="#eef7ff"/>
+  <path d="M112 318c58-82 105-110 142-83 31 23 47 81 101 46 25-16 39-50 45-89" fill="none" stroke="#1677ff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="112" cy="318" r="34" fill="#0ea5e9"/>
+  <circle cx="258" cy="235" r="34" fill="#10b981"/>
+  <path d="M400 101c-47 0-85 38-85 85 0 68 85 164 85 164s85-96 85-164c0-47-38-85-85-85z" fill="#ff6b4a"/>
+  <circle cx="400" cy="186" r="31" fill="#fff7ed"/>
+  <path d="M80 414h352" stroke="#94a3b8" stroke-width="22" stroke-linecap="round"/>
+</svg>

@@ -178,13 +178,13 @@ export function DayTimelinePage() {
       <Card className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-sky-600">{formatDate(day.date)}</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-950">{day.title}</h2>
+          <h2 className="mt-1 text-xl font-semibold text-slate-950">{day.title}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {trip.title} · {items.length} 个行程点
           </p>
         </div>
         <Button
-          className="size-12 rounded-2xl px-0"
+          className="size-11 px-0"
           icon={<Plus className="size-5" />}
           onClick={() => {
             setIsCreating(true)
@@ -200,7 +200,7 @@ export function DayTimelinePage() {
       {isCreating ? (
         <Card>
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-slate-950">新增行程点</h3>
+            <h3 className="text-base font-semibold text-slate-950">新增行程点</h3>
             <p className="mt-1 text-sm text-slate-500">可手动输入坐标，或粘贴含坐标的地图链接。</p>
           </div>
           <ItineraryItemForm
@@ -215,7 +215,7 @@ export function DayTimelinePage() {
       {editingItem ? (
         <Card>
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-slate-950">编辑行程点</h3>
+            <h3 className="text-base font-semibold text-slate-950">编辑行程点</h3>
             <p className="mt-1 text-sm text-slate-500">{editingItem.title}</p>
           </div>
           <ItineraryItemForm
@@ -229,7 +229,7 @@ export function DayTimelinePage() {
       ) : null}
 
       {actionError ? (
-        <div className="rounded-[24px] border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
           {actionError}
         </div>
       ) : null}
@@ -339,7 +339,7 @@ function SkeletonLine({ className = '' }: { className?: string }) {
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="ml-[3.4rem] flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">
+    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium leading-5 text-slate-500">
       <ArrowDown className="size-3.5 shrink-0 text-slate-400" />
       <span className="min-w-0 truncate">{description}</span>
     </div>
@@ -352,7 +352,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
 
   if (!appleUrl || !googleUrl) {
     return (
-      <p className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400">
+      <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400">
         上一站或当前地点信息不足
       </p>
     )

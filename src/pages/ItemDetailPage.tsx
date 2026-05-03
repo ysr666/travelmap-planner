@@ -193,24 +193,24 @@ export function ItemDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         {actionError ? (
-          <div className="rounded-[24px] border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
             {actionError}
           </div>
         ) : null}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-sky-600">
+            <p className="text-xs font-semibold text-sky-600">
               {formatDate(day.date)} · {describeItemTime(item)}
             </p>
-            <h2 className="mt-1 text-[28px] font-bold leading-tight text-slate-950">{item.title}</h2>
+            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">{item.title}</h2>
           </div>
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sm font-bold text-sky-600">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-xs font-semibold text-sky-600">
             {item.transportMode ? transportModeLabels[item.transportMode] : '未定'}
           </span>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
+        <div className="rounded-xl bg-slate-50 p-3">
           <p className="flex items-start gap-2 text-sm font-semibold text-slate-950">
             <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
             {item.locationName || '地点未填写'}
@@ -232,7 +232,7 @@ export function ItemDetailPage() {
         />
         <div className="grid grid-cols-2 gap-3">
           <a
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#1677ff] px-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(22,119,255,0.24)]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(22,119,255,0.18)]"
             href={buildAppleMapsUrl(item)}
             rel="noreferrer"
             target="_blank"
@@ -241,7 +241,7 @@ export function ItemDetailPage() {
             Apple 地图
           </a>
           <a
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80"
             href={buildGoogleMapsUrl(item)}
             rel="noreferrer"
             target="_blank"
@@ -357,8 +357,8 @@ function PreviousTransportCard({
     : null
 
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
-      <h3 className="text-sm font-bold text-slate-950">从上一站到此处</h3>
+    <div className="rounded-xl bg-slate-50 p-3">
+      <h3 className="text-sm font-semibold text-slate-950">从上一站到此处</h3>
       {isFirstItem ? (
         <p className="mt-2 text-sm leading-6 text-slate-500">
           这是当天第一个行程点，没有上一站交通段。
@@ -393,7 +393,7 @@ function PreviousTransportCard({
           {appleUrl && googleUrl ? (
             <div className="mt-3 grid grid-cols-1 gap-2">
               <a
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[#1677ff] px-3 text-xs font-semibold text-white"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-xs font-semibold text-white"
                 href={appleUrl}
                 rel="noreferrer"
                 target="_blank"
@@ -402,7 +402,7 @@ function PreviousTransportCard({
                 用 Apple Maps 查看上一站到此处路线
               </a>
               <a
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-white px-3 text-xs font-semibold text-slate-800 ring-1 ring-slate-200"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-semibold text-slate-800 ring-1 ring-slate-200"
                 href={googleUrl}
                 rel="noreferrer"
                 target="_blank"
@@ -412,7 +412,7 @@ function PreviousTransportCard({
               </a>
             </div>
           ) : (
-            <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-medium text-slate-400">
+            <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-400">
               上一站或当前地点信息不足
             </p>
           )}

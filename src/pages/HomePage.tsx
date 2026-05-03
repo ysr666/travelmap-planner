@@ -142,19 +142,19 @@ export function HomePage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-sky-600">本机 IndexedDB</p>
-            <h2 className="mt-1 text-[28px] font-bold leading-tight text-slate-950">
+            <p className="text-xs font-semibold text-sky-600">本机 IndexedDB</p>
+            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
               我的旅行
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              数据只保存在当前浏览器。本阶段已接入真实旅行列表。
+              数据只保存在当前浏览器。出发前请导出 zip 备份。
             </p>
           </div>
-          <div className="rounded-2xl bg-sky-50 px-3 py-2 text-center">
-            <p className="text-xl font-bold text-sky-600">{tripStats.count}</p>
+          <div className="rounded-xl bg-sky-50 px-3 py-2 text-center">
+            <p className="text-lg font-semibold text-sky-600">{tripStats.count}</p>
             <p className="text-xs font-semibold text-sky-500">旅行</p>
           </div>
         </div>
@@ -179,9 +179,9 @@ export function HomePage() {
 
       {isCreating ? (
         <Card>
-          <form className="space-y-4" onSubmit={handleCreateTrip}>
+          <form className="space-y-3" onSubmit={handleCreateTrip}>
             <div>
-              <h3 className="text-lg font-bold text-slate-950">新建旅行</h3>
+              <h3 className="text-base font-semibold text-slate-950">新建旅行</h3>
               <p className="mt-1 text-sm text-slate-500">每日行程生成会在后续阶段接入。</p>
             </div>
             <FormField
@@ -216,7 +216,7 @@ export function HomePage() {
             <label className="block">
               <span className="text-sm font-semibold text-slate-700">备注</span>
               <textarea
-                className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
                 onChange={(event) =>
                   setForm((current) => ({ ...current, notes: event.target.value }))
                 }
@@ -225,7 +225,7 @@ export function HomePage() {
               />
             </label>
             {formError ? (
-              <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
                 {formError}
               </p>
             ) : null}
@@ -248,7 +248,7 @@ export function HomePage() {
       ) : null}
 
       {error ? (
-        <div className="rounded-[24px] border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
           {error}
         </div>
       ) : null}
@@ -288,13 +288,13 @@ export function HomePage() {
       </section>
 
       <Card className="flex items-center gap-3">
-        <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-          <MapPinned className="size-6" />
+        <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <MapPinned className="size-5" />
         </div>
         <div className="min-w-0">
-          <h3 className="text-base font-bold text-slate-950">离线优先工作区</h3>
+          <h3 className="text-base font-semibold text-slate-950">离线优先工作区</h3>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            当前阶段只接入旅行列表。地图、票据和备份会在后续阶段实现。
+            行程、地图、票据和备份都围绕本机数据工作。
           </p>
         </div>
       </Card>
@@ -315,34 +315,29 @@ function TripCard({
   variantIndex: number
   isDeleting: boolean
 }) {
-  const gradient =
+  const accent =
     variantIndex % 2 === 0
-      ? 'bg-[linear-gradient(135deg,#cae4ff_0%,#f9fbff_48%,#d7f2e6_100%)]'
-      : 'bg-[linear-gradient(135deg,#dbeafe_0%,#f8fafc_52%,#fde68a_100%)]'
+      ? 'bg-sky-500'
+      : 'bg-emerald-500'
 
   return (
-    <Card className="overflow-hidden p-0">
-      <div className={`relative h-36 ${gradient}`}>
-        <div className="absolute left-5 top-5 rounded-2xl bg-white/85 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-          {formatDateRange(trip.startDate, trip.endDate)}
+    <Card className="relative overflow-hidden p-0">
+      <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
+      <button
+        aria-label={`删除 ${trip.title}`}
+        className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100 active:scale-[0.98]"
+        disabled={isDeleting}
+        onClick={onDelete}
+        type="button"
+      >
+        <Trash2 className="size-4" />
+      </button>
+      <button className="block w-full space-y-3 p-4 pl-5 pr-14 text-left" onClick={onOpen} type="button">
+        <div>
+          <p className="truncate text-xs font-semibold text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
+          <h3 className="mt-1 truncate text-lg font-semibold text-slate-950">{trip.title}</h3>
+          <p className="mt-1 truncate text-sm text-slate-500">{trip.destination}</p>
         </div>
-        <button
-          aria-label={`删除 ${trip.title}`}
-          className="absolute right-4 top-4 flex size-10 items-center justify-center rounded-2xl bg-white/88 text-slate-500 shadow-sm active:scale-[0.98]"
-          disabled={isDeleting}
-          onClick={onDelete}
-          type="button"
-        >
-          <Trash2 className="size-4" />
-        </button>
-        <button className="absolute inset-x-0 bottom-0 top-14 text-left" onClick={onOpen} type="button">
-          <div className="absolute bottom-5 left-5 right-5">
-            <p className="truncate text-sm font-semibold text-slate-500">{trip.destination}</p>
-            <h3 className="mt-1 truncate text-2xl font-bold text-slate-950">{trip.title}</h3>
-          </div>
-        </button>
-      </div>
-      <button className="block w-full space-y-3 p-4 text-left" onClick={onOpen} type="button">
         <p className="line-clamp-2 text-sm leading-6 text-slate-500">
           {trip.notes || '暂无备注。'}
         </p>
@@ -378,7 +373,7 @@ function FormField({
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
       <input
-        className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
@@ -390,8 +385,8 @@ function FormField({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-slate-50 px-3 py-3">
-      <p className="truncate text-sm font-bold text-slate-950">{value}</p>
+    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2">
+      <p className="truncate text-sm font-semibold text-slate-950">{value}</p>
       <p className="text-xs font-semibold text-slate-400">{label}</p>
     </div>
   )

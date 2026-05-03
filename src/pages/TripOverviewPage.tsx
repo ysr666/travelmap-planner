@@ -119,10 +119,10 @@ export function TripOverviewPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         <div>
-          <p className="text-sm font-semibold text-sky-600">{trip.destination}</p>
-          <h2 className="mt-1 text-[28px] font-bold leading-tight text-slate-950">
+          <p className="text-xs font-semibold text-sky-600">{trip.destination}</p>
+          <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
             {trip.title}
           </h2>
           <p className="mt-2 text-sm text-slate-500">
@@ -174,7 +174,7 @@ export function TripOverviewPage() {
       <section className="space-y-3">
         <SectionHeader title="每日行程" />
         {actionError ? (
-          <div className="rounded-[24px] border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
             {actionError}
           </div>
         ) : null}
@@ -195,18 +195,18 @@ export function TripOverviewPage() {
             title="还没有每日行程"
           />
         ) : (
-          <Card className="space-y-2 p-2">
+          <Card className="space-y-1 p-2">
             {days.map((day) => (
               <div
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-[22px] p-2 transition hover:bg-slate-50"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2 transition hover:bg-slate-50"
                 key={day.id}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-                    <CalendarDays className="size-5" />
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                    <CalendarDays className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-semibold text-slate-950">
+                    <span className="block truncate text-sm font-semibold text-slate-950">
                       {formatDate(day.date)}
                     </span>
                     <span className="mt-0.5 block truncate text-sm text-slate-500">
@@ -215,14 +215,14 @@ export function TripOverviewPage() {
                   </span>
                 </div>
                 <Button
-                  className="min-h-10 shrink-0 rounded-2xl px-3 text-xs"
+                  className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
                   onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
                   variant="secondary"
                 >
                   日程
                 </Button>
                 <Button
-                  className="min-h-10 shrink-0 rounded-2xl px-3 text-xs"
+                  className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
                   icon={<Map className="size-4" />}
                   onClick={() => navigateTo('map', { tripId: trip.id, dayId: day.id })}
                   variant="secondary"
@@ -236,11 +236,11 @@ export function TripOverviewPage() {
       </section>
 
       <Card className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-          <NotebookText className="size-5" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+          <NotebookText className="size-4" />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-slate-950">旅行备注</h3>
+          <h3 className="text-sm font-semibold text-slate-950">旅行备注</h3>
           <p className="mt-1 text-sm leading-6 text-slate-500">{trip.notes || '暂无备注。'}</p>
         </div>
       </Card>
@@ -250,8 +250,8 @@ export function TripOverviewPage() {
 
 function OverviewMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
-      <p className="text-xl font-bold text-slate-950">{value}</p>
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-center">
+      <p className="text-lg font-semibold text-slate-950">{value}</p>
       <p className="text-xs font-semibold text-slate-400">{label}</p>
     </div>
   )

@@ -132,7 +132,7 @@ export function MapPage() {
           <SkeletonLine className="w-full" />
           <SkeletonLine className="w-1/2" />
         </Card>
-        <div className="h-[42dvh] min-h-[300px] rounded-[28px] bg-white/70" />
+        <div className="h-[42dvh] min-h-[300px] rounded-2xl bg-white/70" />
       </div>
     )
   }
@@ -168,19 +168,19 @@ export function MapPage() {
             <p className="text-xs font-semibold text-sky-600">{trip.title}</p>
             <div className="mt-1 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="truncate text-2xl font-bold text-slate-950">{day.title}</h2>
+                <h2 className="truncate text-xl font-semibold text-slate-950">{day.title}</h2>
                 <p className="mt-1 text-sm text-slate-500">{formatDate(day.date)}</p>
               </div>
-              <div className="shrink-0 rounded-2xl bg-sky-50 px-3 py-2 text-right">
-                <p className="text-sm font-bold text-sky-700">{items.length} 个行程</p>
+              <div className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-right">
+                <p className="text-sm font-semibold text-sky-700">{items.length} 个行程</p>
                 <p className="text-xs font-semibold text-sky-500">{mappedItems.length} 个坐标</p>
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
             {drawerModes.map((mode) => (
               <button
-                className={`min-h-9 rounded-xl text-xs font-bold transition active:scale-[0.98] ${
+                className={`min-h-8 rounded-lg text-xs font-semibold transition active:scale-[0.98] ${
                   drawerMode === mode.id ? 'bg-white text-[#1677ff] shadow-sm' : 'text-slate-500'
                 }`}
                 key={mode.id}
@@ -194,7 +194,7 @@ export function MapPage() {
         </Card>
 
         {items.length === 0 ? (
-          <div className={`${mapHeightByMode[drawerMode]} rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]`}>
+          <div className={`${mapHeightByMode[drawerMode]} rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]`}>
             <div className="flex h-full items-center justify-center">
               <EmptyState
                 body="返回时间轴添加酒店、景点、交通或餐厅后，再查看地图。"
@@ -222,13 +222,13 @@ export function MapPage() {
             <p className="truncate text-xs font-semibold text-sky-600">
               {trip.title} · {formatDate(day.date)}
             </p>
-            <h2 className="truncate text-xl font-bold text-slate-950">{day.title}</h2>
+            <h2 className="truncate text-base font-semibold text-slate-950">{day.title}</h2>
             <p className="mt-1 text-xs text-slate-500">
               {items.length} 个行程点 · {mappedItems.length} 个带坐标
             </p>
           </div>
           <Button
-            className="min-h-10 shrink-0 rounded-2xl px-3 whitespace-nowrap"
+            className="min-h-10 shrink-0 px-3 whitespace-nowrap"
             icon={<Navigation className="size-4" />}
             onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
           >
@@ -237,13 +237,13 @@ export function MapPage() {
         </div>
 
         {mapError ? (
-          <div className="mb-3 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {mapError}
           </div>
         ) : null}
 
         {notice ? (
-          <div className="mb-3 flex items-start gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <div className="mb-3 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-slate-400" />
             <span>{notice}</span>
           </div>
@@ -255,7 +255,7 @@ export function MapPage() {
 
         <div className="mt-3 space-y-2">
           {items.length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
+            <p className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
               这一天还没有行程点。
             </p>
           ) : (
@@ -268,7 +268,7 @@ export function MapPage() {
                     <TransportSegment description={previousTransportDescription} />
                   ) : null}
                   <button
-                    className={`flex w-full items-center gap-3 rounded-2xl p-2 text-left transition active:bg-slate-50 ${
+                    className={`flex w-full items-center gap-3 rounded-xl p-2 text-left transition active:bg-slate-50 ${
                       selectedItemId === item.id ? 'bg-sky-50' : ''
                     }`}
                     onClick={() => handleSelectItem(item)}
@@ -311,14 +311,14 @@ function SelectedItemCard({ item, trip, day }: { item: ItineraryItem; trip: Trip
   const hasCoordinates = hasValidCoordinates(item)
 
   return (
-    <Card className="border-sky-100 bg-white p-3">
+    <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
       <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
-      <h3 className="mt-1 text-lg font-bold text-slate-950">{item.title}</h3>
+      <h3 className="mt-1 text-base font-semibold text-slate-950">{item.title}</h3>
       <p className="mt-1 text-sm text-slate-500">{item.locationName || '地点未填写'}</p>
       <p className="mt-1 line-clamp-2 text-xs text-slate-400">{item.address || '地址未填写'}</p>
       <div className="mt-3 grid grid-cols-3 gap-2">
         <Button
-          className="min-h-10 rounded-xl px-2"
+          className="min-h-10 px-2"
           onClick={() => navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: item.id })}
           variant="secondary"
         >
@@ -356,7 +356,7 @@ function SelectedItemCard({ item, trip, day }: { item: ItineraryItem; trip: Trip
           去时间轴编辑坐标
         </Button>
       ) : null}
-    </Card>
+    </div>
   )
 }
 
@@ -366,7 +366,7 @@ function SkeletonLine({ className = '' }: { className?: string }) {
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="mx-2 flex items-center gap-1.5 rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-500">
+    <div className="mx-2 flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">
       <ArrowDown className="size-3 shrink-0 text-slate-400" />
       <span className="min-w-0 truncate">{description}</span>
     </div>

@@ -111,18 +111,18 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[430px] rounded-t-[30px] border-t border-white/80 bg-white p-4 shadow-[0_-18px_48px_rgba(38,53,76,0.22)]">
+    <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[430px] rounded-t-2xl border-t border-white/80 bg-white p-4 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-sky-600">{ticketStorageModeLabels[storageMode]}</p>
-          <h3 className="mt-1 truncate text-lg font-bold text-slate-950">{displayTitle}</h3>
+          <h3 className="mt-1 truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
           <p className="mt-1 truncate text-xs text-slate-400">
             {ticket.fileName} · {ticketFileTypeLabels[ticket.fileType]} · {formatFileSize(ticket.size)}
           </p>
         </div>
         <button
           aria-label="关闭预览"
-          className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-slate-500"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
           onClick={onClose}
           type="button"
         >
@@ -141,7 +141,7 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
       {storageMode === 'external' ? <ExternalPreview ticket={ticket} /> : null}
 
       {storageMode === 'copy' ? (
-        <div className="max-h-[62dvh] overflow-auto rounded-2xl bg-slate-50">
+        <div className="max-h-[62dvh] overflow-auto rounded-xl bg-slate-50">
           {isLoading ? (
             <div className="flex min-h-64 items-center justify-center text-slate-400">
               <LoaderCircle className="size-5 animate-spin" />
@@ -193,7 +193,7 @@ function CopyPreviewContent({
 
       {ticket.fileType === 'other' ? (
         <div className="space-y-3 p-4 text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-slate-500">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white text-slate-500">
             <FileArchive className="size-7" />
           </div>
           <p className="text-sm leading-6 text-slate-500">此文件类型暂不支持内嵌预览。</p>
@@ -201,7 +201,7 @@ function CopyPreviewContent({
       ) : null}
 
       <a
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
         href={objectUrl}
         rel="noreferrer"
         target="_blank"
@@ -229,11 +229,11 @@ function ReferencePreview({
   onCopy: () => void
 }) {
   return (
-    <div className="space-y-3 rounded-2xl bg-amber-50 p-4 text-amber-900">
+    <div className="space-y-3 rounded-xl bg-amber-50 p-4 text-amber-900">
       <p className="text-sm leading-6">
         此票据仅记录文件位置，旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
-      <p className="rounded-2xl bg-white/70 px-3 py-2 text-sm font-semibold leading-6">
+      <p className="rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold leading-6">
         {ticket.referenceLocation || '未填写位置说明'}
       </p>
       {ticket.referenceLocation ? (
@@ -251,16 +251,16 @@ function ExternalPreview({ ticket }: { ticket: TicketMeta }) {
   const canOpen = Boolean(url && isValidExternalUrl(url))
 
   return (
-    <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
+    <div className="space-y-3 rounded-xl bg-slate-50 p-4">
       <p className="text-sm leading-6 text-slate-500">
         此票据保存的是外部链接，打开时需要网络，并依赖对应的外部服务。
       </p>
-      <p className="break-all rounded-2xl bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
+      <p className="break-all rounded-xl bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
         {url || '未填写外部链接'}
       </p>
       {canOpen ? (
         <a
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
           href={url}
           rel="noreferrer"
           target="_blank"
@@ -269,7 +269,7 @@ function ExternalPreview({ ticket }: { ticket: TicketMeta }) {
           打开外部链接
         </a>
       ) : (
-        <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
           外部链接无效，只支持 http:// 或 https://。
         </p>
       )}

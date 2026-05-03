@@ -30,7 +30,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   const tripId = getRouteParams().get('tripId')
 
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-2xl shadow-slate-300/40">
+    <div className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
       <header
         className={`z-30 border-b border-white/70 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl ${
           isMap ? 'absolute inset-x-0 top-0 bg-white/78' : 'sticky top-0 bg-[#f8fbff]/88'
@@ -39,21 +39,21 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回首页"
-            className="flex size-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 active:scale-[0.98]"
+            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
             onClick={() => navigateTo('home')}
             type="button"
           >
             <Home className="size-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-slate-400">{title.subtitle}</p>
-            <h1 className="truncate text-[22px] font-bold leading-tight text-slate-950">
+            <p className="truncate text-xs font-medium text-slate-400">{title.subtitle}</p>
+            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">
               {title.title}
             </h1>
           </div>
           <button
             aria-label="设置"
-            className="flex size-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 active:scale-[0.98]"
+            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
             onClick={() => navigateTo('settings', tripId ? { tripId } : undefined)}
             type="button"
           >
@@ -114,13 +114,13 @@ export function TripNav({ tripId, activeRoute, dayId, firstDayId, className = ''
   ]
 
   return (
-    <nav className={`rounded-[24px] border border-white/80 bg-white/92 p-1.5 shadow-[0_12px_28px_rgba(47,65,88,0.08)] ${className}`}>
+    <nav className={`rounded-2xl border border-white/80 bg-white/90 p-1.5 shadow-[0_8px_22px_rgba(47,65,88,0.05)] ${className}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (
             <button
-              className={`flex min-h-10 items-center justify-center gap-1.5 rounded-[18px] px-2 text-xs font-bold transition active:scale-[0.98] ${
+              className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] ${
                 item.active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500 active:bg-slate-50'
               }`}
               key={item.id}

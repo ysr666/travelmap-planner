@@ -214,40 +214,34 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-4">
-        <div>
-          <p className="text-sm font-semibold text-sky-600">本地备份</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-950">zip 导出和导入</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据和票据文件。
-          </p>
-        </div>
-
-        {error ? <StatusMessage tone="error" message={error} /> : null}
-        {success ? <StatusMessage tone="success" message={success} /> : null}
-        {warnings.length > 0 ? (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
-            <p className="font-bold">导入/导出提醒</p>
-            <ul className="mt-1 list-inside list-disc">
-              {warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </Card>
+      {error || success || warnings.length > 0 ? (
+        <Card className="space-y-3">
+          {error ? <StatusMessage tone="error" message={error} /> : null}
+          {success ? <StatusMessage tone="success" message={success} /> : null}
+          {warnings.length > 0 ? (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
+              <p className="font-semibold">导入/导出提醒</p>
+              <ul className="mt-1 list-inside list-disc">
+                {warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
 
       {trip ? <TripNav activeRoute="settings" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />
-        <Card className="space-y-4">
+        <Card className="space-y-3">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-              <Smartphone className="size-5" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-bold text-slate-950">可添加到 iPhone 主屏幕</h3>
+              <h3 className="text-base font-semibold text-slate-950">可添加到 iPhone 主屏幕</h3>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
               </p>
@@ -273,46 +267,51 @@ export function SettingsPage() {
         </Card>
       </section>
 
-      <Card className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-            <HardDriveDownload className="size-5" />
+      <section className="space-y-3">
+        <SectionHeader title="备份与导入" />
+        <Card className="space-y-3">
+          <p className="text-sm leading-6 text-slate-500">
+            备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据和票据文件。
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <HardDriveDownload className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold text-slate-950">导出当前旅行</h3>
+              <p className="truncate text-sm text-slate-500">
+                {trip ? trip.title : '请先进入某个旅行，再导出该旅行备份。'}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-slate-950">导出当前旅行</h3>
-            <p className="truncate text-sm text-slate-500">
-              {trip ? trip.title : '请先进入某个旅行，再导出该旅行备份。'}
-            </p>
-          </div>
-        </div>
 
-        {isLoadingTrip ? (
-          <SkeletonLine className="w-full" />
-        ) : trip ? (
-          <Button
-            className="w-full"
-            icon={<HardDriveDownload className="size-4" />}
-            loading={isExporting}
-            onClick={() => void handleExport()}
-          >
-            导出当前旅行备份 zip
-          </Button>
-        ) : (
-          <EmptyState
-            body="从旅行总览进入设置页后，可以导出该旅行的完整备份。"
-            icon={<Archive className="size-6" />}
-            title="当前没有可导出的旅行"
-          />
-        )}
-      </Card>
+          {isLoadingTrip ? (
+            <SkeletonLine className="w-full" />
+          ) : trip ? (
+            <Button
+              className="w-full"
+              icon={<HardDriveDownload className="size-4" />}
+              loading={isExporting}
+              onClick={() => void handleExport()}
+            >
+              导出当前旅行备份 zip
+            </Button>
+          ) : (
+            <EmptyState
+              body="从旅行总览进入设置页后，可以导出该旅行的完整备份。"
+              icon={<Archive className="size-6" />}
+              title="当前没有可导出的旅行"
+            />
+          )}
+        </Card>
 
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-            <Import className="size-5" />
+          <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <Import className="size-4" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-950">导入备份</h3>
+            <h3 className="text-base font-semibold text-slate-950">导入备份</h3>
             <p className="text-sm text-slate-500">选择之前导出的 travelmap zip 文件。</p>
           </div>
         </div>
@@ -321,7 +320,7 @@ export function SettingsPage() {
           <span className="text-sm font-semibold text-slate-700">备份文件</span>
           <input
             accept=".zip,application/zip,application/x-zip-compressed"
-            className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+            className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
             key={fileInputKey}
             onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
             type="file"
@@ -329,7 +328,7 @@ export function SettingsPage() {
         </label>
 
         {selectedFile ? (
-          <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
             已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
           </p>
         ) : null}
@@ -345,6 +344,7 @@ export function SettingsPage() {
           导入 zip 备份
         </Button>
       </Card>
+      </section>
 
       <section className="space-y-3">
         <SectionHeader title="设备存储" />
@@ -385,20 +385,23 @@ export function SettingsPage() {
           </Button>
 
           {persistenceMessage ? (
-            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
               {persistenceMessage}
             </p>
           ) : null}
         </Card>
       </section>
 
-      <Card className="border-amber-100 bg-amber-50/90">
-        <h3 className="text-base font-bold text-amber-950">备份提醒</h3>
-        <p className="mt-2 text-sm leading-6 text-amber-800">
-          重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
-          在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
-        </p>
-      </Card>
+      <section className="space-y-3">
+        <SectionHeader title="关于" />
+        <Card className="border-amber-100 bg-amber-50/80">
+          <h3 className="text-base font-semibold text-amber-950">备份提醒</h3>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
+            在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
+          </p>
+        </Card>
+      </section>
     </div>
   )
 }
@@ -411,7 +414,7 @@ function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: 
   const Icon = tone === 'error' ? AlertTriangle : CheckCircle2
 
   return (
-    <div className={`flex items-start gap-2 rounded-2xl border px-3 py-3 text-sm font-medium ${styles}`}>
+    <div className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}>
       <Icon className="mt-0.5 size-4 shrink-0" />
       <p className="leading-6">{message}</p>
     </div>
@@ -434,7 +437,7 @@ function InfoPill({
   }[tone]
 
   return (
-    <div className={`flex items-start gap-2 rounded-2xl px-3 py-2 text-sm leading-6 ${styles}`}>
+    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-6 ${styles}`}>
       <span className="mt-1 shrink-0">{icon}</span>
       <span>{text}</span>
     </div>

@@ -132,7 +132,7 @@ export function ItineraryItemForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form className="space-y-3" onSubmit={handleSubmit}>
       <FormField
         label="行程标题"
         onChange={(value) => setForm((current) => ({ ...current, title: value }))}
@@ -169,7 +169,7 @@ export function ItineraryItemForm({
       <label className="block">
         <span className="text-sm font-semibold text-slate-700">交通方式</span>
         <select
-          className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
           onChange={(event) =>
             setForm((current) => ({
               ...current,
@@ -185,8 +185,8 @@ export function ItineraryItemForm({
           ))}
         </select>
       </label>
-      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-        <h4 className="text-sm font-bold text-slate-950">从上一站到此处</h4>
+      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+        <h4 className="text-sm font-semibold text-slate-950">从上一站到此处</h4>
         <p className="mt-1 text-xs leading-5 text-slate-500">
           可先用外部地图查看路线，再手动记录交通方式、预计耗时和备注。
         </p>
@@ -194,7 +194,7 @@ export function ItineraryItemForm({
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">交通方式</span>
             <select
-              className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -224,7 +224,7 @@ export function ItineraryItemForm({
         <label className="mt-3 block">
           <span className="text-sm font-semibold text-slate-700">交通备注</span>
           <textarea
-            className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className="mt-2 min-h-20 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
             onChange={(event) =>
               setForm((current) => ({ ...current, previousTransportNote: event.target.value }))
             }
@@ -233,7 +233,7 @@ export function ItineraryItemForm({
           />
         </label>
       </div>
-      <div className="rounded-2xl bg-slate-50 p-3">
+      <div className="rounded-xl bg-slate-50 p-3">
         <FormField
           label="粘贴地图链接解析坐标"
           onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
@@ -269,14 +269,14 @@ export function ItineraryItemForm({
       <label className="block">
         <span className="text-sm font-semibold text-slate-700">备注</span>
         <textarea
-          className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
           onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
           placeholder="可选：预约信息、注意事项或备用方案"
           value={form.notes}
         />
       </label>
       {error ? (
-        <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
           {error}
         </p>
       ) : null}
@@ -314,7 +314,7 @@ function FormField({
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
       <input
-        className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
         inputMode={type === 'number' ? 'decimal' : undefined}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

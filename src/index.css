@@ -27,9 +27,7 @@ body {
   min-height: 100svh;
   margin: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 16% 0%, rgba(122, 188, 255, 0.24), transparent 28rem),
-    linear-gradient(180deg, #f8fbff 0%, #eaf1f7 100%);
+  background: linear-gradient(180deg, #f8fbff 0%, #eaf1f7 100%);
 }
 
 button,

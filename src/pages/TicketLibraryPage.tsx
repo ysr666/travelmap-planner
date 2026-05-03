@@ -352,21 +352,21 @@ export function TicketLibraryPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         <div>
-          <p className="text-sm font-semibold text-sky-600">{trip.title}</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-950">票据和订单</h2>
+          <p className="text-xs font-semibold text-sky-600">{trip.title}</p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-950">票据和订单</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             可保存文件副本，也可只记录文件位置或外部链接。
           </p>
         </div>
 
-        <div className="rounded-2xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
+        <div className="rounded-xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
           清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。重要旅行出发前必须导出 zip 备份到 iCloud Drive。
         </div>
 
         {storageEstimate ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+          <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
             <HardDrive className="size-4 text-slate-400" />
             <span>
               已用 {formatStorageSize(storageEstimate.usage)} / 可用 {formatStorageSize(storageEstimate.quota)}
@@ -377,13 +377,13 @@ export function TicketLibraryPage() {
 
       <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} />
 
-      <Card className="space-y-4">
+      <Card className="space-y-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-            <Upload className="size-5" />
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+            <Upload className="size-4" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-950">添加票据</h3>
+            <h3 className="text-base font-semibold text-slate-950">添加票据</h3>
             <p className="text-xs text-slate-500">文件副本单个建议不超过 20MB。</p>
           </div>
         </div>
@@ -391,7 +391,7 @@ export function TicketLibraryPage() {
         <div className="grid grid-cols-1 gap-2">
           {storageOptions.map((option) => (
             <button
-              className={`rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${
+              className={`rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
                 storageMode === option.value
                   ? 'border-sky-200 bg-sky-50 text-sky-800'
                   : 'border-slate-100 bg-white text-slate-600'
@@ -449,7 +449,7 @@ export function TicketLibraryPage() {
         <label className="block">
           <span className="text-sm font-semibold text-slate-700">绑定对象</span>
           <select
-            className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
             onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
             value={bindingTarget}
           >
@@ -466,7 +466,7 @@ export function TicketLibraryPage() {
         <label className="block">
           <span className="text-sm font-semibold text-slate-700">备注</span>
           <textarea
-            className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className="mt-2 min-h-20 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
             onChange={(event) => setNote(event.target.value)}
             placeholder="例如：酒店订单、门票二维码、登机牌"
             value={note}
@@ -474,7 +474,7 @@ export function TicketLibraryPage() {
         </label>
 
         {actionError ? (
-          <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
             {actionError}
           </p>
         ) : null}
@@ -554,13 +554,13 @@ function TicketCard({
   const shouldShowNote = ticket.note && ticket.note.trim() !== displayTitle
 
   return (
-    <Card className="space-y-3 p-4">
+    <Card className="space-y-3 p-3">
       <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
           {ticketIcons[ticket.fileType]}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-bold text-slate-950">{displayTitle}</h3>
+          <h3 className="truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
           <p className="mt-1 truncate text-xs leading-5 text-slate-500">{ticket.fileName}</p>
           <p className="text-xs leading-5 text-slate-400">
             {ticketFileTypeLabels[ticket.fileType]} · {ticketStorageModeLabels[storageMode]} · {formatFileSize(ticket.size)}
@@ -570,37 +570,38 @@ function TicketCard({
       </div>
 
       {shouldShowNote ? (
-        <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500">
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500">
           {ticket.note}
         </p>
       ) : null}
 
       {storageMode === 'reference' && ticket.referenceLocation ? (
-        <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
           位置：{ticket.referenceLocation}
         </p>
       ) : null}
 
       {storageMode === 'external' && ticket.externalUrl ? (
-        <p className="truncate rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        <p className="truncate rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
           {ticket.externalUrl}
         </p>
       ) : null}
 
-      <p className="text-xs font-semibold text-slate-500">{bindingLabel}</p>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button className="min-h-10 rounded-xl" onClick={onPreview} variant="secondary">
-          查看
-        </Button>
-        <Button
-          className="min-h-10 rounded-xl text-red-600"
-          icon={<Trash2 className="size-4" />}
-          onClick={onDelete}
-          variant="secondary"
-        >
-          删除
-        </Button>
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+        <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-500">{bindingLabel}</p>
+        <div className="flex shrink-0 gap-2">
+          <Button className="min-h-9 px-3 text-xs" onClick={onPreview} variant="secondary">
+            查看
+          </Button>
+          <Button
+            className="min-h-9 px-3 text-xs text-red-600"
+            icon={<Trash2 className="size-4" />}
+            onClick={onDelete}
+            variant="secondary"
+          >
+            删除
+          </Button>
+        </div>
       </div>
     </Card>
   )
@@ -619,13 +620,13 @@ function CopyTicketFields({
     <label className="block">
       <span className="text-sm font-semibold text-slate-700">文件 *</span>
       <input
-        className="mt-2 block w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+        className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
         key={fileInputKey}
         onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
         type="file"
       />
       {selectedFile ? (
-        <span className="mt-2 block rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        <span className="mt-2 block rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
           已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
         </span>
       ) : null}
@@ -659,7 +660,7 @@ function ReferenceTicketFields({
         required
         value={location}
       />
-      <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
         旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
     </div>
@@ -686,7 +687,7 @@ function TextField({
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
       <input
-        className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}

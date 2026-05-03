@@ -14,11 +14,11 @@ export function SectionHeader({ eyebrow, title, action, onAction }: SectionHeade
             {eyebrow}
           </p>
         ) : null}
-        <h2 className="mt-1 text-xl font-bold text-slate-950">{title}</h2>
+        <h2 className="mt-1 text-base font-semibold text-slate-950">{title}</h2>
       </div>
       {action ? (
         <button
-          className="rounded-full px-3 py-1.5 text-sm font-semibold text-sky-600 active:bg-sky-50"
+          className="rounded-xl px-3 py-1.5 text-sm font-semibold text-sky-600 active:bg-sky-50"
           onClick={onAction}
           type="button"
         >

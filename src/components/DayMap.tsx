@@ -237,7 +237,7 @@ export function DayMap({
 
   if (validItems.length === 0) {
     return (
-      <div className={`${heightClassName} rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]`}>
+      <div className={`${heightClassName} rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]`}>
         <div className="flex h-full items-center justify-center">
           <EmptyState
             body="已有行程，但暂无可显示在地图上的坐标。"
@@ -250,12 +250,12 @@ export function DayMap({
   }
 
   return (
-    <div className={`relative ${heightClassName} overflow-hidden rounded-[28px] border border-white/80 bg-slate-100 shadow-[0_16px_34px_rgba(47,65,88,0.12)] transition-[height,min-height] duration-300`}>
+    <div className={`relative ${heightClassName} overflow-hidden rounded-2xl border border-white/80 bg-slate-100 shadow-[0_8px_22px_rgba(47,65,88,0.08)] transition-[height,min-height] duration-300`}>
       <div className="h-full w-full" ref={containerRef} />
       {mapError ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/88 p-5 text-center backdrop-blur">
           <div>
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <AlertTriangle className="size-6" />
             </div>
             <h3 className="text-base font-bold text-slate-950">地图底图无法加载</h3>

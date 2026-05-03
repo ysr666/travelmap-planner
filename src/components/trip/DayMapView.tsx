@@ -63,8 +63,6 @@ export function DayMapView({
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
 
-  const activeSelectedItemId = selectedItem?.id ?? null
-
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
     setSelectedItemId(item.id)
     if (source === 'marker') {
@@ -98,7 +96,7 @@ export function DayMapView({
             items={items}
             onMapError={(message) => setMapError(message)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
-            selectedItemId={activeSelectedItemId}
+            selectedItemId={selectedItemId}
             surface="fullscreen"
           />
         )}
@@ -126,7 +124,7 @@ export function DayMapView({
         onOpenItem={onOpenItem}
         onSelectItem={handleSelectItem}
         selectedItem={selectedItem}
-        selectedItemId={activeSelectedItemId}
+        selectedItemId={selectedItemId}
         setSheetState={setSheetState}
         sheetState={sheetState}
         stageRef={rootRef}
@@ -308,7 +306,7 @@ function MapBottomSheet({
 
   return (
     <section
-      className={`absolute inset-x-0 bottom-0 z-40 flex min-h-0 flex-col rounded-t-[1.35rem] border border-white/80 bg-white/95 shadow-[0_-18px_48px_rgba(47,65,88,0.16)] backdrop-blur-xl ${
+      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-3xl border border-white/80 bg-white/95 shadow-[0_-14px_36px_rgba(47,65,88,0.14)] backdrop-blur-xl ${
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
       data-testid="map-sheet"

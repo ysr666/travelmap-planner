@@ -46,7 +46,6 @@ export function DayMap({
   const onMapErrorRef = useRef(onMapError)
   const selectedItemIdRef = useRef(selectedItemId)
   const coordinateKeyRef = useRef('')
-  const selectionCoordinateKeyRef = useRef('')
   const resizeFrameRef = useRef<number | null>(null)
   const validItems = useMemo(
     () => sortItineraryItems(items).filter(hasValidCoordinates),
@@ -284,16 +283,11 @@ export function DayMap({
       disposed = true
       cleanupMap()
     }
-  }, [cleanupMap, fitViewportIfNeeded, hasMappableItems, scheduleMapResize, syncMarkersAndRoute])
+  }, [cleanupMap, fitViewportIfNeeded, hasMappableItems, syncMarkersAndRoute])
 
   useEffect(() => {
     selectedItemIdRef.current = selectedItemId
     updateMarkerSelection()
-
-    if (selectionCoordinateKeyRef.current !== coordinateKeyRef.current) {
-      selectionCoordinateKeyRef.current = coordinateKeyRef.current
-      return
-    }
 
     const selectedItem = validItemsRef.current.find((item) => item.id === selectedItemId)
     const map = mapRef.current

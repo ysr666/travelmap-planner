@@ -22,6 +22,7 @@ type MarkerRecord = {
   itemId: string
   marker: Marker
   element: HTMLButtonElement
+  content: HTMLSpanElement
 }
 
 const ROUTE_SOURCE_ID = 'day-route-source'
@@ -88,8 +89,8 @@ export function DayMap({
 
   const updateMarkerSelection = useCallback(() => {
     const selectedId = selectedItemIdRef.current
-    markersRef.current.forEach(({ itemId, element }) => {
-      element.className = markerClassName(itemId === selectedId)
+    markersRef.current.forEach(({ itemId, content }) => {
+      content.className = markerContentClassName(itemId === selectedId)
     })
   }, [])
 
@@ -150,11 +151,21 @@ export function DayMap({
     syncRouteLine(map, mapItems)
 
     mapItems.forEach((item, index) => {
+      const lngLat = getItemLngLat(item)
+      if (!lngLat) {
+        return
+      }
+
       const element = document.createElement('button')
       element.type = 'button'
-      element.className = markerClassName(item.id === selectedItemIdRef.current)
-      element.textContent = String(index + 1)
+      element.className = markerRootClassName()
       element.setAttribute('aria-label', `选择 ${item.title}`)
+
+      const content = document.createElement('span')
+      content.className = markerContentClassName(item.id === selectedItemIdRef.current)
+      content.textContent = String(index + 1)
+      element.append(content)
+
       element.addEventListener('click', () => {
         const nextItem = validItemsRef.current.find((candidate) => candidate.id === item.id)
         if (nextItem) {
@@ -166,10 +177,10 @@ export function DayMap({
         anchor: 'center',
         element,
       })
-        .setLngLat([item.lng as number, item.lat as number])
+        .setLngLat(lngLat)
         .addTo(map)
 
-      markersRef.current.push({ itemId: item.id, marker, element })
+      markersRef.current.push({ itemId: item.id, marker, element, content })
     })
 
     updateMarkerSelection()
@@ -230,16 +241,16 @@ export function DayMap({
       cleanupMap()
       loadedRef.current = false
 
-      const firstItem = validItemsRef.current[0]
+      const firstLngLat = getItemLngLat(validItemsRef.current[0])
       const map = new maplibregl.Map({
         attributionControl: false,
-        center: firstItem ? [firstItem.lng as number, firstItem.lat as number] : [139.7671, 35.6812],
+        center: firstLngLat ?? [139.7671, 35.6812],
         container: containerRef.current,
         dragRotate: false,
         pitchWithRotate: false,
         style: styleUrl,
         touchPitch: false,
-        zoom: firstItem ? 12 : 10,
+        zoom: firstLngLat ? 12 : 10,
       })
 
       map.dragPan.enable()
@@ -290,10 +301,11 @@ export function DayMap({
     updateMarkerSelection()
 
     const selectedItem = validItemsRef.current.find((item) => item.id === selectedItemId)
+    const selectedLngLat = selectedItem ? getItemLngLat(selectedItem) : null
     const map = mapRef.current
-    if (map && loadedRef.current && selectedItem) {
+    if (map && loadedRef.current && selectedLngLat) {
       map.easeTo({
-        center: [selectedItem.lng as number, selectedItem.lat as number],
+        center: selectedLngLat,
         duration: 450,
         zoom: Math.max(map.getZoom(), 13.5),
       })
@@ -363,21 +375,27 @@ export function DayMap({
   )
 }
 
-function markerClassName(isSelected: boolean) {
+function markerRootClassName() {
   return [
     'flex',
     'size-11',
-    'z-10',
     'items-center',
     'justify-center',
     'pointer-events-auto',
+  ].join(' ')
+}
+
+function markerContentClassName(isSelected: boolean) {
+  return [
+    'flex',
+    'size-11',
+    'items-center',
+    'justify-center',
     'rounded-full',
     'border-4',
     'text-base',
     'font-bold',
     'shadow-[0_12px_28px_rgba(22,119,255,0.28)]',
-    'transition',
-    'active:scale-95',
     isSelected
       ? 'border-white bg-emerald-500 text-white ring-4 ring-emerald-200'
       : 'border-white bg-[#1677ff] text-white',
@@ -389,7 +407,10 @@ function buildLineFeature(items: ItineraryItem[]): Feature<LineString> {
     type: 'Feature',
     geometry: {
       type: 'LineString',
-      coordinates: items.length > 1 ? items.map((item) => [item.lng as number, item.lat as number]) : [],
+      coordinates: items.length > 1 ? items.flatMap((item) => {
+        const lngLat = getItemLngLat(item)
+        return lngLat ? [lngLat] : []
+      }) : [],
     },
     properties: {},
   }
@@ -402,8 +423,12 @@ function updateViewport(map: MapLibreMap, items: ItineraryItem[]) {
 
   if (items.length === 1) {
     const item = items[0]
+    const lngLat = getItemLngLat(item)
+    if (!lngLat) {
+      return
+    }
     map.flyTo({
-      center: [item.lng as number, item.lat as number],
+      center: lngLat,
       duration: 600,
       zoom: 14,
     })
@@ -411,10 +436,36 @@ function updateViewport(map: MapLibreMap, items: ItineraryItem[]) {
   }
 
   const bounds = new maplibregl.LngLatBounds()
-  items.forEach((item) => bounds.extend([item.lng as number, item.lat as number]))
+  items.forEach((item) => {
+    const lngLat = getItemLngLat(item)
+    if (lngLat) {
+      bounds.extend(lngLat)
+    }
+  })
   map.fitBounds(bounds, {
     duration: 700,
     maxZoom: 14,
     padding: 72,
   })
+}
+
+function getItemLngLat(item?: ItineraryItem): [number, number] | null {
+  if (!item) {
+    return null
+  }
+
+  if (
+    typeof item.lat !== 'number' ||
+    typeof item.lng !== 'number' ||
+    !Number.isFinite(item.lat) ||
+    !Number.isFinite(item.lng) ||
+    item.lat < -90 ||
+    item.lat > 90 ||
+    item.lng < -180 ||
+    item.lng > 180
+  ) {
+    return null
+  }
+
+  return [item.lng, item.lat]
 }

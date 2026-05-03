@@ -52,6 +52,8 @@ npm run dev
 
 [http://localhost:5173/#/home](http://localhost:5173/#/home)
 
+如果示例旅行坐标显示异常，请删除旧示例旅行，或清空浏览器里的 `TravelConsoleDB` 后重新点击“创建示例旅行”。已存在于 IndexedDB 的旧示例数据不会自动更新。
+
 ## 🏗 构建和预览
 
 ```bash

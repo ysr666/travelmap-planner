@@ -41,9 +41,13 @@ export function DayMap({
   const markersRef = useRef<MarkerRecord[]>([])
   const loadedRef = useRef(false)
   const fallbackTriedRef = useRef(false)
+  const fitCoordinateKeyRef = useRef<string | null>(null)
   const onSelectItemRef = useRef(onSelectItem)
   const onMapErrorRef = useRef(onMapError)
   const selectedItemIdRef = useRef(selectedItemId)
+  const coordinateKeyRef = useRef('')
+  const selectionCoordinateKeyRef = useRef('')
+  const resizeFrameRef = useRef<number | null>(null)
   const validItems = useMemo(
     () => sortItineraryItems(items).filter(hasValidCoordinates),
     [items],
@@ -51,9 +55,22 @@ export function DayMap({
   const validItemsRef = useRef(validItems)
   const [mapError, setMapError] = useState<string | null>(null)
 
-  const coordinateKey = validItems
-    .map((item) => `${item.id}:${item.lat}:${item.lng}`)
-    .join('|')
+  const coordinateKey = useMemo(
+    () =>
+      validItems
+        .map((item) =>
+          [
+            item.id,
+            item.lat,
+            item.lng,
+            item.sortOrder,
+            item.startTime ?? '',
+          ].join(':'),
+        )
+        .join('|'),
+    [validItems],
+  )
+  const hasMappableItems = validItems.length > 0
 
   const clearMarkers = useCallback(() => {
     markersRef.current.forEach(({ marker }) => marker.remove())
@@ -67,13 +84,26 @@ export function DayMap({
       mapRef.current = null
     }
     loadedRef.current = false
+    fitCoordinateKeyRef.current = null
   }, [clearMarkers])
 
   const updateMarkerSelection = useCallback(() => {
+    const selectedId = selectedItemIdRef.current
     markersRef.current.forEach(({ itemId, element }) => {
-      element.className = markerClassName(itemId === selectedItemId)
+      element.className = markerClassName(itemId === selectedId)
     })
-  }, [selectedItemId])
+  }, [])
+
+  const scheduleMapResize = useCallback(() => {
+    if (resizeFrameRef.current !== null) {
+      return
+    }
+
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      resizeFrameRef.current = null
+      mapRef.current?.resize()
+    })
+  }, [])
 
   const syncRouteLine = useCallback((map: MapLibreMap, mapItems: ItineraryItem[]) => {
     const lineData = buildLineFeature(mapItems)
@@ -126,7 +156,12 @@ export function DayMap({
       element.className = markerClassName(item.id === selectedItemIdRef.current)
       element.textContent = String(index + 1)
       element.setAttribute('aria-label', `选择 ${item.title}`)
-      element.addEventListener('click', () => onSelectItemRef.current(item))
+      element.addEventListener('click', () => {
+        const nextItem = validItemsRef.current.find((candidate) => candidate.id === item.id)
+        if (nextItem) {
+          onSelectItemRef.current(nextItem)
+        }
+      })
 
       const marker = new maplibregl.Marker({
         anchor: 'center',
@@ -138,8 +173,19 @@ export function DayMap({
       markersRef.current.push({ itemId: item.id, marker, element })
     })
 
+    updateMarkerSelection()
+  }, [clearMarkers, syncRouteLine, updateMarkerSelection])
+
+  const fitViewportIfNeeded = useCallback((map: MapLibreMap) => {
+    const nextCoordinateKey = coordinateKeyRef.current
+    const mapItems = validItemsRef.current
+    if (!nextCoordinateKey || fitCoordinateKeyRef.current === nextCoordinateKey) {
+      return
+    }
+
+    fitCoordinateKeyRef.current = nextCoordinateKey
     updateViewport(map, mapItems)
-  }, [clearMarkers, syncRouteLine])
+  }, [])
 
   useEffect(() => {
     onSelectItemRef.current = onSelectItem
@@ -155,18 +201,23 @@ export function DayMap({
 
   useEffect(() => {
     validItemsRef.current = validItems
-    if (validItems.length === 0) {
+    coordinateKeyRef.current = coordinateKey
+  }, [coordinateKey, validItems])
+
+  useEffect(() => {
+    if (!hasMappableItems) {
       cleanupMap()
       return
     }
 
     if (mapRef.current && loadedRef.current) {
       syncMarkersAndRoute()
+      fitViewportIfNeeded(mapRef.current)
     }
-  }, [cleanupMap, coordinateKey, syncMarkersAndRoute, validItems])
+  }, [cleanupMap, coordinateKey, fitViewportIfNeeded, hasMappableItems, syncMarkersAndRoute])
 
   useEffect(() => {
-    if (!containerRef.current || validItems.length === 0 || mapRef.current) {
+    if (!containerRef.current || !hasMappableItems || mapRef.current) {
       return
     }
 
@@ -206,6 +257,7 @@ export function DayMap({
         loadedRef.current = true
         setMapError(null)
         syncMarkersAndRoute()
+        fitViewportIfNeeded(map)
       })
 
       map.on('error', () => {
@@ -232,12 +284,18 @@ export function DayMap({
       disposed = true
       cleanupMap()
     }
-  }, [cleanupMap, syncMarkersAndRoute, validItems.length])
+  }, [cleanupMap, fitViewportIfNeeded, hasMappableItems, scheduleMapResize, syncMarkersAndRoute])
 
   useEffect(() => {
+    selectedItemIdRef.current = selectedItemId
     updateMarkerSelection()
 
-    const selectedItem = validItems.find((item) => item.id === selectedItemId)
+    if (selectionCoordinateKeyRef.current !== coordinateKeyRef.current) {
+      selectionCoordinateKeyRef.current = coordinateKeyRef.current
+      return
+    }
+
+    const selectedItem = validItemsRef.current.find((item) => item.id === selectedItemId)
     const map = mapRef.current
     if (map && loadedRef.current && selectedItem) {
       map.easeTo({
@@ -246,9 +304,31 @@ export function DayMap({
         zoom: Math.max(map.getZoom(), 13.5),
       })
     }
-  }, [selectedItemId, updateMarkerSelection, validItems])
+  }, [selectedItemId, updateMarkerSelection])
 
-  if (validItems.length === 0) {
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !hasMappableItems) {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleMapResize()
+    })
+    resizeObserver.observe(container)
+    window.addEventListener('resize', scheduleMapResize)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleMapResize)
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current)
+        resizeFrameRef.current = null
+      }
+    }
+  }, [hasMappableItems, scheduleMapResize])
+
+  if (!hasMappableItems) {
     return (
       <div className={surface === 'fullscreen'
         ? `${heightClassName} bg-[#eaf2f9] p-4`

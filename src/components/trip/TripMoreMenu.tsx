@@ -1,0 +1,59 @@
+import { useState, type ReactNode } from 'react'
+import { Archive, CalendarDays, Home, MoreHorizontal, Settings, Ticket, X } from 'lucide-react'
+import { navigateTo } from '../../lib/routes'
+
+type TripMoreMenuProps = {
+  tripId: string
+}
+
+export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <button
+        aria-label="更多"
+        className="flex size-10 items-center justify-center rounded-xl bg-white/88 text-slate-700 ring-1 ring-slate-200/80 backdrop-blur active:scale-[0.98]"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        <MoreHorizontal className="size-5" />
+      </button>
+
+      {open ? (
+        <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] items-end bg-slate-950/24 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
+          <div className="w-full rounded-2xl border border-white/80 bg-white p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
+            <button
+              className="mb-1 flex min-h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-slate-500 active:bg-slate-50"
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              更多
+              <X className="size-4" />
+            </button>
+            <MenuItem icon={<CalendarDays className="size-4" />} label="旅行总览 / 管理" onClick={() => navigateTo('overview', { tripId })} />
+            <MenuItem icon={<Ticket className="size-4" />} label="全部票据" onClick={() => navigateTo('tickets', { tripId })} />
+            <MenuItem icon={<Archive className="size-4" />} label="备份与恢复" onClick={() => navigateTo('settings', { tripId })} />
+            <MenuItem icon={<Settings className="size-4" />} label="设置与存储说明" onClick={() => navigateTo('settings', { tripId })} />
+            <MenuItem icon={<Home className="size-4" />} label="返回首页" onClick={() => navigateTo('home')} />
+          </div>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-700 active:bg-slate-50"
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex size-8 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+        {icon}
+      </span>
+      {label}
+    </button>
+  )
+}

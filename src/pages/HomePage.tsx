@@ -8,6 +8,8 @@ import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { TripCover } from '../components/trip/TripCover'
+import { getTripStatus } from '../lib/tripVisuals'
 
 type TripFormState = {
   title: string
@@ -161,10 +163,10 @@ export function HomePage() {
       <section className="shrink-0 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-sky-600">本地旅行总控台</p>
-            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">旅图</h2>
+            <p className="text-xs font-semibold text-sky-600">你好，旅行家 👋</p>
+            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">旅图 TripMap</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              管理行程、地图、交通段和票据。数据只保存在当前浏览器。
+              让每一段旅程，都井然有序。
             </p>
           </div>
           <div className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-center">
@@ -290,7 +292,7 @@ export function HomePage() {
                     <TripCard
                       key={trip.id}
                       onDelete={() => setPendingDeleteTrip(trip)}
-                      onOpen={() => navigateTo('overview', { tripId: trip.id })}
+                      onOpen={() => navigateTo('trip', { tripId: trip.id })}
                       trip={trip}
                       variantIndex={index}
                       isDeleting={deletingTripId === trip.id}
@@ -360,6 +362,7 @@ function TripCard({
     variantIndex % 2 === 0
       ? 'bg-sky-500'
       : 'bg-emerald-500'
+  const status = getTripStatus(trip)
 
   return (
     <Card className="relative overflow-hidden p-0">
@@ -373,19 +376,20 @@ function TripCard({
       >
         <Trash2 className="size-4" />
       </button>
-      <button className="block w-full space-y-3 p-4 pl-5 pr-14 text-left" onClick={onOpen} type="button">
-        <div>
-          <p className="truncate text-xs font-semibold text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
-          <h3 className="mt-1 truncate text-lg font-semibold text-slate-950">{trip.title}</h3>
+      <button className="grid w-full grid-cols-[6.2rem_1fr] gap-3 p-4 pl-5 pr-14 text-left" onClick={onOpen} type="button">
+        <TripCover trip={trip} variant="thumbnail" />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${status.className}`}>
+              {status.label}
+            </span>
+            <p className="truncate text-xs font-semibold text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
+          </div>
+          <h3 className="mt-2 truncate text-lg font-semibold text-slate-950">{trip.title}</h3>
           <p className="mt-1 truncate text-sm text-slate-500">{trip.destination}</p>
-        </div>
-        <p className="line-clamp-2 text-sm leading-6 text-slate-500">
-          {trip.notes || '暂无备注。'}
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <Stat label="开始" value={formatShortDate(trip.startDate)} />
-          <Stat label="结束" value={formatShortDate(trip.endDate)} />
-          <Stat label="更新" value={formatShortDateTime(trip.updatedAt)} />
+          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
+            {trip.notes || `${formatTripDays(trip.startDate, trip.endDate)} · 最近更新 ${formatShortDateTime(trip.updatedAt)}`}
+          </p>
         </div>
       </button>
     </Card>
@@ -424,15 +428,6 @@ function FormField({
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2">
-      <p className="truncate text-sm font-semibold text-slate-950">{value}</p>
-      <p className="text-xs font-semibold text-slate-400">{label}</p>
-    </div>
-  )
-}
-
 function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
 }
@@ -443,6 +438,17 @@ function formatDateRange(startDate: string, endDate: string) {
   }
 
   return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`
+}
+
+function formatTripDays(startDate: string, endDate: string) {
+  if (!startDate || !endDate || endDate < startDate) {
+    return '日期未定'
+  }
+
+  const start = new Date(`${startDate}T00:00:00`)
+  const end = new Date(`${endDate}T00:00:00`)
+  const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+  return `${days} 天`
 }
 
 function formatShortDate(date: string) {

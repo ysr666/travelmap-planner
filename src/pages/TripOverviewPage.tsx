@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, HardDriveDownload, Map, NotebookText, RotateCw, Ticket } from 'lucide-react'
+import { CalendarDays, HardDriveDownload, Map, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { ensureDaysForTrip, formatDate, formatDateRange, getDayGenerationState } from '../lib/dates'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { getTrip, listDaysByTrip, listItemsByTrip } from '../db'
@@ -9,6 +9,7 @@ import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { TripNav } from '../components/AppShell'
+import { TripCover } from '../components/trip/TripCover'
 
 export function TripOverviewPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
@@ -120,6 +121,7 @@ export function TripOverviewPage() {
   return (
     <div className="space-y-5">
       <Card className="space-y-3">
+        <TripCover trip={trip} variant="hero" />
         <div>
           <p className="text-xs font-semibold text-sky-600">{trip.destination}</p>
           <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
@@ -139,12 +141,19 @@ export function TripOverviewPage() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           <Button
+            className="col-span-3 whitespace-nowrap px-2 text-xs"
+            icon={<Route className="size-4" />}
+            onClick={() => navigateTo('trip', firstDay ? { tripId: trip.id, dayId: firstDay.id } : { tripId: trip.id })}
+          >
+            进入旅行工作台
+          </Button>
+          <Button
             className="whitespace-nowrap px-2 text-xs"
             disabled={!firstDay}
             icon={<Map className="size-4" />}
             onClick={() =>
               firstDay
-                ? navigateTo('map', { tripId: trip.id, dayId: firstDay.id })
+                ? navigateTo('trip', { tripId: trip.id, dayId: firstDay.id, view: 'map' })
                 : undefined
             }
           >
@@ -216,7 +225,7 @@ export function TripOverviewPage() {
                 </div>
                 <Button
                   className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
-                  onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
+                  onClick={() => navigateTo('trip', { tripId: trip.id, dayId: day.id, view: 'schedule' })}
                   variant="secondary"
                 >
                   日程
@@ -224,7 +233,7 @@ export function TripOverviewPage() {
                 <Button
                   className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
                   icon={<Map className="size-4" />}
-                  onClick={() => navigateTo('map', { tripId: trip.id, dayId: day.id })}
+                  onClick={() => navigateTo('trip', { tripId: trip.id, dayId: day.id, view: 'map' })}
                   variant="secondary"
                 >
                   地图

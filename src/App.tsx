@@ -8,6 +8,9 @@ import { HomePage } from './pages/HomePage'
 const TripOverviewPage = lazy(() =>
   import('./pages/TripOverviewPage').then((module) => ({ default: module.TripOverviewPage })),
 )
+const TripWorkspacePage = lazy(() =>
+  import('./pages/TripWorkspacePage').then((module) => ({ default: module.TripWorkspacePage })),
+)
 const DayTimelinePage = lazy(() =>
   import('./pages/DayTimelinePage').then((module) => ({ default: module.DayTimelinePage })),
 )
@@ -45,6 +48,7 @@ function App() {
       {activeRoute !== 'home' ? (
         <Suspense fallback={<RouteLoading activeRoute={activeRoute} />}>
           {activeRoute === 'overview' ? <TripOverviewPage /> : null}
+          {activeRoute === 'trip' ? <TripWorkspacePage /> : null}
           {activeRoute === 'timeline' ? <DayTimelinePage /> : null}
           {activeRoute === 'map' ? <MapPage /> : null}
           {activeRoute === 'item' ? <ItemDetailPage /> : null}

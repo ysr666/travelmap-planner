@@ -232,6 +232,17 @@ export function SettingsPage() {
       ) : null}
 
       {trip ? <TripNav activeRoute="settings" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
+      {trip ? (
+        <Button
+          className="w-full"
+          onClick={() =>
+            navigateTo('trip', days[0] ? { tripId: trip.id, dayId: days[0].id } : { tripId: trip.id })
+          }
+          variant="secondary"
+        >
+          返回旅行工作台
+        </Button>
+      ) : null}
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />

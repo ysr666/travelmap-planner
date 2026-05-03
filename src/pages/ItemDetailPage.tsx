@@ -39,6 +39,7 @@ export function ItemDetailPage() {
   const tripId = params.get('tripId')
   const dayId = params.get('dayId')
   const itemId = params.get('itemId')
+  const fromView = params.get('fromView') === 'map' ? 'map' : 'schedule'
   const [trip, setTrip] = useState<Trip | null>(null)
   const [day, setDay] = useState<Day | null>(null)
   const [item, setItem] = useState<ItineraryItem | null>(null)
@@ -145,7 +146,7 @@ export function ItemDetailPage() {
     try {
       await deleteItineraryItemCascade(item.id)
       setIsDeleteConfirmOpen(false)
-      navigateTo('timeline', { tripId: trip.id, dayId: day.id })
+      navigateTo('trip', { tripId: trip.id, dayId: day.id, view: 'schedule' })
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除行程点失败')
     } finally {
@@ -176,11 +177,11 @@ export function ItemDetailPage() {
         <Button
           className="w-full"
           onClick={() =>
-            tripId && dayId ? navigateTo('timeline', { tripId, dayId }) : navigateTo('home')
+            tripId && dayId ? navigateTo('trip', { tripId, dayId, view: 'schedule' }) : navigateTo('home')
           }
           variant="secondary"
         >
-          {tripId && dayId ? '返回时间轴' : '返回首页'}
+          {tripId && dayId ? '返回旅行工作台' : '返回首页'}
         </Button>
       </div>
     )
@@ -313,10 +314,10 @@ export function ItemDetailPage() {
 
       <Button
         className="w-full"
-        onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
+        onClick={() => navigateTo('trip', { tripId: trip.id, dayId: day.id, view: fromView })}
         variant="secondary"
       >
-        返回时间轴
+        返回旅行工作台
       </Button>
 
       {previewTicket ? (

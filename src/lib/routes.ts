@@ -2,6 +2,7 @@ import type { RouteId } from '../types'
 
 const routeIds: RouteId[] = [
   'home',
+  'trip',
   'overview',
   'timeline',
   'map',

@@ -16,6 +16,7 @@ type AppShellProps = {
 
 const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
   home: { title: '旅行列表', subtitle: '本地旅行总控台' },
+  trip: { title: '旅行工作台', subtitle: '当前旅行与每日行程' },
   overview: { title: '旅行总览', subtitle: '每日行程与备注' },
   timeline: { title: '时间轴', subtitle: '当天行程点' },
   map: { title: '路线地图', subtitle: '每日行程路线' },
@@ -27,12 +28,13 @@ const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
 export function AppShell({ activeRoute, children }: AppShellProps) {
   const isMap = activeRoute === 'map'
   const isHome = activeRoute === 'home'
+  const isTrip = activeRoute === 'trip'
   const title = routeTitles[activeRoute]
   const tripId = getRouteParams().get('tripId')
 
   return (
     <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
-      {!isMap ? (
+      {!isMap && !isTrip ? (
         <header className="z-30 border-b border-white/70 bg-[#f8fbff]/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -65,12 +67,12 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
         className={
           isMap
             ? 'relative min-h-0 flex-1'
-            : isHome
+            : isHome || isTrip
               ? 'flex min-h-0 flex-1 px-4 pt-4'
               : 'min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4 app-scrollbar'
         }
       >
-        <div className={isMap || isHome ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
+        <div className={isMap || isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
           {children}
         </div>
       </main>

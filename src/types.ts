@@ -72,6 +72,7 @@ export type TicketFile = TicketMeta & {
 
 export type RouteId =
   | 'home'
+  | 'trip'
   | 'overview'
   | 'timeline'
   | 'map'

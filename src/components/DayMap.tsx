@@ -42,6 +42,7 @@ export function DayMap({
   const loadedRef = useRef(false)
   const fallbackTriedRef = useRef(false)
   const onSelectItemRef = useRef(onSelectItem)
+  const onMapErrorRef = useRef(onMapError)
   const selectedItemIdRef = useRef(selectedItemId)
   const validItems = useMemo(
     () => sortItineraryItems(items).filter(hasValidCoordinates),
@@ -145,6 +146,10 @@ export function DayMap({
   }, [onSelectItem])
 
   useEffect(() => {
+    onMapErrorRef.current = onMapError
+  }, [onMapError])
+
+  useEffect(() => {
     selectedItemIdRef.current = selectedItemId
   }, [selectedItemId])
 
@@ -180,11 +185,17 @@ export function DayMap({
         attributionControl: false,
         center: firstItem ? [firstItem.lng as number, firstItem.lat as number] : [139.7671, 35.6812],
         container: containerRef.current,
-        cooperativeGestures: true,
+        dragRotate: false,
+        pitchWithRotate: false,
         style: styleUrl,
+        touchPitch: false,
         zoom: firstItem ? 12 : 10,
       })
 
+      map.dragPan.enable()
+      map.touchZoomRotate.enable()
+      map.touchZoomRotate.disableRotation()
+      map.dragRotate.disable()
       map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
       mapRef.current = map
 
@@ -209,7 +220,7 @@ export function DayMap({
         }
 
         setMapError(MAP_ERROR_MESSAGE)
-        onMapError?.(MAP_ERROR_MESSAGE)
+        onMapErrorRef.current?.(MAP_ERROR_MESSAGE)
       })
     }
 
@@ -221,7 +232,7 @@ export function DayMap({
       disposed = true
       cleanupMap()
     }
-  }, [cleanupMap, onMapError, syncMarkersAndRoute, validItems.length])
+  }, [cleanupMap, syncMarkersAndRoute, validItems.length])
 
   useEffect(() => {
     updateMarkerSelection()

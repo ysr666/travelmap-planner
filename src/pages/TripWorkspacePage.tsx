@@ -219,8 +219,8 @@ export function TripWorkspacePage() {
             <div className={`grid grid-cols-2 bg-white ring-1 ring-slate-200/80 ${
               isMapView ? 'rounded-xl p-1' : 'rounded-2xl p-1.5'
             }`}>
-              <ViewButton active={view === 'schedule'} compact={isMapView} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} />
-              <ViewButton active={view === 'map'} compact={isMapView} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} />
+              <ViewButton active={view === 'schedule'} compact={isMapView} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} testId="view-switch-schedule" />
+              <ViewButton active={view === 'map'} compact={isMapView} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} testId="view-switch-map" />
             </div>
           </div>
 
@@ -275,12 +275,14 @@ function ViewButton({
   icon,
   label,
   onClick,
+  testId,
 }: {
   active: boolean
   compact?: boolean
   icon: ReactNode
   label: string
   onClick: () => void
+  testId?: string
 }) {
   return (
     <button
@@ -289,6 +291,7 @@ function ViewButton({
       } ${
         active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500'
       }`}
+      data-testid={testId}
       onClick={onClick}
       type="button"
     >

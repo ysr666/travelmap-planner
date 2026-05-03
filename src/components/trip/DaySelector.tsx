@@ -17,7 +17,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
   }, [selectedDayId])
 
   return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-1 app-scrollbar">
+    <div className="-mx-4 overflow-x-auto px-4 pb-1 app-scrollbar" data-testid="day-selector">
       <div className={`flex min-w-max ${isCompact ? 'gap-1.5' : 'gap-2'}`}>
         {days.map((day, index) => {
           const active = day.id === selectedDayId

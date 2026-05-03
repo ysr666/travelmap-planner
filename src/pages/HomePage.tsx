@@ -365,7 +365,7 @@ function TripCard({
   const status = getTripStatus(trip)
 
   return (
-    <Card className="relative overflow-hidden p-0">
+    <Card className="relative overflow-hidden p-0" data-testid="trip-card">
       <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
       <button
         aria-label={`删除 ${trip.title}`}

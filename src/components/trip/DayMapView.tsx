@@ -310,11 +310,13 @@ function MapBottomSheet({
       className={`absolute inset-x-0 bottom-0 z-40 flex min-h-0 flex-col rounded-t-[1.35rem] border border-white/80 bg-white/95 shadow-[0_-18px_48px_rgba(47,65,88,0.16)] backdrop-blur-xl ${
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
+      data-testid="map-sheet"
       style={{ height: `${sheetHeight}px` }}
     >
       <div
         aria-label="拖动行程抽屉"
         className="flex h-11 shrink-0 touch-none cursor-grab items-center justify-center active:cursor-grabbing"
+        data-testid="map-sheet-handle"
         onPointerCancel={finishDrag}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

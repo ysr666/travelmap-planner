@@ -26,44 +26,53 @@ const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
 
 export function AppShell({ activeRoute, children }: AppShellProps) {
   const isMap = activeRoute === 'map'
+  const isHome = activeRoute === 'home'
   const title = routeTitles[activeRoute]
   const tripId = getRouteParams().get('tripId')
 
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
-      <header
-        className={`z-30 border-b border-white/70 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl ${
-          isMap ? 'absolute inset-x-0 top-0 bg-white/78' : 'sticky top-0 bg-[#f8fbff]/88'
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <button
-            aria-label="返回首页"
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-            onClick={() => navigateTo('home')}
-            type="button"
-          >
-            <Home className="size-5" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-slate-400">{title.subtitle}</p>
-            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">
-              {title.title}
-            </h1>
+    <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
+      {!isMap ? (
+        <header className="z-30 border-b border-white/70 bg-[#f8fbff]/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              aria-label="返回首页"
+              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              onClick={() => navigateTo('home')}
+              type="button"
+            >
+              <Home className="size-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-slate-400">{title.subtitle}</p>
+              <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">
+                {title.title}
+              </h1>
+            </div>
+            <button
+              aria-label="设置"
+              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              onClick={() => navigateTo('settings', tripId ? { tripId } : undefined)}
+              type="button"
+            >
+              <Cog className="size-5" />
+            </button>
           </div>
-          <button
-            aria-label="设置"
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-            onClick={() => navigateTo('settings', tripId ? { tripId } : undefined)}
-            type="button"
-          >
-            <Cog className="size-5" />
-          </button>
-        </div>
-      </header>
+        </header>
+      ) : null}
 
-      <main className={isMap ? 'relative min-h-svh flex-1' : 'flex-1 px-4 pb-8 pt-4'}>
-        <div className={isMap ? 'page-transition h-full' : 'page-transition'}>{children}</div>
+      <main
+        className={
+          isMap
+            ? 'relative min-h-0 flex-1'
+            : isHome
+              ? 'flex min-h-0 flex-1 px-4 pt-4'
+              : 'min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4 app-scrollbar'
+        }
+      >
+        <div className={isMap || isHome ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
+          {children}
+        </div>
       </main>
     </div>
   )

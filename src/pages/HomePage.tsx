@@ -141,163 +141,164 @@ export function HomePage() {
   }
 
   return (
-    <div className="space-y-5">
-      <Card className="space-y-3">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <section className="shrink-0 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold text-sky-600">本机 IndexedDB</p>
-            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
-              我的旅行
-            </h2>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-sky-600">本地旅行总控台</p>
+            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">旅图</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              数据只保存在当前浏览器。出发前请导出 zip 备份。
+              管理行程、地图、交通段和票据。数据只保存在当前浏览器。
             </p>
           </div>
-          <div className="rounded-xl bg-sky-50 px-3 py-2 text-center">
+          <div className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-center">
             <p className="text-lg font-semibold text-sky-600">{tripStats.count}</p>
             <p className="text-xs font-semibold text-sky-500">旅行</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            icon={<Plus className="size-4" />}
-            onClick={() => {
-              setIsCreating((current) => !current)
-              setFormError(null)
-            }}
-          >
-            新建旅行
-          </Button>
-          <Button icon={<Upload className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
-            导入备份
-          </Button>
-        </div>
         {tripStats.latest ? (
-          <p className="text-xs text-slate-400">最近更新：{formatDateTime(tripStats.latest)}</p>
+          <p className="mt-3 text-xs text-slate-400">最近更新：{formatDateTime(tripStats.latest)}</p>
         ) : null}
-      </Card>
-
-      {isCreating ? (
-        <Card>
-          <form className="space-y-3" onSubmit={handleCreateTrip}>
-            <div>
-              <h3 className="text-base font-semibold text-slate-950">新建旅行</h3>
-              <p className="mt-1 text-sm text-slate-500">每日行程生成会在后续阶段接入。</p>
-            </div>
-            <FormField
-              label="旅行标题"
-              onChange={(value) => setForm((current) => ({ ...current, title: value }))}
-              placeholder="例如：东京春日旅行"
-              required
-              value={form.title}
-            />
-            <FormField
-              label="目的地"
-              onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
-              placeholder="例如：日本东京"
-              value={form.destination}
-            />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField
-                label="开始日期"
-                onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
-                required
-                type="date"
-                value={form.startDate}
-              />
-              <FormField
-                label="结束日期"
-                onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
-                required
-                type="date"
-                value={form.endDate}
-              />
-            </div>
-            <label className="block">
-              <span className="text-sm font-semibold text-slate-700">备注</span>
-              <textarea
-                className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, notes: event.target.value }))
-                }
-                placeholder="可选：酒店、航班或旅行说明"
-                value={form.notes}
-              />
-            </label>
-            {formError ? (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
-                {formError}
-              </p>
-            ) : null}
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => {
-                  setIsCreating(false)
-                  setFormError(null)
-                }}
-                variant="secondary"
-              >
-                取消
-              </Button>
-              <Button loading={isSubmitting} type="submit">
-                保存旅行
-              </Button>
-            </div>
-          </form>
-        </Card>
-      ) : null}
+      </section>
 
       {error ? (
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+        <div className="shrink-0 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
           {error}
         </div>
       ) : null}
 
-      <section className="space-y-3">
-        <SectionHeader title="旅行列表" action="刷新" onAction={() => void refreshTrips()} />
-        {isLoading ? (
-          <Card className="space-y-3">
-            <SkeletonLine className="w-2/3" />
-            <SkeletonLine className="w-full" />
-            <SkeletonLine className="w-1/2" />
-          </Card>
-        ) : null}
-
-        {!isLoading && !hasTrips ? (
-          <EmptyState
-            body="点击新建旅行，创建后会写入本机 IndexedDB。"
-            icon={<CalendarDays className="size-6" />}
-            title="还没有旅行"
-          />
-        ) : null}
-
-        {!isLoading && hasTrips ? (
-          <div className="space-y-3">
-            {trips.map((trip, index) => (
-              <TripCard
-                key={trip.id}
-                onDelete={() => void handleDeleteTrip(trip)}
-                onOpen={() => navigateTo('overview', { tripId: trip.id })}
-                trip={trip}
-                variantIndex={index}
-                isDeleting={deletingTripId === trip.id}
-              />
-            ))}
+      <section className="flex min-h-0 flex-1 flex-col gap-3">
+        {isCreating ? (
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+            <Card>
+              <form className="space-y-3" onSubmit={handleCreateTrip}>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">新建旅行</h3>
+                  <p className="mt-1 text-sm text-slate-500">创建后保存在本机 IndexedDB。</p>
+                </div>
+                <FormField
+                  label="旅行标题"
+                  onChange={(value) => setForm((current) => ({ ...current, title: value }))}
+                  placeholder="例如：东京春日旅行"
+                  required
+                  value={form.title}
+                />
+                <FormField
+                  label="目的地"
+                  onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
+                  placeholder="例如：日本东京"
+                  value={form.destination}
+                />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormField
+                    label="开始日期"
+                    onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
+                    required
+                    type="date"
+                    value={form.startDate}
+                  />
+                  <FormField
+                    label="结束日期"
+                    onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
+                    required
+                    type="date"
+                    value={form.endDate}
+                  />
+                </div>
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">备注</span>
+                  <textarea
+                    className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, notes: event.target.value }))
+                    }
+                    placeholder="可选：酒店、航班或旅行说明"
+                    value={form.notes}
+                  />
+                </label>
+                {formError ? (
+                  <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+                    {formError}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => {
+                      setIsCreating(false)
+                      setFormError(null)
+                    }}
+                    variant="secondary"
+                  >
+                    取消
+                  </Button>
+                  <Button loading={isSubmitting} type="submit">
+                    保存旅行
+                  </Button>
+                </div>
+              </form>
+            </Card>
           </div>
-        ) : null}
+        ) : (
+          <>
+            <SectionHeader title="我的旅行" action="刷新" onAction={() => void refreshTrips()} />
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+              {isLoading ? (
+                <Card className="space-y-3">
+                  <SkeletonLine className="w-2/3" />
+                  <SkeletonLine className="w-full" />
+                  <SkeletonLine className="w-1/2" />
+                </Card>
+              ) : null}
+
+              {!isLoading && !hasTrips ? (
+                <EmptyState
+                  body="点击新建旅行，创建后会写入本机 IndexedDB。"
+                  icon={<CalendarDays className="size-6" />}
+                  title="还没有旅行"
+                />
+              ) : null}
+
+              {!isLoading && hasTrips ? (
+                <div className="space-y-3">
+                  {trips.map((trip, index) => (
+                    <TripCard
+                      key={trip.id}
+                      onDelete={() => void handleDeleteTrip(trip)}
+                      onOpen={() => navigateTo('overview', { tripId: trip.id })}
+                      trip={trip}
+                      variantIndex={index}
+                      isDeleting={deletingTripId === trip.id}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </>
+        )}
       </section>
 
-      <Card className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-          <MapPinned className="size-5" />
+      {!isCreating ? (
+        <div className="shrink-0">
+          <div className="mb-3 flex items-center gap-3 rounded-2xl bg-emerald-50/70 px-3 py-2 text-xs text-emerald-700 ring-1 ring-emerald-100">
+            <MapPinned className="size-4 shrink-0" />
+            <span className="min-w-0 truncate">出发前请导出 zip 备份到安全位置。</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              icon={<Plus className="size-4" />}
+              onClick={() => {
+                setIsCreating(true)
+                setFormError(null)
+              }}
+            >
+              新建旅行
+            </Button>
+            <Button icon={<Upload className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
+              导入备份
+            </Button>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold text-slate-950">离线优先工作区</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            行程、地图、票据和备份都围绕本机数据工作。
-          </p>
-        </div>
-      </Card>
+      ) : null}
     </div>
   )
 }

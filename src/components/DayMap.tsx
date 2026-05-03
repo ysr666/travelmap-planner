@@ -13,6 +13,7 @@ type DayMapProps = {
   items: ItineraryItem[]
   selectedItemId?: string | null
   heightClassName?: string
+  surface?: 'card' | 'fullscreen'
   onSelectItem: (item: ItineraryItem) => void
   onMapError?: (message: string) => void
 }
@@ -31,6 +32,7 @@ export function DayMap({
   items,
   selectedItemId,
   heightClassName = 'h-[52dvh] min-h-[360px]',
+  surface = 'card',
   onSelectItem,
   onMapError,
 }: DayMapProps) {
@@ -237,7 +239,10 @@ export function DayMap({
 
   if (validItems.length === 0) {
     return (
-      <div className={`${heightClassName} rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]`}>
+      <div className={surface === 'fullscreen'
+        ? `${heightClassName} bg-[#eaf2f9] p-4`
+        : `${heightClassName} rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]`}
+      >
         <div className="flex h-full items-center justify-center">
           <EmptyState
             body="已有行程，但暂无可显示在地图上的坐标。"
@@ -250,7 +255,13 @@ export function DayMap({
   }
 
   return (
-    <div className={`relative ${heightClassName} overflow-hidden rounded-2xl border border-white/80 bg-slate-100 shadow-[0_8px_22px_rgba(47,65,88,0.08)] transition-[height,min-height] duration-300`}>
+    <div
+      className={
+        surface === 'fullscreen'
+          ? `relative ${heightClassName} overflow-hidden bg-slate-100`
+          : `relative ${heightClassName} overflow-hidden rounded-2xl border border-white/80 bg-slate-100 shadow-[0_8px_22px_rgba(47,65,88,0.08)] transition-[height,min-height] duration-300`
+      }
+    >
       <div className="h-full w-full" ref={containerRef} />
       {mapError ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/88 p-5 text-center backdrop-blur">
@@ -271,8 +282,10 @@ function markerClassName(isSelected: boolean) {
   return [
     'flex',
     'size-11',
+    'z-10',
     'items-center',
     'justify-center',
+    'pointer-events-auto',
     'rounded-full',
     'border-4',
     'text-base',

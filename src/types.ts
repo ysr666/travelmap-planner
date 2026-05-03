@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 
 export type TransportMode = 'walk' | 'transit' | 'car' | 'train' | 'flight' | 'other'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
+export type TicketStorageMode = 'copy' | 'reference' | 'external'
 
 export type Trip = {
   id: string
@@ -49,6 +50,10 @@ export type TicketMeta = {
   tripId: string
   itemId?: string
   scope?: TicketScope
+  title?: string
+  storageMode?: TicketStorageMode
+  externalUrl?: string
+  referenceLocation?: string
   fileName: string
   fileType: 'image' | 'pdf' | 'other'
   mimeType: string

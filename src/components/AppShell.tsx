@@ -3,27 +3,16 @@ import {
   CalendarDays,
   Cog,
   Home,
-  Map,
-  Plus,
   Route,
   Ticket,
 } from 'lucide-react'
-import type { NavItem, RouteId } from '../types'
+import type { RouteId } from '../types'
 import { getRouteParams, navigateTo } from '../lib/routes'
 
 type AppShellProps = {
   activeRoute: RouteId
   children: ReactNode
 }
-
-const navItems: NavItem[] = [
-  { id: 'home', label: '首页', icon: Home },
-  { id: 'overview', label: '旅行', icon: CalendarDays },
-  { id: 'timeline', label: '日程', icon: Route },
-  { id: 'map', label: '地图', icon: Map },
-  { id: 'tickets', label: '票据', icon: Ticket },
-  { id: 'settings', label: '设置', icon: Cog },
-]
 
 const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
   home: { title: '旅行列表', subtitle: '本地旅行总控台' },
@@ -39,15 +28,6 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   const isMap = activeRoute === 'map'
   const title = routeTitles[activeRoute]
   const tripId = getRouteParams().get('tripId')
-
-  function handleNavClick(route: RouteId) {
-    if ((route === 'tickets' || route === 'settings') && tripId) {
-      navigateTo(route, { tripId })
-      return
-    }
-
-    navigateTo(route)
-  }
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-2xl shadow-slate-300/40">
@@ -72,40 +52,87 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
             </h1>
           </div>
           <button
-            aria-label="新建"
-            className="flex size-11 items-center justify-center rounded-2xl bg-[#1677ff] text-white shadow-[0_10px_24px_rgba(22,119,255,0.25)] active:scale-[0.98]"
+            aria-label="设置"
+            className="flex size-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 active:scale-[0.98]"
+            onClick={() => navigateTo('settings', tripId ? { tripId } : undefined)}
             type="button"
           >
-            <Plus className="size-5" />
+            <Cog className="size-5" />
           </button>
         </div>
       </header>
 
-      <main className={isMap ? 'relative min-h-svh flex-1' : 'flex-1 px-4 pb-28 pt-4'}>
-        {children}
+      <main className={isMap ? 'relative min-h-svh flex-1' : 'flex-1 px-4 pb-8 pt-4'}>
+        <div className={isMap ? 'page-transition h-full' : 'page-transition'}>{children}</div>
       </main>
-
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[430px] px-3">
-        <div className="grid grid-cols-6 rounded-[26px] border border-white/80 bg-white/94 p-2 shadow-[0_18px_44px_rgba(38,53,76,0.18)] backdrop-blur-xl">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeRoute === item.id
-            return (
-              <button
-                className={`flex min-w-0 flex-col items-center gap-1 rounded-[18px] px-1.5 py-2 text-[10px] font-semibold transition ${
-                  isActive ? 'bg-sky-50 text-[#1677ff]' : 'text-slate-400 active:bg-slate-50'
-                }`}
-                key={item.id}
-                onClick={() => handleNavClick(item.id)}
-                type="button"
-              >
-                <Icon className="size-5" />
-                <span className="max-w-full truncate">{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </nav>
     </div>
+  )
+}
+
+type TripNavProps = {
+  tripId: string
+  activeRoute: RouteId
+  dayId?: string | null
+  firstDayId?: string | null
+  className?: string
+}
+
+export function TripNav({ tripId, activeRoute, dayId, firstDayId, className = '' }: TripNavProps) {
+  const timelineDayId = dayId || firstDayId
+  const items = [
+    {
+      id: 'overview',
+      label: '总览',
+      icon: CalendarDays,
+      active: activeRoute === 'overview',
+      onClick: () => navigateTo('overview', { tripId }),
+    },
+    {
+      id: 'timeline',
+      label: '日程',
+      icon: Route,
+      active: activeRoute === 'timeline' || activeRoute === 'map' || activeRoute === 'item',
+      onClick: () =>
+        timelineDayId
+          ? navigateTo('timeline', { tripId, dayId: timelineDayId })
+          : navigateTo('overview', { tripId }),
+    },
+    {
+      id: 'tickets',
+      label: '票据',
+      icon: Ticket,
+      active: activeRoute === 'tickets',
+      onClick: () => navigateTo('tickets', { tripId }),
+    },
+    {
+      id: 'settings',
+      label: '备份',
+      icon: Cog,
+      active: activeRoute === 'settings',
+      onClick: () => navigateTo('settings', { tripId }),
+    },
+  ]
+
+  return (
+    <nav className={`rounded-[24px] border border-white/80 bg-white/92 p-1.5 shadow-[0_12px_28px_rgba(47,65,88,0.08)] ${className}`}>
+      <div className="grid grid-cols-4 gap-1">
+        {items.map((item) => {
+          const Icon = item.icon
+          return (
+            <button
+              className={`flex min-h-10 items-center justify-center gap-1.5 rounded-[18px] px-2 text-xs font-bold transition active:scale-[0.98] ${
+                item.active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500 active:bg-slate-50'
+              }`}
+              key={item.id}
+              onClick={item.onClick}
+              type="button"
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </nav>
   )
 }

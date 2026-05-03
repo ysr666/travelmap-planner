@@ -17,7 +17,8 @@ import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
-import { getTrip } from '../db'
+import { TripNav } from '../components/AppShell'
+import { getTrip, listDaysByTrip } from '../db'
 import {
   buildTripBackupFileName,
   downloadBlob,
@@ -26,7 +27,7 @@ import {
 } from '../lib/backup'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
-import type { Trip } from '../types'
+import type { Day, Trip } from '../types'
 
 type StorageEstimateState = {
   usage?: number
@@ -42,6 +43,7 @@ export function SettingsPage() {
   const params = getRouteParams()
   const tripId = params.get('tripId')
   const [trip, setTrip] = useState<Trip | null>(null)
+  const [days, setDays] = useState<Day[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [isPersistenceSupported, setIsPersistenceSupported] = useState(false)
@@ -60,6 +62,7 @@ export function SettingsPage() {
   const refreshTrip = useCallback(async () => {
     if (!tripId) {
       setTrip(null)
+      setDays([])
       setIsLoadingTrip(false)
       return
     }
@@ -67,8 +70,9 @@ export function SettingsPage() {
     setIsLoadingTrip(true)
     setError(null)
     try {
-      const foundTrip = await getTrip(tripId)
+      const [foundTrip, foundDays] = await Promise.all([getTrip(tripId), listDaysByTrip(tripId)])
       setTrip(foundTrip ?? null)
+      setDays(foundTrip ? foundDays : [])
       if (!foundTrip) {
         setError('没有找到当前旅行，请从首页重新进入。')
       }
@@ -232,6 +236,8 @@ export function SettingsPage() {
           </div>
         ) : null}
       </Card>
+
+      {trip ? <TripNav activeRoute="settings" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />

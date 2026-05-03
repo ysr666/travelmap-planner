@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowDown, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { getDay, getTrip, listItemsByDay } from '../db'
 import { BottomDrawer } from '../components/BottomDrawer'
@@ -12,6 +12,26 @@ import { formatDate } from '../lib/dates'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../types'
 
+type DrawerMode = 'compact' | 'balanced' | 'expanded'
+
+const drawerModes: Array<{ id: DrawerMode; label: string }> = [
+  { id: 'compact', label: '地图' },
+  { id: 'balanced', label: '平衡' },
+  { id: 'expanded', label: '列表' },
+]
+
+const mapHeightByMode: Record<DrawerMode, string> = {
+  compact: 'h-[56dvh] min-h-[360px]',
+  balanced: 'h-[42dvh] min-h-[300px]',
+  expanded: 'h-[25dvh] min-h-[210px]',
+}
+
+const drawerHeightByMode: Record<DrawerMode, string> = {
+  compact: 'max-h-[30dvh]',
+  balanced: 'max-h-[46dvh]',
+  expanded: 'max-h-[64dvh]',
+}
+
 export function MapPage() {
   const params = getRouteParams()
   const tripId = params.get('tripId')
@@ -20,10 +40,12 @@ export function MapPage() {
   const [day, setDay] = useState<Day | null>(null)
   const [items, setItems] = useState<ItineraryItem[]>([])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>('balanced')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
   const selectedItem = useMemo(() => {
@@ -68,7 +90,7 @@ export function MapPage() {
         setTrip(foundTrip)
         setDay(foundDay)
         setItems(foundItems)
-        setSelectedItemId(foundItems.find(hasValidCoordinates)?.id ?? null)
+        setSelectedItemId(foundItems.find(hasValidCoordinates)?.id ?? foundItems[0]?.id ?? null)
       } catch (caught) {
         if (isMounted) {
           setLoadError(caught instanceof Error ? caught.message : '读取地图数据失败')
@@ -88,32 +110,36 @@ export function MapPage() {
   }, [tripId, dayId])
 
   function handleSelectItem(item: ItineraryItem) {
+    setSelectedItemId(item.id)
+    setDrawerMode((current) => (current === 'compact' ? 'balanced' : current))
+
     if (!hasValidCoordinates(item)) {
       setNotice('该行程点暂无坐标，可去时间轴编辑坐标。')
-      setSelectedItemId(item.id)
-      return
+    } else {
+      setNotice(null)
     }
 
-    setNotice(null)
-    setSelectedItemId(item.id)
+    window.setTimeout(() => {
+      itemRefs.current[item.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 80)
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-svh bg-[#eaf2f9] px-4 pb-32 pt-24">
+      <div className="min-h-svh bg-[#eaf2f9] px-4 pb-8 pt-24">
         <Card className="mb-3 space-y-3">
           <SkeletonLine className="w-2/3" />
           <SkeletonLine className="w-full" />
           <SkeletonLine className="w-1/2" />
         </Card>
-        <div className="h-[52dvh] min-h-[360px] rounded-[28px] bg-white/70" />
+        <div className="h-[42dvh] min-h-[300px] rounded-[28px] bg-white/70" />
       </div>
     )
   }
 
   if (loadError || !trip || !day) {
     return (
-      <div className="min-h-svh bg-[#eaf2f9] px-4 pb-32 pt-24">
+      <div className="min-h-svh bg-[#eaf2f9] px-4 pb-8 pt-24">
         <EmptyState
           body={loadError || '请从时间轴进入某一天的地图。'}
           icon={<MapPin className="size-6" />}
@@ -135,24 +161,40 @@ export function MapPage() {
   }
 
   return (
-    <div className="min-h-svh overflow-x-hidden bg-[#eaf2f9] pb-28 pt-24">
+    <div className="min-h-svh overflow-x-hidden bg-[#eaf2f9] pb-4 pt-24">
       <div className="px-4">
-        <Card className="mb-3">
-          <p className="text-xs font-semibold text-sky-600">{trip.title}</p>
-          <div className="mt-1 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-2xl font-bold text-slate-950">{day.title}</h2>
-              <p className="mt-1 text-sm text-slate-500">{formatDate(day.date)}</p>
+        <Card className="mb-3 space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-sky-600">{trip.title}</p>
+            <div className="mt-1 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-2xl font-bold text-slate-950">{day.title}</h2>
+                <p className="mt-1 text-sm text-slate-500">{formatDate(day.date)}</p>
+              </div>
+              <div className="shrink-0 rounded-2xl bg-sky-50 px-3 py-2 text-right">
+                <p className="text-sm font-bold text-sky-700">{items.length} 个行程</p>
+                <p className="text-xs font-semibold text-sky-500">{mappedItems.length} 个坐标</p>
+              </div>
             </div>
-            <div className="rounded-2xl bg-sky-50 px-3 py-2 text-right">
-              <p className="text-sm font-bold text-sky-700">{items.length} 个行程</p>
-              <p className="text-xs font-semibold text-sky-500">{mappedItems.length} 个坐标</p>
-            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
+            {drawerModes.map((mode) => (
+              <button
+                className={`min-h-9 rounded-xl text-xs font-bold transition active:scale-[0.98] ${
+                  drawerMode === mode.id ? 'bg-white text-[#1677ff] shadow-sm' : 'text-slate-500'
+                }`}
+                key={mode.id}
+                onClick={() => setDrawerMode(mode.id)}
+                type="button"
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
         </Card>
 
         {items.length === 0 ? (
-          <div className="h-[52dvh] min-h-[360px] rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]">
+          <div className={`${mapHeightByMode[drawerMode]} rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]`}>
             <div className="flex h-full items-center justify-center">
               <EmptyState
                 body="返回时间轴添加酒店、景点、交通或餐厅后，再查看地图。"
@@ -163,6 +205,7 @@ export function MapPage() {
           </div>
         ) : (
           <DayMap
+            heightClassName={mapHeightByMode[drawerMode]}
             items={items}
             onMapError={(message) => setMapError(message)}
             onSelectItem={handleSelectItem}
@@ -171,7 +214,9 @@ export function MapPage() {
         )}
       </div>
 
-      <BottomDrawer className="mt-3 max-h-[38dvh] overflow-y-auto safe-bottom app-scrollbar">
+      <BottomDrawer
+        className={`mt-3 overflow-y-auto safe-bottom app-scrollbar ${drawerHeightByMode[drawerMode]} transition-[max-height] duration-300`}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-sky-600">
@@ -183,7 +228,7 @@ export function MapPage() {
             </p>
           </div>
           <Button
-            className="min-h-10 shrink-0 rounded-2xl px-3"
+            className="min-h-10 shrink-0 rounded-2xl px-3 whitespace-nowrap"
             icon={<Navigation className="size-4" />}
             onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
           >
@@ -227,6 +272,9 @@ export function MapPage() {
                       selectedItemId === item.id ? 'bg-sky-50' : ''
                     }`}
                     onClick={() => handleSelectItem(item)}
+                    ref={(node) => {
+                      itemRefs.current[item.id] = node
+                    }}
                     type="button"
                   >
                     <span

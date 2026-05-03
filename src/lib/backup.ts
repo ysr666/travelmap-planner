@@ -7,6 +7,7 @@ import {
   listItemsByTrip,
   listTicketsByTrip,
 } from '../db'
+import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
 
 const SCHEMA_VERSION = 1
@@ -57,6 +58,10 @@ export async function exportTripBackup(tripId: string): Promise<Blob> {
   zip.file('data/ticketMetas.json', stringifyJson(ticketMetas))
 
   for (const ticket of ticketMetas) {
+    if (!shouldExpectTicketBlob(ticket)) {
+      continue
+    }
+
     const ticketBlob = await getTicketBlob(ticket.id)
     const safeName = safeFileName(ticket.fileName, ticket.id)
     const filePath = `files/${ticket.id}/${safeName}`
@@ -104,6 +109,10 @@ export async function importTripBackup(file: File): Promise<ImportTripBackupResu
 
   const ticketBlobs: TicketBlob[] = []
   for (const ticket of payload.ticketMetas) {
+    if (!shouldExpectTicketBlob(ticket)) {
+      continue
+    }
+
     const filePath = manifest.fileMap[ticket.id]
     if (!filePath) {
       warnings.push(`票据「${ticket.fileName}」在 manifest 中缺少文件路径。`)

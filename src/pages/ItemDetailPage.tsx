@@ -20,13 +20,21 @@ import {
 import { describeItemTime, describePreviousTransport, transportModeLabels } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
 import { getRouteParams, navigateTo } from '../lib/routes'
-import { formatFileSize, formatTicketCreatedAt, ticketFileTypeLabels } from '../lib/tickets'
+import {
+  formatFileSize,
+  formatTicketCreatedAt,
+  getTicketDisplayTitle,
+  getTicketStorageMode,
+  ticketFileTypeLabels,
+  ticketStorageModeLabels,
+} from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { TripNav } from '../components/AppShell'
 
 export function ItemDetailPage() {
   const params = getRouteParams()
@@ -262,6 +270,8 @@ export function ItemDetailPage() {
         </div>
       </Card>
 
+      <TripNav activeRoute="item" dayId={day.id} tripId={trip.id} />
+
       {isEditing ? (
         <Card>
           <div className="mb-4">
@@ -294,12 +304,12 @@ export function ItemDetailPage() {
           <Card className="divide-y divide-slate-100 py-1">
             {tickets.map((ticket) => (
               <ListRow
-                detail={`${ticketFileTypeLabels[ticket.fileType]} · ${formatFileSize(ticket.size)} · ${formatTicketCreatedAt(ticket.createdAt)}`}
+                detail={`${ticketFileTypeLabels[ticket.fileType]} · ${ticketStorageModeLabels[getTicketStorageMode(ticket)]} · ${formatFileSize(ticket.size)} · ${formatTicketCreatedAt(ticket.createdAt)}`}
                 icon={<FileText className="size-5" />}
                 key={ticket.id}
                 meta="查看"
                 onClick={() => setPreviewTicket(ticket)}
-                title={ticket.fileName}
+                title={getTicketDisplayTitle(ticket)}
               />
             ))}
           </Card>

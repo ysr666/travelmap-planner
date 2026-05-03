@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { TripNav } from '../components/AppShell'
 
 export function TripOverviewPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
@@ -138,7 +139,7 @@ export function TripOverviewPage() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           <Button
-            className="px-2 text-xs"
+            className="whitespace-nowrap px-2 text-xs"
             disabled={!firstDay}
             icon={<Map className="size-4" />}
             onClick={() =>
@@ -147,10 +148,10 @@ export function TripOverviewPage() {
                 : undefined
             }
           >
-            路线地图
+            地图
           </Button>
           <Button
-            className="px-2 text-xs"
+            className="whitespace-nowrap px-2 text-xs"
             icon={<Ticket className="size-4" />}
             onClick={() => navigateTo('tickets', { tripId: trip.id })}
             variant="secondary"
@@ -158,7 +159,7 @@ export function TripOverviewPage() {
             票据库
           </Button>
           <Button
-            className="px-2 text-xs"
+            className="whitespace-nowrap px-2 text-xs"
             icon={<HardDriveDownload className="size-4" />}
             onClick={() => navigateTo('settings', { tripId: trip.id })}
             variant="secondary"
@@ -167,6 +168,8 @@ export function TripOverviewPage() {
           </Button>
         </div>
       </Card>
+
+      <TripNav activeRoute="overview" firstDayId={firstDay?.id} tripId={trip.id} />
 
       <section className="space-y-3">
         <SectionHeader title="每日行程" />
@@ -195,14 +198,10 @@ export function TripOverviewPage() {
           <Card className="space-y-2 p-2">
             {days.map((day) => (
               <div
-                className="flex items-center gap-2 rounded-[22px] p-2 transition hover:bg-slate-50"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-[22px] p-2 transition hover:bg-slate-50"
                 key={day.id}
               >
-                <button
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
-                  type="button"
-                >
+                <div className="flex min-w-0 items-center gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
                     <CalendarDays className="size-5" />
                   </span>
@@ -214,9 +213,16 @@ export function TripOverviewPage() {
                       {day.title} · {itemsByDay[day.id] ?? 0} 个点
                     </span>
                   </span>
-                </button>
+                </div>
                 <Button
-                  className="min-h-10 shrink-0 rounded-2xl px-3"
+                  className="min-h-10 shrink-0 rounded-2xl px-3 text-xs"
+                  onClick={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
+                  variant="secondary"
+                >
+                  日程
+                </Button>
+                <Button
+                  className="min-h-10 shrink-0 rounded-2xl px-3 text-xs"
                   icon={<Map className="size-4" />}
                   onClick={() => navigateTo('map', { tripId: trip.id, dayId: day.id })}
                   variant="secondary"

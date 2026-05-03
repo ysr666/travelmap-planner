@@ -168,7 +168,7 @@ export function HomePage() {
           >
             新建旅行
           </Button>
-          <Button icon={<Upload className="size-4" />} variant="secondary">
+          <Button icon={<Upload className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
             导入备份
           </Button>
         </div>
@@ -197,7 +197,7 @@ export function HomePage() {
               placeholder="例如：日本东京"
               value={form.destination}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField
                 label="开始日期"
                 onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
@@ -378,7 +378,7 @@ function FormField({
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
       <input
-        className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}

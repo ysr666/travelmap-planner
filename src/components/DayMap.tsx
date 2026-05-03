@@ -12,6 +12,7 @@ import { EmptyState } from './ui/EmptyState'
 type DayMapProps = {
   items: ItineraryItem[]
   selectedItemId?: string | null
+  heightClassName?: string
   onSelectItem: (item: ItineraryItem) => void
   onMapError?: (message: string) => void
 }
@@ -26,7 +27,13 @@ const ROUTE_SOURCE_ID = 'day-route-source'
 const ROUTE_LAYER_ID = 'day-route-line'
 const MAP_ERROR_MESSAGE = '地图底图暂时无法加载，但本地行程仍可查看。'
 
-export function DayMap({ items, selectedItemId, onSelectItem, onMapError }: DayMapProps) {
+export function DayMap({
+  items,
+  selectedItemId,
+  heightClassName = 'h-[52dvh] min-h-[360px]',
+  onSelectItem,
+  onMapError,
+}: DayMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef<MarkerRecord[]>([])
@@ -230,7 +237,7 @@ export function DayMap({ items, selectedItemId, onSelectItem, onMapError }: DayM
 
   if (validItems.length === 0) {
     return (
-      <div className="h-[52dvh] min-h-[360px] rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]">
+      <div className={`${heightClassName} rounded-[28px] border border-white/80 bg-white/80 p-4 shadow-[0_16px_34px_rgba(47,65,88,0.08)]`}>
         <div className="flex h-full items-center justify-center">
           <EmptyState
             body="已有行程，但暂无可显示在地图上的坐标。"
@@ -243,7 +250,7 @@ export function DayMap({ items, selectedItemId, onSelectItem, onMapError }: DayM
   }
 
   return (
-    <div className="relative h-[52dvh] min-h-[360px] overflow-hidden rounded-[28px] border border-white/80 bg-slate-100 shadow-[0_16px_34px_rgba(47,65,88,0.12)]">
+    <div className={`relative ${heightClassName} overflow-hidden rounded-[28px] border border-white/80 bg-slate-100 shadow-[0_16px_34px_rgba(47,65,88,0.12)] transition-[height,min-height] duration-300`}>
       <div className="h-full w-full" ref={containerRef} />
       {mapError ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/88 p-5 text-center backdrop-blur">

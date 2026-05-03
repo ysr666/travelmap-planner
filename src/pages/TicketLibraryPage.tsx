@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileArchive, FileImage, FileText, HardDrive, Trash2, Upload } from 'lucide-react'
+import { FileArchive, FileImage, FileText, HardDrive, Link2, MapPinned, Trash2, Upload } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -13,6 +13,7 @@ import {
   updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
+import { TripNav } from '../components/AppShell'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -22,14 +23,20 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import {
   formatFileSize,
   formatTicketCreatedAt,
+  getTicketDisplayTitle,
   getTicketFileType,
   getTicketScope,
+  getTicketStorageMode,
+  isValidExternalUrl,
+  normalizeTicketFileName,
   ticketFileTypeLabels,
   ticketScopeLabels,
+  ticketStorageModeLabels,
 } from '../lib/tickets'
-import type { Day, ItineraryItem, TicketMeta, TicketScope, Trip } from '../types'
+import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
+type BindingTarget = TicketScope | `item:${string}`
 type StorageEstimateState = {
   usage?: number
   quota?: number
@@ -41,6 +48,27 @@ const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'pdf', label: 'PDF' },
   { value: 'other', label: '其他' },
   { value: 'unassigned', label: '未绑定' },
+]
+
+const storageOptions: Array<{ value: TicketStorageMode; label: string; description: string; icon: ReactNode }> = [
+  {
+    value: 'copy',
+    label: '保存文件副本',
+    description: '离线可看，会进入 zip 备份。',
+    icon: <Upload className="size-4" />,
+  },
+  {
+    value: 'reference',
+    label: '仅记录文件位置',
+    description: '不占浏览器空间，但不能直接打开本地路径。',
+    icon: <MapPinned className="size-4" />,
+  },
+  {
+    value: 'external',
+    label: '添加外部链接',
+    description: '适合网盘、邮箱或订单网页链接。',
+    icon: <Link2 className="size-4" />,
+  },
 ]
 
 const ticketIcons: Record<TicketMeta['fileType'], ReactNode> = {
@@ -57,9 +85,14 @@ export function TicketLibraryPage() {
   const [days, setDays] = useState<Day[]>([])
   const [items, setItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const [storageMode, setStorageMode] = useState<TicketStorageMode>('copy')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
-  const [bindingTarget, setBindingTarget] = useState<TicketScope | `item:${string}`>('trip')
+  const [referenceFileName, setReferenceFileName] = useState('')
+  const [referenceLocation, setReferenceLocation] = useState('')
+  const [externalUrl, setExternalUrl] = useState('')
+  const [bindingTarget, setBindingTarget] = useState<BindingTarget>('trip')
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
@@ -177,13 +210,31 @@ export function TicketLibraryPage() {
     }
   }, [])
 
-  async function handleUpload() {
-    if (!trip || !selectedFile) {
-      setActionError('请选择要上传的文件。')
+  async function handleSaveTicket() {
+    if (!trip) {
+      return
+    }
+
+    setActionError(null)
+
+    if (storageMode === 'copy' && !selectedFile) {
+      setActionError('请选择要保存到本机的文件。')
+      return
+    }
+
+    if (storageMode === 'reference' && !referenceLocation.trim()) {
+      setActionError('请填写文件位置说明。')
+      return
+    }
+
+    if (storageMode === 'external' && !isValidExternalUrl(externalUrl.trim())) {
+      setActionError('外部链接必须以 http:// 或 https:// 开头。')
       return
     }
 
     if (
+      storageMode === 'copy' &&
+      selectedFile &&
       selectedFile.size > 20 * 1024 * 1024 &&
       !window.confirm('这个文件超过 20MB，可能占用较多本地空间。仍然继续保存到本机浏览器吗？')
     ) {
@@ -191,25 +242,31 @@ export function TicketLibraryPage() {
     }
 
     setIsUploading(true)
-    setActionError(null)
     let createdTicketId: string | null = null
 
     try {
       const itemId = bindingTarget.startsWith('item:') ? bindingTarget.slice(5) : undefined
       const scope: TicketScope = itemId ? 'item' : (bindingTarget as TicketScope)
+      const normalizedTitle = normalizeOptional(title)
+      const normalizedNote = normalizeOptional(note)
       const ticket = await createTicketMeta({
-        fileName: selectedFile.name,
-        fileType: getTicketFileType(selectedFile),
+        ...buildTicketMetaInput(storageMode, {
+          externalUrl,
+          note: normalizedNote,
+          referenceFileName,
+          referenceLocation,
+          selectedFile,
+          title: normalizedTitle,
+        }),
         itemId,
-        mimeType: selectedFile.type || 'application/octet-stream',
-        note: normalizeOptional(note),
         scope,
-        size: selectedFile.size,
         tripId: trip.id,
       })
       createdTicketId = ticket.id
 
-      await saveTicketBlob(ticket.id, selectedFile)
+      if (storageMode === 'copy' && selectedFile) {
+        await saveTicketBlob(ticket.id, selectedFile)
+      }
 
       if (itemId) {
         const item = await getItineraryItem(itemId)
@@ -226,22 +283,20 @@ export function TicketLibraryPage() {
         }
       }
 
-      setSelectedFile(null)
-      setNote('')
-      setFileInputKey((current) => current + 1)
+      resetForm()
       await refreshLibrary()
     } catch (caught) {
       if (createdTicketId) {
         await deleteTicket(createdTicketId)
       }
-      setActionError(caught instanceof Error ? caught.message : '上传票据失败')
+      setActionError(caught instanceof Error ? caught.message : '保存票据失败')
     } finally {
       setIsUploading(false)
     }
   }
 
   async function handleDeleteTicket(ticket: TicketMeta) {
-    const confirmed = window.confirm(`确认删除「${ticket.fileName}」吗？本机文件和绑定关系都会删除。`)
+    const confirmed = window.confirm(`确认删除「${getTicketDisplayTitle(ticket)}」吗？本机文件和绑定关系都会删除。`)
     if (!confirmed) {
       return
     }
@@ -256,6 +311,16 @@ export function TicketLibraryPage() {
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除票据失败')
     }
+  }
+
+  function resetForm() {
+    setSelectedFile(null)
+    setTitle('')
+    setNote('')
+    setReferenceFileName('')
+    setReferenceLocation('')
+    setExternalUrl('')
+    setFileInputKey((current) => current + 1)
   }
 
   if (isLoading) {
@@ -292,13 +357,12 @@ export function TicketLibraryPage() {
           <p className="text-sm font-semibold text-sky-600">{trip.title}</p>
           <h2 className="mt-1 text-2xl font-bold text-slate-950">票据和订单</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            图片、PDF 和其他文件只保存在本机浏览器 IndexedDB。
+            可保存文件副本，也可只记录文件位置或外部链接。
           </p>
         </div>
 
         <div className="rounded-2xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
-          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。Phase 5
-          会加入 zip 备份；重要旅行出发前必须导出备份到 iCloud Drive。
+          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。重要旅行出发前必须导出 zip 备份到 iCloud Drive。
         </div>
 
         {storageEstimate ? (
@@ -311,32 +375,82 @@ export function TicketLibraryPage() {
         ) : null}
       </Card>
 
+      <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} />
+
       <Card className="space-y-4">
         <div className="flex items-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
             <Upload className="size-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-950">上传票据</h3>
-            <p className="text-xs text-slate-500">单个文件建议不超过 20MB。</p>
+            <h3 className="text-base font-bold text-slate-950">添加票据</h3>
+            <p className="text-xs text-slate-500">文件副本单个建议不超过 20MB。</p>
           </div>
         </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-slate-700">文件 *</span>
-          <input
-            className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
-            key={fileInputKey}
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            type="file"
+        <div className="grid grid-cols-1 gap-2">
+          {storageOptions.map((option) => (
+            <button
+              className={`rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${
+                storageMode === option.value
+                  ? 'border-sky-200 bg-sky-50 text-sky-800'
+                  : 'border-slate-100 bg-white text-slate-600'
+              }`}
+              key={option.value}
+              onClick={() => {
+                setStorageMode(option.value)
+                setActionError(null)
+              }}
+              type="button"
+            >
+              <span className="flex items-center gap-2 text-sm font-bold">
+                {option.icon}
+                {option.label}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">{option.description}</span>
+            </button>
+          ))}
+        </div>
+
+        <TextField
+          label="显示名称"
+          onChange={setTitle}
+          placeholder="例如：浅草寺门票二维码"
+          value={title}
+        />
+
+        {storageMode === 'copy' ? (
+          <CopyTicketFields
+            fileInputKey={fileInputKey}
+            selectedFile={selectedFile}
+            setSelectedFile={setSelectedFile}
           />
-        </label>
+        ) : null}
+
+        {storageMode === 'reference' ? (
+          <ReferenceTicketFields
+            fileName={referenceFileName}
+            location={referenceLocation}
+            setFileName={setReferenceFileName}
+            setLocation={setReferenceLocation}
+          />
+        ) : null}
+
+        {storageMode === 'external' ? (
+          <TextField
+            label="外部链接"
+            onChange={setExternalUrl}
+            placeholder="https://..."
+            required
+            value={externalUrl}
+          />
+        ) : null}
 
         <label className="block">
           <span className="text-sm font-semibold text-slate-700">绑定对象</span>
           <select
-            className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-            onChange={(event) => setBindingTarget(event.target.value as TicketScope | `item:${string}`)}
+            className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
             value={bindingTarget}
           >
             <option value="trip">整个旅行：机票、酒店、保险等</option>
@@ -359,12 +473,6 @@ export function TicketLibraryPage() {
           />
         </label>
 
-        {selectedFile ? (
-          <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
-          </p>
-        ) : null}
-
         {actionError ? (
           <p className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
             {actionError}
@@ -373,12 +481,11 @@ export function TicketLibraryPage() {
 
         <Button
           className="w-full"
-          disabled={!selectedFile}
           icon={<Upload className="size-4" />}
           loading={isUploading}
-          onClick={() => void handleUpload()}
+          onClick={() => void handleSaveTicket()}
         >
-          保存到本机
+          保存票据
         </Button>
       </Card>
 
@@ -401,7 +508,7 @@ export function TicketLibraryPage() {
 
         {filteredTickets.length === 0 ? (
           <EmptyState
-            body="上传图片、PDF 或其他旅行文件后，会显示在这里。"
+            body="添加图片、PDF、文件位置或外部链接后，会显示在这里。"
             icon={<FileArchive className="size-6" />}
             title="暂无票据"
           />
@@ -442,6 +549,10 @@ function TicketCard({
   onPreview: () => void
   onDelete: () => void
 }) {
+  const displayTitle = getTicketDisplayTitle(ticket)
+  const storageMode = getTicketStorageMode(ticket)
+  const shouldShowNote = ticket.note && ticket.note.trim() !== displayTitle
+
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-start gap-3">
@@ -449,17 +560,30 @@ function TicketCard({
           {ticketIcons[ticket.fileType]}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-bold text-slate-950">{ticket.fileName}</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            {ticketFileTypeLabels[ticket.fileType]} · {ticket.mimeType || '未知类型'} · {formatFileSize(ticket.size)}
+          <h3 className="truncate text-base font-bold text-slate-950">{displayTitle}</h3>
+          <p className="mt-1 truncate text-xs leading-5 text-slate-500">{ticket.fileName}</p>
+          <p className="text-xs leading-5 text-slate-400">
+            {ticketFileTypeLabels[ticket.fileType]} · {ticketStorageModeLabels[storageMode]} · {formatFileSize(ticket.size)}
           </p>
           <p className="text-xs text-slate-400">{formatTicketCreatedAt(ticket.createdAt)}</p>
         </div>
       </div>
 
-      {ticket.note ? (
+      {shouldShowNote ? (
         <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500">
           {ticket.note}
+        </p>
+      ) : null}
+
+      {storageMode === 'reference' && ticket.referenceLocation ? (
+        <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          位置：{ticket.referenceLocation}
+        </p>
+      ) : null}
+
+      {storageMode === 'external' && ticket.externalUrl ? (
+        <p className="truncate rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          {ticket.externalUrl}
         </p>
       ) : null}
 
@@ -480,6 +604,153 @@ function TicketCard({
       </div>
     </Card>
   )
+}
+
+function CopyTicketFields({
+  selectedFile,
+  fileInputKey,
+  setSelectedFile,
+}: {
+  selectedFile: File | null
+  fileInputKey: number
+  setSelectedFile: (file: File | null) => void
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-slate-700">文件 *</span>
+      <input
+        className="mt-2 block w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+        key={fileInputKey}
+        onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+        type="file"
+      />
+      {selectedFile ? (
+        <span className="mt-2 block rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
+        </span>
+      ) : null}
+    </label>
+  )
+}
+
+function ReferenceTicketFields({
+  fileName,
+  location,
+  setFileName,
+  setLocation,
+}: {
+  fileName: string
+  location: string
+  setFileName: (value: string) => void
+  setLocation: (value: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <TextField
+        label="原文件名"
+        onChange={setFileName}
+        placeholder="例如：酒店订单.pdf"
+        value={fileName}
+      />
+      <TextField
+        label="文件位置说明"
+        onChange={setLocation}
+        placeholder="例如：iCloud Drive/英国签证/酒店订单.pdf"
+        required
+        value={location}
+      />
+      <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+        旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
+      </p>
+    </div>
+  )
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  required?: boolean
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-slate-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
+      <input
+        className="mt-2 h-12 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={value}
+      />
+    </label>
+  )
+}
+
+function buildTicketMetaInput(
+  storageMode: TicketStorageMode,
+  {
+    selectedFile,
+    title,
+    note,
+    referenceFileName,
+    referenceLocation,
+    externalUrl,
+  }: {
+    selectedFile: File | null
+    title?: string
+    note?: string
+    referenceFileName: string
+    referenceLocation: string
+    externalUrl: string
+  },
+) {
+  if (storageMode === 'copy' && selectedFile) {
+    return {
+      fileName: selectedFile.name,
+      fileType: getTicketFileType(selectedFile),
+      mimeType: selectedFile.type || 'application/octet-stream',
+      note,
+      size: selectedFile.size,
+      storageMode,
+      title,
+    }
+  }
+
+  if (storageMode === 'reference') {
+    const fileName = normalizeTicketFileName(referenceFileName, title)
+    return {
+      fileName,
+      fileType: 'other' as const,
+      mimeType: 'text/plain',
+      note,
+      referenceLocation: referenceLocation.trim(),
+      size: 0,
+      storageMode,
+      title,
+    }
+  }
+
+  const normalizedUrl = externalUrl.trim()
+  const fileName = normalizeTicketFileName(title, normalizedUrl)
+  return {
+    externalUrl: normalizedUrl,
+    fileName,
+    fileType: 'other' as const,
+    mimeType: 'text/uri-list',
+    note,
+    size: 0,
+    storageMode,
+    title,
+  }
 }
 
 function describeTicketBinding(ticket: TicketMeta, itemById: Map<string, ItineraryItem>) {

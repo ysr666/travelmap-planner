@@ -18,6 +18,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { TripNav } from '../components/AppShell'
 
 export function DayTimelinePage() {
   const params = getRouteParams()
@@ -193,6 +194,8 @@ export function DayTimelinePage() {
           <span className="sr-only">新增</span>
         </Button>
       </Card>
+
+      <TripNav activeRoute="timeline" dayId={day.id} tripId={trip.id} />
 
       {isCreating ? (
         <Card>

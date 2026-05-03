@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Playwright fixture",
+  "trip": {
+    "title": "AI 测试东京旅行",
+    "destination": "Tokyo, Japan",
+    "startDate": "2026-04-10",
+    "endDate": "2026-04-11",
+    "notes": "E2E fixture generated for open trip plan import."
+  },
+  "days": [
+    {
+      "date": "2026-04-10",
+      "title": "抵达与涩谷",
+      "items": [
+        {
+          "title": "Hotel Metropolitan Tokyo 入住",
+          "startTime": "15:00",
+          "locationName": "Hotel Metropolitan Tokyo",
+          "address": "1-6-1 Nishi-Ikebukuro, Toshima City, Tokyo",
+          "lat": 35.72918,
+          "lng": 139.71092
+        },
+        {
+          "title": "Shibuya Sky",
+          "startTime": "18:30",
+          "locationName": "Shibuya Sky",
+          "address": "2-24-12 Shibuya, Shibuya City, Tokyo",
+          "lat": 35.65858,
+          "lng": 139.70204,
+          "previousTransportMode": "train",
+          "previousTransportDurationMinutes": 25,
+          "previousTransportNote": "JR 山手线到涩谷站，需人工核对。"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-11",
+      "title": "浅草与东京站",
+      "items": [
+        {
+          "title": "Senso-ji",
+          "startTime": "09:30",
+          "locationName": "Senso-ji",
+          "address": "2-3-1 Asakusa, Taito City, Tokyo",
+          "lat": 35.71477,
+          "lng": 139.79666
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "title": "酒店确认单位置",
+      "storageMode": "reference",
+      "referenceLocation": "iCloud Drive/东京旅行/酒店确认单.pdf",
+      "bindTo": {
+        "date": "2026-04-10",
+        "itemTitle": "Hotel Metropolitan Tokyo 入住"
+      }
+    },
+    {
+      "title": "官网订单链接",
+      "storageMode": "external",
+      "externalUrl": "https://example.com/order/ai-test"
+    }
+  ]
+}

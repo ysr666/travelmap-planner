@@ -15,6 +15,7 @@ export {
   getTicketMeta,
   getTrip,
   importTripBackupRecords,
+  importTripPlanRecords,
   listDaysByTrip,
   listItemsByDay,
   listItemsByTrip,

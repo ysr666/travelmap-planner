@@ -4,10 +4,12 @@ import {
   Archive,
   CheckCircle2,
   Database,
+  FileJson,
   HardDriveDownload,
   Import,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   Smartphone,
   Wifi,
   WifiOff,
@@ -27,6 +29,12 @@ import {
 } from '../lib/backup'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
+import {
+  buildTripPlanPreviewSummary,
+  importTripPlanPackage,
+  parseTripPlanFile,
+  type ParsedTripPlanFile,
+} from '../lib/tripPlanImport'
 import type { Day, Trip } from '../types'
 
 type StorageEstimateState = {
@@ -45,6 +53,8 @@ export function SettingsPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
+  const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [isPersistenceSupported, setIsPersistenceSupported] = useState(false)
   const [persistedStorage, setPersistedStorage] = useState<boolean | null>(null)
@@ -52,11 +62,15 @@ export function SettingsPage() {
   const [isRequestingPersistence, setIsRequestingPersistence] = useState(false)
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [fileInputKey, setFileInputKey] = useState(0)
+  const [tripPlanFileInputKey, setTripPlanFileInputKey] = useState(0)
   const [isLoadingTrip, setIsLoadingTrip] = useState(Boolean(tripId))
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [isParsingTripPlan, setIsParsingTripPlan] = useState(false)
+  const [isImportingTripPlan, setIsImportingTripPlan] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [tripPlanError, setTripPlanError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
   const refreshTrip = useCallback(async () => {
@@ -212,6 +226,55 @@ export function SettingsPage() {
     }
   }
 
+  async function handleTripPlanFileChange(file: File | null) {
+    setSelectedTripPlanFile(file)
+    setParsedTripPlan(null)
+    setTripPlanError(null)
+    setSuccess(null)
+    if (!file) {
+      return
+    }
+
+    setIsParsingTripPlan(true)
+    try {
+      const parsed = await parseTripPlanFile(file)
+      setParsedTripPlan(parsed)
+    } catch (caught) {
+      setTripPlanError(caught instanceof Error ? caught.message : '解析 AI 行程包失败。')
+    } finally {
+      setIsParsingTripPlan(false)
+    }
+  }
+
+  async function handleImportTripPlan() {
+    if (!parsedTripPlan || !parsedTripPlan.validation.valid) {
+      setTripPlanError('请先选择并通过校验一个 AI 行程包。')
+      return
+    }
+
+    setIsImportingTripPlan(true)
+    setTripPlanError(null)
+    setError(null)
+    setSuccess(null)
+    setWarnings([])
+    try {
+      const result = await importTripPlanPackage(parsedTripPlan.package, {
+        attachments: parsedTripPlan.attachments,
+        sourceKind: parsedTripPlan.sourceKind,
+      })
+      setSuccess(`已导入 AI 行程包「${result.title}」，正在打开旅行工作台。`)
+      setWarnings(result.warnings)
+      setSelectedTripPlanFile(null)
+      setParsedTripPlan(null)
+      setTripPlanFileInputKey((current) => current + 1)
+      window.setTimeout(() => navigateTo('trip', { tripId: result.tripId }), result.warnings.length > 0 ? 1800 : 500)
+    } catch (caught) {
+      setTripPlanError(caught instanceof Error ? caught.message : '导入 AI 行程包失败。')
+    } finally {
+      setIsImportingTripPlan(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       {error || success || warnings.length > 0 ? (
@@ -355,6 +418,69 @@ export function SettingsPage() {
           导入 zip 备份
         </Button>
       </Card>
+
+        <Card className="space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <Sparkles className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold text-slate-950">导入 AI 行程包</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                旅图不会调用 AI。你可以使用 ChatGPT、Claude、Gemini、DeepSeek
+                或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip，然后在本地导入。
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <InfoPill
+              icon={<FileJson className="size-4" />}
+              text="AI 行程包用于新建旅行；完整备份 zip 仍请使用上方“导入备份”入口。"
+            />
+            <InfoPill
+              icon={<AlertTriangle className="size-4" />}
+              text="AI 生成内容可能不准确，导入前请人工核对日期、地点、坐标和交通时间。"
+              tone="warning"
+            />
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-700">AI 行程包文件</span>
+            <input
+              accept=".json,.zip,application/json,application/zip,application/x-zip-compressed"
+              className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700"
+              data-testid="ai-trip-plan-file-input"
+              key={tripPlanFileInputKey}
+              onChange={(event) => void handleTripPlanFileChange(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+          </label>
+
+          {selectedTripPlanFile ? (
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              已选择：{selectedTripPlanFile.name} · {formatFileSize(selectedTripPlanFile.size)}
+            </p>
+          ) : null}
+
+          {isParsingTripPlan ? <SkeletonLine className="w-full" /> : null}
+
+          {tripPlanError ? <StatusMessage tone="error" message={tripPlanError} /> : null}
+
+          {parsedTripPlan ? <TripPlanPreview parsed={parsedTripPlan} /> : null}
+
+          <Button
+            className="w-full"
+            data-testid="ai-trip-plan-import-button"
+            disabled={!parsedTripPlan?.validation.valid}
+            icon={<Sparkles className="size-4" />}
+            loading={isImportingTripPlan}
+            onClick={() => void handleImportTripPlan()}
+            variant="secondary"
+          >
+            确认导入 AI 行程包
+          </Button>
+        </Card>
       </section>
 
       <section className="space-y-3">
@@ -428,6 +554,103 @@ function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: 
     <div className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}>
       <Icon className="mt-0.5 size-4 shrink-0" />
       <p className="leading-6">{message}</p>
+    </div>
+  )
+}
+
+function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
+  const summary = buildTripPlanPreviewSummary(parsed.validation)
+  const trip = parsed.package.trip
+
+  return (
+    <div
+      className="space-y-3 rounded-2xl border border-violet-100 bg-violet-50/60 p-4"
+      data-testid="ai-trip-plan-preview"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-600">
+          <FileJson className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-violet-600">
+            {parsed.sourceKind === 'zip' ? 'zip 行程包' : 'JSON 行程包'}
+          </p>
+          <h4 className="mt-1 truncate text-base font-semibold text-slate-950">
+            {trip?.title || '未命名旅行'}
+          </h4>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {trip?.destination || '目的地未填写'} · {trip?.startDate || '开始日期未定'} - {trip?.endDate || '结束日期未定'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <PreviewMetric label="Day" value={summary.daysCount} />
+        <PreviewMetric label="行程点" value={summary.itemsCount} />
+        <PreviewMetric label="有坐标" value={summary.geocodedItemsCount} />
+        <PreviewMetric label="缺坐标" value={summary.missingCoordinateCount} />
+        <PreviewMetric label="票据" value={summary.ticketCount} />
+        <PreviewMetric label="copy 附件" value={summary.attachmentCount} />
+        <PreviewMetric label="reference" value={summary.referenceTicketCount} />
+        <PreviewMetric label="external" value={summary.externalTicketCount} />
+      </div>
+
+      {parsed.validation.errors.length > 0 ? (
+        <ValidationList
+          items={parsed.validation.errors}
+          title="需要修正后才能导入"
+          tone="error"
+        />
+      ) : null}
+
+      {parsed.validation.warnings.length > 0 ? (
+        <ValidationList
+          items={parsed.validation.warnings}
+          title="导入提醒"
+          tone="warning"
+        />
+      ) : null}
+
+      {parsed.validation.valid ? (
+        <p className="rounded-xl bg-white/80 px-3 py-2 text-xs leading-5 text-violet-700">
+          校验通过。导入后会创建一个新的本地旅行，不会覆盖现有数据。
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function PreviewMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-white/80 px-3 py-2">
+      <p className="text-lg font-semibold text-slate-950">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  )
+}
+
+function ValidationList({
+  items,
+  title,
+  tone,
+}: {
+  items: string[]
+  title: string
+  tone: 'error' | 'warning'
+}) {
+  const styles =
+    tone === 'error'
+      ? 'border-red-100 bg-red-50 text-red-600'
+      : 'border-amber-100 bg-amber-50 text-amber-800'
+
+  return (
+    <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${styles}`}>
+      <p className="font-semibold">{title}</p>
+      <ul className="mt-1 list-inside list-disc">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   )
 }

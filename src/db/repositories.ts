@@ -26,6 +26,14 @@ export type ImportTripBackupRecordsInput = {
   importedTitleSuffix: string
 }
 
+export type ImportTripPlanRecordsInput = {
+  trip: Trip
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  ticketBlobs: TicketBlob[]
+}
+
 export async function createTrip(input: CreateTripInput) {
   const now = Date.now()
   const trip: Trip = {
@@ -390,6 +398,40 @@ export async function importTripBackupRecords({
   )
 
   return result
+}
+
+export async function importTripPlanRecords({
+  trip,
+  days,
+  itineraryItems,
+  ticketMetas,
+  ticketBlobs,
+}: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
+  assertUniqueIds('Day', days.map((day) => day.id))
+  assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
+  assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+
+  return db.transaction(
+    'rw',
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    async () => {
+      await db.trips.add(trip)
+      if (days.length > 0) {
+        await db.days.bulkAdd(days)
+      }
+      if (itineraryItems.length > 0) {
+        await db.itineraryItems.bulkAdd(itineraryItems)
+      }
+      if (ticketMetas.length > 0) {
+        await db.ticketMetas.bulkAdd(ticketMetas)
+      }
+      if (ticketBlobs.length > 0) {
+        await db.ticketBlobs.bulkAdd(ticketBlobs)
+      }
+
+      return { title: trip.title, tripId: trip.id }
+    },
+  )
 }
 
 const DexieMinKey = Dexie.minKey

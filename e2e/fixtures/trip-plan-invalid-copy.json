@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Playwright fixture",
+  "trip": {
+    "title": "错误 copy JSON",
+    "destination": "Tokyo, Japan",
+    "startDate": "2026-04-10",
+    "endDate": "2026-04-10"
+  },
+  "days": [
+    {
+      "date": "2026-04-10",
+      "title": "测试日",
+      "items": [
+        {
+          "title": "测试地点",
+          "lat": 35.65858,
+          "lng": 139.70204
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "title": "不允许的 copy 票据",
+      "storageMode": "copy",
+      "filePath": "files/ticket.pdf",
+      "fileName": "ticket.pdf",
+      "mimeType": "application/pdf"
+    }
+  ]
+}

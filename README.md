@@ -29,6 +29,22 @@
 - zip 备份：导出和导入单个旅行的完整本机备份
 - PWA：支持 iPhone Safari 添加到主屏幕，并缓存基础 app shell
 
+## 🤖 使用外部 AI 生成行程
+
+旅图不内置 AI，也不会调用 AI API。你可以使用 ChatGPT、Claude、Gemini、DeepSeek 或其他工具生成符合开放格式的 `trip-plan.json` / `trip-plan.zip`，再在设置页的“导入 AI 行程包”区域本地导入。
+
+需要注意：
+
+- AI 行程包导入用于新建旅行，不替代完整 zip 备份恢复。
+- JSON 单文件适合导入行程、坐标、交通段、reference / external 票据。
+- copy 模式真实附件必须使用 zip 行程包，并把文件放在 zip 内 `files/` 目录。
+- AI 可能生成错误地点、错误坐标或错误时间，导入前后都需要人工核对。
+
+文档：
+
+- [AI 行程包开放格式](docs/AI_IMPORT_SPEC.md)
+- [外部 AI 提示词模板](docs/AI_PROMPT_TEMPLATE.md)
+
 ## 🧱 技术栈
 
 - React

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Archive,
   CheckCircle2,
+  Copy,
   Database,
   FileJson,
   HardDriveDownload,
@@ -47,6 +48,21 @@ type PersistentStorageManager = StorageManager & {
   persist?: () => Promise<boolean>
 }
 
+const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要输出 Markdown 或解释。
+为旅图 TripMap 生成 schemaVersion 1 的 trip-plan.json：
+- 顶层必须包含 schemaVersion: 1、type: "trip-plan"、trip、days，可选 tickets。
+- 日期使用 YYYY-MM-DD，时间使用 HH:mm。
+- 每个行程点尽量提供 title、locationName、address、lat、lng、notes。
+- 交通方式只能使用 walk、transit、car、train、flight、other。
+- previousTransportDurationMinutes 只是估算，必须提醒用户人工核对。
+- 不要编造已购票据。
+- 如果没有真实附件，不要生成 storageMode: "copy"。
+- JSON 单文件只使用 reference 或 external 票据。
+- 只有我明确会把文件放进 zip 的 files/ 目录时，才生成 copy 票据，并填写相对 filePath，例如 files/hotel-confirmation.pdf。
+- 不要生成本机绝对路径，不要包含 ../。
+我的旅行需求如下：
+[在这里填写目的地、日期、兴趣、已订酒店或门票信息]`
+
 export function SettingsPage() {
   const params = getRouteParams()
   const tripId = params.get('tripId')
@@ -71,6 +87,7 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [tripPlanError, setTripPlanError] = useState<string | null>(null)
+  const [copyPromptMessage, setCopyPromptMessage] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
   const refreshTrip = useCallback(async () => {
@@ -275,6 +292,20 @@ export function SettingsPage() {
     }
   }
 
+  async function handleCopyAiPrompt() {
+    if (!navigator.clipboard?.writeText) {
+      setCopyPromptMessage('当前浏览器不支持自动复制，请手动复制说明中的提示词。')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(AI_PROMPT_SNIPPET)
+      setCopyPromptMessage('已复制提示词。')
+    } catch {
+      setCopyPromptMessage('当前浏览器不支持自动复制，请手动复制说明中的提示词。')
+    }
+  }
+
   return (
     <div className="space-y-5">
       {error || success || warnings.length > 0 ? (
@@ -445,6 +476,11 @@ export function SettingsPage() {
             />
           </div>
 
+          <TripPlanGuide
+            copyMessage={copyPromptMessage}
+            onCopyPrompt={() => void handleCopyAiPrompt()}
+          />
+
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">AI 行程包文件</span>
             <input
@@ -554,6 +590,75 @@ function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: 
     <div className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}>
       <Icon className="mt-0.5 size-4 shrink-0" />
       <p className="leading-6">{message}</p>
+    </div>
+  )
+}
+
+function TripPlanGuide({
+  copyMessage,
+  onCopyPrompt,
+}: {
+  copyMessage: string | null
+  onCopyPrompt: () => void
+}) {
+  return (
+    <div
+      className="space-y-3 rounded-2xl border border-violet-100 bg-violet-50/60 p-4"
+      data-testid="ai-trip-plan-guide"
+    >
+      <div>
+        <h4 className="text-base font-semibold text-slate-950">AI 行程包使用说明</h4>
+        <p className="mt-1 text-sm leading-6 text-slate-500">
+          旅图不会调用 AI，只导入你上传的 JSON / zip。AI 生成的地点、坐标和交通时间都需要人工核对。
+        </p>
+      </div>
+
+      <div className="space-y-2 text-sm leading-6 text-slate-600">
+        <p>
+          <span className="font-semibold text-slate-800">JSON 单文件</span>
+          ：适合导入行程、地图坐标、交通段，以及 reference / external 票据。
+        </p>
+        <p>
+          <span className="font-semibold text-slate-800">zip 行程包</span>
+          ：适合导入行程和 copy 附件。copy 模式必须使用 zip，并通过 filePath 指向 files/ 内附件。
+        </p>
+      </div>
+
+      <div className="max-w-full overflow-x-auto rounded-xl bg-white/80 p-3">
+        <pre className="min-w-max text-xs leading-5 text-slate-600">{`trip-plan.zip
+├── trip-plan.json
+└── files/
+    ├── hotel-confirmation.pdf
+    └── museum-ticket.png`}</pre>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-slate-800">可复制给外部 AI 的简化提示词</p>
+        <textarea
+          className="min-h-40 w-full resize-y rounded-xl border border-violet-100 bg-white/90 px-3 py-3 font-mono text-xs leading-5 text-slate-600 outline-none focus:border-violet-200"
+          data-testid="ai-trip-plan-prompt-text"
+          readOnly
+          value={AI_PROMPT_SNIPPET}
+        />
+        <Button
+          className="w-full"
+          data-testid="ai-trip-plan-copy-prompt"
+          icon={<Copy className="size-4" />}
+          onClick={onCopyPrompt}
+          variant="secondary"
+        >
+          复制给 AI 的提示词
+        </Button>
+        {copyMessage ? (
+          <p className="rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold leading-5 text-violet-700">
+            {copyMessage}
+          </p>
+        ) : null}
+      </div>
+
+      <p className="text-xs leading-5 text-slate-500">
+        完整技术规范请查看 GitHub 仓库 docs/AI_IMPORT_SPEC.md 和 docs/AI_PROMPT_TEMPLATE.md。
+      </p>
     </div>
   )
 }

@@ -14,6 +14,7 @@ type DayMapProps = {
   selectedItemId?: string | null
   heightClassName?: string
   surface?: 'card' | 'fullscreen'
+  resizeSignal?: number
   onSelectItem: (item: ItineraryItem) => void
   onMapError?: (message: string) => void
 }
@@ -34,6 +35,7 @@ export function DayMap({
   selectedItemId,
   heightClassName = 'h-[52dvh] min-h-[360px]',
   surface = 'card',
+  resizeSignal,
   onSelectItem,
   onMapError,
 }: DayMapProps) {
@@ -333,6 +335,17 @@ export function DayMap({
       }
     }
   }, [hasMappableItems, scheduleMapResize])
+
+  useEffect(() => {
+    if (!mapRef.current || !loadedRef.current || resizeSignal === undefined) {
+      return
+    }
+
+    scheduleMapResize()
+    const timeout = window.setTimeout(scheduleMapResize, 240)
+
+    return () => window.clearTimeout(timeout)
+  }, [resizeSignal, scheduleMapResize])
 
   if (!hasMappableItems) {
     return (

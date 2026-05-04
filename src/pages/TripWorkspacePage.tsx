@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, CalendarDays, Map, Route, RotateCw } from 'lucide-react'
 import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
-import { DayMapView } from '../components/trip/DayMapView'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { TripCover } from '../components/trip/TripCover'
@@ -14,6 +13,11 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../types'
 
 type WorkspaceView = 'schedule' | 'map'
+
+const loadDayMapView = () =>
+  import('../components/trip/DayMapView').then((module) => ({ default: module.DayMapView }))
+
+const LazyDayMapView = lazy(loadDayMapView)
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -29,6 +33,9 @@ export function TripWorkspacePage() {
   const [isGeneratingDays, setIsGeneratingDays] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [hasOpenedMap, setHasOpenedMap] = useState(() => view === 'map')
+  const [mapResizeToken, setMapResizeToken] = useState(0)
+  const mapPreloadStartedRef = useRef(false)
 
   const refreshWorkspace = useCallback(async () => {
     if (!tripId) {
@@ -84,6 +91,41 @@ export function TripWorkspacePage() {
     return () => window.clearTimeout(timeout)
   }, [refreshWorkspace])
 
+  useEffect(() => {
+    if (view !== 'map' || hasOpenedMap) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setHasOpenedMap(true)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [hasOpenedMap, view])
+
+  useEffect(() => {
+    if (isLoading || !trip || days.length === 0 || mapPreloadStartedRef.current) {
+      return
+    }
+
+    mapPreloadStartedRef.current = true
+    return scheduleIdleTask(() => {
+      void loadDayMapView()
+    })
+  }, [days.length, isLoading, trip])
+
+  useEffect(() => {
+    if (view !== 'map' || !hasOpenedMap) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setMapResizeToken((current) => current + 1)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [hasOpenedMap, selectedDay?.id, view])
+
   const selectedDayIndex = useMemo(() => {
     return selectedDay ? days.findIndex((day) => day.id === selectedDay.id) : -1
   }, [days, selectedDay])
@@ -118,6 +160,9 @@ export function TripWorkspacePage() {
   function handleSwitchView(nextView: WorkspaceView) {
     if (!trip || !selectedDay) {
       return
+    }
+    if (nextView === 'map') {
+      setHasOpenedMap(true)
     }
     navigateTo('trip', { tripId: trip.id, dayId: selectedDay.id, view: nextView })
   }
@@ -224,8 +269,13 @@ export function TripWorkspacePage() {
             </div>
           </div>
 
-          {view === 'schedule' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div
+              aria-hidden={isMapView}
+              className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none ${
+                isMapView ? 'pointer-events-none opacity-0' : 'opacity-100'
+              }`}
+            >
               <DayTimelineView
                 compact
                 day={selectedDay}
@@ -238,27 +288,37 @@ export function TripWorkspacePage() {
                 trip={trip}
               />
             </div>
-          ) : (
-            <div className="relative -mx-4 min-h-0 flex-1 overflow-hidden">
-              <DayMapView
-                day={selectedDay}
-                embedded
-                items={items}
-                onBackToTimeline={() => handleSwitchView('schedule')}
-                onEditItem={() => handleSwitchView('schedule')}
-                onOpenItem={(item) =>
-                  navigateTo('item', {
-                    tripId: trip.id,
-                    dayId: selectedDay.id,
-                    itemId: item.id,
-                    fromView: 'map',
-                  })
-                }
-                showFloatingHeader={false}
-                trip={trip}
-              />
-            </div>
-          )}
+
+            {hasOpenedMap ? (
+              <div
+                aria-hidden={!isMapView}
+                className={`absolute inset-y-0 -left-4 -right-4 min-h-0 overflow-hidden transition-opacity duration-200 motion-reduce:transition-none ${
+                  isMapView ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`}
+              >
+                <Suspense fallback={<MapLoadingFallback />}>
+                  <LazyDayMapView
+                    day={selectedDay}
+                    embedded
+                    items={items}
+                    onBackToTimeline={() => handleSwitchView('schedule')}
+                    onEditItem={() => handleSwitchView('schedule')}
+                    onOpenItem={(item) =>
+                      navigateTo('item', {
+                        tripId: trip.id,
+                        dayId: selectedDay.id,
+                        itemId: item.id,
+                        fromView: 'map',
+                      })
+                    }
+                    resizeSignal={mapResizeToken}
+                    showFloatingHeader={false}
+                    trip={trip}
+                  />
+                </Suspense>
+              </div>
+            ) : null}
+          </div>
 
           <p className="sr-only">
             当前第 {selectedDayIndex + 1} 天
@@ -346,4 +406,39 @@ function formatShortWorkspaceDate(date: string) {
 
 function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
+}
+
+function MapLoadingFallback() {
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#eaf2f9] p-4">
+      <div className="rounded-2xl bg-white/85 p-4 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80">
+        <SkeletonLine className="w-1/2" />
+        <p className="mt-3 text-sm font-medium text-slate-600">
+          地图加载中，本地行程仍可查看。
+        </p>
+      </div>
+      <div className="mt-auto rounded-t-3xl bg-white/90 p-4 shadow-[0_-14px_36px_rgba(47,65,88,0.12)] ring-1 ring-white/80">
+        <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
+        <SkeletonLine className="w-2/3" />
+        <SkeletonLine className="mt-3 w-full" />
+        <SkeletonLine className="mt-3 w-5/6" />
+      </div>
+    </div>
+  )
+}
+
+function scheduleIdleTask(task: () => void) {
+  type IdleWindow = Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+
+  const idleWindow = window as IdleWindow
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(task, { timeout: 2500 })
+    return () => idleWindow.cancelIdleCallback?.(handle)
+  }
+
+  const timeout = window.setTimeout(task, 900)
+  return () => window.clearTimeout(timeout)
 }

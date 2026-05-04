@@ -31,8 +31,9 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
     return (await sheet.boundingBox())?.height ?? 0
   }).toBeGreaterThan(before.height + 40)
 
-  await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
-  await page.getByText('Hotel Metropolitan Tokyo 入住').first().click()
-  await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
+  const hotelListItem = page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).first()
+  await expect(hotelListItem).toBeVisible()
+  await hotelListItem.click()
+  await expect(hotelListItem).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

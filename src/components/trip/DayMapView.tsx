@@ -28,6 +28,7 @@ type DayMapViewProps = {
   items: ItineraryItem[]
   embedded?: boolean
   showFloatingHeader?: boolean
+  resizeSignal?: number
   onBackToTimeline?: () => void
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
@@ -47,6 +48,7 @@ export function DayMapView({
   items,
   embedded = false,
   showFloatingHeader = true,
+  resizeSignal,
   onBackToTimeline,
   onOpenItem,
   onEditItem,
@@ -96,6 +98,7 @@ export function DayMapView({
             items={items}
             onMapError={(message) => setMapError(message)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
+            resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
             surface="fullscreen"
           />

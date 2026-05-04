@@ -16,6 +16,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
+import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
@@ -567,12 +568,17 @@ export function SettingsPage() {
 
       <section className="space-y-3">
         <SectionHeader title="关于" />
-        <Card className="border-amber-100 bg-amber-50/80">
-          <h3 className="text-base font-semibold text-amber-950">备份提醒</h3>
-          <p className="mt-2 text-sm leading-6 text-amber-800">
-            重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
-            在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
-          </p>
+        <Card className="space-y-3 border-amber-100 bg-amber-50/80">
+          <div>
+            <h3 className="text-base font-semibold text-amber-950">备份提醒</h3>
+            <p className="mt-2 text-sm leading-6 text-amber-800">
+              重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
+              在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
+            </p>
+          </div>
+          <div className="rounded-xl bg-white/60 px-3 py-2">
+            <AppVersion className="text-left text-amber-800/70" label="当前版本" />
+          </div>
         </Card>
       </section>
     </div>

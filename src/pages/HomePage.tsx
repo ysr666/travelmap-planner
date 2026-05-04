@@ -4,6 +4,7 @@ import { createDemoTrip, createTrip, deleteTripCascade, listTrips } from '../db'
 import { navigateTo } from '../lib/routes'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
+import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -325,6 +326,7 @@ export function HomePage() {
               导入备份
             </Button>
           </div>
+          <AppVersion className="mt-3" suffix="本地优先" />
         </div>
       ) : null}
 

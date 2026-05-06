@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
+import { CloudBackupPanel } from '../components/cloud/CloudBackupPanel'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
@@ -523,6 +524,8 @@ export function SettingsPage() {
           />
         </Card>
       </section>
+
+      <CloudBackupPanel trip={trip} />
 
       <section className="space-y-3">
         <SectionHeader title="设备存储" />

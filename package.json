@@ -9,13 +9,14 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:unit": "vitest run src/lib/tripPlanImport.test.ts",
+    "test:unit": "vitest run",
     "test:unit:watch": "vitest src/lib/tripPlanImport.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
     "dayjs": "^1.11.20",
     "dexie": "^4.4.2",
     "jszip": "^3.10.1",

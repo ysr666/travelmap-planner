@@ -217,6 +217,8 @@ function MapBottomSheet({
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const dragStartYRef = useRef(0)
   const dragStartHeightRef = useRef(0)
+  const dragStartStateRef = useRef<SheetState>('middle')
+  const dragStartTimeRef = useRef(0)
   const dragDeltaRef = useRef(0)
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -257,6 +259,8 @@ function MapBottomSheet({
     event.currentTarget.setPointerCapture(event.pointerId)
     dragStartYRef.current = event.clientY
     dragStartHeightRef.current = sheetHeight
+    dragStartStateRef.current = sheetState
+    dragStartTimeRef.current = Date.now()
     dragDeltaRef.current = 0
     setIsDragging(true)
     setDragHeight(sheetHeight)
@@ -290,7 +294,14 @@ function MapBottomSheet({
     }
 
     const currentHeight = dragHeight ?? sheetHeight
-    const nextState = getNearestSheetState(currentHeight, dragDeltaRef.current, snapPointsRef.current)
+    const nextState = getStableSheetState({
+      dragDelta: dragDeltaRef.current,
+      dragDuration: Date.now() - dragStartTimeRef.current,
+      height: currentHeight,
+      snapPoints: snapPointsRef.current,
+      startHeight: dragStartHeightRef.current,
+      startState: dragStartStateRef.current,
+    })
     setSheetState(nextState)
     setDragHeight(null)
     setIsDragging(false)
@@ -605,38 +616,80 @@ function getSheetSnapPoints(stageHeight?: number): SnapPoints {
   }
 }
 
-function getNearestSheetState(height: number, dragDelta: number, snapPoints: SnapPoints): SheetState {
-  if (Math.abs(dragDelta) > 90) {
-    if (dragDelta < 0) {
-      return nextSheetState(height, snapPoints, 'up')
-    }
-    return nextSheetState(height, snapPoints, 'down')
+function getStableSheetState({
+  height,
+  dragDelta,
+  dragDuration,
+  snapPoints,
+  startHeight,
+  startState,
+}: {
+  height: number
+  dragDelta: number
+  dragDuration: number
+  snapPoints: SnapPoints
+  startHeight: number
+  startState: SheetState
+}): SheetState {
+  const deltaHeight = height - startHeight
+  const absoluteDrag = Math.abs(dragDelta)
+  const velocity = absoluteDrag / Math.max(1, dragDuration)
+  const snapSpan = Math.max(1, snapPoints.expanded - snapPoints.collapsed)
+  const smallDragThreshold = clamp(Math.round(snapSpan * 0.08), 34, 44)
+  const velocityThreshold = 0.56
+  const middleDeadZone = clamp(Math.round(snapSpan * 0.22), 72, 148)
+  const isFast = velocity >= velocityThreshold
+  const direction: 'up' | 'down' = dragDelta < 0 ? 'up' : 'down'
+
+  if (absoluteDrag < smallDragThreshold && !isFast) {
+    return startState
   }
 
-  return SNAP_STATES.reduce((nearest, state) => {
-    const currentDistance = Math.abs(height - snapPoints[state])
-    const nearestDistance = Math.abs(height - snapPoints[nearest])
-    return currentDistance < nearestDistance ? state : nearest
-  }, 'middle' as SheetState)
+  if (!isFast && Math.abs(height - snapPoints.middle) <= middleDeadZone) {
+    return 'middle'
+  }
+
+  if (isFast) {
+    const isLargeFling = absoluteDrag >= snapSpan * 0.36
+    if (startState === 'collapsed' && direction === 'up' && isLargeFling) {
+      return 'expanded'
+    }
+    if (startState === 'expanded' && direction === 'down' && isLargeFling) {
+      return 'collapsed'
+    }
+
+    return adjacentSheetState(startState, direction)
+  }
+
+  if (startState === 'middle') {
+    const upThreshold = Math.max(76, (snapPoints.expanded - snapPoints.middle) * 0.38)
+    const downThreshold = Math.max(76, (snapPoints.middle - snapPoints.collapsed) * 0.38)
+    if (deltaHeight > upThreshold) {
+      return 'expanded'
+    }
+    if (deltaHeight < -downThreshold) {
+      return 'collapsed'
+    }
+    return 'middle'
+  }
+
+  if (startState === 'collapsed') {
+    const upThreshold = Math.max(64, (snapPoints.middle - snapPoints.collapsed) * 0.38)
+    return deltaHeight > upThreshold ? 'middle' : 'collapsed'
+  }
+
+  const downThreshold = Math.max(64, (snapPoints.expanded - snapPoints.middle) * 0.38)
+  return deltaHeight < -downThreshold ? 'middle' : 'expanded'
 }
 
-function nextSheetState(height: number, snapPoints: SnapPoints, direction: 'up' | 'down'): SheetState {
-  const nearest = getNearestWithoutDirection(height, snapPoints)
-  const index = SNAP_STATES.indexOf(nearest)
+function adjacentSheetState(startState: SheetState, direction: 'up' | 'down'): SheetState {
+  const index = SNAP_STATES.indexOf(startState)
 
   if (direction === 'up') {
     return SNAP_STATES[Math.min(SNAP_STATES.length - 1, index + 1)]
   }
 
   return SNAP_STATES[Math.max(0, index - 1)]
-}
-
-function getNearestWithoutDirection(height: number, snapPoints: SnapPoints): SheetState {
-  return SNAP_STATES.reduce((nearest, state) => {
-    const currentDistance = Math.abs(height - snapPoints[state])
-    const nearestDistance = Math.abs(height - snapPoints[nearest])
-    return currentDistance < nearestDistance ? state : nearest
-  }, 'middle' as SheetState)
 }
 
 function clamp(value: number, min: number, max: number) {

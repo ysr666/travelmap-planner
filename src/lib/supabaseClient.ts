@@ -23,6 +23,13 @@ let cachedClient: SupabaseClient | null = null
 let cachedKey = ''
 
 export function getSupabaseConfigStatus(env: SupabaseEnv = import.meta.env): SupabaseConfigStatus {
+  if (shouldForceSupabaseUnconfigured()) {
+    return {
+      configured: false,
+      missing: ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'],
+    }
+  }
+
   const url = env.VITE_SUPABASE_URL?.trim()
   const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim()
   const missing = [
@@ -67,3 +74,15 @@ export function requireSupabaseClient() {
 }
 
 export type { Session, User }
+
+function shouldForceSupabaseUnconfigured() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  try {
+    return window.localStorage.getItem('tripmap:e2e:supabase-unconfigured') === '1'
+  } catch {
+    return false
+  }
+}

@@ -55,6 +55,12 @@ export async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow).toBeLessThanOrEqual(2)
 }
 
+export async function forceSupabaseUnconfigured(page: Page) {
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:e2e:supabase-unconfigured', '1')
+  })
+}
+
 export function getHashParam(url: string, key: string) {
   const hash = new URL(url).hash
   const query = hash.split('?')[1] ?? ''

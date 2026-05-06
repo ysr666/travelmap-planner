@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { clearTravelDatabase, expectNoHorizontalOverflow } from './helpers'
+import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigured } from './helpers'
 
 test('Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
   await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByTestId('cloud-backup-section')).toBeVisible()

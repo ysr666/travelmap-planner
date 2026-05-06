@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, Map, Route, RotateCw } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Map, MapPin, Route, RotateCw } from 'lucide-react'
 import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -9,13 +9,31 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ensureDaysForTrip, formatDateRange } from '../lib/dates'
+import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
+import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../types'
 
 type WorkspaceView = 'schedule' | 'map'
 
-const loadDayMapView = () =>
-  import('../components/trip/DayMapView').then((module) => ({ default: module.DayMapView }))
+function importDayMapView() {
+  return import('../components/trip/DayMapView').then((module) => ({ default: module.DayMapView }))
+}
+
+let dayMapViewLoadPromise: ReturnType<typeof importDayMapView> | null = null
+let mapStylePreloadStarted = false
+
+const loadDayMapView = () => {
+  if (!dayMapViewLoadPromise) {
+    markMapStartup('DayMapView chunk requested')
+    dayMapViewLoadPromise = importDayMapView().then((module) => {
+      markMapStartup('DayMapView chunk loaded')
+      return module
+    })
+  }
+
+  return dayMapViewLoadPromise
+}
 
 const LazyDayMapView = lazy(loadDayMapView)
 
@@ -36,6 +54,10 @@ export function TripWorkspacePage() {
   const [hasOpenedMap, setHasOpenedMap] = useState(() => view === 'map')
   const [mapResizeToken, setMapResizeToken] = useState(0)
   const mapPreloadStartedRef = useRef(false)
+
+  useEffect(() => {
+    resetMapStartupTrace()
+  }, [])
 
   const refreshWorkspace = useCallback(async () => {
     if (!tripId) {
@@ -110,7 +132,9 @@ export function TripWorkspacePage() {
 
     mapPreloadStartedRef.current = true
     return scheduleIdleTask(() => {
+      markMapStartup('idle preload started')
       void loadDayMapView()
+      void preloadMapStyleJson()
     })
   }, [days.length, isLoading, trip])
 
@@ -296,7 +320,7 @@ export function TripWorkspacePage() {
                   isMapView ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
               >
-                <Suspense fallback={<MapLoadingFallback />}>
+                <Suspense fallback={<MapLoadingFallback day={selectedDay} items={items} />}>
                   <LazyDayMapView
                     day={selectedDay}
                     embedded
@@ -408,20 +432,38 @@ function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
 }
 
-function MapLoadingFallback() {
+function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#eaf2f9] p-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#eaf2f9] p-4" data-testid="map-loading-fallback">
       <div className="rounded-2xl bg-white/85 p-4 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80">
         <SkeletonLine className="w-1/2" />
         <p className="mt-3 text-sm font-medium text-slate-600">
           地图加载中，本地行程仍可查看。
         </p>
       </div>
-      <div className="mt-auto rounded-t-3xl bg-white/90 p-4 shadow-[0_-14px_36px_rgba(47,65,88,0.12)] ring-1 ring-white/80">
+      <div className="mt-auto max-h-[54%] min-h-0 rounded-t-3xl bg-white/90 p-4 shadow-[0_-14px_36px_rgba(47,65,88,0.12)] ring-1 ring-white/80">
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
-        <SkeletonLine className="w-2/3" />
-        <SkeletonLine className="mt-3 w-full" />
-        <SkeletonLine className="mt-3 w-5/6" />
+        <p className="text-xs font-semibold text-sky-600">{formatShortWorkspaceDate(day.date)}</p>
+        <h2 className="mt-1 truncate text-base font-semibold text-slate-950">{day.title}</h2>
+        <p className="mt-1 text-xs text-slate-500">{items.length} 个行程点，本地列表可先查看。</p>
+        <div className="mt-3 min-h-0 overflow-y-auto app-scrollbar">
+          <div className="space-y-2 pb-3">
+            {items.slice(0, 4).map((item, index) => (
+              <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2" key={item.id}>
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-950">{item.title}</span>
+                  <span className="flex items-center gap-1 truncate text-xs text-slate-500">
+                    <MapPin className="size-3.5 shrink-0" />
+                    {item.locationName || item.address || '地点未填写'}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -441,4 +483,19 @@ function scheduleIdleTask(task: () => void) {
 
   const timeout = window.setTimeout(task, 900)
   return () => window.clearTimeout(timeout)
+}
+
+async function preloadMapStyleJson() {
+  if (mapStylePreloadStarted || typeof fetch === 'undefined') {
+    return
+  }
+
+  mapStylePreloadStarted = true
+  markMapStartup('style json preload requested', { styleUrl: DEFAULT_MAP_STYLE })
+  try {
+    await fetch(DEFAULT_MAP_STYLE, { cache: 'force-cache' })
+    markMapStartup('style json preload completed')
+  } catch {
+    markMapStartup('style json preload ignored failure')
+  }
 }

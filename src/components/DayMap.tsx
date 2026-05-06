@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, LineString } from 'geojson'
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
+import { markMapStartup } from '../lib/mapStartupMetrics'
 import { sortItineraryItems } from '../lib/itinerary'
 import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
@@ -49,12 +50,14 @@ export function DayMap({
   const selectedItemIdRef = useRef(selectedItemId)
   const coordinateKeyRef = useRef('')
   const resizeFrameRef = useRef<number | null>(null)
+  const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
     () => sortItineraryItems(items).filter((item) => getItemLngLat(item) !== null),
     [items],
   )
   const validItemsRef = useRef(validItems)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [isMapReady, setIsMapReady] = useState(false)
 
   const coordinateKey = useMemo(
     () =>
@@ -139,6 +142,7 @@ export function DayMap({
     } else {
       map.setLayoutProperty(ROUTE_LAYER_ID, 'visibility', hasLine ? 'visible' : 'none')
     }
+    markMapStartup('route source synced', { hasLine, points: mapItems.length })
   }, [])
 
   const syncMarkersAndRoute = useCallback(() => {
@@ -185,6 +189,7 @@ export function DayMap({
     })
 
     updateMarkerSelection()
+    markMapStartup('markers rendered', { count: mapItems.length })
   }, [clearMarkers, syncRouteLine, updateMarkerSelection])
 
   const fitViewportIfNeeded = useCallback((map: MapLibreMap) => {
@@ -196,6 +201,11 @@ export function DayMap({
 
     fitCoordinateKeyRef.current = nextCoordinateKey
     updateViewport(map, mapItems)
+    markMapStartup('first fitBounds completed', { points: mapItems.length })
+  }, [])
+
+  useEffect(() => {
+    markMapStartup('DayMap component mounted', { itemCount: initialItemCountRef.current })
   }, [])
 
   useEffect(() => {
@@ -241,6 +251,7 @@ export function DayMap({
 
       cleanupMap()
       loadedRef.current = false
+      setIsMapReady(false)
 
       const firstLngLat = getItemLngLat(validItemsRef.current[0])
       const map = new maplibregl.Map({
@@ -260,13 +271,24 @@ export function DayMap({
       map.dragRotate.disable()
       map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
       mapRef.current = map
+      markMapStartup('maplibregl.Map created', { isFallback, styleUrl })
+
+      map.once('styledata', () => {
+        markMapStartup('map styledata event')
+      })
+
+      map.once('idle', () => {
+        markMapStartup('map idle event')
+      })
 
       map.once('load', () => {
         if (disposed) {
           return
         }
         loadedRef.current = true
+        setIsMapReady(true)
         setMapError(null)
+        markMapStartup('map load event')
         syncMarkersAndRoute()
         fitViewportIfNeeded(map)
       })
@@ -283,6 +305,7 @@ export function DayMap({
         }
 
         setMapError(MAP_ERROR_MESSAGE)
+        setIsMapReady(false)
         onMapErrorRef.current?.(MAP_ERROR_MESSAGE)
       })
     }
@@ -340,6 +363,7 @@ export function DayMap({
       return
     }
 
+    markMapStartup('resize signal received')
     scheduleMapResize()
     const timeout = window.setTimeout(scheduleMapResize, 240)
 
@@ -372,6 +396,14 @@ export function DayMap({
       }
     >
       <div className="h-full w-full" ref={containerRef} />
+      {!mapError && !isMapReady ? (
+        <div
+          className="pointer-events-none absolute left-3 right-3 top-3 z-10 rounded-2xl bg-white/88 px-4 py-3 text-sm font-medium text-slate-600 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80 backdrop-blur"
+          data-testid="map-base-loading"
+        >
+          正在加载地图底图，本地行程仍可查看。
+        </div>
+      ) : null}
       {mapError ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/88 p-5 text-center backdrop-blur">
           <div>

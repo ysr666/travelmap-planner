@@ -261,6 +261,10 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             text="第一版未做端到端加密。护照、签证、银行卡等高度敏感文件请谨慎上传。"
             tone="warning"
           />
+          <CloudInfoPill
+            icon={<ShieldAlert className="size-4" />}
+            text="真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。"
+          />
         </div>
 
         {!configStatus.configured ? (
@@ -275,7 +279,8 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             </p>
           </div>
         ) : isLoading ? (
-          <div className="space-y-2">
+          <div aria-busy="true" className="space-y-2" data-testid="cloud-loading-state" role="status">
+            <p className="text-sm font-semibold text-slate-500">正在读取云端备份状态...</p>
             <SkeletonLine />
             <SkeletonLine className="w-2/3" />
           </div>
@@ -407,7 +412,7 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
       data-testid="cloud-restore-success"
     >
       <div>
-        <p className="text-sm font-semibold">已恢复：{result.title}</p>
+        <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
         <p className="mt-1 text-xs leading-5 text-emerald-800">
           恢复已创建新的本地旅行，不会覆盖现有数据。以下提醒建议进入后核对。
         </p>
@@ -462,7 +467,7 @@ function CloudBackupList({
           </div>
           {backup.warnings.length > 0 ? (
             <div
-              className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+              className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 [overflow-wrap:anywhere]"
               data-testid="cloud-backup-warning-list"
             >
               {backup.warnings[0]}

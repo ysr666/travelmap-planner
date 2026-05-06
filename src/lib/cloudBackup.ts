@@ -100,6 +100,12 @@ export type BuildCloudSnapshotResult = {
   warnings: string[]
 }
 
+type CloudStorageListEntry = {
+  name: string
+}
+
+type CloudStorageBucket = ReturnType<ReturnType<typeof requireSupabaseClient>['storage']['from']>
+
 type CloudBackupInsertRecord = {
   id: string
   user_id: string
@@ -243,6 +249,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const metadata = await getCloudBackupRow(backupId, user.id)
+  validateCloudBackupSnapshotPath(user.id, backupId, metadata.snapshot_path)
   const bucket = client.storage.from(CLOUD_BACKUP_BUCKET)
   const { data: snapshotBlob, error: snapshotError } = await bucket.download(metadata.snapshot_path)
 
@@ -253,7 +260,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
   const snapshot = parseCloudSnapshotText(await snapshotBlob.text())
   validateCloudSnapshotForRestore(snapshot, user.id, backupId)
   const ticketBlobs: TicketBlob[] = []
-  const warnings = [...snapshot.warnings]
+  const warnings = [...snapshot.warnings, ...buildMissingCloudFileRefWarnings(snapshot)]
 
   for (const fileRef of snapshot.fileRefs) {
     const { data, error } = await bucket.download(fileRef.path)
@@ -277,26 +284,40 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const metadata = await getCloudBackupRow(backupId, user.id)
+  validateCloudBackupSnapshotPath(user.id, backupId, metadata.snapshot_path)
   const bucket = client.storage.from(CLOUD_BACKUP_BUCKET)
-  const pathsToRemove = new Set<string>([metadata.snapshot_path])
   const warnings: string[] = []
+  const listedPaths = await listCloudBackupObjectPaths(bucket, user.id, backupId)
+  const pathsToRemove = new Set<string>([metadata.snapshot_path, ...listedPaths])
 
   try {
-    const { data } = await bucket.download(metadata.snapshot_path)
+    const { data, error: snapshotError } = await bucket.download(metadata.snapshot_path)
+    if (snapshotError || !data) {
+      throw new Error(snapshotError?.message ?? 'snapshot.json 下载失败')
+    }
     if (data) {
       const snapshot = parseCloudSnapshotText(await data.text())
-      validateCloudFileRefPaths(snapshot, user.id, backupId)
+      validateCloudSnapshotForRestore(snapshot, user.id, backupId)
       for (const fileRef of snapshot.fileRefs) {
         pathsToRemove.add(fileRef.path)
       }
     }
   } catch {
-    warnings.push('云端 snapshot 无法读取，已尝试删除 metadata 和已知文件。')
+    warnings.push('云端 snapshot 无法读取，已按当前备份路径清理可枚举文件。')
   }
 
-  const { error: removeError } = await bucket.remove([...pathsToRemove])
+  const safePathsToRemove = [...pathsToRemove].map((path) => {
+    assertCloudObjectPathInBackup(path, user.id, backupId)
+    return path
+  })
+
+  if (safePathsToRemove.length === 0) {
+    throw new Error('没有找到可删除的云端备份文件。')
+  }
+
+  const { error: removeError } = await bucket.remove(safePathsToRemove)
   if (removeError) {
-    warnings.push(`部分云端文件可能未删除：${removeError.message}`)
+    throw new Error(`云端文件删除失败，无法确认附件是否全部可清理。请稍后重试或检查 Supabase Storage policy。${removeError.message}`)
   }
 
   const { error: deleteError } = await client
@@ -306,7 +327,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
     .eq('user_id', user.id)
 
   if (deleteError) {
-    throw new Error(deleteError.message)
+    throw new Error(`云端文件已清理，但 metadata 删除失败。请在 Supabase 后台检查该备份记录：${deleteError.message}`)
   }
 
   return { warnings }
@@ -454,13 +475,32 @@ export function buildCloudRestoreRecords(
 }
 
 export function buildCloudSnapshotPath(userId: string, backupId: string) {
-  return `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}/snapshot.json`
+  return `${buildCloudBackupPrefix(userId, backupId)}/snapshot.json`
 }
 
 export function buildCloudFilePath(userId: string, backupId: string, ticketId: string, fileName: string) {
-  return `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}/files/${safeCloudPathSegment(
-    ticketId,
-  )}/${safeFileName(fileName, 'file')}`
+  return `${buildCloudBackupPrefix(userId, backupId)}/files/${safeCloudPathSegment(ticketId)}/${safeFileName(
+    fileName,
+    'file',
+  )}`
+}
+
+export function buildCloudBackupPrefix(userId: string, backupId: string) {
+  return `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}`
+}
+
+export function validateCloudBackupSnapshotPath(userId: string, backupId: string, snapshotPath: string) {
+  const expectedPath = buildCloudSnapshotPath(userId, backupId)
+  if (snapshotPath !== expectedPath) {
+    throw new Error('云端备份 metadata 中的 snapshot 路径与当前用户或备份不匹配。')
+  }
+}
+
+export function buildMissingCloudFileRefWarnings(snapshot: CloudTripSnapshot) {
+  const fileRefTicketIds = new Set(snapshot.fileRefs.map((fileRef) => fileRef.ticketId))
+  return snapshot.ticketMetas
+    .filter((ticket) => shouldExpectTicketBlob(ticket) && !fileRefTicketIds.has(ticket.id))
+    .map((ticket) => `票据「${ticket.title || ticket.note || ticket.fileName}」缺少云端文件内容，已仅恢复元数据。`)
 }
 
 export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
@@ -687,7 +727,6 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
 }
 
 function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, backupId: string) {
-  const expectedPrefix = `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}/files/`
   const seenTicketIds = new Set<string>()
 
   for (const rawFileRef of snapshot.fileRefs as unknown[]) {
@@ -700,9 +739,80 @@ function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, 
     }
     seenTicketIds.add(fileRef.ticketId)
 
+    const expectedPrefix = `${buildCloudBackupPrefix(userId, backupId)}/files/${safeCloudPathSegment(
+      fileRef.ticketId,
+    )}/`
     if (!isSafeCloudObjectPath(fileRef.path, expectedPrefix)) {
       throw new Error('云端备份中的文件路径不属于当前备份。')
     }
+  }
+}
+
+async function listCloudBackupObjectPaths(
+  bucket: CloudStorageBucket,
+  userId: string,
+  backupId: string,
+) {
+  const backupPrefix = buildCloudBackupPrefix(userId, backupId)
+  const paths = new Set<string>()
+  const rootEntries = await listCloudStorageFolder(bucket, backupPrefix)
+
+  for (const entry of rootEntries) {
+    if (entry.name === 'snapshot.json') {
+      paths.add(`${backupPrefix}/snapshot.json`)
+    } else if (entry.name === 'files') {
+      const ticketEntries = await listCloudStorageFolder(bucket, `${backupPrefix}/files`)
+      for (const ticketEntry of ticketEntries) {
+        const ticketPrefix = `${backupPrefix}/files/${ticketEntry.name}`
+        const fileEntries = await listCloudStorageFolder(bucket, ticketPrefix)
+        for (const fileEntry of fileEntries) {
+          const path = `${ticketPrefix}/${fileEntry.name}`
+          assertCloudObjectPathInBackup(path, userId, backupId)
+          paths.add(path)
+        }
+      }
+    }
+  }
+
+  return [...paths]
+}
+
+async function listCloudStorageFolder(bucket: CloudStorageBucket, path: string) {
+  const entries: CloudStorageListEntry[] = []
+  let offset = 0
+  const limit = 1000
+
+  while (true) {
+    const { data, error } = await bucket.list(path, {
+      limit,
+      offset,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+
+    if (error) {
+      throw new Error(
+        `云端文件列表读取失败，无法确认附件是否全部可清理。请稍后重试或检查 Supabase Storage policy。${error.message}`,
+      )
+    }
+
+    const page = ((data ?? []) as CloudStorageListEntry[]).filter(
+      (entry) => typeof entry.name === 'string' && entry.name.length > 0,
+    )
+    entries.push(...page)
+
+    if (page.length < limit) {
+      break
+    }
+    offset += page.length
+  }
+
+  return entries
+}
+
+function assertCloudObjectPathInBackup(path: string, userId: string, backupId: string) {
+  const expectedPrefix = `${buildCloudBackupPrefix(userId, backupId)}/`
+  if (!isSafeCloudObjectPath(path, expectedPrefix)) {
+    throw new Error('云端备份文件路径不属于当前用户或备份。')
   }
 }
 

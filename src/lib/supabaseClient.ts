@@ -81,6 +81,12 @@ function shouldForceSupabaseUnconfigured() {
   }
 
   try {
+    const hostname = window.location.hostname
+    const isLocalTestHost = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+    if (!isLocalTestHost) {
+      return false
+    }
+
     return window.localStorage.getItem('tripmap:e2e:supabase-unconfigured') === '1'
   } catch {
     return false

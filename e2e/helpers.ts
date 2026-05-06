@@ -56,6 +56,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
 }
 
 export async function forceSupabaseUnconfigured(page: Page) {
+  await page.route('**/*.supabase.co/**', (route) => route.abort())
   await page.evaluate(() => {
     window.localStorage.setItem('tripmap:e2e:supabase-unconfigured', '1')
   })

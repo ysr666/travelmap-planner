@@ -4,8 +4,10 @@ import {
   buildCloudRestoreRecords,
   buildCloudSnapshotFromRecords,
   buildCloudSnapshotPath,
+  buildMissingCloudFileRefWarnings,
   parseCloudSnapshot,
   parseCloudSnapshotText,
+  validateCloudBackupSnapshotPath,
   validateCloudSnapshotForRestore,
 } from './cloudBackup'
 import { getSupabaseConfigStatus } from './supabaseClient'
@@ -158,6 +160,12 @@ describe('supabase cloud backup helpers', () => {
     )
   })
 
+  it('rejects metadata snapshot paths outside the current user and backup', () => {
+    expect(() =>
+      validateCloudBackupSnapshotPath('user-id', 'backup-id', 'user-id/other-backup/snapshot.json'),
+    ).toThrow('snapshot 路径')
+  })
+
   it('remaps all ids when restoring records', async () => {
     const blob = new Blob(['pdf'], { type: 'application/pdf' })
     const snapshot = buildCloudSnapshotFromRecords({
@@ -229,6 +237,47 @@ describe('supabase cloud backup helpers', () => {
     expect(() => validateCloudSnapshotForRestore(snapshot, 'user-id', 'backup-id')).toThrow(
       '文件路径不属于当前备份',
     )
+  })
+
+  it('rejects file refs whose path ticket segment does not match ticketId', () => {
+    const blob = new Blob(['pdf'], { type: 'application/pdf' })
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: items,
+      ticketBlobs: [{ blob, ticketId: copyTicket.id }],
+      ticketMetas: [copyTicket],
+      trip,
+      userId: 'user-id',
+    }).snapshot
+
+    snapshot.fileRefs[0].path = 'user-id/backup-id/files/another-ticket/order.pdf'
+
+    expect(() => validateCloudSnapshotForRestore(snapshot, 'user-id', 'backup-id')).toThrow(
+      '文件路径不属于当前备份',
+    )
+  })
+
+  it('creates fresh warnings when copy tickets have no cloud file ref', () => {
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: items,
+      ticketBlobs: [],
+      ticketMetas: [copyTicket],
+      trip,
+      userId: 'user-id',
+    }).snapshot
+    snapshot.warnings = []
+
+    expect(buildMissingCloudFileRefWarnings(snapshot)).toEqual([
+      '票据「酒店订单」缺少云端文件内容，已仅恢复元数据。',
+    ])
+    expect(buildCloudRestoreRecords(snapshot, []).ticketBlobs).toHaveLength(0)
   })
 
   it('rejects file refs for reference or external tickets', () => {

@@ -1,11 +1,12 @@
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
-import { clearTravelDatabase, expectNoHorizontalOverflow } from './helpers'
+import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigured } from './helpers'
 
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) => {
   await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
@@ -43,6 +44,7 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
 
 test('JSON 单文件出现 copy 票据时阻止导入', async ({ page }) => {
   await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   await page
@@ -58,6 +60,7 @@ test('JSON 单文件出现 copy 票据时阻止导入', async ({ page }) => {
 
 test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   await page

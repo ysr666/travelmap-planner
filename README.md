@@ -37,13 +37,15 @@
 
 - AI 行程包导入用于新建旅行，不替代完整 zip 备份恢复。
 - JSON 单文件适合导入行程、坐标、交通段、reference / external 票据。
-- copy 模式真实附件必须使用 zip 行程包，并把文件放在 zip 内 `files/` 目录。
+- copy 模式真实附件必须使用 zip 行程包，并把文件放在 zip 内 `files/` 目录；`filePath` 必须是 `files/` 下的安全相对路径。
 - AI 可能生成错误地点、错误坐标或错误时间，导入前后都需要人工核对。
+- 导入预览会区分“必须修复”和“建议检查”；有建议检查时仍可导入，但导入后应逐项核对。
 
 文档：
 
 - [AI 行程包开放格式](docs/AI_IMPORT_SPEC.md)
 - [外部 AI 提示词模板](docs/AI_PROMPT_TEMPLATE.md)
+- [trip-plan 示例](examples/README.md)
 
 ## 🧱 技术栈
 

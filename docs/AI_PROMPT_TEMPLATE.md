@@ -12,10 +12,10 @@
 - 顶层字段必须包含：
   - schemaVersion: 1
   - type: "trip-plan"
-  - source: 你的模型或工具名称
   - trip
   - days
   - tickets 可选
+- source 可选，用于标注你的模型或工具名称。
 - 日期必须使用 YYYY-MM-DD。
 - 时间如果填写，必须使用 HH:mm。
 - 经纬度必须使用十进制度：
@@ -53,7 +53,8 @@
 - 如果只是提醒用户去某处找文件，使用 storageMode: "reference"，并填写 referenceLocation。
 - 如果用户提供的是网页链接，使用 storageMode: "external"，externalUrl 必须是 http:// 或 https://。
 - 只有当我明确说明 zip 中会放置某个文件时，才可以生成 storageMode: "copy"，并填写 filePath，例如 files/hotel-confirmation.pdf。
-- filePath 必须是 zip 内相对路径，不能是本机绝对路径，不能包含 ../。
+- filePath 必须是 zip 内 files/ 目录下的相对路径，不能是本机绝对路径，不能包含 ../、空路径段或 Windows 盘符。
+- 如需绑定票据到某个行程点，使用 bindTo.date 和 bindTo.itemTitle，两个字段必须同时填写。
 
 自检：
 - 输出前确认 JSON 没有尾随逗号。
@@ -69,6 +70,6 @@
 
 1. 先让 AI 输出 JSON。
 2. 在旅图设置页选择“导入 AI 行程包”。
-3. 查看预览、errors 和 warnings。
+3. 查看预览中的“必须修复”和“建议检查”。
 4. 导入后人工核对地点、坐标、时间和票据。
 5. 出发前导出旅图完整 zip 备份到 iCloud Drive、OneDrive 或电脑本地。

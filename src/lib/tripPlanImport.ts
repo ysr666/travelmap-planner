@@ -8,6 +8,13 @@ import type { Day, ItineraryItem, TicketBlob, TicketMeta, TicketStorageMode, Tra
 const SCHEMA_VERSION = 1
 const TRIP_PLAN_TYPE = 'trip-plan'
 const MAX_SOFT_ATTACHMENT_SIZE = 20 * 1024 * 1024
+const MAX_IMPORT_FILE_SIZE = 100 * 1024 * 1024
+const MAX_TRIP_PLAN_JSON_SIZE = 2 * 1024 * 1024
+const MAX_ZIP_ENTRY_COUNT = 300
+const MAX_COPY_ATTACHMENT_COUNT = 50
+const MAX_DAYS_COUNT = 120
+const MAX_ITEMS_COUNT = 1000
+const MAX_TICKETS_COUNT = 500
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
 const TRANSPORT_MODES: TransportMode[] = ['walk', 'transit', 'car', 'train', 'flight', 'other']
@@ -106,14 +113,31 @@ export type ImportTripPlanResult = {
   warnings: string[]
 }
 
+export type TripPlanRecords = {
+  trip: Trip
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  ticketBlobs: TicketBlob[]
+  warnings: string[]
+}
+
 type ValidateOptions = {
   sourceKind: TripPlanSourceKind
   attachments?: Map<string, TripPlanAttachment>
 }
 
+type BuildTripPlanRecordsOptions = ValidateOptions & {
+  now?: number
+  createIdFn?: typeof createId
+}
+
 export async function parseTripPlanFile(file: File): Promise<ParsedTripPlanFile> {
   if (!file || file.size <= 0) {
     throw new Error('请选择一个有效的 JSON 或 zip 行程包。')
+  }
+  if (file.size > MAX_IMPORT_FILE_SIZE) {
+    throw new Error('行程包文件超过 100MB，请拆分附件后重新导入。')
   }
 
   if (await looksLikeZip(file)) {
@@ -181,13 +205,23 @@ export function validateTripPlanPackage(
     errors.push('days 必须是数组。')
   } else {
     summary.daysCount = pkg.days.length
+    if (pkg.days.length > MAX_DAYS_COUNT) {
+      errors.push(`days 数量不能超过 ${MAX_DAYS_COUNT}。`)
+    }
     validateDays(pkg, errors, warnings, summary)
   }
 
   if (pkg.tickets !== undefined && !Array.isArray(pkg.tickets)) {
     errors.push('tickets 必须是数组。')
   } else if (Array.isArray(pkg.tickets)) {
+    if (pkg.tickets.length > MAX_TICKETS_COUNT) {
+      errors.push(`tickets 数量不能超过 ${MAX_TICKETS_COUNT}。`)
+    }
     validateTickets(pkg.tickets, options, errors, warnings, summary)
+  }
+
+  if (summary.itemsCount > MAX_ITEMS_COUNT) {
+    errors.push(`行程点数量不能超过 ${MAX_ITEMS_COUNT}。`)
   }
 
   return {
@@ -206,14 +240,31 @@ export async function importTripPlanPackage(
   pkg: TripPlanImportPackage,
   options: ValidateOptions,
 ): Promise<ImportTripPlanResult> {
+  const records = buildTripPlanRecords(pkg, options)
+  const result = await importTripPlanRecords({
+    days: records.days,
+    itineraryItems: records.itineraryItems,
+    ticketBlobs: records.ticketBlobs,
+    ticketMetas: records.ticketMetas,
+    trip: records.trip,
+  })
+
+  return { ...result, warnings: records.warnings }
+}
+
+export function buildTripPlanRecords(
+  pkg: TripPlanImportPackage,
+  options: BuildTripPlanRecordsOptions,
+): TripPlanRecords {
   const validation = validateTripPlanPackage(pkg, options)
   if (!validation.valid) {
     throw new Error(validation.errors[0] ?? '行程包校验失败。')
   }
 
   const warnings = [...validation.warnings]
-  const now = Date.now()
-  const tripId = createId('trip')
+  const now = options.now ?? Date.now()
+  const createIdFn = options.createIdFn ?? createId
+  const tripId = createIdFn('trip')
   const trip: Trip = {
     createdAt: now,
     destination: normalizeText(pkg.trip.destination) ?? '',
@@ -230,7 +281,7 @@ export async function importTripPlanPackage(
   const itemByBindKey = new Map<string, ItineraryItem[]>()
 
   pkg.days.forEach((inputDay, dayIndex) => {
-    const dayId = createId('day')
+    const dayId = createIdFn('day')
     const day: Day = {
       date: inputDay.date,
       id: dayId,
@@ -246,7 +297,7 @@ export async function importTripPlanPackage(
         createdAt: now,
         dayId,
         endTime: normalizeText(inputItem.endTime),
-        id: createId('item'),
+        id: createIdFn('item'),
         lat: normalizeNumber(inputItem.lat),
         lng: normalizeNumber(inputItem.lng),
         locationName: normalizeText(inputItem.locationName),
@@ -275,7 +326,7 @@ export async function importTripPlanPackage(
   const ticketBlobs: TicketBlob[] = []
 
   for (const ticketInput of pkg.tickets ?? []) {
-    const ticketId = createId('ticket')
+    const ticketId = createIdFn('ticket')
     const boundItem = resolveTicketBinding(ticketInput, itemByBindKey, warnings)
     const storageMode = ticketInput.storageMode
     const title = normalizeText(ticketInput.title) ?? '未命名票据'
@@ -334,29 +385,86 @@ export async function importTripPlanPackage(
     }
   }
 
-  const result = await importTripPlanRecords({
+  const records: TripPlanRecords = {
     days,
     itineraryItems: items,
     ticketBlobs,
     ticketMetas,
     trip,
-  })
+    warnings,
+  }
+  validateTripPlanRecordGraph(records)
 
-  return { ...result, warnings }
+  return records
+}
+
+function validateTripPlanRecordGraph(records: TripPlanRecords) {
+  const dayIds = new Set(records.days.map((day) => day.id))
+  const itemIds = new Set(records.itineraryItems.map((item) => item.id))
+  const ticketIds = new Set(records.ticketMetas.map((ticket) => ticket.id))
+  const blobTicketIds = new Set(records.ticketBlobs.map((ticketBlob) => ticketBlob.ticketId))
+
+  for (const day of records.days) {
+    if (day.tripId !== records.trip.id) {
+      throw new Error('AI 行程包导入数据中存在不属于当前旅行的 Day。')
+    }
+  }
+
+  for (const item of records.itineraryItems) {
+    if (item.tripId !== records.trip.id || !dayIds.has(item.dayId)) {
+      throw new Error('AI 行程包导入数据中存在无效的行程点引用。')
+    }
+    for (const ticketId of item.ticketIds) {
+      if (!ticketIds.has(ticketId)) {
+        throw new Error('AI 行程包导入数据中存在无效的票据绑定。')
+      }
+    }
+  }
+
+  for (const ticket of records.ticketMetas) {
+    if (ticket.tripId !== records.trip.id || (ticket.itemId && !itemIds.has(ticket.itemId))) {
+      throw new Error('AI 行程包导入数据中存在无效的票据引用。')
+    }
+    if (ticket.storageMode === 'copy' && !blobTicketIds.has(ticket.id)) {
+      throw new Error(`copy 票据「${ticket.title || ticket.fileName}」缺少文件内容。`)
+    }
+    if (ticket.storageMode !== 'copy' && blobTicketIds.has(ticket.id)) {
+      throw new Error(`非 copy 票据「${ticket.title || ticket.fileName}」不应包含文件内容。`)
+    }
+  }
+
+  for (const ticketBlob of records.ticketBlobs) {
+    if (!ticketIds.has(ticketBlob.ticketId)) {
+      throw new Error('AI 行程包导入数据中存在孤立的票据文件。')
+    }
+  }
 }
 
 export function safeZipPath(value: string | undefined) {
   const normalized = value?.replace(/\\/g, '/').trim()
-  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) {
+  if (
+    !normalized ||
+    normalized.startsWith('/') ||
+    !normalized.startsWith('files/') ||
+    hasControlCharacter(normalized) ||
+    /^[a-zA-Z]:\//.test(normalized)
+  ) {
     return null
   }
 
   const parts = normalized.split('/')
-  if (parts.some((part) => part === '..' || part === '')) {
+  if (parts.some((part) => part === '..' || part === '.' || part === '')) {
     return null
   }
 
   return parts.join('/')
+}
+
+function hasControlCharacter(value: string) {
+  return value.split('').some((char) => {
+    const code = char.charCodeAt(0)
+    return code < 32 || code === 127
+  })
 }
 
 export function inferMimeType(fileName: string | undefined) {
@@ -373,6 +481,10 @@ export function inferMimeType(fileName: string | undefined) {
 }
 
 async function parseTripPlanJson(file: File, text: string): Promise<ParsedTripPlanFile> {
+  if (text.length > MAX_TRIP_PLAN_JSON_SIZE) {
+    throw new Error('trip-plan.json 超过 2MB，请精简行程内容后重新导入。')
+  }
+
   const pkg = parsePackageJson(text, '选择的 JSON 无法解析。')
   if (!isRecord(pkg) || pkg.type !== TRIP_PLAN_TYPE) {
     throw new Error('选择的 JSON 不是旅图 AI 行程包。请确认 type 为 "trip-plan"。')
@@ -391,7 +503,11 @@ async function parseTripPlanJson(file: File, text: string): Promise<ParsedTripPl
 
 async function parseTripPlanZip(file: File): Promise<ParsedTripPlanFile> {
   const JSZip = (await import('jszip')).default
-  const zip = await JSZip.loadAsync(file)
+  const zip = await JSZip.loadAsync(await file.arrayBuffer())
+  if (Object.keys(zip.files).length > MAX_ZIP_ENTRY_COUNT) {
+    throw new Error(`zip 文件条目不能超过 ${MAX_ZIP_ENTRY_COUNT} 个。`)
+  }
+
   const hasTripPlan = Boolean(zip.file('trip-plan.json'))
   const hasBackup = Boolean(zip.file('manifest.json') && zip.file('data/trip.json'))
 
@@ -412,7 +528,12 @@ async function parseTripPlanZip(file: File): Promise<ParsedTripPlanFile> {
     throw new Error('zip 中缺少 trip-plan.json。')
   }
 
-  const rawPackage = parsePackageJson(await tripPlanFile.async('string'), 'trip-plan.json 无法解析。')
+  const rawTripPlanJson = await tripPlanFile.async('string')
+  if (rawTripPlanJson.length > MAX_TRIP_PLAN_JSON_SIZE) {
+    throw new Error('trip-plan.json 超过 2MB，请精简行程内容后重新导入。')
+  }
+
+  const rawPackage = parsePackageJson(rawTripPlanJson, 'trip-plan.json 无法解析。')
   const pkg = rawPackage as TripPlanImportPackage
   const attachments = isRecord(rawPackage) ? await readReferencedAttachments(zip, pkg) : new Map()
   const validation = validateTripPlanPackage(pkg, { attachments, sourceKind: 'zip' })
@@ -428,10 +549,16 @@ async function parseTripPlanZip(file: File): Promise<ParsedTripPlanFile> {
 
 async function readReferencedAttachments(zip: JSZip, pkg: TripPlanImportPackage) {
   const attachments = new Map<string, TripPlanAttachment>()
+  let copyTicketCount = 0
 
   for (const ticket of Array.isArray(pkg.tickets) ? pkg.tickets : []) {
     if (!isRecord(ticket) || ticket.storageMode !== 'copy') {
       continue
+    }
+
+    copyTicketCount += 1
+    if (copyTicketCount > MAX_COPY_ATTACHMENT_COUNT) {
+      throw new Error(`copy 票据数量不能超过 ${MAX_COPY_ATTACHMENT_COUNT}。`)
     }
 
     const path = safeZipPath(typeof ticket.filePath === 'string' ? ticket.filePath : undefined)
@@ -590,7 +717,7 @@ function validateTickets(
 
       const path = safeZipPath(ticket.filePath)
       if (!path) {
-        errors.push(`${prefix}.filePath 不安全或为空。`)
+        errors.push(`${prefix}.filePath 必须是 files/ 目录下的安全相对路径。`)
         return
       }
 

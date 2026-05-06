@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Example",
+  "trip": {
+    "title": "大阪票据示例旅行",
+    "destination": "Osaka, Japan",
+    "startDate": "2026-05-10",
+    "endDate": "2026-05-10",
+    "notes": "此 JSON 应放在 trip-plan.zip 根目录，附件放在 files/ 目录。"
+  },
+  "days": [
+    {
+      "date": "2026-05-10",
+      "title": "抵达大阪",
+      "items": [
+        {
+          "title": "酒店入住",
+          "startTime": "15:00",
+          "locationName": "Hotel Granvia Osaka",
+          "address": "3-1-1 Umeda, Kita Ward, Osaka",
+          "lat": 34.70249,
+          "lng": 135.49595
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "title": "酒店确认单",
+      "storageMode": "copy",
+      "filePath": "files/hotel-confirmation.pdf",
+      "fileName": "hotel-confirmation.pdf",
+      "mimeType": "application/pdf",
+      "bindTo": {
+        "date": "2026-05-10",
+        "itemTitle": "酒店入住"
+      }
+    }
+  ]
+}

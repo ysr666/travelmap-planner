@@ -35,6 +35,7 @@ import {
   buildTripPlanPreviewSummary,
   importTripPlanPackage,
   parseTripPlanFile,
+  type ImportTripPlanResult,
   type ParsedTripPlanFile,
 } from '../lib/tripPlanImport'
 import type { Day, Trip } from '../types'
@@ -72,6 +73,7 @@ export function SettingsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
   const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
+  const [tripPlanSuccess, setTripPlanSuccess] = useState<ImportTripPlanResult | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [isPersistenceSupported, setIsPersistenceSupported] = useState(false)
   const [persistedStorage, setPersistedStorage] = useState<boolean | null>(null)
@@ -247,6 +249,7 @@ export function SettingsPage() {
   async function handleTripPlanFileChange(file: File | null) {
     setSelectedTripPlanFile(file)
     setParsedTripPlan(null)
+    setTripPlanSuccess(null)
     setTripPlanError(null)
     setSuccess(null)
     if (!file) {
@@ -280,12 +283,10 @@ export function SettingsPage() {
         attachments: parsedTripPlan.attachments,
         sourceKind: parsedTripPlan.sourceKind,
       })
-      setSuccess(`已导入 AI 行程包「${result.title}」，正在打开旅行工作台。`)
-      setWarnings(result.warnings)
+      setTripPlanSuccess(result)
       setSelectedTripPlanFile(null)
       setParsedTripPlan(null)
       setTripPlanFileInputKey((current) => current + 1)
-      window.setTimeout(() => navigateTo('trip', { tripId: result.tripId }), result.warnings.length > 0 ? 1800 : 500)
     } catch (caught) {
       setTripPlanError(caught instanceof Error ? caught.message : '导入 AI 行程包失败。')
     } finally {
@@ -477,14 +478,10 @@ export function SettingsPage() {
             />
           </div>
 
-          <TripPlanGuide
-            copyMessage={copyPromptMessage}
-            onCopyPrompt={() => void handleCopyAiPrompt()}
-          />
-
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">AI 行程包文件</span>
             <input
+              aria-label="选择 AI 行程包文件"
               accept=".json,.zip,application/json,application/zip,application/x-zip-compressed"
               className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700"
               data-testid="ai-trip-plan-file-input"
@@ -495,7 +492,7 @@ export function SettingsPage() {
           </label>
 
           {selectedTripPlanFile ? (
-            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 break-words [overflow-wrap:anywhere]">
               已选择：{selectedTripPlanFile.name} · {formatFileSize(selectedTripPlanFile.size)}
             </p>
           ) : null}
@@ -515,8 +512,15 @@ export function SettingsPage() {
             onClick={() => void handleImportTripPlan()}
             variant="secondary"
           >
-            确认导入 AI 行程包
+            {getTripPlanImportButtonLabel(parsedTripPlan)}
           </Button>
+
+          {tripPlanSuccess ? <TripPlanSuccessCard result={tripPlanSuccess} /> : null}
+
+          <TripPlanGuide
+            copyMessage={copyPromptMessage}
+            onCopyPrompt={() => void handleCopyAiPrompt()}
+          />
         </Card>
       </section>
 
@@ -593,9 +597,12 @@ function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: 
   const Icon = tone === 'error' ? AlertTriangle : CheckCircle2
 
   return (
-    <div className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}>
+    <div
+      className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}
+      role={tone === 'error' ? 'alert' : 'status'}
+    >
       <Icon className="mt-0.5 size-4 shrink-0" />
-      <p className="leading-6">{message}</p>
+      <p className="min-w-0 break-words leading-6 [overflow-wrap:anywhere]">{message}</p>
     </div>
   )
 }
@@ -672,6 +679,8 @@ function TripPlanGuide({
 function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
   const summary = buildTripPlanPreviewSummary(parsed.validation)
   const trip = parsed.package.trip
+  const hasErrors = parsed.validation.errors.length > 0
+  const hasWarnings = parsed.validation.warnings.length > 0
 
   return (
     <div
@@ -689,11 +698,16 @@ function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
           <h4 className="mt-1 truncate text-base font-semibold text-slate-950">
             {trip?.title || '未命名旅行'}
           </h4>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
+          <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
             {trip?.destination || '目的地未填写'} · {trip?.startDate || '开始日期未定'} - {trip?.endDate || '结束日期未定'}
           </p>
         </div>
       </div>
+
+      <TripPlanValidationStatus
+        hasErrors={hasErrors}
+        hasWarnings={hasWarnings}
+      />
 
       <div className="grid grid-cols-2 gap-2">
         <PreviewMetric label="Day" value={summary.daysCount} />
@@ -706,27 +720,125 @@ function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
         <PreviewMetric label="external" value={summary.externalTicketCount} />
       </div>
 
-      {parsed.validation.errors.length > 0 ? (
+      {hasErrors ? (
         <ValidationList
+          description="以下问题会阻止导入，请修改 JSON 或 zip 后重新选择文件。"
+          testId="ai-trip-plan-errors"
           items={parsed.validation.errors}
-          title="需要修正后才能导入"
+          title="必须修复"
           tone="error"
         />
       ) : null}
 
-      {parsed.validation.warnings.length > 0 ? (
+      {hasWarnings ? (
         <ValidationList
+          description="以下问题不会阻止导入，但建议导入后逐项核对。"
+          testId="ai-trip-plan-warnings"
           items={parsed.validation.warnings}
-          title="导入提醒"
+          title="建议检查"
           tone="warning"
         />
       ) : null}
 
       {parsed.validation.valid ? (
-        <p className="rounded-xl bg-white/80 px-3 py-2 text-xs leading-5 text-violet-700">
-          校验通过。导入后会创建一个新的本地旅行，不会覆盖现有数据。
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-700" role="status">
+          可导入：将创建一个新的本地旅行，不会覆盖现有数据。
         </p>
       ) : null}
+    </div>
+  )
+}
+
+function TripPlanSuccessCard({ result }: { result: ImportTripPlanResult }) {
+  return (
+    <div
+      className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4"
+      data-testid="ai-trip-plan-success-checklist"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600">
+          <CheckCircle2 className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-emerald-700">已导入</p>
+          <h4 className="mt-1 break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+            {result.title}
+          </h4>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-white/80 px-3 py-3 text-sm leading-6 text-emerald-900">
+        <p className="font-semibold">建议检查</p>
+        <ol className="mt-1 list-decimal space-y-1 pl-5">
+          <li>地图坐标是否准确</li>
+          <li>交通方式和预计耗时是否合理</li>
+          <li>票据是否绑定到正确行程点</li>
+          <li>出发前导出完整 zip 备份</li>
+        </ol>
+      </div>
+
+      {result.warnings.length > 0 ? (
+        <ValidationList
+          description="导入已完成，但这些内容仍建议核对。"
+          items={result.warnings}
+          testId="ai-trip-plan-success-warnings"
+          title="建议检查"
+          tone="warning"
+        />
+      ) : null}
+
+      <Button
+        className="w-full"
+        onClick={() => navigateTo('trip', { tripId: result.tripId })}
+      >
+        进入旅行工作台
+      </Button>
+    </div>
+  )
+}
+
+function getTripPlanImportButtonLabel(parsed: ParsedTripPlanFile | null) {
+  if (!parsed) {
+    return '确认导入 AI 行程包'
+  }
+  if (parsed.validation.errors.length > 0) {
+    return '有必须修复，无法导入'
+  }
+  if (parsed.validation.warnings.length > 0) {
+    return '有建议检查，仍然导入'
+  }
+  return '确认导入'
+}
+
+function TripPlanValidationStatus({
+  hasErrors,
+  hasWarnings,
+}: {
+  hasErrors: boolean
+  hasWarnings: boolean
+}) {
+  const status = hasErrors
+    ? {
+        className: 'border-red-100 bg-red-50 text-red-600',
+        text: '有必须修复，无法导入',
+      }
+    : hasWarnings
+      ? {
+          className: 'border-amber-100 bg-amber-50 text-amber-800',
+          text: '有建议检查，可导入',
+        }
+      : {
+          className: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+          text: '可导入',
+        }
+
+  return (
+    <div
+      aria-live="polite"
+      className={`rounded-xl border px-3 py-2 text-sm font-semibold ${status.className}`}
+      data-testid="ai-trip-plan-validation-status"
+    >
+      {status.text}
     </div>
   )
 }
@@ -741,11 +853,15 @@ function PreviewMetric({ label, value }: { label: string; value: number }) {
 }
 
 function ValidationList({
+  description,
   items,
+  testId,
   title,
   tone,
 }: {
+  description: string
   items: string[]
+  testId: string
   title: string
   tone: 'error' | 'warning'
 }) {
@@ -755,11 +871,12 @@ function ValidationList({
       : 'border-amber-100 bg-amber-50 text-amber-800'
 
   return (
-    <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${styles}`}>
+    <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${styles}`} data-testid={testId}>
       <p className="font-semibold">{title}</p>
-      <ul className="mt-1 list-inside list-disc">
+      <p className="mt-1 text-xs leading-5 opacity-80">{description}</p>
+      <ul className="mt-2 list-outside list-disc space-y-1 pl-5">
         {items.map((item) => (
-          <li key={item}>{item}</li>
+          <li className="break-words [overflow-wrap:anywhere]" key={item}>{item}</li>
         ))}
       </ul>
     </div>

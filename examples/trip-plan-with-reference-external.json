@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Example",
+  "trip": {
+    "title": "伦敦周末旅行",
+    "destination": "London, UK",
+    "startDate": "2026-06-05",
+    "endDate": "2026-06-06",
+    "notes": "示例数据仅用于格式参考。"
+  },
+  "days": [
+    {
+      "date": "2026-06-05",
+      "title": "抵达伦敦",
+      "items": [
+        {
+          "title": "酒店入住",
+          "startTime": "15:00",
+          "locationName": "The Resident Covent Garden",
+          "address": "51 Bedford St, London WC2R 0PZ",
+          "lat": 51.51131,
+          "lng": -0.1234,
+          "notes": "请人工核对入住时间。"
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "title": "酒店订单位置",
+      "storageMode": "reference",
+      "referenceLocation": "iCloud Drive/伦敦旅行/酒店订单.pdf",
+      "note": "旅图不会保存这个文件副本。",
+      "bindTo": {
+        "date": "2026-06-05",
+        "itemTitle": "酒店入住"
+      }
+    },
+    {
+      "title": "Booking 订单链接",
+      "storageMode": "external",
+      "externalUrl": "https://example.com/booking/order"
+    }
+  ]
+}

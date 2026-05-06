@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Playwright fixture",
+  "trip": {
+    "title": "AI 缺坐标测试旅行",
+    "destination": "Tokyo, Japan",
+    "startDate": "2026-04-10",
+    "endDate": "2026-04-10"
+  },
+  "days": [
+    {
+      "date": "2026-04-10",
+      "title": "缺坐标测试日",
+      "items": [
+        {
+          "title": "无坐标餐厅",
+          "startTime": "12:00",
+          "locationName": "Unknown restaurant",
+          "address": "Tokyo"
+        }
+      ]
+    }
+  ]
+}

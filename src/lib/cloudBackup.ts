@@ -250,7 +250,8 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
     throw new Error(snapshotError?.message ?? '云端备份 snapshot.json 下载失败。')
   }
 
-  const snapshot = parseCloudSnapshot(JSON.parse(await snapshotBlob.text()))
+  const snapshot = parseCloudSnapshotText(await snapshotBlob.text())
+  validateCloudSnapshotForRestore(snapshot, user.id, backupId)
   const ticketBlobs: TicketBlob[] = []
   const warnings = [...snapshot.warnings]
 
@@ -283,7 +284,8 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
   try {
     const { data } = await bucket.download(metadata.snapshot_path)
     if (data) {
-      const snapshot = parseCloudSnapshot(JSON.parse(await data.text()))
+      const snapshot = parseCloudSnapshotText(await data.text())
+      validateCloudFileRefPaths(snapshot, user.id, backupId)
       for (const fileRef of snapshot.fileRefs) {
         pathsToRemove.add(fileRef.path)
       }
@@ -429,12 +431,15 @@ export function buildCloudRestoreRecords(
     itemId: ticket.itemId ? requireMappedCloudId(itemIdMap, ticket.itemId) : undefined,
     tripId: nextTripId,
   }))
+  const copyTicketIds = new Set(
+    snapshot.ticketMetas.filter(shouldExpectTicketBlob).map((ticket) => ticket.id),
+  )
   const ticketBlobsById = new Map(ticketBlobs.map((ticketBlob) => [ticketBlob.ticketId, ticketBlob.blob]))
   const nextTicketBlobs: TicketBlob[] = []
 
   for (const [oldTicketId, blob] of ticketBlobsById) {
     const nextTicketId = ticketIdMap.get(oldTicketId)
-    if (nextTicketId) {
+    if (nextTicketId && copyTicketIds.has(oldTicketId)) {
       nextTicketBlobs.push({ blob, ticketId: nextTicketId })
     }
   }
@@ -494,6 +499,22 @@ export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
     type: CLOUD_BACKUP_TYPE,
     warnings: Array.isArray(value.warnings) ? value.warnings.filter(isString) : [],
   }
+}
+
+export function parseCloudSnapshotText(text: string): CloudTripSnapshot {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error('云端备份 snapshot.json 无法解析。')
+  }
+
+  return parseCloudSnapshot(value)
+}
+
+export function validateCloudSnapshotForRestore(snapshot: CloudTripSnapshot, userId: string, backupId: string) {
+  validateSnapshotGraph(snapshot)
+  validateCloudFileRefPaths(snapshot, userId, backupId)
 }
 
 export function formatCloudBackupSize(size: number) {
@@ -616,12 +637,13 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
       throw new Error(`云端备份中的行程点存在重复 ID：${item.id}`)
     }
     if (!Array.isArray(item.ticketIds)) {
-      item.ticketIds = []
+      throw new Error('云端备份中的行程点票据列表格式不正确。')
     }
     itemIds.add(item.id)
   }
 
   const ticketIds = new Set<string>()
+  const ticketMap = new Map<string, TicketMeta>()
   for (const ticket of snapshot.ticketMetas) {
     if (!ticket.id || ticket.tripId !== snapshot.trip.id) {
       throw new Error('云端备份中的票据元数据引用不正确。')
@@ -633,6 +655,7 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
       throw new Error(`云端备份中的票据存在重复 ID：${ticket.id}`)
     }
     ticketIds.add(ticket.id)
+    ticketMap.set(ticket.id, ticket)
   }
 
   for (const item of snapshot.itineraryItems) {
@@ -643,11 +666,81 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
     }
   }
 
-  for (const fileRef of snapshot.fileRefs) {
+  const fileRefTicketIds = new Set<string>()
+  for (const rawFileRef of snapshot.fileRefs as unknown[]) {
+    if (!isCloudFileRefShape(rawFileRef)) {
+      throw new Error('云端备份中的文件引用格式不正确。')
+    }
+    const fileRef = rawFileRef
+    if (fileRefTicketIds.has(fileRef.ticketId)) {
+      throw new Error('云端备份中的文件引用存在重复票据。')
+    }
+    fileRefTicketIds.add(fileRef.ticketId)
     if (!ticketIds.has(fileRef.ticketId)) {
       throw new Error('云端备份中的文件引用了不存在的票据。')
     }
+    const ticket = ticketMap.get(fileRef.ticketId)
+    if (!ticket || !shouldExpectTicketBlob(ticket)) {
+      throw new Error('云端备份中的文件引用只能绑定 copy 模式票据。')
+    }
   }
+}
+
+function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, backupId: string) {
+  const expectedPrefix = `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}/files/`
+  const seenTicketIds = new Set<string>()
+
+  for (const rawFileRef of snapshot.fileRefs as unknown[]) {
+    if (!isCloudFileRefShape(rawFileRef)) {
+      throw new Error('云端备份中的文件引用格式不正确。')
+    }
+    const fileRef = rawFileRef
+    if (seenTicketIds.has(fileRef.ticketId)) {
+      throw new Error('云端备份中的文件引用存在重复票据。')
+    }
+    seenTicketIds.add(fileRef.ticketId)
+
+    if (!isSafeCloudObjectPath(fileRef.path, expectedPrefix)) {
+      throw new Error('云端备份中的文件路径不属于当前备份。')
+    }
+  }
+}
+
+function isCloudFileRefShape(value: unknown): value is CloudFileRef {
+  return (
+    isRecord(value) &&
+    typeof value.ticketId === 'string' &&
+    value.ticketId.trim().length > 0 &&
+    typeof value.path === 'string' &&
+    value.path.trim().length > 0 &&
+    typeof value.fileName === 'string' &&
+    value.fileName.trim().length > 0 &&
+    typeof value.mimeType === 'string' &&
+    value.mimeType.trim().length > 0 &&
+    typeof value.size === 'number' &&
+    Number.isFinite(value.size) &&
+    value.size >= 0
+  )
+}
+
+function isSafeCloudObjectPath(path: string, expectedPrefix: string) {
+  if (!path.startsWith(expectedPrefix) || hasControlCharacter(path) || path.includes('\\')) {
+    return false
+  }
+
+  const segments = path.split('/')
+  return segments.every((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+}
+
+function hasControlCharacter(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 31 || code === 127) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function requireMappedCloudId(idMap: Map<string, string>, id: string) {

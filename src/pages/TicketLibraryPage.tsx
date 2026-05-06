@@ -593,21 +593,25 @@ function TicketCard({
           {ticketIcons[ticket.fileType]}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
-          <p className="mt-1 truncate text-xs leading-5 text-slate-500">{ticket.fileName}</p>
+          <h3 className="break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+            {displayTitle}
+          </h3>
+          <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
+            {ticket.fileName}
+          </p>
           <p className="text-xs leading-5 text-slate-400">{describeTicketMetaLine(ticket)}</p>
           <p className="text-xs text-slate-400">{formatTicketCreatedAt(ticket.createdAt)}</p>
         </div>
       </div>
 
       {shouldShowNote ? (
-        <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500">
+        <p className="break-words rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">
           {ticket.note}
         </p>
       ) : null}
 
       {storageMode === 'reference' && ticket.referenceLocation ? (
-        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+        <p className="break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
           位置：{ticket.referenceLocation}
         </p>
       ) : null}

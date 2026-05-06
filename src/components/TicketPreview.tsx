@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Copy, ExternalLink, FileArchive, LoaderCircle, Share2, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
 import {
@@ -38,6 +39,15 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
     typeof navigator.share === 'function' &&
     typeof navigator.canShare === 'function' &&
     navigator.canShare({ files: shareFile ? [shareFile] : [] })
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -109,59 +119,72 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
     }
   }
 
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[430px] rounded-t-2xl border-t border-white/80 bg-white p-4 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-sky-600">{ticketStorageModeLabels[storageMode]}</p>
-          <h3 className="mt-1 truncate text-base font-semibold text-slate-950">{displayTitle}</h3>
-          <p className="mt-1 truncate text-xs text-slate-400">
-            {ticket.fileName} · {describeTicketMetaLine(ticket)}
-          </p>
-        </div>
-        <button
-          aria-label="关闭预览"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
-          onClick={onClose}
-          type="button"
-        >
-          <X className="size-5" />
-        </button>
-      </div>
-
-      {storageMode === 'reference' ? (
-        <ReferencePreview
-          copyMessage={copyMessage}
-          onCopy={() => void handleCopyReference()}
-          ticket={ticket}
-        />
-      ) : null}
-
-      {storageMode === 'external' ? <ExternalPreview ticket={ticket} /> : null}
-
-      {storageMode === 'copy' ? (
-        <div className="max-h-[62dvh] overflow-auto rounded-xl bg-slate-50">
-          {isLoading ? (
-            <div className="flex min-h-64 items-center justify-center text-slate-400">
-              <LoaderCircle className="size-5 animate-spin" />
+  return createPortal(
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      role="dialog"
+    >
+      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[430px] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
+        <div className="shrink-0 p-4 pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-sky-600">{ticketStorageModeLabels[storageMode]}</p>
+              <h3 className="mt-1 break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                {displayTitle}
+              </h3>
+              <p className="mt-1 break-words text-xs text-slate-400 [overflow-wrap:anywhere]">
+                {ticket.fileName} · {describeTicketMetaLine(ticket)}
+              </p>
             </div>
-          ) : null}
+            <button
+              aria-label="关闭预览"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+        </div>
 
-          {error ? (
-            <p className="min-h-40 px-4 py-8 text-center text-sm leading-6 text-red-500">{error}</p>
-          ) : null}
-
-          {!isLoading && !error && objectUrl ? (
-            <CopyPreviewContent
-              canShareFile={canShareFile}
-              objectUrl={objectUrl}
-              onShare={() => void handleShareFile()}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {storageMode === 'reference' ? (
+            <ReferencePreview
+              copyMessage={copyMessage}
+              onCopy={() => void handleCopyReference()}
               ticket={ticket}
             />
           ) : null}
+
+          {storageMode === 'external' ? <ExternalPreview ticket={ticket} /> : null}
+
+          {storageMode === 'copy' ? (
+            <div className="rounded-xl bg-slate-50">
+              {isLoading ? (
+                <div className="flex min-h-64 items-center justify-center text-slate-400">
+                  <LoaderCircle className="size-5 animate-spin" />
+                </div>
+              ) : null}
+
+              {error ? (
+                <p className="min-h-40 px-4 py-8 text-center text-sm leading-6 text-red-500">{error}</p>
+              ) : null}
+
+              {!isLoading && !error && objectUrl ? (
+                <CopyPreviewContent
+                  canShareFile={canShareFile}
+                  objectUrl={objectUrl}
+                  onShare={() => void handleShareFile()}
+                  ticket={ticket}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -232,7 +255,7 @@ function ReferencePreview({
       <p className="text-sm leading-6">
         此票据仅记录文件位置，旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
-      <p className="rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold leading-6">
+      <p className="break-words rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold leading-6 [overflow-wrap:anywhere]">
         {ticket.referenceLocation || '未填写位置说明'}
       </p>
       {ticket.referenceLocation ? (

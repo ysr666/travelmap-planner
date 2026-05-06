@@ -4,7 +4,6 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, LineString } from 'geojson'
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
-import { hasValidCoordinates } from '../lib/mapLinks'
 import { sortItineraryItems } from '../lib/itinerary'
 import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
@@ -51,7 +50,7 @@ export function DayMap({
   const coordinateKeyRef = useRef('')
   const resizeFrameRef = useRef<number | null>(null)
   const validItems = useMemo(
-    () => sortItineraryItems(items).filter(hasValidCoordinates),
+    () => sortItineraryItems(items).filter((item) => getItemLngLat(item) !== null),
     [items],
   )
   const validItemsRef = useRef(validItems)
@@ -416,14 +415,22 @@ function markerContentClassName(isSelected: boolean) {
 }
 
 function buildLineFeature(items: ItineraryItem[]): Feature<LineString> {
+  const coordinates = items.flatMap((item) => {
+    const lngLat = getItemLngLat(item)
+    return lngLat ? [lngLat] : []
+  })
+  const lineCoordinates =
+    coordinates.length > 1
+      ? coordinates
+      : coordinates.length === 1
+        ? [coordinates[0], coordinates[0]]
+        : [[0, 0], [0, 0]]
+
   return {
     type: 'Feature',
     geometry: {
       type: 'LineString',
-      coordinates: items.length > 1 ? items.flatMap((item) => {
-        const lngLat = getItemLngLat(item)
-        return lngLat ? [lngLat] : []
-      }) : [],
+      coordinates: lineCoordinates,
     },
     properties: {},
   }

@@ -28,6 +28,7 @@ import {
   uploadTripCloudBackup,
   verifyEmailOtp,
   type CloudBackupSummary,
+  type RestoreCloudBackupResult,
 } from '../../lib/cloudBackup'
 import { getSupabaseClient, type User } from '../../lib/supabaseClient'
 import { navigateTo } from '../../lib/routes'
@@ -51,6 +52,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [isRestoring, setIsRestoring] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<CloudBackupSummary | null>(null)
+  const [restoreResult, setRestoreResult] = useState<RestoreCloudBackupResult | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupSummary | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -152,6 +154,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       await signOut()
       setUser(null)
       setBackups([])
+      setRestoreResult(null)
       setMessage('已退出云端备份账号。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
@@ -169,6 +172,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setIsUploading(true)
     setError(null)
     setMessage(null)
+    setRestoreResult(null)
     setWarnings([])
     try {
       const result = await uploadTripCloudBackup(trip.id)
@@ -190,12 +194,17 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setIsRestoring(true)
     setError(null)
     setMessage(null)
+    setRestoreResult(null)
     setWarnings([])
     try {
       const result = await restoreCloudBackup(restoreTarget.id)
-      setWarnings(result.warnings)
       setRestoreTarget(null)
-      navigateTo('trip', { tripId: result.tripId })
+      if (result.warnings.length > 0) {
+        setRestoreResult(result)
+        setMessage('云端备份已恢复为新的本地旅行。请先检查下列提醒。')
+      } else {
+        navigateTo('trip', { tripId: result.tripId })
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '恢复云端备份失败。')
     } finally {
@@ -211,6 +220,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setIsDeleting(true)
     setError(null)
     setMessage(null)
+    setRestoreResult(null)
     setWarnings([])
     try {
       const result = await deleteCloudBackup(deleteTarget.id)
@@ -272,6 +282,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         ) : user ? (
           <div className="space-y-3">
             <CloudStatusMessage error={error} message={message} warnings={warnings} />
+            {restoreResult ? <CloudRestoreSuccessCard result={restoreResult} /> : null}
             <div
               className="rounded-xl bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-600"
               data-testid="cloud-current-user"
@@ -386,6 +397,32 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         title="删除云端备份？"
       />
     </section>
+  )
+}
+
+function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult }) {
+  return (
+    <div
+      className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-emerald-900"
+      data-testid="cloud-restore-success"
+    >
+      <div>
+        <p className="text-sm font-semibold">已恢复：{result.title}</p>
+        <p className="mt-1 text-xs leading-5 text-emerald-800">
+          恢复已创建新的本地旅行，不会覆盖现有数据。以下提醒建议进入后核对。
+        </p>
+      </div>
+      <ul className="list-inside list-disc space-y-1 text-xs leading-5">
+        {result.warnings.map((warning) => (
+          <li className="break-words [overflow-wrap:anywhere]" key={warning}>
+            {warning}
+          </li>
+        ))}
+      </ul>
+      <Button className="w-full" onClick={() => navigateTo('trip', { tripId: result.tripId })}>
+        进入恢复的旅行工作台
+      </Button>
+    </div>
   )
 }
 

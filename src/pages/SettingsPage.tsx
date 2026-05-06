@@ -320,7 +320,7 @@ export function SettingsPage() {
               <p className="font-semibold">导入/导出提醒</p>
               <ul className="mt-1 list-inside list-disc">
                 {warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
+                  <li className="break-words [overflow-wrap:anywhere]" key={warning}>{warning}</li>
                 ))}
               </ul>
             </div>
@@ -379,7 +379,7 @@ export function SettingsPage() {
         <SectionHeader title="备份与导入" />
         <Card className="space-y-3">
           <p className="text-sm leading-6 text-slate-500">
-            备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据和票据文件。
+            备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据，以及可用的 copy 模式票据文件；reference / external 票据会保存位置说明或外部链接。
           </p>
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">

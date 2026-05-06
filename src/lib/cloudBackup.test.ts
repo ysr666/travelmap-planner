@@ -5,6 +5,8 @@ import {
   buildCloudSnapshotFromRecords,
   buildCloudSnapshotPath,
   parseCloudSnapshot,
+  parseCloudSnapshotText,
+  validateCloudSnapshotForRestore,
 } from './cloudBackup'
 import { getSupabaseConfigStatus } from './supabaseClient'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
@@ -202,5 +204,79 @@ describe('supabase cloud backup helpers', () => {
     }).snapshot
 
     expect(() => buildCloudRestoreRecords(snapshot, [])).toThrow('行程点引用不正确')
+  })
+
+  it('reports invalid snapshot json with a user-facing error', () => {
+    expect(() => parseCloudSnapshotText('{not json')).toThrow('云端备份 snapshot.json 无法解析')
+  })
+
+  it('rejects file refs outside the current backup storage prefix', () => {
+    const blob = new Blob(['pdf'], { type: 'application/pdf' })
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: items,
+      ticketBlobs: [{ blob, ticketId: copyTicket.id }],
+      ticketMetas: [copyTicket],
+      trip,
+      userId: 'user-id',
+    }).snapshot
+
+    snapshot.fileRefs[0].path = 'user-id/another-backup/files/ticket_copy/order.pdf'
+
+    expect(() => validateCloudSnapshotForRestore(snapshot, 'user-id', 'backup-id')).toThrow(
+      '文件路径不属于当前备份',
+    )
+  })
+
+  it('rejects file refs for reference or external tickets', () => {
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: [{ ...items[0], ticketIds: ['ticket_reference'] }],
+      ticketBlobs: [],
+      ticketMetas: [{ ...referenceTicket, itemId: 'item_old', scope: 'item' }],
+      trip,
+      userId: 'user-id',
+    }).snapshot
+
+    snapshot.fileRefs = [
+      {
+        fileName: 'visa.pdf',
+        mimeType: 'application/pdf',
+        path: 'user-id/backup-id/files/ticket_reference/visa.pdf',
+        size: 4,
+        ticketId: 'ticket_reference',
+      },
+    ]
+
+    expect(() => buildCloudRestoreRecords(snapshot, [
+      { blob: new Blob(['pdf'], { type: 'application/pdf' }), ticketId: 'ticket_reference' },
+    ])).toThrow('文件引用只能绑定 copy 模式票据')
+  })
+
+  it('rejects malformed item ticket id lists instead of silently dropping them', () => {
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: [
+        {
+          ...items[0],
+          ticketIds: undefined as unknown as string[],
+        },
+      ],
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip,
+      userId: 'user-id',
+    }).snapshot
+
+    expect(() => buildCloudRestoreRecords(snapshot, [])).toThrow('票据列表格式不正确')
   })
 })

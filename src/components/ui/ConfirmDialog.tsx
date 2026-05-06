@@ -56,8 +56,12 @@ export function ConfirmDialog({
               {icon || <AlertTriangle className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">{body}</p>
+              <h2 className="break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                {title}
+              </h2>
+              <p className="mt-1 break-words text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">
+                {body}
+              </p>
             </div>
           </div>
         </div>

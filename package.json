@@ -2,7 +2,7 @@
   "name": "travel-console-pwa",
   "private": true,
   "version": "0.2.0",
-  "tripMapBuild": 1,
+  "tripMapBuild": 2,
   "type": "module",
   "scripts": {
     "dev": "vite",

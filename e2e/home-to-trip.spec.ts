@@ -5,7 +5,7 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await clearTravelDatabase(page)
 
   await expect(page.getByText('旅图 TripMap')).toBeVisible()
-  await expect(page.getByText(/旅图 v\d+\.\d+\.\d+ · 本地优先/)).toBeVisible()
+  await expect(page.getByText(/旅图 v\d+\.\d+\.\d+(?:\.\d+)? · 本地优先/)).toBeVisible()
   await expect(page.getByText('还没有旅行')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

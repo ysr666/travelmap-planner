@@ -1,12 +1,26 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+type PackageMetadata = {
+  version?: string
+  tripMapBuild?: number | string
+}
+
+const packageMetadata = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as PackageMetadata
+
+const packageVersion = packageMetadata.version ?? process.env.npm_package_version ?? '0.0.0'
+const tripMapBuild = packageMetadata.tripMapBuild
+const appVersion = tripMapBuild === undefined ? packageVersion : `${packageVersion}.${tripMapBuild}`
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   plugins: [
     react(),

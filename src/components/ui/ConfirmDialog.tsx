@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from './Button'
 
@@ -25,23 +26,42 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!open) {
+      return undefined
+    }
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [open])
+
   if (!open) {
     return null
   }
 
-  return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] items-end justify-center bg-slate-950/24 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
-      <div className="w-full rounded-2xl border border-white/80 bg-white p-4 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
-        <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
-            {icon || <AlertTriangle className="size-5" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">{body}</p>
+  return createPortal(
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center"
+      role="dialog"
+    >
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_18px_48px_rgba(38,53,76,0.18)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              {icon || <AlertTriangle className="size-5" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">{body}</p>
+            </div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Button disabled={loading} onClick={onCancel} variant="secondary">
             {cancelLabel}
           </Button>
@@ -55,6 +75,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

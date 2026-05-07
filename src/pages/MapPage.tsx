@@ -71,6 +71,13 @@ export function MapPage() {
     }
   }, [tripId, dayId])
 
+  async function refreshItems() {
+    if (!dayId) {
+      return
+    }
+    setItems(await listItemsByDay(dayId))
+  }
+
   if (isLoading) {
     return (
       <div className="app-viewport overflow-hidden bg-[#eaf2f9] px-4 pt-[max(5rem,env(safe-area-inset-top))]">
@@ -113,6 +120,7 @@ export function MapPage() {
       items={items}
       onBackToTimeline={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
       onEditItem={() => navigateTo('timeline', { tripId: trip.id, dayId: day.id })}
+      onItemsChange={refreshItems}
       onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: item.id, fromView: 'map' })}
       trip={trip}
     />

@@ -8,12 +8,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ExternalLink, LocateFixed, MapPin, MoreHorizontal, Navigation } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
+import { updateItineraryItem } from '../../db'
 import { buildAppleMapsUrl, buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
-import { describeItemTime, describePreviousTransport } from '../../lib/itinerary'
+import { describeItemTime, describePreviousTransport, sortItineraryItems } from '../../lib/itinerary'
 import { formatDate } from '../../lib/dates'
 import {
   ROUTING_CONFIG_CHANGED_EVENT,
@@ -26,6 +27,7 @@ import {
 import {
   ROUTE_CACHE_CHANGED_EVENT,
   buildCurrentRouteCacheIdentity,
+  clearRouteCache,
   loadRouteCache,
   pruneStaleRouteCachesForDay,
   saveRouteCache,
@@ -33,11 +35,13 @@ import {
 } from '../../lib/routeCache'
 import { buildDayPrewarmQueue, shouldSkipMapPrewarm } from '../../lib/mapPrewarm'
 import { markMapStartup } from '../../lib/mapStartupMetrics'
-import type { Day, ItineraryItem, Trip } from '../../types'
+import type { Day, ItineraryItem, TransportMode, Trip } from '../../types'
 
 type SheetState = 'collapsed' | 'middle' | 'expanded'
 type SelectSource = 'marker' | 'list'
 type RouteUiState = 'straight' | 'loading' | 'road' | 'cached' | 'mixed' | 'failed'
+type RouteDisplayMode = 'straight' | 'road'
+type RoadTransportMode = Extract<TransportMode, 'walk' | 'car' | 'bus'>
 
 type SnapPoints = Record<SheetState, number>
 
@@ -55,6 +59,7 @@ type DayMapViewProps = {
   onBackToTimeline?: () => void
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
+  onItemsChange?: () => Promise<void> | void
 }
 
 const DEFAULT_SNAP_POINTS: SnapPoints = {
@@ -64,6 +69,12 @@ const DEFAULT_SNAP_POINTS: SnapPoints = {
 }
 
 const SNAP_STATES: SheetState[] = ['collapsed', 'middle', 'expanded']
+const ROAD_TRANSPORT_MODES: RoadTransportMode[] = ['walk', 'car', 'bus']
+const ROAD_TRANSPORT_LABELS: Record<RoadTransportMode, string> = {
+  walk: '步行',
+  car: '驾车',
+  bus: '公交',
+}
 
 export function DayMapView({
   trip,
@@ -79,6 +90,7 @@ export function DayMapView({
   onBackToTimeline,
   onOpenItem,
   onEditItem,
+  onItemsChange,
 }: DayMapViewProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [sheetState, setSheetState] = useState<SheetState>('middle')
@@ -87,18 +99,37 @@ export function DayMapView({
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
   const [routeResult, setRouteResult] = useState<DayRouteResult | null>(null)
   const [routeUiState, setRouteUiState] = useState<RouteUiState>('straight')
+  const [routeDisplayMode, setRouteDisplayMode] = useState<RouteDisplayMode>('straight')
   const [routeWarnings, setRouteWarnings] = useState<string[]>([])
   const [cacheRefreshToken, setCacheRefreshToken] = useState(0)
   const routeAbortRef = useRef<AbortController | null>(null)
   const dayMapRef = useRef<DayMapHandle | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const pendingRouteEditNoticeRef = useRef<string[] | null>(null)
   const [mapReadyToken, setMapReadyToken] = useState(0)
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
+  const orderedItems = useMemo(() => sortItineraryItems(items), [items])
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
+  const activeSegmentItem = useMemo(() => {
+    if (orderedItems.length < 2) {
+      return null
+    }
+
+    const selectedIndex = selectedItemId
+      ? orderedItems.findIndex((item) => item.id === selectedItemId)
+      : -1
+
+    if (selectedIndex > 0) {
+      return orderedItems[selectedIndex]
+    }
+
+    return orderedItems[1]
+  }, [orderedItems, selectedItemId])
+  const activeRoadMode = getRoadTransportMode(activeSegmentItem)
   const routeCacheIdentity = useMemo(
     () => buildCurrentRouteCacheIdentity({
       tripId: trip.id,
@@ -109,7 +140,7 @@ export function DayMapView({
     [day.id, items, trip.id],
   )
   const routeIdentityKey = routeCacheIdentity.signature
-  const routeLineStrings = routeResult?.lineStrings
+  const routeLineStrings = routeDisplayMode === 'road' ? routeResult?.lineStrings : undefined
   const routeConfigured = isRoutingConfigured(routingConfig)
   const routeCacheRefreshKey = `${cacheRefreshToken}:${routingConfig.provider}:${routingConfig.configured}:${routingConfig.source}`
   const prewarmItemsByDayId = useMemo(
@@ -179,10 +210,16 @@ export function DayMapView({
           setRouteResult(buildRouteResultFromCache(cached))
           setRouteWarnings(['使用本地缓存路线。', ...cached.warnings])
           setRouteUiState('cached')
+          setRouteDisplayMode('road')
           return
         }
         setRouteResult(null)
-        setRouteWarnings(prunedCount > 0 ? ['路线已过期，请重新生成。'] : [])
+        if (pendingRouteEditNoticeRef.current) {
+          setRouteWarnings(pendingRouteEditNoticeRef.current)
+          pendingRouteEditNoticeRef.current = null
+        } else {
+          setRouteWarnings(prunedCount > 0 ? ['路线已过期，请重新生成。'] : [])
+        }
         setRouteUiState('straight')
       } catch {
         if (cancelled) {
@@ -270,6 +307,7 @@ export function DayMapView({
   async function handleGenerateRoadRoute(forceRefresh = false) {
     const latestConfig = getRoutingConfig()
     setRoutingConfig(latestConfig)
+    setRouteDisplayMode('road')
     if (!isRoutingConfigured(latestConfig)) {
       setRouteWarnings([
         routeResult ? '路线服务未配置，无法重新生成；当前仍可查看已有路线。' : '路线服务未配置，已显示直线连接。',
@@ -317,6 +355,7 @@ export function DayMapView({
       setRouteResult(result)
       setRouteWarnings(nextWarnings)
       setRouteUiState(result.status === 'straight' ? 'failed' : result.status)
+      setRouteDisplayMode('road')
     } catch (caught) {
       if (controller.signal.aborted) {
         return
@@ -342,6 +381,54 @@ export function DayMapView({
     setRouteResult(null)
     setRouteWarnings([])
     setRouteUiState('straight')
+    setRouteDisplayMode('straight')
+  }
+
+  function handleSelectRoadDisplay() {
+    setRouteDisplayMode('road')
+    if (!activeSegmentItem) {
+      setRouteWarnings(['至少需要两个地点才能设置道路交通方式。'])
+    }
+  }
+
+  async function handleChangeRoadTransportMode(mode: RoadTransportMode) {
+    setRouteDisplayMode('road')
+    if (!activeSegmentItem) {
+      setRouteWarnings(['至少需要两个地点才能设置道路交通方式。'])
+      return
+    }
+
+    if (activeSegmentItem.previousTransportMode === mode) {
+      setRouteWarnings(mode === 'bus' ? ['公交为道路近似。'] : [])
+      return
+    }
+
+    try {
+      await updateItineraryItem(activeSegmentItem.id, { previousTransportMode: mode })
+      setRouteResult(null)
+      setRouteUiState('straight')
+      const nextWarnings = [
+        '交通方式已更新，点击重新生成。',
+        ...(mode === 'bus' ? ['公交为道路近似。'] : []),
+      ]
+      pendingRouteEditNoticeRef.current = nextWarnings
+      setRouteWarnings(nextWarnings)
+      await onItemsChange?.()
+    } catch (caught) {
+      setRouteWarnings([caught instanceof Error ? caught.message : '更新交通方式失败。'])
+    }
+  }
+
+  async function handleClearRouteCache() {
+    try {
+      await clearRouteCache()
+      setRouteResult(null)
+      setRouteUiState('straight')
+      setRouteDisplayMode('straight')
+      setRouteWarnings(['路线缓存已清理。'])
+    } catch (caught) {
+      setRouteWarnings([caught instanceof Error ? caught.message : '清理路线缓存失败。'])
+    }
   }
 
   return (
@@ -369,9 +456,19 @@ export function DayMapView({
       </div>
 
       {isVisible && items.length > 0 ? (
-        <MapRouteStatusPill
+        <FloatingRouteControl
+          activeRoadMode={activeRoadMode}
+          activeSegmentItem={activeSegmentItem}
           configured={routeConfigured}
+          displayMode={routeDisplayMode}
+          onChangeRoadTransportMode={(mode) => void handleChangeRoadTransportMode(mode)}
+          onClearRouteCache={() => void handleClearRouteCache()}
+          onGenerateRoadRoute={() => void handleGenerateRoadRoute(routeUiState !== 'straight')}
+          onResetToStraight={handleResetToStraight}
+          onSelectRoadDisplay={handleSelectRoadDisplay}
+          showBelowHeader={showFloatingHeader}
           state={routeUiState}
+          warnings={routeWarnings}
         />
       ) : null}
 
@@ -395,11 +492,9 @@ export function DayMapView({
           notice={notice}
           onBackToTimeline={onBackToTimeline}
           onEditItem={onEditItem}
-          onGenerateRoadRoute={() => void handleGenerateRoadRoute(routeUiState !== 'straight')}
           onOpenItem={onOpenItem}
-          onResetToStraight={handleResetToStraight}
           onSelectItem={handleSelectItem}
-          routeConfigured={routeConfigured}
+          routeDisplayMode={routeDisplayMode}
           routeState={routeUiState}
           routeWarnings={routeWarnings}
           selectedItem={selectedItem}
@@ -467,9 +562,7 @@ type MapBottomSheetProps = {
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
   onBackToTimeline?: () => void
-  onGenerateRoadRoute: () => void
-  onResetToStraight: () => void
-  routeConfigured: boolean
+  routeDisplayMode: RouteDisplayMode
   routeState: RouteUiState
   routeWarnings: string[]
   itemRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>
@@ -491,9 +584,7 @@ function MapBottomSheet({
   onOpenItem,
   onEditItem,
   onBackToTimeline,
-  onGenerateRoadRoute,
-  onResetToStraight,
-  routeConfigured,
+  routeDisplayMode,
   routeState,
   routeWarnings,
   itemRefs,
@@ -603,8 +694,6 @@ function MapBottomSheet({
     window.setTimeout(requestMapResize, 280)
   }
 
-  const showList = sheetState !== 'collapsed' || isDragging
-
   return (
     <section
       className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-3xl border border-white/80 bg-white/95 shadow-[0_-14px_36px_rgba(47,65,88,0.14)] backdrop-blur-xl ${
@@ -649,16 +738,14 @@ function MapBottomSheet({
         </div>
 
         <div className="shrink-0 space-y-2 px-4">
-          <RouteControlRow
-            configured={routeConfigured}
-            onGenerateRoadRoute={onGenerateRoadRoute}
-            onResetToStraight={onResetToStraight}
+          <RouteSheetSummary
+            displayMode={routeDisplayMode}
             state={routeState}
             warnings={routeWarnings}
           />
 
           {mapError ? (
-            <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <div className="rounded-xl bg-amber-50/85 px-3 py-2 text-sm text-amber-800">
               {mapError}
             </div>
           ) : null}
@@ -688,7 +775,7 @@ function MapBottomSheet({
           ) : null}
         </div>
 
-        {showList ? (
+        {sheetState === 'expanded' ? (
           <div
             className="mt-3 min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] app-scrollbar"
             ref={listScrollRef}
@@ -703,94 +790,192 @@ function MapBottomSheet({
             />
           </div>
         ) : (
-          <p className="mx-4 mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            上拉查看完整行程，下拉专注查看地图。
-          </p>
+          <div className="mt-3 px-4" data-testid="map-sheet-preview-list">
+            <ItineraryPreviewList
+              itemRefs={itemRefs}
+              items={items}
+              onSelectItem={onSelectItem}
+              selectedItemId={selectedItemId}
+            />
+            <p className="mt-2 text-center text-xs text-slate-400">
+              上拉查看完整行程
+            </p>
+          </div>
         )}
       </div>
     </section>
   )
 }
 
-function MapRouteStatusPill({
+function FloatingRouteControl({
   state,
   configured,
+  displayMode,
+  warnings,
+  activeRoadMode,
+  activeSegmentItem,
+  showBelowHeader,
+  onGenerateRoadRoute,
+  onResetToStraight,
+  onSelectRoadDisplay,
+  onChangeRoadTransportMode,
+  onClearRouteCache,
 }: {
   state: RouteUiState
   configured: boolean
+  displayMode: RouteDisplayMode
+  warnings: string[]
+  activeRoadMode: RoadTransportMode | null
+  activeSegmentItem: ItineraryItem | null
+  showBelowHeader: boolean
+  onGenerateRoadRoute: () => void
+  onResetToStraight: () => void
+  onSelectRoadDisplay: () => void
+  onChangeRoadTransportMode: (mode: RoadTransportMode) => void
+  onClearRouteCache: () => void
 }) {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const showRoadModes = displayMode === 'road'
+  const canGenerate = configured && state !== 'loading'
+  const shortNotice = getRouteShortNotice(state, configured, warnings)
+
   return (
-    <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[calc(100%-1.5rem)]">
-      <div
-        className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-[0_10px_24px_rgba(47,65,88,0.12)] ring-1 ring-white/80 backdrop-blur"
-        data-testid="route-status-pill"
-      >
-        <span className={`size-2 rounded-full ${routeStatusDotClassName(state, configured)}`} />
-        <span className="truncate">{routeStatusLabel(state, configured)}</span>
+    <div className={`pointer-events-none absolute inset-x-3 z-30 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
+      <div className="pointer-events-auto space-y-2 rounded-[1.35rem] bg-white/90 p-2 shadow-[0_12px_30px_rgba(47,65,88,0.12)] ring-1 ring-white/75 backdrop-blur-xl">
+        <div className="flex items-center gap-2">
+          <div className="grid min-w-0 flex-1 grid-cols-2 rounded-full bg-slate-100/80 p-0.5">
+            <button
+              className={`min-h-9 rounded-full px-3 text-sm font-semibold transition active:scale-[0.98] ${
+                displayMode === 'straight' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+              }`}
+              data-testid="route-mode-segment-straight"
+              onClick={onResetToStraight}
+              type="button"
+            >
+              直线
+            </button>
+            <button
+              className={`min-h-9 rounded-full px-3 text-sm font-semibold transition active:scale-[0.98] ${
+                displayMode === 'road' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+              }`}
+              data-testid="route-mode-segment-road"
+              onClick={onSelectRoadDisplay}
+              type="button"
+            >
+              道路
+            </button>
+          </div>
+          <Button
+            className="min-h-9 shrink-0 rounded-full px-3 text-xs"
+            data-testid="route-generate-button"
+            disabled={!canGenerate}
+            loading={state === 'loading'}
+            onClick={onGenerateRoadRoute}
+          >
+            {primaryRouteActionLabel(state, configured)}
+          </Button>
+          <button
+            aria-expanded={moreOpen}
+            aria-label="更多路线选项"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-slate-600 transition active:scale-[0.98]"
+            data-testid="route-more-toggle"
+            onClick={() => setMoreOpen((current) => !current)}
+            type="button"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </div>
+
+        {showRoadModes ? (
+          <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-50 p-1">
+            {ROAD_TRANSPORT_MODES.map((mode) => (
+              <button
+                className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
+                  activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500'
+                }`}
+                data-testid={`route-transport-${mode}`}
+                disabled={!activeSegmentItem}
+                key={mode}
+                onClick={() => onChangeRoadTransportMode(mode)}
+                type="button"
+              >
+                {ROAD_TRANSPORT_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div
+          className="flex items-center gap-2 px-1 text-xs text-slate-500"
+          data-testid="route-status-pill"
+        >
+          <span className={`size-2 rounded-full ${routeStatusDotClassName(state, configured)}`} />
+          <span className="shrink-0 font-semibold text-slate-700">{routeStatusLabel(state, configured)}</span>
+          {shortNotice ? <span className="min-w-0 truncate">{shortNotice}</span> : null}
+        </div>
+
+        {moreOpen ? (
+          <div
+            className="space-y-3 rounded-2xl bg-white/75 px-3 py-3 text-xs text-slate-600 ring-1 ring-slate-100"
+            data-testid="route-more-panel"
+          >
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className="min-h-9 rounded-xl bg-slate-50 px-3 font-semibold text-slate-600 active:scale-[0.98]"
+                data-testid="route-reset-button"
+                onClick={onResetToStraight}
+                type="button"
+              >
+                回到直线
+              </button>
+              <button
+                className="min-h-9 rounded-xl bg-slate-50 px-3 font-semibold text-slate-600 active:scale-[0.98]"
+                onClick={onClearRouteCache}
+                type="button"
+              >
+                清理缓存
+              </button>
+            </div>
+            <div className="space-y-1 leading-5">
+              <p>{routeSourceDetail(state, configured)}</p>
+              {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
+              {activeRoadMode === 'bus' || hasBusWarning(warnings) ? (
+                <p>公交为道路近似，不含站点、班次、换乘和实时交通。</p>
+              ) : null}
+            </div>
+            {warnings.length > 0 ? (
+              <div className="space-y-1" data-testid="route-warning">
+                {warnings.map((warning) => (
+                  <p className="break-words text-amber-700" key={warning}>
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function RouteControlRow({
+function RouteSheetSummary({
   state,
-  configured,
+  displayMode,
   warnings,
-  onGenerateRoadRoute,
-  onResetToStraight,
 }: {
   state: RouteUiState
-  configured: boolean
+  displayMode: RouteDisplayMode
   warnings: string[]
-  onGenerateRoadRoute: () => void
-  onResetToStraight: () => void
 }) {
-  const canReset = state === 'road' || state === 'cached' || state === 'mixed' || state === 'failed'
-  const canGenerate = configured && state !== 'loading'
-
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-slate-700">
-            {routeStatusLabel(state, configured)}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-slate-500">
-            {routeStatusDescription(state, configured)}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {canReset ? (
-            <Button
-              className="min-h-8 px-2.5 text-xs"
-              data-testid="route-reset-button"
-              onClick={onResetToStraight}
-              variant="ghost"
-            >
-              回到直线
-            </Button>
-          ) : null}
-          <Button
-            className="min-h-8 px-2.5 text-xs"
-            data-testid="route-generate-button"
-            disabled={!canGenerate}
-            loading={state === 'loading'}
-            onClick={onGenerateRoadRoute}
-            variant={configured ? 'secondary' : 'ghost'}
-          >
-            {state === 'road' || state === 'cached' || state === 'mixed' || state === 'failed' ? '重新生成' : '生成道路路线'}
-          </Button>
-        </div>
-      </div>
-      {warnings.length > 0 ? (
-        <div className="mt-2 space-y-1" data-testid="route-warning">
-          {warnings.slice(0, 3).map((warning) => (
-            <p className="break-words text-xs leading-5 text-amber-700" key={warning}>
-              {warning}
-            </p>
-          ))}
-        </div>
-      ) : null}
+    <div className="flex items-center justify-between gap-2 border-y border-slate-100 py-2 text-xs">
+      <span className="font-semibold text-slate-700">
+        {displayMode === 'road' ? '道路路线' : '直线连接'}
+      </span>
+      <span className="min-w-0 truncate text-slate-400">
+        {getSheetRouteSummary(state, warnings)}
+      </span>
     </div>
   )
 }
@@ -814,26 +999,95 @@ function routeStatusLabel(state: RouteUiState, configured: boolean) {
   return configured ? '直线连接' : '直线连接'
 }
 
-function routeStatusDescription(state: RouteUiState, configured: boolean) {
-  if (!configured) {
-    return state === 'cached' ? '使用本地缓存路线，无法重新生成。' : '配置路线服务后可手动生成道路路线。'
-  }
+function primaryRouteActionLabel(state: RouteUiState, configured: boolean) {
   if (state === 'loading') {
-    return '本地行程仍可查看，失败会回退直线。'
+    return '生成中'
   }
-  if (state === 'cached') {
-    return '命中本机 IndexedDB 路线缓存。'
-  }
-  if (state === 'road') {
-    return '路线由第三方服务生成，仅供参考。'
-  }
-  if (state === 'mixed') {
-    return '可用路段已生成，失败路段保留直线。'
+  if (!configured) {
+    return '无法生成'
   }
   if (state === 'failed') {
-    return '路线服务未返回可用结果。'
+    return '重试'
   }
-  return '点击按钮后才会请求第三方路线服务。'
+  if (state === 'road' || state === 'cached' || state === 'mixed') {
+    return '重新生成'
+  }
+  return '生成路线'
+}
+
+function getRouteShortNotice(state: RouteUiState, configured: boolean, warnings: string[]) {
+  if (hasBusWarning(warnings)) {
+    return '公交为道路近似'
+  }
+  if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
+    return '点击重新生成'
+  }
+  if (warnings.some((warning) => warning.includes('路线已过期'))) {
+    return '路线已过期'
+  }
+  if (!configured) {
+    return state === 'cached' ? '可查看缓存，不能重新生成' : '未配置 ORS'
+  }
+  if (state === 'cached') {
+    return '已显示本地缓存路线'
+  }
+  if (state === 'road') {
+    return '已显示道路路线'
+  }
+  if (state === 'mixed') {
+    return '部分路段回退直线'
+  }
+  if (state === 'failed') {
+    return '已回退直线'
+  }
+  if (state === 'loading') {
+    return '本地行程仍可查看'
+  }
+  return '点击生成道路路线'
+}
+
+function getSheetRouteSummary(state: RouteUiState, warnings: string[]) {
+  if (state === 'cached') {
+    return '本地缓存'
+  }
+  if (state === 'road') {
+    return '已生成'
+  }
+  if (state === 'mixed') {
+    return '部分回退'
+  }
+  if (state === 'failed') {
+    return '已回退'
+  }
+  if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
+    return '待重新生成'
+  }
+  if (warnings.some((warning) => warning.includes('路线已过期'))) {
+    return '已过期'
+  }
+  return '查看顺序'
+}
+
+function routeSourceDetail(state: RouteUiState, configured: boolean) {
+  if (state === 'cached') {
+    return '来源：本地路线缓存。'
+  }
+  if (state === 'road' || state === 'mixed') {
+    return '来源：第三方路线服务，结果仅供参考。'
+  }
+  if (!configured) {
+    return '来源：直线连接。'
+  }
+  return '来源：本地直线连接，点击生成后才请求路线服务。'
+}
+
+function hasBusWarning(warnings: string[]) {
+  return warnings.some((warning) => warning.includes('公交'))
+}
+
+function getRoadTransportMode(item: ItineraryItem | null): RoadTransportMode | null {
+  const mode = item?.previousTransportMode
+  return mode === 'walk' || mode === 'car' || mode === 'bus' ? mode : null
 }
 
 function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
@@ -903,6 +1157,59 @@ function getNetworkInformation() {
   }
 
   return (navigator as NavigatorWithConnection).connection ?? null
+}
+
+function ItineraryPreviewList({
+  items,
+  selectedItemId,
+  onSelectItem,
+  itemRefs,
+}: {
+  items: ItineraryItem[]
+  selectedItemId: string | null
+  onSelectItem: (item: ItineraryItem, source: SelectSource) => void
+  itemRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>
+}) {
+  const previewItems = items.slice(0, 3)
+  if (previewItems.length === 0) {
+    return (
+      <p className="py-3 text-sm text-slate-500">
+        这一天还没有行程点。
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      {previewItems.map((item, index) => (
+        <button
+          className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition active:bg-slate-50 ${
+            selectedItemId === item.id ? 'bg-sky-50/80' : ''
+          }`}
+          key={item.id}
+          onClick={() => onSelectItem(item, 'list')}
+          ref={(node) => {
+            itemRefs.current[item.id] = node
+          }}
+          type="button"
+        >
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
+            {index + 1}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-slate-900">{item.title}</span>
+            <span className="block truncate text-xs text-slate-400">{item.locationName || item.address || '地点未填写'}</span>
+          </span>
+          <span className="shrink-0 text-xs text-slate-400">{describeItemTime(item)}</span>
+        </button>
+      ))}
+      {items.length > previewItems.length ? (
+        <p className="px-2 pt-1 text-xs text-slate-400">
+          还有 {items.length - previewItems.length} 个行程点
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 function ItineraryList({
@@ -1012,24 +1319,28 @@ function SelectedItemCard({
   const hasCoordinates = hasValidCoordinates(item)
 
   return (
-    <div className="rounded-xl bg-sky-50/80 p-3 ring-1 ring-sky-100">
-      <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
-      <h3 className="mt-1 truncate text-base font-semibold text-slate-950">{item.title}</h3>
-      <p className="mt-1 truncate text-sm text-slate-500">{item.locationName || '地点未填写'}</p>
-      {!compact ? (
-        <p className="mt-1 line-clamp-2 text-xs text-slate-400">{item.address || '地址未填写'}</p>
-      ) : null}
-      <div className="mt-3 grid grid-cols-3 gap-2">
+    <div className="rounded-2xl bg-slate-50/70 px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
+          <h3 className="mt-0.5 truncate text-sm font-semibold text-slate-950">{item.title}</h3>
+          <p className="mt-0.5 truncate text-xs text-slate-500">{item.locationName || '地点未填写'}</p>
+        </div>
         <Button
-          className="min-h-10 px-2 text-xs"
+          className="min-h-8 shrink-0 px-2.5 text-xs"
           onClick={() => onOpenItem(item)}
-          variant="secondary"
+          variant="ghost"
         >
           详情
         </Button>
+      </div>
+      {!compact ? (
+        <p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.address || '地址未填写'}</p>
+      ) : null}
+      <div className="mt-2 flex gap-2">
         <a
-          className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
-            hasCoordinates ? 'bg-[#1677ff] text-white' : 'bg-slate-100 text-slate-400'
+          className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
+            hasCoordinates ? 'bg-white text-slate-700 ring-1 ring-slate-200/80' : 'bg-slate-100 text-slate-400'
           }`}
           href={hasCoordinates ? buildAppleMapsUrl(item) : undefined}
           rel="noreferrer"
@@ -1039,7 +1350,7 @@ function SelectedItemCard({
           Apple
         </a>
         <a
-          className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
+          className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
             hasCoordinates ? 'bg-white text-slate-800 ring-1 ring-slate-200' : 'bg-slate-100 text-slate-400'
           }`}
           href={hasCoordinates ? buildGoogleMapsUrl(item) : undefined}
@@ -1052,7 +1363,7 @@ function SelectedItemCard({
       </div>
       {!hasCoordinates ? (
         <Button
-          className="mt-2 w-full min-h-10"
+          className="mt-2 w-full min-h-9 text-xs"
           onClick={() => (onEditItem ? onEditItem(item) : undefined)}
           variant="secondary"
         >

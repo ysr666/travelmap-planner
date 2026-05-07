@@ -409,6 +409,7 @@ export function TripWorkspacePage() {
                     items={items}
                     onBackToTimeline={() => handleSwitchView('schedule')}
                     onEditItem={() => handleSwitchView('schedule')}
+                    onItemsChange={refreshItems}
                     onOpenItem={(item) =>
                       navigateTo('item', {
                         tripId: trip.id,

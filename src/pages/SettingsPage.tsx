@@ -42,6 +42,14 @@ import {
   type ParsedTripPlanFile,
 } from '../lib/tripPlanImport'
 import {
+  ROUTE_CACHE_CHANGED_EVENT,
+  clearRouteCache,
+  getRouteCacheMaxByteOptions,
+  getRouteCacheStats,
+  setRouteCacheMaxBytes,
+  type RouteCacheStats,
+} from '../lib/routeCache'
+import {
   ROUTING_CONFIG_CHANGED_EVENT,
   clearLocalOpenRouteServiceApiKey,
   getLocalOpenRouteServiceApiKey,
@@ -106,6 +114,10 @@ export function SettingsPage() {
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
   const [routingKeyInput, setRoutingKeyInput] = useState(() => getLocalOpenRouteServiceApiKey())
   const [routingMessage, setRoutingMessage] = useState<string | null>(null)
+  const [routeCacheStats, setRouteCacheStats] = useState<RouteCacheStats | null>(null)
+  const [routeCacheError, setRouteCacheError] = useState<string | null>(null)
+  const [isClearingRouteCache, setIsClearingRouteCache] = useState(false)
+  const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
 
   const refreshTrip = useCallback(async () => {
     if (!tripId) {
@@ -164,6 +176,15 @@ export function SettingsPage() {
     }
   }, [])
 
+  const refreshRouteCacheStats = useCallback(async () => {
+    try {
+      setRouteCacheError(null)
+      setRouteCacheStats(await getRouteCacheStats())
+    } catch (caught) {
+      setRouteCacheError(caught instanceof Error ? caught.message : '读取路线缓存统计失败。')
+    }
+  }, [])
+
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshTrip(), 0)
     return () => window.clearTimeout(timeout)
@@ -200,6 +221,19 @@ export function SettingsPage() {
       window.removeEventListener('storage', refreshRoutingConfig)
     }
   }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void refreshRouteCacheStats(), 0)
+    function handleRouteCacheChanged() {
+      void refreshRouteCacheStats()
+    }
+
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, handleRouteCacheChanged)
+    return () => {
+      window.clearTimeout(timeout)
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, handleRouteCacheChanged)
+    }
+  }, [refreshRouteCacheStats])
 
   async function handleRequestPersistence() {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -351,6 +385,32 @@ export function SettingsPage() {
     setRoutingKeyInput('')
     setRoutingConfig(getRoutingConfig())
     setRoutingMessage('已清除本机路线服务 key，地图会回到直线连接。')
+  }
+
+  async function handleRouteCacheMaxBytesChange(bytes: number) {
+    setIsUpdatingRouteCacheLimit(true)
+    setRouteCacheError(null)
+    try {
+      await setRouteCacheMaxBytes(bytes)
+      await refreshRouteCacheStats()
+    } catch (caught) {
+      setRouteCacheError(caught instanceof Error ? caught.message : '更新路线缓存上限失败。')
+    } finally {
+      setIsUpdatingRouteCacheLimit(false)
+    }
+  }
+
+  async function handleClearRouteCache() {
+    setIsClearingRouteCache(true)
+    setRouteCacheError(null)
+    try {
+      await clearRouteCache()
+      await refreshRouteCacheStats()
+    } catch (caught) {
+      setRouteCacheError(caught instanceof Error ? caught.message : '清理路线缓存失败。')
+    } finally {
+      setIsClearingRouteCache(false)
+    }
   }
 
   return (
@@ -574,8 +634,14 @@ export function SettingsPage() {
       <RouteServiceSettings
         config={routingConfig}
         keyInput={routingKeyInput}
+        cacheError={routeCacheError}
+        cacheStats={routeCacheStats}
+        isClearingCache={isClearingRouteCache}
+        isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
         message={routingMessage}
+        onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
         onClear={handleClearRoutingKey}
+        onClearCache={() => void handleClearRouteCache()}
         onKeyInputChange={setRoutingKeyInput}
         onSave={handleSaveRoutingKey}
       />
@@ -648,19 +714,32 @@ export function SettingsPage() {
 function RouteServiceSettings({
   config,
   keyInput,
+  cacheStats,
+  cacheError,
+  isClearingCache,
+  isUpdatingCacheLimit,
   message,
   onKeyInputChange,
   onSave,
   onClear,
+  onCacheMaxBytesChange,
+  onClearCache,
 }: {
   config: RoutingConfig
   keyInput: string
+  cacheStats: RouteCacheStats | null
+  cacheError: string | null
+  isClearingCache: boolean
+  isUpdatingCacheLimit: boolean
   message: string | null
   onKeyInputChange: (value: string) => void
   onSave: () => void
   onClear: () => void
+  onCacheMaxBytesChange: (bytes: number) => void
+  onClearCache: () => void
 }) {
   const configLabel = getRoutingConfigLabel(config)
+  const maxOptions = getRouteCacheMaxByteOptions()
 
   return (
     <section className="space-y-3" data-testid="routing-settings-section">
@@ -737,10 +816,77 @@ function RouteServiceSettings({
         <p className="text-xs leading-5 text-slate-400">
           本机 key 不进入 IndexedDB、zip 备份、Supabase 云备份或 AI 行程包，只保存在当前浏览器 localStorage。
         </p>
+
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-semibold text-slate-950">路线缓存</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                只缓存道路路线 polyline，不缓存地图瓦片，也不会进入备份或云端。
+              </p>
+            </div>
+            <span
+              className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-200"
+              data-testid="route-cache-count"
+            >
+              {cacheStats ? `${cacheStats.count} 条` : '读取中'}
+            </span>
+          </div>
+
+          <div
+            className="rounded-xl bg-white px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100"
+            data-testid="route-cache-stats"
+          >
+            {cacheStats ? (
+              <>
+                当前缓存：<span className="font-semibold text-slate-900">{formatFileSize(cacheStats.totalSizeBytes)}</span>
+                <span className="text-slate-400"> / </span>
+                上限 <span className="font-semibold text-slate-900">{formatFileSize(cacheStats.maxBytes)}</span>
+              </>
+            ) : (
+              '正在读取路线缓存统计…'
+            )}
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-700">缓存上限</span>
+            <select
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+              data-testid="route-cache-max-select"
+              disabled={isUpdatingCacheLimit}
+              onChange={(event) => onCacheMaxBytesChange(Number(event.target.value))}
+              value={cacheStats?.maxBytes ?? DEFAULT_ROUTE_CACHE_MAX_BYTES_FALLBACK}
+            >
+              {maxOptions.map((bytes) => (
+                <option key={bytes} value={bytes}>
+                  {formatFileSize(bytes)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <Button
+            className="w-full"
+            data-testid="route-cache-clear"
+            loading={isClearingCache}
+            onClick={onClearCache}
+            variant="secondary"
+          >
+            清理路线缓存
+          </Button>
+
+          {cacheError ? (
+            <p className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+              {cacheError}
+            </p>
+          ) : null}
+        </div>
       </Card>
     </section>
   )
 }
+
+const DEFAULT_ROUTE_CACHE_MAX_BYTES_FALLBACK = 20 * 1024 * 1024
 
 function getRoutingConfigLabel(config: RoutingConfig) {
   if (config.configured && config.source === 'local') {

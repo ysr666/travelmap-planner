@@ -17,18 +17,25 @@ import { describeItemTime, describePreviousTransport } from '../../lib/itinerary
 import { formatDate } from '../../lib/dates'
 import {
   ROUTING_CONFIG_CHANGED_EVENT,
-  buildRouteCacheKey,
   fetchDayRoute,
   getRoutingConfig,
   isRoutingConfigured,
   type DayRouteResult,
   type RoutingConfig,
 } from '../../lib/routing'
+import {
+  ROUTE_CACHE_CHANGED_EVENT,
+  buildCurrentRouteCacheIdentity,
+  loadRouteCache,
+  pruneStaleRouteCachesForDay,
+  saveRouteCache,
+  type RouteCacheEntry,
+} from '../../lib/routeCache'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type SheetState = 'collapsed' | 'middle' | 'expanded'
 type SelectSource = 'marker' | 'list'
-type RouteUiState = 'straight' | 'loading' | 'road' | 'mixed' | 'failed'
+type RouteUiState = 'straight' | 'loading' | 'road' | 'cached' | 'mixed' | 'failed'
 
 type SnapPoints = Record<SheetState, number>
 
@@ -71,6 +78,7 @@ export function DayMapView({
   const [routeResult, setRouteResult] = useState<DayRouteResult | null>(null)
   const [routeUiState, setRouteUiState] = useState<RouteUiState>('straight')
   const [routeWarnings, setRouteWarnings] = useState<string[]>([])
+  const [cacheRefreshToken, setCacheRefreshToken] = useState(0)
   const routeAbortRef = useRef<AbortController | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -79,10 +87,16 @@ export function DayMapView({
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
-  const routeIdentityKey = useMemo(
-    () => buildRouteCacheKey(items, routingConfig),
-    [items, routingConfig],
+  const routeCacheIdentity = useMemo(
+    () => buildCurrentRouteCacheIdentity({
+      tripId: trip.id,
+      dayId: day.id,
+      items,
+      provider: 'openrouteservice',
+    }),
+    [day.id, items, trip.id],
   )
+  const routeIdentityKey = routeCacheIdentity.signature
   const routeLineStrings = routeResult?.lineStrings
   const routeConfigured = isRoutingConfigured(routingConfig)
 
@@ -100,17 +114,53 @@ export function DayMapView({
   }, [])
 
   useEffect(() => {
+    function refreshRouteCache() {
+      setCacheRefreshToken((current) => current + 1)
+    }
+
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRouteCache)
+    return () => {
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRouteCache)
+    }
+  }, [])
+
+  useEffect(() => {
     routeAbortRef.current?.abort()
     routeAbortRef.current = null
+    let cancelled = false
 
-    const timeout = window.setTimeout(() => {
-      setRouteResult(null)
-      setRouteWarnings([])
-      setRouteUiState('straight')
-    }, 0)
+    async function refreshCachedRoute() {
+      try {
+        await pruneStaleRouteCachesForDay(trip.id, day.id, routeIdentityKey)
+        const cached = await loadRouteCache(routeIdentityKey)
+        if (cancelled) {
+          return
+        }
+        if (cached) {
+          setRouteResult(buildRouteResultFromCache(cached))
+          setRouteWarnings(['使用本地缓存路线。', ...cached.warnings])
+          setRouteUiState('cached')
+          return
+        }
+        setRouteResult(null)
+        setRouteWarnings([])
+        setRouteUiState('straight')
+      } catch {
+        if (cancelled) {
+          return
+        }
+        setRouteResult(null)
+        setRouteWarnings(['读取本地路线缓存失败，已显示直线连接。'])
+        setRouteUiState('straight')
+      }
+    }
 
-    return () => window.clearTimeout(timeout)
-  }, [routeIdentityKey])
+    void refreshCachedRoute()
+
+    return () => {
+      cancelled = true
+    }
+  }, [cacheRefreshToken, day.id, routeIdentityKey, trip.id])
 
   useEffect(() => {
     return () => {
@@ -144,6 +194,8 @@ export function DayMapView({
       return
     }
 
+    const previousResult = routeResult
+    const previousState = routeUiState
     routeAbortRef.current?.abort()
     const controller = new AbortController()
     routeAbortRef.current = controller
@@ -158,16 +210,35 @@ export function DayMapView({
       if (controller.signal.aborted) {
         return
       }
+      const nextWarnings = [...result.warnings]
+      if (hasRoadSegments(result)) {
+        const saveResult = await saveRouteCache({
+          tripId: trip.id,
+          dayId: day.id,
+          provider: 'openrouteservice',
+          signature: routeCacheIdentity.signature,
+          coordinateKey: routeCacheIdentity.coordinateKey,
+          modeKey: routeCacheIdentity.modeKey,
+          lineStrings: result.lineStrings,
+          warnings: result.warnings,
+          distanceMeters: sumOptional(result.segments.map((segment) => segment.distanceMeters)),
+          durationSeconds: sumOptional(result.segments.map((segment) => segment.durationSeconds)),
+        })
+        if (!saveResult.saved) {
+          nextWarnings.push(saveResult.warning)
+        }
+      }
       setRouteResult(result)
-      setRouteWarnings(result.warnings)
+      setRouteWarnings(nextWarnings)
       setRouteUiState(result.status === 'straight' ? 'failed' : result.status)
     } catch (caught) {
       if (controller.signal.aborted) {
         return
       }
-      setRouteResult(null)
-      setRouteUiState('failed')
+      setRouteResult(previousResult)
+      setRouteUiState(previousResult ? previousState : 'failed')
       setRouteWarnings([
+        ...(previousResult ? ['重新生成失败，仍可使用已有路线。'] : []),
         caught instanceof Error
           ? `${caught.message} 已回退直线。`
           : '道路路线生成失败，已回退直线。',
@@ -584,7 +655,7 @@ function RouteControlRow({
   onGenerateRoadRoute: () => void
   onResetToStraight: () => void
 }) {
-  const canReset = state === 'road' || state === 'mixed' || state === 'failed'
+  const canReset = state === 'road' || state === 'cached' || state === 'mixed' || state === 'failed'
   const canGenerate = configured && state !== 'loading'
 
   return (
@@ -617,7 +688,7 @@ function RouteControlRow({
             onClick={onGenerateRoadRoute}
             variant={configured ? 'secondary' : 'ghost'}
           >
-            {state === 'road' || state === 'mixed' || state === 'failed' ? '重新生成' : '生成道路路线'}
+            {state === 'road' || state === 'cached' || state === 'mixed' || state === 'failed' ? '重新生成' : '生成道路路线'}
           </Button>
         </div>
       </div>
@@ -638,6 +709,9 @@ function routeStatusLabel(state: RouteUiState, configured: boolean) {
   if (state === 'loading') {
     return '正在生成路线'
   }
+  if (state === 'cached') {
+    return '本地缓存路线'
+  }
   if (state === 'road') {
     return '道路路线'
   }
@@ -652,10 +726,13 @@ function routeStatusLabel(state: RouteUiState, configured: boolean) {
 
 function routeStatusDescription(state: RouteUiState, configured: boolean) {
   if (!configured) {
-    return '配置路线服务后可手动生成道路路线。'
+    return state === 'cached' ? '使用本地缓存路线，无法重新生成。' : '配置路线服务后可手动生成道路路线。'
   }
   if (state === 'loading') {
     return '本地行程仍可查看，失败会回退直线。'
+  }
+  if (state === 'cached') {
+    return '命中本机 IndexedDB 路线缓存。'
   }
   if (state === 'road') {
     return '路线由第三方服务生成，仅供参考。'
@@ -673,13 +750,36 @@ function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
   if (state === 'loading') {
     return 'bg-sky-400'
   }
-  if (state === 'road') {
+  if (state === 'road' || state === 'cached') {
     return 'bg-emerald-500'
   }
   if (state === 'mixed' || state === 'failed') {
     return 'bg-amber-500'
   }
   return configured ? 'bg-slate-400' : 'bg-slate-300'
+}
+
+function buildRouteResultFromCache(entry: RouteCacheEntry): DayRouteResult {
+  return {
+    segments: [],
+    lineStrings: entry.lineStrings,
+    warnings: entry.warnings,
+    provider: entry.provider,
+    status: 'road',
+    cacheKey: entry.signature,
+  }
+}
+
+function hasRoadSegments(result: DayRouteResult) {
+  return result.segments.some((segment) => segment.kind === 'road')
+}
+
+function sumOptional(values: Array<number | undefined>) {
+  const numbers = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (numbers.length === 0) {
+    return undefined
+  }
+  return numbers.reduce((sum, value) => sum + value, 0)
 }
 
 function requestMapResize() {

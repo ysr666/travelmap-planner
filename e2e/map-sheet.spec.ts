@@ -87,6 +87,55 @@ test('配置本机路线 key 后可以用 mock provider 生成道路路线', asy
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-generate-button').click()
 
+  await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败|本地缓存路线/)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('道路路线生成后可从本地缓存恢复并可清理', async ({ page }) => {
+  await page.route('https://api.openrouteservice.org/**', async (route) => {
+    const body = route.request().postDataJSON() as { coordinates: number[][] }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: body.coordinates,
+            },
+            properties: {
+              summary: {
+                distance: 1200,
+                duration: 600,
+              },
+            },
+          },
+        ],
+      }),
+    })
+  })
+
+  const tripId = await createDemoTripViaUi(page)
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
+  })
+  await page.getByTestId('view-switch-map').click()
+  await page.getByTestId('route-generate-button').click()
   await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败/)
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('map-sheet')).toBeVisible()
+  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存路线')
+
+  await page.goto(`/#/settings?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('route-cache-stats')).toContainText(/当前缓存/)
+  await page.getByTestId('route-cache-clear').click()
+  await expect(page.getByTestId('route-cache-stats')).toContainText('0 KB')
+
+  await page.goto(`/#/trip?tripId=${tripId}&view=map`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expectNoHorizontalOverflow(page)
 })

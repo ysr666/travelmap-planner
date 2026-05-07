@@ -3,17 +3,24 @@ import { expect, type Locator, type Page } from '@playwright/test'
 export async function clearTravelDatabase(page: Page) {
   await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
-    return new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase('TravelConsoleDB')
+    function deleteDatabase(name: string) {
+      return new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase(name)
 
-      request.onsuccess = () => resolve()
-      request.onerror = () => {
-        reject(request.error ?? new Error('删除 IndexedDB 失败'))
-      }
-      request.onblocked = () => {
-        reject(new Error('删除 IndexedDB 被现有连接阻塞'))
-      }
-    })
+        request.onsuccess = () => resolve()
+        request.onerror = () => {
+          reject(request.error ?? new Error(`删除 ${name} 失败`))
+        }
+        request.onblocked = () => {
+          reject(new Error(`删除 ${name} 被现有连接阻塞`))
+        }
+      })
+    }
+
+    return Promise.all([
+      deleteDatabase('TravelConsoleDB'),
+      deleteDatabase('TripMapRouteCacheDB'),
+    ]).then(() => undefined)
   })
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })

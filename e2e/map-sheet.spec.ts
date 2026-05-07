@@ -124,7 +124,7 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   })
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-generate-button').click()
-  await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败/)
+  await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败|本地缓存路线/)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('map-sheet')).toBeVisible()

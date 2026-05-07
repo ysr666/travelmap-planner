@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, MultiLineString } from 'geojson'
@@ -7,6 +7,7 @@ import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup } from '../lib/mapStartupMetrics'
 import { sortItineraryItems } from '../lib/itinerary'
 import { getItemLngLat, type LngLat } from '../lib/routing'
+import type { DayPrewarmTarget } from '../lib/mapPrewarm'
 import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
 
@@ -19,6 +20,13 @@ type DayMapProps = {
   routeLineStrings?: LngLat[][]
   onSelectItem: (item: ItineraryItem) => void
   onMapError?: (message: string) => void
+  onMapReady?: () => void
+}
+
+export type DayMapHandle = {
+  cancelPrewarm: () => void
+  isReady: () => boolean
+  prewarmBounds: (targets: DayPrewarmTarget[]) => Promise<void>
 }
 
 type MarkerRecord = {
@@ -28,11 +36,25 @@ type MarkerRecord = {
   content: HTMLSpanElement
 }
 
+type CameraState = {
+  bearing: number
+  center: LngLat
+  pitch: number
+  zoom: number
+}
+
+type PrewarmSession = {
+  cancelled: boolean
+  restoreCamera: CameraState
+  restored: boolean
+}
+
 const ROUTE_SOURCE_ID = 'day-route-source'
 const ROUTE_LAYER_ID = 'day-route-line'
 const MAP_ERROR_MESSAGE = '地图底图暂时无法加载，但本地行程仍可查看。'
+const PREWARM_IDLE_TIMEOUT_MS = 1000
 
-export function DayMap({
+export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   items,
   selectedItemId,
   heightClassName = 'h-[52dvh] min-h-[360px]',
@@ -41,7 +63,8 @@ export function DayMap({
   routeLineStrings,
   onSelectItem,
   onMapError,
-}: DayMapProps) {
+  onMapReady,
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef<MarkerRecord[]>([])
@@ -50,10 +73,12 @@ export function DayMap({
   const fitCoordinateKeyRef = useRef<string | null>(null)
   const onSelectItemRef = useRef(onSelectItem)
   const onMapErrorRef = useRef(onMapError)
+  const onMapReadyRef = useRef(onMapReady)
   const selectedItemIdRef = useRef(selectedItemId)
   const coordinateKeyRef = useRef('')
   const routeLineStringsRef = useRef<LngLat[][] | undefined>(routeLineStrings)
   const resizeFrameRef = useRef<number | null>(null)
+  const prewarmSessionRef = useRef<PrewarmSession | null>(null)
   const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
     () => sortItineraryItems(items).filter((item) => getItemLngLat(item) !== null),
@@ -87,6 +112,11 @@ export function DayMap({
   }, [])
 
   const cleanupMap = useCallback(() => {
+    const session = prewarmSessionRef.current
+    if (session) {
+      session.cancelled = true
+      prewarmSessionRef.current = null
+    }
     clearMarkers()
     if (mapRef.current) {
       mapRef.current.remove()
@@ -113,6 +143,100 @@ export function DayMap({
       mapRef.current?.resize()
     })
   }, [])
+
+  const restorePrewarmCamera = useCallback((session: PrewarmSession) => {
+    if (session.restored) {
+      return
+    }
+
+    const map = mapRef.current
+    if (!map) {
+      return
+    }
+
+    session.restored = true
+    map.jumpTo({
+      bearing: session.restoreCamera.bearing,
+      center: session.restoreCamera.center,
+      pitch: session.restoreCamera.pitch,
+      zoom: session.restoreCamera.zoom,
+    })
+    markMapStartup('prewarm restored current camera')
+  }, [])
+
+  const cancelPrewarm = useCallback(() => {
+    const session = prewarmSessionRef.current
+    if (!session) {
+      return
+    }
+
+    session.cancelled = true
+    restorePrewarmCamera(session)
+    prewarmSessionRef.current = null
+    markMapStartup('prewarm cancelled')
+  }, [restorePrewarmCamera])
+
+  const prewarmBounds = useCallback(async (targets: DayPrewarmTarget[]) => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current || targets.length === 0) {
+      markMapStartup('prewarm skipped', {
+        hasMap: Boolean(map),
+        loaded: loadedRef.current,
+        targets: targets.length,
+      })
+      return
+    }
+
+    cancelPrewarm()
+    const center = map.getCenter()
+    const session: PrewarmSession = {
+      cancelled: false,
+      restoreCamera: {
+        bearing: map.getBearing(),
+        center: [center.lng, center.lat],
+        pitch: map.getPitch(),
+        zoom: map.getZoom(),
+      },
+      restored: false,
+    }
+    prewarmSessionRef.current = session
+
+    markMapStartup('prewarm queue created', { count: targets.length })
+    try {
+      for (const target of targets) {
+        if (session.cancelled || prewarmSessionRef.current !== session) {
+          break
+        }
+
+        markMapStartup('prewarm day started', {
+          dayId: target.dayId,
+          points: target.coordinatesCount,
+          title: target.title,
+        })
+        const bounds = new maplibregl.LngLatBounds(target.bounds[0], target.bounds[1])
+        map.fitBounds(bounds, {
+          duration: 0,
+          maxZoom: 14,
+          padding: 72,
+        })
+        const result = await waitForMapIdleOrTimeout(map, PREWARM_IDLE_TIMEOUT_MS, session)
+        markMapStartup(result === 'idle' ? 'prewarm day idle' : 'prewarm day timeout', {
+          dayId: target.dayId,
+        })
+      }
+    } finally {
+      if (prewarmSessionRef.current === session) {
+        restorePrewarmCamera(session)
+        prewarmSessionRef.current = null
+      }
+    }
+  }, [cancelPrewarm, restorePrewarmCamera])
+
+  useImperativeHandle(ref, () => ({
+    cancelPrewarm,
+    isReady: () => Boolean(mapRef.current && loadedRef.current),
+    prewarmBounds,
+  }), [cancelPrewarm, prewarmBounds])
 
   const syncRouteLine = useCallback((map: MapLibreMap, mapItems: ItineraryItem[]) => {
     const lineData = buildLineFeature(mapItems, routeLineStringsRef.current)
@@ -222,6 +346,10 @@ export function DayMap({
   }, [onMapError])
 
   useEffect(() => {
+    onMapReadyRef.current = onMapReady
+  }, [onMapReady])
+
+  useEffect(() => {
     selectedItemIdRef.current = selectedItemId
   }, [selectedItemId])
 
@@ -297,6 +425,7 @@ export function DayMap({
         markMapStartup('map load event')
         syncMarkersAndRoute()
         fitViewportIfNeeded(map)
+        onMapReadyRef.current?.()
       })
 
       map.on('error', () => {
@@ -423,6 +552,28 @@ export function DayMap({
       ) : null}
     </div>
   )
+})
+
+function waitForMapIdleOrTimeout(
+  map: MapLibreMap,
+  timeoutMs: number,
+  session: PrewarmSession,
+): Promise<'idle' | 'timeout'> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (result: 'idle' | 'timeout') => {
+      if (settled) {
+        return
+      }
+      settled = true
+      window.clearTimeout(timeout)
+      map.off('idle', handleIdle)
+      resolve(session.cancelled ? 'timeout' : result)
+    }
+    const handleIdle = () => finish('idle')
+    const timeout = window.setTimeout(() => finish('timeout'), timeoutMs)
+    map.once('idle', handleIdle)
+  })
 }
 
 function markerRootClassName() {

@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from 'react'
 import { AlertCircle, ArrowDown, ArrowLeft, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
-import { DayMap } from '../DayMap'
+import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { buildAppleMapsUrl, buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
@@ -31,6 +31,8 @@ import {
   saveRouteCache,
   type RouteCacheEntry,
 } from '../../lib/routeCache'
+import { buildDayPrewarmQueue, shouldSkipMapPrewarm } from '../../lib/mapPrewarm'
+import { markMapStartup } from '../../lib/mapStartupMetrics'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type SheetState = 'collapsed' | 'middle' | 'expanded'
@@ -43,7 +45,11 @@ type DayMapViewProps = {
   trip: Trip
   day: Day
   items: ItineraryItem[]
+  allDays?: Day[]
+  dayItemsByDayId?: Record<string, ItineraryItem[]>
   embedded?: boolean
+  isVisible?: boolean
+  prewarmEnabled?: boolean
   showFloatingHeader?: boolean
   resizeSignal?: number
   onBackToTimeline?: () => void
@@ -63,7 +69,11 @@ export function DayMapView({
   trip,
   day,
   items,
+  allDays,
+  dayItemsByDayId,
   embedded = false,
+  isVisible = true,
+  prewarmEnabled = false,
   showFloatingHeader = true,
   resizeSignal,
   onBackToTimeline,
@@ -80,8 +90,10 @@ export function DayMapView({
   const [routeWarnings, setRouteWarnings] = useState<string[]>([])
   const [cacheRefreshToken, setCacheRefreshToken] = useState(0)
   const routeAbortRef = useRef<AbortController | null>(null)
+  const dayMapRef = useRef<DayMapHandle | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [mapReadyToken, setMapReadyToken] = useState(0)
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
   const selectedItem = useMemo(() => {
@@ -99,6 +111,32 @@ export function DayMapView({
   const routeIdentityKey = routeCacheIdentity.signature
   const routeLineStrings = routeResult?.lineStrings
   const routeConfigured = isRoutingConfigured(routingConfig)
+  const prewarmItemsByDayId = useMemo(
+    () => ({
+      ...(dayItemsByDayId ?? {}),
+      [day.id]: items,
+    }),
+    [day.id, dayItemsByDayId, items],
+  )
+  const prewarmQueue = useMemo(
+    () =>
+      buildDayPrewarmQueue({
+        currentDayId: day.id,
+        days: allDays ?? [day],
+        itemsByDayId: prewarmItemsByDayId,
+      }),
+    [allDays, day, prewarmItemsByDayId],
+  )
+  const prewarmQueueKey = useMemo(
+    () =>
+      prewarmQueue
+        .map((target) => `${target.dayId}:${target.bounds.flat().map((value) => value.toFixed(5)).join(',')}`)
+        .join('|'),
+    [prewarmQueue],
+  )
+  const cancelDayMapPrewarm = useCallback(() => {
+    dayMapRef.current?.cancelPrewarm()
+  }, [])
 
   useEffect(() => {
     function refreshConfig() {
@@ -165,8 +203,49 @@ export function DayMapView({
   useEffect(() => {
     return () => {
       routeAbortRef.current?.abort()
+      cancelDayMapPrewarm()
     }
-  }, [])
+  }, [cancelDayMapPrewarm])
+
+  useEffect(() => {
+    if (!prewarmEnabled) {
+      dayMapRef.current?.cancelPrewarm()
+      markMapStartup('prewarm skipped: map visible')
+      return
+    }
+
+    if (prewarmQueue.length === 0) {
+      markMapStartup('prewarm skipped: no coords')
+      return
+    }
+
+    const connection = getNetworkInformation()
+    if (shouldSkipMapPrewarm(connection)) {
+      markMapStartup(connection?.saveData ? 'prewarm skipped: saveData' : 'prewarm skipped: slow network', {
+        effectiveType: connection?.effectiveType,
+      })
+      return
+    }
+
+    if (!dayMapRef.current?.isReady()) {
+      return
+    }
+
+    let cancelled = false
+    const cancelIdle = schedulePrewarmIdleTask(() => {
+      if (cancelled || !prewarmEnabled) {
+        return
+      }
+
+      void dayMapRef.current?.prewarmBounds(prewarmQueue)
+    })
+
+    return () => {
+      cancelled = true
+      cancelIdle()
+      cancelDayMapPrewarm()
+    }
+  }, [cancelDayMapPrewarm, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
 
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
     setSelectedItemId(item.id)
@@ -268,9 +347,11 @@ export function DayMapView({
           />
         ) : (
           <DayMap
+            ref={dayMapRef}
             heightClassName="h-full min-h-0"
             items={items}
             onMapError={(message) => setMapError(message)}
+            onMapReady={() => setMapReadyToken((current) => current + 1)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
             routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
@@ -280,14 +361,14 @@ export function DayMapView({
         )}
       </div>
 
-      {items.length > 0 ? (
+      {isVisible && items.length > 0 ? (
         <MapRouteStatusPill
           configured={routeConfigured}
           state={routeUiState}
         />
       ) : null}
 
-      {showFloatingHeader ? (
+      {isVisible && showFloatingHeader ? (
         <MapHeader
           day={day}
           itemCount={items.length}
@@ -297,29 +378,31 @@ export function DayMapView({
         />
       ) : null}
 
-      <MapBottomSheet
-        day={day}
-        itemRefs={itemRefs}
-        items={items}
-        mapError={mapError}
-        mappedCount={mappedItems.length}
-        notice={notice}
-        onBackToTimeline={onBackToTimeline}
-        onEditItem={onEditItem}
-        onGenerateRoadRoute={() => void handleGenerateRoadRoute(routeUiState !== 'straight')}
-        onOpenItem={onOpenItem}
-        onResetToStraight={handleResetToStraight}
-        onSelectItem={handleSelectItem}
-        routeConfigured={routeConfigured}
-        routeState={routeUiState}
-        routeWarnings={routeWarnings}
-        selectedItem={selectedItem}
-        selectedItemId={selectedItemId}
-        setSheetState={setSheetState}
-        sheetState={sheetState}
-        stageRef={rootRef}
-        trip={trip}
-      />
+      {isVisible ? (
+        <MapBottomSheet
+          day={day}
+          itemRefs={itemRefs}
+          items={items}
+          mapError={mapError}
+          mappedCount={mappedItems.length}
+          notice={notice}
+          onBackToTimeline={onBackToTimeline}
+          onEditItem={onEditItem}
+          onGenerateRoadRoute={() => void handleGenerateRoadRoute(routeUiState !== 'straight')}
+          onOpenItem={onOpenItem}
+          onResetToStraight={handleResetToStraight}
+          onSelectItem={handleSelectItem}
+          routeConfigured={routeConfigured}
+          routeState={routeUiState}
+          routeWarnings={routeWarnings}
+          selectedItem={selectedItem}
+          selectedItemId={selectedItemId}
+          setSheetState={setSheetState}
+          sheetState={sheetState}
+          stageRef={rootRef}
+          trip={trip}
+        />
+      ) : null}
     </div>
   )
 }
@@ -786,6 +869,33 @@ function requestMapResize() {
   window.requestAnimationFrame(() => {
     window.dispatchEvent(new Event('resize'))
   })
+}
+
+function schedulePrewarmIdleTask(task: () => void) {
+  type IdleWindow = Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+
+  const idleWindow = window as IdleWindow
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(task, { timeout: 3200 })
+    return () => idleWindow.cancelIdleCallback?.(handle)
+  }
+
+  const timeout = window.setTimeout(task, 1200)
+  return () => window.clearTimeout(timeout)
+}
+
+function getNetworkInformation() {
+  type NavigatorWithConnection = Navigator & {
+    connection?: {
+      effectiveType?: string
+      saveData?: boolean
+    }
+  }
+
+  return (navigator as NavigatorWithConnection).connection ?? null
 }
 
 function ItineraryList({

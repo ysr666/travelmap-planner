@@ -47,6 +47,7 @@ export function TripWorkspacePage() {
   const [days, setDays] = useState<Day[]>([])
   const [selectedDay, setSelectedDay] = useState<Day | null>(null)
   const [items, setItems] = useState<ItineraryItem[]>([])
+  const [dayItemsByDayId, setDayItemsByDayId] = useState<Record<string, ItineraryItem[]>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isGeneratingDays, setIsGeneratingDays] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -54,10 +55,15 @@ export function TripWorkspacePage() {
   const [hasOpenedMap, setHasOpenedMap] = useState(() => view === 'map')
   const [mapResizeToken, setMapResizeToken] = useState(0)
   const mapPreloadStartedRef = useRef(false)
+  const backgroundMapWarmupStartedRef = useRef(false)
 
   useEffect(() => {
     resetMapStartupTrace()
   }, [])
+
+  useEffect(() => {
+    backgroundMapWarmupStartedRef.current = false
+  }, [tripId])
 
   const refreshWorkspace = useCallback(async () => {
     if (!tripId) {
@@ -76,6 +82,7 @@ export function TripWorkspacePage() {
         setDays([])
         setSelectedDay(null)
         setItems([])
+        setDayItemsByDayId({})
         setLoadError('没有找到这个旅行，请返回首页重新选择。')
         return
       }
@@ -88,6 +95,7 @@ export function TripWorkspacePage() {
       setDays(foundDays)
       setSelectedDay(nextSelectedDay)
       setItems(nextItems)
+      setDayItemsByDayId(nextSelectedDay ? { [nextSelectedDay.id]: nextItems } : {})
 
       if (nextSelectedDay && requestedDayId !== nextSelectedDay.id) {
         navigateTo('trip', { tripId, dayId: nextSelectedDay.id, view })
@@ -105,7 +113,12 @@ export function TripWorkspacePage() {
     if (!selectedDay) {
       return
     }
-    setItems(await listItemsByDay(selectedDay.id))
+    const nextItems = await listItemsByDay(selectedDay.id)
+    setItems(nextItems)
+    setDayItemsByDayId((current) => ({
+      ...current,
+      [selectedDay.id]: nextItems,
+    }))
   }, [selectedDay])
 
   useEffect(() => {
@@ -139,6 +152,70 @@ export function TripWorkspacePage() {
   }, [days.length, isLoading, trip])
 
   useEffect(() => {
+    if (
+      isLoading ||
+      !trip ||
+      !selectedDay ||
+      hasOpenedMap ||
+      view === 'map' ||
+      backgroundMapWarmupStartedRef.current ||
+      shouldSkipWorkspaceMapWarmup()
+    ) {
+      return
+    }
+
+    backgroundMapWarmupStartedRef.current = true
+    let cancelled = false
+    const cancelIdle = scheduleIdleTask(() => {
+      markMapStartup('hidden map warm mount requested')
+      void loadDayMapView().then(() => {
+        if (!cancelled) {
+          setHasOpenedMap(true)
+          markMapStartup('hidden map warm mount started')
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [hasOpenedMap, isLoading, selectedDay, trip, view])
+
+  const daysKey = useMemo(() => days.map((day) => day.id).join('|'), [days])
+
+  useEffect(() => {
+    if (isLoading || !trip || days.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    const cancelIdle = scheduleIdleTask(() => {
+      markMapStartup('prewarm day items load requested', { days: days.length })
+      void Promise.all(
+        days.map(async (day) => {
+          const dayItems = await listItemsByDay(day.id)
+          return [day.id, dayItems] as const
+        }),
+      ).then((entries) => {
+        if (cancelled) {
+          return
+        }
+
+        setDayItemsByDayId(Object.fromEntries(entries))
+        markMapStartup('prewarm day items loaded', { days: entries.length })
+      }).catch(() => {
+        markMapStartup('prewarm day items load ignored failure')
+      })
+    })
+
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [days, daysKey, isLoading, trip])
+
+  useEffect(() => {
     if (view !== 'map' || !hasOpenedMap) {
       return
     }
@@ -166,7 +243,9 @@ export function TripWorkspacePage() {
       const nextSelectedDay = pickSelectedDay(trip, nextDays, null)
       setDays(nextDays)
       setSelectedDay(nextSelectedDay)
-      setItems(nextSelectedDay ? await listItemsByDay(nextSelectedDay.id) : [])
+      const nextItems = nextSelectedDay ? await listItemsByDay(nextSelectedDay.id) : []
+      setItems(nextItems)
+      setDayItemsByDayId(nextSelectedDay ? { [nextSelectedDay.id]: nextItems } : {})
       if (nextSelectedDay) {
         navigateTo('trip', { tripId: trip.id, dayId: nextSelectedDay.id, view })
       }
@@ -297,7 +376,7 @@ export function TripWorkspacePage() {
             <div
               aria-hidden={isMapView}
               className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none ${
-                isMapView ? 'pointer-events-none opacity-0' : 'opacity-100'
+                isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
               }`}
             >
               <DayTimelineView
@@ -317,13 +396,16 @@ export function TripWorkspacePage() {
               <div
                 aria-hidden={!isMapView}
                 className={`absolute inset-y-0 -left-4 -right-4 min-h-0 overflow-hidden transition-opacity duration-200 motion-reduce:transition-none ${
-                  isMapView ? 'opacity-100' : 'pointer-events-none opacity-0'
+                  isMapView ? 'visible opacity-100' : 'invisible pointer-events-none opacity-0'
                 }`}
               >
-                <Suspense fallback={<MapLoadingFallback day={selectedDay} items={items} />}>
+                <Suspense fallback={isMapView ? <MapLoadingFallback day={selectedDay} items={items} /> : <HiddenMapLoadingFallback />}>
                   <LazyDayMapView
+                    allDays={days}
                     day={selectedDay}
+                    dayItemsByDayId={dayItemsByDayId}
                     embedded
+                    isVisible={isMapView}
                     items={items}
                     onBackToTimeline={() => handleSwitchView('schedule')}
                     onEditItem={() => handleSwitchView('schedule')}
@@ -336,6 +418,7 @@ export function TripWorkspacePage() {
                       })
                     }
                     resizeSignal={mapResizeToken}
+                    prewarmEnabled={!isMapView}
                     showFloatingHeader={false}
                     trip={trip}
                   />
@@ -469,6 +552,10 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
   )
 }
 
+function HiddenMapLoadingFallback() {
+  return <div className="h-full min-h-0 bg-[#eaf2f9]" data-testid="map-loading-fallback" />
+}
+
 function scheduleIdleTask(task: () => void) {
   type IdleWindow = Window & {
     requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
@@ -498,4 +585,32 @@ async function preloadMapStyleJson() {
   } catch {
     markMapStartup('style json preload ignored failure')
   }
+}
+
+function shouldSkipWorkspaceMapWarmup() {
+  type NavigatorWithConnection = Navigator & {
+    connection?: {
+      effectiveType?: string
+      saveData?: boolean
+    }
+  }
+
+  const connection = (navigator as NavigatorWithConnection).connection
+  if (!connection) {
+    return false
+  }
+
+  if (connection.saveData) {
+    markMapStartup('hidden map warm mount skipped: saveData')
+    return true
+  }
+
+  if (connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g') {
+    markMapStartup('hidden map warm mount skipped: slow network', {
+      effectiveType: connection.effectiveType,
+    })
+    return true
+  }
+
+  return false
 }

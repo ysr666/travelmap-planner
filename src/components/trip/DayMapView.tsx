@@ -15,10 +15,20 @@ import { EmptyState } from '../ui/EmptyState'
 import { buildAppleMapsUrl, buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
 import { describeItemTime, describePreviousTransport } from '../../lib/itinerary'
 import { formatDate } from '../../lib/dates'
+import {
+  ROUTING_CONFIG_CHANGED_EVENT,
+  buildRouteCacheKey,
+  fetchDayRoute,
+  getRoutingConfig,
+  isRoutingConfigured,
+  type DayRouteResult,
+  type RoutingConfig,
+} from '../../lib/routing'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type SheetState = 'collapsed' | 'middle' | 'expanded'
 type SelectSource = 'marker' | 'list'
+type RouteUiState = 'straight' | 'loading' | 'road' | 'mixed' | 'failed'
 
 type SnapPoints = Record<SheetState, number>
 
@@ -57,6 +67,11 @@ export function DayMapView({
   const [sheetState, setSheetState] = useState<SheetState>('middle')
   const [notice, setNotice] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
+  const [routeResult, setRouteResult] = useState<DayRouteResult | null>(null)
+  const [routeUiState, setRouteUiState] = useState<RouteUiState>('straight')
+  const [routeWarnings, setRouteWarnings] = useState<string[]>([])
+  const routeAbortRef = useRef<AbortController | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
@@ -64,6 +79,44 @@ export function DayMapView({
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
+  const routeIdentityKey = useMemo(
+    () => buildRouteCacheKey(items, routingConfig),
+    [items, routingConfig],
+  )
+  const routeLineStrings = routeResult?.lineStrings
+  const routeConfigured = isRoutingConfigured(routingConfig)
+
+  useEffect(() => {
+    function refreshConfig() {
+      setRoutingConfig(getRoutingConfig())
+    }
+
+    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshConfig)
+    window.addEventListener('storage', refreshConfig)
+    return () => {
+      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshConfig)
+      window.removeEventListener('storage', refreshConfig)
+    }
+  }, [])
+
+  useEffect(() => {
+    routeAbortRef.current?.abort()
+    routeAbortRef.current = null
+
+    const timeout = window.setTimeout(() => {
+      setRouteResult(null)
+      setRouteWarnings([])
+      setRouteUiState('straight')
+    }, 0)
+
+    return () => window.clearTimeout(timeout)
+  }, [routeIdentityKey])
+
+  useEffect(() => {
+    return () => {
+      routeAbortRef.current?.abort()
+    }
+  }, [])
 
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
     setSelectedItemId(item.id)
@@ -84,6 +137,56 @@ export function DayMapView({
     }
   }, [])
 
+  async function handleGenerateRoadRoute(forceRefresh = false) {
+    if (!routeConfigured) {
+      setRouteWarnings(['路线服务未配置，已显示直线连接。'])
+      setRouteUiState('straight')
+      return
+    }
+
+    routeAbortRef.current?.abort()
+    const controller = new AbortController()
+    routeAbortRef.current = controller
+    setRouteUiState('loading')
+    setRouteWarnings([])
+
+    try {
+      const result = await fetchDayRoute(items, routingConfig, {
+        signal: controller.signal,
+        forceRefresh,
+      })
+      if (controller.signal.aborted) {
+        return
+      }
+      setRouteResult(result)
+      setRouteWarnings(result.warnings)
+      setRouteUiState(result.status === 'straight' ? 'failed' : result.status)
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        return
+      }
+      setRouteResult(null)
+      setRouteUiState('failed')
+      setRouteWarnings([
+        caught instanceof Error
+          ? `${caught.message} 已回退直线。`
+          : '道路路线生成失败，已回退直线。',
+      ])
+    } finally {
+      if (routeAbortRef.current === controller) {
+        routeAbortRef.current = null
+      }
+    }
+  }
+
+  function handleResetToStraight() {
+    routeAbortRef.current?.abort()
+    routeAbortRef.current = null
+    setRouteResult(null)
+    setRouteWarnings([])
+    setRouteUiState('straight')
+  }
+
   return (
     <div ref={rootRef} className={`${embedded ? 'relative h-full min-h-0' : 'app-viewport relative'} min-h-0 overflow-hidden bg-[#eaf2f9]`}>
       <div className="absolute inset-0 z-0">
@@ -98,12 +201,20 @@ export function DayMapView({
             items={items}
             onMapError={(message) => setMapError(message)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
+            routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
             surface="fullscreen"
           />
         )}
       </div>
+
+      {items.length > 0 ? (
+        <MapRouteStatusPill
+          configured={routeConfigured}
+          state={routeUiState}
+        />
+      ) : null}
 
       {showFloatingHeader ? (
         <MapHeader
@@ -124,8 +235,13 @@ export function DayMapView({
         notice={notice}
         onBackToTimeline={onBackToTimeline}
         onEditItem={onEditItem}
+        onGenerateRoadRoute={() => void handleGenerateRoadRoute(routeUiState !== 'straight')}
         onOpenItem={onOpenItem}
+        onResetToStraight={handleResetToStraight}
         onSelectItem={handleSelectItem}
+        routeConfigured={routeConfigured}
+        routeState={routeUiState}
+        routeWarnings={routeWarnings}
         selectedItem={selectedItem}
         selectedItemId={selectedItemId}
         setSheetState={setSheetState}
@@ -190,6 +306,11 @@ type MapBottomSheetProps = {
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
   onBackToTimeline?: () => void
+  onGenerateRoadRoute: () => void
+  onResetToStraight: () => void
+  routeConfigured: boolean
+  routeState: RouteUiState
+  routeWarnings: string[]
   itemRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>
   stageRef: RefObject<HTMLDivElement | null>
 }
@@ -209,6 +330,11 @@ function MapBottomSheet({
   onOpenItem,
   onEditItem,
   onBackToTimeline,
+  onGenerateRoadRoute,
+  onResetToStraight,
+  routeConfigured,
+  routeState,
+  routeWarnings,
   itemRefs,
   stageRef,
 }: MapBottomSheetProps) {
@@ -362,6 +488,14 @@ function MapBottomSheet({
         </div>
 
         <div className="shrink-0 space-y-2 px-4">
+          <RouteControlRow
+            configured={routeConfigured}
+            onGenerateRoadRoute={onGenerateRoadRoute}
+            onResetToStraight={onResetToStraight}
+            state={routeState}
+            warnings={routeWarnings}
+          />
+
           {mapError ? (
             <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
               {mapError}
@@ -415,6 +549,137 @@ function MapBottomSheet({
       </div>
     </section>
   )
+}
+
+function MapRouteStatusPill({
+  state,
+  configured,
+}: {
+  state: RouteUiState
+  configured: boolean
+}) {
+  return (
+    <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[calc(100%-1.5rem)]">
+      <div
+        className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-[0_10px_24px_rgba(47,65,88,0.12)] ring-1 ring-white/80 backdrop-blur"
+        data-testid="route-status-pill"
+      >
+        <span className={`size-2 rounded-full ${routeStatusDotClassName(state, configured)}`} />
+        <span className="truncate">{routeStatusLabel(state, configured)}</span>
+      </div>
+    </div>
+  )
+}
+
+function RouteControlRow({
+  state,
+  configured,
+  warnings,
+  onGenerateRoadRoute,
+  onResetToStraight,
+}: {
+  state: RouteUiState
+  configured: boolean
+  warnings: string[]
+  onGenerateRoadRoute: () => void
+  onResetToStraight: () => void
+}) {
+  const canReset = state === 'road' || state === 'mixed' || state === 'failed'
+  const canGenerate = configured && state !== 'loading'
+
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-slate-700">
+            {routeStatusLabel(state, configured)}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-slate-500">
+            {routeStatusDescription(state, configured)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {canReset ? (
+            <Button
+              className="min-h-8 px-2.5 text-xs"
+              data-testid="route-reset-button"
+              onClick={onResetToStraight}
+              variant="ghost"
+            >
+              回到直线
+            </Button>
+          ) : null}
+          <Button
+            className="min-h-8 px-2.5 text-xs"
+            data-testid="route-generate-button"
+            disabled={!canGenerate}
+            loading={state === 'loading'}
+            onClick={onGenerateRoadRoute}
+            variant={configured ? 'secondary' : 'ghost'}
+          >
+            {state === 'road' || state === 'mixed' || state === 'failed' ? '重新生成' : '生成道路路线'}
+          </Button>
+        </div>
+      </div>
+      {warnings.length > 0 ? (
+        <div className="mt-2 space-y-1" data-testid="route-warning">
+          {warnings.slice(0, 3).map((warning) => (
+            <p className="break-words text-xs leading-5 text-amber-700" key={warning}>
+              {warning}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function routeStatusLabel(state: RouteUiState, configured: boolean) {
+  if (state === 'loading') {
+    return '正在生成路线'
+  }
+  if (state === 'road') {
+    return '道路路线'
+  }
+  if (state === 'mixed') {
+    return '部分路线失败'
+  }
+  if (state === 'failed') {
+    return '道路路线不可用，已显示直线'
+  }
+  return configured ? '直线连接' : '直线连接'
+}
+
+function routeStatusDescription(state: RouteUiState, configured: boolean) {
+  if (!configured) {
+    return '配置路线服务后可手动生成道路路线。'
+  }
+  if (state === 'loading') {
+    return '本地行程仍可查看，失败会回退直线。'
+  }
+  if (state === 'road') {
+    return '路线由第三方服务生成，仅供参考。'
+  }
+  if (state === 'mixed') {
+    return '可用路段已生成，失败路段保留直线。'
+  }
+  if (state === 'failed') {
+    return '路线服务未返回可用结果。'
+  }
+  return '点击按钮后才会请求第三方路线服务。'
+}
+
+function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
+  if (state === 'loading') {
+    return 'bg-sky-400'
+  }
+  if (state === 'road') {
+    return 'bg-emerald-500'
+  }
+  if (state === 'mixed' || state === 'failed') {
+    return 'bg-amber-500'
+  }
+  return configured ? 'bg-slate-400' : 'bg-slate-300'
 }
 
 function requestMapResize() {

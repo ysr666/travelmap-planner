@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Feature, LineString } from 'geojson'
+import type { Feature, MultiLineString } from 'geojson'
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup } from '../lib/mapStartupMetrics'
 import { sortItineraryItems } from '../lib/itinerary'
+import { getItemLngLat, type LngLat } from '../lib/routing'
 import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
 
@@ -15,6 +16,7 @@ type DayMapProps = {
   heightClassName?: string
   surface?: 'card' | 'fullscreen'
   resizeSignal?: number
+  routeLineStrings?: LngLat[][]
   onSelectItem: (item: ItineraryItem) => void
   onMapError?: (message: string) => void
 }
@@ -36,6 +38,7 @@ export function DayMap({
   heightClassName = 'h-[52dvh] min-h-[360px]',
   surface = 'card',
   resizeSignal,
+  routeLineStrings,
   onSelectItem,
   onMapError,
 }: DayMapProps) {
@@ -49,6 +52,7 @@ export function DayMap({
   const onMapErrorRef = useRef(onMapError)
   const selectedItemIdRef = useRef(selectedItemId)
   const coordinateKeyRef = useRef('')
+  const routeLineStringsRef = useRef<LngLat[][] | undefined>(routeLineStrings)
   const resizeFrameRef = useRef<number | null>(null)
   const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
@@ -74,6 +78,7 @@ export function DayMap({
         .join('|'),
     [validItems],
   )
+  const routeLineKey = useMemo(() => buildRouteLineKey(routeLineStrings), [routeLineStrings])
   const hasMappableItems = validItems.length > 0
 
   const clearMarkers = useCallback(() => {
@@ -110,8 +115,8 @@ export function DayMap({
   }, [])
 
   const syncRouteLine = useCallback((map: MapLibreMap, mapItems: ItineraryItem[]) => {
-    const lineData = buildLineFeature(mapItems)
-    const hasLine = mapItems.length > 1
+    const lineData = buildLineFeature(mapItems, routeLineStringsRef.current)
+    const hasLine = lineData.geometry.coordinates.length > 0
 
     if (!map.getSource(ROUTE_SOURCE_ID)) {
       map.addSource(ROUTE_SOURCE_ID, {
@@ -223,7 +228,8 @@ export function DayMap({
   useEffect(() => {
     validItemsRef.current = validItems
     coordinateKeyRef.current = coordinateKey
-  }, [coordinateKey, validItems])
+    routeLineStringsRef.current = routeLineStrings
+  }, [coordinateKey, routeLineStrings, validItems])
 
   useEffect(() => {
     if (!hasMappableItems) {
@@ -235,7 +241,7 @@ export function DayMap({
       syncMarkersAndRoute()
       fitViewportIfNeeded(mapRef.current)
     }
-  }, [cleanupMap, coordinateKey, fitViewportIfNeeded, hasMappableItems, syncMarkersAndRoute])
+  }, [cleanupMap, coordinateKey, fitViewportIfNeeded, hasMappableItems, routeLineKey, syncMarkersAndRoute])
 
   useEffect(() => {
     if (!containerRef.current || !hasMappableItems || mapRef.current) {
@@ -446,23 +452,23 @@ function markerContentClassName(isSelected: boolean) {
   ].join(' ')
 }
 
-function buildLineFeature(items: ItineraryItem[]): Feature<LineString> {
-  const coordinates = items.flatMap((item) => {
-    const lngLat = getItemLngLat(item)
-    return lngLat ? [lngLat] : []
-  })
-  const lineCoordinates =
-    coordinates.length > 1
-      ? coordinates
-      : coordinates.length === 1
-        ? [coordinates[0], coordinates[0]]
-        : [[0, 0], [0, 0]]
+function buildLineFeature(items: ItineraryItem[], routeLineStrings?: LngLat[][]): Feature<MultiLineString> {
+  const lineCoordinates = normalizeLineStrings(routeLineStrings)
+  const fallbackCoordinates = normalizeLineStrings(
+    items.length > 1
+      ? items.slice(1).flatMap((item, index) => {
+          const from = getItemLngLat(items[index])
+          const to = getItemLngLat(item)
+          return from && to ? [[from, to]] : []
+        })
+      : [],
+  )
 
   return {
     type: 'Feature',
     geometry: {
-      type: 'LineString',
-      coordinates: lineCoordinates,
+      type: 'MultiLineString',
+      coordinates: lineCoordinates.length > 0 ? lineCoordinates : fallbackCoordinates,
     },
     properties: {},
   }
@@ -501,23 +507,30 @@ function updateViewport(map: MapLibreMap, items: ItineraryItem[]) {
   })
 }
 
-function getItemLngLat(item?: ItineraryItem): [number, number] | null {
-  if (!item) {
-    return null
+function normalizeLineStrings(routeLineStrings?: LngLat[][]) {
+  if (!routeLineStrings) {
+    return []
   }
 
-  if (
-    typeof item.lat !== 'number' ||
-    typeof item.lng !== 'number' ||
-    !Number.isFinite(item.lat) ||
-    !Number.isFinite(item.lng) ||
-    item.lat < -90 ||
-    item.lat > 90 ||
-    item.lng < -180 ||
-    item.lng > 180
-  ) {
-    return null
-  }
+  return routeLineStrings
+    .map((lineString) => lineString.filter(isValidLngLat))
+    .filter((lineString) => lineString.length >= 2)
+}
 
-  return [item.lng, item.lat]
+function isValidLngLat(coordinate: LngLat) {
+  const [lng, lat] = coordinate
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
+  )
+}
+
+function buildRouteLineKey(routeLineStrings?: LngLat[][]) {
+  return normalizeLineStrings(routeLineStrings)
+    .map((lineString) => lineString.map(([lng, lat]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';'))
+    .join('|')
 }

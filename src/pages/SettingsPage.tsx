@@ -8,7 +8,9 @@ import {
   FileJson,
   HardDriveDownload,
   Import,
+  KeyRound,
   RefreshCw,
+  Route,
   ShieldCheck,
   Sparkles,
   Smartphone,
@@ -39,6 +41,14 @@ import {
   type ImportTripPlanResult,
   type ParsedTripPlanFile,
 } from '../lib/tripPlanImport'
+import {
+  ROUTING_CONFIG_CHANGED_EVENT,
+  clearLocalOpenRouteServiceApiKey,
+  getLocalOpenRouteServiceApiKey,
+  getRoutingConfig,
+  saveLocalOpenRouteServiceApiKey,
+  type RoutingConfig,
+} from '../lib/routing'
 import type { Day, Trip } from '../types'
 
 type StorageEstimateState = {
@@ -93,6 +103,9 @@ export function SettingsPage() {
   const [tripPlanError, setTripPlanError] = useState<string | null>(null)
   const [copyPromptMessage, setCopyPromptMessage] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
+  const [routingKeyInput, setRoutingKeyInput] = useState(() => getLocalOpenRouteServiceApiKey())
+  const [routingMessage, setRoutingMessage] = useState<string | null>(null)
 
   const refreshTrip = useCallback(async () => {
     if (!tripId) {
@@ -171,6 +184,20 @@ export function SettingsPage() {
     return () => {
       window.removeEventListener('online', updateOnlineStatus)
       window.removeEventListener('offline', updateOnlineStatus)
+    }
+  }, [])
+
+  useEffect(() => {
+    function refreshRoutingConfig() {
+      setRoutingConfig(getRoutingConfig())
+      setRoutingKeyInput(getLocalOpenRouteServiceApiKey())
+    }
+
+    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutingConfig)
+    window.addEventListener('storage', refreshRoutingConfig)
+    return () => {
+      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutingConfig)
+      window.removeEventListener('storage', refreshRoutingConfig)
     }
   }, [])
 
@@ -307,6 +334,23 @@ export function SettingsPage() {
     } catch {
       setCopyPromptMessage('当前浏览器不支持自动复制，请手动复制说明中的提示词。')
     }
+  }
+
+  function handleSaveRoutingKey() {
+    if (!routingKeyInput.trim()) {
+      setRoutingMessage('请输入 OpenRouteService API key。')
+      return
+    }
+    saveLocalOpenRouteServiceApiKey(routingKeyInput)
+    setRoutingConfig(getRoutingConfig())
+    setRoutingMessage('路线服务 key 已保存到当前浏览器本机。')
+  }
+
+  function handleClearRoutingKey() {
+    clearLocalOpenRouteServiceApiKey()
+    setRoutingKeyInput('')
+    setRoutingConfig(getRoutingConfig())
+    setRoutingMessage('已清除本机路线服务 key，地图会回到直线连接。')
   }
 
   return (
@@ -527,6 +571,15 @@ export function SettingsPage() {
 
       <CloudBackupPanel trip={trip} />
 
+      <RouteServiceSettings
+        config={routingConfig}
+        keyInput={routingKeyInput}
+        message={routingMessage}
+        onClear={handleClearRoutingKey}
+        onKeyInputChange={setRoutingKeyInput}
+        onSave={handleSaveRoutingKey}
+      />
+
       <section className="space-y-3">
         <SectionHeader title="设备存储" />
         <Card className="space-y-3">
@@ -590,6 +643,116 @@ export function SettingsPage() {
       </section>
     </div>
   )
+}
+
+function RouteServiceSettings({
+  config,
+  keyInput,
+  message,
+  onKeyInputChange,
+  onSave,
+  onClear,
+}: {
+  config: RoutingConfig
+  keyInput: string
+  message: string | null
+  onKeyInputChange: (value: string) => void
+  onSave: () => void
+  onClear: () => void
+}) {
+  const configLabel = getRoutingConfigLabel(config)
+
+  return (
+    <section className="space-y-3" data-testid="routing-settings-section">
+      <SectionHeader title="路线服务" />
+      <Card className="space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+            <Route className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-slate-950">道路路线 polyline</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              不配置时，地图继续使用直线连接。配置 OpenRouteService 后，可以在地图页手动生成道路路线。
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <InfoPill
+            icon={<AlertTriangle className="size-4" />}
+            text="生成道路路线会把地点坐标发送给第三方路线服务；路线仅供参考，不包含实时交通。"
+            tone="warning"
+          />
+          <InfoPill
+            icon={<KeyRound className="size-4" />}
+            text="VITE_OPENROUTESERVICE_API_KEY 会进入前端 bundle。个人部署可用，公开部署不建议；未来公开服务应使用后端代理。"
+            tone="warning"
+          />
+        </div>
+
+        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          当前状态：<span className="font-semibold text-slate-800">{configLabel}</span>
+        </div>
+
+        <label className="block">
+          <span className="text-sm font-semibold text-slate-700">本机 OpenRouteService API key</span>
+          <input
+            autoComplete="off"
+            className="mt-2 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 placeholder:text-slate-400"
+            data-testid="routing-api-key-input"
+            onChange={(event) => onKeyInputChange(event.target.value)}
+            placeholder="只保存在当前浏览器本机"
+            type="password"
+            value={keyInput}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            className="w-full"
+            data-testid="routing-api-key-save"
+            icon={<KeyRound className="size-4" />}
+            onClick={onSave}
+            variant="secondary"
+          >
+            保存本机 key
+          </Button>
+          <Button
+            className="w-full"
+            data-testid="routing-api-key-clear"
+            onClick={onClear}
+            variant="ghost"
+          >
+            清除
+          </Button>
+        </div>
+
+        {message ? (
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+            {message}
+          </p>
+        ) : null}
+
+        <p className="text-xs leading-5 text-slate-400">
+          本机 key 不进入 IndexedDB、zip 备份、Supabase 云备份或 AI 行程包，只保存在当前浏览器 localStorage。
+        </p>
+      </Card>
+    </section>
+  )
+}
+
+function getRoutingConfigLabel(config: RoutingConfig) {
+  if (config.configured && config.source === 'local') {
+    return '已使用本机 key'
+  }
+  if (config.configured && config.source === 'env') {
+    return '已通过环境变量配置'
+  }
+  if (config.provider === 'openrouteservice') {
+    return '已选择 OpenRouteService，但尚未配置 key'
+  }
+  return '未配置，地图使用直线连接'
 }
 
 function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {

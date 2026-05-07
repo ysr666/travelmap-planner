@@ -62,6 +62,14 @@ export async function forceSupabaseUnconfigured(page: Page) {
   })
 }
 
+export async function forceRoutingUnconfigured(page: Page) {
+  await page.route('https://api.openrouteservice.org/**', (route) => route.abort())
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:routing:provider', 'none')
+    window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
+  })
+}
+
 export function getHashParam(url: string, key: string) {
   const hash = new URL(url).hash
   const query = hash.split('?')[1] ?? ''

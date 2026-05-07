@@ -1,4 +1,4 @@
-export type TransportMode = 'walk' | 'transit' | 'car' | 'train' | 'flight' | 'other'
+export type TransportMode = 'walk' | 'transit' | 'bus' | 'car' | 'train' | 'flight' | 'other'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
 

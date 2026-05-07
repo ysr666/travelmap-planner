@@ -3,6 +3,7 @@ import type { ItineraryItem, TransportMode } from '../types'
 export const transportModeLabels: Record<TransportMode, string> = {
   walk: '步行',
   transit: '公共交通',
+  bus: '公交',
   car: '打车/驾车',
   train: '火车',
   flight: '飞机',

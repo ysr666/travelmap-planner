@@ -152,7 +152,7 @@ function mapAppleDirectionsMode(mode?: TransportMode) {
     return 'w'
   }
 
-  if (mode === 'transit' || mode === 'train') {
+  if (mode === 'transit' || mode === 'bus' || mode === 'train') {
     return 'r'
   }
 
@@ -168,7 +168,7 @@ function mapGoogleDirectionsMode(mode?: TransportMode) {
     return 'walking'
   }
 
-  if (mode === 'transit' || mode === 'train') {
+  if (mode === 'transit' || mode === 'bus' || mode === 'train') {
     return 'transit'
   }
 

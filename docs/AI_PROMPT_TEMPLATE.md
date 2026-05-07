@@ -22,7 +22,8 @@
   - lat: -90 到 90
   - lng: -180 到 180
 - transportMode / previousTransportMode 只能使用：
-  walk, transit, car, train, flight, other
+  walk, transit, bus, car, train, flight, other
+- 公交请使用 bus。不要把 bus 当作真实公交导航；它只会在旅图中按道路路线近似显示。
 
 请生成：
 - trip.title

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  BUS_APPROXIMATION_WARNING,
   buildFallbackStraightRoute,
   fetchDayRoute,
   fetchRouteSegment,
@@ -27,7 +28,12 @@ describe('routing profile mapping', () => {
   it('maps supported transport modes to real OpenRouteService profiles', () => {
     expect(mapTransportModeToRoutingProfile('walk').profile).toBe('foot-walking')
     expect(mapTransportModeToRoutingProfile('car').profile).toBe('driving-car')
+    expect(mapTransportModeToRoutingProfile('bus').profile).toBe('driving-car')
     expect(mapTransportModeToRoutingProfile('cycling').profile).toBe('cycling-regular')
+  })
+
+  it('marks bus route generation as an approximation', () => {
+    expect(mapTransportModeToRoutingProfile('bus').warning).toBe(BUS_APPROXIMATION_WARNING)
   })
 
   it('keeps train transit and flight as straight fallback modes', () => {
@@ -108,14 +114,33 @@ describe('OpenRouteService requests', () => {
 
   it('does not call provider for flight segments', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch
+    for (const mode of ['train', 'transit', 'flight'] as const) {
+      const result = await fetchDayRoute([
+        item('a', 35.1, 139.1, 1),
+        item('b', 35.2, 139.2, 2, mode),
+      ], configured, { fetcher, forceRefresh: true })
+
+      expect(result.status).toBe('straight')
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('uses driving route for bus segments with an approximation warning', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.2, 35.2]])), {
+        status: 200,
+      })
+    }) as unknown as typeof fetch
+
     const result = await fetchDayRoute([
       item('a', 35.1, 139.1, 1),
-      item('b', 35.2, 139.2, 2, 'flight'),
+      item('b', 35.2, 139.2, 2, 'bus'),
     ], configured, { fetcher, forceRefresh: true })
 
-    expect(fetcher).not.toHaveBeenCalled()
-    expect(result.status).toBe('straight')
-    expect(result.warnings.join(' ')).toContain('飞行')
+    expect(result.status).toBe('road')
+    expect(result.warnings).toContain(BUS_APPROXIMATION_WARNING)
+    const [url] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    expect(url).toContain('/driving-car/')
   })
 })
 

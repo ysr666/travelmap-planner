@@ -4,7 +4,7 @@ import type { ItineraryItem, TransportMode } from '../types'
 
 export type RoutingProvider = 'none' | 'openrouteservice'
 export type RoutingProfile = 'foot-walking' | 'driving-car' | 'cycling-regular'
-export type RoutingMode = TransportMode | 'cycling' | 'unknown'
+export type RoutingMode = TransportMode | 'cycling' | 'subway' | 'unknown'
 export type LngLat = [number, number]
 
 export type RoutingConfig = {
@@ -55,6 +55,7 @@ export type FetchDayRouteOptions = {
 export const ROUTING_PROVIDER_STORAGE_KEY = 'tripmap:routing:provider'
 export const ROUTING_API_KEY_STORAGE_KEY = 'tripmap:routing:openrouteservice-api-key'
 export const ROUTING_CONFIG_CHANGED_EVENT = 'tripmap:routing-config-changed'
+export const BUS_APPROXIMATION_WARNING = '公交段使用道路路线近似，不包含公交站点、班次、换乘和实时交通。实际出行请以 Apple Maps / Google Maps 等导航为准。'
 
 const OPENROUTESERVICE_ENDPOINT = 'https://api.openrouteservice.org/v2/directions'
 const DEFAULT_TIMEOUT_MS = 10000
@@ -147,11 +148,18 @@ export function mapTransportModeToRoutingProfile(mode?: RoutingMode): {
     return { profile: 'driving-car' }
   }
 
+  if (mode === 'bus') {
+    return {
+      profile: 'driving-car',
+      warning: BUS_APPROXIMATION_WARNING,
+    }
+  }
+
   if (mode === 'cycling') {
     return { profile: 'cycling-regular' }
   }
 
-  if (mode === 'train' || mode === 'transit' || mode === 'flight') {
+  if (mode === 'train' || mode === 'transit' || mode === 'subway' || mode === 'flight') {
     return {
       profile: null,
       warning: `${transportModeName(mode)} 段暂不使用道路路线，已显示直线连接。`,
@@ -545,14 +553,18 @@ function uniqueMessages(messages: string[]) {
   return Array.from(new Set(messages.filter(Boolean)))
 }
 
-function transportModeName(mode: TransportMode) {
-  const names: Record<TransportMode, string> = {
+function transportModeName(mode: RoutingMode) {
+  const names: Record<RoutingMode, string> = {
     walk: '步行',
     transit: '公共交通',
+    bus: '公交',
     car: '驾车',
     train: '火车',
     flight: '飞行',
     other: '其他交通',
+    cycling: '骑行',
+    subway: '地铁',
+    unknown: '交通方式未定',
   }
   return names[mode]
 }

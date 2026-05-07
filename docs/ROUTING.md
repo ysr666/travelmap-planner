@@ -46,7 +46,9 @@ VITE_OPENROUTESERVICE_API_KEY=your_openrouteservice_key
 - 不保存 OpenRouteService API key。
 - 不缓存 OpenFreeMap tiles / glyph / sprite。
 
-下次打开同一 Trip / Day 时，如果行程点坐标、顺序、交通模式和 provider 版本没有变化，地图会直接显示“本地缓存路线”。如果地点坐标、排序、交通模式或路线算法版本变化，旧缓存会失效并删除，地图回到直线连接，用户可重新生成。
+下次打开同一 Trip / Day 时，如果行程点坐标、顺序、交通模式和 provider 版本没有变化，地图会自动显示“本地缓存路线”。即使当前没有配置 OpenRouteService key，也可以查看已有缓存路线；缺少 key 只会禁用重新生成。路线缓存 signature 不包含 API key、环境变量来源或 localStorage key 值。
+
+如果地点坐标、排序、交通模式或路线算法版本变化，旧缓存会失效并删除，地图回到直线连接，用户可重新生成。清理路线缓存后，当前地图页会收到 `tripmap:route-cache-changed` 事件并回到直线连接。
 
 设置页的“路线服务”区域可以查看缓存大小、设置上限和清理路线缓存。默认上限是 20 MB，可选 5 MB、20 MB、50 MB、100 MB。超过上限时会按最近使用时间清理旧缓存。
 
@@ -58,9 +60,12 @@ VITE_OPENROUTESERVICE_API_KEY=your_openrouteservice_key
 | --- | --- | --- |
 | `walk` | `foot-walking` | 请求步行路线 |
 | `car` | `driving-car` | 请求驾车路线 |
+| `bus` | `driving-car` | 公交段使用道路路线近似，不包含公交站点、班次、换乘和实时交通 |
 | `cycling` | `cycling-regular` | 仅 routing 内部支持，当前业务枚举暂不持久化 |
 | `other` / 未填写 | `driving-car` | 尝试驾车路线，并提示仅供参考 |
 | `train` / `transit` / `flight` | 无 | 第一版直接显示直线 fallback |
+
+公交近似只能帮助画出大致道路 polyline，不能代表公交站点、班次、换乘或实时交通。实际出行请以 Apple Maps / Google Maps 等导航为准。火车、公共交通和飞机段不会请求 ORS，继续使用直线 fallback。
 
 ## 失败回退
 

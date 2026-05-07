@@ -74,7 +74,7 @@ const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要
 - 顶层必须包含 schemaVersion: 1、type: "trip-plan"、trip、days，可选 tickets。
 - 日期使用 YYYY-MM-DD，时间使用 HH:mm。
 - 每个行程点尽量提供 title、locationName、address、lat、lng、notes。
-- 交通方式只能使用 walk、transit、car、train、flight、other。
+- 交通方式只能使用 walk、transit、bus、car、train、flight、other。
 - previousTransportDurationMinutes 只是估算，必须提醒用户人工核对。
 - 不要编造已购票据。
 - 如果没有真实附件，不要生成 storageMode: "copy"。

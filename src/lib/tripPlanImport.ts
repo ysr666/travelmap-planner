@@ -17,7 +17,7 @@ const MAX_ITEMS_COUNT = 1000
 const MAX_TICKETS_COUNT = 500
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
-const TRANSPORT_MODES: TransportMode[] = ['walk', 'transit', 'car', 'train', 'flight', 'other']
+const TRANSPORT_MODES: TransportMode[] = ['walk', 'transit', 'bus', 'car', 'train', 'flight', 'other']
 
 export type TripPlanImportPackage = {
   schemaVersion: 1

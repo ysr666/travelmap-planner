@@ -111,6 +111,7 @@ export function DayMapView({
   const routeIdentityKey = routeCacheIdentity.signature
   const routeLineStrings = routeResult?.lineStrings
   const routeConfigured = isRoutingConfigured(routingConfig)
+  const routeCacheRefreshKey = `${cacheRefreshToken}:${routingConfig.provider}:${routingConfig.configured}:${routingConfig.source}`
   const prewarmItemsByDayId = useMemo(
     () => ({
       ...(dayItemsByDayId ?? {}),
@@ -169,7 +170,7 @@ export function DayMapView({
 
     async function refreshCachedRoute() {
       try {
-        await pruneStaleRouteCachesForDay(trip.id, day.id, routeIdentityKey)
+        const prunedCount = await pruneStaleRouteCachesForDay(trip.id, day.id, routeIdentityKey)
         const cached = await loadRouteCache(routeIdentityKey)
         if (cancelled) {
           return
@@ -181,7 +182,7 @@ export function DayMapView({
           return
         }
         setRouteResult(null)
-        setRouteWarnings([])
+        setRouteWarnings(prunedCount > 0 ? ['路线已过期，请重新生成。'] : [])
         setRouteUiState('straight')
       } catch {
         if (cancelled) {
@@ -198,7 +199,7 @@ export function DayMapView({
     return () => {
       cancelled = true
     }
-  }, [cacheRefreshToken, day.id, routeIdentityKey, trip.id])
+  }, [day.id, routeCacheRefreshKey, routeIdentityKey, trip.id])
 
   useEffect(() => {
     return () => {
@@ -267,9 +268,15 @@ export function DayMapView({
   }, [])
 
   async function handleGenerateRoadRoute(forceRefresh = false) {
-    if (!routeConfigured) {
-      setRouteWarnings(['路线服务未配置，已显示直线连接。'])
-      setRouteUiState('straight')
+    const latestConfig = getRoutingConfig()
+    setRoutingConfig(latestConfig)
+    if (!isRoutingConfigured(latestConfig)) {
+      setRouteWarnings([
+        routeResult ? '路线服务未配置，无法重新生成；当前仍可查看已有路线。' : '路线服务未配置，已显示直线连接。',
+      ])
+      if (!routeResult) {
+        setRouteUiState('straight')
+      }
       return
     }
 
@@ -282,7 +289,7 @@ export function DayMapView({
     setRouteWarnings([])
 
     try {
-      const result = await fetchDayRoute(items, routingConfig, {
+      const result = await fetchDayRoute(items, latestConfig, {
         signal: controller.signal,
         forceRefresh,
       })
@@ -317,7 +324,7 @@ export function DayMapView({
       setRouteResult(previousResult)
       setRouteUiState(previousResult ? previousState : 'failed')
       setRouteWarnings([
-        ...(previousResult ? ['重新生成失败，仍可使用已有路线。'] : []),
+        ...(previousResult ? ['重新生成失败，仍可使用已有缓存路线。'] : []),
         caught instanceof Error
           ? `${caught.message} 已回退直线。`
           : '道路路线生成失败，已回退直线。',

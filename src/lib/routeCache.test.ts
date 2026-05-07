@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  buildRouteCacheSignature,
   buildCurrentRouteCacheIdentity,
   clearRouteCache,
   enforceRouteCacheLimit,
@@ -28,6 +29,22 @@ describe('route cache signatures', () => {
     expect(buildCurrentRouteCacheIdentity({ tripId: 'trip', dayId: 'day', items: coordinateChanged }).signature).not.toBe(signature)
     expect(buildCurrentRouteCacheIdentity({ tripId: 'trip', dayId: 'day', items: orderChanged }).signature).not.toBe(signature)
     expect(buildCurrentRouteCacheIdentity({ tripId: 'trip', dayId: 'day', items: modeChanged }).signature).not.toBe(signature)
+  })
+
+  it('does not include API key or config source in persistent route cache signature', () => {
+    const base = [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2, 'bus')]
+    const identity = buildCurrentRouteCacheIdentity({ tripId: 'trip', dayId: 'day', items: base })
+
+    expect(identity.signature).not.toContain('fake-key')
+    expect(identity.signature).not.toContain('local')
+    expect(buildRouteCacheSignature({
+      tripId: 'trip',
+      dayId: 'day',
+      provider: 'openrouteservice',
+      coordinateKey: identity.coordinateKey,
+      modeKey: identity.modeKey,
+      routingVersion: identity.routingVersion,
+    })).toBe(identity.signature)
   })
 })
 
@@ -66,6 +83,23 @@ describe('route cache storage', () => {
     expect(loaded?.lineStrings).toEqual([[[139.1, 35.1], [139.2, 35.2]]])
     expect(loaded?.warnings).toEqual(['test warning'])
     expect(loaded?.lastUsedAt).toBeTruthy()
+  })
+
+  it('can load an existing OpenRouteService cache without provider configuration', async () => {
+    const identity = buildCurrentRouteCacheIdentity({
+      tripId: 'trip',
+      dayId: 'day',
+      items: [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2)],
+    })
+
+    await saveRouteCache({
+      tripId: 'trip',
+      dayId: 'day',
+      ...identity,
+      lineStrings: sampleLineStrings(),
+    })
+
+    expect((await loadRouteCache(identity.signature))?.provider).toBe('openrouteservice')
   })
 
   it('prunes stale signatures for the same day', async () => {

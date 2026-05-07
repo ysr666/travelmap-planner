@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured } from './helpers'
 
 test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async ({ page }) => {
@@ -92,7 +92,9 @@ test('配置本机路线 key 后可以用 mock provider 生成道路路线', asy
 })
 
 test('道路路线生成后可从本地缓存恢复并可清理', async ({ page }) => {
+  let routeRequestCount = 0
   await page.route('https://api.openrouteservice.org/**', async (route) => {
+    routeRequestCount += 1
     const body = route.request().postDataJSON() as { coordinates: number[][] }
     await route.fulfill({
       contentType: 'application/json',
@@ -130,6 +132,17 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存路线')
 
+  const requestsAfterCacheLoad = routeRequestCount
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:routing:provider', 'none')
+    window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
+    window.dispatchEvent(new Event('tripmap:routing-config-changed'))
+  })
+  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存路线')
+  await expect(page.getByText('使用本地缓存路线，无法重新生成。')).toBeVisible()
+  await expect(page.getByTestId('route-generate-button')).toBeDisabled()
+  expect(routeRequestCount).toBe(requestsAfterCacheLoad)
+
   await page.goto(`/#/settings?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('route-cache-stats')).toContainText(/当前缓存/)
   await page.getByTestId('route-cache-clear').click()
@@ -139,3 +152,89 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expectNoHorizontalOverflow(page)
 })
+
+test('公交段生成道路路线时显示近似提示', async ({ page }) => {
+  let sawDrivingCarRequest = false
+  await page.route('https://api.openrouteservice.org/**', async (route) => {
+    const request = route.request()
+    const body = request.postDataJSON() as { coordinates: number[][] }
+    if (request.url().includes('/driving-car/')) {
+      sawDrivingCarRequest = true
+    }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: body.coordinates,
+            },
+            properties: {
+              summary: {
+                distance: 1200,
+                duration: 600,
+              },
+            },
+          },
+        ],
+      }),
+    })
+  })
+
+  await createDemoTripViaUi(page)
+  await setItemPreviousTransportMode(page, '明治神宫散步', 'bus')
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
+  })
+  await page.getByTestId('view-switch-map').click()
+  await page.getByTestId('route-generate-button').click()
+
+  await expect(page.getByText('公交段使用道路路线近似，不包含公交站点、班次、换乘和实时交通。实际出行请以 Apple Maps / Google Maps 等导航为准。')).toBeVisible()
+  expect(sawDrivingCarRequest).toBe(true)
+  await expectNoHorizontalOverflow(page)
+})
+
+async function setItemPreviousTransportMode(page: Page, title: string, mode: string) {
+  await page.evaluate(
+    ({ title, mode }) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('TravelConsoleDB')
+        request.onerror = () => reject(request.error ?? new Error('打开 IndexedDB 失败'))
+        request.onsuccess = () => {
+          const db = request.result
+          const transaction = db.transaction('itineraryItems', 'readwrite')
+          const store = transaction.objectStore('itineraryItems')
+          const cursorRequest = store.openCursor()
+          cursorRequest.onerror = () => reject(cursorRequest.error ?? new Error('读取行程点失败'))
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result
+            if (!cursor) {
+              reject(new Error(`没有找到行程点：${title}`))
+              return
+            }
+            const value = cursor.value as { title?: string; previousTransportMode?: string; updatedAt?: number }
+            if (value.title === title) {
+              value.previousTransportMode = mode
+              value.updatedAt = Date.now()
+              cursor.update(value)
+              return
+            }
+            cursor.continue()
+          }
+          transaction.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          transaction.onerror = () => {
+            db.close()
+            reject(transaction.error ?? new Error('更新交通方式失败'))
+          }
+        }
+      }),
+    { mode, title },
+  )
+}

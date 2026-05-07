@@ -115,6 +115,16 @@ describe('validateTripPlanPackage', () => {
     })
   })
 
+  it('accepts bus as a transport mode', () => {
+    const pkg = basicPackage()
+    pkg.days[0].items[1].previousTransportMode = 'bus'
+
+    const result = validate(pkg)
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
   it('rejects unsupported schema, wrong type, empty title, and invalid dates', () => {
     const pkg = {
       ...basicPackage(),

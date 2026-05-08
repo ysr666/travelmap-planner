@@ -10,7 +10,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(sheet).toBeVisible()
   await expect(handle).toBeVisible()
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
-  await expect(page.getByTestId('map-sheet-preview-list')).toBeVisible()
+  await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
 
   const before = await sheet.boundingBox()
   const handleBox = await handle.boundingBox()
@@ -25,12 +25,13 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   const startY = handleBox.y + handleBox.height / 2
   await page.mouse.move(startX, startY)
   await page.mouse.down()
-  await page.mouse.move(startX, startY - 260, { steps: 8 })
+  await page.mouse.move(startX, startY - 110, { steps: 8 })
   await page.mouse.up()
 
   await expect.poll(async () => {
     return (await sheet.boundingBox())?.height ?? 0
   }).toBeGreaterThan(before.height + 40)
+  await expect(page.getByTestId('map-sheet-preview-list')).toBeVisible()
 
   const hotelListItem = page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).first()
   await expect(hotelListItem).toBeVisible()
@@ -44,9 +45,13 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
   await forceRoutingUnconfigured(page)
   await page.getByTestId('view-switch-map').click()
 
-  await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
+  await expect(page.getByTestId('route-status-pill')).toContainText('直线')
+  await expect(page.getByTestId('route-transport-walk')).toBeHidden()
+  await page.getByTestId('route-mode-segment-road').click()
+  await expect(page.getByTestId('route-status-pill')).toContainText('无法生成')
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
-  await expect(page.getByText('未配置 ORS')).toBeVisible()
+  await page.getByTestId('route-more-toggle').click()
+  await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
   await expectNoHorizontalOverflow(page)
 })
 
@@ -86,9 +91,10 @@ test('配置本机路线 key 后可以用 mock provider 生成道路路线', asy
     window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
   })
   await page.getByTestId('view-switch-map').click()
+  await page.getByTestId('route-mode-segment-road').click()
   await page.getByTestId('route-generate-button').click()
 
-  await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败|本地缓存路线/)
+  await expect(page.getByTestId('route-status-pill')).toContainText(/道路|部分|缓存/)
   await expectNoHorizontalOverflow(page)
 })
 
@@ -126,12 +132,13 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
     window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
   })
   await page.getByTestId('view-switch-map').click()
+  await page.getByTestId('route-mode-segment-road').click()
   await page.getByTestId('route-generate-button').click()
-  await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分路线失败|本地缓存路线/)
+  await expect(page.getByTestId('route-status-pill')).toContainText(/道路|部分|缓存/)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('map-sheet')).toBeVisible()
-  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存路线')
+  await expect(page.getByTestId('route-status-pill')).toContainText('缓存')
 
   const requestsAfterCacheLoad = routeRequestCount
   await page.evaluate(() => {
@@ -139,15 +146,15 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
     window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
     window.dispatchEvent(new Event('tripmap:routing-config-changed'))
   })
-  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存路线')
-  await expect(page.getByText('可查看缓存，不能重新生成')).toBeVisible()
+  await expect(page.getByTestId('route-status-pill')).toContainText('缓存')
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
+  await page.getByTestId('route-more-toggle').click()
+  await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
   expect(routeRequestCount).toBe(requestsAfterCacheLoad)
 
-  await page.getByTestId('route-more-toggle').click()
   await expect(page.getByTestId('route-more-panel')).toBeVisible()
   await page.getByRole('button', { name: '清理缓存' }).click()
-  await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
+  await expect(page.getByTestId('route-status-pill')).toContainText('直线')
   await expectNoHorizontalOverflow(page)
 })
 
@@ -191,13 +198,14 @@ test('公交段生成道路路线时显示近似提示', async ({ page }) => {
   })
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-mode-segment-road').click()
-  await expect(page.getByTestId('route-transport-bus')).toBeVisible()
+  await page.getByTestId('route-transport-current').click()
+  await expect(page.getByTestId('route-more-panel')).toBeVisible()
   await page.getByTestId('route-transport-bus').click()
-  await expect(page.getByText('公交为道路近似')).toBeVisible()
+  await expect(page.getByTestId('route-status-pill')).toContainText('公交近似')
   expect(routeRequestCount).toBe(0)
   await page.getByTestId('route-generate-button').click()
 
-  await expect(page.getByText('公交为道路近似')).toBeVisible()
+  await expect(page.getByTestId('route-status-pill')).toContainText('公交近似')
   expect(sawDrivingCarRequest).toBe(true)
   await expectNoHorizontalOverflow(page)
 })

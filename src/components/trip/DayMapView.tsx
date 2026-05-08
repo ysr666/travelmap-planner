@@ -93,7 +93,7 @@ export function DayMapView({
   onItemsChange,
 }: DayMapViewProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [sheetState, setSheetState] = useState<SheetState>('middle')
+  const [sheetState, setSheetState] = useState<SheetState>('collapsed')
   const [notice, setNotice] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
@@ -595,7 +595,7 @@ function MapBottomSheet({
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const dragStartYRef = useRef(0)
   const dragStartHeightRef = useRef(0)
-  const dragStartStateRef = useRef<SheetState>('middle')
+  const dragStartStateRef = useRef<SheetState>('collapsed')
   const dragStartTimeRef = useRef(0)
   const dragDeltaRef = useRef(0)
   const [dragHeight, setDragHeight] = useState<number | null>(null)
@@ -717,7 +717,7 @@ function MapBottomSheet({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-3 flex shrink-0 items-start justify-between gap-3 px-4">
+        <div className="mb-2 flex shrink-0 items-start justify-between gap-3 px-4">
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold text-sky-600">
               {formatDate(day.date)}
@@ -727,14 +727,16 @@ function MapBottomSheet({
               {items.length} 个行程点 · {mappedCount} 个带坐标
             </p>
           </div>
-          <Button
-            className={`shrink-0 whitespace-nowrap rounded-xl ${sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-9 px-3 text-xs'}`}
-            icon={<Navigation className="size-3.5" />}
-            onClick={onBackToTimeline}
-            variant={sheetState === 'expanded' ? 'ghost' : 'primary'}
-          >
-            日程
-          </Button>
+          {sheetState !== 'collapsed' ? (
+            <Button
+              className={`shrink-0 whitespace-nowrap rounded-xl ${sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-9 px-3 text-xs'}`}
+              icon={<Navigation className="size-3.5" />}
+              onClick={onBackToTimeline}
+              variant={sheetState === 'expanded' ? 'ghost' : 'secondary'}
+            >
+              日程
+            </Button>
+          ) : null}
         </div>
 
         <div className="shrink-0 space-y-2 px-4">
@@ -757,9 +759,15 @@ function MapBottomSheet({
             </div>
           ) : null}
 
-          {selectedItem && sheetState !== 'expanded' ? (
+          {selectedItem && sheetState === 'collapsed' ? (
+            <CompactItemLine
+              item={selectedItem}
+              onSelectItem={(item) => onSelectItem(item, 'list')}
+              selected={selectedItem.id === selectedItemId}
+            />
+          ) : selectedItem && sheetState === 'middle' ? (
             <SelectedItemCard
-              compact={sheetState === 'collapsed'}
+              compact
               day={day}
               item={selectedItem}
               onEditItem={onEditItem}
@@ -789,7 +797,7 @@ function MapBottomSheet({
               selectedItemId={selectedItemId}
             />
           </div>
-        ) : (
+        ) : sheetState === 'middle' ? (
           <div className="mt-3 px-4" data-testid="map-sheet-preview-list">
             <ItineraryPreviewList
               itemRefs={itemRefs}
@@ -801,6 +809,10 @@ function MapBottomSheet({
               上拉查看完整行程
             </p>
           </div>
+        ) : (
+          <p className="mt-2 px-4 text-center text-xs text-slate-400">
+            上拉查看行程
+          </p>
         )}
       </div>
     </section>
@@ -835,17 +847,18 @@ function FloatingRouteControl({
   onClearRouteCache: () => void
 }) {
   const [moreOpen, setMoreOpen] = useState(false)
-  const showRoadModes = displayMode === 'road'
+  const showRoadModeChip = displayMode === 'road'
   const canGenerate = configured && state !== 'loading'
-  const shortNotice = getRouteShortNotice(state, configured, warnings)
+  const showPrimaryAction = shouldShowPrimaryRouteAction(state, displayMode, warnings)
+  const compactStatus = getCompactRouteStatus(state, configured, warnings, displayMode)
 
   return (
     <div className={`pointer-events-none absolute inset-x-3 z-30 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
-      <div className="pointer-events-auto space-y-2 rounded-[1.35rem] bg-white/90 p-2 shadow-[0_12px_30px_rgba(47,65,88,0.12)] ring-1 ring-white/75 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <div className="grid min-w-0 flex-1 grid-cols-2 rounded-full bg-slate-100/80 p-0.5">
+      <div className="pointer-events-auto space-y-2 rounded-[1.35rem] bg-white/88 p-1.5 shadow-[0_12px_30px_rgba(47,65,88,0.11)] ring-1 ring-white/75 backdrop-blur-xl">
+        <div className="flex items-center gap-1.5">
+          <div className="grid min-w-0 flex-[1_1_7rem] grid-cols-2 rounded-full bg-slate-100/80 p-0.5">
             <button
-              className={`min-h-9 rounded-full px-3 text-sm font-semibold transition active:scale-[0.98] ${
+              className={`min-h-8 rounded-full px-2.5 text-xs font-semibold transition active:scale-[0.98] ${
                 displayMode === 'straight' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
               }`}
               data-testid="route-mode-segment-straight"
@@ -855,7 +868,7 @@ function FloatingRouteControl({
               直线
             </button>
             <button
-              className={`min-h-9 rounded-full px-3 text-sm font-semibold transition active:scale-[0.98] ${
+              className={`min-h-8 rounded-full px-2.5 text-xs font-semibold transition active:scale-[0.98] ${
                 displayMode === 'road' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
               }`}
               data-testid="route-mode-segment-road"
@@ -865,19 +878,43 @@ function FloatingRouteControl({
               道路
             </button>
           </div>
-          <Button
-            className="min-h-9 shrink-0 rounded-full px-3 text-xs"
-            data-testid="route-generate-button"
-            disabled={!canGenerate}
-            loading={state === 'loading'}
-            onClick={onGenerateRoadRoute}
+
+          {showRoadModeChip ? (
+            <button
+              className="min-h-8 shrink-0 rounded-full bg-sky-50 px-2.5 text-xs font-semibold text-sky-700 transition active:scale-[0.98]"
+              data-testid="route-transport-current"
+              disabled={!activeSegmentItem}
+              onClick={() => setMoreOpen(true)}
+              type="button"
+            >
+              {ROAD_TRANSPORT_LABELS[activeRoadMode ?? 'car']}
+            </button>
+          ) : null}
+
+          <span
+            className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${compactStatus.className}`}
+            data-testid="route-status-pill"
           >
-            {primaryRouteActionLabel(state, configured)}
-          </Button>
+            <span className={`size-1.5 rounded-full ${routeStatusDotClassName(state, configured)}`} />
+            {compactStatus.label}
+          </span>
+
+          {showPrimaryAction ? (
+            <Button
+              className="min-h-8 shrink-0 rounded-full px-2.5 text-xs"
+              data-testid="route-generate-button"
+              disabled={!canGenerate}
+              loading={state === 'loading'}
+              onClick={onGenerateRoadRoute}
+            >
+              {primaryRouteActionLabel(state, configured)}
+            </Button>
+          ) : null}
+
           <button
             aria-expanded={moreOpen}
             aria-label="更多路线选项"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-slate-600 transition active:scale-[0.98]"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-slate-600 transition active:scale-[0.98]"
             data-testid="route-more-toggle"
             onClick={() => setMoreOpen((current) => !current)}
             type="button"
@@ -886,39 +923,33 @@ function FloatingRouteControl({
           </button>
         </div>
 
-        {showRoadModes ? (
-          <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-50 p-1">
-            {ROAD_TRANSPORT_MODES.map((mode) => (
-              <button
-                className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-                  activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500'
-                }`}
-                data-testid={`route-transport-${mode}`}
-                disabled={!activeSegmentItem}
-                key={mode}
-                onClick={() => onChangeRoadTransportMode(mode)}
-                type="button"
-              >
-                {ROAD_TRANSPORT_LABELS[mode]}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div
-          className="flex items-center gap-2 px-1 text-xs text-slate-500"
-          data-testid="route-status-pill"
-        >
-          <span className={`size-2 rounded-full ${routeStatusDotClassName(state, configured)}`} />
-          <span className="shrink-0 font-semibold text-slate-700">{routeStatusLabel(state, configured)}</span>
-          {shortNotice ? <span className="min-w-0 truncate">{shortNotice}</span> : null}
-        </div>
-
         {moreOpen ? (
           <div
-            className="space-y-3 rounded-2xl bg-white/75 px-3 py-3 text-xs text-slate-600 ring-1 ring-slate-100"
+            className="space-y-3 rounded-2xl bg-white/78 px-3 py-3 text-xs text-slate-600 ring-1 ring-slate-100"
             data-testid="route-more-panel"
           >
+            <div className="space-y-2">
+              <p className="font-semibold text-slate-700">道路交通方式</p>
+              <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-50 p-1">
+                {ROAD_TRANSPORT_MODES.map((mode) => (
+                  <button
+                    className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
+                      activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500'
+                    }`}
+                    data-testid={`route-transport-${mode}`}
+                    disabled={!activeSegmentItem}
+                    key={mode}
+                    onClick={() => onChangeRoadTransportMode(mode)}
+                    type="button"
+                  >
+                    {ROAD_TRANSPORT_LABELS[mode]}
+                  </button>
+                ))}
+              </div>
+              {!activeSegmentItem ? (
+                <p className="text-slate-400">至少需要两个地点才能设置道路交通方式。</p>
+              ) : null}
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 className="min-h-9 rounded-xl bg-slate-50 px-3 font-semibold text-slate-600 active:scale-[0.98]"
@@ -980,23 +1011,28 @@ function RouteSheetSummary({
   )
 }
 
-function routeStatusLabel(state: RouteUiState, configured: boolean) {
-  if (state === 'loading') {
-    return '正在生成路线'
-  }
-  if (state === 'cached') {
-    return '本地缓存路线'
-  }
-  if (state === 'road') {
-    return '道路路线'
-  }
-  if (state === 'mixed') {
-    return '部分路线失败'
-  }
-  if (state === 'failed') {
-    return '道路路线不可用，已显示直线'
-  }
-  return configured ? '直线连接' : '直线连接'
+function CompactItemLine({
+  item,
+  selected,
+  onSelectItem,
+}: {
+  item: ItineraryItem
+  selected: boolean
+  onSelectItem: (item: ItineraryItem) => void
+}) {
+  return (
+    <button
+      className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
+        selected ? 'bg-sky-50/70 text-slate-950' : 'bg-white/70 text-slate-700'
+      }`}
+      onClick={() => onSelectItem(item)}
+      type="button"
+    >
+      <MapPin className="size-3.5 shrink-0 text-sky-500" />
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
+      <span className="shrink-0 text-xs text-slate-400">{describeItemTime(item)}</span>
+    </button>
+  )
 }
 
 function primaryRouteActionLabel(state: RouteUiState, configured: boolean) {
@@ -1004,46 +1040,63 @@ function primaryRouteActionLabel(state: RouteUiState, configured: boolean) {
     return '生成中'
   }
   if (!configured) {
-    return '无法生成'
+    return '无法'
   }
   if (state === 'failed') {
     return '重试'
   }
   if (state === 'road' || state === 'cached' || state === 'mixed') {
-    return '重新生成'
+    return '更新'
   }
-  return '生成路线'
+  return '生成'
 }
 
-function getRouteShortNotice(state: RouteUiState, configured: boolean, warnings: string[]) {
+function shouldShowPrimaryRouteAction(state: RouteUiState, displayMode: RouteDisplayMode, warnings: string[]) {
+  return (
+    displayMode === 'road'
+    || state === 'loading'
+    || state === 'road'
+    || state === 'cached'
+    || state === 'mixed'
+    || state === 'failed'
+    || warnings.some((warning) => warning.includes('交通方式已更新') || warning.includes('路线已过期'))
+  )
+}
+
+function getCompactRouteStatus(
+  state: RouteUiState,
+  configured: boolean,
+  warnings: string[],
+  displayMode: RouteDisplayMode,
+) {
   if (hasBusWarning(warnings)) {
-    return '公交为道路近似'
+    return { label: '公交近似', className: 'bg-amber-50 text-amber-700' }
   }
   if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
-    return '点击重新生成'
+    return { label: '需更新', className: 'bg-amber-50 text-amber-700' }
   }
   if (warnings.some((warning) => warning.includes('路线已过期'))) {
-    return '路线已过期'
-  }
-  if (!configured) {
-    return state === 'cached' ? '可查看缓存，不能重新生成' : '未配置 ORS'
-  }
-  if (state === 'cached') {
-    return '已显示本地缓存路线'
-  }
-  if (state === 'road') {
-    return '已显示道路路线'
-  }
-  if (state === 'mixed') {
-    return '部分路段回退直线'
-  }
-  if (state === 'failed') {
-    return '已回退直线'
+    return { label: '已过期', className: 'bg-amber-50 text-amber-700' }
   }
   if (state === 'loading') {
-    return '本地行程仍可查看'
+    return { label: '生成中', className: 'bg-sky-50 text-sky-700' }
   }
-  return '点击生成道路路线'
+  if (state === 'cached') {
+    return { label: '缓存', className: 'bg-emerald-50 text-emerald-700' }
+  }
+  if (state === 'road') {
+    return { label: '道路', className: 'bg-emerald-50 text-emerald-700' }
+  }
+  if (state === 'mixed') {
+    return { label: '部分', className: 'bg-amber-50 text-amber-700' }
+  }
+  if (state === 'failed') {
+    return { label: '失败', className: 'bg-amber-50 text-amber-700' }
+  }
+  if (displayMode === 'road' && !configured) {
+    return { label: '无法生成', className: 'bg-slate-100 text-slate-500' }
+  }
+  return { label: '直线', className: 'bg-white/80 text-slate-600' }
 }
 
 function getSheetRouteSummary(state: RouteUiState, warnings: string[]) {

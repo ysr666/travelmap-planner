@@ -131,7 +131,7 @@ export async function getCurrentSession(): Promise<Session | null> {
   const client = requireSupabaseClient()
   const { data, error } = await client.auth.getSession()
   if (error) {
-    throw new Error(error.message)
+    throw new Error('获取登录状态失败：' + error.message)
   }
 
   return data.session
@@ -141,7 +141,7 @@ export async function getCurrentUser(): Promise<User | null> {
   const client = requireSupabaseClient()
   const { data, error } = await client.auth.getUser()
   if (error) {
-    throw new Error(error.message)
+    throw new Error('获取用户信息失败：' + error.message)
   }
 
   return data.user
@@ -157,7 +157,7 @@ export async function signInWithEmailOtp(email: string) {
     },
   })
   if (error) {
-    throw new Error(error.message)
+    throw new Error('发送验证码失败：' + error.message)
   }
 }
 
@@ -169,7 +169,7 @@ export async function verifyEmailOtp(email: string, token: string) {
     type: 'email',
   })
   if (error) {
-    throw new Error(error.message)
+    throw new Error('验证码验证失败：' + error.message)
   }
 }
 
@@ -177,7 +177,7 @@ export async function signOut() {
   const client = requireSupabaseClient()
   const { error } = await client.auth.signOut()
   if (error) {
-    throw new Error(error.message)
+    throw new Error('退出登录失败：' + error.message)
   }
 }
 
@@ -191,7 +191,7 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error('获取云端备份列表失败：' + error.message)
   }
 
   return (data as CloudBackupRow[] | null ?? []).map(mapCloudBackupRow)
@@ -212,7 +212,7 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
         upsert: false,
       })
       if (error) {
-        throw new Error(error.message)
+        throw new Error('票据文件上传失败：' + error.message)
       }
       uploadedPaths.push(file.path)
     }
@@ -229,13 +229,13 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
       },
     )
     if (snapshotError) {
-      throw new Error(snapshotError.message)
+      throw new Error('快照上传失败：' + snapshotError.message)
     }
     uploadedPaths.push(snapshotResult.metadata.snapshot_path)
 
     const { error: insertError } = await client.from(CLOUD_BACKUP_TABLE).insert(snapshotResult.metadata)
     if (insertError) {
-      throw new Error(insertError.message)
+      throw new Error('备份记录写入失败：' + insertError.message)
     }
 
     return { backupId, warnings: snapshotResult.warnings }

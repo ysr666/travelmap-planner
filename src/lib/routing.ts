@@ -186,7 +186,7 @@ export function buildFallbackStraightRoute(items: ItineraryItem[], warning?: str
   }
 }
 
-export function buildRouteCacheKey(items: ItineraryItem[], config: RoutingConfig) {
+function buildRouteCacheKey(items: ItineraryItem[], config: RoutingConfig) {
   const orderedItems = getOrderedMappableItems(items)
   const coordinatePart = orderedItems
     .map((item) =>

@@ -13,6 +13,7 @@ export type RouteCacheEntry = {
   modeKey: string
   lineStrings: LngLat[][]
   warnings: string[]
+  status?: 'road' | 'mixed' | 'straight'
   distanceMeters?: number
   durationSeconds?: number
   sizeBytes: number
@@ -30,6 +31,7 @@ export type SaveRouteCacheInput = {
   modeKey: string
   lineStrings: LngLat[][]
   warnings?: string[]
+  status?: 'road' | 'mixed' | 'straight'
   distanceMeters?: number
   durationSeconds?: number
 }
@@ -180,6 +182,7 @@ export async function saveRouteCache(input: SaveRouteCacheInput) {
     modeKey: input.modeKey,
     lineStrings: normalizedLineStrings,
     warnings: input.warnings ?? [],
+    status: input.status,
     distanceMeters: input.distanceMeters,
     durationSeconds: input.durationSeconds,
   }

@@ -214,6 +214,7 @@ export function DayMapView({
           return
         }
         setRouteResult(null)
+        setRouteDisplayMode('straight')
         if (pendingRouteEditNoticeRef.current) {
           setRouteWarnings(pendingRouteEditNoticeRef.current)
           pendingRouteEditNoticeRef.current = null
@@ -345,6 +346,7 @@ export function DayMapView({
           modeKey: routeCacheIdentity.modeKey,
           lineStrings: result.lineStrings,
           warnings: result.warnings,
+          status: (result.status === 'road' || result.status === 'mixed' ? result.status : 'road') as 'road' | 'mixed',
           distanceMeters: sumOptional(result.segments.map((segment) => segment.distanceMeters)),
           durationSeconds: sumOptional(result.segments.map((segment) => segment.durationSeconds)),
         })
@@ -853,7 +855,7 @@ function FloatingRouteControl({
   const compactStatus = getCompactRouteStatus(state, configured, warnings, displayMode)
 
   return (
-    <div className={`pointer-events-none absolute inset-x-3 z-30 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
+    <div className={`pointer-events-none absolute inset-x-3 z-40 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
       <div className="pointer-events-auto space-y-2 rounded-[1.35rem] bg-white/88 p-1.5 shadow-[0_12px_30px_rgba(47,65,88,0.11)] ring-1 ring-white/75 backdrop-blur-xl">
         <div className="flex items-center gap-1.5">
           <div className="grid min-w-0 flex-[1_1_7rem] grid-cols-2 rounded-full bg-slate-100/80 p-0.5">
@@ -1157,12 +1159,15 @@ function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
 }
 
 function buildRouteResultFromCache(entry: RouteCacheEntry): DayRouteResult {
+  const hasFailureWarnings = entry.warnings.some(
+    (w) => w.includes('回退') || w.includes('失败') || w.includes('不可用'),
+  )
   return {
     segments: [],
     lineStrings: entry.lineStrings,
     warnings: entry.warnings,
     provider: entry.provider,
-    status: 'road',
+    status: entry.status ?? (hasFailureWarnings ? 'mixed' : 'road'),
     cacheKey: entry.signature,
   }
 }

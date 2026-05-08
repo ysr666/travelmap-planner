@@ -69,7 +69,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
             ? 'relative min-h-0 flex-1'
             : isHome || isTrip
               ? 'flex min-h-0 flex-1 px-4 pt-4'
-              : 'min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4 app-scrollbar'
+              : 'min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar'
         }
       >
         <div className={isMap || isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>

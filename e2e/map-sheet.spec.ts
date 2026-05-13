@@ -45,7 +45,7 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
   await forceRoutingUnconfigured(page)
   await page.getByTestId('view-switch-map').click()
 
-  await expect(page.getByTestId('route-status-pill')).toContainText('直线')
+  await expect(page.getByTestId('route-status-pill')).toBeHidden()
   await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await page.getByTestId('route-mode-segment-road').click()
   await expect(page.getByTestId('route-status-pill')).toContainText('无法生成')
@@ -154,7 +154,7 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
 
   await expect(page.getByTestId('route-more-panel')).toBeVisible()
   await page.getByRole('button', { name: '清理缓存' }).click()
-  await expect(page.getByTestId('route-status-pill')).toContainText('直线')
+  await expect(page.getByTestId('route-status-pill')).toBeHidden()
   await expectNoHorizontalOverflow(page)
 })
 

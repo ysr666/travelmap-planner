@@ -10,6 +10,9 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(sheet).toBeVisible()
   await expect(handle).toBeVisible()
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
+  if (await page.getByTestId('map-base-loading').isVisible().catch(() => false)) {
+    await expect(page.getByTestId('route-chip')).toBeHidden()
+  }
   await expect(page.getByTestId('route-chip')).toBeVisible()
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
@@ -43,6 +46,8 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
   await page.getByTestId('route-more-toggle').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
+  await expect(page.getByTestId('route-more-panel')).toBeHidden()
+  await expect(page.getByTestId('route-warning-details')).toBeHidden()
   await page.getByTestId('route-more-toggle').click()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
 
@@ -68,6 +73,8 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
   await page.getByTestId('route-mode-segment-road').click()
   await expect(page.getByTestId('route-status-pill')).toContainText('无法生成路线')
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
+  await expect(page.getByTestId('route-more-panel')).toBeHidden()
+  await page.getByTestId('route-details-toggle').click()
   await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
   await expectNoHorizontalOverflow(page)
 })
@@ -174,6 +181,8 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
+  await expect(page.getByTestId('route-more-panel')).toBeHidden()
+  await page.getByTestId('route-details-toggle').click()
   await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
   expect(routeRequestCount).toBe(requestsAfterCacheLoad)
 
@@ -226,7 +235,11 @@ test('公交段生成道路路线时显示近似提示', async ({ page }) => {
   await page.getByTestId('route-mode-segment-road').click()
   await page.getByTestId('route-transport-bus').click()
   await expect(page.getByTestId('route-status-pill')).toContainText('公交近似')
+  await expect(page.getByTestId('route-more-panel')).toBeHidden()
+  await expect(page.getByTestId('route-warning-details')).toBeHidden()
+  await page.getByTestId('route-details-toggle').click()
   await expect(page.getByTestId('route-more-panel')).toContainText('公交为道路近似')
+  await expect(page.getByTestId('route-warning-details')).toContainText('公交为道路近似')
   expect(routeRequestCount).toBe(0)
   await page.getByTestId('route-generate-button').click()
 

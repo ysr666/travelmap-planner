@@ -102,6 +102,7 @@ export function DayMapView({
   const [routeDisplayMode, setRouteDisplayMode] = useState<RouteDisplayMode>('straight')
   const [routeWarnings, setRouteWarnings] = useState<string[]>([])
   const [routeControlsOpen, setRouteControlsOpen] = useState(false)
+  const [mapBaseLoading, setMapBaseLoading] = useState(() => items.some(hasValidCoordinates))
   const [roadModeOverride, setRoadModeOverride] = useState<{
     dayId: string
     mode: RoadTransportMode
@@ -463,6 +464,7 @@ export function DayMapView({
             ref={dayMapRef}
             heightClassName="h-full min-h-0"
             items={items}
+            onBaseLoadingChange={setMapBaseLoading}
             onMapError={(message) => setMapError(message)}
             onMapReady={() => setMapReadyToken((current) => current + 1)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
@@ -474,7 +476,7 @@ export function DayMapView({
         )}
       </div>
 
-      {isVisible && items.length > 0 ? (
+      {isVisible && mappedItems.length > 0 && !mapBaseLoading && !mapError ? (
         <RouteStatusChip
           activeRoadMode={activeRoadMode}
           configured={routeConfigured}
@@ -513,6 +515,7 @@ export function DayMapView({
           routeWarnings={routeWarnings}
           routeConfigured={routeConfigured}
           routeControlsOpen={routeControlsOpen}
+          routeDetailsResetKey={routeIdentityKey}
           activeRoadMode={activeRoadMode}
           activeSegmentItem={activeSegmentItem}
           onChangeRoadTransportMode={(mode) => void handleChangeRoadTransportMode(mode)}
@@ -591,6 +594,7 @@ type MapBottomSheetProps = {
   routeWarnings: string[]
   routeConfigured: boolean
   routeControlsOpen: boolean
+  routeDetailsResetKey: string
   activeRoadMode: RoadTransportMode | null
   activeSegmentItem: ItineraryItem | null
   setRouteControlsOpen: (open: boolean | ((current: boolean) => boolean)) => void
@@ -623,6 +627,7 @@ function MapBottomSheet({
   routeWarnings,
   routeConfigured,
   routeControlsOpen,
+  routeDetailsResetKey,
   activeRoadMode,
   activeSegmentItem,
   setRouteControlsOpen,
@@ -801,6 +806,7 @@ function MapBottomSheet({
               activeSegmentItem={activeSegmentItem}
               configured={routeConfigured}
               displayMode={routeDisplayMode}
+              key={routeDetailsResetKey}
               onChangeRoadTransportMode={onChangeRoadTransportMode}
               onClearRouteCache={onClearRouteCache}
               onGenerateRoadRoute={onGenerateRoadRoute}
@@ -971,101 +977,131 @@ function RouteControlsSection({
   onChangeRoadTransportMode: (mode: RoadTransportMode) => void
   onClearRouteCache: () => void
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const canGenerate = configured && state !== 'loading'
+  const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
+  const warningSummary = getRouteWarningSummary(warnings, configured, activeRoadMode)
+  const hasDetails = warnings.length > 0 || !configured || activeRoadMode === 'bus' || state !== 'straight'
 
   return (
     <div
-      className="space-y-3 rounded-2xl bg-white/80 px-3 py-3 text-xs text-slate-600 ring-1 ring-slate-100"
+      className="space-y-2 rounded-2xl bg-white/75 px-3 py-2.5 text-xs text-slate-600 ring-1 ring-slate-100"
       data-testid="route-controls-section"
     >
-      <div className="grid grid-cols-2 gap-1 rounded-full bg-slate-100/80 p-0.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold text-slate-800">路线</span>
+        <span className={`min-w-0 truncate text-right font-semibold ${chip.className}`}>{chip.label}</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-full bg-slate-100/80 p-0.5">
+          <button
+            className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
+              displayMode === 'straight' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+            }`}
+            data-testid="route-mode-segment-straight"
+            onClick={onResetToStraight}
+            type="button"
+          >
+            直线
+          </button>
+          <button
+            className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
+              displayMode === 'road' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+            }`}
+            data-testid="route-mode-segment-road"
+            onClick={onSelectRoadDisplay}
+            type="button"
+          >
+            道路
+          </button>
+        </div>
         <button
-          className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-            displayMode === 'straight' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
-          }`}
-          data-testid="route-mode-segment-straight"
-          onClick={onResetToStraight}
+          className="min-h-8 shrink-0 rounded-full bg-[#1677ff] px-3 text-xs font-semibold text-white shadow-[0_5px_14px_rgba(22,119,255,0.16)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="route-generate-button"
+          disabled={!canGenerate}
+          onClick={onGenerateRoadRoute}
           type="button"
         >
-          直线
-        </button>
-        <button
-          className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-            displayMode === 'road' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
-          }`}
-          data-testid="route-mode-segment-road"
-          onClick={onSelectRoadDisplay}
-          type="button"
-        >
-          道路
+          {compactRouteActionLabel(state, configured)}
         </button>
       </div>
 
-      <div className="space-y-2">
-        <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-50 p-1">
-          {ROAD_TRANSPORT_MODES.map((mode) => (
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 app-scrollbar">
+        {ROAD_TRANSPORT_MODES.map((mode) => (
+          <button
+            className={`min-h-7 shrink-0 rounded-full px-2.5 text-xs font-semibold transition active:scale-[0.98] ${
+              activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-50 text-slate-500'
+            }`}
+            data-testid={`route-transport-${mode}`}
+            disabled={!activeSegmentItem}
+            key={mode}
+            onClick={() => onChangeRoadTransportMode(mode)}
+            type="button"
+          >
+            {ROAD_TRANSPORT_LABELS[mode]}
+          </button>
+        ))}
+        {!activeSegmentItem ? (
+          <span className="shrink-0 text-slate-400">需要至少两个地点</span>
+        ) : null}
+      </div>
+
+      {warningSummary || hasDetails ? (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/80 px-2.5 py-2 [overflow-wrap:anywhere]">
+          <span className="min-w-0 truncate text-slate-500" data-testid="route-warning-summary">
+            {warningSummary ?? '路线详情'}
+          </span>
+          {hasDetails ? (
             <button
-              className={`min-h-8 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-                activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500'
-              }`}
-              data-testid={`route-transport-${mode}`}
-              disabled={!activeSegmentItem}
-              key={mode}
-              onClick={() => onChangeRoadTransportMode(mode)}
+              className="shrink-0 font-semibold text-sky-600 active:scale-[0.98]"
+              data-testid="route-details-toggle"
+              onClick={() => setDetailsOpen((current) => !current)}
               type="button"
             >
-              {ROAD_TRANSPORT_LABELS[mode]}
+              {detailsOpen ? '收起详情' : '查看详情'}
             </button>
-          ))}
+          ) : null}
         </div>
-        {!activeSegmentItem ? (
-          <p className="text-slate-400">至少需要两个地点才能设置道路交通方式。</p>
-        ) : null}
-      </div>
+      ) : null}
 
-      <Button
-        className="w-full min-h-9 rounded-xl text-xs"
-        data-testid="route-generate-button"
-        disabled={!canGenerate}
-        loading={state === 'loading'}
-        onClick={onGenerateRoadRoute}
-      >
-        {primaryRouteActionLabel(state, configured)}
-      </Button>
+      {detailsOpen ? (
+        <div className="space-y-2 rounded-xl bg-slate-50/75 px-2.5 py-2">
+          <div className="space-y-1 leading-5 text-slate-500 [overflow-wrap:anywhere]" data-testid="route-more-panel">
+            <p>{routeSourceDetail(state, configured)}</p>
+            {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
+            {activeRoadMode === 'bus' || hasBusWarning(warnings) ? (
+              <p>公交为道路近似，不含站点、班次、换乘和实时交通。</p>
+            ) : null}
+          </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          className="min-h-9 rounded-xl bg-slate-50 px-3 font-semibold text-slate-600 active:scale-[0.98]"
-          data-testid="route-reset-button"
-          onClick={onResetToStraight}
-          type="button"
-        >
-          回到直线
-        </button>
-        <button
-          className="min-h-9 rounded-xl px-3 font-semibold text-slate-500 active:scale-[0.98]"
-          onClick={onClearRouteCache}
-          type="button"
-        >
-          清理缓存
-        </button>
-      </div>
+          {warnings.length > 0 ? (
+            <div className="space-y-1 [overflow-wrap:anywhere]" data-testid="route-warning-details">
+              {warnings.map((warning) => (
+                <p className="break-words text-amber-700" key={warning}>
+                  {warning}
+                </p>
+              ))}
+            </div>
+          ) : null}
 
-      <div className="space-y-1 leading-5 text-slate-500 [overflow-wrap:anywhere]" data-testid="route-more-panel">
-        <p>{routeSourceDetail(state, configured)}</p>
-        {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
-        {activeRoadMode === 'bus' || hasBusWarning(warnings) ? (
-          <p>公交为道路近似，不含站点、班次、换乘和实时交通。</p>
-        ) : null}
-      </div>
-
-      {warnings.length > 0 ? (
-        <div className="space-y-1 [overflow-wrap:anywhere]" data-testid="route-warning-details">
-          {warnings.map((warning) => (
-            <p className="break-words text-amber-700" key={warning}>
-              {warning}
-            </p>
-          ))}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <button
+              className="min-h-8 rounded-full bg-white px-3 font-semibold text-slate-600 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              data-testid="route-reset-button"
+              onClick={onResetToStraight}
+              type="button"
+            >
+              回到直线
+            </button>
+            <button
+              className="min-h-8 rounded-full px-3 font-semibold text-slate-500 active:scale-[0.98]"
+              onClick={onClearRouteCache}
+              type="button"
+            >
+              清理缓存
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -1096,7 +1132,7 @@ function CompactItemLine({
   )
 }
 
-function primaryRouteActionLabel(state: RouteUiState, configured: boolean) {
+function compactRouteActionLabel(state: RouteUiState, configured: boolean) {
   if (state === 'loading') {
     return '生成中'
   }
@@ -1109,7 +1145,32 @@ function primaryRouteActionLabel(state: RouteUiState, configured: boolean) {
   if (state === 'road' || state === 'cached' || state === 'mixed') {
     return '重新生成'
   }
-  return '生成道路路线'
+  return '生成'
+}
+
+function getRouteWarningSummary(
+  warnings: string[],
+  configured: boolean,
+  activeRoadMode: RoadTransportMode | null,
+) {
+  if (!configured) {
+    return '未配置 ORS'
+  }
+  if (activeRoadMode === 'bus' || hasBusWarning(warnings)) {
+    return '公交近似'
+  }
+  if (warnings.some((warning) => warning.includes('路线已过期'))) {
+    return '路线已过期'
+  }
+  if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
+    return '路线需更新'
+  }
+
+  const actionableWarnings = warnings.filter((warning) => !warning.includes('使用本地缓存路线'))
+  if (actionableWarnings.length > 0) {
+    return `${actionableWarnings.length} 条路线提示`
+  }
+  return null
 }
 
 function getRouteChipStatus(

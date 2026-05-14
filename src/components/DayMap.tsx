@@ -19,6 +19,7 @@ type DayMapProps = {
   resizeSignal?: number
   routeLineStrings?: LngLat[][]
   onSelectItem: (item: ItineraryItem) => void
+  onBaseLoadingChange?: (loading: boolean) => void
   onMapError?: (message: string) => void
   onMapReady?: () => void
 }
@@ -62,6 +63,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   resizeSignal,
   routeLineStrings,
   onSelectItem,
+  onBaseLoadingChange,
   onMapError,
   onMapReady,
 }, ref) {
@@ -72,6 +74,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const fallbackTriedRef = useRef(false)
   const fitCoordinateKeyRef = useRef<string | null>(null)
   const onSelectItemRef = useRef(onSelectItem)
+  const onBaseLoadingChangeRef = useRef(onBaseLoadingChange)
   const onMapErrorRef = useRef(onMapError)
   const onMapReadyRef = useRef(onMapReady)
   const selectedItemIdRef = useRef(selectedItemId)
@@ -105,6 +108,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   )
   const routeLineKey = useMemo(() => buildRouteLineKey(routeLineStrings), [routeLineStrings])
   const hasMappableItems = validItems.length > 0
+  const showBaseLoading = hasMappableItems && !mapError && !isMapReady
 
   const clearMarkers = useCallback(() => {
     markersRef.current.forEach(({ marker }) => marker.remove())
@@ -342,6 +346,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   }, [onSelectItem])
 
   useEffect(() => {
+    onBaseLoadingChangeRef.current = onBaseLoadingChange
+  }, [onBaseLoadingChange])
+
+  useEffect(() => {
     onMapErrorRef.current = onMapError
   }, [onMapError])
 
@@ -358,6 +366,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     coordinateKeyRef.current = coordinateKey
     routeLineStringsRef.current = routeLineStrings
   }, [coordinateKey, routeLineStrings, validItems])
+
+  useEffect(() => {
+    onBaseLoadingChangeRef.current?.(showBaseLoading)
+  }, [showBaseLoading])
 
   useEffect(() => {
     if (!hasMappableItems) {
@@ -531,7 +543,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       }
     >
       <div className="h-full w-full" ref={containerRef} />
-      {!mapError && !isMapReady ? (
+      {showBaseLoading ? (
         <div
           className="pointer-events-none absolute left-3 right-3 top-3 z-10 rounded-2xl bg-white/88 px-4 py-3 text-sm font-medium text-slate-600 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80 backdrop-blur"
           data-testid="map-base-loading"

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
-  Archive,
   CheckCircle2,
   Copy,
   Database,
   FileJson,
-  HardDriveDownload,
   Import,
   KeyRound,
   RefreshCw,
@@ -19,20 +17,13 @@ import {
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
-import { CloudBackupPanel } from '../components/cloud/CloudBackupPanel'
 import { Card } from '../components/ui/Card'
-import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
-import { TripNav } from '../components/AppShell'
-import { getTrip, listDaysByTrip } from '../db'
 import {
-  buildTripBackupFileName,
-  downloadBlob,
-  exportTripBackup,
   importTripBackup,
 } from '../lib/backup'
-import { getRouteParams, navigateTo } from '../lib/routes'
+import { navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
 import {
   buildTripPlanPreviewSummary,
@@ -64,7 +55,6 @@ import {
   isGoogleMapsConfigured,
   saveGoogleMapsApiKey,
 } from '../lib/googleMaps'
-import type { Day, Trip } from '../types'
 
 type StorageEstimateState = {
   usage?: number
@@ -92,10 +82,6 @@ const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要
 [在这里填写目的地、日期、兴趣、已订酒店或门票信息]`
 
 export function SettingsPage() {
-  const params = getRouteParams()
-  const tripId = params.get('tripId')
-  const [trip, setTrip] = useState<Trip | null>(null)
-  const [days, setDays] = useState<Day[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
   const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
@@ -108,8 +94,6 @@ export function SettingsPage() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [fileInputKey, setFileInputKey] = useState(0)
   const [tripPlanFileInputKey, setTripPlanFileInputKey] = useState(0)
-  const [isLoadingTrip, setIsLoadingTrip] = useState(Boolean(tripId))
-  const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isParsingTripPlan, setIsParsingTripPlan] = useState(false)
   const [isImportingTripPlan, setIsImportingTripPlan] = useState(false)
@@ -128,30 +112,6 @@ export function SettingsPage() {
   const [routeCacheError, setRouteCacheError] = useState<string | null>(null)
   const [isClearingRouteCache, setIsClearingRouteCache] = useState(false)
   const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
-
-  const refreshTrip = useCallback(async () => {
-    if (!tripId) {
-      setTrip(null)
-      setDays([])
-      setIsLoadingTrip(false)
-      return
-    }
-
-    setIsLoadingTrip(true)
-    setError(null)
-    try {
-      const [foundTrip, foundDays] = await Promise.all([getTrip(tripId), listDaysByTrip(tripId)])
-      setTrip(foundTrip ?? null)
-      setDays(foundTrip ? foundDays : [])
-      if (!foundTrip) {
-        setError('没有找到当前旅行，请从首页重新进入。')
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '读取当前旅行失败')
-    } finally {
-      setIsLoadingTrip(false)
-    }
-  }, [tripId])
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -194,11 +154,6 @@ export function SettingsPage() {
       setRouteCacheError(caught instanceof Error ? caught.message : '读取路线缓存统计失败。')
     }
   }, [])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => void refreshTrip(), 0)
-    return () => window.clearTimeout(timeout)
-  }, [refreshTrip])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshStorageStatus(), 0)
@@ -284,27 +239,6 @@ export function SettingsPage() {
     }
   }
 
-  async function handleExport() {
-    if (!trip) {
-      setError('请先进入某个旅行，再导出该旅行备份。')
-      return
-    }
-
-    setIsExporting(true)
-    setError(null)
-    setSuccess(null)
-    setWarnings([])
-    try {
-      const zipBlob = await exportTripBackup(trip.id)
-      downloadBlob(zipBlob, buildTripBackupFileName(trip.title))
-      setSuccess('备份 zip 已生成。请把它保存到 iCloud Drive、OneDrive 或电脑本地。')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '导出备份失败')
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
   async function handleImport() {
     if (!selectedFile) {
       setError('请选择一个 zip 备份文件。')
@@ -322,7 +256,7 @@ export function SettingsPage() {
       setSelectedFile(null)
       setFileInputKey((current) => current + 1)
       window.setTimeout(
-        () => navigateTo('overview', { tripId: result.tripId }),
+        () => navigateTo('trip', { tripId: result.tripId }),
         result.warnings.length > 0 ? 2200 : 600,
       )
     } catch (caught) {
@@ -476,19 +410,6 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      {trip ? <TripNav activeRoute="settings" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
-      {trip ? (
-        <Button
-          className="w-full"
-          onClick={() =>
-            navigateTo('trip', days[0] ? { tripId: trip.id, dayId: days[0].id } : { tripId: trip.id })
-          }
-          variant="secondary"
-        >
-          返回旅行工作台
-        </Button>
-      ) : null}
-
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />
         <Card className="space-y-3">
@@ -524,42 +445,7 @@ export function SettingsPage() {
       </section>
 
       <section className="space-y-3">
-        <SectionHeader title="备份与导入" />
-        <Card className="space-y-3">
-          <p className="text-sm leading-6 text-slate-500">
-            备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据，以及可用的 copy 模式票据文件；reference / external 票据会保存位置说明或外部链接。
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-              <HardDriveDownload className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950">导出当前旅行</h3>
-              <p className="truncate text-sm text-slate-500">
-                {trip ? trip.title : '请先进入某个旅行，再导出该旅行备份。'}
-              </p>
-            </div>
-          </div>
-
-          {isLoadingTrip ? (
-            <SkeletonLine className="w-full" />
-          ) : trip ? (
-            <Button
-              className="w-full"
-              icon={<HardDriveDownload className="size-4" />}
-              loading={isExporting}
-              onClick={() => void handleExport()}
-            >
-              导出当前旅行备份 zip
-            </Button>
-          ) : (
-            <EmptyState
-              body="从旅行总览进入设置页后，可以导出该旅行的完整备份。"
-              icon={<Archive className="size-6" />}
-              title="当前没有可导出的旅行"
-            />
-          )}
-        </Card>
+        <SectionHeader title="导入备份" />
 
       <Card className="space-y-3">
         <div className="flex items-center gap-3">
@@ -672,8 +558,6 @@ export function SettingsPage() {
           />
         </Card>
       </section>
-
-      <CloudBackupPanel trip={trip} />
 
       <GoogleMapsSettings
         configured={googleMapsConfigured}

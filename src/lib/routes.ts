@@ -3,17 +3,26 @@ import type { RouteId } from '../types'
 const routeIds: RouteId[] = [
   'home',
   'trip',
-  'overview',
-  'timeline',
-  'map',
   'item',
   'tickets',
   'settings',
 ]
 
+const legacyRedirects: Record<string, RouteId> = {
+  overview: 'trip',
+  timeline: 'trip',
+  map: 'trip',
+}
+
 export function routeFromHash(): RouteId {
-  const value = window.location.hash.replace(/^#\/?/, '').split('?')[0] as RouteId
-  return routeIds.includes(value) ? value : 'home'
+  const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
+  if (routeIds.includes(raw as RouteId)) {
+    return raw as RouteId
+  }
+  if (legacyRedirects[raw]) {
+    return legacyRedirects[raw]
+  }
+  return 'home'
 }
 
 export function getRouteParams(hash = window.location.hash) {

@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
 import {
-  CalendarDays,
   Cog,
   Home,
   Route,
   Ticket,
 } from 'lucide-react'
 import type { RouteId } from '../types'
-import { getRouteParams, navigateTo } from '../lib/routes'
+import { navigateTo } from '../lib/routes'
 
 type AppShellProps = {
   activeRoute: RouteId
@@ -17,24 +16,19 @@ type AppShellProps = {
 const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
   home: { title: '旅行列表', subtitle: '本地旅行总控台' },
   trip: { title: '旅行工作台', subtitle: '当前旅行与每日行程' },
-  overview: { title: '旅行总览', subtitle: '每日行程与备注' },
-  timeline: { title: '时间轴', subtitle: '当天行程点' },
-  map: { title: '路线地图', subtitle: '每日行程路线' },
   item: { title: '行程点详情', subtitle: '地点、备注与外部地图' },
   tickets: { title: '票据库', subtitle: '文件保存在本机' },
   settings: { title: '设置', subtitle: '本机存储与备份' },
 }
 
 export function AppShell({ activeRoute, children }: AppShellProps) {
-  const isMap = activeRoute === 'map'
   const isHome = activeRoute === 'home'
-  const isTrip = activeRoute === 'trip'
+  const isTrip = activeRoute === 'trip' || activeRoute === 'item'
   const title = routeTitles[activeRoute]
-  const tripId = getRouteParams().get('tripId')
 
   return (
     <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
-      {!isMap && !isTrip ? (
+      {!isTrip ? (
         <header className="z-30 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -54,7 +48,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
             <button
               aria-label="设置"
               className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-              onClick={() => navigateTo('settings', tripId ? { tripId } : undefined)}
+              onClick={() => navigateTo('settings')}
               type="button"
             >
               <Cog className="size-5" />
@@ -65,14 +59,12 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
 
       <main
         className={
-          isMap
-            ? 'relative min-h-0 flex-1'
-            : isHome || isTrip
-              ? 'flex min-h-0 flex-1 px-4 pt-4'
-              : 'min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar'
+          isHome || isTrip
+            ? 'flex min-h-0 flex-1 px-4 pt-4'
+            : 'min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar'
         }
       >
-        <div className={isMap || isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
+        <div className={isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
           {children}
         </div>
       </main>
@@ -88,25 +80,14 @@ type TripNavProps = {
   className?: string
 }
 
-export function TripNav({ tripId, activeRoute, dayId, firstDayId, className = '' }: TripNavProps) {
-  const timelineDayId = dayId || firstDayId
+export function TripNav({ tripId, activeRoute, className = '' }: TripNavProps) {
   const items = [
     {
-      id: 'overview',
-      label: '总览',
-      icon: CalendarDays,
-      active: activeRoute === 'overview',
-      onClick: () => navigateTo('overview', { tripId }),
-    },
-    {
-      id: 'timeline',
+      id: 'trip',
       label: '日程',
       icon: Route,
-      active: activeRoute === 'timeline' || activeRoute === 'map' || activeRoute === 'item',
-      onClick: () =>
-        timelineDayId
-          ? navigateTo('timeline', { tripId, dayId: timelineDayId })
-          : navigateTo('overview', { tripId }),
+      active: activeRoute === 'trip' || activeRoute === 'item',
+      onClick: () => navigateTo('trip', { tripId }),
     },
     {
       id: 'tickets',
@@ -117,16 +98,16 @@ export function TripNav({ tripId, activeRoute, dayId, firstDayId, className = ''
     },
     {
       id: 'settings',
-      label: '备份',
+      label: '设置',
       icon: Cog,
       active: activeRoute === 'settings',
-      onClick: () => navigateTo('settings', { tripId }),
+      onClick: () => navigateTo('settings'),
     },
   ]
 
   return (
     <nav className={`rounded-2xl border border-white/80 bg-white/90 p-1.5 shadow-[0_8px_22px_rgba(47,65,88,0.05)] ${className}`}>
-      <div className="grid grid-cols-4 gap-1">
+      <div className="grid grid-cols-3 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (

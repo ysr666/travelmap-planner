@@ -17,9 +17,19 @@ describe('routeFromHash', () => {
     expect(routeFromHash()).toBe('trip')
   })
 
-  it('parses map route', () => {
+  it('redirects legacy map route to trip', () => {
     window.location.hash = '#/map?tripId=abc&dayId=def'
-    expect(routeFromHash()).toBe('map')
+    expect(routeFromHash()).toBe('trip')
+  })
+
+  it('redirects legacy overview route to trip', () => {
+    window.location.hash = '#/overview?tripId=abc'
+    expect(routeFromHash()).toBe('trip')
+  })
+
+  it('redirects legacy timeline route to trip', () => {
+    window.location.hash = '#/timeline?tripId=abc'
+    expect(routeFromHash()).toBe('trip')
   })
 
   it('returns home for unknown route', () => {

@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
-  getDay,
   getItineraryItem,
-  getTrip,
   listItemsByDay,
   listTicketsByItem,
   updateItineraryItem,
@@ -19,7 +17,7 @@ import {
 } from '../lib/mapLinks'
 import { describeItemTime, describePreviousTransport, transportModeLabels } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
-import { getRouteParams, navigateTo } from '../lib/routes'
+import { navigateTo } from '../lib/routes'
 import {
   describeTicketMetaLine,
   formatTicketCreatedAt,
@@ -32,103 +30,64 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
-import { TripNav } from '../components/AppShell'
 
-export function ItemDetailPage() {
-  const params = getRouteParams()
-  const tripId = params.get('tripId')
-  const dayId = params.get('dayId')
-  const itemId = params.get('itemId')
-  const fromView = params.get('fromView') === 'map' ? 'map' : 'schedule'
-  const [trip, setTrip] = useState<Trip | null>(null)
-  const [day, setDay] = useState<Day | null>(null)
-  const [item, setItem] = useState<ItineraryItem | null>(null)
+type ItemDetailContentProps = {
+  trip: Trip
+  day: Day
+  item: ItineraryItem
+  onClose: () => void
+  onItemDeleted: () => void
+}
+
+export function ItemDetailContent({ trip, day, item: initialItem, onClose, onItemDeleted }: ItemDetailContentProps) {
+  void onClose
+  const [item, setItem] = useState<ItineraryItem>(initialItem)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingRelations, setIsLoadingRelations] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const itemIndex = useMemo(() => {
-    if (!item) {
-      return -1
-    }
-
-    return dayItems.findIndex((dayItem) => dayItem.id === item.id)
-  }, [dayItems, item])
-  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
-
-  const refreshItem = useCallback(async () => {
-    if (!tripId || !dayId || !itemId) {
-      setLoadError('缺少行程点参数，请从时间轴进入详情。')
-      setIsLoading(false)
-      return
-    }
-
-    setIsLoading(true)
-    setLoadError(null)
-    setActionError(null)
+  const loadRelations = useCallback(async () => {
+    setIsLoadingRelations(true)
     try {
-      const [foundTrip, foundDay, foundItem] = await Promise.all([
-        getTrip(tripId),
-        getDay(dayId),
-        getItineraryItem(itemId),
-      ])
-
-      if (
-        !foundTrip ||
-        !foundDay ||
-        !foundItem ||
-        foundDay.tripId !== tripId ||
-        foundItem.tripId !== tripId ||
-        foundItem.dayId !== dayId
-      ) {
-        setTrip(null)
-        setDay(null)
-        setItem(null)
-        setDayItems([])
-        setTickets([])
-        setLoadError('没有找到这个行程点，请返回时间轴重新选择。')
-        return
-      }
-
       const [foundDayItems, foundTickets] = await Promise.all([
-        listItemsByDay(dayId),
-        listTicketsByItem(foundItem.id),
+        listItemsByDay(day.id),
+        listTicketsByItem(item.id),
       ])
-      setTrip(foundTrip)
-      setDay(foundDay)
-      setItem(foundItem)
       setDayItems(foundDayItems)
       setTickets(foundTickets)
-    } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : '读取行程点失败')
+    } catch {
+      // silently ignore
     } finally {
-      setIsLoading(false)
+      setIsLoadingRelations(false)
     }
-  }, [dayId, itemId, tripId])
+  }, [day.id, item.id])
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => void refreshItem(), 0)
-    return () => window.clearTimeout(timeout)
-  }, [refreshItem])
+  useState(() => {
+    void loadRelations()
+  })
+
+  const itemIndex = useMemo(() => {
+    return dayItems.findIndex((dayItem) => dayItem.id === item.id)
+  }, [dayItems, item.id])
+  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
 
   async function handleUpdateItem(value: ItineraryItemFormValue) {
-    if (!item) {
-      return
-    }
-
     setIsSubmitting(true)
     setActionError(null)
     try {
       await updateItineraryItem(item.id, value)
       setIsEditing(false)
-      await refreshItem()
+      const refreshed = await getItineraryItem(item.id)
+      if (refreshed) {
+        setItem(refreshed)
+      }
+      await loadRelations()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '保存修改失败')
     } finally {
@@ -137,16 +96,12 @@ export function ItemDetailPage() {
   }
 
   async function confirmDeleteItem() {
-    if (!item || !trip || !day) {
-      return
-    }
-
     setIsDeleting(true)
     setActionError(null)
     try {
       await deleteItineraryItemCascade(item.id)
       setIsDeleteConfirmOpen(false)
-      navigateTo('trip', { tripId: trip.id, dayId: day.id, view: 'schedule' })
+      onItemDeleted()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除行程点失败')
     } finally {
@@ -154,41 +109,8 @@ export function ItemDetailPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <Card className="space-y-3">
-          <SkeletonLine className="w-2/3" />
-          <SkeletonLine className="w-full" />
-          <SkeletonLine className="w-1/2" />
-        </Card>
-      </div>
-    )
-  }
-
-  if (loadError || !trip || !day || !item) {
-    return (
-      <div className="space-y-5">
-        <EmptyState
-          body={loadError || '请从时间轴选择一个行程点。'}
-          icon={<MapPin className="size-6" />}
-          title="无法打开行程点"
-        />
-        <Button
-          className="w-full"
-          onClick={() =>
-            tripId && dayId ? navigateTo('trip', { tripId, dayId, view: 'schedule' }) : navigateTo('home')
-          }
-          variant="secondary"
-        >
-          {tripId && dayId ? '返回旅行工作台' : '返回首页'}
-        </Button>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-2">
       <Card className="space-y-3">
         {actionError ? (
           <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
@@ -266,8 +188,6 @@ export function ItemDetailPage() {
         </div>
       </Card>
 
-      <TripNav activeRoute="item" dayId={day.id} tripId={trip.id} />
-
       {isEditing ? (
         <Card>
           <div className="mb-4">
@@ -290,7 +210,12 @@ export function ItemDetailPage() {
           onAction={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
           title={`绑定票据（${tickets.length}）`}
         />
-        {tickets.length === 0 ? (
+        {isLoadingRelations ? (
+          <div className="space-y-2">
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+          </div>
+        ) : tickets.length === 0 ? (
           <EmptyState
             body="可以上传门票、车票、二维码截图或 PDF，并绑定到这个行程点。"
             icon={<Ticket className="size-6" />}
@@ -311,14 +236,6 @@ export function ItemDetailPage() {
           </Card>
         )}
       </section>
-
-      <Button
-        className="w-full"
-        onClick={() => navigateTo('trip', { tripId: trip.id, dayId: day.id, view: fromView })}
-        variant="secondary"
-      >
-        返回旅行工作台
-      </Button>
 
       {previewTicket ? (
         <TicketPreview
@@ -343,10 +260,6 @@ export function ItemDetailPage() {
       />
     </div>
   )
-}
-
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
 }
 
 function PreviousTransportCard({

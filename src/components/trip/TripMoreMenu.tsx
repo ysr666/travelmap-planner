@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Archive, CalendarDays, Home, MoreHorizontal, Settings, Ticket, X } from 'lucide-react'
+import { Archive, Home, MoreHorizontal, Settings, Ticket, X } from 'lucide-react'
 import { navigateTo } from '../../lib/routes'
 
 type TripMoreMenuProps = {
@@ -31,10 +31,9 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
               更多
               <X className="size-4" />
             </button>
-            <MenuItem icon={<CalendarDays className="size-4" />} label="旅行总览 / 管理" onClick={() => navigateTo('overview', { tripId })} />
             <MenuItem icon={<Ticket className="size-4" />} label="全部票据" onClick={() => navigateTo('tickets', { tripId })} />
-            <MenuItem icon={<Archive className="size-4" />} label="备份与恢复" onClick={() => navigateTo('settings', { tripId })} />
-            <MenuItem icon={<Settings className="size-4" />} label="设置与存储说明" onClick={() => navigateTo('settings', { tripId })} />
+            <MenuItem icon={<Archive className="size-4" />} label="备份与恢复" onClick={() => navigateTo('trip', { tripId, view: 'overview' })} />
+            <MenuItem icon={<Settings className="size-4" />} label="设置与存储说明" onClick={() => navigateTo('settings')} />
             <MenuItem icon={<Home className="size-4" />} label="返回首页" onClick={() => navigateTo('home')} />
           </div>
         </div>

@@ -6,18 +6,8 @@ import { routeFromHash } from './lib/routes'
 import type { RouteId } from './types'
 import { HomePage } from './pages/HomePage'
 
-const TripOverviewPage = lazy(() =>
-  import('./pages/TripOverviewPage').then((module) => ({ default: module.TripOverviewPage })),
-)
 const TripWorkspacePage = lazy(() =>
   import('./pages/TripWorkspacePage').then((module) => ({ default: module.TripWorkspacePage })),
-)
-const DayTimelinePage = lazy(() =>
-  import('./pages/DayTimelinePage').then((module) => ({ default: module.DayTimelinePage })),
-)
-const MapPage = lazy(() => import('./pages/MapPage').then((module) => ({ default: module.MapPage })))
-const ItemDetailPage = lazy(() =>
-  import('./pages/ItemDetailPage').then((module) => ({ default: module.ItemDetailPage })),
 )
 const TicketLibraryPage = lazy(() =>
   import('./pages/TicketLibraryPage').then((module) => ({ default: module.TicketLibraryPage })),
@@ -48,12 +38,8 @@ function App() {
       {activeRoute === 'home' ? <HomePage /> : null}
       {activeRoute !== 'home' ? (
         <ErrorBoundary key={currentHash}>
-          <Suspense fallback={<RouteLoading activeRoute={activeRoute} />}>
-            {activeRoute === 'overview' ? <TripOverviewPage /> : null}
-            {activeRoute === 'trip' ? <TripWorkspacePage /> : null}
-            {activeRoute === 'timeline' ? <DayTimelinePage /> : null}
-            {activeRoute === 'map' ? <MapPage /> : null}
-            {activeRoute === 'item' ? <ItemDetailPage /> : null}
+          <Suspense fallback={<RouteLoading />}>
+            {activeRoute === 'trip' || activeRoute === 'item' ? <TripWorkspacePage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
           </Suspense>
@@ -63,17 +49,14 @@ function App() {
   )
 }
 
-function RouteLoading({ activeRoute }: { activeRoute: RouteId }) {
-  const isMap = activeRoute === 'map'
-
+function RouteLoading() {
   return (
-    <div className={isMap ? 'app-viewport bg-map-bg p-4 pt-[max(5rem,env(safe-area-inset-top))]' : 'space-y-5'}>
+    <div className="space-y-5">
       <Card className="space-y-3">
         <div className="h-4 w-28 animate-pulse rounded-full bg-slate-100" />
         <div className="h-5 w-2/3 animate-pulse rounded-full bg-slate-100" />
         <div className="h-4 w-full animate-pulse rounded-full bg-slate-100" />
       </Card>
-      {isMap ? <div className="mt-3 h-[54dvh] rounded-2xl bg-white/70" /> : null}
     </div>
   )
 }

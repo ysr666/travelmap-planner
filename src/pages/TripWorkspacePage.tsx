@@ -1,21 +1,24 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, Map, MapPin, Route, RotateCw } from 'lucide-react'
-import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
+import { ArrowLeft, CalendarDays, HardDriveDownload, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
+import { getItineraryItem, getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
+import { ItemDetailContent } from './ItemDetailPage'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
+import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { BottomSheet } from '../components/ui/BottomSheet'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
-import { ensureDaysForTrip, formatDateRange } from '../lib/dates'
+import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
-import { getRouteParams, navigateTo } from '../lib/routes'
+import { getRouteParams, navigateTo, routeFromHash } from '../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../types'
 
-type WorkspaceView = 'schedule' | 'map'
+type WorkspaceView = 'overview' | 'schedule' | 'map'
 
 function importDayMapView() {
   return import('../components/trip/DayMapView').then((module) => ({ default: module.DayMapView }))
@@ -44,6 +47,7 @@ export function TripWorkspacePage() {
   const requestedDayId = params.get('dayId')
   const hasViewParam = params.has('view')
   const view = normalizeView(params.get('view'))
+  const routeItemId = params.get('itemId')
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
   const [selectedDay, setSelectedDay] = useState<Day | null>(null)
@@ -57,6 +61,24 @@ export function TripWorkspacePage() {
   const [mapResizeToken, setMapResizeToken] = useState(0)
   const mapPreloadStartedRef = useRef(false)
   const backgroundMapWarmupStartedRef = useRef(false)
+
+  const isItemRoute = routeFromHash() === 'item' && routeItemId !== null
+  const [sheetItem, setSheetItem] = useState<ItineraryItem | null>(null)
+  const [sheetItemLoading, setSheetItemLoading] = useState(isItemRoute)
+
+  useEffect(() => {
+    if (!isItemRoute || !routeItemId) {
+      return undefined
+    }
+    let cancelled = false
+    void getItineraryItem(routeItemId).then((found) => {
+      if (!cancelled) {
+        setSheetItem(found ?? null)
+        setSheetItemLoading(false)
+      }
+    })
+    return () => { cancelled = true }
+  }, [isItemRoute, routeItemId])
 
   useEffect(() => {
     resetMapStartupTrace()
@@ -98,9 +120,10 @@ export function TripWorkspacePage() {
       setItems(nextItems)
       setDayItemsByDayId(nextSelectedDay ? { [nextSelectedDay.id]: nextItems } : {})
 
+      const currentRoute = routeFromHash()
       if (nextSelectedDay && requestedDayId !== nextSelectedDay.id) {
-        navigateTo('trip', { tripId, dayId: nextSelectedDay.id, view })
-      } else if (nextSelectedDay && !hasViewParam) {
+        navigateTo(currentRoute === 'item' ? 'item' : 'trip', { tripId, dayId: nextSelectedDay.id, view, ...(currentRoute === 'item' && routeItemId ? { itemId: routeItemId } : {}) })
+      } else if (nextSelectedDay && !hasViewParam && currentRoute !== 'item') {
         navigateTo('trip', { tripId, dayId: nextSelectedDay.id, view })
       }
     } catch (caught) {
@@ -108,7 +131,7 @@ export function TripWorkspacePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [hasViewParam, requestedDayId, tripId, view])
+  }, [hasViewParam, requestedDayId, routeItemId, tripId, view])
 
   const refreshItems = useCallback(async () => {
     if (!selectedDay) {
@@ -120,7 +143,7 @@ export function TripWorkspacePage() {
       ...current,
       [selectedDay.id]: nextItems,
     }))
-  }, [selectedDay])
+  }, [selectedDay, setItems, setDayItemsByDayId])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshWorkspace(), 0)
@@ -184,6 +207,17 @@ export function TripWorkspacePage() {
   }, [hasOpenedMap, isLoading, selectedDay, trip, view])
 
   const daysKey = useMemo(() => days.map((day) => day.id).join('|'), [days])
+
+  const allItems = useMemo(() => {
+    return Object.values(dayItemsByDayId).flat()
+  }, [dayItemsByDayId])
+
+  const itemsByDayCount = useMemo(() => {
+    return allItems.reduce<Record<string, number>>((acc, item) => {
+      acc[item.dayId] = (acc[item.dayId] ?? 0) + 1
+      return acc
+    }, {})
+  }, [allItems])
 
   useEffect(() => {
     if (isLoading || !trip || days.length === 0) {
@@ -262,13 +296,25 @@ export function TripWorkspacePage() {
   }
 
   function handleSwitchView(nextView: WorkspaceView) {
-    if (!trip || !selectedDay) {
+    if (!trip) {
       return
     }
     if (nextView === 'map') {
       setHasOpenedMap(true)
     }
-    navigateTo('trip', { tripId: trip.id, dayId: selectedDay.id, view: nextView })
+    const params: Record<string, string> = { tripId: trip.id, view: nextView }
+    if (selectedDay) {
+      params.dayId = selectedDay.id
+    }
+    navigateTo('trip', params)
+  }
+
+  function handleOverviewSelectDay(day: Day, targetView: 'schedule' | 'map') {
+    if (!trip) return
+    if (targetView === 'map') {
+      setHasOpenedMap(true)
+    }
+    navigateTo('trip', { tripId: trip.id, dayId: day.id, view: targetView })
   }
 
   if (isLoading) {
@@ -356,84 +402,237 @@ export function TripWorkspacePage() {
             </Button>
           </Card>
         </div>
-      ) : selectedDay ? (
+      ) : (
         <>
           <div className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>
-            <DaySelector
-              days={days}
-              density={isMapView ? 'compact' : 'regular'}
-              onSelectDay={handleSelectDay}
-              selectedDayId={selectedDay.id}
-            />
-            <div className={`grid grid-cols-2 bg-white ring-1 ring-slate-200/80 ${
+            {view !== 'overview' ? (
+              <DaySelector
+                days={days}
+                density={isMapView ? 'compact' : 'regular'}
+                onSelectDay={handleSelectDay}
+                selectedDayId={selectedDay?.id ?? null}
+              />
+            ) : null}
+            <div className={`grid grid-cols-3 bg-white ring-1 ring-slate-200/80 ${
               isMapView ? 'rounded-xl p-1' : 'rounded-2xl p-1.5'
             }`}>
+              <ViewButton active={view === 'overview'} compact={isMapView} icon={<CalendarDays className="size-4" />} label="总览" onClick={() => handleSwitchView('overview')} testId="view-switch-overview" />
               <ViewButton active={view === 'schedule'} compact={isMapView} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} testId="view-switch-schedule" />
               <ViewButton active={view === 'map'} compact={isMapView} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} testId="view-switch-map" />
             </div>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden">
-            <div
-              aria-hidden={isMapView}
-              className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none ${
-                isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
-              }`}
-            >
-              <DayTimelineView
-                compact
-                day={selectedDay}
-                items={items}
-                onItemsChange={refreshItems}
-                onOpenItem={(item) =>
-                  navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id })
-                }
-                onSwitchToMap={() => handleSwitchView('map')}
-                trip={trip}
-              />
-            </div>
+          {view === 'overview' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+              <div className="space-y-4 pb-4">
+                <Card className="space-y-3">
+                  <TripCover trip={trip} variant="hero" />
+                  <div>
+                    <p className="text-xs font-semibold text-sky-600">{trip.destination}</p>
+                    <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
+                      {trip.title}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-500">
+                      {formatDateRange(trip.startDate, trip.endDate)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <OverviewMetric label="天数" value={days.length.toString()} />
+                    <OverviewMetric label="行程" value={allItems.length.toString()} />
+                    <OverviewMetric
+                      label="已定位"
+                      value={allItems.filter((item) => item.lat !== undefined && item.lng !== undefined).length.toString()}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      className="whitespace-nowrap px-2 text-xs"
+                      disabled={days.length === 0}
+                      icon={<Map className="size-4" />}
+                      onClick={() => {
+                        const firstDay = days[0]
+                        if (firstDay) handleOverviewSelectDay(firstDay, 'map')
+                      }}
+                    >
+                      地图
+                    </Button>
+                    <Button
+                      className="whitespace-nowrap px-2 text-xs"
+                      icon={<Ticket className="size-4" />}
+                      onClick={() => navigateTo('tickets', { tripId: trip.id })}
+                      variant="secondary"
+                    >
+                      票据库
+                    </Button>
+                    <Button
+                      className="whitespace-nowrap px-2 text-xs"
+                      icon={<HardDriveDownload className="size-4" />}
+                      onClick={() => navigateTo('settings', { tripId: trip.id })}
+                      variant="secondary"
+                    >
+                      备份
+                    </Button>
+                  </div>
+                </Card>
 
-            {hasOpenedMap ? (
+                {days.length > 0 ? (
+                  <section className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
+                    <Card className="space-y-1 p-2">
+                      {days.map((day) => (
+                        <div
+                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2 transition hover:bg-slate-50"
+                          key={day.id}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                              <CalendarDays className="size-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-slate-950">
+                                {formatDate(day.date)}
+                              </span>
+                              <span className="mt-0.5 block truncate text-sm text-slate-500">
+                                {day.title} · {itemsByDayCount[day.id] ?? 0} 个点
+                              </span>
+                            </span>
+                          </div>
+                          <Button
+                            className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
+                            onClick={() => handleOverviewSelectDay(day, 'schedule')}
+                            variant="secondary"
+                          >
+                            日程
+                          </Button>
+                          <Button
+                            className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
+                            icon={<Map className="size-4" />}
+                            onClick={() => handleOverviewSelectDay(day, 'map')}
+                            variant="secondary"
+                          >
+                            地图
+                          </Button>
+                        </div>
+                      ))}
+                    </Card>
+                  </section>
+                ) : null}
+
+                <Card className="flex items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                    <NotebookText className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-950">旅行备注</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">{trip.notes || '暂无备注。'}</p>
+                  </div>
+                </Card>
+
+                <TravelBackupPanel days={days} trip={trip} />
+              </div>
+            </div>
+          ) : selectedDay ? (
+            <div className="relative min-h-0 flex-1 overflow-hidden">
               <div
-                aria-hidden={!isMapView}
-                className={`absolute inset-y-0 -left-4 -right-4 min-h-0 overflow-hidden transition-opacity duration-200 motion-reduce:transition-none ${
-                  isMapView ? 'visible opacity-100' : 'invisible pointer-events-none opacity-0'
+                aria-hidden={isMapView}
+                className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none ${
+                  isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
                 }`}
               >
-                <Suspense fallback={isMapView ? <MapLoadingFallback day={selectedDay} items={items} /> : <HiddenMapLoadingFallback />}>
-                  <LazyDayMapView
-                    allDays={days}
-                    day={selectedDay}
-                    dayItemsByDayId={dayItemsByDayId}
-                    embedded
-                    isVisible={isMapView}
-                    items={items}
-                    onBackToTimeline={() => handleSwitchView('schedule')}
-                    onEditItem={() => handleSwitchView('schedule')}
-                    onItemsChange={refreshItems}
-                    onOpenItem={(item) =>
-                      navigateTo('item', {
-                        tripId: trip.id,
-                        dayId: selectedDay.id,
-                        itemId: item.id,
-                        fromView: 'map',
-                      })
-                    }
-                    resizeSignal={mapResizeToken}
-                    prewarmEnabled={!isMapView}
-                    showFloatingHeader={false}
-                    trip={trip}
-                  />
-                </Suspense>
+                <DayTimelineView
+                  compact
+                  day={selectedDay}
+                  items={items}
+                  onItemsChange={refreshItems}
+                  onOpenItem={(item) =>
+                    navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view })
+                  }
+                  onSwitchToMap={() => handleSwitchView('map')}
+                  trip={trip}
+                />
               </div>
-            ) : null}
-          </div>
 
-          <p className="sr-only">
-            当前第 {selectedDayIndex + 1} 天
-          </p>
+              {hasOpenedMap ? (
+                <div
+                  aria-hidden={!isMapView}
+                  className={`absolute inset-y-0 -left-4 -right-4 min-h-0 overflow-hidden transition-opacity duration-200 motion-reduce:transition-none ${
+                    isMapView ? 'visible opacity-100' : 'invisible pointer-events-none opacity-0'
+                  }`}
+                >
+                  <Suspense fallback={isMapView ? <MapLoadingFallback day={selectedDay} items={items} /> : <HiddenMapLoadingFallback />}>
+                    <LazyDayMapView
+                      allDays={days}
+                      day={selectedDay}
+                      dayItemsByDayId={dayItemsByDayId}
+                      embedded
+                      isVisible={isMapView}
+                      items={items}
+                      onBackToTimeline={() => handleSwitchView('schedule')}
+                      onEditItem={() => handleSwitchView('schedule')}
+                      onItemsChange={refreshItems}
+                      onOpenItem={(item) =>
+                        navigateTo('item', {
+                          tripId: trip.id,
+                          dayId: selectedDay.id,
+                          itemId: item.id,
+                          view,
+                        })
+                      }
+                      resizeSignal={mapResizeToken}
+                      prewarmEnabled={!isMapView}
+                      showFloatingHeader={false}
+                      trip={trip}
+                    />
+                  </Suspense>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto app-scrollbar">
+              <EmptyState
+                body="请从首页选择一个旅行，或先生成每日行程。"
+                icon={<CalendarDays className="size-6" />}
+                title="暂无行程数据"
+              />
+            </div>
+          )}
+
+          {selectedDay && view !== 'overview' ? (
+            <p className="sr-only">
+              当前第 {selectedDayIndex + 1} 天
+            </p>
+          ) : null}
         </>
-      ) : null}
+      )}
+
+      <BottomSheet
+        open={isItemRoute}
+        onClose={() =>
+          navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view })
+        }
+        title="行程点详情"
+      >
+        {sheetItemLoading ? (
+          <div className="space-y-3 py-4">
+            <SkeletonLine className="w-2/3" />
+            <SkeletonLine className="w-full" />
+            <SkeletonLine className="w-1/2" />
+          </div>
+        ) : sheetItem ? (
+          <ItemDetailContent
+            day={selectedDay ?? days[0] ?? { id: '', tripId: trip.id, date: trip.startDate, title: '', sortOrder: 0 }}
+            item={sheetItem}
+            onClose={() =>
+              navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view })
+            }
+            onItemDeleted={() => {
+              navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view: 'schedule' })
+              void refreshItems()
+            }}
+            trip={trip}
+          />
+        ) : null}
+      </BottomSheet>
     </div>
   )
 }
@@ -492,7 +691,9 @@ function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null)
 }
 
 function normalizeView(value: string | null): WorkspaceView {
-  return value === 'map' ? 'map' : 'schedule'
+  if (value === 'map') return 'map'
+  if (value === 'schedule') return 'schedule'
+  return 'overview'
 }
 
 function formatDateKey(date: Date) {
@@ -611,4 +812,13 @@ function shouldSkipWorkspaceMapWarmup() {
   }
 
   return false
+}
+
+function OverviewMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-center">
+      <p className="text-lg font-semibold text-slate-950">{value}</p>
+      <p className="text-xs font-semibold text-slate-400">{label}</p>
+    </div>
+  )
 }

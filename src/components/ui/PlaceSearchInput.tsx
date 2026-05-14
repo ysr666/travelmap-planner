@@ -16,6 +16,31 @@ type PlaceSearchInputProps = {
   onPlaceSelect: (place: PlaceResult) => void
 }
 
+const POPULAR_COUNTRIES = [
+  { code: '', label: '不限地区' },
+  { code: 'JP', label: '日本' },
+  { code: 'CN', label: '中国' },
+  { code: 'KR', label: '韩国' },
+  { code: 'TH', label: '泰国' },
+  { code: 'SG', label: '新加坡' },
+  { code: 'VN', label: '越南' },
+  { code: 'MY', label: '马来西亚' },
+  { code: 'ID', label: '印度尼西亚' },
+  { code: 'PH', label: '菲律宾' },
+  { code: 'TW', label: '台湾' },
+  { code: 'HK', label: '香港' },
+  { code: 'MO', label: '澳门' },
+  { code: 'US', label: '美国' },
+  { code: 'GB', label: '英国' },
+  { code: 'FR', label: '法国' },
+  { code: 'DE', label: '德国' },
+  { code: 'IT', label: '意大利' },
+  { code: 'ES', label: '西班牙' },
+  { code: 'AU', label: '澳大利亚' },
+  { code: 'NZ', label: '新西兰' },
+  { code: 'CA', label: '加拿大' },
+]
+
 export function PlaceSearchInput({
   label,
   placeholder = '搜索地点...',
@@ -26,6 +51,7 @@ export function PlaceSearchInput({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
   const [ready, setReady] = useState(isGoogleMapsAvailable)
+  const [country, setCountry] = useState('')
 
   useEffect(() => {
     if (ready) {
@@ -45,13 +71,23 @@ export function PlaceSearchInput({
   }, [ready])
 
   useEffect(() => {
-    if (!ready || !inputRef.current || autocompleteRef.current) {
+    if (!ready || !inputRef.current) {
       return
     }
 
-    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+    if (autocompleteRef.current) {
+      google.maps.event.clearInstanceListeners(autocompleteRef.current)
+      autocompleteRef.current = null
+    }
+
+    const options: google.maps.places.AutocompleteOptions = {
       fields: ['name', 'formatted_address', 'geometry.location'],
-    })
+    }
+    if (country) {
+      options.componentRestrictions = { country }
+    }
+
+    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, options)
 
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
@@ -74,21 +110,34 @@ export function PlaceSearchInput({
       google.maps.event.clearInstanceListeners(autocomplete)
       autocompleteRef.current = null
     }
-  }, [ready, onPlaceSelect])
+  }, [ready, country, onPlaceSelect])
 
   return (
     <label className="block">
       <span className="text-sm font-semibold text-slate-700">{label}</span>
-      <input
-        ref={inputRef}
-        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={ready ? placeholder : placeholder}
-        type="text"
-        value={value}
-      />
+      <div className="mt-2 flex gap-2">
+        <select
+          className="h-11 shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          onChange={(event) => setCountry(event.target.value)}
+          value={country}
+        >
+          {POPULAR_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <input
+          ref={inputRef}
+          className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={ready ? placeholder : '加载中...'}
+          type="text"
+          value={value}
+        />
+      </div>
       {!ready ? (
-        <span className="mt-1 block text-xs text-slate-400">配置 Google Maps API 后可使用地点搜索</span>
+        <span className="mt-1 block text-xs text-slate-400">正在加载 Google Maps...</span>
       ) : null}
     </label>
   )

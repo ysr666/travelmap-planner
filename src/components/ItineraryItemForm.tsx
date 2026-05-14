@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from 'react'
-import { LocateFixed } from 'lucide-react'
+import { ChevronDown, ChevronUp, LocateFixed } from 'lucide-react'
 import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
 import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
@@ -76,6 +76,7 @@ export function ItineraryItemForm({
   const [error, setError] = useState<string | null>(null)
   const [parseMessage, setParseMessage] = useState<string | null>(null)
   const googleMapsKeyConfigured = isGoogleMapsConfigured()
+  const [showManualCoords, setShowManualCoords] = useState(!googleMapsKeyConfigured)
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     setForm((current) => ({
@@ -257,39 +258,89 @@ export function ItineraryItemForm({
           />
         </label>
       </div>
-      <div className="rounded-xl bg-slate-50 p-3">
-        <FormField
-          label="粘贴地图链接解析坐标"
-          onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
-          placeholder="支持 ll=、query=、q=、@lat,lng 等显式坐标"
-          value={form.mapLink}
-        />
-        <Button
-          className="mt-3 w-full"
-          icon={<LocateFixed className="size-4" />}
-          onClick={handleParseCoordinates}
-          variant="secondary"
-        >
-          解析坐标
-        </Button>
-        {parseMessage ? <p className="mt-2 text-xs text-slate-500">{parseMessage}</p> : null}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          label="纬度 lat"
-          onChange={(value) => setForm((current) => ({ ...current, lat: value }))}
-          placeholder="35.6585"
-          type="number"
-          value={form.lat}
-        />
-        <FormField
-          label="经度 lng"
-          onChange={(value) => setForm((current) => ({ ...current, lng: value }))}
-          placeholder="139.7020"
-          type="number"
-          value={form.lng}
-        />
-      </div>
+      {googleMapsKeyConfigured ? (
+        <div className="rounded-xl bg-slate-50 p-3">
+          <button
+            className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
+            onClick={() => setShowManualCoords((current) => !current)}
+            type="button"
+          >
+            <span>手动输入坐标</span>
+            {showManualCoords ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </button>
+          {showManualCoords ? (
+            <div className="mt-3 space-y-3">
+              <FormField
+                label="粘贴地图链接解析坐标"
+                onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
+                placeholder="支持 ll=、query=、q=、@lat,lng 等显式坐标"
+                value={form.mapLink}
+              />
+              <Button
+                className="w-full"
+                icon={<LocateFixed className="size-4" />}
+                onClick={handleParseCoordinates}
+                variant="secondary"
+              >
+                解析坐标
+              </Button>
+              {parseMessage ? <p className="text-xs text-slate-500">{parseMessage}</p> : null}
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  label="纬度 lat"
+                  onChange={(value) => setForm((current) => ({ ...current, lat: value }))}
+                  placeholder="35.6585"
+                  type="number"
+                  value={form.lat}
+                />
+                <FormField
+                  label="经度 lng"
+                  onChange={(value) => setForm((current) => ({ ...current, lng: value }))}
+                  placeholder="139.7020"
+                  type="number"
+                  value={form.lng}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <FormField
+              label="粘贴地图链接解析坐标"
+              onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
+              placeholder="支持 ll=、query=、q=、@lat,lng 等显式坐标"
+              value={form.mapLink}
+            />
+            <Button
+              className="mt-3 w-full"
+              icon={<LocateFixed className="size-4" />}
+              onClick={handleParseCoordinates}
+              variant="secondary"
+            >
+              解析坐标
+            </Button>
+            {parseMessage ? <p className="mt-2 text-xs text-slate-500">{parseMessage}</p> : null}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="纬度 lat"
+              onChange={(value) => setForm((current) => ({ ...current, lat: value }))}
+              placeholder="35.6585"
+              type="number"
+              value={form.lat}
+            />
+            <FormField
+              label="经度 lng"
+              onChange={(value) => setForm((current) => ({ ...current, lng: value }))}
+              placeholder="139.7020"
+              type="number"
+              value={form.lng}
+            />
+          </div>
+        </>
+      )}
       <label className="block">
         <span className="text-sm font-semibold text-slate-700">备注</span>
         <textarea

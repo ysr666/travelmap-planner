@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary: #1677ff;
+  --color-primary-shadow: rgba(22, 119, 255, 0.18);
+  --color-primary-shadow-lg: rgba(22, 119, 255, 0.20);
+  --color-map-bg: #eaf2f9;
+  --color-surface: #f8fbff;
+}
+
 :root {
   color: #18202f;
   background: #eef3f8;
@@ -27,7 +35,7 @@ body {
   min-height: 100svh;
   margin: 0;
   overflow-x: hidden;
-  background: linear-gradient(180deg, #f8fbff 0%, #eaf1f7 100%);
+  background: linear-gradient(180deg, var(--color-surface) 0%, #eaf1f7 100%);
 }
 
 button,

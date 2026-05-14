@@ -223,7 +223,7 @@ function CopyPreviewContent({
       ) : null}
 
       <a
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white"
         href={objectUrl}
         rel="noreferrer"
         target="_blank"
@@ -282,7 +282,7 @@ function ExternalPreview({ ticket }: { ticket: TicketMeta }) {
       </p>
       {canOpen ? (
         <a
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white"
           href={url}
           rel="noreferrer"
           target="_blank"

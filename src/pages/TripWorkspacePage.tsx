@@ -8,6 +8,7 @@ import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { ensureDaysForTrip, formatDateRange } from '../lib/dates'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
@@ -457,7 +458,7 @@ function ViewButton({
       className={`flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[0.98] ${
         compact ? 'min-h-8 text-xs' : 'min-h-10 text-sm'
       } ${
-        active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500'
+        active ? 'bg-primary text-white shadow-sm' : 'text-slate-500'
       }`}
       data-testid={testId}
       onClick={onClick}
@@ -512,13 +513,9 @@ function formatShortWorkspaceDate(date: string) {
   }).format(parsed)
 }
 
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
-}
-
 function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#eaf2f9] p-4" data-testid="map-loading-fallback">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-map-bg p-4" data-testid="map-loading-fallback">
       <div className="rounded-2xl bg-white/85 p-4 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80">
         <SkeletonLine className="w-1/2" />
         <p className="mt-3 text-sm font-medium text-slate-600">
@@ -554,7 +551,7 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
 }
 
 function HiddenMapLoadingFallback() {
-  return <div className="h-full min-h-0 bg-[#eaf2f9]" data-testid="map-loading-fallback" />
+  return <div className="h-full min-h-0 bg-map-bg" data-testid="map-loading-fallback" />
 }
 
 function scheduleIdleTask(task: () => void) {

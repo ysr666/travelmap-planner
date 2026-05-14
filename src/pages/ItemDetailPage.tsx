@@ -228,7 +228,7 @@ export function ItemDetailPage() {
         />
         <div className="grid grid-cols-2 gap-3">
           <a
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(22,119,255,0.18)]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-[0_6px_16px_var(--color-primary-shadow)]"
             href={buildAppleMapsUrl(item)}
             rel="noreferrer"
             target="_blank"
@@ -403,7 +403,7 @@ function PreviousTransportCard({
           {appleUrl && googleUrl ? (
             <div className="mt-3 grid grid-cols-1 gap-2">
               <a
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1677ff] px-3 text-xs font-semibold text-white"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-white"
                 href={appleUrl}
                 rel="noreferrer"
                 target="_blank"

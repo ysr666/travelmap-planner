@@ -9,6 +9,8 @@ import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { FormField } from '../components/ui/FormField'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { TripCover } from '../components/trip/TripCover'
 import { getTripStatus } from '../lib/tripVisuals'
 
@@ -396,42 +398,6 @@ function TripCard({
       </button>
     </Card>
   )
-}
-
-function FormField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  required = false,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  type?: 'text' | 'date'
-  required?: boolean
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-semibold text-slate-700">
-        {label}
-        {required ? <span className="text-red-500"> *</span> : null}
-      </span>
-      <input
-        className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        type={type}
-        value={value}
-      />
-    </label>
-  )
-}
-
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
 }
 
 function formatDateRange(startDate: string, endDate: string) {

@@ -4,6 +4,7 @@ import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
 import { transportModeOptions } from '../lib/itinerary'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
+import { FormField } from './ui/FormField'
 
 export type ItineraryItemFormValue = {
   title: string
@@ -289,40 +290,6 @@ export function ItineraryItemForm({
         </Button>
       </div>
     </form>
-  )
-}
-
-function FormField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  required = false,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  type?: 'text' | 'time' | 'number'
-  required?: boolean
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-semibold text-slate-700">
-        {label}
-        {required ? <span className="text-red-500"> *</span> : null}
-      </span>
-      <input
-        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-        inputMode={type === 'number' ? 'decimal' : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        step={type === 'number' ? 'any' : undefined}
-        type={type}
-        value={value}
-      />
-    </label>
   )
 }
 

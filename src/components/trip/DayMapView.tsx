@@ -452,7 +452,7 @@ export function DayMapView({
   }
 
   return (
-    <div ref={rootRef} className={`${embedded ? 'relative h-full min-h-0' : 'app-viewport relative'} min-h-0 overflow-hidden bg-[#eaf2f9]`}>
+    <div ref={rootRef} className={`${embedded ? 'relative h-full min-h-0' : 'app-viewport relative'} min-h-0 overflow-hidden bg-map-bg`}>
       <div className="absolute inset-0 z-0">
         {items.length === 0 ? (
           <MapEmptyBackdrop
@@ -1550,7 +1550,7 @@ function SelectedItemCard({
 
 function MapEmptyBackdrop({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex h-full items-center justify-center bg-[#eaf2f9] p-6">
+    <div className="flex h-full items-center justify-center bg-map-bg p-6">
       <EmptyState
         body={body}
         icon={<MapPin className="size-6" />}

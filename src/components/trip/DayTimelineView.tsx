@@ -189,7 +189,7 @@ export function DayTimelineView({
                   ) : null}
                   <div className="grid w-full grid-cols-[2.8rem_1fr] gap-3">
                     <div className="relative flex justify-center">
-                      <div className="z-10 flex size-9 items-center justify-center rounded-full bg-[#1677ff] text-sm font-bold text-white shadow-lg shadow-sky-200">
+                      <div className="z-10 flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-lg shadow-sky-200">
                         {index + 1}
                       </div>
                       {index !== items.length - 1 ? (

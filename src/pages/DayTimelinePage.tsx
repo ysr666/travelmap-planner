@@ -5,6 +5,7 @@ import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { TripNav } from '../components/AppShell'
 import { formatDate } from '../lib/dates'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -114,6 +115,3 @@ export function DayTimelinePage() {
   )
 }
 
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
-}

@@ -510,7 +510,7 @@ export function TicketLibraryPage() {
           {filterOptions.map((option) => (
             <button
               className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-semibold ${
-                filter === option.value ? 'bg-[#1677ff] text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'
+                filter === option.value ? 'bg-primary text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'
               }`}
               key={option.value}
               onClick={() => setFilter(option.value)}

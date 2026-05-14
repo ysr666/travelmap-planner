@@ -80,7 +80,7 @@ export function MapPage() {
 
   if (isLoading) {
     return (
-      <div className="app-viewport overflow-hidden bg-[#eaf2f9] px-4 pt-[max(5rem,env(safe-area-inset-top))]">
+      <div className="app-viewport overflow-hidden bg-map-bg px-4 pt-[max(5rem,env(safe-area-inset-top))]">
         <div className="rounded-2xl border border-white/80 bg-white/90 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
           <SkeletonLine className="w-2/3" />
           <SkeletonLine className="mt-3 w-full" />
@@ -93,7 +93,7 @@ export function MapPage() {
 
   if (loadError || !trip || !day) {
     return (
-      <div className="app-viewport overflow-hidden bg-[#eaf2f9] px-4 pt-[max(5rem,env(safe-area-inset-top))]">
+      <div className="app-viewport overflow-hidden bg-map-bg px-4 pt-[max(5rem,env(safe-area-inset-top))]">
         <EmptyState
           body={loadError || '请从时间轴进入某一天的地图。'}
           icon={<MapPin className="size-6" />}

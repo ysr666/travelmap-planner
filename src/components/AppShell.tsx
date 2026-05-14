@@ -35,7 +35,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   return (
     <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
       {!isMap && !isTrip ? (
-        <header className="z-30 border-b border-white/70 bg-[#f8fbff]/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <header className="z-30 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <button
               aria-label="返回首页"
@@ -132,7 +132,7 @@ export function TripNav({ tripId, activeRoute, dayId, firstDayId, className = ''
           return (
             <button
               className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] ${
-                item.active ? 'bg-[#1677ff] text-white shadow-sm' : 'text-slate-500 active:bg-slate-50'
+                item.active ? 'bg-primary text-white shadow-sm' : 'text-slate-500 active:bg-slate-50'
               }`}
               key={item.id}
               onClick={item.onClick}

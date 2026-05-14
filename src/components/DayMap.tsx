@@ -520,7 +520,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   if (!hasMappableItems) {
     return (
       <div className={surface === 'fullscreen'
-        ? `${heightClassName} bg-[#eaf2f9] p-4`
+        ? `${heightClassName} bg-map-bg p-4`
         : `${heightClassName} rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]`}
       >
         <div className="flex h-full items-center justify-center">
@@ -611,7 +611,7 @@ function markerContentClassName(isSelected: boolean) {
     'shadow-[0_12px_28px_rgba(22,119,255,0.28)]',
     isSelected
       ? 'border-white bg-emerald-500 text-white ring-4 ring-emerald-200'
-      : 'border-white bg-[#1677ff] text-white',
+      : 'border-white bg-primary text-white',
   ].join(' ')
 }
 

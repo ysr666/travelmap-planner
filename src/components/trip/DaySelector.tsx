@@ -25,7 +25,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
             <button
               className={`${isCompact ? 'min-h-9 rounded-xl px-2.5' : 'min-h-12 rounded-2xl px-3'} text-left transition active:scale-[0.98] ${
                 active
-                  ? 'bg-[#1677ff] text-white shadow-[0_8px_18px_rgba(22,119,255,0.20)]'
+                  ? 'bg-primary text-white shadow-[0_8px_18px_var(--color-primary-shadow-lg)]'
                   : 'bg-white text-slate-600 ring-1 ring-slate-200/80'
               }`}
               key={day.id}

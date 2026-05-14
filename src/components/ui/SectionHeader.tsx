@@ -18,7 +18,7 @@ export function SectionHeader({ eyebrow, title, action, onAction }: SectionHeade
       </div>
       {action ? (
         <button
-          className="rounded-xl px-3 py-1.5 text-sm font-semibold text-sky-600 active:bg-sky-50"
+          className="rounded-xl px-3 py-1.5 text-sm font-semibold text-sky-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 active:bg-sky-50"
           onClick={onAction}
           type="button"
         >

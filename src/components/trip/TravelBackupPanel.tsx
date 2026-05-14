@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Archive, HardDriveDownload } from 'lucide-react'
 import { CloudBackupPanel } from '../cloud/CloudBackupPanel'
 import { buildTripBackupFileName, downloadBlob, exportTripBackup } from '../../lib/backup'
-import type { Day, Trip } from '../../types'
+import type { Trip } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { EmptyState } from '../ui/EmptyState'
@@ -10,7 +10,6 @@ import { SectionHeader } from '../ui/SectionHeader'
 
 type TravelBackupPanelProps = {
   trip: Trip | null
-  days: Day[]
   isLoadingTrip?: boolean
 }
 

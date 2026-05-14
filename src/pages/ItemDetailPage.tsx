@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
@@ -35,12 +35,10 @@ type ItemDetailContentProps = {
   trip: Trip
   day: Day
   item: ItineraryItem
-  onClose: () => void
   onItemDeleted: () => void
 }
 
-export function ItemDetailContent({ trip, day, item: initialItem, onClose, onItemDeleted }: ItemDetailContentProps) {
-  void onClose
+export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted }: ItemDetailContentProps) {
   const [item, setItem] = useState<ItineraryItem>(initialItem)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
@@ -68,9 +66,12 @@ export function ItemDetailContent({ trip, day, item: initialItem, onClose, onIte
     }
   }, [day.id, item.id])
 
-  useState(() => {
+  const didLoadRef = useRef(false)
+  useEffect(() => {
+    if (didLoadRef.current) return
+    didLoadRef.current = true
     void loadRelations()
-  })
+  }, [loadRelations])
 
   const itemIndex = useMemo(() => {
     return dayItems.findIndex((dayItem) => dayItem.id === item.id)

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, HardDriveDownload, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
 import { getItineraryItem, getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -95,11 +95,13 @@ export function TripWorkspacePage() {
       return
     }
 
+    let cancelled = false
     setIsLoading(true)
     setLoadError(null)
     setActionError(null)
     try {
       const foundTrip = await getTrip(tripId)
+      if (cancelled) return
       if (!foundTrip) {
         setTrip(null)
         setDays([])
@@ -111,8 +113,10 @@ export function TripWorkspacePage() {
       }
 
       const foundDays = await listDaysByTrip(tripId)
+      if (cancelled) return
       const nextSelectedDay = pickSelectedDay(foundTrip, foundDays, requestedDayId)
       const nextItems = nextSelectedDay ? await listItemsByDay(nextSelectedDay.id) : []
+      if (cancelled) return
 
       setTrip(foundTrip)
       setDays(foundDays)
@@ -127,10 +131,15 @@ export function TripWorkspacePage() {
         navigateTo('trip', { tripId, dayId: nextSelectedDay.id, view })
       }
     } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : '读取旅行工作台失败')
+      if (!cancelled) {
+        setLoadError(caught instanceof Error ? caught.message : '读取旅行工作台失败')
+      }
     } finally {
-      setIsLoading(false)
+      if (!cancelled) {
+        setIsLoading(false)
+      }
     }
+    return () => { cancelled = true }
   }, [hasViewParam, requestedDayId, routeItemId, tripId, view])
 
   const refreshItems = useCallback(async () => {
@@ -143,7 +152,7 @@ export function TripWorkspacePage() {
       ...current,
       [selectedDay.id]: nextItems,
     }))
-  }, [selectedDay, setItems, setDayItemsByDayId])
+  }, [selectedDay])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshWorkspace(), 0)
@@ -217,6 +226,10 @@ export function TripWorkspacePage() {
       acc[item.dayId] = (acc[item.dayId] ?? 0) + 1
       return acc
     }, {})
+  }, [allItems])
+
+  const locatedCount = useMemo(() => {
+    return allItems.filter((item) => item.lat !== undefined && item.lng !== undefined).length
   }, [allItems])
 
   useEffect(() => {
@@ -441,10 +454,10 @@ export function TripWorkspacePage() {
                     <OverviewMetric label="行程" value={allItems.length.toString()} />
                     <OverviewMetric
                       label="已定位"
-                      value={allItems.filter((item) => item.lat !== undefined && item.lng !== undefined).length.toString()}
+                      value={locatedCount.toString()}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       className="whitespace-nowrap px-2 text-xs"
                       disabled={days.length === 0}
@@ -464,24 +477,15 @@ export function TripWorkspacePage() {
                     >
                       票据库
                     </Button>
-                    <Button
-                      className="whitespace-nowrap px-2 text-xs"
-                      icon={<HardDriveDownload className="size-4" />}
-                      onClick={() => navigateTo('settings', { tripId: trip.id })}
-                      variant="secondary"
-                    >
-                      备份
-                    </Button>
                   </div>
                 </Card>
 
-                {days.length > 0 ? (
-                  <section className="space-y-3">
+                <section className="space-y-3">
                     <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
                     <Card className="space-y-1 p-2">
                       {days.map((day) => (
                         <div
-                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2 transition hover:bg-slate-50"
+                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2"
                           key={day.id}
                         >
                           <div className="flex min-w-0 items-center gap-3">
@@ -516,7 +520,6 @@ export function TripWorkspacePage() {
                       ))}
                     </Card>
                   </section>
-                ) : null}
 
                 <Card className="flex items-start gap-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
@@ -528,7 +531,7 @@ export function TripWorkspacePage() {
                   </div>
                 </Card>
 
-                <TravelBackupPanel days={days} trip={trip} />
+                <TravelBackupPanel trip={trip} />
               </div>
             </div>
           ) : selectedDay ? (
@@ -607,9 +610,11 @@ export function TripWorkspacePage() {
 
       <BottomSheet
         open={isItemRoute}
-        onClose={() =>
-          navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view })
-        }
+        onClose={() => {
+          const params: Record<string, string> = { tripId: trip.id, view }
+          if (selectedDay) params.dayId = selectedDay.id
+          navigateTo('trip', params)
+        }}
         title="行程点详情"
       >
         {sheetItemLoading ? (
@@ -618,16 +623,14 @@ export function TripWorkspacePage() {
             <SkeletonLine className="w-full" />
             <SkeletonLine className="w-1/2" />
           </div>
-        ) : sheetItem ? (
+        ) : sheetItem && selectedDay ? (
           <ItemDetailContent
-            day={selectedDay ?? days[0] ?? { id: '', tripId: trip.id, date: trip.startDate, title: '', sortOrder: 0 }}
+            day={selectedDay}
             item={sheetItem}
-            onClose={() =>
-              navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view })
-            }
             onItemDeleted={() => {
-              navigateTo('trip', { tripId: trip.id, dayId: selectedDay?.id ?? '', view: 'schedule' })
-              void refreshItems()
+              const params: Record<string, string> = { tripId: trip.id, view: 'schedule' }
+              if (selectedDay) params.dayId = selectedDay.id
+              navigateTo('trip', params)
             }}
             trip={trip}
           />

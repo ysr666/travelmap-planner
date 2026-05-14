@@ -411,7 +411,8 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <Collapsible title="PWA 和离线使用">
+      <section className="space-y-3">
+        <SectionHeader title="PWA 和离线使用" />
         <Card className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
@@ -442,7 +443,7 @@ export function SettingsPage() {
             />
           </div>
         </Card>
-      </Collapsible>
+      </section>
 
       <section className="space-y-3">
         <SectionHeader title="导入备份" />
@@ -488,7 +489,7 @@ export function SettingsPage() {
       </Card>
       </section>
 
-      <Collapsible title="AI 行程导入">
+      <Collapsible subtitle="用 AI 生成行程后导入" title="AI 行程导入">
         <Card className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
@@ -561,7 +562,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible title="Google Maps 配置">
+      <Collapsible subtitle="底图、地点搜索与公交路线" title="Google Maps 配置">
         <GoogleMapsSettings
         configured={googleMapsConfigured}
         keyInput={googleMapsKeyInput}
@@ -572,7 +573,7 @@ export function SettingsPage() {
       />
       </Collapsible>
 
-      <Collapsible title="路线服务配置">
+      <Collapsible subtitle="步行/驾车路线与缓存管理" title="路线服务配置">
         <RouteServiceSettings
         config={routingConfig}
         keyInput={routingKeyInput}
@@ -589,7 +590,7 @@ export function SettingsPage() {
       />
       </Collapsible>
 
-      <Collapsible title="设备存储">
+      <Collapsible subtitle="IndexedDB 用量与持久化状态" title="设备存储">
         <Card className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -634,7 +635,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible title="关于">
+      <Collapsible subtitle="版本信息与备份提醒" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80">
           <div>
             <h3 className="text-base font-semibold text-amber-950">备份提醒</h3>

@@ -163,9 +163,14 @@ export function HomePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <section className="shrink-0 flex items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
-        <h2 className="text-lg font-semibold text-slate-950">旅图</h2>
-        <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-sm font-semibold text-sky-600">{tripStats.count} 次旅行</span>
+      <section className="shrink-0 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 px-5 py-4 text-white shadow-[0_8px_22px_rgba(56,130,225,0.25)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">旅图</h2>
+            <p className="mt-0.5 text-sm text-white/70">让每一段旅程，井然有序</p>
+          </div>
+          <span className="rounded-lg bg-white/20 px-2.5 py-1 text-sm font-semibold">{tripStats.count} 次旅行</span>
+        </div>
       </section>
 
       {error ? (

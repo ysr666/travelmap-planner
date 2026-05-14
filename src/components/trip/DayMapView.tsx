@@ -913,14 +913,14 @@ function RouteStatusChip({
     <div className={`pointer-events-none absolute left-3 z-40 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
       <button
         aria-label="打开路线设置"
-        className={`pointer-events-auto flex min-h-9 max-w-[16rem] items-center gap-1.5 rounded-full border border-white/80 bg-white/88 px-2.5 py-1.5 text-xs font-semibold shadow-[0_8px_20px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
+        className={`pointer-events-auto flex min-h-8 max-w-[15rem] items-center gap-1.5 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[11px] font-semibold shadow-[0_6px_16px_rgba(47,65,88,0.08)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
         data-testid="route-chip"
         onClick={onClick}
         type="button"
       >
-        <span className={`size-1.5 shrink-0 rounded-full ${routeStatusDotClassName(state, configured)}`} />
+        <span className={`size-1.5 shrink-0 rounded-full opacity-80 ${routeStatusDotClassName(state, configured)}`} />
         <span className="min-w-0 truncate" data-testid="route-status-pill">{chip.label}</span>
-        <ChevronDown className="size-3.5 shrink-0 text-slate-400" />
+        <ChevronDown className="size-3 shrink-0 text-slate-400" />
       </button>
     </div>
   )
@@ -940,7 +940,7 @@ function RouteControlsSummary({
   return (
     <button
       aria-expanded={open}
-      className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50/80 px-3 py-2 text-left text-xs transition active:scale-[0.99]"
+      className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50/60 px-3 py-1.5 text-left text-xs transition active:scale-[0.99]"
       data-testid="route-more-toggle"
       onClick={onToggle}
       type="button"
@@ -985,7 +985,7 @@ function RouteControlsSection({
 
   return (
     <div
-      className="space-y-2 rounded-2xl bg-white/75 px-3 py-2.5 text-xs text-slate-600 ring-1 ring-slate-100"
+      className="space-y-1.5 rounded-xl bg-white/60 px-2.5 py-2 text-xs text-slate-600 ring-1 ring-slate-100/80"
       data-testid="route-controls-section"
     >
       <div className="flex items-center justify-between gap-3">
@@ -994,10 +994,10 @@ function RouteControlsSection({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-full bg-slate-100/80 p-0.5">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-0.5 rounded-full bg-slate-100/70 p-0.5">
           <button
             className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-              displayMode === 'straight' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+              displayMode === 'straight' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70' : 'text-slate-500'
             }`}
             data-testid="route-mode-segment-straight"
             onClick={onResetToStraight}
@@ -1007,7 +1007,7 @@ function RouteControlsSection({
           </button>
           <button
             className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-              displayMode === 'road' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
+              displayMode === 'road' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70' : 'text-slate-500'
             }`}
             data-testid="route-mode-segment-road"
             onClick={onSelectRoadDisplay}
@@ -1017,7 +1017,7 @@ function RouteControlsSection({
           </button>
         </div>
         <button
-          className="min-h-8 shrink-0 rounded-full bg-[#1677ff] px-3 text-xs font-semibold text-white shadow-[0_5px_14px_rgba(22,119,255,0.16)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-7 shrink-0 rounded-full bg-sky-600/90 px-2.5 text-xs font-semibold text-white shadow-[0_4px_10px_rgba(22,119,255,0.12)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="route-generate-button"
           disabled={!canGenerate}
           onClick={onGenerateRoadRoute}
@@ -1027,11 +1027,11 @@ function RouteControlsSection({
         </button>
       </div>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 app-scrollbar">
+      <div className="flex items-center gap-1 overflow-x-auto pb-0.5 app-scrollbar">
         {ROAD_TRANSPORT_MODES.map((mode) => (
           <button
             className={`min-h-7 shrink-0 rounded-full px-2.5 text-xs font-semibold transition active:scale-[0.98] ${
-              activeRoadMode === mode ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-50 text-slate-500'
+              activeRoadMode === mode ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200/80' : 'bg-slate-50/70 text-slate-500'
             }`}
             data-testid={`route-transport-${mode}`}
             disabled={!activeSegmentItem}
@@ -1048,7 +1048,7 @@ function RouteControlsSection({
       </div>
 
       {warningSummary || hasDetails ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/80 px-2.5 py-2 [overflow-wrap:anywhere]">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/60 px-2.5 py-1.5 [overflow-wrap:anywhere]">
           <span className="min-w-0 truncate text-slate-500" data-testid="route-warning-summary">
             {warningSummary ?? '路线详情'}
           </span>
@@ -1066,7 +1066,7 @@ function RouteControlsSection({
       ) : null}
 
       {detailsOpen ? (
-        <div className="space-y-2 rounded-xl bg-slate-50/75 px-2.5 py-2">
+        <div className="space-y-1.5 rounded-xl bg-slate-50/55 px-2.5 py-2">
           <div className="space-y-1 leading-5 text-slate-500 [overflow-wrap:anywhere]" data-testid="route-more-panel">
             <p>{routeSourceDetail(state, configured)}</p>
             {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
@@ -1078,7 +1078,7 @@ function RouteControlsSection({
           {warnings.length > 0 ? (
             <div className="space-y-1 [overflow-wrap:anywhere]" data-testid="route-warning-details">
               {warnings.map((warning) => (
-                <p className="break-words text-amber-700" key={warning}>
+                <p className="break-words text-amber-600" key={warning}>
                   {warning}
                 </p>
               ))}
@@ -1087,7 +1087,7 @@ function RouteControlsSection({
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
-              className="min-h-8 rounded-full bg-white px-3 font-semibold text-slate-600 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              className="min-h-7 rounded-full bg-white/80 px-2.5 font-semibold text-slate-600 ring-1 ring-slate-200/70 active:scale-[0.98]"
               data-testid="route-reset-button"
               onClick={onResetToStraight}
               type="button"
@@ -1095,7 +1095,7 @@ function RouteControlsSection({
               回到直线
             </button>
             <button
-              className="min-h-8 rounded-full px-3 font-semibold text-slate-500 active:scale-[0.98]"
+              className="min-h-7 rounded-full px-2.5 font-semibold text-slate-400 active:scale-[0.98]"
               onClick={onClearRouteCache}
               type="button"
             >
@@ -1184,29 +1184,29 @@ function getRouteChipStatus(
   if (displayMode === 'road' && (activeRoadMode === 'bus' || hasBusWarning(warnings))) {
     return {
       label: state === 'cached' ? '公交近似 · 缓存' : '公交近似',
-      className: 'text-amber-700',
+      className: 'text-amber-600',
     }
   }
   if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
-    return { label: '路线需更新', className: 'text-amber-700' }
+    return { label: '路线需更新', className: 'text-amber-600' }
   }
   if (warnings.some((warning) => warning.includes('路线已过期'))) {
-    return { label: '路线已过期', className: 'text-amber-700' }
+    return { label: '路线已过期', className: 'text-amber-600' }
   }
   if (state === 'loading') {
-    return { label: '正在生成路线', className: 'text-sky-700' }
+    return { label: '正在生成路线', className: 'text-sky-600' }
   }
   if (state === 'cached') {
-    return { label: '道路路线 · 本地缓存', className: 'text-emerald-700' }
+    return { label: '道路路线 · 本地缓存', className: 'text-slate-700' }
   }
   if (state === 'road') {
-    return { label: '道路路线', className: 'text-emerald-700' }
+    return { label: '道路路线', className: 'text-slate-700' }
   }
   if (state === 'mixed') {
-    return { label: `部分失败${warningCount > 0 ? ` · ${warningCount} 条提示` : ''}`, className: 'text-amber-700' }
+    return { label: `部分失败${warningCount > 0 ? ` · ${warningCount} 条提示` : ''}`, className: 'text-amber-600' }
   }
   if (state === 'failed') {
-    return { label: '无法生成路线', className: 'text-amber-700' }
+    return { label: '无法生成路线', className: 'text-amber-600' }
   }
   if (displayMode === 'road' && !configured) {
     return { label: '无法生成路线', className: 'text-slate-500' }
@@ -1263,10 +1263,10 @@ function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
     return 'bg-sky-400'
   }
   if (state === 'road' || state === 'cached') {
-    return 'bg-emerald-500'
+    return 'bg-sky-500'
   }
   if (state === 'mixed' || state === 'failed') {
-    return 'bg-amber-500'
+    return 'bg-amber-400'
   }
   return configured ? 'bg-slate-400' : 'bg-slate-300'
 }

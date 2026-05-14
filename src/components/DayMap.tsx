@@ -1,9 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Feature, MultiLineString } from 'geojson'
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
+import { MapLibreAdapter } from '../lib/maplibreAdapter'
+import type { MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
 import { markMapStartup } from '../lib/mapStartupMetrics'
 import { sortItineraryItems } from '../lib/itinerary'
 import { getItemLngLat, type LngLat } from '../lib/routing'
@@ -32,16 +31,16 @@ export type DayMapHandle = {
 
 type MarkerRecord = {
   itemId: string
-  marker: Marker
+  handle: { setLngLat(lngLat: MapLngLat): void; remove(): void }
   element: HTMLButtonElement
   content: HTMLSpanElement
 }
 
 type CameraState = {
-  bearing: number
   center: LngLat
-  pitch: number
   zoom: number
+  bearing: number
+  pitch: number
 }
 
 type PrewarmSession = {
@@ -50,10 +49,9 @@ type PrewarmSession = {
   restored: boolean
 }
 
-const ROUTE_SOURCE_ID = 'day-route-source'
-const ROUTE_LAYER_ID = 'day-route-line'
 const MAP_ERROR_MESSAGE = '地图底图暂时无法加载，但本地行程仍可查看。'
-const PREWARM_IDLE_TIMEOUT_MS = 1000
+
+const maplibreAdapter = new MapLibreAdapter()
 
 export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   items,
@@ -68,7 +66,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   onMapReady,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
+  const mapRef = useRef<MapInstance | null>(null)
   const markersRef = useRef<MarkerRecord[]>([])
   const loadedRef = useRef(false)
   const fallbackTriedRef = useRef(false)
@@ -111,7 +109,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const showBaseLoading = hasMappableItems && !mapError && !isMapReady
 
   const clearMarkers = useCallback(() => {
-    markersRef.current.forEach(({ marker }) => marker.remove())
+    markersRef.current.forEach(({ handle }) => handle.remove())
     markersRef.current = []
   }, [])
 
@@ -159,12 +157,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
 
     session.restored = true
-    map.jumpTo({
-      bearing: session.restoreCamera.bearing,
-      center: session.restoreCamera.center,
-      pitch: session.restoreCamera.pitch,
-      zoom: session.restoreCamera.zoom,
-    })
+    map.jumpTo(session.restoreCamera)
     markMapStartup('prewarm restored current camera')
   }, [])
 
@@ -192,14 +185,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
 
     cancelPrewarm()
-    const center = map.getCenter()
+    const camera = map.getCamera()
     const session: PrewarmSession = {
       cancelled: false,
       restoreCamera: {
-        bearing: map.getBearing(),
-        center: [center.lng, center.lat],
-        pitch: map.getPitch(),
-        zoom: map.getZoom(),
+        center: camera.center as LngLat,
+        zoom: camera.zoom,
+        bearing: camera.bearing,
+        pitch: camera.pitch,
       },
       restored: false,
     }
@@ -217,13 +210,12 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
           points: target.coordinatesCount,
           title: target.title,
         })
-        const bounds = new maplibregl.LngLatBounds(target.bounds[0], target.bounds[1])
-        map.fitBounds(bounds, {
+        map.fitBounds(target.bounds as unknown as LngLatBounds, {
           duration: 0,
           maxZoom: 14,
           padding: 72,
         })
-        const result = await waitForMapIdleOrTimeout(map, PREWARM_IDLE_TIMEOUT_MS, session)
+        const result = await map.waitForIdle()
         markMapStartup(result === 'idle' ? 'prewarm day idle' : 'prewarm day timeout', {
           dayId: target.dayId,
         })
@@ -242,42 +234,6 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     prewarmBounds,
   }), [cancelPrewarm, prewarmBounds])
 
-  const syncRouteLine = useCallback((map: MapLibreMap, mapItems: ItineraryItem[]) => {
-    const lineData = buildLineFeature(mapItems, routeLineStringsRef.current)
-    const hasLine = lineData.geometry.coordinates.length > 0
-
-    if (!map.getSource(ROUTE_SOURCE_ID)) {
-      map.addSource(ROUTE_SOURCE_ID, {
-        type: 'geojson',
-        data: lineData,
-      })
-    } else {
-      const source = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource
-      source.setData(lineData)
-    }
-
-    if (!map.getLayer(ROUTE_LAYER_ID)) {
-      map.addLayer({
-        id: ROUTE_LAYER_ID,
-        type: 'line',
-        source: ROUTE_SOURCE_ID,
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-          visibility: hasLine ? 'visible' : 'none',
-        },
-        paint: {
-          'line-color': '#1677ff',
-          'line-width': 4,
-          'line-opacity': 0.86,
-        },
-      })
-    } else {
-      map.setLayoutProperty(ROUTE_LAYER_ID, 'visibility', hasLine ? 'visible' : 'none')
-    }
-    markMapStartup('route source synced', { hasLine, points: mapItems.length })
-  }, [])
-
   const syncMarkersAndRoute = useCallback(() => {
     const map = mapRef.current
     if (!map || !loadedRef.current) {
@@ -286,7 +242,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     const mapItems = validItemsRef.current
     clearMarkers()
-    syncRouteLine(map, mapItems)
+
+    const lineStrings = buildLineStrings(mapItems, routeLineStringsRef.current)
+    map.setRouteLine(lineStrings as unknown as MapLngLat[][])
 
     mapItems.forEach((item, index) => {
       const lngLat = getItemLngLat(item)
@@ -311,21 +269,18 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         }
       })
 
-      const marker = new maplibregl.Marker({
-        anchor: 'center',
-        element,
-      })
-        .setLngLat(lngLat)
-        .addTo(map)
-
-      markersRef.current.push({ itemId: item.id, marker, element, content })
+      const handle = map.addMarker(lngLat as unknown as MapLngLat, element)
+      markersRef.current.push({ itemId: item.id, handle, element, content })
     })
 
     updateMarkerSelection()
     markMapStartup('markers rendered', { count: mapItems.length })
-  }, [clearMarkers, syncRouteLine, updateMarkerSelection])
+  }, [clearMarkers, updateMarkerSelection])
 
-  const fitViewportIfNeeded = useCallback((map: MapLibreMap) => {
+  const fitViewportIfNeeded = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
     const nextCoordinateKey = coordinateKeyRef.current
     const mapItems = validItemsRef.current
     if (!nextCoordinateKey || fitCoordinateKeyRef.current === nextCoordinateKey) {
@@ -379,7 +334,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     if (mapRef.current && loadedRef.current) {
       syncMarkersAndRoute()
-      fitViewportIfNeeded(mapRef.current)
+      fitViewportIfNeeded()
     }
   }, [cleanupMap, coordinateKey, fitViewportIfNeeded, hasMappableItems, routeLineKey, syncMarkersAndRoute])
 
@@ -400,28 +355,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       setIsMapReady(false)
 
       const firstLngLat = getItemLngLat(validItemsRef.current[0])
-      const map = new maplibregl.Map({
-        attributionControl: false,
-        center: firstLngLat ?? [139.7671, 35.6812],
-        container: containerRef.current,
-        dragRotate: false,
-        pitchWithRotate: false,
-        style: styleUrl,
-        touchPitch: false,
+      const map = maplibreAdapter.createMap(containerRef.current, {
+        center: (firstLngLat ?? [139.7671, 35.6812]) as MapLngLat,
         zoom: firstLngLat ? 12 : 10,
+        style: styleUrl,
       })
 
-      map.dragPan.enable()
-      map.touchZoomRotate.enable()
-      map.touchZoomRotate.disableRotation()
-      map.dragRotate.disable()
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
       mapRef.current = map
-      markMapStartup('maplibregl.Map created', { isFallback, styleUrl })
-
-      map.once('styledata', () => {
-        markMapStartup('map styledata event')
-      })
+      markMapStartup('map created', { isFallback, styleUrl })
 
       map.once('idle', () => {
         markMapStartup('map idle event')
@@ -436,7 +377,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         setMapError(null)
         markMapStartup('map load event')
         syncMarkersAndRoute()
-        fitViewportIfNeeded(map)
+        fitViewportIfNeeded()
         onMapReadyRef.current?.()
       })
 
@@ -475,11 +416,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     const selectedLngLat = selectedItem ? getItemLngLat(selectedItem) : null
     const map = mapRef.current
     if (map && loadedRef.current && selectedLngLat) {
-      map.easeTo({
-        center: selectedLngLat,
-        duration: 450,
-        zoom: Math.max(map.getZoom(), 13.5),
-      })
+      const currentZoom = map.getCamera().zoom
+      map.easeTo(selectedLngLat as unknown as MapLngLat, Math.max(currentZoom, 13.5), 450)
     }
   }, [selectedItemId, updateMarkerSelection])
 
@@ -566,28 +504,6 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   )
 })
 
-function waitForMapIdleOrTimeout(
-  map: MapLibreMap,
-  timeoutMs: number,
-  session: PrewarmSession,
-): Promise<'idle' | 'timeout'> {
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = (result: 'idle' | 'timeout') => {
-      if (settled) {
-        return
-      }
-      settled = true
-      window.clearTimeout(timeout)
-      map.off('idle', handleIdle)
-      resolve(session.cancelled ? 'timeout' : result)
-    }
-    const handleIdle = () => finish('idle')
-    const timeout = window.setTimeout(() => finish('timeout'), timeoutMs)
-    map.once('idle', handleIdle)
-  })
-}
-
 function markerRootClassName() {
   return [
     'flex',
@@ -615,29 +531,26 @@ function markerContentClassName(isSelected: boolean) {
   ].join(' ')
 }
 
-function buildLineFeature(items: ItineraryItem[], routeLineStrings?: LngLat[][]): Feature<MultiLineString> {
-  const lineCoordinates = normalizeLineStrings(routeLineStrings)
-  const fallbackCoordinates = normalizeLineStrings(
-    items.length > 1
-      ? items.slice(1).flatMap((item, index) => {
-          const from = getItemLngLat(items[index])
-          const to = getItemLngLat(item)
-          return from && to ? [[from, to]] : []
-        })
-      : [],
-  )
-
-  return {
-    type: 'Feature',
-    geometry: {
-      type: 'MultiLineString',
-      coordinates: lineCoordinates.length > 0 ? lineCoordinates : fallbackCoordinates,
-    },
-    properties: {},
+function buildLineStrings(items: ItineraryItem[], routeLineStrings?: LngLat[][]): LngLat[][] {
+  const normalized = normalizeLineStrings(routeLineStrings)
+  if (normalized.length > 0) {
+    return normalized
   }
+
+  if (items.length <= 1) {
+    return []
+  }
+
+  return normalizeLineStrings(
+    items.slice(1).flatMap((item, index) => {
+      const from = getItemLngLat(items[index])
+      const to = getItemLngLat(item)
+      return from && to ? [[from, to]] : []
+    }),
+  )
 }
 
-function updateViewport(map: MapLibreMap, items: ItineraryItem[]) {
+function updateViewport(map: MapInstance, items: ItineraryItem[]) {
   if (items.length === 0) {
     return
   }
@@ -648,26 +561,32 @@ function updateViewport(map: MapLibreMap, items: ItineraryItem[]) {
     if (!lngLat) {
       return
     }
-    map.flyTo({
-      center: lngLat,
-      duration: 600,
-      zoom: 14,
-    })
+    map.flyTo(lngLat as unknown as MapLngLat, 14, 600)
     return
   }
 
-  const bounds = new maplibregl.LngLatBounds()
+  let minLng = Infinity
+  let minLat = Infinity
+  let maxLng = -Infinity
+  let maxLat = -Infinity
+
   items.forEach((item) => {
     const lngLat = getItemLngLat(item)
     if (lngLat) {
-      bounds.extend(lngLat)
+      minLng = Math.min(minLng, lngLat[0])
+      minLat = Math.min(minLat, lngLat[1])
+      maxLng = Math.max(maxLng, lngLat[0])
+      maxLat = Math.max(maxLat, lngLat[1])
     }
   })
-  map.fitBounds(bounds, {
-    duration: 700,
-    maxZoom: 14,
-    padding: 72,
-  })
+
+  if (Number.isFinite(minLng)) {
+    map.fitBounds([[minLng, minLat], [maxLng, maxLat]] as unknown as LngLatBounds, {
+      duration: 700,
+      maxZoom: 14,
+      padding: 72,
+    })
+  }
 }
 
 function normalizeLineStrings(routeLineStrings?: LngLat[][]) {

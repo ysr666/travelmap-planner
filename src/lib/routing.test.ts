@@ -13,6 +13,7 @@ import type { ItineraryItem } from '../types'
 const configured: RoutingConfig = {
   provider: 'openrouteservice',
   apiKey: 'test-key',
+  googleMapsKey: null,
   configured: true,
   source: 'local',
 }
@@ -20,6 +21,7 @@ const configured: RoutingConfig = {
 const unconfigured: RoutingConfig = {
   provider: 'none',
   apiKey: null,
+  googleMapsKey: null,
   configured: false,
   source: 'none',
 }

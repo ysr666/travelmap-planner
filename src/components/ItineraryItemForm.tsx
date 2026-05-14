@@ -1,10 +1,12 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { LocateFixed } from 'lucide-react'
 import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
+import { isGoogleMapsAvailable } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
 import { FormField } from './ui/FormField'
+import { PlaceSearchInput, type PlaceResult } from './ui/PlaceSearchInput'
 
 export type ItineraryItemFormValue = {
   title: string
@@ -73,6 +75,17 @@ export function ItineraryItemForm({
   const [form, setForm] = useState<FormState>(initialState)
   const [error, setError] = useState<string | null>(null)
   const [parseMessage, setParseMessage] = useState<string | null>(null)
+  const googleMapsReady = isGoogleMapsAvailable()
+
+  const handlePlaceSelect = useCallback((place: PlaceResult) => {
+    setForm((current) => ({
+      ...current,
+      locationName: place.name || current.locationName,
+      address: place.address || current.address,
+      lat: place.lat.toString(),
+      lng: place.lng.toString(),
+    }))
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -155,12 +168,22 @@ export function ItineraryItemForm({
           value={form.endTime}
         />
       </div>
-      <FormField
-        label="地点名称"
-        onChange={(value) => setForm((current) => ({ ...current, locationName: value }))}
-        placeholder="例如：涩谷天空"
-        value={form.locationName}
-      />
+      {googleMapsReady ? (
+        <PlaceSearchInput
+          label="搜索地点"
+          onChange={(value) => setForm((current) => ({ ...current, locationName: value }))}
+          onPlaceSelect={handlePlaceSelect}
+          placeholder="输入地点名称搜索..."
+          value={form.locationName}
+        />
+      ) : (
+        <FormField
+          label="地点名称"
+          onChange={(value) => setForm((current) => ({ ...current, locationName: value }))}
+          placeholder="例如：涩谷天空"
+          value={form.locationName}
+        />
+      )}
       <FormField
         label="地址"
         onChange={(value) => setForm((current) => ({ ...current, address: value }))}

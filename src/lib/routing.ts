@@ -2,7 +2,7 @@ import { hasValidCoordinates } from './mapLinks'
 import { sortItineraryItems } from './itinerary'
 import type { ItineraryItem, TransportMode } from '../types'
 
-export type RoutingProvider = 'none' | 'openrouteservice'
+export type RoutingProvider = 'none' | 'openrouteservice' | 'google'
 export type RoutingProfile = 'foot-walking' | 'driving-car' | 'cycling-regular'
 export type RoutingMode = TransportMode | 'cycling' | 'subway' | 'unknown'
 export type LngLat = [number, number]
@@ -10,6 +10,7 @@ export type LngLat = [number, number]
 export type RoutingConfig = {
   provider: RoutingProvider
   apiKey: string | null
+  googleMapsKey: string | null
   configured: boolean
   source: 'local' | 'env' | 'none'
 }
@@ -58,6 +59,7 @@ export const ROUTING_CONFIG_CHANGED_EVENT = 'tripmap:routing-config-changed'
 export const BUS_APPROXIMATION_WARNING = '公交段使用道路路线近似，不包含公交站点、班次、换乘和实时交通。实际出行请以 Apple Maps / Google Maps 等导航为准。'
 
 const OPENROUTESERVICE_ENDPOINT = 'https://api.openrouteservice.org/v2/directions'
+const GOOGLE_ROUTES_ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes'
 const DEFAULT_TIMEOUT_MS = 10000
 const ROUTE_CACHE_LIMIT = 20
 const routeCache = new Map<string, DayRouteResult>()
@@ -75,20 +77,19 @@ export function getRoutingConfig(
   const localApiKey = storage?.getItem(ROUTING_API_KEY_STORAGE_KEY)?.trim() || ''
   const envProvider = normalizeProvider(env.VITE_ROUTING_PROVIDER)
   const envApiKey = env.VITE_OPENROUTESERVICE_API_KEY?.trim() || ''
+  const localGoogleKey = storage?.getItem('tripmap:google-maps-api-key')?.trim() || ''
+  const envGoogleKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || ''
+  const googleMapsKey = localGoogleKey || envGoogleKey || null
 
   if (rawLocalProvider === 'none') {
-    return {
-      provider: 'none',
-      apiKey: null,
-      configured: false,
-      source: 'none',
-    }
+    return { provider: 'none', apiKey: null, googleMapsKey, configured: false, source: 'none' }
   }
 
   if (localProvider === 'openrouteservice' || localApiKey) {
     return {
       provider: 'openrouteservice',
       apiKey: localApiKey || null,
+      googleMapsKey,
       configured: Boolean(localApiKey),
       source: localApiKey ? 'local' : 'none',
     }
@@ -98,20 +99,24 @@ export function getRoutingConfig(
     return {
       provider: 'openrouteservice',
       apiKey: envApiKey || null,
+      googleMapsKey,
       configured: Boolean(envApiKey),
       source: envApiKey ? 'env' : 'none',
     }
   }
 
-  return {
-    provider: 'none',
-    apiKey: null,
-    configured: false,
-    source: 'none',
+  if (googleMapsKey) {
+    return { provider: 'google', apiKey: null, googleMapsKey, configured: true, source: localGoogleKey ? 'local' : 'env' }
   }
+
+  return { provider: 'none', apiKey: null, googleMapsKey: null, configured: false, source: 'none' }
 }
 
 export function isRoutingConfigured(config = getRoutingConfig()) {
+  if (config.provider === 'google' && config.googleMapsKey) {
+    return true
+  }
+
   return config.provider === 'openrouteservice' && config.configured && Boolean(config.apiKey)
 }
 
@@ -182,7 +187,7 @@ export function buildFallbackStraightRoute(items: ItineraryItem[], warning?: str
     warnings: warning ? [warning] : [],
     provider: 'none',
     status: 'straight',
-    cacheKey: buildRouteCacheKey(items, { provider: 'none', apiKey: null, configured: false, source: 'none' }),
+    cacheKey: buildRouteCacheKey(items, { provider: 'none', apiKey: null, googleMapsKey: null, configured: false, source: 'none' }),
   }
 }
 
@@ -312,6 +317,10 @@ export async function fetchRouteSegment(
     fetcher?: typeof fetch
   } = {},
 ): Promise<RouteSegmentResult> {
+  if (config.provider === 'google' && config.googleMapsKey) {
+    return fetchGoogleRouteSegment(request, config.googleMapsKey, options)
+  }
+
   if (!isRoutingConfigured(config) || !config.apiKey) {
     throw new Error('路线服务未配置。')
   }
@@ -350,6 +359,123 @@ export async function fetchRouteSegment(
   } finally {
     cleanup()
   }
+}
+
+async function fetchGoogleRouteSegment(
+  request: RouteSegmentRequest,
+  apiKey: string,
+  options: {
+    signal?: AbortSignal
+    timeoutMs?: number
+    fetcher?: typeof fetch
+  } = {},
+): Promise<RouteSegmentResult> {
+  const travelMode = mapGoogleTravelMode(request.mode)
+  const { signal, cleanup } = createTimeoutSignal(options.signal, options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+  const fetcher = options.fetcher ?? fetch
+
+  try {
+    const response = await fetcher(GOOGLE_ROUTES_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: { latitude: request.from[1], longitude: request.from[0] } } },
+        destination: { location: { latLng: { latitude: request.to[1], longitude: request.to[0] } } },
+        travelMode,
+        routingPreference: 'TRAFFIC_UNAWARE',
+      }),
+      signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(mapGoogleRoutesStatus(response.status))
+    }
+
+    const data = await response.json()
+    const route = data.routes?.[0]
+    if (!route?.polyline?.encodedPolyline) {
+      throw new Error('Google 路线服务没有返回可用路线。')
+    }
+
+    const coordinates = decodeGooglePolyline(route.polyline.encodedPolyline)
+    if (coordinates.length < 2) {
+      throw new Error('Google 路线服务返回的路线数据不完整。')
+    }
+
+    const durationSeconds = typeof route.duration === 'string'
+      ? Number.parseFloat(route.duration.replace('s', ''))
+      : undefined
+
+    return {
+      coordinates,
+      distanceMeters: route.distanceMeters,
+      durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : undefined,
+      provider: 'google',
+      kind: 'road',
+      segmentIndex: request.segmentIndex,
+      fromItemId: request.fromItemId,
+      toItemId: request.toItemId,
+    }
+  } finally {
+    cleanup()
+  }
+}
+
+function mapGoogleTravelMode(mode: RoutingMode): string {
+  if (mode === 'walk') return 'WALK'
+  if (mode === 'car') return 'DRIVE'
+  if (mode === 'bus' || mode === 'train' || mode === 'transit' || mode === 'subway') return 'TRANSIT'
+  if (mode === 'cycling') return 'BICYCLE'
+  return 'DRIVE'
+}
+
+function decodeGooglePolyline(encoded: string): LngLat[] {
+  const coordinates: LngLat[] = []
+  let lat = 0
+  let lng = 0
+  let index = 0
+
+  while (index < encoded.length) {
+    let shift = 0
+    let result = 0
+    let byte: number
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1)
+
+    shift = 0
+    result = 0
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1)
+
+    coordinates.push([lng / 1e5, lat / 1e5])
+  }
+
+  return coordinates
+}
+
+function mapGoogleRoutesStatus(status: number) {
+  if (status === 401 || status === 403) {
+    return 'Google 路线服务密钥无效或无权限。'
+  }
+  if (status === 429) {
+    return 'Google 路线服务请求过于频繁或额度已用尽。'
+  }
+  if (status >= 500) {
+    return 'Google 路线服务暂时不可用。'
+  }
+  return 'Google 路线服务请求失败。'
 }
 
 export function parseOpenRouteServiceGeoJson(input: unknown): {
@@ -434,7 +560,9 @@ function createStraightSegment(
 }
 
 function normalizeProvider(value?: string | null): RoutingProvider {
-  return value === 'openrouteservice' ? 'openrouteservice' : 'none'
+  if (value === 'openrouteservice') return 'openrouteservice'
+  if (value === 'google') return 'google'
+  return 'none'
 }
 
 function getBrowserStorage() {

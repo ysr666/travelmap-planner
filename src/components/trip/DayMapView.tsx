@@ -906,7 +906,8 @@ function RouteStatusChip({
   return (
     <div className={`pointer-events-none absolute left-3 z-40 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
       <button
-        className={`pointer-events-auto flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border border-white/80 bg-white/88 px-3 py-2 text-xs font-semibold shadow-[0_10px_24px_rgba(47,65,88,0.12)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
+        aria-label="打开路线设置"
+        className={`pointer-events-auto flex min-h-9 max-w-[16rem] items-center gap-1.5 rounded-full border border-white/80 bg-white/88 px-2.5 py-1.5 text-xs font-semibold shadow-[0_8px_20px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
         data-testid="route-chip"
         onClick={onClick}
         type="button"

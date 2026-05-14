@@ -12,7 +12,11 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
   await expect(page.getByTestId('route-chip')).toBeVisible()
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
+  await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
+  await expect(page.getByTestId('route-mode-segment-straight')).toBeHidden()
+  await expect(page.getByTestId('route-mode-segment-road')).toBeHidden()
+  await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await expect(page.getByTestId('route-generate-button')).toBeHidden()
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
 
@@ -56,6 +60,7 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
 
   await expect(page.getByTestId('route-chip')).toBeVisible()
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
+  await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
   await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await page.getByTestId('route-chip').click()
@@ -156,6 +161,8 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
   await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存')
+  await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
+  await expect(page.getByTestId('route-generate-button')).toBeHidden()
 
   const requestsAfterCacheLoad = routeRequestCount
   await page.evaluate(() => {
@@ -223,6 +230,7 @@ test('公交段生成道路路线时显示近似提示', async ({ page }) => {
   expect(routeRequestCount).toBe(0)
   await page.getByTestId('route-generate-button').click()
 
+  await expect.poll(() => routeRequestCount).toBeGreaterThan(0)
   await expect(page.getByTestId('route-status-pill')).toContainText('公交近似')
   expect(sawDrivingCarRequest).toBe(true)
   await expectNoHorizontalOverflow(page)

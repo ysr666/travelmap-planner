@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { LocateFixed } from 'lucide-react'
 import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
-import { isGoogleMapsAvailable } from '../lib/googleMaps'
+import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
@@ -75,7 +75,7 @@ export function ItineraryItemForm({
   const [form, setForm] = useState<FormState>(initialState)
   const [error, setError] = useState<string | null>(null)
   const [parseMessage, setParseMessage] = useState<string | null>(null)
-  const googleMapsReady = isGoogleMapsAvailable()
+  const googleMapsKeyConfigured = isGoogleMapsConfigured()
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     setForm((current) => ({
@@ -168,7 +168,7 @@ export function ItineraryItemForm({
           value={form.endTime}
         />
       </div>
-      {googleMapsReady ? (
+      {googleMapsKeyConfigured ? (
         <PlaceSearchInput
           label="搜索地点"
           onChange={(value) => setForm((current) => ({ ...current, locationName: value }))}

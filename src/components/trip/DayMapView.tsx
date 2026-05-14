@@ -745,7 +745,7 @@ function MapBottomSheet({
 
   return (
     <section
-      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-3xl border border-white/80 bg-white/95 shadow-[0_-14px_36px_rgba(47,65,88,0.14)] backdrop-blur-xl ${
+      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-3xl border border-white/70 bg-white/94 shadow-[0_-10px_28px_rgba(47,65,88,0.10)] backdrop-blur-xl ${
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
       data-testid="map-sheet"
@@ -762,7 +762,7 @@ function MapBottomSheet({
         role="button"
         tabIndex={0}
       >
-        <div className="h-1.5 w-11 rounded-full bg-slate-300" />
+        <div className="h-1 w-10 rounded-full bg-slate-300/80" />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -781,7 +781,7 @@ function MapBottomSheet({
             </p>
           </div>
           <Button
-            className={`shrink-0 whitespace-nowrap rounded-xl ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-9 px-3 text-xs'}`}
+            className={`shrink-0 whitespace-nowrap rounded-full bg-slate-50/70 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
             icon={<Navigation className="size-3.5" />}
             onClick={onBackToTimeline}
             variant={sheetState === 'middle' ? 'secondary' : 'ghost'}
@@ -818,13 +818,13 @@ function MapBottomSheet({
           ) : null}
 
           {mapError ? (
-            <div className="rounded-xl bg-amber-50/85 px-3 py-2 text-sm text-amber-800">
+            <div className="rounded-xl bg-amber-50/70 px-3 py-2 text-sm text-amber-700">
               {mapError}
             </div>
           ) : null}
 
           {notice ? (
-            <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <div className="flex items-start gap-2 rounded-xl bg-slate-50/70 px-3 py-2 text-sm text-slate-600">
               <AlertCircle className="mt-0.5 size-4 shrink-0 text-slate-400" />
               <span>{notice}</span>
             </div>
@@ -846,7 +846,7 @@ function MapBottomSheet({
               trip={trip}
             />
           ) : sheetState !== 'expanded' ? (
-            <p className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
+            <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm text-slate-500">
               {items.length === 0
                 ? '这一天还没有行程点。'
                 : '选择地图标记或列表行程查看详情。'}
@@ -1351,11 +1351,11 @@ function ItineraryPreviewList({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {previewItems.map((item, index) => (
         <button
-          className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition active:bg-slate-50 ${
-            selectedItemId === item.id ? 'bg-sky-50/80' : ''
+          className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
+            selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80' : 'bg-white/35 ring-1 ring-transparent'
           }`}
           key={item.id}
           onClick={() => onSelectItem(item, 'list')}
@@ -1364,7 +1364,7 @@ function ItineraryPreviewList({
           }}
           type="button"
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-xs font-bold text-slate-500">
             {index + 1}
           </span>
           <span className="min-w-0 flex-1">
@@ -1400,14 +1400,14 @@ function ItineraryList({
 }) {
   if (items.length === 0) {
     return (
-      <p className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
+      <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm text-slate-500">
         这一天还没有行程点。
       </p>
     )
   }
 
   return (
-    <div className="space-y-2 pb-8">
+    <div className="space-y-1.5 pb-8">
       {items.map((item, index) => {
         const previousTransportDescription = describePreviousTransport(item)
         const hasCoordinates = hasValidCoordinates(item)
@@ -1418,8 +1418,8 @@ function ItineraryList({
               <TransportSegment description={previousTransportDescription} />
             ) : null}
             <button
-              className={`flex w-full items-center gap-3 rounded-xl p-2 text-left transition active:bg-slate-50 ${
-                selectedItemId === item.id ? 'bg-sky-50 ring-1 ring-sky-100' : ''
+              className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
+                selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80' : 'bg-white/35 ring-1 ring-transparent'
               }`}
               onClick={() => onSelectItem(item, 'list')}
               ref={(node) => {
@@ -1429,7 +1429,7 @@ function ItineraryList({
             >
               <span
                 className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  hasCoordinates ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-400'
+                  hasCoordinates ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100/80' : 'bg-slate-100/80 text-slate-400'
                 }`}
               >
                 {index + 1}
@@ -1450,14 +1450,14 @@ function ItineraryList({
             {!hasCoordinates ? (
               <div className="ml-11 flex gap-2">
                 <Button
-                  className="min-h-9 px-3 text-xs"
+                  className="min-h-8 rounded-full px-3 text-xs"
                   onClick={() => onOpenItem(item)}
                   variant="secondary"
                 >
                   详情
                 </Button>
                 <Button
-                  className="min-h-9 px-3 text-xs"
+                  className="min-h-8 rounded-full px-3 text-xs"
                   onClick={() => (onEditItem ? onEditItem(item) : undefined)}
                   variant="ghost"
                 >
@@ -1490,7 +1490,7 @@ function SelectedItemCard({
   const hasCoordinates = hasValidCoordinates(item)
 
   return (
-    <div className="rounded-2xl bg-slate-50/70 px-3 py-2.5">
+    <div className="rounded-xl bg-slate-50/60 px-3 py-2.5 ring-1 ring-slate-100/70">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
@@ -1498,7 +1498,7 @@ function SelectedItemCard({
           <p className="mt-0.5 truncate text-xs text-slate-500">{item.locationName || '地点未填写'}</p>
         </div>
         <Button
-          className="min-h-8 shrink-0 px-2.5 text-xs"
+          className="min-h-8 shrink-0 rounded-full px-2.5 text-xs"
           onClick={() => onOpenItem(item)}
           variant="ghost"
         >
@@ -1511,7 +1511,7 @@ function SelectedItemCard({
       <div className="mt-2 flex gap-2">
         <a
           className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
-            hasCoordinates ? 'bg-white text-slate-700 ring-1 ring-slate-200/80' : 'bg-slate-100 text-slate-400'
+            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70' : 'bg-slate-100/70 text-slate-400'
           }`}
           href={hasCoordinates ? buildAppleMapsUrl(item) : undefined}
           rel="noreferrer"
@@ -1522,7 +1522,7 @@ function SelectedItemCard({
         </a>
         <a
           className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
-            hasCoordinates ? 'bg-white text-slate-800 ring-1 ring-slate-200' : 'bg-slate-100 text-slate-400'
+            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70' : 'bg-slate-100/70 text-slate-400'
           }`}
           href={hasCoordinates ? buildGoogleMapsUrl(item) : undefined}
           rel="noreferrer"
@@ -1534,7 +1534,7 @@ function SelectedItemCard({
       </div>
       {!hasCoordinates ? (
         <Button
-          className="mt-2 w-full min-h-9 text-xs"
+          className="mt-2 w-full min-h-8 rounded-full text-xs"
           onClick={() => (onEditItem ? onEditItem(item) : undefined)}
           variant="secondary"
         >
@@ -1662,7 +1662,7 @@ function clamp(value: number, min: number, max: number) {
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="mx-2 flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">
+    <div className="mx-1 flex w-fit max-w-[calc(100%-0.5rem)] items-center gap-1.5 rounded-full bg-slate-50/75 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100/70">
       <ArrowDown className="size-3 shrink-0 text-slate-400" />
       <span className="min-w-0 truncate">{description}</span>
     </div>

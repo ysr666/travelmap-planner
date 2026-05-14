@@ -18,6 +18,7 @@ import {
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import {
@@ -410,8 +411,7 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <section className="space-y-3">
-        <SectionHeader title="PWA 和离线使用" />
+      <Collapsible title="PWA 和离线使用">
         <Card className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
@@ -442,7 +442,7 @@ export function SettingsPage() {
             />
           </div>
         </Card>
-      </section>
+      </Collapsible>
 
       <section className="space-y-3">
         <SectionHeader title="导入备份" />
@@ -486,7 +486,9 @@ export function SettingsPage() {
           导入 zip 备份
         </Button>
       </Card>
+      </section>
 
+      <Collapsible title="AI 行程导入">
         <Card className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
@@ -557,9 +559,10 @@ export function SettingsPage() {
             onCopyPrompt={() => void handleCopyAiPrompt()}
           />
         </Card>
-      </section>
+      </Collapsible>
 
-      <GoogleMapsSettings
+      <Collapsible title="Google Maps 配置">
+        <GoogleMapsSettings
         configured={googleMapsConfigured}
         keyInput={googleMapsKeyInput}
         message={googleMapsMessage}
@@ -567,8 +570,10 @@ export function SettingsPage() {
         onKeyInputChange={setGoogleMapsKeyInput}
         onSave={handleSaveGoogleMapsKey}
       />
+      </Collapsible>
 
-      <RouteServiceSettings
+      <Collapsible title="路线服务配置">
+        <RouteServiceSettings
         config={routingConfig}
         keyInput={routingKeyInput}
         cacheError={routeCacheError}
@@ -582,9 +587,9 @@ export function SettingsPage() {
         onKeyInputChange={setRoutingKeyInput}
         onSave={handleSaveRoutingKey}
       />
+      </Collapsible>
 
-      <section className="space-y-3">
-        <SectionHeader title="设备存储" />
+      <Collapsible title="设备存储">
         <Card className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -627,10 +632,9 @@ export function SettingsPage() {
             </p>
           ) : null}
         </Card>
-      </section>
+      </Collapsible>
 
-      <section className="space-y-3">
-        <SectionHeader title="关于" />
+      <Collapsible title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80">
           <div>
             <h3 className="text-base font-semibold text-amber-950">备份提醒</h3>
@@ -643,7 +647,7 @@ export function SettingsPage() {
             <AppVersion className="text-left text-amber-800/70" label="当前版本" />
           </div>
         </Card>
-      </section>
+      </Collapsible>
     </div>
   )
 }
@@ -665,7 +669,6 @@ function GoogleMapsSettings({
 }) {
   return (
     <section className="space-y-3" data-testid="google-maps-settings-section">
-      <SectionHeader title="Google Maps" />
       <Card className="space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -773,7 +776,6 @@ function RouteServiceSettings({
 
   return (
     <section className="space-y-3" data-testid="routing-settings-section">
-      <SectionHeader title="路线服务" />
       <Card className="space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">

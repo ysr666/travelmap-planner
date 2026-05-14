@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, HardDriveDownload, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
 import { getItineraryItem, getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -9,6 +9,7 @@ import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Collapsible } from '../components/ui/Collapsible'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
@@ -228,10 +229,6 @@ export function TripWorkspacePage() {
     }, {})
   }, [allItems])
 
-  const locatedCount = useMemo(() => {
-    return allItems.filter((item) => item.lat !== undefined && item.lng !== undefined).length
-  }, [allItems])
-
   useEffect(() => {
     if (isLoading || !trip || days.length === 0) {
       return
@@ -388,7 +385,7 @@ export function TripWorkspacePage() {
           </div>
           <TripMoreMenu tripId={trip.id} />
         </div>
-        {!isMapView ? <TripCover trip={trip} variant="compact" /> : null}
+        {!isMapView && view !== 'overview' ? <TripCover trip={trip} variant="compact" /> : null}
       </header>
 
       {days.length === 0 ? (
@@ -449,13 +446,9 @@ export function TripWorkspacePage() {
                       {formatDateRange(trip.startDate, trip.endDate)}
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <OverviewMetric label="天数" value={days.length.toString()} />
-                    <OverviewMetric label="行程" value={allItems.length.toString()} />
-                    <OverviewMetric
-                      label="已定位"
-                      value={locatedCount.toString()}
-                    />
+                    <OverviewMetric label="行程点" value={allItems.length.toString()} />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Button
@@ -490,60 +483,48 @@ export function TripWorkspacePage() {
 
                 <section className="space-y-3">
                     <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
-                    <Card className="space-y-1 p-2">
-                      {days.map((day) => (
+                    <Card className="divide-y divide-slate-100 p-0">
+                      {days.map((day, index) => (
                         <div
-                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2 transition hover:bg-slate-50 active:bg-slate-100 cursor-pointer"
+                          className="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50 active:bg-slate-100 cursor-pointer"
                           key={day.id}
                           onClick={() => handleOverviewSelectDay(day, 'schedule')}
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOverviewSelectDay(day, 'schedule') }}
                         >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-                              <CalendarDays className="size-4" />
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-xs font-bold text-sky-600">
+                            D{index + 1}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-950">
+                              {formatDate(day.date)}
                             </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-semibold text-slate-950">
-                                {formatDate(day.date)}
-                              </span>
-                              <span className="mt-0.5 block truncate text-sm text-slate-500">
-                                {day.title} · {itemsByDayCount[day.id] ?? 0} 个点
-                              </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-400">
+                              {itemsByDayCount[day.id] ?? 0} 个行程点
                             </span>
-                          </div>
-                          <Button
-                            className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
-                            onClick={() => handleOverviewSelectDay(day, 'schedule')}
-                            variant="secondary"
-                          >
-                            日程
-                          </Button>
-                          <Button
-                            className="min-h-10 shrink-0 px-3 text-xs whitespace-nowrap"
-                            icon={<Map className="size-4" />}
-                            onClick={() => handleOverviewSelectDay(day, 'map')}
-                            variant="secondary"
-                          >
-                            地图
-                          </Button>
+                          </span>
+                          <ChevronRight className="size-4 shrink-0 text-slate-300" />
                         </div>
                       ))}
                     </Card>
                   </section>
 
-                <Card className="flex items-start gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                    <NotebookText className="size-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-950">旅行备注</h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-500">{trip.notes || '暂无备注。'}</p>
-                  </div>
-                </Card>
+                {trip.notes ? (
+                  <Card className="flex items-start gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                      <NotebookText className="size-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">旅行备注</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">{trip.notes}</p>
+                    </div>
+                  </Card>
+                ) : null}
 
-                <TravelBackupPanel trip={trip} />
+                <Collapsible title="备份与恢复">
+                  <TravelBackupPanel trip={trip} />
+                </Collapsible>
               </div>
             </div>
           ) : selectedDay ? (

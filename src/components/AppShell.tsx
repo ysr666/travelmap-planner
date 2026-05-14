@@ -13,46 +13,51 @@ type AppShellProps = {
   children: ReactNode
 }
 
-const routeTitles: Record<RouteId, { title: string; subtitle: string }> = {
-  home: { title: '旅行列表', subtitle: '本地旅行总控台' },
-  trip: { title: '旅行工作台', subtitle: '当前旅行与每日行程' },
-  item: { title: '行程点详情', subtitle: '地点、备注与外部地图' },
-  tickets: { title: '票据库', subtitle: '文件保存在本机' },
-  settings: { title: '设置', subtitle: '本机存储与备份' },
+const routeTitles: Record<RouteId, string> = {
+  home: '旅图',
+  trip: '旅行工作台',
+  item: '行程点详情',
+  tickets: '票据库',
+  settings: '设置',
 }
 
 export function AppShell({ activeRoute, children }: AppShellProps) {
   const isHome = activeRoute === 'home'
   const isTrip = activeRoute === 'trip' || activeRoute === 'item'
-  const title = routeTitles[activeRoute]
+  const pageTitle = routeTitles[activeRoute]
 
   return (
     <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)]">
       {!isTrip ? (
         <header className="z-30 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
-            <button
-              aria-label="返回首页"
-              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-              onClick={() => navigateTo('home')}
-              type="button"
-            >
-              <Home className="size-5" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-slate-400">{title.subtitle}</p>
-              <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">
-                {title.title}
-              </h1>
-            </div>
-            <button
-              aria-label="设置"
-              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-              onClick={() => navigateTo('settings')}
-              type="button"
-            >
-              <Cog className="size-5" />
-            </button>
+            {isHome ? (
+              <div className="size-10" />
+            ) : (
+              <button
+                aria-label="返回首页"
+                className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+                onClick={() => navigateTo('home')}
+                type="button"
+              >
+                <Home className="size-5" />
+              </button>
+            )}
+            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
+              {pageTitle}
+            </h1>
+            {activeRoute === 'settings' ? (
+              <div className="size-10" />
+            ) : (
+              <button
+                aria-label="设置"
+                className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+                onClick={() => navigateTo('settings')}
+                type="button"
+              >
+                <Cog className="size-5" />
+              </button>
+            )}
           </div>
         </header>
       ) : null}

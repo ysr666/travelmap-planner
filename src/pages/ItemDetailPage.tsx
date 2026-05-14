@@ -24,6 +24,7 @@ import {
   getTicketDisplayTitle,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+import { Collapsible } from '../components/ui/Collapsible'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -125,55 +126,58 @@ export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted 
             </p>
             <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">{item.title}</h2>
           </div>
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-xs font-semibold text-sky-600">
-            {item.transportMode ? transportModeLabels[item.transportMode] : '未定'}
-          </span>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-3">
-          <p className="flex items-start gap-2 text-sm font-semibold text-slate-950">
-            <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
-            {item.locationName || '地点未填写'}
-          </p>
-          <p className="mt-1 pl-6 text-sm leading-6 text-slate-500">
-            {item.address || '地址未填写'}
-          </p>
-          {item.lat !== undefined && item.lng !== undefined ? (
-            <p className="mt-1 pl-6 text-xs text-slate-400">
-              {item.lat}, {item.lng}
-            </p>
+          {item.transportMode ? (
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-xs font-semibold text-sky-600">
+              {transportModeLabels[item.transportMode]}
+            </span>
           ) : null}
         </div>
-        <p className="text-sm leading-6 text-slate-500">{item.notes || '暂无备注。'}</p>
-        <PreviousTransportCard
-          isFirstItem={itemIndex <= 0}
-          item={item}
-          previousItem={previousItem}
-        />
-        <div className="grid grid-cols-2 gap-3">
+        {item.locationName || item.address ? (
+          <div className="rounded-xl bg-slate-50 p-3">
+            <p className="flex items-start gap-2 text-sm font-semibold text-slate-950">
+              <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
+              {item.locationName || '地点未填写'}
+            </p>
+            {item.address ? (
+              <p className="mt-1 pl-6 text-sm leading-6 text-slate-500">{item.address}</p>
+            ) : null}
+          </div>
+        ) : null}
+        {item.notes ? (
+          <p className="text-sm leading-6 text-slate-500">{item.notes}</p>
+        ) : null}
+        {itemIndex > 0 ? (
+          <Collapsible title="从上一站到此">
+            <PreviousTransportCard
+              item={item}
+              previousItem={previousItem}
+            />
+          </Collapsible>
+        ) : null}
+        <a
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-[0_6px_16px_var(--color-primary-shadow)]"
+          href={isIOS() ? buildAppleMapsUrl(item) : buildGoogleMapsUrl(item)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {isIOS() ? <Navigation className="size-4" /> : <ExternalLink className="size-4" />}
+          {isIOS() ? 'Apple 地图' : 'Google 地图'}
+        </a>
+        <Collapsible title="其他地图">
           <a
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-[0_6px_16px_var(--color-primary-shadow)]"
-            href={buildAppleMapsUrl(item)}
+            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80"
+            href={isIOS() ? buildGoogleMapsUrl(item) : buildAppleMapsUrl(item)}
             rel="noreferrer"
             target="_blank"
           >
-            <Navigation className="size-4" />
-            Apple 地图
+            {isIOS() ? <ExternalLink className="size-4" /> : <Navigation className="size-4" />}
+            {isIOS() ? 'Google 地图' : 'Apple 地图'}
           </a>
-          <a
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80"
-            href={buildGoogleMapsUrl(item)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <ExternalLink className="size-4" />
-            Google 地图
-          </a>
-        </div>
+        </Collapsible>
         <div className="grid grid-cols-2 gap-3">
           <Button
             icon={<Edit3 className="size-4" />}
             onClick={() => setIsEditing((current) => !current)}
-            variant="secondary"
           >
             编辑
           </Button>
@@ -266,11 +270,9 @@ export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted 
 function PreviousTransportCard({
   item,
   previousItem,
-  isFirstItem,
 }: {
   item: ItineraryItem
   previousItem: ItineraryItem | null
-  isFirstItem: boolean
 }) {
   const description = describePreviousTransport(item)
   const appleUrl = previousItem
@@ -281,67 +283,47 @@ function PreviousTransportCard({
     : null
 
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <h3 className="text-sm font-semibold text-slate-950">从上一站到此处</h3>
-      {isFirstItem ? (
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          这是当天第一个行程点，没有上一站交通段。
-        </p>
-      ) : (
-        <>
-          {description ? (
-            <div className="mt-2 space-y-1.5 text-sm text-slate-600">
-              {item.previousTransportMode ? (
-                <p>
-                  <span className="font-semibold text-slate-500">交通方式：</span>
-                  {transportModeLabels[item.previousTransportMode]}
-                </p>
-              ) : null}
-              {item.previousTransportDurationMinutes !== undefined ? (
-                <p>
-                  <span className="font-semibold text-slate-500">预计耗时：</span>
-                  {item.previousTransportDurationMinutes} 分钟
-                </p>
-              ) : null}
-              {item.previousTransportNote ? (
-                <p>
-                  <span className="font-semibold text-slate-500">交通备注：</span>
-                  {item.previousTransportNote}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm leading-6 text-slate-500">尚未填写交通信息。</p>
-          )}
-
-          {appleUrl && googleUrl ? (
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              <a
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-white"
-                href={appleUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <Navigation className="size-4" />
-                用 Apple Maps 查看上一站到此处路线
-              </a>
-              <a
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-semibold text-slate-800 ring-1 ring-slate-200"
-                href={googleUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <ExternalLink className="size-4" />
-                用 Google Maps 查看上一站到此处路线
-              </a>
-            </div>
-          ) : (
-            <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-400">
-              上一站或当前地点信息不足
+    <div className="space-y-3">
+      {description ? (
+        <div className="space-y-1.5 text-sm text-slate-600">
+          {item.previousTransportMode ? (
+            <p>
+              <span className="font-semibold text-slate-500">交通方式：</span>
+              {transportModeLabels[item.previousTransportMode]}
             </p>
-          )}
-        </>
+          ) : null}
+          {item.previousTransportDurationMinutes !== undefined ? (
+            <p>
+              <span className="font-semibold text-slate-500">预计耗时：</span>
+              {item.previousTransportDurationMinutes} 分钟
+            </p>
+          ) : null}
+          {item.previousTransportNote ? (
+            <p>
+              <span className="font-semibold text-slate-500">交通备注：</span>
+              {item.previousTransportNote}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm leading-6 text-slate-500">尚未填写交通信息。</p>
       )}
+
+      {appleUrl && googleUrl ? (
+        <a
+          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-white"
+          href={isIOS() ? appleUrl : googleUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {isIOS() ? <Navigation className="size-4" /> : <ExternalLink className="size-4" />}
+          查看路线
+        </a>
+      ) : null}
     </div>
   )
+}
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 }

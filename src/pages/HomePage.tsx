@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { CalendarDays, MapPinned, Plus, Trash2, Upload } from 'lucide-react'
+import { CalendarDays, Plus, Trash2 } from 'lucide-react'
 import { createDemoTrip, createTrip, deleteTripCascade, listTrips } from '../db'
 import { navigateTo } from '../lib/routes'
 import type { Trip } from '../types'
@@ -163,23 +163,9 @@ export function HomePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <section className="shrink-0 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-sky-600">你好，旅行家 👋</p>
-            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">旅图 TripMap</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              让每一段旅程，都井然有序。
-            </p>
-          </div>
-          <div className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-center">
-            <p className="text-lg font-semibold text-sky-600">{tripStats.count}</p>
-            <p className="text-xs font-semibold text-sky-500">旅行</p>
-          </div>
-        </div>
-        {tripStats.latest ? (
-          <p className="mt-3 text-xs text-slate-400">最近更新：{formatDateTime(tripStats.latest)}</p>
-        ) : null}
+      <section className="shrink-0 flex items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-[0_8px_22px_rgba(47,65,88,0.05)]">
+        <h2 className="text-lg font-semibold text-slate-950">旅图</h2>
+        <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-sm font-semibold text-sky-600">{tripStats.count} 次旅行</span>
       </section>
 
       {error ? (
@@ -261,7 +247,7 @@ export function HomePage() {
           </div>
         ) : (
           <>
-            <SectionHeader title="我的旅行" action="刷新" onAction={() => void refreshTrips()} />
+            <SectionHeader title="我的旅行" />
             <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
               {isLoading ? (
                 <Card className="space-y-3">
@@ -310,24 +296,23 @@ export function HomePage() {
 
       {!isCreating ? (
         <div className="shrink-0">
-          <div className="mb-3 flex items-center gap-3 rounded-2xl bg-emerald-50/70 px-3 py-2 text-xs text-emerald-700 ring-1 ring-emerald-100">
-            <MapPinned className="size-4 shrink-0" />
-            <span className="min-w-0 truncate">出发前请导出 zip 备份到安全位置。</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              icon={<Plus className="size-4" />}
-              onClick={() => {
-                setIsCreating(true)
-                setFormError(null)
-              }}
-            >
-              新建旅行
-            </Button>
-            <Button icon={<Upload className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
-              导入备份
-            </Button>
-          </div>
+          <Button
+            className="w-full"
+            icon={<Plus className="size-4" />}
+            onClick={() => {
+              setIsCreating(true)
+              setFormError(null)
+            }}
+          >
+            新建旅行
+          </Button>
+          <button
+            className="mt-2 w-full text-center text-sm font-medium text-slate-400 transition hover:text-slate-600"
+            onClick={() => navigateTo('settings')}
+            type="button"
+          >
+            导入备份
+          </button>
           <AppVersion className="mt-3" suffix="本地优先" />
         </div>
       ) : null}
@@ -371,31 +356,30 @@ function TripCard({
   return (
     <Card className="relative overflow-hidden p-0" data-testid="trip-card">
       <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
-      <button
-        aria-label={`删除 ${trip.title}`}
-        className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100 active:scale-[0.98]"
-        disabled={isDeleting}
-        onClick={onDelete}
-        type="button"
-      >
-        <Trash2 className="size-4" />
-      </button>
-      <button className="grid w-full grid-cols-[6.2rem_1fr] gap-3 p-4 pl-5 pr-14 text-left" onClick={onOpen} type="button">
+      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-4 pl-5 text-left" onClick={onOpen} type="button">
         <TripCover trip={trip} variant="thumbnail" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${status.className}`}>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${status.className}`}>
               {status.label}
             </span>
-            <p className="truncate text-xs font-semibold text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
+            <p className="truncate text-xs text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
           </div>
-          <h3 className="mt-2 truncate text-lg font-semibold text-slate-950">{trip.title}</h3>
-          <p className="mt-1 truncate text-sm text-slate-500">{trip.destination}</p>
-          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
-            {trip.notes || `${formatTripDays(trip.startDate, trip.endDate)} · 最近更新 ${formatShortDateTime(trip.updatedAt)}`}
-          </p>
+          <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950">{trip.title}</h3>
+          <p className="mt-0.5 truncate text-sm text-slate-500">{trip.destination}</p>
         </div>
       </button>
+      <div className="flex items-center justify-end border-t border-slate-100 px-4 py-2">
+        <button
+          aria-label={`删除 ${trip.title}`}
+          className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
+          disabled={isDeleting}
+          onClick={onDelete}
+          type="button"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
     </Card>
   )
 }
@@ -408,17 +392,6 @@ function formatDateRange(startDate: string, endDate: string) {
   return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`
 }
 
-function formatTripDays(startDate: string, endDate: string) {
-  if (!startDate || !endDate || endDate < startDate) {
-    return '日期未定'
-  }
-
-  const start = new Date(`${startDate}T00:00:00`)
-  const end = new Date(`${endDate}T00:00:00`)
-  const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
-  return `${days} 天`
-}
-
 function formatShortDate(date: string) {
   if (!date) {
     return '未定'
@@ -428,18 +401,4 @@ function formatShortDate(date: string) {
     month: 'numeric',
     day: 'numeric',
   }).format(new Date(`${date}T00:00:00`))
-}
-
-function formatShortDateTime(timestamp: number) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  }).format(new Date(timestamp))
-}
-
-function formatDateTime(timestamp: number) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(timestamp))
 }

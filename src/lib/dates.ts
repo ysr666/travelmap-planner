@@ -21,6 +21,11 @@ export function formatDateRange(startDate: string, endDate: string) {
   return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`
 }
 
+export function formatDateKey(date: Date) {
+  const pad = (value: number) => value.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 export function listExpectedTripDates(trip: Trip) {
   const start = dayjs(trip.startDate)
   const end = dayjs(trip.endDate)

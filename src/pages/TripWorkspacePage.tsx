@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
+import { ArrowLeft, CalendarDays, HardDriveDownload, Map, MapPin, NotebookText, Route, RotateCw, Ticket } from 'lucide-react'
 import { getItineraryItem, getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -12,7 +12,7 @@ import { Card } from '../components/ui/Card'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
-import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
+import { ensureDaysForTrip, formatDate, formatDateKey, formatDateRange } from '../lib/dates'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo, routeFromHash } from '../lib/routes'
@@ -457,7 +457,7 @@ export function TripWorkspacePage() {
                       value={locatedCount.toString()}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Button
                       className="whitespace-nowrap px-2 text-xs"
                       disabled={days.length === 0}
@@ -477,6 +477,14 @@ export function TripWorkspacePage() {
                     >
                       票据库
                     </Button>
+                    <Button
+                      className="whitespace-nowrap px-2 text-xs"
+                      icon={<HardDriveDownload className="size-4" />}
+                      onClick={() => document.getElementById('travel-backup-panel')?.scrollIntoView({ behavior: 'smooth' })}
+                      variant="secondary"
+                    >
+                      备份
+                    </Button>
                   </div>
                 </Card>
 
@@ -485,8 +493,12 @@ export function TripWorkspacePage() {
                     <Card className="space-y-1 p-2">
                       {days.map((day) => (
                         <div
-                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2"
+                          className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl p-2 transition hover:bg-slate-50 active:bg-slate-100 cursor-pointer"
                           key={day.id}
+                          onClick={() => handleOverviewSelectDay(day, 'schedule')}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOverviewSelectDay(day, 'schedule') }}
                         >
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
@@ -697,11 +709,6 @@ function normalizeView(value: string | null): WorkspaceView {
   if (value === 'map') return 'map'
   if (value === 'schedule') return 'schedule'
   return 'overview'
-}
-
-function formatDateKey(date: Date) {
-  const pad = (value: number) => value.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 function formatShortWorkspaceDate(date: string) {

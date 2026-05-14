@@ -39,7 +39,7 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3" id="travel-backup-panel">
       <SectionHeader title="备份与恢复" />
       <Card className="space-y-3">
         <p className="text-sm leading-6 text-slate-500">

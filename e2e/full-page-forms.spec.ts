@@ -3,7 +3,6 @@ import {
   clearTravelDatabase,
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
-  getHashParam,
 } from './helpers'
 
 async function getDemoIds(page: import('@playwright/test').Page, tripId: string) {
@@ -19,7 +18,7 @@ async function getDemoIds(page: import('@playwright/test').Page, tripId: string)
     const itemsStore = tx.objectStore('itineraryItems')
 
     const daysIndex = daysStore.index('tripId')
-    const days = await new Promise<any[]>((resolve, reject) => {
+    const days = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
       const req = daysIndex.getAll(tid)
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
@@ -29,14 +28,14 @@ async function getDemoIds(page: import('@playwright/test').Page, tripId: string)
     if (!day) return { dayId: null, itemId: null }
 
     const itemsIndex = itemsStore.index('dayId')
-    const items = await new Promise<any[]>((resolve, reject) => {
-      const req = itemsIndex.getAll(day.id)
+    const items = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      const req = itemsIndex.getAll(day.id as string)
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
     })
 
     db.close()
-    return { dayId: day.id, itemId: items[0]?.id ?? null }
+    return { dayId: day.id as string, itemId: (items[0]?.id as string) ?? null }
   }, tripId)
 }
 

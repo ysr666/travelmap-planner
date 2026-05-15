@@ -382,15 +382,6 @@ export function TicketLibraryPage() {
       </Card>
 
       <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} />
-      <Button
-        className="w-full"
-        onClick={() =>
-          navigateTo('trip', days[0] ? { tripId: trip.id, dayId: days[0].id } : { tripId: trip.id })
-        }
-        variant="secondary"
-      >
-        返回旅行工作台
-      </Button>
 
       <Card className="space-y-3">
         <div className="flex items-center gap-2">

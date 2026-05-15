@@ -6,6 +6,7 @@ import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { ItemDetailContent } from './ItemDetailPage'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
+import { TripNav } from '../components/AppShell'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -563,7 +564,7 @@ export function TripWorkspacePage() {
                       embedded
                       isVisible={isMapView}
                       items={items}
-                      onBackToTimeline={() => handleSwitchView('schedule')}
+                      onBackToSchedule={() => handleSwitchView('schedule')}
                       onEditItem={() => handleSwitchView('schedule')}
                       onItemsChange={refreshItems}
                       onOpenItem={(item) =>
@@ -600,6 +601,12 @@ export function TripWorkspacePage() {
           ) : null}
         </>
       )}
+
+      {!isMapView ? (
+        <div className="shrink-0">
+          <TripNav activeRoute="trip" firstDayId={days[0]?.id} tripId={trip.id} />
+        </div>
+      ) : null}
 
       <BottomSheet
         open={isItemRoute}

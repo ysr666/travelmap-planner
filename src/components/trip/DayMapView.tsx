@@ -56,7 +56,7 @@ type DayMapViewProps = {
   prewarmEnabled?: boolean
   showFloatingHeader?: boolean
   resizeSignal?: number
-  onBackToTimeline?: () => void
+  onBackToSchedule?: () => void
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
   onItemsChange?: () => Promise<void> | void
@@ -87,7 +87,7 @@ export function DayMapView({
   prewarmEnabled = false,
   showFloatingHeader = true,
   resizeSignal,
-  onBackToTimeline,
+  onBackToSchedule,
   onOpenItem,
   onEditItem,
   onItemsChange,
@@ -493,7 +493,7 @@ export function DayMapView({
           day={day}
           itemCount={items.length}
           mappedCount={mappedItems.length}
-          onBackToTimeline={onBackToTimeline}
+          onBackToSchedule={onBackToSchedule}
           trip={trip}
         />
       ) : null}
@@ -506,7 +506,7 @@ export function DayMapView({
           mapError={mapError}
           mappedCount={mappedItems.length}
           notice={notice}
-          onBackToTimeline={onBackToTimeline}
+          onBackToSchedule={onBackToSchedule}
           onEditItem={onEditItem}
           onOpenItem={onOpenItem}
           onSelectItem={handleSelectItem}
@@ -541,13 +541,13 @@ function MapHeader({
   day,
   itemCount,
   mappedCount,
-  onBackToTimeline,
+  onBackToSchedule,
 }: {
   trip: Trip
   day: Day
   itemCount: number
   mappedCount: number
-  onBackToTimeline?: () => void
+  onBackToSchedule?: () => void
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -555,7 +555,7 @@ function MapHeader({
         <button
           aria-label="返回日程"
           className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
-          onClick={onBackToTimeline}
+          onClick={onBackToSchedule}
           type="button"
         >
           <ArrowLeft className="size-5" />
@@ -588,7 +588,7 @@ type MapBottomSheetProps = {
   onSelectItem: (item: ItineraryItem, source: SelectSource) => void
   onOpenItem: (item: ItineraryItem) => void
   onEditItem?: (item: ItineraryItem) => void
-  onBackToTimeline?: () => void
+  onBackToSchedule?: () => void
   routeDisplayMode: RouteDisplayMode
   routeState: RouteUiState
   routeWarnings: string[]
@@ -621,7 +621,7 @@ function MapBottomSheet({
   onSelectItem,
   onOpenItem,
   onEditItem,
-  onBackToTimeline,
+  onBackToSchedule,
   routeDisplayMode,
   routeState,
   routeWarnings,
@@ -783,7 +783,7 @@ function MapBottomSheet({
           <Button
             className={`shrink-0 whitespace-nowrap rounded-full bg-slate-50/70 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
             icon={<Navigation className="size-3.5" />}
-            onClick={onBackToTimeline}
+            onClick={onBackToSchedule}
             variant={sheetState === 'middle' ? 'secondary' : 'ghost'}
           >
             日程

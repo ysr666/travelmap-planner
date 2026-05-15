@@ -6,6 +6,10 @@ const routeIds: RouteId[] = [
   'item',
   'tickets',
   'settings',
+  'trip/new',
+  'trip/edit',
+  'item/new',
+  'item/edit',
 ]
 
 const legacyRedirects: Record<string, RouteId> = {

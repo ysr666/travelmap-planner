@@ -15,6 +15,12 @@ const TicketLibraryPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
 )
+const TripFormPage = lazy(() =>
+  import('./pages/TripFormPage').then((module) => ({ default: module.TripFormPage })),
+)
+const ItemFormPage = lazy(() =>
+  import('./pages/ItemFormPage').then((module) => ({ default: module.ItemFormPage })),
+)
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
@@ -40,6 +46,8 @@ function App() {
         <ErrorBoundary key={currentHash}>
           <Suspense fallback={<RouteLoading />}>
             {activeRoute === 'trip' || activeRoute === 'item' ? <TripWorkspacePage /> : null}
+            {activeRoute === 'trip/new' || activeRoute === 'trip/edit' ? <TripFormPage /> : null}
+            {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
           </Suspense>

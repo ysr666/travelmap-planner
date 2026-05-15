@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Plus, Trash2 } from 'lucide-react'
 import {
   createDemoTrip,
-  createTrip,
   deleteTripCascade,
   listDaysByTrip,
   listItemsByTrip,
@@ -17,18 +16,9 @@ import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
-import { FormField } from '../components/ui/FormField'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { TripCover } from '../components/trip/TripCover'
 import { getTripStatus } from '../lib/tripVisuals'
-
-type TripFormState = {
-  title: string
-  destination: string
-  startDate: string
-  endDate: string
-  notes: string
-}
 
 type TripCardStats = {
   dayCount: number
@@ -36,25 +26,13 @@ type TripCardStats = {
   ticketCount: number
 }
 
-const initialFormState: TripFormState = {
-  title: '',
-  destination: '',
-  startDate: '',
-  endDate: '',
-  notes: '',
-}
-
 export function HomePage() {
   const [trips, setTrips] = useState<Trip[]>([])
-  const [form, setForm] = useState<TripFormState>(initialFormState)
-  const [isCreating, setIsCreating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCreatingDemo, setIsCreatingDemo] = useState(false)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
   const [pendingDeleteTrip, setPendingDeleteTrip] = useState<Trip | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
   const [tripStatsById, setTripStatsById] = useState<Record<string, TripCardStats>>({})
 
   const hasTrips = trips.length > 0
@@ -102,49 +80,6 @@ export function HomePage() {
       isMounted = false
     }
   }, [])
-
-  async function handleCreateTrip(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setFormError(null)
-    setError(null)
-
-    const title = form.title.trim()
-    const destination = form.destination.trim()
-    const notes = form.notes.trim()
-
-    if (!title) {
-      setFormError('请填写旅行标题')
-      return
-    }
-
-    if (!form.startDate || !form.endDate) {
-      setFormError('请选择开始日期和结束日期')
-      return
-    }
-
-    if (form.endDate < form.startDate) {
-      setFormError('结束日期不能早于开始日期')
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      await createTrip({
-        title,
-        destination: destination || '未填写目的地',
-        startDate: form.startDate,
-        endDate: form.endDate,
-        notes: notes || undefined,
-      })
-      setForm(initialFormState)
-      setIsCreating(false)
-      await refreshTrips()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '新建旅行失败')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   async function handleCreateDemoTrip() {
     setIsCreatingDemo(true)
@@ -197,81 +132,9 @@ export function HomePage() {
       ) : null}
 
       <section className="flex min-h-0 flex-1 flex-col gap-3">
-        {isCreating ? (
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
-            <Card>
-              <form className="space-y-3" onSubmit={handleCreateTrip}>
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">新建旅行</h3>
-                  <p className="mt-1 text-sm text-slate-500">创建后保存在本机 IndexedDB。</p>
-                </div>
-                <FormField
-                  label="旅行标题"
-                  onChange={(value) => setForm((current) => ({ ...current, title: value }))}
-                  placeholder="例如：东京春日旅行"
-                  required
-                  value={form.title}
-                />
-                <FormField
-                  label="目的地"
-                  onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
-                  placeholder="例如：日本东京"
-                  value={form.destination}
-                />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <FormField
-                    label="开始日期"
-                    onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
-                    required
-                    type="date"
-                    value={form.startDate}
-                  />
-                  <FormField
-                    label="结束日期"
-                    onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
-                    required
-                    type="date"
-                    value={form.endDate}
-                  />
-                </div>
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">备注</span>
-                  <textarea
-                    className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, notes: event.target.value }))
-                    }
-                    placeholder="可选：酒店、航班或旅行说明"
-                    value={form.notes}
-                  />
-                </label>
-                {formError ? (
-                  <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
-                    {formError}
-                  </p>
-                ) : null}
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    onClick={() => {
-                      setIsCreating(false)
-                      setFormError(null)
-                    }}
-                    variant="secondary"
-                  >
-                    取消
-                  </Button>
-                  <Button loading={isSubmitting} type="submit">
-                    保存旅行
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          </div>
-        ) : (
-          <>
-            <SectionHeader title="我的旅行" />
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
-              {isLoading ? (
+        <SectionHeader title="我的旅行" />
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+            {isLoading ? (
                 <Card className="space-y-3">
                   <SkeletonLine className="w-2/3" />
                   <SkeletonLine className="w-full" />
@@ -312,20 +175,14 @@ export function HomePage() {
                   ))}
                 </div>
               ) : null}
-            </div>
-          </>
-        )}
+        </div>
       </section>
 
-      {!isCreating ? (
-        <div className="shrink-0">
+      <div className="shrink-0">
           <Button
             className="w-full"
             icon={<Plus className="size-4" />}
-            onClick={() => {
-              setIsCreating(true)
-              setFormError(null)
-            }}
+            onClick={() => navigateTo('trip/new')}
           >
             新建旅行
           </Button>
@@ -338,7 +195,6 @@ export function HomePage() {
           </button>
           <AppVersion className="mt-3" suffix="本地优先" />
         </div>
-      ) : null}
 
       <ConfirmDialog
         body="删除后，本机保存的日程、行程点、票据元数据、票据文件和绑定关系都会被移除。"

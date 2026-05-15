@@ -19,11 +19,17 @@ const routeTitles: Record<RouteId, string> = {
   item: '行程点详情',
   tickets: '票据库',
   settings: '设置',
+  'trip/new': '新建旅行',
+  'trip/edit': '编辑旅行',
+  'item/new': '新增行程点',
+  'item/edit': '编辑行程点',
 }
 
 export function AppShell({ activeRoute, children }: AppShellProps) {
   const isHome = activeRoute === 'home'
   const isTrip = activeRoute === 'trip' || activeRoute === 'item'
+    || activeRoute === 'trip/new' || activeRoute === 'trip/edit'
+    || activeRoute === 'item/new' || activeRoute === 'item/edit'
   const pageTitle = routeTitles[activeRoute]
 
   return (

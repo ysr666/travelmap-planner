@@ -2,12 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
-  getItineraryItem,
   listItemsByDay,
   listTicketsByItem,
-  updateItineraryItem,
 } from '../db'
-import { ItineraryItemForm, type ItineraryItemFormValue } from '../components/ItineraryItemForm'
 import { TicketPreview } from '../components/TicketPreview'
 import {
   buildAppleMapsDirectionsUrl,
@@ -39,14 +36,11 @@ type ItemDetailContentProps = {
   onItemDeleted: () => void
 }
 
-export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted }: ItemDetailContentProps) {
-  const [item, setItem] = useState<ItineraryItem>(initialItem)
+export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetailContentProps) {
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [isLoadingRelations, setIsLoadingRelations] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -78,24 +72,6 @@ export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted 
     return dayItems.findIndex((dayItem) => dayItem.id === item.id)
   }, [dayItems, item.id])
   const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
-
-  async function handleUpdateItem(value: ItineraryItemFormValue) {
-    setIsSubmitting(true)
-    setActionError(null)
-    try {
-      await updateItineraryItem(item.id, value)
-      setIsEditing(false)
-      const refreshed = await getItineraryItem(item.id)
-      if (refreshed) {
-        setItem(refreshed)
-      }
-      await loadRelations()
-    } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : '保存修改失败')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   async function confirmDeleteItem() {
     setIsDeleting(true)
@@ -177,7 +153,7 @@ export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted 
         <div className="grid grid-cols-2 gap-3">
           <Button
             icon={<Edit3 className="size-4" />}
-            onClick={() => setIsEditing((current) => !current)}
+            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id })}
           >
             编辑
           </Button>
@@ -192,22 +168,6 @@ export function ItemDetailContent({ trip, day, item: initialItem, onItemDeleted 
           </Button>
         </div>
       </Card>
-
-      {isEditing ? (
-        <Card>
-          <div className="mb-4">
-            <h3 className="text-lg font-bold text-slate-950">编辑行程点</h3>
-            <p className="mt-1 text-sm text-slate-500">{item.title}</p>
-          </div>
-          <ItineraryItemForm
-            initialItem={item}
-            loading={isSubmitting}
-            onCancel={() => setIsEditing(false)}
-            onSubmit={handleUpdateItem}
-            submitLabel="保存修改"
-          />
-        </Card>
-      ) : null}
 
       <section className="space-y-3">
         <SectionHeader

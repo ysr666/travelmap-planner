@@ -1,11 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ArrowDown, Clock3, ExternalLink, MapPin, Navigation, Plus, Ticket, Trash2 } from 'lucide-react'
-import {
-  createItineraryItem,
-  deleteItineraryItemCascade,
-  updateItineraryItem,
-} from '../../db'
-import { ItineraryItemForm, type ItineraryItemFormValue } from '../ItineraryItemForm'
+import { deleteItineraryItemCascade } from '../../db'
+import { navigateTo } from '../../lib/routes'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -34,54 +30,9 @@ export function DayTimelineView({
   compact = false,
   onSwitchToMap,
 }: DayTimelineViewProps) {
-  const [editingItem, setEditingItem] = useState<ItineraryItem | null>(null)
-  const [isCreating, setIsCreating] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
   const [pendingDeleteItem, setPendingDeleteItem] = useState<ItineraryItem | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-
-  const maxSortOrder = useMemo(() => {
-    return items.reduce((max, item) => Math.max(max, item.sortOrder), 0)
-  }, [items])
-
-  async function handleCreateItem(value: ItineraryItemFormValue) {
-    setIsSubmitting(true)
-    setActionError(null)
-    try {
-      await createItineraryItem({
-        ...value,
-        tripId: trip.id,
-        dayId: day.id,
-        ticketIds: [],
-        sortOrder: maxSortOrder + 1,
-      })
-      setIsCreating(false)
-      await onItemsChange()
-    } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : '新增行程点失败')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  async function handleUpdateItem(value: ItineraryItemFormValue) {
-    if (!editingItem) {
-      return
-    }
-
-    setIsSubmitting(true)
-    setActionError(null)
-    try {
-      await updateItineraryItem(editingItem.id, value)
-      setEditingItem(null)
-      await onItemsChange()
-    } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : '更新行程点失败')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   async function confirmDeleteItem() {
     if (!pendingDeleteItem) {
@@ -93,9 +44,6 @@ export function DayTimelineView({
     setActionError(null)
     try {
       await deleteItineraryItemCascade(item.id)
-      if (editingItem?.id === item.id) {
-        setEditingItem(null)
-      }
       setPendingDeleteItem(null)
       await onItemsChange()
     } catch (caught) {
@@ -121,46 +69,12 @@ export function DayTimelineView({
           <Button
             className="min-h-10 px-3"
             icon={<Plus className="size-4" />}
-            onClick={() => {
-              setIsCreating(true)
-              setEditingItem(null)
-            }}
+            onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id })}
           >
             新增
           </Button>
         </div>
       </div>
-
-      {isCreating ? (
-        <Card>
-          <div className="mb-4">
-            <h3 className="text-base font-semibold text-slate-950">新增行程点</h3>
-            <p className="mt-1 text-sm text-slate-500">可手动输入坐标，或粘贴含坐标的地图链接。</p>
-          </div>
-          <ItineraryItemForm
-            loading={isSubmitting}
-            onCancel={() => setIsCreating(false)}
-            onSubmit={handleCreateItem}
-            submitLabel="保存行程点"
-          />
-        </Card>
-      ) : null}
-
-      {editingItem ? (
-        <Card>
-          <div className="mb-4">
-            <h3 className="text-base font-semibold text-slate-950">编辑行程点</h3>
-            <p className="mt-1 text-sm text-slate-500">{editingItem.title}</p>
-          </div>
-          <ItineraryItemForm
-            initialItem={editingItem}
-            loading={isSubmitting}
-            onCancel={() => setEditingItem(null)}
-            onSubmit={handleUpdateItem}
-            submitLabel="保存修改"
-          />
-        </Card>
-      ) : null}
 
       {actionError ? (
         <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
@@ -222,10 +136,7 @@ export function DayTimelineView({
                         <div className="flex gap-2">
                           <Button
                             className="min-h-9 rounded-xl px-3"
-                            onClick={() => {
-                              setEditingItem(item)
-                              setIsCreating(false)
-                            }}
+                            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id })}
                             variant="secondary"
                           >
                             编辑

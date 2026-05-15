@@ -76,3 +76,7 @@ export type RouteId =
   | 'item'
   | 'tickets'
   | 'settings'
+  | 'trip/new'
+  | 'trip/edit'
+  | 'item/new'
+  | 'item/edit'

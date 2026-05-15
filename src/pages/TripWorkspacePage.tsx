@@ -494,12 +494,15 @@ export function TripWorkspacePage() {
                           tabIndex={0}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOverviewSelectDay(day, 'schedule') }}
                         >
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-xs font-bold text-sky-600">
-                            D{index + 1}
+                          <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50 px-2 text-xs font-bold text-sky-600">
+                            {formatChineseDayOrdinal(index + 1)}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold text-slate-950">
                               {formatDate(day.date)}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">
+                              {day.title}
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-slate-400">
                               {itemsByDayCount[day.id] ?? 0} 个行程点
@@ -697,6 +700,44 @@ function normalizeView(value: string | null): WorkspaceView {
   if (value === 'map') return 'map'
   if (value === 'schedule') return 'schedule'
   return 'overview'
+}
+
+const CHINESE_DAY_ORDINALS = [
+  '第一天',
+  '第二天',
+  '第三天',
+  '第四天',
+  '第五天',
+  '第六天',
+  '第七天',
+  '第八天',
+  '第九天',
+  '第十天',
+  '第十一天',
+  '第十二天',
+  '第十三天',
+  '第十四天',
+  '第十五天',
+  '第十六天',
+  '第十七天',
+  '第十八天',
+  '第十九天',
+  '第二十天',
+  '第二十一天',
+  '第二十二天',
+  '第二十三天',
+  '第二十四天',
+  '第二十五天',
+  '第二十六天',
+  '第二十七天',
+  '第二十八天',
+  '第二十九天',
+  '第三十天',
+  '第三十一天',
+]
+
+function formatChineseDayOrdinal(dayNumber: number) {
+  return CHINESE_DAY_ORDINALS[dayNumber - 1] ?? `第${dayNumber}天`
 }
 
 function formatShortWorkspaceDate(date: string) {

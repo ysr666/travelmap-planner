@@ -22,7 +22,7 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
 
       {open ? (
         <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] items-end bg-slate-950/24 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
-          <div className="w-full rounded-2xl border border-white/80 bg-white p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
+          <div className="w-full rounded-2xl border border-white/80 bg-white p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]" data-testid="trip-more-menu">
             <button
               className="mb-1 flex min-h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-slate-500 active:bg-slate-50"
               onClick={() => setOpen(false)}
@@ -33,7 +33,7 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
             </button>
             <MenuItem icon={<Ticket className="size-4" />} label="全部票据" onClick={() => navigateTo('tickets', { tripId })} />
             <MenuItem icon={<Archive className="size-4" />} label="备份与恢复" onClick={() => navigateTo('trip', { tripId, view: 'overview' })} />
-            <MenuItem icon={<Settings className="size-4" />} label="设置与存储说明" onClick={() => navigateTo('settings')} />
+            <MenuItem icon={<Settings className="size-4" />} label="设置" onClick={() => navigateTo('settings')} />
             <MenuItem icon={<Home className="size-4" />} label="返回首页" onClick={() => navigateTo('home')} />
           </div>
         </div>

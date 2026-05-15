@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CalendarDays, Plus, Trash2 } from 'lucide-react'
-import { createDemoTrip, createTrip, deleteTripCascade, listTrips } from '../db'
+import {
+  createDemoTrip,
+  createTrip,
+  deleteTripCascade,
+  listDaysByTrip,
+  listItemsByTrip,
+  listTicketsByTrip,
+  listTrips,
+} from '../db'
 import { navigateTo } from '../lib/routes'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
@@ -22,6 +30,12 @@ type TripFormState = {
   notes: string
 }
 
+type TripCardStats = {
+  dayCount: number
+  itemCount: number
+  ticketCount: number
+}
+
 const initialFormState: TripFormState = {
   title: '',
   destination: '',
@@ -41,6 +55,7 @@ export function HomePage() {
   const [pendingDeleteTrip, setPendingDeleteTrip] = useState<Trip | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [tripStatsById, setTripStatsById] = useState<Record<string, TripCardStats>>({})
 
   const hasTrips = trips.length > 0
 
@@ -53,8 +68,9 @@ export function HomePage() {
 
   async function refreshTrips() {
     setError(null)
-    const nextTrips = await listTrips()
+    const { statsById, trips: nextTrips } = await loadTripsWithStats()
     setTrips(nextTrips)
+    setTripStatsById(statsById)
   }
 
   useEffect(() => {
@@ -64,9 +80,10 @@ export function HomePage() {
       setIsLoading(true)
       setError(null)
       try {
-        const nextTrips = await listTrips()
+        const { statsById, trips: nextTrips } = await loadTripsWithStats()
         if (isMounted) {
           setTrips(nextTrips)
+          setTripStatsById(statsById)
         }
       } catch (caught) {
         if (isMounted) {
@@ -287,6 +304,7 @@ export function HomePage() {
                       key={trip.id}
                       onDelete={() => setPendingDeleteTrip(trip)}
                       onOpen={() => navigateTo('trip', { tripId: trip.id })}
+                      stats={tripStatsById[trip.id]}
                       trip={trip}
                       variantIndex={index}
                       isDeleting={deletingTripId === trip.id}
@@ -343,12 +361,14 @@ function TripCard({
   trip,
   onOpen,
   onDelete,
+  stats,
   variantIndex,
   isDeleting,
 }: {
   trip: Trip
   onOpen: () => void
   onDelete: () => void
+  stats?: TripCardStats
   variantIndex: number
   isDeleting: boolean
 }) {
@@ -372,6 +392,11 @@ function TripCard({
           </div>
           <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950">{trip.title}</h3>
           <p className="mt-0.5 truncate text-sm text-slate-500">{trip.destination}</p>
+          {stats ? (
+            <p className="mt-1 truncate text-xs font-medium text-slate-500">
+              {stats.dayCount} 天 · {stats.itemCount} 个行程点 · {stats.ticketCount} 张票据
+            </p>
+          ) : null}
         </div>
       </button>
       <div className="flex items-center justify-end border-t border-slate-100 px-4 py-2">
@@ -387,6 +412,36 @@ function TripCard({
       </div>
     </Card>
   )
+}
+
+async function loadTripsWithStats() {
+  const trips = await listTrips()
+  const entries = await Promise.all(
+    trips.map(async (trip) => {
+      try {
+        const [days, items, tickets] = await Promise.all([
+          listDaysByTrip(trip.id),
+          listItemsByTrip(trip.id),
+          listTicketsByTrip(trip.id),
+        ])
+        return [
+          trip.id,
+          {
+            dayCount: days.length,
+            itemCount: items.length,
+            ticketCount: tickets.length,
+          },
+        ] as const
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  return {
+    statsById: Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)),
+    trips,
+  }
 }
 
 function formatDateRange(startDate: string, endDate: string) {

@@ -12,6 +12,11 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await page.getByRole('button', { name: '创建示例旅行' }).click()
   const tripCard = page.getByTestId('trip-card').first()
   await expect(tripCard).toBeVisible()
+  await expect(tripCard).toContainText('东京春日旅行')
+  await expect(tripCard).toContainText('日本东京')
+  await expect(tripCard).toContainText('4/12 - 4/17')
+  await expect(tripCard).toContainText('2 天')
+  await expect(tripCard).toContainText('5 个行程点')
   await clickTripCard(tripCard)
 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)

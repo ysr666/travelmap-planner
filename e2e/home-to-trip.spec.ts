@@ -20,7 +20,10 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await clickTripCard(tripCard)
 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByTestId('view-switch-schedule').click()
+  await expect(page.getByText('每日行程')).toBeVisible()
+  await expect(page.getByText('第一天')).toBeVisible()
+  await page.getByText('第一天', { exact: true }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
   await expect(page.getByTestId('view-switch-schedule')).toBeVisible()

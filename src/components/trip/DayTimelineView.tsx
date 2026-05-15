@@ -19,6 +19,7 @@ type DayTimelineViewProps = {
   onOpenItem: (item: ItineraryItem) => void
   compact?: boolean
   onSwitchToMap?: () => void
+  sourceView?: 'schedule' | 'map'
 }
 
 export function DayTimelineView({
@@ -29,6 +30,7 @@ export function DayTimelineView({
   onOpenItem,
   compact = false,
   onSwitchToMap,
+  sourceView = 'schedule',
 }: DayTimelineViewProps) {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
   const [pendingDeleteItem, setPendingDeleteItem] = useState<ItineraryItem | null>(null)
@@ -69,7 +71,7 @@ export function DayTimelineView({
           <Button
             className="min-h-10 px-3"
             icon={<Plus className="size-4" />}
-            onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id })}
+            onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id, view: sourceView })}
           >
             新增
           </Button>
@@ -136,7 +138,7 @@ export function DayTimelineView({
                         <div className="flex gap-2">
                           <Button
                             className="min-h-9 rounded-xl px-3"
-                            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id })}
+                            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
                             variant="secondary"
                           >
                             编辑

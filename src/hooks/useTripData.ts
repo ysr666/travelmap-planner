@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { formatDateKey } from '../lib/dates'
 import type { Day, ItineraryItem, Trip } from '../types'
@@ -25,7 +25,7 @@ type UseTripDataReturn = {
   refreshItems: () => Promise<void>
 }
 
-function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null) {
+export function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null) {
   if (days.length === 0) {
     return null
   }
@@ -46,6 +46,37 @@ function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null)
   return [...days].sort((a, b) => a.sortOrder - b.sortOrder)[0]
 }
 
+export async function loadTripDataBundle({
+  tripId,
+  dayId,
+}: {
+  tripId: string
+  dayId?: string | null
+}) {
+  const foundTrip = await getTrip(tripId)
+  if (!foundTrip) {
+    return {
+      trip: null,
+      days: [],
+      selectedDay: null,
+      items: [],
+      itemsByDay: {},
+    }
+  }
+
+  const foundDays = await listDaysByTrip(tripId)
+  const nextSelectedDay = pickSelectedDay(foundTrip, foundDays, dayId ?? null)
+  const nextItems = nextSelectedDay ? await listItemsByDay(nextSelectedDay.id) : []
+
+  return {
+    trip: foundTrip,
+    days: foundDays,
+    selectedDay: nextSelectedDay,
+    items: nextItems,
+    itemsByDay: nextSelectedDay ? { [nextSelectedDay.id]: nextItems } : {},
+  }
+}
+
 export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataReturn {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
@@ -54,6 +85,7 @@ export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataR
   const [itemsByDay, setItemsByDay] = useState<Record<string, ItineraryItem[]>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const allItems = useMemo(() => Object.values(itemsByDay).flat(), [itemsByDay])
 
@@ -66,9 +98,14 @@ export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataR
 
     setIsLoading(true)
     setError(null)
+    const requestId = ++requestIdRef.current
     try {
-      const foundTrip = await getTrip(tripId)
-      if (!foundTrip) {
+      const bundle = await loadTripDataBundle({ tripId, dayId })
+      if (requestId !== requestIdRef.current) {
+        return { nextSelectedDay: null as Day | null }
+      }
+
+      if (!bundle.trip) {
         setTrip(null)
         setDays([])
         setSelectedDay(null)
@@ -78,21 +115,21 @@ export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataR
         return { nextSelectedDay: null as Day | null }
       }
 
-      const foundDays = await listDaysByTrip(tripId)
-      const nextSelectedDay = pickSelectedDay(foundTrip, foundDays, dayId ?? null)
-      const nextItems = nextSelectedDay ? await listItemsByDay(nextSelectedDay.id) : []
-
-      setTrip(foundTrip)
-      setDays(foundDays)
-      setSelectedDay(nextSelectedDay)
-      setItems(nextItems)
-      setItemsByDay(nextSelectedDay ? { [nextSelectedDay.id]: nextItems } : {})
-      return { nextSelectedDay }
+      setTrip(bundle.trip)
+      setDays(bundle.days)
+      setSelectedDay(bundle.selectedDay)
+      setItems(bundle.items)
+      setItemsByDay(bundle.itemsByDay)
+      return { nextSelectedDay: bundle.selectedDay }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '读取旅行工作台失败')
+      if (requestId === requestIdRef.current) {
+        setError(caught instanceof Error ? caught.message : '读取旅行工作台失败')
+      }
       return { nextSelectedDay: null as Day | null }
     } finally {
-      setIsLoading(false)
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [dayId, tripId])
 
@@ -105,7 +142,10 @@ export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataR
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refresh(), 0)
-    return () => window.clearTimeout(timeout)
+    return () => {
+      requestIdRef.current += 1
+      window.clearTimeout(timeout)
+    }
   }, [refresh])
 
   return {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { getRouteParams, navigateTo, routeFromHash } from './routes'
+import { getCanonicalHashRedirect, getRouteParams, navigateTo, routeFromHash } from './routes'
 
 afterEach(() => {
   window.location.hash = ''
@@ -17,19 +17,27 @@ describe('routeFromHash', () => {
     expect(routeFromHash()).toBe('trip')
   })
 
-  it('redirects legacy map route to trip', () => {
-    window.location.hash = '#/map?tripId=abc&dayId=def'
-    expect(routeFromHash()).toBe('trip')
+  it('parses day route', () => {
+    window.location.hash = '#/day?tripId=abc&dayId=def&view=map'
+    expect(routeFromHash()).toBe('day')
   })
 
-  it('redirects legacy overview route to trip', () => {
+  it('parses legacy map route without rewriting', () => {
+    window.location.hash = '#/map?tripId=abc&dayId=def'
+    expect(routeFromHash()).toBe('day')
+    expect(window.location.hash).toBe('#/map?tripId=abc&dayId=def')
+  })
+
+  it('parses legacy overview route without rewriting', () => {
     window.location.hash = '#/overview?tripId=abc'
     expect(routeFromHash()).toBe('trip')
+    expect(window.location.hash).toBe('#/overview?tripId=abc')
   })
 
-  it('redirects legacy timeline route to trip', () => {
+  it('parses legacy timeline route without rewriting', () => {
     window.location.hash = '#/timeline?tripId=abc'
-    expect(routeFromHash()).toBe('trip')
+    expect(routeFromHash()).toBe('day')
+    expect(window.location.hash).toBe('#/timeline?tripId=abc')
   })
 
   it('returns home for unknown route', () => {
@@ -40,6 +48,24 @@ describe('routeFromHash', () => {
   it('handles hash without leading slash', () => {
     window.location.hash = '#settings'
     expect(routeFromHash()).toBe('settings')
+  })
+})
+
+describe('getCanonicalHashRedirect', () => {
+  it('canonicalizes legacy overview route', () => {
+    expect(getCanonicalHashRedirect('#/overview?tripId=abc')).toBe('#/trip?tripId=abc')
+  })
+
+  it('canonicalizes legacy map route with day id', () => {
+    expect(getCanonicalHashRedirect('#/map?tripId=abc&dayId=def')).toBe('#/day?tripId=abc&dayId=def&view=map')
+  })
+
+  it('canonicalizes legacy trip day view to day route', () => {
+    expect(getCanonicalHashRedirect('#/trip?tripId=abc&dayId=def&view=schedule')).toBe('#/day?tripId=abc&dayId=def&view=schedule')
+  })
+
+  it('does not canonicalize trip day view before a day id is known', () => {
+    expect(getCanonicalHashRedirect('#/trip?tripId=abc&view=schedule')).toBeNull()
   })
 })
 

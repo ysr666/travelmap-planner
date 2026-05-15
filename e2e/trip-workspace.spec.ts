@@ -12,21 +12,25 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
 
   await expect(page.getByText('当天日程')).toBeVisible()
   await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
+  await expect(page).toHaveURL(/#\/day\?/)
   await expectNoHorizontalOverflow(page)
 
   await page.getByTestId('view-switch-map').click()
+  await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.getByTestId('view-switch-schedule').click()
+  await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByText('当天日程')).toBeVisible()
   await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.getByTestId('view-switch-map').click()
+  await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
@@ -38,9 +42,11 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectNoHorizontalOverflow(page)
 
   const currentTripId = getHashParam(page.url(), 'tripId')
+  const currentDayId = getHashParam(page.url(), 'dayId')
   expect(currentTripId).toBe(tripId)
+  expect(currentDayId).toBeTruthy()
 
-  await page.goto(`/#/overview?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('每日行程')).toBeVisible()
   await expect(page.getByText('第一天')).toBeVisible()
   await expect(page.getByText('第二天')).toBeVisible()
@@ -57,6 +63,10 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(moreMenu.getByText(/Google Maps 配置|路线服务配置|设备存储/)).toHaveCount(0)
   await moreMenu.getByRole('button', { name: '更多' }).click()
   await expectNoHorizontalOverflow(page)
+
+  await page.goto(`/#/trip?tripId=${tripId}&dayId=${currentDayId}&view=map`, { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/view=map/)
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('票据库')).toBeVisible()

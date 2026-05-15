@@ -98,6 +98,7 @@ test('新增行程点页面可以创建并返回日程', async ({ page }) => {
   await page.getByLabel('行程标题').fill('新景点')
   await page.getByRole('button', { name: '新增行程点' }).click()
 
+  await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
 })
 

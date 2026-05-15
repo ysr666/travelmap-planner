@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   Cog,
   Home,
+  Map,
   Route,
   Ticket,
 } from 'lucide-react'
@@ -16,6 +17,7 @@ type AppShellProps = {
 const routeTitles: Record<RouteId, string> = {
   home: '旅图',
   trip: '旅行工作台',
+  day: '每日行程',
   item: '行程点详情',
   tickets: '票据库',
   settings: '设置',
@@ -27,7 +29,7 @@ const routeTitles: Record<RouteId, string> = {
 
 export function AppShell({ activeRoute, children }: AppShellProps) {
   const isHome = activeRoute === 'home'
-  const isTrip = activeRoute === 'trip' || activeRoute === 'item'
+  const isTrip = activeRoute === 'trip' || activeRoute === 'day' || activeRoute === 'item'
     || activeRoute === 'trip/new' || activeRoute === 'trip/edit'
     || activeRoute === 'item/new' || activeRoute === 'item/edit'
   const pageTitle = routeTitles[activeRoute]
@@ -88,17 +90,45 @@ type TripNavProps = {
   activeRoute: RouteId
   dayId?: string | null
   firstDayId?: string | null
+  activeView?: 'schedule' | 'map'
   className?: string
 }
 
-export function TripNav({ tripId, activeRoute, className = '' }: TripNavProps) {
+export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, className = '' }: TripNavProps) {
+  const targetDayId = dayId ?? firstDayId ?? null
   const items = [
     {
       id: 'trip',
+      label: '总览',
+      icon: Home,
+      active: activeRoute === 'trip',
+      onClick: () => navigateTo('trip', { tripId }),
+    },
+    {
+      id: 'schedule',
       label: '日程',
       icon: Route,
-      active: activeRoute === 'trip' || activeRoute === 'item',
-      onClick: () => navigateTo('trip', { tripId }),
+      active: activeRoute === 'day' && activeView !== 'map',
+      onClick: () => {
+        if (targetDayId) {
+          navigateTo('day', { tripId, dayId: targetDayId, view: 'schedule' })
+        } else {
+          navigateTo('trip', { tripId })
+        }
+      },
+    },
+    {
+      id: 'map',
+      label: '地图',
+      icon: Map,
+      active: activeRoute === 'day' && activeView === 'map',
+      onClick: () => {
+        if (targetDayId) {
+          navigateTo('day', { tripId, dayId: targetDayId, view: 'map' })
+        } else {
+          navigateTo('trip', { tripId })
+        }
+      },
     },
     {
       id: 'tickets',
@@ -107,18 +137,11 @@ export function TripNav({ tripId, activeRoute, className = '' }: TripNavProps) {
       active: activeRoute === 'tickets',
       onClick: () => navigateTo('tickets', { tripId }),
     },
-    {
-      id: 'settings',
-      label: '设置',
-      icon: Cog,
-      active: activeRoute === 'settings',
-      onClick: () => navigateTo('settings'),
-    },
   ]
 
   return (
     <nav className={`rounded-2xl border border-white/80 bg-white/90 p-1.5 shadow-[0_8px_22px_rgba(47,65,88,0.05)] ${className}`}>
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (

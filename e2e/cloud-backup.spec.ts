@@ -4,12 +4,15 @@ import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
   forceSupabaseUnconfigured,
+  getHashParam,
 } from './helpers'
 
 test('Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
   await createDemoTripViaUi(page)
   await forceSupabaseUnconfigured(page)
-  await page.getByTestId('view-switch-overview').click()
+  const tripId = getHashParam(page.url(), 'tripId')
+  expect(tripId).toBeTruthy()
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   const cloudSection = page.getByTestId('cloud-backup-section')
   if (!(await cloudSection.isVisible().catch(() => false))) {
     await page

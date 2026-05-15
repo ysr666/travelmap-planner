@@ -2,12 +2,18 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Card } from './components/ui/Card'
-import { routeFromHash } from './lib/routes'
+import { getCanonicalHashRedirect, routeFromHash } from './lib/routes'
 import type { RouteId } from './types'
 import { HomePage } from './pages/HomePage'
 
 const TripWorkspacePage = lazy(() =>
   import('./pages/TripWorkspacePage').then((module) => ({ default: module.TripWorkspacePage })),
+)
+const DayViewPage = lazy(() =>
+  import('./pages/DayViewPage').then((module) => ({ default: module.DayViewPage })),
+)
+const ItemDetailPage = lazy(() =>
+  import('./pages/ItemDetailPage').then((module) => ({ default: module.ItemDetailPage })),
 )
 const TicketLibraryPage = lazy(() =>
   import('./pages/TicketLibraryPage').then((module) => ({ default: module.TicketLibraryPage })),
@@ -24,10 +30,17 @@ const ItemFormPage = lazy(() =>
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
-  const activeRoute: RouteId = routeFromHash()
+  const activeRoute: RouteId = routeFromHash(currentHash)
 
   useEffect(() => {
-    const syncRoute = () => setCurrentHash(window.location.hash)
+    const syncRoute = () => {
+      const redirect = getCanonicalHashRedirect(window.location.hash)
+      if (redirect && redirect !== window.location.hash) {
+        window.location.replace(redirect)
+        return
+      }
+      setCurrentHash(window.location.hash)
+    }
     window.addEventListener('hashchange', syncRoute)
 
     if (!window.location.hash) {
@@ -40,12 +53,14 @@ function App() {
   }, [])
 
   return (
-    <AppShell activeRoute={activeRoute} key={currentHash}>
+    <AppShell activeRoute={activeRoute}>
       {activeRoute === 'home' ? <HomePage /> : null}
       {activeRoute !== 'home' ? (
-        <ErrorBoundary key={currentHash}>
+        <ErrorBoundary key={activeRoute}>
           <Suspense fallback={<RouteLoading />}>
-            {activeRoute === 'trip' || activeRoute === 'item' ? <TripWorkspacePage /> : null}
+            {activeRoute === 'trip' ? <TripWorkspacePage /> : null}
+            {activeRoute === 'day' ? <DayViewPage /> : null}
+            {activeRoute === 'item' ? <ItemDetailPage /> : null}
             {activeRoute === 'trip/new' || activeRoute === 'trip/edit' ? <TripFormPage /> : null}
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}

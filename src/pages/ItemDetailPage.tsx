@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
+  getDay,
+  getItineraryItem,
+  getTrip,
   listItemsByDay,
   listTicketsByItem,
 } from '../db'
@@ -28,15 +31,147 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
+import { getRouteParams } from '../lib/routes'
 
 type ItemDetailContentProps = {
   trip: Trip
   day: Day
   item: ItineraryItem
   onItemDeleted: () => void
+  sourceView?: 'schedule' | 'map'
 }
 
-export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetailContentProps) {
+export function ItemDetailPage() {
+  const params = getRouteParams()
+  const tripId = params.get('tripId')
+  const dayId = params.get('dayId')
+  const itemId = params.get('itemId')
+  const hasMissingParams = !tripId || !dayId || !itemId
+  const sourceView = normalizeSourceView(params.get('view'))
+  const [trip, setTrip] = useState<Trip | null>(null)
+  const [day, setDay] = useState<Day | null>(null)
+  const [item, setItem] = useState<ItineraryItem | null>(null)
+  const [isLoading, setIsLoading] = useState(!hasMissingParams)
+  const [error, setError] = useState<string | null>(() => {
+    if (hasMissingParams) return '缺少行程点参数。'
+    return null
+  })
+
+  useEffect(() => {
+    if (hasMissingParams) {
+      return
+    }
+
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      setIsLoading(true)
+      setError(null)
+      void Promise.all([
+        getTrip(tripId),
+        getDay(dayId),
+        getItineraryItem(itemId),
+      ]).then(([foundTrip, foundDay, foundItem]) => {
+        if (cancelled) return
+        if (!foundTrip || !foundDay || !foundItem) {
+          setError('未找到该行程点。')
+          setTrip(foundTrip ?? null)
+          setDay(foundDay ?? null)
+          setItem(foundItem ?? null)
+          return
+        }
+        setTrip(foundTrip)
+        setDay(foundDay)
+        setItem(foundItem)
+      }).catch((caught) => {
+        if (!cancelled) {
+          setError(caught instanceof Error ? caught.message : '加载行程点失败')
+        }
+      }).finally(() => {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      })
+    }, 0)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [dayId, hasMissingParams, itemId, tripId])
+
+  function goBackToDay() {
+    if (tripId && dayId) {
+      navigateTo('day', { tripId, dayId, view: sourceView })
+    } else if (tripId) {
+      navigateTo('trip', { tripId })
+    } else {
+      navigateTo('home')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
+        <Card className="space-y-3">
+          <SkeletonLine className="w-2/3" />
+          <SkeletonLine className="w-full" />
+          <SkeletonLine className="w-1/2" />
+        </Card>
+      </div>
+    )
+  }
+
+  if (error || !trip || !day || !item) {
+    return (
+      <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
+        <EmptyState
+          body={error || '请从每日行程重新打开。'}
+          icon={<CalendarDays className="size-6" />}
+          title="无法打开行程点"
+        />
+        <Button onClick={goBackToDay} variant="secondary">
+          返回每日行程
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
+      <header className="z-30 shrink-0 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            aria-label="返回每日行程"
+            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            onClick={goBackToDay}
+            type="button"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+          <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
+            行程点详情
+          </h1>
+          <div className="size-10" />
+        </div>
+      </header>
+
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar">
+        <div className="page-transition">
+          <ItemDetailContent
+            day={day}
+            item={item}
+            onItemDeleted={goBackToDay}
+            sourceView={sourceView}
+            trip={trip}
+          />
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView = 'schedule' }: ItemDetailContentProps) {
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
@@ -153,7 +288,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetail
         <div className="grid grid-cols-2 gap-3">
           <Button
             icon={<Edit3 className="size-4" />}
-            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id })}
+            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
           >
             编辑
           </Button>
@@ -286,4 +421,8 @@ function PreviousTransportCard({
 
 function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
+
+function normalizeSourceView(value: string | null): 'schedule' | 'map' {
+  return value === 'map' ? 'map' : 'schedule'
 }

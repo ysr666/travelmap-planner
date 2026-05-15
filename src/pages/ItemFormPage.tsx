@@ -14,6 +14,7 @@ export function ItemFormPage() {
   const tripId = params.get('tripId')
   const dayId = params.get('dayId')
   const itemId = params.get('itemId')
+  const sourceView = params.get('view') === 'map' ? 'map' : 'schedule'
 
   const [existingItem, setExistingItem] = useState<ItineraryItem | null>(null)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
@@ -87,7 +88,11 @@ export function ItemFormPage() {
 
   function handleCancel() {
     if (tripId) {
-      navigateTo('trip', { tripId, ...(dayId ? { dayId, view: 'schedule' } : {}) })
+      if (dayId) {
+        navigateTo('day', { tripId, dayId, view: sourceView })
+      } else {
+        navigateTo('trip', { tripId })
+      }
     } else {
       navigateTo('home')
     }
@@ -101,7 +106,7 @@ export function ItemFormPage() {
     try {
       if (isEdit && itemId && existingItem) {
         await updateItineraryItem(itemId, value)
-        navigateTo('item', { tripId, dayId, itemId })
+        navigateTo('item', { tripId, dayId, itemId, view: sourceView })
       } else {
         await createItineraryItem({
           ...value,
@@ -110,7 +115,7 @@ export function ItemFormPage() {
           ticketIds: [],
           sortOrder,
         })
-        navigateTo('trip', { tripId, dayId, view: 'schedule' })
+        navigateTo('day', { tripId, dayId, view: 'schedule' })
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : isEdit ? '保存修改失败' : '新增行程点失败')

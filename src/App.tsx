@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
+import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Card } from './components/ui/Card'
 import { getCanonicalHashRedirect, routeFromHash } from './lib/routes'
@@ -54,6 +55,7 @@ function App() {
 
   return (
     <AppShell activeRoute={activeRoute}>
+      <AutoSnapshotBackupController />
       {activeRoute === 'home' ? <HomePage /> : null}
       {activeRoute !== 'home' ? (
         <ErrorBoundary key={activeRoute}>

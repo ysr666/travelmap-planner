@@ -276,7 +276,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
   }
 
   const records = buildCloudRestoreRecords(snapshot, ticketBlobs)
-  const result = await importTripPlanRecords(records)
+  const result = await importTripPlanRecords(records, { markDirty: false })
   return { title: result.title, tripId: result.tripId, warnings }
 }
 

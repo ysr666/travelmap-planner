@@ -31,6 +31,13 @@ import {
   type RestoreCloudBackupResult,
 } from '../../lib/cloudBackup'
 import { getSupabaseClient, type User } from '../../lib/supabaseClient'
+import {
+  completeTripAutoSnapshotSuccess,
+  getTripAutoSnapshotStatus,
+  isAutoSnapshotBackupEnabled,
+  setAutoSnapshotBackupEnabled,
+  subscribeAutoSnapshotBackup,
+} from '../../lib/autoSnapshotBackup'
 import { navigateTo } from '../../lib/routes'
 import type { Trip } from '../../types'
 
@@ -57,6 +64,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
 
   const refreshCloudBackups = useCallback(async () => {
     if (!configStatus.configured) {
@@ -102,6 +110,26 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
     return () => data.subscription.unsubscribe()
   }, [configStatus.configured, refreshCloudBackups])
+
+  useEffect(() => {
+    return subscribeAutoSnapshotBackup((detail) => {
+      if (detail.kind === 'settings') {
+        setAutoBackupEnabledState(isAutoSnapshotBackupEnabled())
+      }
+    })
+  }, [])
+
+  function handleAutoBackupToggle() {
+    if (!configStatus.configured) {
+      return
+    }
+
+    const nextValue = !autoBackupEnabled
+    setAutoSnapshotBackupEnabled(nextValue)
+    setAutoBackupEnabledState(nextValue)
+    setMessage(nextValue ? '自动云端备份已开启。' : '自动云端备份已关闭。')
+    setError(null)
+  }
 
   async function handleSendOtp() {
     const trimmedEmail = email.trim()
@@ -176,6 +204,10 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setWarnings([])
     try {
       const result = await uploadTripCloudBackup(trip.id)
+      const autoBackupStatus = getTripAutoSnapshotStatus(trip.id)
+      if (autoBackupStatus?.dirtyAt) {
+        completeTripAutoSnapshotSuccess(trip.id, autoBackupStatus.dirtyAt)
+      }
       setMessage('当前旅行已上传到云端备份。')
       setWarnings(result.warnings)
       await refreshCloudBackups()
@@ -266,6 +298,13 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             text="真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。"
           />
         </div>
+
+        <AutoCloudBackupSetting
+          configured={configStatus.configured}
+          enabled={autoBackupEnabled}
+          onToggle={handleAutoBackupToggle}
+          signedIn={Boolean(user)}
+        />
 
         {!configStatus.configured ? (
           <div
@@ -427,6 +466,58 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
       <Button className="w-full" onClick={() => navigateTo('trip', { tripId: result.tripId })}>
         进入恢复的旅行工作台
       </Button>
+    </div>
+  )
+}
+
+function AutoCloudBackupSetting({
+  configured,
+  enabled,
+  onToggle,
+  signedIn,
+}: {
+  configured: boolean
+  enabled: boolean
+  onToggle: () => void
+  signedIn: boolean
+}) {
+  const helperText = !configured
+    ? '配置 Supabase 后才能开启。'
+    : signedIn
+      ? '开启后，本机数据变化会延迟上传旅行云端快照。不会自动恢复或合并冲突。'
+      : '可以先保存设置；登录云端备份账号后才会开始自动上传。'
+
+  return (
+    <div
+      className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3"
+      data-testid="auto-cloud-backup-setting"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-950">自动云端备份</p>
+          <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
+            {helperText}
+          </p>
+        </div>
+        <button
+          aria-checked={enabled && configured}
+          aria-label="自动云端备份"
+          className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition ${
+            enabled && configured ? 'bg-sky-500' : 'bg-slate-200'
+          } disabled:cursor-not-allowed disabled:opacity-60`}
+          data-testid="auto-cloud-backup-toggle"
+          disabled={!configured}
+          onClick={onToggle}
+          role="switch"
+          type="button"
+        >
+          <span
+            className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${
+              enabled && configured ? 'left-6' : 'left-1'
+            }`}
+          />
+        </button>
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { TripNav } from '../components/AppShell'
+import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Collapsible } from '../components/ui/Collapsible'
@@ -192,6 +193,9 @@ export function TripWorkspacePage() {
                 <p className="mt-2 text-sm text-slate-500">
                   {formatDateRange(trip.startDate, trip.endDate)}
                 </p>
+                <div className="mt-2">
+                  <AutoSnapshotBackupStatus tripId={trip.id} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <OverviewMetric label="天数" value={days.length.toString()} />

@@ -5,6 +5,7 @@ import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripNav } from '../components/AppShell'
+import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -269,6 +270,7 @@ export function DayViewPage() {
             <p className="truncate text-xs text-slate-500">
               {isMapView ? selectedDay.title : formatDateRange(trip.startDate, trip.endDate)}
             </p>
+            <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
           </div>
           <TripMoreMenu tripId={trip.id} />
         </div>

@@ -1,0 +1,144 @@
+import 'fake-indexeddb/auto'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { db } from './database'
+import {
+  createDay,
+  createItineraryItem,
+  createTicketMeta,
+  createTrip,
+  deleteTripCascade,
+  getTicketMeta,
+  importTripPlanRecords,
+  saveTicketBlob,
+  updateItineraryItem,
+} from './index'
+import {
+  getTripAutoSnapshotStatus,
+  resetAutoSnapshotBackupForTests,
+} from '../lib/autoSnapshotBackup'
+import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+
+beforeEach(async () => {
+  resetAutoSnapshotBackupForTests()
+  await db.delete()
+  await db.open()
+})
+
+describe('tracked db mutations', () => {
+  it('marks trips dirty after local trip, day and item mutations', async () => {
+    const trip = await createTrip({
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      startDate: '2026-04-01',
+      title: '东京',
+    })
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({ status: 'dirty' })
+
+    const day = await createDay({
+      date: '2026-04-01',
+      sortOrder: 1,
+      title: '第一天',
+      tripId: trip.id,
+    })
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('day-created')
+
+    const item = await createItineraryItem({
+      dayId: day.id,
+      sortOrder: 1,
+      ticketIds: [],
+      title: '涩谷',
+      tripId: trip.id,
+    })
+    await updateItineraryItem(item.id, { title: '涩谷 Sky' })
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('item-updated')
+  })
+
+  it('marks ticket blob changes dirty through ticket metadata lookup', async () => {
+    const trip = await createTrip({
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      startDate: '2026-04-01',
+      title: '东京',
+    })
+    const ticket = await createTicketMeta({
+      fileName: 'order.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 3,
+      storageMode: 'copy',
+      title: '订单',
+      tripId: trip.id,
+    })
+
+    await saveTicketBlob(ticket.id, new Blob(['pdf'], { type: 'application/pdf' }))
+    expect(await getTicketMeta(ticket.id)).toBeTruthy()
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('ticket-blob-saved')
+  })
+
+  it('clears local auto backup state when a local trip is deleted', async () => {
+    const trip = await createTrip({
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      startDate: '2026-04-01',
+      title: '东京',
+    })
+
+    await deleteTripCascade(trip.id)
+    expect(getTripAutoSnapshotStatus(trip.id)).toBeNull()
+  })
+
+  it('marks imports dirty only when requested', async () => {
+    const records = buildImportRecords('trip_imported')
+    const result = await importTripPlanRecords(records)
+    expect(getTripAutoSnapshotStatus(result.tripId)).toMatchObject({ status: 'dirty' })
+
+    const cloudRecords = buildImportRecords('trip_cloud_restore')
+    const cloudResult = await importTripPlanRecords(cloudRecords, { markDirty: false })
+    expect(getTripAutoSnapshotStatus(cloudResult.tripId)).toBeNull()
+  })
+})
+
+function buildImportRecords(tripId: string): {
+  trip: Trip
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  ticketBlobs: []
+} {
+  const now = Date.now()
+  const dayId = `${tripId}_day`
+  return {
+    days: [
+      {
+        date: '2026-04-01',
+        id: dayId,
+        sortOrder: 1,
+        title: '第一天',
+        tripId,
+      },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId,
+        id: `${tripId}_item`,
+        sortOrder: 1,
+        ticketIds: [],
+        title: '涩谷',
+        tripId,
+        updatedAt: now,
+      },
+    ],
+    ticketBlobs: [],
+    ticketMetas: [],
+    trip: {
+      createdAt: now,
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      id: tripId,
+      startDate: '2026-04-01',
+      title: '导入旅行',
+      updatedAt: now,
+    },
+  }
+}

@@ -14,6 +14,18 @@ playwright-report
 test-results
 *.local
 
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local agent/tool state
+.claude/
+.deepflow/
+agentdb.rvf
+agentdb.rvf.lock
+ruvector.db
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

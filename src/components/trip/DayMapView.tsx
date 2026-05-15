@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -745,7 +745,7 @@ function MapBottomSheet({
 
   return (
     <section
-      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-3xl border border-white/70 bg-white/94 shadow-[0_-10px_28px_rgba(47,65,88,0.10)] backdrop-blur-xl ${
+      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-[1.75rem] border border-white/75 bg-white/94 shadow-[0_-8px_24px_rgba(47,65,88,0.09)] backdrop-blur-xl ${
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
       data-testid="map-sheet"
@@ -768,20 +768,19 @@ function MapBottomSheet({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="mb-2 flex shrink-0 items-start justify-between gap-3 px-4">
           <div className="min-w-0 flex-1">
-            {sheetState !== 'collapsed' ? (
-              <p className="truncate text-xs font-semibold text-sky-600">
-                {formatDate(day.date)}
-              </p>
-            ) : null}
+            <p className="truncate text-xs font-semibold text-sky-600">
+              {formatDate(day.date)}
+            </p>
             <h2 className="truncate text-base font-semibold text-slate-950">{day.title}</h2>
             <p className="mt-0.5 truncate text-xs text-slate-500">
               {sheetState === 'collapsed'
-                ? `${items.length} 个行程点 · ${getSheetRouteSummary(routeState, routeWarnings)}`
+                ? `${items.length} 个行程点 · ${mappedCount} 个坐标 · ${getSheetRouteSummary(routeState, routeWarnings)}`
                 : `${items.length} 个行程点 · ${mappedCount} 个带坐标`}
             </p>
           </div>
           <Button
             className={`shrink-0 whitespace-nowrap rounded-full bg-slate-50/70 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
+            data-testid="map-sheet-schedule-button"
             icon={<Navigation className="size-3.5" />}
             onClick={onBackToSchedule}
             variant={sheetState === 'middle' ? 'secondary' : 'ghost'}
@@ -790,7 +789,10 @@ function MapBottomSheet({
           </Button>
         </div>
 
-        <div className="shrink-0 space-y-2 px-4">
+        <div
+          className="shrink-0 space-y-2 px-4"
+          data-testid={sheetState === 'collapsed' ? 'map-collapsed-sheet' : undefined}
+        >
           {sheetState !== 'collapsed' ? (
             <RouteControlsSummary
               open={routeControlsOpen}
@@ -833,7 +835,7 @@ function MapBottomSheet({
           {selectedItem && sheetState === 'collapsed' ? (
             <CompactItemLine
               item={selectedItem}
-              onSelectItem={(item) => onSelectItem(item, 'list')}
+              onOpenItem={onOpenItem}
               selected={selectedItem.id === selectedItemId}
             />
           ) : selectedItem && sheetState === 'middle' ? (
@@ -880,11 +882,7 @@ function MapBottomSheet({
               上拉查看完整行程
             </p>
           </div>
-        ) : (
-          <p className="mt-2 px-4 text-center text-xs text-slate-400">
-            上拉查看行程
-          </p>
-        )}
+        ) : null}
       </div>
     </section>
   )
@@ -910,10 +908,10 @@ function RouteStatusChip({
   const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
 
   return (
-    <div className={`pointer-events-none absolute left-3 z-40 ${showBelowHeader ? 'top-24' : 'top-3'}`}>
+    <div className={`pointer-events-none absolute left-4 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
       <button
         aria-label="打开路线设置"
-        className={`pointer-events-auto flex min-h-8 max-w-[15rem] items-center gap-1.5 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[11px] font-semibold shadow-[0_6px_16px_rgba(47,65,88,0.08)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
+        className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[11px] font-semibold shadow-[0_6px_16px_rgba(47,65,88,0.08)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
         data-testid="route-chip"
         onClick={onClick}
         type="button"
@@ -1111,23 +1109,44 @@ function RouteControlsSection({
 function CompactItemLine({
   item,
   selected,
-  onSelectItem,
+  onOpenItem,
 }: {
   item: ItineraryItem
   selected: boolean
-  onSelectItem: (item: ItineraryItem) => void
+  onOpenItem: (item: ItineraryItem) => void
 }) {
+  const location = item.locationName || item.address || '地点未填写'
+  const transportDescription = describePreviousTransport(item)
+
   return (
     <button
-      className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
-        selected ? 'bg-sky-50/70 text-slate-950' : 'bg-white/70 text-slate-700'
+      aria-label={`打开 ${item.title} 详情`}
+      className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left transition active:bg-slate-50 ${
+        selected ? 'bg-sky-50/65 text-slate-950 ring-1 ring-sky-100/80' : 'bg-white/60 text-slate-700 ring-1 ring-slate-100/70'
       }`}
-      onClick={() => onSelectItem(item)}
+      data-testid="map-collapsed-item-preview"
+      onClick={() => onOpenItem(item)}
       type="button"
     >
-      <MapPin className="size-3.5 shrink-0 text-sky-500" />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
-      <span className="shrink-0 text-xs text-slate-400">{describeItemTime(item)}</span>
+      <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100/80">
+        {describeItemTime(item)}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">{item.title}</span>
+        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-slate-500">
+          <MapPin className="size-3 shrink-0 text-slate-400" />
+          <span className="truncate">{location}</span>
+        </span>
+      </span>
+      {transportDescription ? (
+        <span className="hidden max-w-[6rem] shrink-0 truncate rounded-full bg-slate-50/80 px-2 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100/70 min-[380px]:block">
+          {transportDescription}
+        </span>
+      ) : null}
+      <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-sky-600">
+        详情
+        <ChevronRight className="size-3.5" />
+      </span>
     </button>
   )
 }

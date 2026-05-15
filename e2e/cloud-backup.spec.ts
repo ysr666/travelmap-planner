@@ -1,12 +1,26 @@
 import { expect, test } from '@playwright/test'
-import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigured } from './helpers'
+import {
+  clearTravelDatabase,
+  createDemoTripViaUi,
+  expectNoHorizontalOverflow,
+  forceSupabaseUnconfigured,
+} from './helpers'
 
 test('Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
-  await clearTravelDatabase(page)
+  await createDemoTripViaUi(page)
   await forceSupabaseUnconfigured(page)
-  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('view-switch-overview').click()
+  const cloudSection = page.getByTestId('cloud-backup-section')
+  if (!(await cloudSection.isVisible().catch(() => false))) {
+    await page
+      .locator('details')
+      .filter({ hasText: '备份与恢复' })
+      .first()
+      .locator('summary')
+      .click()
+  }
 
-  await expect(page.getByTestId('cloud-backup-section')).toBeVisible()
+  await expect(cloudSection).toBeVisible()
   const message = page.getByTestId('supabase-unconfigured-message')
   await expect(message).toContainText('云端备份未配置')
   await expect(message).toContainText('VITE_SUPABASE_URL')
@@ -24,6 +38,7 @@ test('设置页可以保存和清除本机路线服务 key', async ({ page }) =>
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await page.getByText('路线服务配置', { exact: true }).click()
 
   await expect(page.getByTestId('routing-settings-section')).toBeVisible()
   const input = page.getByTestId('routing-api-key-input')
@@ -32,6 +47,7 @@ test('设置页可以保存和清除本机路线服务 key', async ({ page }) =>
   await expect(page.getByText('路线服务 key 已保存到当前浏览器本机。')).toBeVisible()
 
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByText('路线服务配置', { exact: true }).click()
   await expect(page.getByTestId('routing-settings-section')).toContainText('已使用本机 key')
   await page.getByTestId('routing-api-key-clear').click()
   await expect(page.getByText('已清除本机路线服务 key')).toBeVisible()

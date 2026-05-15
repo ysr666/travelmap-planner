@@ -35,6 +35,8 @@ export async function createDemoTripViaUi(page: Page) {
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
+  await page.getByTestId('view-switch-schedule').click()
+  await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
 
   return getHashParam(page.url(), 'tripId')

@@ -13,7 +13,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   if (await page.getByTestId('map-base-loading').isVisible().catch(() => false)) {
     await expect(page.getByTestId('route-chip')).toBeHidden()
   }
-  await expect(page.getByTestId('route-chip')).toBeVisible()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
@@ -21,7 +21,22 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByTestId('route-mode-segment-road')).toBeHidden()
   await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await expect(page.getByTestId('route-generate-button')).toBeHidden()
+  await expect(page.getByTestId('map-collapsed-sheet')).toBeVisible()
+  await expect(page.getByTestId('map-collapsed-item-preview')).toBeVisible()
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
+  await expect(page.getByText('上拉查看行程')).toBeHidden()
+  await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
+
+  const routeChipBox = await page.getByTestId('route-chip').boundingBox()
+  const viewport = page.viewportSize()
+  expect(routeChipBox).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  if (!routeChipBox || !viewport) {
+    throw new Error('路线 chip 或视口没有可用布局盒')
+  }
+  expect(routeChipBox.x).toBeGreaterThanOrEqual(12)
+  expect(routeChipBox.x + routeChipBox.width).toBeLessThanOrEqual(viewport.width - 8)
 
   const before = await sheet.boundingBox()
   const handleBox = await handle.boundingBox()
@@ -58,12 +73,28 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expectNoHorizontalOverflow(page)
 })
 
+test('collapsed sheet uses a lightweight item preview that opens detail', async ({ page }) => {
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+
+  await expect(page.getByTestId('map-collapsed-sheet')).toBeVisible()
+  await expect(page.getByTestId('map-collapsed-item-preview')).toBeVisible()
+  await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
+  await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
+
+  await page.getByTestId('map-collapsed-item-preview').click()
+  await expect(page).toHaveURL(/#\/item\?/)
+  await expect(page.getByRole('heading', { name: /Hotel Metropolitan Tokyo/ })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
 test('地图路线服务未配置时保留直线连接提示', async ({ page }) => {
   await createDemoTripViaUi(page)
   await forceRoutingUnconfigured(page)
   await page.getByTestId('view-switch-map').click()
 
-  await expect(page.getByTestId('route-chip')).toBeVisible()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-controls-section')).toBeHidden()

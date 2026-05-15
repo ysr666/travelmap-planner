@@ -1,15 +1,20 @@
 import path from 'node:path'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigured } from './helpers'
 
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
+
+async function openAiTripImportSection(page: Page) {
+  await page.getByText('AI 行程导入', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
+}
 
 test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
+  await openAiTripImportSection(page)
   const guide = page.getByTestId('ai-trip-plan-guide')
   await expect(guide).toBeVisible()
   await expect(guide.getByText('JSON 单文件', { exact: true })).toBeVisible()
@@ -36,7 +41,9 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
   await expect(checklist.getByText('地图坐标是否准确')).toBeVisible()
   await checklist.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await expect(page.getByText('AI 测试东京旅行')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'AI 测试东京旅行' }).first()).toBeVisible()
+  await page.getByTestId('view-switch-schedule').click()
+  await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
   await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -46,6 +53,7 @@ test('JSON 单文件出现 copy 票据时阻止导入', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await openAiTripImportSection(page)
 
   await page
     .getByTestId('ai-trip-plan-file-input')
@@ -62,6 +70,7 @@ test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await openAiTripImportSection(page)
 
   await page
     .getByTestId('ai-trip-plan-file-input')
@@ -78,7 +87,9 @@ test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await expect(page.getByTestId('ai-trip-plan-success-checklist')).toBeVisible()
   await page.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await expect(page.getByText('AI 缺坐标测试旅行')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'AI 缺坐标测试旅行' }).first()).toBeVisible()
+  await page.getByTestId('view-switch-schedule').click()
+  await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByText('无坐标餐厅')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

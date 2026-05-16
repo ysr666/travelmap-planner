@@ -25,7 +25,7 @@ import { SectionHeader } from '../components/ui/SectionHeader'
 import {
   importTripBackup,
 } from '../lib/backup'
-import { navigateTo } from '../lib/routes'
+import { getRouteParams, navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
 import {
   buildTripPlanPreviewSummary,
@@ -84,6 +84,8 @@ const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要
 [在这里填写目的地、日期、兴趣、已订酒店或门票信息]`
 
 export function SettingsPage() {
+  const routeParams = getRouteParams()
+  const shouldOpenCloudBackup = routeParams.get('section') === 'cloud'
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
   const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
@@ -490,7 +492,12 @@ export function SettingsPage() {
       </Card>
       </section>
 
-      <Collapsible subtitle="Supabase 快照备份与恢复" title="云端备份">
+      <Collapsible
+        defaultOpen={shouldOpenCloudBackup}
+        key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
+        subtitle="Supabase 快照备份与恢复"
+        title="云端备份"
+      >
         <CloudBackupPanel trip={null} />
       </Collapsible>
 

@@ -33,6 +33,7 @@ test('设置页 Supabase 未配置时显示云端备份提示且不显示登录�
   await expect(page.getByTestId('cloud-login-form')).toHaveCount(0)
   await expect(page.getByTestId('cloud-upload-current-trip')).toHaveCount(0)
   await expect(page.getByTestId('cloud-backup-list')).toHaveCount(0)
+  await expect(page.getByTestId('cloud-snapshot-check-prompts')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
 

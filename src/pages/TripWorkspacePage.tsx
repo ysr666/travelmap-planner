@@ -6,6 +6,7 @@ import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { TripNav } from '../components/AppShell'
 import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
+import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Collapsible } from '../components/ui/Collapsible'
@@ -197,6 +198,7 @@ export function TripWorkspacePage() {
                   <AutoSnapshotBackupStatus tripId={trip.id} />
                 </div>
               </div>
+              <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
               <div className="grid grid-cols-2 gap-3">
                 <OverviewMetric label="天数" value={days.length.toString()} />
                 <OverviewMetric label="行程点" value={allItems.length.toString()} />

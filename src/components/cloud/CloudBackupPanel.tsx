@@ -16,6 +16,7 @@ import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
 import { SectionHeader } from '../ui/SectionHeader'
+import { CloudSnapshotCheckPrompts } from './CloudSnapshotCheckPrompts'
 import {
   deleteCloudBackup,
   formatCloudBackupSize,
@@ -305,6 +306,8 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           onToggle={handleAutoBackupToggle}
           signedIn={Boolean(user)}
         />
+
+        <CloudSnapshotCheckPrompts maxItems={5} variant="settings" />
 
         {!configStatus.configured ? (
           <div

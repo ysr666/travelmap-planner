@@ -147,7 +147,7 @@ export function ItineraryItemForm({
   }
 
   return (
-    <form className="space-y-3" onSubmit={handleSubmit}>
+    <form className="space-y-4" onSubmit={handleSubmit}>
       <FormField
         label="行程标题"
         onChange={(value) => setForm((current) => ({ ...current, title: value }))}
@@ -210,12 +210,14 @@ export function ItineraryItemForm({
           ))}
         </select>
       </label>
-      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-        <h4 className="text-sm font-semibold text-slate-950">从上一站到此处</h4>
-        <p className="mt-1 text-xs leading-5 text-slate-500">
-          可先用外部地图查看路线，再手动记录交通方式、预计耗时和备注。
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+      <section className="space-y-3 border-t border-slate-100 pt-4">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-950">从上一站到此处</h4>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            可先用外部地图查看路线，再记录交通方式、预计耗时和备注。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">交通方式</span>
             <select
@@ -246,10 +248,10 @@ export function ItineraryItemForm({
             value={form.previousTransportDurationMinutes}
           />
         </div>
-        <label className="mt-3 block">
+        <label className="block">
           <span className="text-sm font-semibold text-slate-700">交通备注</span>
           <textarea
-            className="mt-2 min-h-20 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className="mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
             onChange={(event) =>
               setForm((current) => ({ ...current, previousTransportNote: event.target.value }))
             }
@@ -257,11 +259,11 @@ export function ItineraryItemForm({
             value={form.previousTransportNote}
           />
         </label>
-      </div>
+      </section>
       {googleMapsKeyConfigured ? (
-        <div className="rounded-xl bg-slate-50 p-3">
+        <section className="space-y-3 border-t border-slate-100 pt-4">
           <button
-            className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
+            className="flex w-full items-center justify-between rounded-xl px-0 py-1 text-left text-sm font-semibold text-slate-700"
             onClick={() => setShowManualCoords((current) => !current)}
             type="button"
           >
@@ -269,7 +271,7 @@ export function ItineraryItemForm({
             {showManualCoords ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           </button>
           {showManualCoords ? (
-            <div className="mt-3 space-y-3">
+            <div className="space-y-3">
               <FormField
                 label="粘贴地图链接解析坐标"
                 onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
@@ -285,7 +287,7 @@ export function ItineraryItemForm({
                 解析坐标
               </Button>
               {parseMessage ? <p className="text-xs text-slate-500">{parseMessage}</p> : null}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
                   label="纬度 lat"
                   onChange={(value) => setForm((current) => ({ ...current, lat: value }))}
@@ -303,10 +305,16 @@ export function ItineraryItemForm({
               </div>
             </div>
           ) : null}
-        </div>
+        </section>
       ) : (
-        <>
-          <div className="rounded-xl bg-slate-50 p-3">
+        <section className="space-y-3 border-t border-slate-100 pt-4">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-950">坐标</h4>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              可粘贴地图链接解析，也可以手动填写纬度和经度。
+            </p>
+          </div>
+          <div className="space-y-3">
             <FormField
               label="粘贴地图链接解析坐标"
               onChange={(value) => setForm((current) => ({ ...current, mapLink: value }))}
@@ -323,7 +331,7 @@ export function ItineraryItemForm({
             </Button>
             {parseMessage ? <p className="mt-2 text-xs text-slate-500">{parseMessage}</p> : null}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
               label="纬度 lat"
               onChange={(value) => setForm((current) => ({ ...current, lat: value }))}
@@ -339,12 +347,12 @@ export function ItineraryItemForm({
               value={form.lng}
             />
           </div>
-        </>
+        </section>
       )}
       <label className="block">
         <span className="text-sm font-semibold text-slate-700">备注</span>
         <textarea
-          className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          className="mt-2 min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
           onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
           placeholder="可选：预约信息、注意事项或备用方案"
           value={form.notes}

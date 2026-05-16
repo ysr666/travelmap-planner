@@ -3,7 +3,9 @@ import {
   buildCloudSnapshotCheckResults,
   buildCloudSnapshotCheckSignature,
   compareCloudSnapshotVersions,
+  deduplicateResultsByTripId,
   dismissCloudSnapshotPrompt,
+  formatVersionTimestamp,
   getCloudSnapshotCheckState,
   groupLatestCloudBackupsByTripId,
   isCloudSnapshotPromptDismissed,
@@ -281,6 +283,82 @@ describe('cloud snapshot prompt dismissal', () => {
 
     expect(isCloudSnapshotPromptDismissed(result.signature)).toBe(true)
     expect(getCloudSnapshotCheckState().results).toEqual([])
+  })
+})
+
+describe('cloud snapshot version context fields', () => {
+  it('populates dirtyAt and tripUpdatedAt in results', () => {
+    const dirtyAt = Date.parse('2026-04-02T12:00:00.000Z')
+    const results = buildCloudSnapshotCheckResults({
+      autoStatusByTripId: {
+        trip_1: createAutoStatus({ dirtyAt, lastSuccessAt: Date.parse('2026-04-02T10:30:00.000Z') }),
+      },
+      backups: [createBackup({ exportedAt: '2026-04-02T09:00:00.000Z' })],
+      trips: [baseTrip],
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0].dirtyAt).toBe(dirtyAt)
+    expect(results[0].tripUpdatedAt).toBe(baseTrip.updatedAt)
+  })
+
+  it('sets dirtyAt to null when no autoStatus exists', () => {
+    const results = buildCloudSnapshotCheckResults({
+      backups: [createBackup({ exportedAt: '2026-04-03T00:00:00.000Z' })],
+      trips: [baseTrip],
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0].dirtyAt).toBeNull()
+    expect(results[0].tripUpdatedAt).toBe(baseTrip.updatedAt)
+  })
+})
+
+describe('deduplicateResultsByTripId', () => {
+  it('keeps only the latest result per tripId', () => {
+    const results = [
+      {
+        ...buildCloudSnapshotCheckResults({
+          backups: [createBackup({ exportedAt: '2026-04-02T09:00:00.000Z', id: 'backup_old' })],
+          trips: [baseTrip],
+        })[0],
+        cloudVersion: 100,
+      },
+      {
+        ...buildCloudSnapshotCheckResults({
+          backups: [createBackup({ exportedAt: '2026-04-03T00:00:00.000Z', id: 'backup_new' })],
+          trips: [baseTrip],
+        })[0],
+        cloudVersion: 200,
+      },
+    ]
+
+    const deduped = deduplicateResultsByTripId(results)
+    expect(deduped).toHaveLength(1)
+    expect(deduped[0].cloudVersion).toBe(200)
+  })
+})
+
+describe('formatVersionTimestamp', () => {
+  it('formats valid epoch as YYYY-MM-DD HH:mm', () => {
+    const epoch = Date.parse('2026-04-02T10:30:00.000Z')
+    expect(formatVersionTimestamp(epoch)).toBe('2026-04-02 18:30')
+  })
+
+  it('returns null for null', () => {
+    expect(formatVersionTimestamp(null)).toBeNull()
+  })
+
+  it('returns null for NaN', () => {
+    expect(formatVersionTimestamp(NaN)).toBeNull()
+  })
+
+  it('returns null for 0', () => {
+    expect(formatVersionTimestamp(0)).toBeNull()
+  })
+
+  it('returns null for negative values', () => {
+    expect(formatVersionTimestamp(-1000)).toBeNull()
   })
 })
 

@@ -14,11 +14,13 @@ export type CloudSnapshotCheckResult = {
   backupId: string
   cloudVersion: number
   cloudVersionIso: string
+  dirtyAt: number | null
   localVersion: number
   signature: string
   status: CloudSnapshotCheckStatus
   tripId: string
   tripTitle: string
+  tripUpdatedAt: number | null
 }
 
 export type CloudSnapshotCheckState = {
@@ -69,8 +71,10 @@ export function compareCloudSnapshotVersions({
   if (!backup || !cloudVersion || !tripUpdatedAt) {
     return {
       cloudVersion: cloudVersion?.time ?? null,
+      dirtyAt,
       localVersion: dirtyAt ?? tripUpdatedAt ?? null,
       status: 'unknown' as CloudSnapshotCheckStatus,
+      tripUpdatedAt,
     }
   }
 
@@ -80,8 +84,10 @@ export function compareCloudSnapshotVersions({
     if (!lastSuccessAt || cloudVersion.time > lastSuccessAt + VERSION_TOLERANCE_MS) {
       return {
         cloudVersion: cloudVersion.time,
+        dirtyAt,
         localVersion,
         status: 'possible_conflict' as CloudSnapshotCheckStatus,
+        tripUpdatedAt,
       }
     }
   }
@@ -89,23 +95,29 @@ export function compareCloudSnapshotVersions({
   if (localVersion > cloudVersion.time + VERSION_TOLERANCE_MS) {
     return {
       cloudVersion: cloudVersion.time,
+      dirtyAt,
       localVersion,
       status: 'local_newer' as CloudSnapshotCheckStatus,
+      tripUpdatedAt,
     }
   }
 
   if (cloudVersion.time > localVersion + VERSION_TOLERANCE_MS) {
     return {
       cloudVersion: cloudVersion.time,
+      dirtyAt,
       localVersion,
       status: 'cloud_newer' as CloudSnapshotCheckStatus,
+      tripUpdatedAt,
     }
   }
 
   return {
     cloudVersion: cloudVersion.time,
+    dirtyAt,
     localVersion,
     status: 'in_sync' as CloudSnapshotCheckStatus,
+    tripUpdatedAt,
   }
 }
 
@@ -153,15 +165,40 @@ export function buildCloudSnapshotCheckResults({
       backupId: backup.id,
       cloudVersion: comparison.cloudVersion,
       cloudVersionIso: new Date(comparison.cloudVersion).toISOString(),
+      dirtyAt: comparison.dirtyAt ?? null,
       localVersion: comparison.localVersion,
       signature,
       status: comparison.status,
       tripId: trip.id,
       tripTitle: trip.title,
+      tripUpdatedAt: comparison.tripUpdatedAt ?? null,
     })
   }
 
-  return results.sort((first, second) => second.cloudVersion - first.cloudVersion)
+  return deduplicateResultsByTripId(results).sort((first, second) => second.cloudVersion - first.cloudVersion)
+}
+
+export function deduplicateResultsByTripId(results: CloudSnapshotCheckResult[]) {
+  const byTripId = new Map<string, CloudSnapshotCheckResult>()
+  for (const result of results) {
+    const existing = byTripId.get(result.tripId)
+    if (!existing || result.cloudVersion > existing.cloudVersion) {
+      byTripId.set(result.tripId, result)
+    }
+  }
+  return [...byTripId.values()]
+}
+
+export function formatVersionTimestamp(epochMs: number | null): string | null {
+  if (epochMs == null || !Number.isFinite(epochMs) || epochMs <= 0) {
+    return null
+  }
+  const date = new Date(epochMs)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  const pad = (value: number) => value.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 export function groupLatestCloudBackupsByTripId(backups: CloudBackupSummary[]) {

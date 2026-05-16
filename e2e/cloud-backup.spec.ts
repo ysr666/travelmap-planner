@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearTravelDatabase,
+  createDemoTripViaUi,
   expectNoHorizontalOverflow,
   forceSupabaseUnconfigured,
 } from './helpers'
@@ -34,6 +35,45 @@ test('设置页 Supabase 未配置时显示云端备份提示且不显示登录�
   await expect(page.getByTestId('cloud-upload-current-trip')).toHaveCount(0)
   await expect(page.getByTestId('cloud-backup-list')).toHaveCount(0)
   await expect(page.getByTestId('cloud-snapshot-check-prompts')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('设置页通过 section=cloud 可以直接打开云端备份区域', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
+  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+  const cloudSection = page.getByTestId('cloud-backup-section')
+  await expect(cloudSection).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Day View 不显示云端快照检查提醒', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
+  const tripId = await createDemoTripViaUi(page)
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+
+  await page.getByRole('button', { name: /第一天/ }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page.getByTestId('cloud-snapshot-check-card')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('本地新建和编辑旅行不受云端快照提醒干扰', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
+  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
+
+  await page.getByRole('button', { name: '新建旅行' }).click()
+  await expect(page.getByTestId('trip-form-page')).toBeVisible()
+
+  await page.getByLabel('旅行标题').fill('测试旅行')
+  await page.getByLabel('开始日期').fill('2026-06-01')
+  await page.getByLabel('结束日期').fill('2026-06-02')
+  await page.getByTestId('trip-form-submit').click()
+  await expect(page).toHaveURL(/#\/trip\?tripId=/)
+
+  await expect(page.getByTestId('cloud-snapshot-check-card')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
 

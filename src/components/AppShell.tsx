@@ -40,7 +40,14 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
         <header className="z-30 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             {isHome ? (
-              <div className="size-10" />
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <img alt="" className="size-7 rounded-lg" src="/favicon.svg" />
+                </span>
+                <h1 className="min-w-0 truncate text-xl font-semibold leading-tight text-slate-950">
+                  {pageTitle}
+                </h1>
+              </div>
             ) : (
               <button
                 aria-label="返回首页"
@@ -51,9 +58,11 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
                 <Home className="size-5" />
               </button>
             )}
-            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
-              {pageTitle}
-            </h1>
+            {!isHome ? (
+              <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
+                {pageTitle}
+              </h1>
+            ) : null}
             {activeRoute === 'settings' ? (
               <div className="size-10" />
             ) : (

@@ -118,8 +118,8 @@ export function HomePage() {
       <section className="shrink-0 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 px-5 py-4 text-white shadow-[0_8px_22px_rgba(56,130,225,0.25)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">旅图</h2>
-            <p className="mt-0.5 text-sm text-white/70">让每一段旅程，井然有序</p>
+            <h2 className="text-lg font-semibold">本地优先的旅行计划</h2>
+            <p className="mt-0.5 text-sm text-white/75">日程、地图和票据，集中放好。</p>
           </div>
           <span className="rounded-lg bg-white/20 px-2.5 py-1 text-sm font-semibold">{tripStats.count} 次旅行</span>
         </div>
@@ -237,7 +237,7 @@ function TripCard({
   return (
     <Card className="relative overflow-hidden p-0" data-testid="trip-card">
       <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
-      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-4 pl-5 text-left" onClick={onOpen} type="button">
+      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-4 pl-5 pr-11 text-left" onClick={onOpen} type="button">
         <TripCover trip={trip} variant="thumbnail" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -255,17 +255,15 @@ function TripCard({
           ) : null}
         </div>
       </button>
-      <div className="flex items-center justify-end border-t border-slate-100 px-4 py-2">
-        <button
-          aria-label={`删除 ${trip.title}`}
-          className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
-          disabled={isDeleting}
-          onClick={onDelete}
-          type="button"
-        >
-          <Trash2 className="size-4" />
-        </button>
-      </div>
+      <button
+        aria-label={`删除 ${trip.title}`}
+        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/85 text-slate-400 shadow-sm ring-1 ring-slate-200/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
+        disabled={isDeleting}
+        onClick={onDelete}
+        type="button"
+      >
+        <Trash2 className="size-4" />
+      </button>
     </Card>
   )
 }

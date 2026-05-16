@@ -18,6 +18,7 @@ import {
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
+import { CloudBackupPanel } from '../components/cloud/CloudBackupPanel'
 import { Collapsible } from '../components/ui/Collapsible'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -488,6 +489,10 @@ export function SettingsPage() {
         </Button>
       </Card>
       </section>
+
+      <Collapsible subtitle="Supabase 快照备份与恢复" title="云端备份">
+        <CloudBackupPanel trip={null} />
+      </Collapsible>
 
       <Collapsible subtitle="用 AI 生成行程后导入" title="AI 行程导入">
         <Card className="space-y-3">

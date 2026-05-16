@@ -1,23 +1,19 @@
 import { expect, test } from '@playwright/test'
 import {
   clearTravelDatabase,
-  createDemoTripViaUi,
   expectNoHorizontalOverflow,
   forceSupabaseUnconfigured,
-  getHashParam,
 } from './helpers'
 
-test('Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
-  await createDemoTripViaUi(page)
+test('设置页 Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
+  await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
-  const tripId = getHashParam(page.url(), 'tripId')
-  expect(tripId).toBeTruthy()
-  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
   const cloudSection = page.getByTestId('cloud-backup-section')
   if (!(await cloudSection.isVisible().catch(() => false))) {
     await page
       .locator('details')
-      .filter({ hasText: '备份与恢复' })
+      .filter({ hasText: '云端备份' })
       .first()
       .locator('summary')
       .click()

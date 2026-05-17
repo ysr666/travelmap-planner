@@ -13,7 +13,7 @@ export function ListRow({ icon, title, detail, meta, onClick }: ListRowProps) {
   const content = (
     <>
       {icon ? (
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           {icon}
         </div>
       ) : null}
@@ -29,7 +29,7 @@ export function ListRow({ icon, title, detail, meta, onClick }: ListRowProps) {
   if (onClick) {
     return (
       <button
-        className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left transition active:bg-slate-50"
+        className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left transition active:bg-slate-50 dark:active:bg-slate-800/70"
         onClick={onClick}
         type="button"
       >

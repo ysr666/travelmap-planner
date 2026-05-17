@@ -11,6 +11,22 @@
     <meta name="apple-mobile-web-app-title" content="旅图" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>旅图 TripMap</title>
+    <script>
+      (function () {
+        try {
+          var mode = window.localStorage.getItem('tripmap:appearance')
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'system'
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          var isDark = mode === 'dark' || (mode === 'system' && prefersDark)
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+          var themeColor = document.querySelector('meta[name="theme-color"]')
+          if (themeColor) themeColor.setAttribute('content', isDark ? '#101827' : '#eef3f8')
+        } catch (error) {
+          document.documentElement.classList.remove('dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

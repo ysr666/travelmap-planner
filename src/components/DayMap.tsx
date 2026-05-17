@@ -13,6 +13,7 @@ import { EmptyState } from './ui/EmptyState'
 type DayMapProps = {
   items: ItineraryItem[]
   selectedItemId?: string | null
+  selectedItemSource?: 'marker' | 'list' | null
   heightClassName?: string
   surface?: 'card' | 'fullscreen'
   resizeSignal?: number
@@ -56,6 +57,7 @@ const maplibreAdapter = new MapLibreAdapter()
 export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   items,
   selectedItemId,
+  selectedItemSource,
   heightClassName = 'h-[52dvh] min-h-[360px]',
   surface = 'card',
   resizeSignal,
@@ -130,8 +132,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
   const updateMarkerSelection = useCallback(() => {
     const selectedId = selectedItemIdRef.current
-    markersRef.current.forEach(({ itemId, content }) => {
-      content.className = markerContentClassName(itemId === selectedId)
+    markersRef.current.forEach(({ itemId, element, content }) => {
+      const isSelected = itemId === selectedId
+      content.className = markerContentClassName(isSelected)
+      element.style.zIndex = isSelected ? '45' : '40'
     })
   }, [])
 
@@ -255,7 +259,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       const element = document.createElement('button')
       element.type = 'button'
       element.className = markerRootClassName()
+      element.style.zIndex = '40'
       element.setAttribute('aria-label', `选择 ${item.title}`)
+      element.setAttribute('data-testid', 'day-map-marker')
 
       const content = document.createElement('span')
       content.className = markerContentClassName(item.id === selectedItemIdRef.current)
@@ -412,6 +418,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     selectedItemIdRef.current = selectedItemId
     updateMarkerSelection()
 
+    if (selectedItemSource === 'marker') {
+      return
+    }
+
     const selectedItem = validItemsRef.current.find((item) => item.id === selectedItemId)
     const selectedLngLat = selectedItem ? getItemLngLat(selectedItem) : null
     const map = mapRef.current
@@ -419,7 +429,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       const currentZoom = map.getCamera().zoom
       map.easeTo(selectedLngLat as unknown as MapLngLat, Math.max(currentZoom, 13.5), 450)
     }
-  }, [selectedItemId, updateMarkerSelection])
+  }, [selectedItemId, selectedItemSource, updateMarkerSelection])
 
   useEffect(() => {
     const container = containerRef.current

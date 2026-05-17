@@ -89,6 +89,44 @@ test('collapsed sheet uses a lightweight item preview that opens detail', async 
   await expectNoHorizontalOverflow(page)
 })
 
+test('点击地图 marker 显示轻量地点卡片并可进入详情', async ({ page }) => {
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('route-controls-section')).toBeHidden()
+
+  const hotelMarker = page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ })
+  await expect(hotelMarker).toBeVisible()
+  await hotelMarker.click()
+
+  const markerCard = page.getByTestId('map-marker-card')
+  await expect(markerCard).toBeVisible()
+  await expect(markerCard).toContainText('15:00')
+  await expect(markerCard).toContainText('Hotel Metropolitan Tokyo 入住')
+  await expect(markerCard).toContainText('Hotel Metropolitan Tokyo')
+  await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
+  await expect(page.getByTestId('route-controls-section')).toBeHidden()
+
+  await page.getByRole('button', { name: /选择 明治神宫散步/ }).click()
+  await expect(markerCard).toContainText('明治神宫散步')
+  await expect(markerCard).toContainText('Meiji Shrine')
+
+  await page.getByTestId('map-marker-card-close').click()
+  await expect(markerCard).toBeHidden()
+
+  await hotelMarker.click()
+  await page.getByTestId('map-marker-card-open').click()
+  await expect(page).toHaveURL(/#\/item\?/)
+  await expect(page).toHaveURL(/view=map/)
+  await expect(page.getByRole('heading', { name: /Hotel Metropolitan Tokyo/ })).toBeVisible()
+
+  await page.getByLabel('返回每日行程').click()
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/view=map/)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('地图路线服务未配置时保留直线连接提示', async ({ page }) => {
   await createDemoTripViaUi(page)
   await forceRoutingUnconfigured(page)
@@ -198,7 +236,7 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
-  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存')
+  await expect(page.getByTestId('route-chip')).toContainText('本地缓存')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-generate-button')).toBeHidden()
 
@@ -208,7 +246,7 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
     window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
     window.dispatchEvent(new Event('tripmap:routing-config-changed'))
   })
-  await expect(page.getByTestId('route-status-pill')).toContainText('本地缓存')
+  await expect(page.getByTestId('route-chip')).toContainText('本地缓存')
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()

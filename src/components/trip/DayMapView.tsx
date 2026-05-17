@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, ExternalLink, LocateFixed, MapPin, Navigation } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, ExternalLink, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -92,9 +92,16 @@ export function DayMapView({
   onEditItem,
   onItemsChange,
 }: DayMapViewProps) {
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [selectedItemSelection, setSelectedItemSelection] = useState<{
+    dayId: string
+    itemId: string
+    source: SelectSource
+  } | null>(null)
   const [sheetState, setSheetState] = useState<SheetState>('collapsed')
-  const [notice, setNotice] = useState<string | null>(null)
+  const [noticeState, setNoticeState] = useState<{
+    dayId: string
+    message: string
+  } | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
   const [routeResult, setRouteResult] = useState<DayRouteResult | null>(null)
@@ -103,6 +110,10 @@ export function DayMapView({
   const [routeWarnings, setRouteWarnings] = useState<string[]>([])
   const [routeControlsOpen, setRouteControlsOpen] = useState(false)
   const [mapBaseLoading, setMapBaseLoading] = useState(() => items.some(hasValidCoordinates))
+  const [markerCardSelection, setMarkerCardSelection] = useState<{
+    dayId: string
+    itemId: string
+  } | null>(null)
   const [roadModeOverride, setRoadModeOverride] = useState<{
     dayId: string
     mode: RoadTransportMode
@@ -118,9 +129,19 @@ export function DayMapView({
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
   const orderedItems = useMemo(() => sortItineraryItems(items), [items])
+  const selectedItemId = selectedItemSelection?.dayId === day.id ? selectedItemSelection.itemId : null
+  const selectedItemSource = selectedItemSelection?.dayId === day.id ? selectedItemSelection.source : null
+  const markerCardItemId = markerCardSelection?.dayId === day.id ? markerCardSelection.itemId : null
+  const notice = noticeState?.dayId === day.id ? noticeState.message : null
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
+  const markerCardItem = useMemo(() => {
+    if (!markerCardItemId) {
+      return null
+    }
+    return mappedItems.find((item) => item.id === markerCardItemId) ?? null
+  }, [mappedItems, markerCardItemId])
   const activeSegmentItem = useMemo(() => {
     if (orderedItems.length < 2) {
       return null
@@ -297,23 +318,31 @@ export function DayMapView({
   }, [cancelDayMapPrewarm, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
 
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
-    setSelectedItemId(item.id)
-    if (source === 'marker') {
-      setSheetState((current) => (current === 'collapsed' ? 'middle' : current))
-    }
+    setSelectedItemSelection({
+      dayId: day.id,
+      itemId: item.id,
+      source,
+    })
 
     if (!hasValidCoordinates(item)) {
-      setNotice('该行程点暂无坐标，可去日程编辑坐标。')
+      setNoticeState({
+        dayId: day.id,
+        message: '该行程点暂无坐标，可去日程编辑坐标。',
+      })
     } else {
-      setNotice(null)
+      setNoticeState(null)
     }
 
     if (source === 'marker') {
-      window.setTimeout(() => {
-        itemRefs.current[item.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }, 100)
+      setMarkerCardSelection({
+        dayId: day.id,
+        itemId: item.id,
+      })
+      return
     }
-  }, [])
+
+    setMarkerCardSelection(null)
+  }, [day.id])
 
   async function handleGenerateRoadRoute(forceRefresh = false) {
     const latestConfig = getRoutingConfig()
@@ -471,9 +500,19 @@ export function DayMapView({
             routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
+            selectedItemSource={selectedItemSource}
             surface="fullscreen"
           />
         )}
+
+        {isVisible && sheetState === 'collapsed' && markerCardItem && !mapBaseLoading && !mapError ? (
+          <MarkerPreviewCard
+            item={markerCardItem}
+            onClose={() => setMarkerCardSelection(null)}
+            onOpenItem={onOpenItem}
+            showBelowHeader={showFloatingHeader}
+          />
+        ) : null}
       </div>
 
       {isVisible && mappedItems.length > 0 && !mapBaseLoading && !mapError ? (
@@ -532,6 +571,66 @@ export function DayMapView({
           trip={trip}
         />
       ) : null}
+    </div>
+  )
+}
+
+function MarkerPreviewCard({
+  item,
+  onClose,
+  onOpenItem,
+  showBelowHeader,
+}: {
+  item: ItineraryItem
+  onClose: () => void
+  onOpenItem: (item: ItineraryItem) => void
+  showBelowHeader: boolean
+}) {
+  const transportDescription = describePreviousTransport(item)
+  const location = item.locationName || item.address || '地点未填写'
+
+  return (
+    <div
+      className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'bottom-[calc(10.75rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(10.25rem+env(safe-area-inset-bottom))]'}`}
+    >
+      <div
+        className="pointer-events-auto relative mx-auto max-w-sm rounded-2xl border border-white/75 bg-white/92 p-2 shadow-[0_14px_34px_rgba(47,65,88,0.14)] backdrop-blur-xl"
+        data-testid="map-marker-card"
+      >
+        <button
+          aria-label={`打开 ${item.title} 详情`}
+          className="flex min-h-20 w-full items-center gap-3 rounded-xl px-2.5 py-2 pr-10 text-left transition active:bg-slate-50"
+          data-testid="map-marker-card-open"
+          onClick={() => onOpenItem(item)}
+          type="button"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
+            <MapPin className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</span>
+            <span className="mt-0.5 block truncate text-sm font-semibold text-slate-950">{item.title}</span>
+            <span className="mt-0.5 block truncate text-xs text-slate-500">{location}</span>
+            {transportDescription ? (
+              <span className="mt-1 inline-flex max-w-full items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100">
+                <span className="truncate">{transportDescription}</span>
+              </span>
+            ) : null}
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-sky-600">
+            详情
+          </span>
+        </button>
+        <button
+          aria-label="关闭地点卡片"
+          className="absolute right-2.5 top-2.5 flex size-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 ring-1 ring-slate-100 active:scale-[0.98]"
+          data-testid="map-marker-card-close"
+          onClick={onClose}
+          type="button"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   )
 }

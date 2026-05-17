@@ -78,7 +78,10 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: '返回旅行总览' }).click()
+  await expect(page).toHaveURL(/#\/trip\?/)
+  await page.getByRole('button', { name: '票据库' }).click()
+  await expect(page).toHaveURL(/#\/tickets\?/)
   await expect(page.getByText('票据库')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

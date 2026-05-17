@@ -1,5 +1,20 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, ChevronRight, Clock3, Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  CalendarDays,
+  ChevronRight,
+  Clock3,
+  Edit3,
+  ExternalLink,
+  FileArchive,
+  FileImage,
+  FileText,
+  Link2,
+  MapPin,
+  Navigation,
+  Ticket,
+  Trash2,
+} from 'lucide-react'
 import {
   deleteItineraryItemCascade,
   getDay,
@@ -18,9 +33,9 @@ import { describeItemTime, describePreviousTransport, sortItineraryItems, transp
 import { formatDate } from '../lib/dates'
 import { navigateTo } from '../lib/routes'
 import {
-  describeTicketMetaLine,
-  formatTicketCreatedAt,
+  formatFileSize,
   getTicketDisplayTitle,
+  getTicketStorageMode,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
@@ -293,7 +308,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
       <section className="space-y-3" data-testid="item-detail-tickets">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-slate-950">票据</h3>
+            <h3 className="text-base font-semibold text-slate-950">现场票据</h3>
             <p className="mt-0.5 text-xs text-slate-500">{tickets.length} 张已绑定</p>
           </div>
           <Button
@@ -310,19 +325,19 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
             <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
           </div>
         ) : tickets.length === 0 ? (
-          <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-4 text-sm leading-6 text-slate-500">
+          <div className="rounded-2xl border border-white/80 bg-white/85 px-4 py-4 text-sm leading-6 text-slate-500 shadow-[0_8px_22px_rgba(47,65,88,0.035)]">
             <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 ring-1 ring-sky-100">
                 <Ticket className="size-5" />
               </span>
               <span>
                 <span className="block font-semibold text-slate-950">暂无绑定票据</span>
-                可在票据库添加门票、车票、二维码截图或 PDF。
+                可在票据库添加二维码截图、门票、车票或订单 PDF。
               </span>
             </div>
           </div>
         ) : (
-          <Card className="space-y-1 py-2">
+          <div className="space-y-2">
             {ticketPreviewItems.map((ticket) => (
               <TicketCompactRow
                 key={ticket.id}
@@ -332,14 +347,16 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
             ))}
             {hiddenTicketCount > 0 ? (
               <button
-                className="flex min-h-10 w-full items-center justify-center rounded-xl text-sm font-semibold text-sky-700 active:bg-sky-50"
-                onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3.5 py-2.5 text-left text-sm font-semibold text-sky-700 transition active:bg-sky-100"
+                data-testid="item-ticket-view-all"
+                onClick={() => navigateTo('tickets', { tripId: trip.id })}
                 type="button"
               >
-                查看全部票据（还有 {hiddenTicketCount} 张）
+                <span>查看全部票据</span>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs">+{hiddenTicketCount}</span>
               </button>
             ) : null}
-          </Card>
+          </div>
         )}
       </section>
 
@@ -508,25 +525,90 @@ function TicketCompactRow({
   ticket: TicketMeta
   onClick: () => void
 }) {
+  const visual = getTicketVisualMeta(ticket)
+  const secondary = getTicketSecondaryLine(ticket)
+
   return (
     <button
-      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50"
+      className="flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border border-white/80 bg-white/90 px-3 py-2.5 text-left shadow-[0_8px_22px_rgba(47,65,88,0.035)] transition active:scale-[0.99] active:bg-slate-50"
       data-testid="item-ticket-entry"
       onClick={onClick}
       type="button"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100">
-        <FileText className="size-5" />
+      <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${visual.toneClass}`}>
+        {visual.icon}
+        <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.badge}</span>
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-slate-950">{getTicketDisplayTitle(ticket)}</span>
-        <span className="block truncate text-xs text-slate-500">
-          {describeTicketMetaLine(ticket)} · {formatTicketCreatedAt(ticket.createdAt)}
-        </span>
+        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{visual.label}</span>
+        {secondary ? (
+          <span className="mt-0.5 block break-words text-xs leading-4 text-slate-400 [overflow-wrap:anywhere]">
+            {secondary}
+          </span>
+        ) : null}
       </span>
-      <span className="shrink-0 text-xs font-semibold text-sky-600">查看</span>
+      <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">查看</span>
     </button>
   )
+}
+
+function getTicketVisualMeta(ticket: TicketMeta) {
+  const storageMode = getTicketStorageMode(ticket)
+
+  if (storageMode === 'external') {
+    return {
+      badge: '链接',
+      icon: <Link2 className="size-4" />,
+      label: '外部链接',
+      toneClass: 'bg-violet-50 text-violet-700 ring-violet-100',
+    }
+  }
+
+  if (storageMode === 'reference') {
+    return {
+      badge: '位置',
+      icon: <MapPin className="size-4" />,
+      label: '文件位置',
+      toneClass: 'bg-amber-50 text-amber-700 ring-amber-100',
+    }
+  }
+
+  if (ticket.fileType === 'image') {
+    return {
+      badge: '图片',
+      icon: <FileImage className="size-4" />,
+      label: `本机图片 · ${formatFileSize(ticket.size)}`,
+      toneClass: 'bg-sky-50 text-sky-700 ring-sky-100',
+    }
+  }
+
+  if (ticket.fileType === 'pdf') {
+    return {
+      badge: 'PDF',
+      icon: <FileText className="size-4" />,
+      label: `本机 PDF · ${formatFileSize(ticket.size)}`,
+      toneClass: 'bg-rose-50 text-rose-700 ring-rose-100',
+    }
+  }
+
+  return {
+    badge: '文件',
+    icon: <FileArchive className="size-4" />,
+    label: `本机文件 · ${formatFileSize(ticket.size)}`,
+    toneClass: 'bg-slate-50 text-slate-600 ring-slate-100',
+  }
+}
+
+function getTicketSecondaryLine(ticket: TicketMeta) {
+  const storageMode = getTicketStorageMode(ticket)
+  if (storageMode === 'external') {
+    return ticket.externalUrl?.trim() || ticket.fileName
+  }
+  if (storageMode === 'reference') {
+    return ticket.referenceLocation?.trim() || ticket.fileName
+  }
+  return ticket.fileName
 }
 
 function normalizeSourceView(value: string | null): 'schedule' | 'map' {

@@ -11,6 +11,17 @@ type DemoRecords = {
   thirdItemId: string
 }
 
+type SeedTicket = {
+  title: string
+  storageMode: 'copy' | 'reference' | 'external'
+  fileName: string
+  fileType: 'image' | 'pdf' | 'other'
+  mimeType: string
+  size: number
+  referenceLocation?: string
+  externalUrl?: string
+}
+
 async function getDemoRecords(page: Page, tripId: string): Promise<DemoRecords> {
   return page.evaluate(async (tid) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -80,8 +91,8 @@ async function removeItemCoordinates(page: Page, itemId: string) {
   }, itemId)
 }
 
-async function addReferenceTickets(page: Page, tripId: string, itemId: string, count: number) {
-  await page.evaluate(async ({ targetTripId, targetItemId, ticketCount }) => {
+async function addItemTickets(page: Page, tripId: string, itemId: string, tickets: SeedTicket[]) {
+  await page.evaluate(async ({ targetTripId, targetItemId, seedTickets }) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open('TravelConsoleDB')
       request.onsuccess = () => resolve(request.result)
@@ -94,7 +105,8 @@ async function addReferenceTickets(page: Page, tripId: string, itemId: string, c
     const now = Date.now()
     const ticketIds: string[] = []
 
-    for (let index = 0; index < ticketCount; index += 1) {
+    for (let index = 0; index < seedTickets.length; index += 1) {
+      const seedTicket = seedTickets[index]
       const id = `ticket_e2e_${now}_${index}`
       ticketIds.push(id)
       await new Promise<void>((resolve, reject) => {
@@ -103,15 +115,16 @@ async function addReferenceTickets(page: Page, tripId: string, itemId: string, c
           tripId: targetTripId,
           itemId: targetItemId,
           scope: 'item',
-          title: `测试票据 ${index + 1}`,
-          storageMode: 'reference',
-          referenceLocation: `iCloud Drive/TravelMap/test-${index + 1}.pdf`,
-          fileName: `test-${index + 1}.pdf`,
-          fileType: 'pdf',
-          mimeType: 'application/pdf',
-          size: 1280 + index,
-          createdAt: now + index,
-          updatedAt: now + index,
+          title: seedTicket.title,
+          storageMode: seedTicket.storageMode,
+          referenceLocation: seedTicket.referenceLocation,
+          externalUrl: seedTicket.externalUrl,
+          fileName: seedTicket.fileName,
+          fileType: seedTicket.fileType,
+          mimeType: seedTicket.mimeType,
+          size: seedTicket.size,
+          createdAt: now + seedTickets.length - index,
+          updatedAt: now + seedTickets.length - index,
         })
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
@@ -132,7 +145,48 @@ async function addReferenceTickets(page: Page, tripId: string, itemId: string, c
     })
 
     db.close()
-  }, { targetTripId: tripId, targetItemId: itemId, ticketCount: count })
+  }, { targetTripId: tripId, targetItemId: itemId, seedTickets: tickets })
+}
+
+function makeTicketSeeds(count: number): SeedTicket[] {
+  const seeds: SeedTicket[] = [
+    {
+      title: '酒店订单 PDF',
+      storageMode: 'reference',
+      referenceLocation: 'iCloud Drive/TravelMap/hotel-order.pdf',
+      fileName: 'hotel-order.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 1280,
+    },
+    {
+      title: '电子门票链接',
+      storageMode: 'external',
+      externalUrl: 'https://example.com/tickets/tokyo',
+      fileName: 'tokyo-ticket-link.url',
+      fileType: 'other',
+      mimeType: 'text/uri-list',
+      size: 0,
+    },
+    {
+      title: '二维码截图',
+      storageMode: 'copy',
+      fileName: 'qr-code.png',
+      fileType: 'image',
+      mimeType: 'image/png',
+      size: 2048,
+    },
+    {
+      title: '备用车票 PDF',
+      storageMode: 'copy',
+      fileName: 'train-backup.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 4096,
+    },
+  ]
+
+  return seeds.slice(0, count)
 }
 
 test('日程来源打开行程点详情并返回日程', async ({ page }) => {
@@ -147,6 +201,8 @@ test('日程来源打开行程点详情并返回日程', async ({ page }) => {
   await expect(page.getByTestId('item-detail-core')).toContainText('Hotel Metropolitan Tokyo')
   await expect(page.getByTestId('item-detail-navigation').getByRole('link', { name: 'Apple 地图' })).toBeVisible()
   await expect(page.getByTestId('item-detail-navigation').getByRole('link', { name: 'Google 地图' })).toBeVisible()
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('现场票据')
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('暂无绑定票据')
 
   await page.getByRole('button', { name: '返回日程' }).click()
   await expect(page).toHaveURL(/#\/day\?/)
@@ -243,18 +299,42 @@ test('无坐标行程点显示轻量导航不可用状态', async ({ page }) => 
   await expectNoHorizontalOverflow(page)
 })
 
-test('票据摘要保持紧凑且删除后返回来源视图', async ({ page }) => {
+test('票据区显示现场卡片、预览和查看全部入口', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
   const { dayId, firstItemId } = await getDemoRecords(page, tripId)
-  await addReferenceTickets(page, tripId, firstItemId, 4)
+  await addItemTickets(page, tripId, firstItemId, makeTicketSeeds(4))
 
-  await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${firstItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  const itemUrl = `/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${firstItemId}&view=schedule`
+  await page.goto(itemUrl, { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('现场票据')
   await expect(page.getByTestId('item-detail-tickets')).toContainText('4 张已绑定')
   await expect(page.getByTestId('item-ticket-entry')).toHaveCount(3)
-  await expect(page.getByRole('button', { name: /查看全部票据/ })).toBeVisible()
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('酒店订单 PDF')
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('文件位置')
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('外部链接')
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('本机图片')
+  await expect(page.getByTestId('item-ticket-view-all')).toContainText('+1')
   await page.getByTestId('item-ticket-entry').first().click()
   await expect(page.getByText('此票据仅记录文件位置')).toBeVisible()
   await page.getByLabel('关闭预览').click()
+
+  await page.getByTestId('item-ticket-view-all').click()
+  await expect(page).toHaveURL(/#\/tickets\?/)
+  expect(new URL(page.url()).hash).toContain(`tripId=${tripId}`)
+  expect(new URL(page.url()).hash).not.toContain('itemId=')
+  await expectNoHorizontalOverflow(page)
+})
+
+test('票据摘要保持紧凑且删除后返回来源视图', async ({ page }) => {
+  const tripId = await createDemoTripViaUi(page)
+  const { dayId, firstItemId } = await getDemoRecords(page, tripId)
+  await addItemTickets(page, tripId, firstItemId, makeTicketSeeds(1))
+
+  await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${firstItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('1 张已绑定')
+  await expect(page.getByTestId('item-ticket-entry')).toHaveCount(1)
+  await expect(page.getByTestId('item-detail-tickets')).toContainText('酒店订单 PDF')
 
   await page.getByRole('button', { name: '删除行程点' }).click()
   await expect(page.getByRole('dialog')).toContainText('确认删除')

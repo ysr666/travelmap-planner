@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, Map, NotebookText, RotateCw, Ticket } from 'lucide-react'
 import { listItemsByDay } from '../db'
 import { TripCover } from '../components/trip/TripCover'
@@ -185,54 +185,52 @@ export function TripWorkspacePage() {
         <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
           <div className="space-y-4 pb-4">
             <Card className="space-y-3">
-              <TripCover trip={trip} variant="hero" />
-              <div>
-                <p className="text-xs font-semibold text-sky-600">{trip.destination}</p>
-                <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
-                  {trip.title}
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  {formatDateRange(trip.startDate, trip.endDate)}
-                </p>
-                <div className="mt-2">
-                  <AutoSnapshotBackupStatus tripId={trip.id} />
+              <div className="flex items-start gap-3">
+                <TripCover className="h-20 w-24 shrink-0 rounded-xl" trip={trip} variant="compact" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-sky-600">{trip.destination || '目的地未定'}</p>
+                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-slate-950">
+                    {trip.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {formatDateRange(trip.startDate, trip.endDate)}
+                  </p>
+                  <div className="mt-2">
+                    <AutoSnapshotBackupStatus tripId={trip.id} />
+                  </div>
                 </div>
               </div>
-              <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
-              <div className="grid grid-cols-2 gap-3">
-                <OverviewMetric label="天数" value={days.length.toString()} />
-                <OverviewMetric label="行程点" value={allItems.length.toString()} />
+              <div className="flex flex-wrap gap-2">
+                <OverviewStatChip label={`${days.length} 天`} />
+                <OverviewStatChip label={`${allItems.length} 个行程点`} />
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  className="whitespace-nowrap px-2 text-xs"
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <OverviewAction
                   disabled={days.length === 0}
                   icon={<Map className="size-4" />}
                   onClick={() => {
                     const firstDay = days[0]
                     if (firstDay) openDay(firstDay, 'map')
                   }}
+                  primary
                 >
                   地图
-                </Button>
-                <Button
-                  className="whitespace-nowrap px-2 text-xs"
+                </OverviewAction>
+                <OverviewAction
                   icon={<Ticket className="size-4" />}
                   onClick={() => navigateTo('tickets', { tripId: trip.id })}
-                  variant="secondary"
                 >
                   票据库
-                </Button>
-                <Button
-                  className="whitespace-nowrap px-2 text-xs"
+                </OverviewAction>
+                <OverviewAction
                   icon={<HardDriveDownload className="size-4" />}
                   onClick={() => document.getElementById('travel-backup-panel')?.scrollIntoView({ behavior: 'smooth' })}
-                  variant="secondary"
                 >
                   备份
-                </Button>
+                </OverviewAction>
               </div>
             </Card>
+            <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
@@ -299,11 +297,40 @@ export function TripWorkspacePage() {
   )
 }
 
-function OverviewMetric({ label, value }: { label: string; value: string }) {
+function OverviewStatChip({ label }: { label: string }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-center">
-      <p className="text-lg font-semibold text-slate-950">{value}</p>
-      <p className="text-xs font-semibold text-slate-400">{label}</p>
-    </div>
+    <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+      {label}
+    </span>
+  )
+}
+
+function OverviewAction({
+  children,
+  disabled,
+  icon,
+  onClick,
+  primary = false,
+}: {
+  children: string
+  disabled?: boolean
+  icon: ReactNode
+  onClick: () => void
+  primary?: boolean
+}) {
+  return (
+    <button
+      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+        primary
+          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100'
+          : 'bg-slate-50 text-slate-600 ring-1 ring-slate-100'
+      }`}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      {icon}
+      <span className="truncate">{children}</span>
+    </button>
   )
 }

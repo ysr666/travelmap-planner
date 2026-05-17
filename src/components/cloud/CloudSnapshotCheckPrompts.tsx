@@ -247,14 +247,23 @@ function CloudSnapshotPromptCard({
   variant: 'trip' | 'settings'
 }) {
   const view = getPromptView(result)
+  const isTripVariant = variant === 'trip'
 
   return (
     <article
-      className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 px-3 py-3"
+      className={
+        isTripVariant
+          ? 'space-y-2 rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2.5 shadow-[0_6px_18px_rgba(47,65,88,0.04)]'
+          : 'space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 px-3 py-3'
+      }
       data-testid="cloud-snapshot-check-card"
     >
       <div className="flex items-start gap-2">
-        <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/80 text-sky-600">
+        <div
+          className={`mt-0.5 flex shrink-0 items-center justify-center rounded-lg text-sky-600 ${
+            isTripVariant ? 'size-6 bg-sky-50' : 'size-7 bg-white/80'
+          }`}
+        >
           {view.icon}
         </div>
         <div className="min-w-0 flex-1">
@@ -269,7 +278,7 @@ function CloudSnapshotPromptCard({
       <div className={result.status === 'possible_conflict' ? 'grid gap-2' : 'grid grid-cols-2 gap-2'}>
         {result.status === 'local_newer' || result.status === 'possible_conflict' ? (
           <Button
-            className="min-h-9 px-3 text-xs"
+            className={`${isTripVariant ? 'min-h-8' : 'min-h-9'} px-3 text-xs`}
             data-testid="cloud-snapshot-upload"
             icon={<Upload className="size-3.5" />}
             loading={busy}
@@ -280,7 +289,7 @@ function CloudSnapshotPromptCard({
         ) : null}
         {result.status === 'cloud_newer' || result.status === 'possible_conflict' ? (
           <Button
-            className="min-h-9 px-3 text-xs"
+            className={`${isTripVariant ? 'min-h-8' : 'min-h-9'} px-3 text-xs`}
             data-testid="cloud-snapshot-restore"
             icon={<Download className="size-3.5" />}
             loading={busy}
@@ -290,7 +299,7 @@ function CloudSnapshotPromptCard({
           </Button>
         ) : null}
         <Button
-          className={`min-h-9 px-3 text-xs ${result.status === 'possible_conflict' ? 'w-full' : ''}`}
+          className={`${isTripVariant ? 'min-h-8' : 'min-h-9'} px-3 text-xs ${result.status === 'possible_conflict' ? 'w-full' : ''}`}
           data-testid="cloud-snapshot-view-backups"
           onClick={() => navigateTo('settings', { section: 'cloud' })}
           variant="secondary"

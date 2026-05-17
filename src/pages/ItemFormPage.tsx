@@ -32,7 +32,7 @@ export function ItemFormPage() {
   }, [dayItems])
 
   useEffect(() => {
-    if (!tripId || !dayId) return
+    if (hasInitialError || !tripId || !dayId) return
 
     let cancelled = false
 
@@ -84,7 +84,7 @@ export function ItemFormPage() {
     })
 
     return () => { cancelled = true }
-  }, [tripId, dayId, isEdit, itemId])
+  }, [tripId, dayId, isEdit, itemId, hasInitialError])
 
   function handleCancel() {
     if (tripId) {

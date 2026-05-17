@@ -21,6 +21,7 @@
 - Phase 12A：自动云端快照备份基础完成。
 - Phase 12B：PWA 启动云端快照检查完成。
 - Phase 12C：冲突感知云端提示与操作链路完成。
+- Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
 
 当前 canonical routes：
 
@@ -39,20 +40,19 @@
 
 ## 不要误判为完成
 
-- Home 仍需要视觉与信息架构纠偏：应用图标、旅行卡片下栏、空壳容器、自然中文入口仍需复查。
-- Full-page forms 仍需移动端 QA：输入框重叠、长文本、键盘、保存/取消位置仍需修。
 - Trip Home 还不是完整旅行首页：全旅行地图概览和入口层级仍待做。
 - Day View 还没有完成 marker-card interaction：当前仍以 sheet 为主，理想形态是 marker 触发轻卡片，再进入 Item Detail。
 - Item Detail 仍需变成旅行现场查看页。
 - Ticket Library 仍偏文件列表，还不是票据画廊。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
+- 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
 
 ## 后续路线图
 
 ### 1. Trip / Day / Item / Ticket UX completion
 
-- Phase 12D：Home 与全局视觉纠偏。修复删内容式轻量化、空白下栏、无意义 chip 和入口文案。
-- Phase 12E：Full-page form 布局修复与输入体验 QA。确保 Trip / Item 新建编辑页面在 390px 下不重叠、不溢出。
+- Phase 12D：Home 与全局视觉纠偏。✅ 已完成。
+- Phase 12E：Full-page form 布局修复与输入体验 QA。✅ 已完成。
 - Phase 13A：Trip Home 地图概览与入口优化。Trip Home 成为真正旅行首页，而不是纯 overview。
 - Phase 13B：Day View 地图点卡片交互。点击 marker 显示轻量卡片，点击卡片进入 Item Detail。
 - Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。

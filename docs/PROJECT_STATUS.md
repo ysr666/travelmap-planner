@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
 更新时间：2026-05-17  
-基线：Phase 12C 后，Trip Home / Day View 路由拆分、自动云端快照备份、启动云端快照检查和冲突感知提示已完成。
+基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、Trip Home 层级平衡和冲突感知提示均已完成。
 
 ## 当前定位
 
@@ -61,16 +61,16 @@
 - Phase 12A：自动云端快照备份基础。
 - Phase 12B：启动云端快照检查。
 - Phase 12C：冲突感知云端提示。
+- Phase 12E：视觉完整性纠偏与全页表单布局修复。
 
 ## 不要误判为完成
 
-- Home 视觉与信息架构仍待纠偏：应用图标、旅行卡片信息层级、空壳区域和自然中文入口仍需修。
-- Full-page form 仍需 QA：输入框重叠、长地址、移动端密度、键盘弹出后保存按钮可达性仍需复查。
 - Trip Home 还缺全旅行地图概览与更清晰入口。
 - Day View 的 marker-card interaction 尚未完成：目标是点击 marker 出现轻量卡片，再进入 Item Detail。
 - Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
+- 时区与日期语义审计待做。
 
 ## 云端与同步状态
 
@@ -94,9 +94,10 @@
 
 ## 下一步建议
 
-优先执行 `docs/ROADMAP_V4.md` 中的 Phase 12D 与 Phase 12E：
+优先执行 `docs/ROADMAP_V4.md` 中的后续阶段：
 
-1. Home 与全局视觉纠偏。
-2. Full-page form 布局修复与输入体验 QA。
+1. 时区与日期语义审计（Phase 12F）。
+2. Trip Home 地图概览与入口优化（Phase 13A）。
+3. Day View marker-card interaction（Phase 13B）。
 
-在这两步完成前，不建议继续推进 Map Provider、AI-native 或 Transit Hints 等新能力。
+在时区审计完成前，不建议继续推进 Map Provider、AI-native 或 Transit Hints 等新能力。

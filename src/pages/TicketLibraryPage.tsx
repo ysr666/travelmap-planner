@@ -533,8 +533,10 @@ export function TicketLibraryPage() {
       {previewTicket ? (
         <TicketPreview
           key={previewTicket.id}
+          onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
           ticket={previewTicket}
+          tickets={filteredTickets}
         />
       ) : null}
 

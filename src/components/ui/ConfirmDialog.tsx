@@ -57,7 +57,7 @@ export function ConfirmDialog({
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center"
       role="dialog"
     >
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_18px_48px_rgba(38,53,76,0.18)]">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_18px_48px_rgba(38,53,76,0.18)] dark:border-slate-700/80 dark:bg-slate-900 dark:shadow-[0_18px_48px_rgba(0,0,0,0.42)]">
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
@@ -73,7 +73,7 @@ export function ConfirmDialog({
             </div>
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-900/95">
           <Button disabled={loading} onClick={onCancel} variant="secondary">
             {cancelLabel}
           </Button>

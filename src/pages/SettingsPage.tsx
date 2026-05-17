@@ -7,11 +7,14 @@ import {
   FileJson,
   Import,
   KeyRound,
+  Monitor,
+  Moon,
   RefreshCw,
   Route,
   ShieldCheck,
   Sparkles,
   Smartphone,
+  Sun,
   Wifi,
   WifiOff,
 } from 'lucide-react'
@@ -57,6 +60,8 @@ import {
   isGoogleMapsConfigured,
   saveGoogleMapsApiKey,
 } from '../lib/googleMaps'
+import type { AppearanceMode } from '../lib/appearance'
+import { useAppearance } from '../lib/appearanceContext'
 
 type StorageEstimateState = {
   usage?: number
@@ -83,7 +88,14 @@ const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要
 我的旅行需求如下：
 [在这里填写目的地、日期、兴趣、已订酒店或门票信息]`
 
+const appearanceOptions: Array<{ value: AppearanceMode; label: string; icon: ReactNode }> = [
+  { value: 'system', label: '跟随系统', icon: <Monitor className="size-4" /> },
+  { value: 'light', label: '白天模式', icon: <Sun className="size-4" /> },
+  { value: 'dark', label: '黑夜模式', icon: <Moon className="size-4" /> },
+]
+
 export function SettingsPage() {
+  const { mode: appearanceMode, resolvedMode, setMode: setAppearanceMode } = useAppearance()
   const routeParams = getRouteParams()
   const shouldOpenCloudBackup = routeParams.get('section') === 'cloud'
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -413,6 +425,46 @@ export function SettingsPage() {
           ) : null}
         </Card>
       ) : null}
+
+      <section className="space-y-3" data-testid="appearance-settings">
+        <SectionHeader title="外观" />
+        <Card className="space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <Monitor className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold text-slate-950">外观</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                当前显示为{resolvedMode === 'dark' ? '黑夜模式' : '白天模式'}。
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="外观模式">
+            {appearanceOptions.map((option) => {
+              const active = appearanceMode === option.value
+              return (
+                <button
+                  aria-pressed={active}
+                  className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
+                    active
+                      ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
+                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-100'
+                  }`}
+                  data-testid={`appearance-mode-${option.value}`}
+                  key={option.value}
+                  onClick={() => setAppearanceMode(option.value)}
+                  type="button"
+                >
+                  {option.icon}
+                  <span>{option.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </Card>
+      </section>
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />

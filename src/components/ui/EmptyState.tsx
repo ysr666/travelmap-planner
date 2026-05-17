@@ -8,7 +8,7 @@ type EmptyStateProps = {
 
 export function EmptyState({ icon, title, body }: EmptyStateProps) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-5 py-8 text-center">
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-5 py-8 text-center dark:border-slate-700 dark:bg-slate-900/70">
       <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
         {icon}
       </div>

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ArrowLeft, CalendarDays, ChevronRight, Clock3, Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
   getDay,
   getItineraryItem,
   getTrip,
+  listItemsByDay,
   listTicketsByItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
@@ -13,7 +14,7 @@ import {
   buildGoogleMapsUrl,
   hasValidCoordinates,
 } from '../lib/mapLinks'
-import { describeItemTime, describePreviousTransport, transportModeLabels } from '../lib/itinerary'
+import { describeItemTime, describePreviousTransport, sortItineraryItems, transportModeLabels } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
 import { navigateTo } from '../lib/routes'
 import {
@@ -34,6 +35,7 @@ type ItemDetailContentProps = {
   day: Day
   item: ItineraryItem
   onItemDeleted: () => void
+  sourceView: 'schedule' | 'map'
 }
 
 export function ItemDetailPage() {
@@ -166,6 +168,7 @@ export function ItemDetailPage() {
             day={day}
             item={item}
             onItemDeleted={goBackToDay}
+            sourceView={sourceView}
             trip={trip}
           />
         </div>
@@ -174,7 +177,8 @@ export function ItemDetailPage() {
   )
 }
 
-export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetailContentProps) {
+export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }: ItemDetailContentProps) {
+  const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [isLoadingRelations, setIsLoadingRelations] = useState(true)
@@ -185,22 +189,29 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetail
   const loadRelations = useCallback(async () => {
     setIsLoadingRelations(true)
     try {
-      const foundTickets = await listTicketsByItem(item.id)
+      const [foundDayItems, foundTickets] = await Promise.all([
+        listItemsByDay(day.id),
+        listTicketsByItem(item.id),
+      ])
+      setDayItems(sortItineraryItems(foundDayItems))
       setTickets(foundTickets)
     } catch {
       // silently ignore
     } finally {
       setIsLoadingRelations(false)
     }
-  }, [item.id])
+  }, [day.id, item.id])
 
-  const didLoadRef = useRef(false)
   useEffect(() => {
-    if (didLoadRef.current) return
-    didLoadRef.current = true
-    void loadRelations()
+    const timeout = window.setTimeout(() => {
+      void loadRelations()
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [loadRelations])
 
+  const itemIndex = dayItems.findIndex((dayItem) => dayItem.id === item.id)
+  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
+  const nextItem = itemIndex >= 0 && itemIndex < dayItems.length - 1 ? dayItems[itemIndex + 1] : null
   const transportDescription = describePreviousTransport(item)
   const hasCoordinates = hasValidCoordinates(item)
   const ticketPreviewItems = tickets.slice(0, 3)
@@ -268,6 +279,16 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetail
           </section>
         ) : null}
       </Card>
+
+      {dayItems.length > 1 ? (
+        <ItemNeighborNavigation
+          day={day}
+          nextItem={nextItem}
+          previousItem={previousItem}
+          sourceView={sourceView}
+          trip={trip}
+        />
+      ) : null}
 
       <section className="space-y-3" data-testid="item-detail-tickets">
         <div className="flex items-center justify-between gap-3">
@@ -384,6 +405,77 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetail
         title={`确认删除「${item.title}」吗？`}
       />
     </div>
+  )
+}
+
+function ItemNeighborNavigation({
+  trip,
+  day,
+  previousItem,
+  nextItem,
+  sourceView,
+}: {
+  trip: Trip
+  day: Day
+  previousItem: ItineraryItem | null
+  nextItem: ItineraryItem | null
+  sourceView: 'schedule' | 'map'
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2" data-testid="item-neighbor-nav">
+      <NeighborButton
+        direction="previous"
+        item={previousItem}
+        label="上一项"
+        onClick={() => {
+          if (previousItem) {
+            navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: previousItem.id, view: sourceView })
+          }
+        }}
+      />
+      <NeighborButton
+        direction="next"
+        item={nextItem}
+        label="下一项"
+        onClick={() => {
+          if (nextItem) {
+            navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: nextItem.id, view: sourceView })
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+function NeighborButton({
+  direction,
+  item,
+  label,
+  onClick,
+}: {
+  direction: 'previous' | 'next'
+  item: ItineraryItem | null
+  label: string
+  onClick: () => void
+}) {
+  const disabled = !item
+
+  return (
+    <button
+      aria-disabled={disabled}
+      className={`min-h-16 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-left shadow-[0_8px_22px_rgba(47,65,88,0.04)] transition active:scale-[0.99] ${
+        disabled ? 'cursor-not-allowed opacity-45' : 'active:bg-slate-50'
+      }`}
+      data-testid={`item-${direction}-button`}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="block text-xs font-semibold text-sky-600">{label}</span>
+      <span className="mt-1 block truncate text-sm font-semibold text-slate-950">
+        {item ? item.title : direction === 'previous' ? '已经是第一项' : '已经是最后一项'}
+      </span>
+    </button>
   )
 }
 

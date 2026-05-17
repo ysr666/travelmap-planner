@@ -11,7 +11,7 @@ import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { formatDateRange } from '../lib/dates'
+import { formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -406,16 +406,7 @@ function normalizeDayView(value: string | null): DayWorkspaceView {
 }
 
 function formatShortWorkspaceDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) {
-    return '日期未定'
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(parsed)
+  return formatShortDateWithWeekday(date)
 }
 
 function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }) {

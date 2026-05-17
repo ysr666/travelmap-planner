@@ -2,6 +2,7 @@ import type JSZip from 'jszip'
 import { createId } from '../db/ids'
 import { importTripPlanRecords } from '../db'
 import { safeFileName } from './backup'
+import { isValidPlainDate } from './plainDate'
 import { isValidExternalUrl } from './tickets'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, TicketStorageMode, TransportMode, Trip } from '../types'
 
@@ -15,7 +16,6 @@ const MAX_COPY_ATTACHMENT_COUNT = 50
 const MAX_DAYS_COUNT = 120
 const MAX_ITEMS_COUNT = 1000
 const MAX_TICKETS_COUNT = 500
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
 const TRANSPORT_MODES: TransportMode[] = ['walk', 'transit', 'bus', 'car', 'train', 'flight', 'other']
 
@@ -820,12 +820,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isValidDateString(value: string | undefined) {
-  if (!value || !DATE_PATTERN.test(value)) {
-    return false
-  }
-
-  const parsed = new Date(`${value}T00:00:00Z`)
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+  return isValidPlainDate(value)
 }
 
 function isValidTimeString(value: string) {

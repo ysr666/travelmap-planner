@@ -14,7 +14,7 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await expect(tripCard).toBeVisible()
   await expect(tripCard).toContainText('东京春日旅行')
   await expect(tripCard).toContainText('日本东京')
-  await expect(tripCard).toContainText('4/12 - 4/17')
+  await expect(tripCard).toContainText('4月12日 - 4月17日')
   await expect(tripCard).toContainText('2 天')
   await expect(tripCard).toContainText('5 个行程点')
   await clickTripCard(tripCard)

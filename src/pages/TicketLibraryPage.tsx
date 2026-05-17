@@ -22,17 +22,20 @@ import { SectionHeader } from '../components/ui/SectionHeader'
 import { describeItemTime } from '../lib/itinerary'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
-  describeTicketMetaLine,
   formatFileSize,
   formatTicketCreatedAt,
   getTicketDisplayTitle,
   getTicketFileType,
   getTicketScope,
-  getTicketStorageMode,
   isValidExternalUrl,
   normalizeTicketFileName,
   ticketScopeLabels,
 } from '../lib/tickets'
+import {
+  getTicketDisplayMeta,
+  type TicketDisplayIconKind,
+  type TicketDisplayToneKey,
+} from '../lib/ticketDisplay'
 import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
@@ -70,12 +73,6 @@ const storageOptions: Array<{ value: TicketStorageMode; label: string; descripti
     icon: <Link2 className="size-4" />,
   },
 ]
-
-const ticketIcons: Record<TicketMeta['fileType'], ReactNode> = {
-  image: <FileImage className="size-5" />,
-  pdf: <FileText className="size-5" />,
-  other: <FileArchive className="size-5" />,
-}
 
 export function TicketLibraryPage() {
   const params = getRouteParams()
@@ -519,7 +516,7 @@ export function TicketLibraryPage() {
             title="暂无票据"
           />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3" data-testid="ticket-gallery">
             {filteredTickets.map((ticket) => (
               <TicketCard
                 bindingLabel={describeTicketBinding(ticket, itemById)}
@@ -574,63 +571,81 @@ function TicketCard({
   onDelete: () => void
 }) {
   const displayTitle = getTicketDisplayTitle(ticket)
-  const storageMode = getTicketStorageMode(ticket)
-  const shouldShowNote = ticket.note && ticket.note.trim() !== displayTitle
+  const visual = getTicketDisplayMeta(ticket)
 
   return (
-    <Card className="space-y-3 p-3">
-      <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-          {ticketIcons[ticket.fileType]}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+    <Card className="flex min-h-[12.25rem] flex-col p-2.5" data-testid="ticket-card">
+      <button
+        aria-label={`查看${displayTitle}`}
+        className="flex min-h-0 flex-1 flex-col rounded-xl px-0.5 py-0.5 text-left transition active:scale-[0.99]"
+        onClick={onPreview}
+        type="button"
+      >
+        <span className="flex items-start justify-between gap-2">
+          <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${ticketToneClasses[visual.toneKey]}`}>
+            {renderTicketDisplayIcon(visual.iconKind)}
+            <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
+          </span>
+          <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100">
+            {visual.storageLabel}
+          </span>
+        </span>
+
+        <span className="mt-3 min-w-0">
+          <span className="block break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">
             {displayTitle}
-          </h3>
-          <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
-            {ticket.fileName}
-          </p>
-          <p className="text-xs leading-5 text-slate-400">{describeTicketMetaLine(ticket)}</p>
-          <p className="text-xs text-slate-400">{formatTicketCreatedAt(ticket.createdAt)}</p>
-        </div>
-      </div>
+          </span>
+          <span className="mt-1 block break-words text-[11px] leading-4 text-slate-500 [overflow-wrap:anywhere]">
+            {visual.secondaryLine}
+          </span>
+        </span>
 
-      {shouldShowNote ? (
-        <p className="break-words rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">
-          {ticket.note}
-        </p>
-      ) : null}
+        <span className="mt-auto pt-3">
+          <span className="block truncate text-[11px] font-semibold text-slate-400">
+            {bindingLabel}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-slate-400">
+            {formatTicketCreatedAt(ticket.createdAt)}
+          </span>
+        </span>
+      </button>
 
-      {storageMode === 'reference' && ticket.referenceLocation ? (
-        <p className="break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
-          位置：{ticket.referenceLocation}
-        </p>
-      ) : null}
-
-      {storageMode === 'external' && ticket.externalUrl ? (
-        <p className="truncate rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-          {ticket.externalUrl}
-        </p>
-      ) : null}
-
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
-        <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-500">{bindingLabel}</p>
-        <div className="flex shrink-0 gap-2">
-          <Button className="min-h-9 px-3 text-xs" onClick={onPreview} variant="secondary">
-            查看
-          </Button>
-          <Button
-            className="min-h-9 px-3 text-xs text-red-600"
-            icon={<Trash2 className="size-4" />}
-            onClick={onDelete}
-            variant="secondary"
-          >
-            删除
-          </Button>
-        </div>
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+        <button
+          className="min-h-8 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 active:bg-sky-100"
+          onClick={onPreview}
+          type="button"
+        >
+          查看
+        </button>
+        <button
+          aria-label={`删除${displayTitle}`}
+          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-slate-400 active:bg-red-50 active:text-red-600"
+          onClick={onDelete}
+          type="button"
+        >
+          <Trash2 className="size-3.5" />
+          删除
+        </button>
       </div>
     </Card>
   )
+}
+
+const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+  rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
+  slate: 'bg-slate-50 text-slate-600 ring-slate-100',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+}
+
+function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
+  if (iconKind === 'external') return <Link2 className="size-4" />
+  if (iconKind === 'reference') return <MapPinned className="size-4" />
+  if (iconKind === 'image') return <FileImage className="size-4" />
+  if (iconKind === 'pdf') return <FileText className="size-4" />
+  return <FileArchive className="size-4" />
 }
 
 function CopyTicketFields({

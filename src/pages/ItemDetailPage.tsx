@@ -33,10 +33,13 @@ import { describeItemTime, describePreviousTransport, sortItineraryItems, transp
 import { formatDate } from '../lib/dates'
 import { navigateTo } from '../lib/routes'
 import {
-  formatFileSize,
   getTicketDisplayTitle,
-  getTicketStorageMode,
 } from '../lib/tickets'
+import {
+  getTicketDisplayMeta,
+  type TicketDisplayIconKind,
+  type TicketDisplayToneKey,
+} from '../lib/ticketDisplay'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -525,8 +528,8 @@ function TicketCompactRow({
   ticket: TicketMeta
   onClick: () => void
 }) {
-  const visual = getTicketVisualMeta(ticket)
-  const secondary = getTicketSecondaryLine(ticket)
+  const visual = getTicketDisplayMeta(ticket)
+  const secondary = visual.secondaryLine
 
   return (
     <button
@@ -535,13 +538,13 @@ function TicketCompactRow({
       onClick={onClick}
       type="button"
     >
-      <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${visual.toneClass}`}>
-        {visual.icon}
-        <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.badge}</span>
+      <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${ticketToneClasses[visual.toneKey]}`}>
+        {renderTicketDisplayIcon(visual.iconKind)}
+        <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-slate-950">{getTicketDisplayTitle(ticket)}</span>
-        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{visual.label}</span>
+        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{visual.storageLabel}</span>
         {secondary ? (
           <span className="mt-0.5 block break-words text-xs leading-4 text-slate-400 [overflow-wrap:anywhere]">
             {secondary}
@@ -553,62 +556,20 @@ function TicketCompactRow({
   )
 }
 
-function getTicketVisualMeta(ticket: TicketMeta) {
-  const storageMode = getTicketStorageMode(ticket)
-
-  if (storageMode === 'external') {
-    return {
-      badge: '链接',
-      icon: <Link2 className="size-4" />,
-      label: '外部链接',
-      toneClass: 'bg-violet-50 text-violet-700 ring-violet-100',
-    }
-  }
-
-  if (storageMode === 'reference') {
-    return {
-      badge: '位置',
-      icon: <MapPin className="size-4" />,
-      label: '文件位置',
-      toneClass: 'bg-amber-50 text-amber-700 ring-amber-100',
-    }
-  }
-
-  if (ticket.fileType === 'image') {
-    return {
-      badge: '图片',
-      icon: <FileImage className="size-4" />,
-      label: `本机图片 · ${formatFileSize(ticket.size)}`,
-      toneClass: 'bg-sky-50 text-sky-700 ring-sky-100',
-    }
-  }
-
-  if (ticket.fileType === 'pdf') {
-    return {
-      badge: 'PDF',
-      icon: <FileText className="size-4" />,
-      label: `本机 PDF · ${formatFileSize(ticket.size)}`,
-      toneClass: 'bg-rose-50 text-rose-700 ring-rose-100',
-    }
-  }
-
-  return {
-    badge: '文件',
-    icon: <FileArchive className="size-4" />,
-    label: `本机文件 · ${formatFileSize(ticket.size)}`,
-    toneClass: 'bg-slate-50 text-slate-600 ring-slate-100',
-  }
+const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+  rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
+  slate: 'bg-slate-50 text-slate-600 ring-slate-100',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-100',
 }
 
-function getTicketSecondaryLine(ticket: TicketMeta) {
-  const storageMode = getTicketStorageMode(ticket)
-  if (storageMode === 'external') {
-    return ticket.externalUrl?.trim() || ticket.fileName
-  }
-  if (storageMode === 'reference') {
-    return ticket.referenceLocation?.trim() || ticket.fileName
-  }
-  return ticket.fileName
+function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
+  if (iconKind === 'external') return <Link2 className="size-4" />
+  if (iconKind === 'reference') return <MapPin className="size-4" />
+  if (iconKind === 'image') return <FileImage className="size-4" />
+  if (iconKind === 'pdf') return <FileText className="size-4" />
+  return <FileArchive className="size-4" />
 }
 
 function normalizeSourceView(value: string | null): 'schedule' | 'map' {

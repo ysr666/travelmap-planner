@@ -197,8 +197,17 @@ export function formatVersionTimestamp(epochMs: number | null): string | null {
   if (Number.isNaN(date.getTime())) {
     return null
   }
-  const pad = (value: number) => value.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+  }).formatToParts(date)
+  const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day} ${valueByType.hour}:${valueByType.minute}`
 }
 
 export function groupLatestCloudBackupsByTripId(backups: CloudBackupSummary[]) {

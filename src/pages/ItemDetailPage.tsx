@@ -1,19 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CalendarDays, Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeft, CalendarDays, ChevronRight, Clock3, Edit3, ExternalLink, FileText, MapPin, Navigation, Ticket, Trash2 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
   getDay,
   getItineraryItem,
   getTrip,
-  listItemsByDay,
   listTicketsByItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
 import {
-  buildAppleMapsDirectionsUrl,
   buildAppleMapsUrl,
-  buildGoogleMapsDirectionsUrl,
   buildGoogleMapsUrl,
+  hasValidCoordinates,
 } from '../lib/mapLinks'
 import { describeItemTime, describePreviousTransport, transportModeLabels } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
@@ -24,13 +22,10 @@ import {
   getTicketDisplayTitle,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
-import { Collapsible } from '../components/ui/Collapsible'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
-import { ListRow } from '../components/ui/ListRow'
-import { SectionHeader } from '../components/ui/SectionHeader'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { getRouteParams } from '../lib/routes'
 
@@ -39,7 +34,6 @@ type ItemDetailContentProps = {
   day: Day
   item: ItineraryItem
   onItemDeleted: () => void
-  sourceView?: 'schedule' | 'map'
 }
 
 export function ItemDetailPage() {
@@ -109,6 +103,7 @@ export function ItemDetailPage() {
       navigateTo('home')
     }
   }
+  const backLabel = sourceView === 'map' ? '返回地图' : '返回日程'
 
   if (isLoading) {
     return (
@@ -142,17 +137,26 @@ export function ItemDetailPage() {
       <header className="z-30 shrink-0 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
           <button
-            aria-label="返回每日行程"
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            aria-label={backLabel}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
             onClick={goBackToDay}
             type="button"
           >
-            <ArrowLeft className="size-5" />
+            <ArrowLeft className="size-4" />
+            <span>{backLabel}</span>
           </button>
-          <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
+          <h1 className="sr-only">
             行程点详情
           </h1>
-          <div className="size-10" />
+          <button
+            aria-label="编辑行程点"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
+            type="button"
+          >
+            <Edit3 className="size-4" />
+            <span>编辑</span>
+          </button>
         </div>
       </header>
 
@@ -162,7 +166,6 @@ export function ItemDetailPage() {
             day={day}
             item={item}
             onItemDeleted={goBackToDay}
-            sourceView={sourceView}
             trip={trip}
           />
         </div>
@@ -171,8 +174,7 @@ export function ItemDetailPage() {
   )
 }
 
-export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView = 'schedule' }: ItemDetailContentProps) {
-  const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
+export function ItemDetailContent({ trip, day, item, onItemDeleted }: ItemDetailContentProps) {
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [isLoadingRelations, setIsLoadingRelations] = useState(true)
@@ -183,18 +185,14 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView =
   const loadRelations = useCallback(async () => {
     setIsLoadingRelations(true)
     try {
-      const [foundDayItems, foundTickets] = await Promise.all([
-        listItemsByDay(day.id),
-        listTicketsByItem(item.id),
-      ])
-      setDayItems(foundDayItems)
+      const foundTickets = await listTicketsByItem(item.id)
       setTickets(foundTickets)
     } catch {
       // silently ignore
     } finally {
       setIsLoadingRelations(false)
     }
-  }, [day.id, item.id])
+  }, [item.id])
 
   const didLoadRef = useRef(false)
   useEffect(() => {
@@ -203,10 +201,10 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView =
     void loadRelations()
   }, [loadRelations])
 
-  const itemIndex = useMemo(() => {
-    return dayItems.findIndex((dayItem) => dayItem.id === item.id)
-  }, [dayItems, item.id])
-  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
+  const transportDescription = describePreviousTransport(item)
+  const hasCoordinates = hasValidCoordinates(item)
+  const ticketPreviewItems = tickets.slice(0, 3)
+  const hiddenTicketCount = Math.max(0, tickets.length - ticketPreviewItems.length)
 
   async function confirmDeleteItem() {
     setIsDeleting(true)
@@ -224,118 +222,145 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView =
 
   return (
     <div className="space-y-5 pb-2">
-      <Card className="space-y-3">
+      <Card className="space-y-4" data-testid="item-detail-core">
         {actionError ? (
           <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
             {actionError}
           </div>
         ) : null}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold text-sky-600">
-              {formatDate(day.date)} · {describeItemTime(item)}
-            </p>
-            <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">{item.title}</h2>
-          </div>
+        <div className="space-y-2">
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+            <Clock3 className="size-3.5" />
+            {formatDate(day.date)} · {describeItemTime(item)}
+          </p>
+          <h2 className="text-2xl font-semibold leading-tight text-slate-950">{item.title}</h2>
           {item.transportMode ? (
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-xs font-semibold text-sky-600">
+            <span className="inline-flex rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">
               {transportModeLabels[item.transportMode]}
             </span>
           ) : null}
         </div>
-        {item.locationName || item.address ? (
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="flex items-start gap-2 text-sm font-semibold text-slate-950">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
-              {item.locationName || '地点未填写'}
-            </p>
-            {item.address ? (
-              <p className="mt-1 pl-6 text-sm leading-6 text-slate-500">{item.address}</p>
-            ) : null}
-          </div>
-        ) : null}
-        {item.notes ? (
-          <p className="text-sm leading-6 text-slate-500">{item.notes}</p>
-        ) : null}
-        {itemIndex > 0 ? (
-          <Collapsible title="从上一站到此">
-            <PreviousTransportCard
-              item={item}
-              previousItem={previousItem}
+
+        <div className="space-y-2">
+          <DetailRow
+            icon={<MapPin className="size-4" />}
+            label={item.locationName || '地点未填写'}
+            value={item.address}
+          />
+          <DetailRow
+            icon={<Navigation className="size-4" />}
+            label={hasCoordinates ? '已保存坐标' : '暂无坐标'}
+            value={hasCoordinates ? '可使用外部地图导航' : '外部地图导航暂不可用'}
+          />
+          {transportDescription ? (
+            <DetailRow
+              icon={<ChevronRight className="size-4" />}
+              label="从上一站到此处"
+              value={transportDescription}
             />
-          </Collapsible>
-        ) : null}
-        <a
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-[0_6px_16px_var(--color-primary-shadow)]"
-          href={isIOS() ? buildAppleMapsUrl(item) : buildGoogleMapsUrl(item)}
-          rel="noreferrer"
-          target="_blank"
-        >
-          {isIOS() ? <Navigation className="size-4" /> : <ExternalLink className="size-4" />}
-          {isIOS() ? 'Apple 地图' : 'Google 地图'}
-        </a>
-        <Collapsible title="其他地图">
-          <a
-            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80"
-            href={isIOS() ? buildGoogleMapsUrl(item) : buildAppleMapsUrl(item)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {isIOS() ? <ExternalLink className="size-4" /> : <Navigation className="size-4" />}
-            {isIOS() ? 'Google 地图' : 'Apple 地图'}
-          </a>
-        </Collapsible>
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            icon={<Edit3 className="size-4" />}
-            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
-          >
-            编辑
-          </Button>
-          <Button
-            className="text-red-600"
-            disabled={isDeleting}
-            icon={<Trash2 className="size-4" />}
-            onClick={() => setIsDeleteConfirmOpen(true)}
-            variant="secondary"
-          >
-            删除
-          </Button>
+          ) : null}
         </div>
+
+        {item.notes ? (
+          <section className="rounded-2xl bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold text-slate-400">备注</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{item.notes}</p>
+          </section>
+        ) : null}
       </Card>
 
-      <section className="space-y-3">
-        <SectionHeader
-          action="添加票据"
-          onAction={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
-          title={`绑定票据（${tickets.length}）`}
-        />
+      <section className="space-y-3" data-testid="item-detail-tickets">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-slate-950">票据</h3>
+            <p className="mt-0.5 text-xs text-slate-500">{tickets.length} 张已绑定</p>
+          </div>
+          <Button
+            className="min-h-9 px-3"
+            onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+            variant="secondary"
+          >
+            添加票据
+          </Button>
+        </div>
         {isLoadingRelations ? (
           <div className="space-y-2">
             <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
             <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
           </div>
         ) : tickets.length === 0 ? (
-          <EmptyState
-            body="可以上传门票、车票、二维码截图或 PDF，并绑定到这个行程点。"
-            icon={<Ticket className="size-6" />}
-            title="暂无绑定票据"
-          />
+          <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-4 text-sm leading-6 text-slate-500">
+            <div className="flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100">
+                <Ticket className="size-5" />
+              </span>
+              <span>
+                <span className="block font-semibold text-slate-950">暂无绑定票据</span>
+                可在票据库添加门票、车票、二维码截图或 PDF。
+              </span>
+            </div>
+          </div>
         ) : (
-          <Card className="divide-y divide-slate-100 py-1">
-            {tickets.map((ticket) => (
-              <ListRow
-                detail={`${describeTicketMetaLine(ticket)} · ${formatTicketCreatedAt(ticket.createdAt)}`}
-                icon={<FileText className="size-5" />}
+          <Card className="space-y-1 py-2">
+            {ticketPreviewItems.map((ticket) => (
+              <TicketCompactRow
                 key={ticket.id}
-                meta="查看"
                 onClick={() => setPreviewTicket(ticket)}
-                title={getTicketDisplayTitle(ticket)}
+                ticket={ticket}
               />
             ))}
+            {hiddenTicketCount > 0 ? (
+              <button
+                className="flex min-h-10 w-full items-center justify-center rounded-xl text-sm font-semibold text-sky-700 active:bg-sky-50"
+                onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+                type="button"
+              >
+                查看全部票据（还有 {hiddenTicketCount} 张）
+              </button>
+            ) : null}
           </Card>
         )}
       </section>
+
+      <section className="space-y-3" data-testid="item-detail-navigation">
+        <h3 className="text-base font-semibold text-slate-950">外部导航</h3>
+        {hasCoordinates ? (
+          <div className="grid grid-cols-2 gap-2">
+            <a
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              href={buildAppleMapsUrl(item)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Navigation className="size-4" />
+              Apple 地图
+            </a>
+            <a
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              href={buildGoogleMapsUrl(item)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink className="size-4" />
+              Google 地图
+            </a>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-slate-500 ring-1 ring-white/80">
+            暂无坐标，无法从这里打开外部地图导航。可以先编辑这个地点并补充坐标。
+          </div>
+        )}
+      </section>
+
+      <Button
+        className="w-full text-red-600"
+        disabled={isDeleting}
+        icon={<Trash2 className="size-4" />}
+        onClick={() => setIsDeleteConfirmOpen(true)}
+        variant="ghost"
+      >
+        删除行程点
+      </Button>
 
       {previewTicket ? (
         <TicketPreview
@@ -362,65 +387,54 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView =
   )
 }
 
-function PreviousTransportCard({
-  item,
-  previousItem,
+function DetailRow({
+  icon,
+  label,
+  value,
 }: {
-  item: ItineraryItem
-  previousItem: ItineraryItem | null
+  icon: ReactNode
+  label: string
+  value?: string
 }) {
-  const description = describePreviousTransport(item)
-  const appleUrl = previousItem
-    ? buildAppleMapsDirectionsUrl(previousItem, item, item.previousTransportMode)
-    : null
-  const googleUrl = previousItem
-    ? buildGoogleMapsDirectionsUrl(previousItem, item, item.previousTransportMode)
-    : null
-
   return (
-    <div className="space-y-3">
-      {description ? (
-        <div className="space-y-1.5 text-sm text-slate-600">
-          {item.previousTransportMode ? (
-            <p>
-              <span className="font-semibold text-slate-500">交通方式：</span>
-              {transportModeLabels[item.previousTransportMode]}
-            </p>
-          ) : null}
-          {item.previousTransportDurationMinutes !== undefined ? (
-            <p>
-              <span className="font-semibold text-slate-500">预计耗时：</span>
-              {item.previousTransportDurationMinutes} 分钟
-            </p>
-          ) : null}
-          {item.previousTransportNote ? (
-            <p>
-              <span className="font-semibold text-slate-500">交通备注：</span>
-              {item.previousTransportNote}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-sm leading-6 text-slate-500">尚未填写交通信息。</p>
-      )}
-
-      {appleUrl && googleUrl ? (
-        <a
-          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-white"
-          href={isIOS() ? appleUrl : googleUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          {isIOS() ? <Navigation className="size-4" /> : <ExternalLink className="size-4" />}
-          查看路线
-        </a>
-      ) : null}
+    <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-3 py-3">
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 ring-1 ring-slate-100">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block break-words text-sm font-semibold text-slate-950">{label}</span>
+        {value ? <span className="mt-0.5 block break-words text-sm leading-5 text-slate-500">{value}</span> : null}
+      </span>
     </div>
   )
 }
 
-function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+function TicketCompactRow({
+  ticket,
+  onClick,
+}: {
+  ticket: TicketMeta
+  onClick: () => void
+}) {
+  return (
+    <button
+      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50"
+      data-testid="item-ticket-entry"
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100">
+        <FileText className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-slate-950">{getTicketDisplayTitle(ticket)}</span>
+        <span className="block truncate text-xs text-slate-500">
+          {describeTicketMetaLine(ticket)} · {formatTicketCreatedAt(ticket.createdAt)}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs font-semibold text-sky-600">查看</span>
+    </button>
+  )
 }
 
 function normalizeSourceView(value: string | null): 'schedule' | 'map' {

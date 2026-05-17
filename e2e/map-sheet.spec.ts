@@ -121,7 +121,7 @@ test('点击地图 marker 显示轻量地点卡片并可进入详情', async ({ 
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByRole('heading', { name: /Hotel Metropolitan Tokyo/ })).toBeVisible()
 
-  await page.getByLabel('返回每日行程').click()
+  await page.getByLabel('返回地图').click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expectNoHorizontalOverflow(page)

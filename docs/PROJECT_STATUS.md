@@ -85,6 +85,7 @@
 ## 数据与缓存边界
 
 - IndexedDB 是主数据源。
+- 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
 - 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
 - OpenRouteService / Google Maps key 不进入 IndexedDB、zip、Supabase 或 trip-plan。

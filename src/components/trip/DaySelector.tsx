@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { formatShortDateWithWeekday } from '../../lib/dates'
 import type { Day } from '../../types'
 
 type DaySelectorProps = {
@@ -46,12 +47,5 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
 }
 
 function formatShortDay(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) {
-    return '日期未定'
-  }
-
-  const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(parsed)
-  const day = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(parsed)
-  return `${day} ${weekday}`
+  return formatShortDateWithWeekday(date)
 }

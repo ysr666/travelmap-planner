@@ -9,6 +9,7 @@ import {
   listTrips,
 } from '../db'
 import { navigateTo } from '../lib/routes'
+import { formatDateRange } from '../lib/dates'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
@@ -296,23 +297,4 @@ async function loadTripsWithStats() {
     statsById: Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)),
     trips,
   }
-}
-
-function formatDateRange(startDate: string, endDate: string) {
-  if (!startDate || !endDate) {
-    return '日期未定'
-  }
-
-  return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`
-}
-
-function formatShortDate(date: string) {
-  if (!date) {
-    return '未定'
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  }).format(new Date(`${date}T00:00:00`))
 }

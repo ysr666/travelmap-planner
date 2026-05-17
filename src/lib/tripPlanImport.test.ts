@@ -147,6 +147,28 @@ describe('validateTripPlanPackage', () => {
     )
   })
 
+  it('rejects full ISO datetimes in plain date and time fields', () => {
+    const pkg = basicPackage()
+    pkg.trip.startDate = '2026-04-10T00:00:00+09:00'
+    pkg.trip.endDate = '2026-04-11T00:00:00+09:00'
+    pkg.days[0].date = '2026-04-10T00:00:00+09:00'
+    pkg.days[0].items[0].startTime = '2026-04-10T15:00:00+09:00'
+    pkg.days[0].items[0].endTime = '2026-04-10T16:00:00+09:00'
+
+    const result = validate(pkg)
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'trip.startDate 必须是 YYYY-MM-DD。',
+        'trip.endDate 必须是 YYYY-MM-DD。',
+        'days[0].date 必须是 YYYY-MM-DD。',
+        expect.stringContaining('startTime 应为 HH:mm'),
+        expect.stringContaining('endTime 应为 HH:mm'),
+      ]),
+    )
+  })
+
   it('rejects invalid item time, coordinate, transport, and previous duration values', () => {
     const pkg = basicPackage()
     pkg.days[0].items[0] = {
@@ -325,6 +347,23 @@ describe('parseTripPlanFile', () => {
 })
 
 describe('buildTripPlanRecords', () => {
+  it('keeps plain dates and local wall-clock times unchanged in records', () => {
+    const pkg = basicPackage()
+    pkg.days[0].items[0].endTime = '16:30'
+
+    const records = buildTripPlanRecords(pkg, {
+      createIdFn: makeIdFactory(),
+      now: 12345,
+      sourceKind: 'json',
+    })
+
+    expect(records.trip.startDate).toBe('2026-04-10')
+    expect(records.trip.endDate).toBe('2026-04-11')
+    expect(records.days[0].date).toBe('2026-04-10')
+    expect(records.itineraryItems[0].startTime).toBe('15:00')
+    expect(records.itineraryItems[0].endTime).toBe('16:30')
+  })
+
   it('builds records with deterministic ids and resolves ticket bindings', () => {
     const pkg = basicPackage()
     pkg.days[0].items.push({

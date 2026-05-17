@@ -1,24 +1,31 @@
-import dayjs from 'dayjs'
-import 'dayjs/locale/zh-cn'
 import { createDay, listDaysByTrip } from '../db'
+import {
+  formatPlainDateChinese,
+  formatPlainShortDateChinese,
+  formatPlainShortDateWithWeekdayChinese,
+  isValidPlainDate,
+  listPlainDateRangeInclusive,
+} from './plainDate'
 import type { Day, Trip } from '../types'
 
-dayjs.locale('zh-cn')
-
 export function formatDate(date: string) {
-  return dayjs(date).isValid() ? dayjs(date).format('YYYY年M月D日') : '日期无效'
+  return formatPlainDateChinese(date) ?? '日期无效'
 }
 
 export function formatShortDate(date: string) {
-  return dayjs(date).isValid() ? dayjs(date).format('M月D日') : '未定'
+  return formatPlainShortDateChinese(date) ?? '未定'
 }
 
 export function formatDateRange(startDate: string, endDate: string) {
-  if (!dayjs(startDate).isValid() || !dayjs(endDate).isValid()) {
+  if (!isValidPlainDate(startDate) || !isValidPlainDate(endDate)) {
     return '日期未定'
   }
 
   return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`
+}
+
+export function formatShortDateWithWeekday(date: string) {
+  return formatPlainShortDateWithWeekdayChinese(date) ?? '日期未定'
 }
 
 export function formatDateKey(date: Date) {
@@ -27,22 +34,7 @@ export function formatDateKey(date: Date) {
 }
 
 export function listExpectedTripDates(trip: Trip) {
-  const start = dayjs(trip.startDate)
-  const end = dayjs(trip.endDate)
-  if (!start.isValid() || !end.isValid() || end.isBefore(start, 'day')) {
-    return []
-  }
-
-  const dates: string[] = []
-  let cursor = start.startOf('day')
-  const last = end.startOf('day')
-
-  while (cursor.isBefore(last, 'day') || cursor.isSame(last, 'day')) {
-    dates.push(cursor.format('YYYY-MM-DD'))
-    cursor = cursor.add(1, 'day')
-  }
-
-  return dates
+  return listPlainDateRangeInclusive(trip.startDate, trip.endDate)
 }
 
 export function getDayGenerationState(trip: Trip, days: Day[]) {

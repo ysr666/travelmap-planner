@@ -54,6 +54,16 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page.getByText('浅草与东京站')).toBeVisible()
   await expect(page.getByText('2026年4月12日')).toBeVisible()
   await expect(page.getByText('3 个行程点')).toBeVisible()
+  const mapOverview = page.getByTestId('trip-map-overview')
+  await expect(mapOverview).toBeVisible()
+  await expect(mapOverview).toContainText('旅行地图')
+  await expect(mapOverview).toContainText('5 个有坐标地点')
+  await mapOverview.getByRole('button', { name: '查看地图' }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/view=map/)
+  await expect(page.getByTestId('map-sheet')).toBeVisible()
+
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
   await page.getByRole('button', { name: '更多' }).click()
   const moreMenu = page.getByTestId('trip-more-menu')

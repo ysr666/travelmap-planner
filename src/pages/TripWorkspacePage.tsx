@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, Map, NotebookText, RotateCw, Ticket } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, Map, MapPinned, NotebookText, RotateCw, Ticket } from 'lucide-react'
 import { listItemsByDay } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -15,8 +15,23 @@ import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { formatChineseDayOrdinal } from '../lib/dayOrdinal'
+import { sortItineraryItems } from '../lib/itinerary'
+import { hasValidCoordinates } from '../lib/mapLinks'
 import { getRouteParams, navigateTo } from '../lib/routes'
-import type { Day } from '../types'
+import type { Day, ItineraryItem } from '../types'
+
+type TripMapPoint = {
+  id: string
+  x: number
+  y: number
+}
+
+type TripMapOverviewData = {
+  points: TripMapPoint[]
+  coordinateCount: number
+  dayCount: number
+  targetDay: Day | null
+}
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -76,6 +91,14 @@ export function TripWorkspacePage() {
       return acc
     }, {})
   }, [allItems])
+
+  const mapOverview = useMemo(() => {
+    return buildTripMapOverviewData({
+      days,
+      itemsByDay,
+      selectedDay,
+    })
+  }, [days, itemsByDay, selectedDay])
 
   async function handleGenerateDays() {
     if (!trip) {
@@ -204,18 +227,7 @@ export function TripWorkspacePage() {
                 <OverviewStatChip label={`${days.length} 天`} />
                 <OverviewStatChip label={`${allItems.length} 个行程点`} />
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <OverviewAction
-                  disabled={days.length === 0}
-                  icon={<Map className="size-4" />}
-                  onClick={() => {
-                    const firstDay = days[0]
-                    if (firstDay) openDay(firstDay, 'map')
-                  }}
-                  primary
-                >
-                  地图
-                </OverviewAction>
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <OverviewAction
                   icon={<Ticket className="size-4" />}
                   onClick={() => navigateTo('tickets', { tripId: trip.id })}
@@ -231,6 +243,15 @@ export function TripWorkspacePage() {
               </div>
             </Card>
             <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
+
+            <TripMapOverview
+              data={mapOverview}
+              onOpenMap={() => {
+                if (mapOverview.targetDay) {
+                  openDay(mapOverview.targetDay, 'map')
+                }
+              }}
+            />
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
@@ -307,25 +328,16 @@ function OverviewStatChip({ label }: { label: string }) {
 
 function OverviewAction({
   children,
-  disabled,
   icon,
   onClick,
-  primary = false,
 }: {
   children: string
-  disabled?: boolean
   icon: ReactNode
   onClick: () => void
-  primary?: boolean
 }) {
   return (
     <button
-      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
-        primary
-          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100'
-          : 'bg-slate-50 text-slate-600 ring-1 ring-slate-100'
-      }`}
-      disabled={disabled}
+      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-slate-50 px-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-100 transition active:scale-[0.98]"
       onClick={onClick}
       type="button"
     >
@@ -333,4 +345,195 @@ function OverviewAction({
       <span className="truncate">{children}</span>
     </button>
   )
+}
+
+function TripMapOverview({
+  data,
+  onOpenMap,
+}: {
+  data: TripMapOverviewData
+  onOpenMap: () => void
+}) {
+  const hasPoints = data.points.length > 0
+  const linePoints = data.points.map((point) => `${point.x},${point.y}`).join(' ')
+
+  return (
+    <Card className="overflow-hidden p-0" data-testid="trip-map-overview">
+      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-950">旅行地图</h3>
+          <p className="mt-0.5 truncate text-xs text-slate-500">
+            {hasPoints
+              ? `${data.coordinateCount} 个有坐标地点 · ${data.dayCount} 天`
+              : '还没有可显示的坐标'}
+          </p>
+        </div>
+        <button
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 ring-1 ring-sky-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!data.targetDay}
+          onClick={onOpenMap}
+          type="button"
+        >
+          <Map className="size-3.5" />
+          查看地图
+        </button>
+      </div>
+      <div className="px-4 pb-4">
+        <div className="relative h-32 overflow-hidden rounded-2xl bg-slate-50 ring-1 ring-slate-100">
+          <div className="absolute inset-0 opacity-75 [background-image:linear-gradient(to_right,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.16)_1px,transparent_1px)] [background-size:28px_28px]" />
+          {hasPoints ? (
+            <>
+              <svg
+                aria-label="旅行坐标概览"
+                className="absolute inset-0 size-full"
+                data-testid="trip-map-overview-svg"
+                preserveAspectRatio="none"
+                role="img"
+                viewBox="0 0 100 100"
+              >
+                {data.points.length > 1 ? (
+                  <polyline
+                    fill="none"
+                    points={linePoints}
+                    stroke="rgba(14, 116, 144, 0.45)"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.25"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
+                {data.points.map((point, index) => (
+                  <g key={point.id}>
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      fill="white"
+                      r="4.4"
+                      stroke="rgba(2, 132, 199, 0.28)"
+                      strokeWidth="1.4"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <circle cx={point.x} cy={point.y} fill="#0284c7" r="2.5" />
+                    {index === 0 ? (
+                      <circle
+                        cx={point.x}
+                        cy={point.y}
+                        fill="none"
+                        r="6"
+                        stroke="rgba(2, 132, 199, 0.18)"
+                        strokeWidth="1.2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ) : null}
+                  </g>
+                ))}
+              </svg>
+              <p className="absolute bottom-2 left-3 right-3 truncate rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+                简化连线仅表示行程顺序
+              </p>
+            </>
+          ) : (
+            <div className="absolute inset-0 flex items-center gap-3 px-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 ring-1 ring-slate-100">
+                <MapPinned className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-700">还没有可显示的坐标</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  给行程点补充坐标后，这里会显示旅行地图概览。
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function buildTripMapOverviewData({
+  days,
+  itemsByDay,
+  selectedDay,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  selectedDay: Day | null
+}): TripMapOverviewData {
+  const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
+  const mappableItems = orderedDays.flatMap((day) =>
+    sortItineraryItems(itemsByDay[day.id] ?? [])
+      .filter(hasValidCoordinates)
+      .map((item) => ({ day, item })),
+  )
+  const targetDay = chooseMapTargetDay({ days: orderedDays, itemsByDay, selectedDay })
+
+  if (mappableItems.length === 0) {
+    return {
+      points: [],
+      coordinateCount: 0,
+      dayCount: 0,
+      targetDay,
+    }
+  }
+
+  const bounds = mappableItems.reduce(
+    (acc, { item }) => ({
+      minLng: Math.min(acc.minLng, item.lng ?? acc.minLng),
+      maxLng: Math.max(acc.maxLng, item.lng ?? acc.maxLng),
+      minLat: Math.min(acc.minLat, item.lat ?? acc.minLat),
+      maxLat: Math.max(acc.maxLat, item.lat ?? acc.maxLat),
+    }),
+    {
+      minLng: Number.POSITIVE_INFINITY,
+      maxLng: Number.NEGATIVE_INFINITY,
+      minLat: Number.POSITIVE_INFINITY,
+      maxLat: Number.NEGATIVE_INFINITY,
+    },
+  )
+  const rawLngSpan = bounds.maxLng - bounds.minLng
+  const rawLatSpan = bounds.maxLat - bounds.minLat
+  const lngSpan = Math.max(rawLngSpan, 0.0001)
+  const latSpan = Math.max(rawLatSpan, 0.0001)
+  const padding = 12
+  const drawable = 100 - padding * 2
+  const coordinateDayIds = new Set<string>()
+  const points = mappableItems.map(({ day, item }) => {
+    coordinateDayIds.add(day.id)
+    const lng = item.lng ?? bounds.minLng
+    const lat = item.lat ?? bounds.minLat
+    return {
+      id: item.id,
+      x: rawLngSpan < 0.0001 ? 50 : padding + ((lng - bounds.minLng) / lngSpan) * drawable,
+      y: rawLatSpan < 0.0001 ? 50 : padding + ((bounds.maxLat - lat) / latSpan) * drawable,
+    }
+  })
+
+  return {
+    points,
+    coordinateCount: points.length,
+    dayCount: coordinateDayIds.size,
+    targetDay,
+  }
+}
+
+function chooseMapTargetDay({
+  days,
+  itemsByDay,
+  selectedDay,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  selectedDay: Day | null
+}) {
+  if (selectedDay && hasAnyValidCoordinate(itemsByDay[selectedDay.id] ?? [])) {
+    return selectedDay
+  }
+
+  const firstDayWithCoordinates = days.find((day) => hasAnyValidCoordinate(itemsByDay[day.id] ?? []))
+  return firstDayWithCoordinates ?? selectedDay ?? days[0] ?? null
+}
+
+function hasAnyValidCoordinate(items: ItineraryItem[]) {
+  return items.some(hasValidCoordinates)
 }

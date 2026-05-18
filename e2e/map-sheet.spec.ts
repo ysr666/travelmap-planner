@@ -127,6 +127,96 @@ test('点击地图 marker 显示轻量地点卡片并可进入详情', async ({ 
   await expectNoHorizontalOverflow(page)
 })
 
+test('地图重定位不会生成路线且保留 marker 卡片和路线控件', async ({ page }) => {
+  let routeRequestCount = 0
+  await page.route('https://api.openrouteservice.org/**', (route) => {
+    routeRequestCount += 1
+    return route.abort()
+  })
+
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('map-recenter-button')).toBeVisible()
+
+  await page.getByTestId('map-recenter-button').click()
+  expect(routeRequestCount).toBe(0)
+  await expect(page.getByTestId('route-controls-section')).toBeHidden()
+
+  await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
+  await expect(page.getByTestId('map-marker-card')).toBeVisible()
+  await expect(page.getByTestId('map-marker-card')).toContainText('Hotel Metropolitan Tokyo 入住')
+
+  await page.getByTestId('route-chip').click()
+  await expect(page.getByTestId('route-controls-section')).toBeVisible()
+  await page.getByTestId('map-recenter-button').click()
+  await expect(page.getByTestId('route-controls-section')).toBeVisible()
+  expect(routeRequestCount).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('使用 mocked geolocation 显示当前位置且远距离时优先回到行程范围', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 34.6937, longitude: 135.5023 })
+
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+
+  await page.getByTestId('map-user-location-button').click()
+  await expect(page.getByTestId('map-user-location-marker')).toHaveCount(1)
+  await expect(page.getByTestId('map-location-notice')).toContainText('当前位置距离行程较远，已优先回到当天行程范围')
+  await expectNoHorizontalOverflow(page)
+})
+
+test('使用 mocked geolocation 成功路径显示当前位置', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 35.6897, longitude: 139.702 })
+
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+
+  await page.getByTestId('map-user-location-button').click()
+  await expect(page.getByTestId('map-user-location-marker')).toBeVisible()
+  await expect(page.getByTestId('map-location-notice')).toBeHidden()
+  await expectNoHorizontalOverflow(page)
+})
+
+test('当前位置权限被拒绝时显示轻量 fallback', async ({ page, context }) => {
+  await context.clearPermissions()
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        clearWatch: () => undefined,
+        getCurrentPosition: (
+          _success: PositionCallback,
+          error?: PositionErrorCallback | null,
+        ) => {
+          error?.({
+            code: 1,
+            message: 'denied',
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+          } as GeolocationPositionError)
+        },
+        watchPosition: () => 1,
+      },
+    })
+  })
+
+  await createDemoTripViaUi(page)
+  await page.getByTestId('view-switch-map').click()
+  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+
+  await page.getByTestId('map-user-location-button').click()
+  await expect(page.getByTestId('map-location-notice')).toContainText('无法取得当前位置，请检查浏览器权限。')
+  await expect(page.getByTestId('map-user-location-marker')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('地图路线服务未配置时保留直线连接提示', async ({ page }) => {
   await createDemoTripViaUi(page)
   await forceRoutingUnconfigured(page)

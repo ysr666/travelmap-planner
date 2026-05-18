@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, ExternalLink, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Crosshair, ExternalLink, Locate, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -22,6 +22,7 @@ import {
   getRoutingConfig,
   isRoutingConfigured,
   type DayRouteResult,
+  type LngLat,
   type RoutingConfig,
 } from '../../lib/routing'
 import {
@@ -42,6 +43,7 @@ type SelectSource = 'marker' | 'list'
 type RouteUiState = 'straight' | 'loading' | 'road' | 'cached' | 'mixed' | 'failed'
 type RouteDisplayMode = 'straight' | 'road'
 type RoadTransportMode = Extract<TransportMode, 'walk' | 'car' | 'bus'>
+type UserLocationStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 type SnapPoints = Record<SheetState, number>
 
@@ -75,6 +77,8 @@ const ROAD_TRANSPORT_LABELS: Record<RoadTransportMode, string> = {
   car: '驾车',
   bus: '公交',
 }
+const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回到当天行程范围'
+const LOCATION_UNAVAILABLE_MESSAGE = '当前浏览器暂时无法获取位置。'
 
 export function DayMapView({
   trip,
@@ -114,6 +118,12 @@ export function DayMapView({
     dayId: string
     itemId: string
   } | null>(null)
+  const [userLocation, setUserLocation] = useState<LngLat | null>(null)
+  const [userLocationStatus, setUserLocationStatus] = useState<UserLocationStatus>('idle')
+  const [mapControlNotice, setMapControlNotice] = useState<{
+    dayId: string
+    message: string
+  } | null>(null)
   const [roadModeOverride, setRoadModeOverride] = useState<{
     dayId: string
     mode: RoadTransportMode
@@ -125,6 +135,7 @@ export function DayMapView({
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const pendingRouteEditNoticeRef = useRef<string[] | null>(null)
+  const pendingUserLocationRecenterRef = useRef(false)
   const [mapReadyToken, setMapReadyToken] = useState(0)
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
@@ -133,6 +144,7 @@ export function DayMapView({
   const selectedItemSource = selectedItemSelection?.dayId === day.id ? selectedItemSelection.source : null
   const markerCardItemId = markerCardSelection?.dayId === day.id ? markerCardSelection.itemId : null
   const notice = noticeState?.dayId === day.id ? noticeState.message : null
+  const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedItemId) ?? mappedItems[0] ?? items[0] ?? null
   }, [items, mappedItems, selectedItemId])
@@ -200,6 +212,9 @@ export function DayMapView({
   const cancelDayMapPrewarm = useCallback(() => {
     dayMapRef.current?.cancelPrewarm()
   }, [])
+  const setCurrentMapControlNotice = useCallback((message: string | null) => {
+    setMapControlNotice(message ? { dayId: day.id, message } : null)
+  }, [day.id])
 
   useEffect(() => {
     function refreshConfig() {
@@ -316,6 +331,34 @@ export function DayMapView({
       cancelDayMapPrewarm()
     }
   }, [cancelDayMapPrewarm, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
+
+  const applyMapRecenterNotice = useCallback((result: ReturnType<DayMapHandle['recenter']> | undefined) => {
+    if (!result) {
+      setCurrentMapControlNotice('地图还在准备中，请稍后再试。')
+      return
+    }
+
+    if (result.excludedUserLocationForDistance) {
+      setCurrentMapControlNotice(FAR_USER_LOCATION_MESSAGE)
+      return
+    }
+
+    if (!result.usedItineraryPoints && !result.includedUserLocation) {
+      setCurrentMapControlNotice('暂无可回到的地图坐标。')
+      return
+    }
+
+    setCurrentMapControlNotice(null)
+  }, [setCurrentMapControlNotice])
+
+  useEffect(() => {
+    if (!pendingUserLocationRecenterRef.current || !userLocation || !dayMapRef.current?.isReady()) {
+      return
+    }
+
+    pendingUserLocationRecenterRef.current = false
+    applyMapRecenterNotice(dayMapRef.current.recenter())
+  }, [applyMapRecenterNotice, day.id, mapReadyToken, userLocation])
 
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
     setSelectedItemSelection({
@@ -480,6 +523,45 @@ export function DayMapView({
     setRouteControlsOpen(true)
   }
 
+  function handleRecenterMap() {
+    applyMapRecenterNotice(dayMapRef.current?.recenter())
+  }
+
+  function handleRequestUserLocation() {
+    if (!navigator.geolocation) {
+      setUserLocationStatus('error')
+      setCurrentMapControlNotice(LOCATION_UNAVAILABLE_MESSAGE)
+      return
+    }
+
+    setUserLocationStatus('loading')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation: LngLat = [position.coords.longitude, position.coords.latitude]
+        if (!isFiniteLngLat(nextLocation)) {
+          setUserLocationStatus('error')
+          setCurrentMapControlNotice(LOCATION_UNAVAILABLE_MESSAGE)
+          return
+        }
+
+        pendingUserLocationRecenterRef.current = true
+        setUserLocation(nextLocation)
+        setUserLocationStatus('ready')
+      },
+      () => {
+        pendingUserLocationRecenterRef.current = false
+        setUserLocation(null)
+        setUserLocationStatus('error')
+        setCurrentMapControlNotice('无法取得当前位置，请检查浏览器权限。')
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 60_000,
+        timeout: 8_000,
+      },
+    )
+  }
+
   return (
     <div ref={rootRef} className={`${embedded ? 'relative h-full min-h-0' : 'app-viewport relative'} min-h-0 overflow-hidden bg-map-bg`}>
       <div className="absolute inset-0 z-0">
@@ -502,6 +584,7 @@ export function DayMapView({
             selectedItemId={selectedItemId}
             selectedItemSource={selectedItemSource}
             surface="fullscreen"
+            userLocation={userLocation}
           />
         )}
 
@@ -525,6 +608,19 @@ export function DayMapView({
           state={routeUiState}
           warnings={routeWarnings}
         />
+      ) : null}
+
+      {isVisible && items.length > 0 && !mapBaseLoading && !mapError ? (
+        <MapFloatingControls
+          locationStatus={userLocationStatus}
+          onRecenter={handleRecenterMap}
+          onRequestUserLocation={handleRequestUserLocation}
+          showBelowHeader={showFloatingHeader}
+        />
+      ) : null}
+
+      {isVisible && mapControlNoticeMessage && !mapBaseLoading && !mapError ? (
+        <MapControlNotice message={mapControlNoticeMessage} showBelowHeader={showFloatingHeader} />
       ) : null}
 
       {isVisible && showFloatingHeader ? (
@@ -1023,6 +1119,65 @@ function RouteStatusChip({
   )
 }
 
+function MapFloatingControls({
+  locationStatus,
+  showBelowHeader,
+  onRecenter,
+  onRequestUserLocation,
+}: {
+  locationStatus: UserLocationStatus
+  showBelowHeader: boolean
+  onRecenter: () => void
+  onRequestUserLocation: () => void
+}) {
+  const locationLoading = locationStatus === 'loading'
+
+  return (
+    <div className={`pointer-events-none absolute right-4 z-40 flex flex-col gap-2 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
+      <button
+        aria-label="回到当天行程范围"
+        className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-700 shadow-[0_8px_22px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98]"
+        data-testid="map-recenter-button"
+        onClick={onRecenter}
+        title="回到当天行程范围"
+        type="button"
+      >
+        <Crosshair className="size-5" />
+      </button>
+      <button
+        aria-label={locationLoading ? '正在获取当前位置' : '显示当前位置'}
+        className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-700 shadow-[0_8px_22px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
+        data-testid="map-user-location-button"
+        disabled={locationLoading}
+        onClick={onRequestUserLocation}
+        title={locationLoading ? '正在获取当前位置' : '显示当前位置'}
+        type="button"
+      >
+        <Locate className={`size-5 ${locationLoading ? 'animate-pulse text-sky-600' : locationStatus === 'ready' ? 'text-sky-600' : ''}`} />
+      </button>
+    </div>
+  )
+}
+
+function MapControlNotice({
+  message,
+  showBelowHeader,
+}: {
+  message: string
+  showBelowHeader: boolean
+}) {
+  return (
+    <div className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'top-40' : 'top-20'}`}>
+      <div
+        className="ml-auto max-w-[17rem] rounded-2xl border border-white/70 bg-white/92 px-3 py-2 text-xs font-medium leading-5 text-slate-600 shadow-[0_10px_24px_rgba(47,65,88,0.10)] backdrop-blur-xl"
+        data-testid="map-location-notice"
+      >
+        {message}
+      </div>
+    </div>
+  )
+}
+
 function RouteControlsSummary({
   open,
   onToggle,
@@ -1387,6 +1542,17 @@ function routeStatusDotClassName(state: RouteUiState, configured: boolean) {
     return 'bg-amber-400'
   }
   return configured ? 'bg-slate-400' : 'bg-slate-300'
+}
+
+function isFiniteLngLat([lng, lat]: LngLat) {
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
+  )
 }
 
 function buildRouteResultFromCache(entry: RouteCacheEntry): DayRouteResult {

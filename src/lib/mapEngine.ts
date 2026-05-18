@@ -21,7 +21,7 @@ export type MapInitOptions = {
   style?: string
 }
 
-export type MapEventType = 'load' | 'idle' | 'error' | 'moveend' | 'resize'
+export type MapEventType = 'load' | 'idle' | 'error' | 'moveend' | 'resize' | 'zoom'
 
 export type MarkerHandle = {
   setLngLat(lngLat: LngLat): void

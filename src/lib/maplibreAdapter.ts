@@ -109,7 +109,11 @@ class MapLibreMapInstance implements MapInstance {
           'line-join': 'round',
           visibility: hasLine && this.routeVisible ? 'visible' : 'none',
         },
-        paint: { 'line-color': '#1677ff', 'line-width': 4, 'line-opacity': 0.86 },
+        paint: {
+          'line-color': '#1677ff',
+          'line-opacity': 0.86,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2.5, 12, 4, 16, 6],
+        },
       })
     } else {
       const source = this.map.getSource(this.routeSourceId) as maplibregl.GeoJSONSource

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Copy, ExternalLink, FileArchive, LoaderCircle, Share2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, Share2, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
 import {
   describeTicketMetaLine,
@@ -15,16 +15,44 @@ import { Button } from './ui/Button'
 type TicketPreviewProps = {
   ticket: TicketMeta
   onClose: () => void
+  onChangeTicket?: (ticket: TicketMeta) => void
+  tickets?: TicketMeta[]
 }
 
-export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
+type BlobPreviewState = {
+  blob: Blob | null
+  error: string | null
+  isLoading: boolean
+  objectUrl: string | null
+  ticketId: string
+}
+
+export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: TicketPreviewProps) {
   const storageMode = getTicketStorageMode(ticket)
   const displayTitle = getTicketDisplayTitle(ticket)
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [blob, setBlob] = useState<Blob | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(storageMode === 'copy')
-  const [copyMessage, setCopyMessage] = useState<string | null>(null)
+  const [blobState, setBlobState] = useState<BlobPreviewState>({
+    blob: null,
+    error: null,
+    isLoading: storageMode === 'copy',
+    objectUrl: null,
+    ticketId: ticket.id,
+  })
+  const [copyMessageState, setCopyMessageState] = useState<{ message: string; ticketId: string } | null>(null)
+  const contextIndex = tickets?.findIndex((contextTicket) => contextTicket.id === ticket.id) ?? -1
+  const hasNavigation = Boolean(tickets && tickets.length > 1 && onChangeTicket && contextIndex >= 0)
+  const previousTicket = hasNavigation && tickets ? tickets[contextIndex - 1] : undefined
+  const nextTicket = hasNavigation && tickets ? tickets[contextIndex + 1] : undefined
+  const activeBlobState = blobState.ticketId === ticket.id
+    ? blobState
+    : {
+        blob: null,
+        error: null,
+        isLoading: storageMode === 'copy',
+        objectUrl: null,
+        ticketId: ticket.id,
+      }
+  const { blob, error, isLoading, objectUrl } = activeBlobState
+  const copyMessage = copyMessageState?.ticketId === ticket.id ? copyMessageState.message : null
   const shareFile = useMemo(() => {
     if (!blob) {
       return null
@@ -55,7 +83,6 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
 
     async function loadBlob() {
       if (storageMode !== 'copy') {
-        setIsLoading(false)
         return
       }
 
@@ -71,15 +98,26 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
           return
         }
 
-        setBlob(record.blob)
-        setObjectUrl(nextObjectUrl)
+        setBlobState({
+          blob: record.blob,
+          error: null,
+          isLoading: false,
+          objectUrl: nextObjectUrl,
+          ticketId: ticket.id,
+        })
       } catch (caught) {
         if (isActive) {
-          setError(caught instanceof Error ? caught.message : '读取票据文件失败')
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false)
+          if (nextObjectUrl) {
+            URL.revokeObjectURL(nextObjectUrl)
+            nextObjectUrl = null
+          }
+          setBlobState({
+            blob: null,
+            error: caught instanceof Error ? caught.message : '读取票据文件失败',
+            isLoading: false,
+            objectUrl: null,
+            ticketId: ticket.id,
+          })
         }
       }
     }
@@ -94,6 +132,33 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
     }
   }, [storageMode, ticket.id])
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
+      if (!hasNavigation || !onChangeTicket) {
+        return
+      }
+
+      if (event.key === 'ArrowLeft' && previousTicket) {
+        event.preventDefault()
+        onChangeTicket(previousTicket)
+      }
+
+      if (event.key === 'ArrowRight' && nextTicket) {
+        event.preventDefault()
+        onChangeTicket(nextTicket)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [hasNavigation, nextTicket, onChangeTicket, onClose, previousTicket])
+
   async function handleCopyReference() {
     if (!ticket.referenceLocation) {
       return
@@ -101,9 +166,9 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
 
     try {
       await navigator.clipboard.writeText(ticket.referenceLocation)
-      setCopyMessage('已复制位置说明。')
+      setCopyMessageState({ message: '已复制位置说明。', ticketId: ticket.id })
     } catch {
-      setCopyMessage('复制失败，请手动选择位置说明。')
+      setCopyMessageState({ message: '复制失败，请手动选择位置说明。', ticketId: ticket.id })
     }
   }
 
@@ -119,18 +184,31 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
     }
   }
 
+  function handlePreviousTicket() {
+    if (previousTicket && onChangeTicket) {
+      onChangeTicket(previousTicket)
+    }
+  }
+
+  function handleNextTicket() {
+    if (nextTicket && onChangeTicket) {
+      onChangeTicket(nextTicket)
+    }
+  }
+
   return createPortal(
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex justify-center bg-slate-950/80 backdrop-blur-sm"
+      data-testid="ticket-preview"
       role="dialog"
     >
-      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[430px] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_-10px_28px_rgba(38,53,76,0.14)]">
-        <div className="shrink-0 p-4 pb-3">
+      <div className="flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-slate-950 text-white shadow-[0_0_36px_rgba(15,23,42,0.35)]">
+        <div className="shrink-0 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-sky-600">{ticketStorageModeLabels[storageMode]}</p>
-              <h3 className="mt-1 break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+              <p className="text-xs font-semibold text-sky-300">{ticketStorageModeLabels[storageMode]}</p>
+              <h3 className="mt-1 break-words text-base font-semibold text-white [overflow-wrap:anywhere]">
                 {displayTitle}
               </h3>
               <p className="mt-1 break-words text-xs text-slate-400 [overflow-wrap:anywhere]">
@@ -139,16 +217,49 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
             </div>
             <button
               aria-label="关闭预览"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 active:scale-[0.98]"
+              data-testid="ticket-preview-close"
               onClick={onClose}
               type="button"
             >
               <X className="size-5" />
             </button>
           </div>
+          {hasNavigation && tickets ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <button
+                aria-label="上一张票据"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-semibold text-white ring-1 ring-white/10 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+                data-testid="ticket-preview-previous"
+                disabled={!previousTicket}
+                onClick={handlePreviousTicket}
+                type="button"
+              >
+                <ChevronLeft className="size-4" />
+                上一张
+              </button>
+              <span
+                className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-white/10"
+                data-testid="ticket-preview-counter"
+              >
+                {contextIndex + 1} / {tickets.length}
+              </span>
+              <button
+                aria-label="下一张票据"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-semibold text-white ring-1 ring-white/10 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+                data-testid="ticket-preview-next"
+                disabled={!nextTicket}
+                onClick={handleNextTicket}
+                type="button"
+              >
+                下一张
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-[max(1rem,env(safe-area-inset-bottom))] app-scrollbar">
           {storageMode === 'reference' ? (
             <ReferencePreview
               copyMessage={copyMessage}
@@ -160,7 +271,7 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
           {storageMode === 'external' ? <ExternalPreview ticket={ticket} /> : null}
 
           {storageMode === 'copy' ? (
-            <div className="rounded-xl bg-slate-50">
+            <div className="min-h-[calc(100dvh-12rem)] rounded-3xl bg-black/25 ring-1 ring-white/10">
               {isLoading ? (
                 <div className="flex min-h-64 items-center justify-center text-slate-400">
                   <LoaderCircle className="size-5 animate-spin" />
@@ -168,7 +279,7 @@ export function TicketPreview({ ticket, onClose }: TicketPreviewProps) {
               ) : null}
 
               {error ? (
-                <p className="min-h-40 px-4 py-8 text-center text-sm leading-6 text-red-500">{error}</p>
+                <p className="min-h-40 px-4 py-8 text-center text-sm leading-6 text-red-200">{error}</p>
               ) : null}
 
               {!isLoading && !error && objectUrl ? (
@@ -204,26 +315,37 @@ function CopyPreviewContent({
       {ticket.fileType === 'image' ? (
         <img
           alt={ticket.fileName}
-          className="max-h-[52dvh] w-full rounded-xl bg-white object-contain"
+          className="max-h-[66dvh] w-full rounded-2xl bg-black object-contain"
+          data-testid="ticket-preview-image"
           src={objectUrl}
         />
       ) : null}
 
       {ticket.fileType === 'pdf' ? (
-        <iframe className="h-[52dvh] w-full rounded-xl bg-white" src={objectUrl} title={ticket.fileName} />
+        <>
+          <iframe
+            className="h-[64dvh] w-full rounded-2xl bg-white"
+            data-testid="ticket-preview-pdf"
+            src={objectUrl}
+            title={ticket.fileName}
+          />
+          <p className="px-1 text-xs leading-5 text-slate-300">
+            如果 PDF 没有显示，请使用“在新标签打开”。
+          </p>
+        </>
       ) : null}
 
       {ticket.fileType === 'other' ? (
         <div className="space-y-3 p-4 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white text-slate-500">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white/10 text-slate-300">
             <FileArchive className="size-7" />
           </div>
-          <p className="text-sm leading-6 text-slate-500">此文件类型暂不支持内嵌预览。</p>
+          <p className="text-sm leading-6 text-slate-300">此文件类型暂不支持内嵌预览。</p>
         </div>
       ) : null}
 
       <a
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-950"
         href={objectUrl}
         rel="noreferrer"
         target="_blank"
@@ -251,7 +373,7 @@ function ReferencePreview({
   onCopy: () => void
 }) {
   return (
-    <div className="space-y-3 rounded-xl bg-amber-50 p-4 text-amber-900">
+    <div className="space-y-3 rounded-3xl bg-amber-50 p-4 text-amber-900" data-testid="ticket-preview-reference">
       <p className="text-sm leading-6">
         此票据仅记录文件位置，旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
@@ -273,7 +395,7 @@ function ExternalPreview({ ticket }: { ticket: TicketMeta }) {
   const canOpen = Boolean(url && isValidExternalUrl(url))
 
   return (
-    <div className="space-y-3 rounded-xl bg-slate-50 p-4">
+    <div className="space-y-3 rounded-3xl bg-slate-50 p-4" data-testid="ticket-preview-external">
       <p className="text-sm leading-6 text-slate-500">
         此票据保存的是外部链接，打开时需要网络，并依赖对应的外部服务。
       </p>

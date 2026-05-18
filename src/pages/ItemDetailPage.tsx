@@ -406,8 +406,10 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
       {previewTicket ? (
         <TicketPreview
           key={previewTicket.id}
+          onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
           ticket={previewTicket}
+          tickets={tickets}
         />
       ) : null}
 

@@ -99,9 +99,10 @@ async function addItemTickets(page: Page, tripId: string, itemId: string, ticket
       request.onerror = () => reject(request.error)
     })
 
-    const tx = db.transaction(['itineraryItems', 'ticketMetas'], 'readwrite')
+    const tx = db.transaction(['itineraryItems', 'ticketMetas', 'ticketBlobs'], 'readwrite')
     const itemsStore = tx.objectStore('itineraryItems')
     const ticketsStore = tx.objectStore('ticketMetas')
+    const blobsStore = tx.objectStore('ticketBlobs')
     const now = Date.now()
     const ticketIds: string[] = []
 
@@ -129,6 +130,17 @@ async function addItemTickets(page: Page, tripId: string, itemId: string, ticket
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
       })
+
+      if (seedTicket.storageMode === 'copy') {
+        await new Promise<void>((resolve, reject) => {
+          const request = blobsStore.put({
+            blob: buildTicketBlob(seedTicket),
+            ticketId: id,
+          })
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+        })
+      }
     }
 
     const item = await new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -145,6 +157,20 @@ async function addItemTickets(page: Page, tripId: string, itemId: string, ticket
     })
 
     db.close()
+
+    function buildTicketBlob(seedTicket: SeedTicket) {
+      if (seedTicket.fileType === 'image') {
+        return new Blob([
+          '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160"><rect width="240" height="160" fill="#e0f2fe"/><text x="120" y="84" text-anchor="middle" font-size="20" fill="#0369a1">旅图票据</text></svg>',
+        ], { type: seedTicket.mimeType })
+      }
+
+      if (seedTicket.fileType === 'pdf') {
+        return new Blob(['%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'], { type: seedTicket.mimeType })
+      }
+
+      return new Blob(['ticket file'], { type: seedTicket.mimeType })
+    }
   }, { targetTripId: tripId, targetItemId: itemId, seedTickets: tickets })
 }
 
@@ -171,9 +197,9 @@ function makeTicketSeeds(count: number): SeedTicket[] {
     {
       title: '二维码截图',
       storageMode: 'copy',
-      fileName: 'qr-code.png',
+      fileName: 'qr-code.svg',
       fileType: 'image',
-      mimeType: 'image/png',
+      mimeType: 'image/svg+xml',
       size: 2048,
     },
     {
@@ -317,8 +343,17 @@ test('票据区显示现场卡片、预览和查看全部入口', async ({ page 
   await expect(page.getByTestId('item-detail-tickets')).toContainText('本地副本')
   await expect(page.getByTestId('item-ticket-view-all')).toContainText('+1')
   await page.getByTestId('item-ticket-entry').first().click()
-  await expect(page.getByText('此票据仅记录文件位置')).toBeVisible()
-  await page.getByLabel('关闭预览').click()
+  await expect(page.getByTestId('ticket-preview')).toBeVisible()
+  await expect(page.getByTestId('ticket-preview-counter')).toContainText('1 / 4')
+  await expect(page.getByTestId('ticket-preview-reference')).toContainText('此票据仅记录文件位置')
+  await page.getByTestId('ticket-preview-next').click()
+  await expect(page.getByTestId('ticket-preview-counter')).toContainText('2 / 4')
+  await expect(page.getByTestId('ticket-preview-external')).toContainText('此票据保存的是外部链接')
+  await page.getByTestId('ticket-preview-next').click()
+  await expect(page.getByTestId('ticket-preview-counter')).toContainText('3 / 4')
+  await expect(page.getByTestId('ticket-preview-image')).toBeVisible()
+  await page.getByTestId('ticket-preview-close').click()
+  await expect(page.getByTestId('ticket-preview')).toHaveCount(0)
 
   await page.getByTestId('item-ticket-view-all').click()
   await expect(page).toHaveURL(/#\/tickets\?/)

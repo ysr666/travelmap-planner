@@ -13,7 +13,7 @@ export function Collapsible({ title, subtitle, defaultOpen = false, children }: 
 
   return (
     <details
-      className="group rounded-xl bg-white ring-1 ring-slate-200/80"
+      className="group rounded-xl bg-white ring-1 ring-slate-200/80 dark:bg-slate-900 dark:ring-slate-700/80"
       open={defaultOpen}
       ref={detailsRef}
     >
@@ -26,7 +26,7 @@ export function Collapsible({ title, subtitle, defaultOpen = false, children }: 
           ) : null}
         </div>
       </summary>
-      <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+      <div className="border-t border-slate-100 px-4 pb-4 pt-3 dark:border-slate-800">
         {children}
       </div>
     </details>

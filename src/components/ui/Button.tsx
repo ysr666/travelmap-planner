@@ -12,8 +12,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]',
-  secondary: 'bg-white text-slate-900 ring-1 ring-slate-200/80',
-  ghost: 'bg-transparent text-slate-600',
+  secondary: 'bg-white text-slate-900 ring-1 ring-slate-200/80 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700/80',
+  ghost: 'bg-transparent text-slate-600 dark:text-slate-300',
 }
 
 export function Button({

@@ -18,6 +18,7 @@ import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
+import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildDayBrief } from '../lib/travelBrief'
 import type { Day, ItineraryItem, TicketMeta } from '../types'
 
@@ -222,6 +223,7 @@ export function DayViewPage() {
       days: [selectedDay],
       items,
       nowPlainDate: formatDateKey(new Date()),
+      profile: getStoredTravelProfile(),
       selectedDayId: selectedDay.id,
       tickets: ticketMetas,
       trip,

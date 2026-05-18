@@ -1,6 +1,7 @@
 import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, TransportMode, Trip } from '../types'
 import { sortItineraryItems } from './itinerary'
 import { getTicketScope, getTicketStorageMode } from './tickets'
+import { normalizeTravelProfile, type TravelProfile } from './travelProfile'
 
 export type TripContextCoordinateState = 'missing' | 'present' | 'invalid'
 export type TripContextNoteLength = 'none' | 'short' | 'medium' | 'long'
@@ -11,6 +12,7 @@ export type BuildTripContextInput = {
   days: Day[]
   items: ItineraryItem[]
   tickets: TicketMeta[]
+  profile?: TravelProfile
   selectedDayId?: string | null
   nowPlainDate?: string
 }
@@ -18,6 +20,7 @@ export type BuildTripContextInput = {
 export type TripContext = {
   version: 1
   nowPlainDate?: string
+  profile?: TravelProfile
   selectedDayId?: string
   trip: {
     id: string
@@ -81,6 +84,7 @@ export function buildTripContext({
   days,
   items,
   nowPlainDate,
+  profile,
   selectedDayId,
   tickets,
   trip,
@@ -88,6 +92,7 @@ export function buildTripContext({
   const itemsByDay = groupItemsByDay(items)
   const ticketIdsByItemId = groupTicketIdsByItemId(tickets)
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
+  const normalizedProfile = profile ? normalizeTravelProfile(profile) : undefined
 
   return {
     days: orderedDays.map((day) => {
@@ -102,6 +107,7 @@ export function buildTripContext({
       }
     }),
     nowPlainDate: nowPlainDate?.trim() || undefined,
+    ...(normalizedProfile ? { profile: normalizedProfile } : {}),
     selectedDayId: selectedDayId ?? undefined,
     ticketSummary: buildTicketSummary(tickets),
     trip: {

@@ -26,6 +26,11 @@ import { Collapsible } from '../components/ui/Collapsible'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import {
+  getStoredAiPrivacySettings,
+  saveAiPrivacySettings,
+  type AiPrivacySettings,
+} from '../lib/aiPrivacy'
+import {
   importTripBackup,
 } from '../lib/backup'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -60,6 +65,15 @@ import {
   isGoogleMapsConfigured,
   saveGoogleMapsApiKey,
 } from '../lib/googleMaps'
+import {
+  getStoredTravelProfile,
+  normalizeTravelProfile,
+  saveTravelProfile,
+  type TravelPace,
+  type TravelProfile,
+  type TravelReminderLevel,
+  type TravelTransportPreference,
+} from '../lib/travelProfile'
 import type { AppearanceMode } from '../lib/appearance'
 import { useAppearance } from '../lib/appearanceContext'
 
@@ -92,6 +106,97 @@ const appearanceOptions: Array<{ value: AppearanceMode; label: string; icon: Rea
   { value: 'system', label: '跟随系统', icon: <Monitor className="size-4" /> },
   { value: 'light', label: '白天模式', icon: <Sun className="size-4" /> },
   { value: 'dark', label: '黑夜模式', icon: <Moon className="size-4" /> },
+]
+
+const paceOptions: Array<{ value: TravelPace; label: string; detail: string }> = [
+  { value: 'relaxed', label: '轻松', detail: '少量重点' },
+  { value: 'moderate', label: '适中', detail: '默认节奏' },
+  { value: 'compact', label: '紧凑', detail: '更多安排' },
+]
+
+const transportOptions: Array<{ value: TravelTransportPreference; label: string }> = [
+  { value: 'public_transport', label: '公共交通优先' },
+  { value: 'walking', label: '步行为主' },
+  { value: 'taxi', label: '可接受打车' },
+  { value: 'mixed', label: '综合' },
+]
+
+const reminderLevelOptions: Array<{ value: TravelReminderLevel; label: string }> = [
+  { value: 'quiet', label: '轻提醒' },
+  { value: 'normal', label: '标准' },
+  { value: 'detailed', label: '详细' },
+]
+
+const aiPrivacyGroups: Array<{
+  title: string
+  items: Array<{
+    key: keyof AiPrivacySettings
+    title: string
+    description: string
+    disabled?: boolean
+  }>
+}> = [
+  {
+    title: '基础行程',
+    items: [
+      {
+        description: '行程标题、日期、时间和行程点标题。',
+        key: 'allowItineraryBasics',
+        title: '行程基础信息',
+      },
+      {
+        description: '地点名称和地址；不包含精确经纬度。',
+        key: 'allowLocationText',
+        title: '地点名称和地址',
+      },
+      {
+        description: '只表示是否有坐标或坐标是否异常，不包含完整坐标。',
+        key: 'allowCoordinateState',
+        title: '坐标状态',
+      },
+      {
+        description: '交通方式、交通耗时是否存在，以及是否有交通备注。',
+        key: 'allowTransportInfo',
+        title: '交通信息',
+      },
+    ],
+  },
+  {
+    title: '票据和备注',
+    items: [
+      {
+        description: '票据数量、绑定状态和类型标签。',
+        key: 'allowTicketMetadata',
+        title: '票据元数据',
+      },
+      {
+        description: '票据文件名或标题；默认关闭。',
+        key: 'allowTicketFileNames',
+        title: '票据文件名 / 标题',
+      },
+      {
+        description: '仅表示备注是否存在和粗略长度。',
+        key: 'allowNotesSummary',
+        title: '备注摘要状态',
+      },
+      {
+        description: '完整备注内容；默认关闭，当前本地检查不会读取。',
+        key: 'allowFullNotes',
+        title: '完整备注内容',
+      },
+      {
+        description: '后续支持。当前不可开启，也不会读取图片、PDF 或文件正文。',
+        disabled: true,
+        key: 'allowTicketFileContent',
+        title: '票据图片/PDF 内容',
+      },
+      {
+        description: '云端备份或同步状态；默认关闭。',
+        key: 'allowCloudSyncStatus',
+        title: '云端同步状态',
+      },
+    ],
+  },
 ]
 
 export function SettingsPage() {
@@ -128,6 +233,8 @@ export function SettingsPage() {
   const [routeCacheError, setRouteCacheError] = useState<string | null>(null)
   const [isClearingRouteCache, setIsClearingRouteCache] = useState(false)
   const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
+  const [travelProfile, setTravelProfile] = useState<TravelProfile>(() => getStoredTravelProfile())
+  const [aiPrivacySettings, setAiPrivacySettings] = useState<AiPrivacySettings>(() => getStoredAiPrivacySettings())
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -344,6 +451,22 @@ export function SettingsPage() {
     }
   }
 
+  function updateTravelProfile(patch: Partial<TravelProfile>) {
+    setTravelProfile((current) => {
+      const next = normalizeTravelProfile({ ...current, ...patch })
+      saveTravelProfile(next)
+      return next
+    })
+  }
+
+  function updateAiPrivacySetting(key: keyof AiPrivacySettings, value: boolean) {
+    setAiPrivacySettings((current) => {
+      const next = { ...current, [key]: value }
+      saveAiPrivacySettings(next)
+      return getStoredAiPrivacySettings()
+    })
+  }
+
   function handleSaveRoutingKey() {
     if (!routingKeyInput.trim()) {
       setRoutingMessage('请输入 OpenRouteService API key。')
@@ -465,6 +588,20 @@ export function SettingsPage() {
           </div>
         </Card>
       </section>
+
+      <Collapsible subtitle="未来 AI 简报会参考的本机偏好" title="旅行偏好">
+        <TravelProfileSettings
+          onChange={updateTravelProfile}
+          profile={travelProfile}
+        />
+      </Collapsible>
+
+      <Collapsible subtitle="未来 AI 功能可读取的数据范围" title="AI 与隐私">
+        <AiPrivacySettingsPanel
+          onChange={updateAiPrivacySetting}
+          settings={aiPrivacySettings}
+        />
+      </Collapsible>
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />
@@ -714,6 +851,255 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
     </div>
+  )
+}
+
+function TravelProfileSettings({
+  profile,
+  onChange,
+}: {
+  profile: TravelProfile
+  onChange: (patch: Partial<TravelProfile>) => void
+}) {
+  return (
+    <section className="space-y-3" data-testid="travel-profile-section">
+      <Card className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+            <Route className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-slate-950">旅行偏好</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              这些偏好只保存在当前浏览器，用于后续 AI 简报、建议和本地节奏判断。
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <InfoPill
+            icon={<ShieldCheck className="size-4" />}
+            text="当前本地检查仍只在设备内运行，不会上传数据，也不会调用外部 AI。"
+            tone="success"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-800">旅行节奏</p>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="旅行节奏">
+            {paceOptions.map((option) => (
+              <OptionButton
+                active={profile.pace === option.value}
+                detail={option.detail}
+                key={option.value}
+                label={option.label}
+                onClick={() => onChange({ pace: option.value })}
+                testId={`travel-profile-pace-${option.value}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-800">交通偏好</p>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="交通偏好">
+            {transportOptions.map((option) => (
+              <OptionButton
+                active={profile.preferTransport === option.value}
+                key={option.value}
+                label={option.label}
+                onClick={() => onChange({ preferTransport: option.value })}
+                testId={`travel-profile-transport-${option.value}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <ToggleRow
+          checked={profile.mealTimeProtection}
+          description="后续 AI 建议应尽量保留正常吃饭时间；当前不会推断餐厅或路线。"
+          onChange={(checked) => onChange({ mealTimeProtection: checked })}
+          testId="travel-profile-meal-protection"
+          title="保护饭点"
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-700">希望几点后开始</span>
+            <input
+              className="mt-2 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+              data-testid="travel-profile-morning-start"
+              onChange={(event) => onChange({ morningStartAfter: event.target.value || undefined })}
+              type="time"
+              value={profile.morningStartAfter ?? ''}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-700">希望几点前结束</span>
+            <input
+              className="mt-2 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+              data-testid="travel-profile-night-return"
+              onChange={(event) => onChange({ nightReturnBefore: event.target.value || undefined })}
+              type="time"
+              value={profile.nightReturnBefore ?? ''}
+            />
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-800">提醒强度</p>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="提醒强度">
+            {reminderLevelOptions.map((option) => (
+              <OptionButton
+                active={profile.reminderLevel === option.value}
+                key={option.value}
+                label={option.label}
+                onClick={() => onChange({ reminderLevel: option.value })}
+                testId={`travel-profile-reminder-${option.value}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          当前只会把“旅行节奏”用于保守的安排密度阈值；不会新增路线、用餐或时间推断。
+        </p>
+      </Card>
+    </section>
+  )
+}
+
+function AiPrivacySettingsPanel({
+  settings,
+  onChange,
+}: {
+  settings: AiPrivacySettings
+  onChange: (key: keyof AiPrivacySettings, value: boolean) => void
+}) {
+  return (
+    <section className="space-y-3" data-testid="ai-privacy-section">
+      <Card className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+            <ShieldCheck className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-slate-950">AI 与隐私</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              这些开关用于控制未来 AI 功能可读取的数据范围；当前“本地检查”不会上传数据，也不会调用外部 AI。
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <InfoPill
+            icon={<Sparkles className="size-4" />}
+            text="当前本地检查只读取设备内的结构化行程信息，且保持只读。"
+            tone="success"
+          />
+          <InfoPill
+            icon={<AlertTriangle className="size-4" />}
+            text="票据图片/PDF 内容默认不可读取；本阶段不会解析、上传或发送票据文件。"
+            tone="warning"
+          />
+        </div>
+
+        {aiPrivacyGroups.map((group) => (
+          <div className="space-y-2" key={group.title}>
+            <p className="text-sm font-semibold text-slate-800">{group.title}</p>
+            <div className="grid gap-2">
+              {group.items.map((item) => (
+                <ToggleRow
+                  checked={item.disabled ? false : settings[item.key]}
+                  description={item.description}
+                  disabled={item.disabled}
+                  key={item.key}
+                  onChange={(checked) => onChange(item.key, checked)}
+                  testId={`ai-privacy-${item.key}`}
+                  title={item.title}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 备份、Supabase 快照或云端同步。
+        </p>
+      </Card>
+    </section>
+  )
+}
+
+function OptionButton({
+  active,
+  detail,
+  label,
+  onClick,
+  testId,
+}: {
+  active: boolean
+  detail?: string
+  label: string
+  onClick: () => void
+  testId: string
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
+        active
+          ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
+          : 'bg-slate-50 text-slate-600 ring-1 ring-slate-100'
+      }`}
+      data-testid={testId}
+      onClick={onClick}
+      type="button"
+    >
+      <span>{label}</span>
+      {detail ? <span className="text-[11px] font-medium opacity-80">{detail}</span> : null}
+    </button>
+  )
+}
+
+function ToggleRow({
+  checked,
+  description,
+  disabled = false,
+  onChange,
+  testId,
+  title,
+}: {
+  checked: boolean
+  description: string
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+  testId: string
+  title: string
+}) {
+  return (
+    <button
+      aria-checked={checked}
+      className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+      data-testid={testId}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      role="switch"
+      type="button"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-900">{title}</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span>
+      </span>
+      <span
+        className={`mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
+          checked ? 'justify-end bg-primary' : 'justify-start bg-slate-200'
+        }`}
+        aria-hidden="true"
+      >
+        <span className="size-5 rounded-full bg-white shadow-sm" />
+      </span>
+    </button>
   )
 }
 

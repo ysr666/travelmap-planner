@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTripContext, getCoordinateState } from './aiTripContext'
+import { defaultTravelProfile } from './travelProfile'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 
 const now = 1000
@@ -175,5 +176,32 @@ describe('buildTripContext', () => {
     expect(getCoordinateState({ lat: 35, lng: undefined })).toBe('invalid')
     expect(getCoordinateState({ lat: 91, lng: 139 })).toBe('invalid')
     expect(getCoordinateState({ lat: Number.NaN, lng: 139 })).toBe('invalid')
+  })
+
+  it('can include a sanitized travel profile for local rules', () => {
+    const context = buildTripContext({
+      days: [makeDay()],
+      items: [makeItem()],
+      profile: {
+        ...defaultTravelProfile,
+        mealTimeProtection: false,
+        morningStartAfter: '09:30',
+        nightReturnBefore: '22:00',
+        pace: 'compact',
+        preferTransport: 'walking',
+        reminderLevel: 'quiet',
+      },
+      tickets: [],
+      trip: makeTrip(),
+    })
+
+    expect(context.profile).toEqual({
+      mealTimeProtection: false,
+      morningStartAfter: '09:30',
+      nightReturnBefore: '22:00',
+      pace: 'compact',
+      preferTransport: 'walking',
+      reminderLevel: 'quiet',
+    })
   })
 })

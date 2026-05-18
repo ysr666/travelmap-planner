@@ -21,6 +21,7 @@ import { sortItineraryItems } from '../lib/itinerary'
 import { hasValidCoordinates } from '../lib/mapLinks'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
+import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
 import type { Day, ItineraryItem, TicketMeta } from '../types'
 
@@ -133,6 +134,7 @@ export function TripWorkspacePage() {
       days,
       items: allItems,
       nowPlainDate: formatDateKey(new Date()),
+      profile: getStoredTravelProfile(),
       selectedDayId: selectedDay?.id,
       tickets: ticketMetas,
       trip,

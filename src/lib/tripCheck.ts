@@ -1,4 +1,5 @@
 import type { TripContext, TripContextDay, TripContextItem } from './aiTripContext'
+import { getDenseDayItemLimit } from './travelProfile'
 
 export type TripCheckSeverity = 'info' | 'warning' | 'critical'
 export type TripCheckSource = 'local_rule' | 'future_ai'
@@ -48,7 +49,6 @@ type FindingInput = Omit<TripCheckCard, 'affectedDayIds' | 'affectedItemIds' | '
   kind: 'warning' | 'suggestion'
 }
 
-const denseDayItemLimit = 6
 const shortGapMinutes = 30
 const longDaySpanMinutes = 12 * 60
 const ticketLikePattern = /门票|预约|ticket|reservation|booking|入场|凭证/i
@@ -59,9 +59,10 @@ export function analyzeTripContext(context: TripContext): TripCheckResult {
     suggestions: [],
     warnings: [],
   }
+  const denseDayItemLimit = getDenseDayItemLimit(context.profile)
 
   for (const day of context.days) {
-    analyzeDay(day, result)
+    analyzeDay(day, result, denseDayItemLimit)
   }
 
   const criticalCount = result.warnings.filter((finding) => finding.severity === 'critical').length
@@ -97,7 +98,7 @@ export function getTopTripCheckFindings(result: TripCheckResult, limit = 3) {
     .slice(0, limit)
 }
 
-function analyzeDay(day: TripContextDay, result: MutableTripCheckResult) {
+function analyzeDay(day: TripContextDay, result: MutableTripCheckResult, denseDayItemLimit: number) {
   if (day.items.length === 0) {
     addFinding(result, {
       affectedDayIds: [day.id],

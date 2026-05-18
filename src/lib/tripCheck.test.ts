@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildTripContext } from './aiTripContext'
 import { analyzeTripContext, isTicketLikeItem } from './tripCheck'
+import { defaultTravelProfile, type TravelProfile } from './travelProfile'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 
 const now = 1000
@@ -66,14 +67,17 @@ function analyze({
   days = [makeDay()],
   items,
   tickets = [],
+  profile,
 }: {
   days?: Day[]
   items: ItineraryItem[]
   tickets?: TicketMeta[]
+  profile?: TravelProfile
 }) {
   return analyzeTripContext(buildTripContext({
     days,
     items,
+    profile,
     tickets,
     trip: makeTrip(),
   }))
@@ -177,6 +181,47 @@ describe('analyzeTripContext', () => {
     )
     const denseResult = analyze({ items: denseItems })
     expect(denseResult.suggestions.map((finding) => finding.ruleId)).toContain('dense_day')
+  })
+
+  it('uses travel profile pace for dense-day thresholds only', () => {
+    const sixItems = Array.from({ length: 6 }, (_, index) =>
+      makeItem({
+        id: `item-${index + 1}`,
+        previousTransportDurationMinutes: index === 0 ? undefined : 10,
+        sortOrder: index + 1,
+      }),
+    )
+    const sevenItems = Array.from({ length: 7 }, (_, index) =>
+      makeItem({
+        id: `item-${index + 1}`,
+        previousTransportDurationMinutes: index === 0 ? undefined : 10,
+        sortOrder: index + 1,
+      }),
+    )
+    const nineItems = Array.from({ length: 9 }, (_, index) =>
+      makeItem({
+        id: `item-${index + 1}`,
+        previousTransportDurationMinutes: index === 0 ? undefined : 10,
+        sortOrder: index + 1,
+      }),
+    )
+
+    expect(analyze({
+      items: sixItems,
+      profile: { ...defaultTravelProfile, pace: 'relaxed' },
+    }).suggestions.map((finding) => finding.ruleId)).toContain('dense_day')
+    expect(analyze({
+      items: sixItems,
+      profile: { ...defaultTravelProfile, pace: 'moderate' },
+    }).suggestions.map((finding) => finding.ruleId)).not.toContain('dense_day')
+    expect(analyze({
+      items: sevenItems,
+      profile: { ...defaultTravelProfile, pace: 'compact' },
+    }).suggestions.map((finding) => finding.ruleId)).not.toContain('dense_day')
+    expect(analyze({
+      items: nineItems,
+      profile: { ...defaultTravelProfile, pace: 'compact' },
+    }).suggestions.map((finding) => finding.ruleId)).toContain('dense_day')
   })
 
   it('detects short gaps, overlaps, and long day spans', () => {

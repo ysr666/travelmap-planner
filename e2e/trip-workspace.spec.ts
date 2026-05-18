@@ -12,6 +12,14 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
 
   await expect(page.getByText('当天日程')).toBeVisible()
   await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
+  const dayBrief = page.getByTestId('day-local-brief-card')
+  await expect(dayBrief).toBeVisible()
+  await expect(dayBrief).toContainText('当日简报')
+  await expect(dayBrief).toContainText('本地检查')
+  await expect(dayBrief).toContainText('准备提醒')
+  await expect(dayBrief).toContainText(/根据已填写内容|基于当前本地行程信息/)
+  await expect(dayBrief).toContainText('后续可接入天气、开放时间和路线信息')
+  await expect(dayBrief.getByRole('button')).toHaveCount(0)
   await expect(page).toHaveURL(/#\/day\?/)
   await expectNoHorizontalOverflow(page)
 
@@ -20,6 +28,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
+  await expect(dayBrief).toBeHidden()
   await expectNoHorizontalOverflow(page)
 
   await page.getByTestId('view-switch-schedule').click()
@@ -59,6 +68,10 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(localCheck).toBeVisible()
   await expect(localCheck).toContainText('行程体检')
   await expect(localCheck).toContainText('本地检查')
+  await expect(localCheck).toContainText('准备提醒')
+  await expect(localCheck).toContainText('行程点')
+  await expect(localCheck).toContainText('票据')
+  await expect(localCheck).toContainText('后续可接入天气、开放时间和路线信息')
   await expect(localCheck.getByRole('button')).toHaveCount(0)
   expect(await localCheck.getByTestId('local-trip-check-finding').count()).toBeLessThanOrEqual(3)
   await expectNoHorizontalOverflow(page)

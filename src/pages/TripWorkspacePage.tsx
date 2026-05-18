@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, Map, MapPinned, NotebookText, RotateCw, Ticket } from 'lucide-react'
-import { listItemsByDay } from '../db'
+import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
@@ -15,10 +15,12 @@ import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { formatChineseDayOrdinal } from '../lib/dayOrdinal'
+import { buildTripContext } from '../lib/aiTripContext'
 import { sortItineraryItems } from '../lib/itinerary'
 import { hasValidCoordinates } from '../lib/mapLinks'
 import { getRouteParams, navigateTo } from '../lib/routes'
-import type { Day, ItineraryItem } from '../types'
+import { analyzeTripContext, getTopTripCheckFindings, type TripCheckCard, type TripCheckResult, type TripCheckSeverity } from '../lib/tripCheck'
+import type { Day, ItineraryItem, TicketMeta } from '../types'
 
 type TripMapPoint = {
   id: string
@@ -54,6 +56,16 @@ export function TripWorkspacePage() {
 
   const [isGeneratingDays, setIsGeneratingDays] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
+  const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
+
+  const tripContextKey = useMemo(() => {
+    if (!trip || days.length === 0) {
+      return ''
+    }
+
+    return `${trip.id}:${days.map((day) => day.id).join('|')}`
+  }, [days, trip])
 
   useEffect(() => {
     if (!isLoading && trip && selectedDay && (requestedView === 'schedule' || requestedView === 'map')) {
@@ -67,23 +79,33 @@ export function TripWorkspacePage() {
     }
 
     let cancelled = false
-    void Promise.all(
-      days.map(async (day) => {
-        const dayItems = await listItemsByDay(day.id)
-        return [day.id, dayItems] as const
-      }),
-    ).then((entries) => {
+    const currentTripContextKey = tripContextKey
+    void Promise.all([
+      Promise.all(
+        days.map(async (day) => {
+          const dayItems = await listItemsByDay(day.id)
+          return [day.id, dayItems] as const
+        }),
+      ),
+      listTicketsByTrip(trip.id),
+    ]).then(([entries, tickets]) => {
       if (!cancelled) {
         setItemsByDay(Object.fromEntries(entries))
+        setTicketMetas(tickets)
+        setLoadedTripContextKey(currentTripContextKey)
       }
     }).catch(() => {
+      if (!cancelled) {
+        setTicketMetas([])
+        setLoadedTripContextKey('')
+      }
       // Trip Home can still render without aggregate item counts.
     })
 
     return () => {
       cancelled = true
     }
-  }, [days, isLoading, setItemsByDay, trip])
+  }, [days, isLoading, setItemsByDay, trip, tripContextKey])
 
   const itemsByDayCount = useMemo(() => {
     return allItems.reduce<Record<string, number>>((acc, item) => {
@@ -99,6 +121,20 @@ export function TripWorkspacePage() {
       selectedDay,
     })
   }, [days, itemsByDay, selectedDay])
+
+  const tripCheck = useMemo(() => {
+    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
+      return null
+    }
+
+    return analyzeTripContext(buildTripContext({
+      days,
+      items: allItems,
+      selectedDayId: selectedDay?.id,
+      tickets: ticketMetas,
+      trip,
+    }))
+  }, [allItems, days, loadedTripContextKey, selectedDay?.id, ticketMetas, trip, tripContextKey])
 
   async function handleGenerateDays() {
     if (!trip) {
@@ -244,6 +280,8 @@ export function TripWorkspacePage() {
             </Card>
             <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
 
+            {tripCheck ? <LocalTripCheckCard result={tripCheck} /> : null}
+
             <TripMapOverview
               data={mapOverview}
               onOpenMap={() => {
@@ -345,6 +383,78 @@ function OverviewAction({
       <span className="truncate">{children}</span>
     </button>
   )
+}
+
+function LocalTripCheckCard({ result }: { result: TripCheckResult }) {
+  const findings = getTopTripCheckFindings(result, 3)
+
+  return (
+    <Card className="space-y-3" data-testid="local-trip-check-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-sky-600">行程体检</p>
+          <h3 className="mt-0.5 text-sm font-semibold text-slate-950">本地检查</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{result.summary.message}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${getTripCheckBadgeClass(result.summary.severity)}`}>
+          {getTripCheckSeverityLabel(result.summary.severity)}
+        </span>
+      </div>
+
+      {findings.length > 0 ? (
+        <div className="space-y-2">
+          {findings.map((finding) => (
+            <LocalTripCheckFinding finding={finding} key={finding.id} />
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium leading-5 text-emerald-700">
+          未发现明显问题，出发前仍建议人工核对关键预订信息。
+        </p>
+      )}
+
+      <p className="text-[11px] leading-5 text-slate-400">
+        仅基于本地行程信息，不读取票据文件。
+      </p>
+    </Card>
+  )
+}
+
+function LocalTripCheckFinding({ finding }: { finding: TripCheckCard }) {
+  return (
+    <div
+      className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100"
+      data-testid="local-trip-check-finding"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="min-w-0 text-xs font-semibold leading-5 text-slate-800">{finding.title}</h4>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getTripCheckBadgeClass(finding.severity)}`}>
+          {getTripCheckSeverityLabel(finding.severity)}
+        </span>
+      </div>
+      <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">{finding.message}</p>
+    </div>
+  )
+}
+
+function getTripCheckSeverityLabel(severity: TripCheckSeverity) {
+  if (severity === 'critical') {
+    return '需核对'
+  }
+  if (severity === 'warning') {
+    return '提醒'
+  }
+  return '正常'
+}
+
+function getTripCheckBadgeClass(severity: TripCheckSeverity) {
+  if (severity === 'critical') {
+    return 'bg-red-50 text-red-600 ring-1 ring-red-100'
+  }
+  if (severity === 'warning') {
+    return 'bg-amber-50 text-amber-700 ring-1 ring-amber-100'
+  }
+  return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
 }
 
 function TripMapOverview({

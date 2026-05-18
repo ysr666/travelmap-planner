@@ -55,6 +55,14 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page.getByText('2026年4月12日')).toBeVisible()
   await expect(page.getByText('3 个行程点')).toBeVisible()
   const mapOverview = page.getByTestId('trip-map-overview')
+  const localCheck = page.getByTestId('local-trip-check-card')
+  await expect(localCheck).toBeVisible()
+  await expect(localCheck).toContainText('行程体检')
+  await expect(localCheck).toContainText('本地检查')
+  await expect(localCheck.getByRole('button')).toHaveCount(0)
+  expect(await localCheck.getByTestId('local-trip-check-finding').count()).toBeLessThanOrEqual(3)
+  await expectNoHorizontalOverflow(page)
+
   await expect(mapOverview).toBeVisible()
   await expect(mapOverview).toContainText('旅行地图')
   await expect(mapOverview).toContainText('5 个有坐标地点')
@@ -78,7 +86,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
 
-  await page.getByRole('button', { name: '返回旅行总览' }).click()
+  await page.locator('header').getByRole('button', { name: '返回旅行总览' }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
   await page.getByRole('button', { name: '票据库' }).click()
   await expect(page).toHaveURL(/#\/tickets\?/)

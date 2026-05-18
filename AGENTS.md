@@ -88,10 +88,14 @@ Use specific prompts like:
 
 If Claude Code is available in the terminal, Codex may invoke it as a worker using headless mode.
 
+For this project, the local Claude Code command/wrapper is `cclaude`. Do not use `claudecode`.
+
 Before invoking Claude, Codex should check availability:
 
-    command -v claude
-    claude --help
+    command -v cclaude
+    cclaude --help
+
+When supported by the installed `cclaude`, prefer auto mode with review-oriented permissions: fast enough to avoid repeated approvals, but still requiring Codex to inspect the diff before accepting the work.
 
 Preferred pattern:
 
@@ -99,7 +103,7 @@ Preferred pattern:
     <very specific worker prompt>
     EOF
 
-    claude -p "$(cat /tmp/claude-worker-task.md)" \
+    cclaude -p "$(cat /tmp/claude-worker-task.md)" \
       --permission-mode acceptEdits \
       --output-format text
 

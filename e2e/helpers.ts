@@ -80,6 +80,20 @@ export async function forceRoutingUnconfigured(page: Page) {
   })
 }
 
+export async function mockMapStyle(page: Page) {
+  await page.route('https://tiles.openfreemap.org/styles/**', (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        layers: [],
+        name: 'TripMap E2E Empty Style',
+        sources: {},
+        version: 8,
+      }),
+      contentType: 'application/json',
+    }),
+  )
+}
+
 export function getHashParam(url: string, key: string) {
   const hash = new URL(url).hash
   const query = hash.split('?')[1] ?? ''

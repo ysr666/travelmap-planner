@@ -1,21 +1,25 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, CalendarDays, Map, MapPin, Route } from 'lucide-react'
-import { listItemsByDay } from '../db'
+import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripNav } from '../components/AppShell'
+import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
+import { formatDateKey, formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
+import { buildTripContext } from '../lib/aiTripContext'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo } from '../lib/routes'
-import type { Day, ItineraryItem } from '../types'
+import { analyzeTripContext } from '../lib/tripCheck'
+import { buildDayBrief } from '../lib/travelBrief'
+import type { Day, ItineraryItem, TicketMeta } from '../types'
 
 type DayWorkspaceView = 'schedule' | 'map'
 
@@ -60,8 +64,10 @@ export function DayViewPage() {
 
   const [hasOpenedMap, setHasOpenedMap] = useState(() => view === 'map')
   const [mapResizeToken, setMapResizeToken] = useState(0)
+  const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
   const mapPreloadStartedRef = useRef(false)
   const backgroundMapWarmupStartedRef = useRef(false)
+  const tripIdForTickets = trip?.id
 
   useEffect(() => {
     resetMapStartupTrace()
@@ -171,6 +177,27 @@ export function DayViewPage() {
   }, [days, daysKey, isLoading, setItemsByDay, trip])
 
   useEffect(() => {
+    if (isLoading || !tripIdForTickets) {
+      return
+    }
+
+    let cancelled = false
+    void listTicketsByTrip(tripIdForTickets).then((tickets) => {
+      if (!cancelled) {
+        setTicketMetas(tickets)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setTicketMetas([])
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoading, tripIdForTickets])
+
+  useEffect(() => {
     if (view !== 'map' || !hasOpenedMap) {
       return
     }
@@ -185,6 +212,22 @@ export function DayViewPage() {
   const selectedDayIndex = useMemo(() => {
     return selectedDay ? days.findIndex((day) => day.id === selectedDay.id) : -1
   }, [days, selectedDay])
+
+  const dayBrief = useMemo(() => {
+    if (!trip || !selectedDay) {
+      return null
+    }
+
+    const context = buildTripContext({
+      days: [selectedDay],
+      items,
+      nowPlainDate: formatDateKey(new Date()),
+      selectedDayId: selectedDay.id,
+      tickets: ticketMetas,
+      trip,
+    })
+    return buildDayBrief(context, analyzeTripContext(context), selectedDay.id)
+  }, [items, selectedDay, ticketMetas, trip])
 
   function handleSelectDay(day: Day) {
     navigateTo('day', { tripId: day.tripId, dayId: day.id, view })
@@ -298,18 +341,21 @@ export function DayViewPage() {
             isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
           }`}
         >
-          <DayTimelineView
-            compact
-            day={selectedDay}
-            items={items}
-            onItemsChange={refreshItems}
-            onOpenItem={(item) =>
-              navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view })
-            }
-            onSwitchToMap={() => handleSwitchView('map')}
-            sourceView={view}
-            trip={trip}
-          />
+          <div className="space-y-4 pb-4">
+            {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
+            <DayTimelineView
+              compact
+              day={selectedDay}
+              items={items}
+              onItemsChange={refreshItems}
+              onOpenItem={(item) =>
+                navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view })
+              }
+              onSwitchToMap={() => handleSwitchView('map')}
+              sourceView={view}
+              trip={trip}
+            />
+          </div>
         </div>
 
         {hasOpenedMap ? (

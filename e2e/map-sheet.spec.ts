@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured } from './helpers'
+import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured, mockMapStyle } from './helpers'
+
+test.beforeEach(async ({ page }) => {
+  await mockMapStyle(page)
+})
 
 test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async ({ page }) => {
   await createDemoTripViaUi(page)

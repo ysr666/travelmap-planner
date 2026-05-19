@@ -14,6 +14,7 @@ import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -116,18 +117,21 @@ export function HomePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <section className="shrink-0 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 px-5 py-4 text-white shadow-[0_8px_22px_rgba(56,130,225,0.25)]">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">本地优先的旅行计划</h2>
-            <p className="mt-0.5 text-sm text-white/75">日程、地图和票据，集中放好。</p>
+      <Card className="shrink-0" variant="grouped">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">本地优先</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-100">
+              旅行计划
+            </h2>
+            <p className="mt-1 text-sm leading-6 tm-muted">日程、地图和票据，集中放好。</p>
           </div>
-          <span className="rounded-lg bg-white/20 px-2.5 py-1 text-sm font-semibold">{tripStats.count} 次旅行</span>
+          <Badge>{tripStats.count} 次旅行</Badge>
         </div>
-      </section>
+      </Card>
 
       {error ? (
-        <div className="shrink-0 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+        <div className="shrink-0 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
           {error}
         </div>
       ) : null}
@@ -163,14 +167,13 @@ export function HomePage() {
 
               {!isLoading && hasTrips ? (
                 <div className="space-y-3">
-                  {trips.map((trip, index) => (
+                  {trips.map((trip) => (
                     <TripCard
                       key={trip.id}
                       onDelete={() => setPendingDeleteTrip(trip)}
                       onOpen={() => navigateTo('trip', { tripId: trip.id })}
                       stats={tripStatsById[trip.id]}
                       trip={trip}
-                      variantIndex={index}
                       isDeleting={deletingTripId === trip.id}
                     />
                   ))}
@@ -219,26 +222,19 @@ function TripCard({
   onOpen,
   onDelete,
   stats,
-  variantIndex,
   isDeleting,
 }: {
   trip: Trip
   onOpen: () => void
   onDelete: () => void
   stats?: TripCardStats
-  variantIndex: number
   isDeleting: boolean
 }) {
-  const accent =
-    variantIndex % 2 === 0
-      ? 'bg-sky-500'
-      : 'bg-emerald-500'
   const status = getTripStatus(trip)
 
   return (
-    <Card className="relative overflow-hidden p-0" data-testid="trip-card">
-      <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
-      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-4 pl-5 pr-11 text-left" onClick={onOpen} type="button">
+    <Card className="relative overflow-hidden" data-testid="trip-card" padding="none" variant="grouped">
+      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-3 pr-11 text-left transition active:bg-slate-50/80 dark:active:bg-slate-800/50 tm-focus" onClick={onOpen} type="button">
         <TripCover trip={trip} variant="thumbnail" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -247,10 +243,10 @@ function TripCard({
             </span>
             <p className="truncate text-xs text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
           </div>
-          <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950">{trip.title}</h3>
-          <p className="mt-0.5 truncate text-sm text-slate-500">{trip.destination}</p>
+          <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950 dark:text-slate-100">{trip.title}</h3>
+          <p className="mt-0.5 truncate text-sm tm-muted">{trip.destination}</p>
           {stats ? (
-            <p className="mt-1 truncate text-xs font-medium text-slate-500">
+            <p className="mt-1 truncate text-xs font-medium tm-muted">
               {stats.dayCount} 天 · {stats.itemCount} 个行程点 · {stats.ticketCount} 张票据
             </p>
           ) : null}
@@ -258,7 +254,7 @@ function TripCard({
       </button>
       <button
         aria-label={`删除 ${trip.title}`}
-        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/85 text-slate-400 shadow-sm ring-1 ring-slate-200/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
+        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/80 text-slate-400 ring-1 ring-slate-200/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98] dark:bg-slate-900/80 dark:ring-slate-700/70 dark:hover:bg-red-500/10 tm-focus"
         disabled={isDeleting}
         onClick={onDelete}
         type="button"

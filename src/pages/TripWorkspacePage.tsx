@@ -10,6 +10,7 @@ import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackup
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
 import { Collapsible } from '../components/ui/Collapsible'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
@@ -201,7 +202,7 @@ export function TripWorkspacePage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回首页"
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
             onClick={() => navigateTo('home')}
             type="button"
           >
@@ -211,7 +212,7 @@ export function TripWorkspacePage() {
             <p className="truncate text-xs font-semibold text-sky-600">
               {trip.destination || '目的地未定'}
             </p>
-            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950">
+            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
               {trip.title}
             </h1>
             <p className="truncate text-xs text-slate-500">
@@ -224,7 +225,7 @@ export function TripWorkspacePage() {
 
       {days.length === 0 ? (
         <div className="min-h-0 flex-1 overflow-y-auto app-scrollbar">
-          <Card className="space-y-4">
+          <Card className="space-y-4" variant="grouped">
             <TripCover trip={trip} variant="hero" />
             <EmptyState
               body="先按旅行日期生成每日行程，然后开始添加地点、交通段和票据。"
@@ -232,7 +233,7 @@ export function TripWorkspacePage() {
               title="这趟旅行还没有每日行程"
             />
             {actionError ? (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-500/10 dark:text-red-300">
                 {actionError}
               </p>
             ) : null}
@@ -249,15 +250,15 @@ export function TripWorkspacePage() {
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
           <div className="space-y-4 pb-4">
-            <Card className="space-y-3">
+            <Card className="space-y-3" variant="grouped">
               <div className="flex items-start gap-3">
                 <TripCover className="h-20 w-24 shrink-0 rounded-xl" trip={trip} variant="compact" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-sky-600">{trip.destination || '目的地未定'}</p>
-                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-slate-950">
+                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-slate-950 dark:text-slate-100">
                     {trip.title}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm tm-muted">
                     {formatDateRange(trip.startDate, trip.endDate)}
                   </p>
                   <div className="mt-2">
@@ -298,11 +299,11 @@ export function TripWorkspacePage() {
             />
 
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-950">每日行程</h3>
-              <Card className="divide-y divide-slate-100 p-0">
+              <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">每日行程</h3>
+              <Card className="divide-y tm-row" padding="none" variant="grouped">
                 {days.map((day, index) => (
                   <div
-                    className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-50 active:bg-slate-100"
+                    className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-50/70 active:bg-slate-100/80 dark:hover:bg-slate-800/40 dark:active:bg-slate-800/70"
                     key={day.id}
                     onClick={() => openDay(day, 'schedule')}
                     onKeyDown={(event) => {
@@ -311,17 +312,17 @@ export function TripWorkspacePage() {
                     role="button"
                     tabIndex={0}
                   >
-                    <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50 px-2 text-xs font-bold text-sky-600">
+                    <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">
                       {formatChineseDayOrdinal(index + 1)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-950">
+                      <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
                         {formatDate(day.date)}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-500">
+                      <span className="mt-0.5 block truncate text-xs tm-muted">
                         {day.title}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-400">
+                      <span className="mt-0.5 block truncate text-xs tm-muted">
                         {itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0} 个行程点
                       </span>
                     </span>
@@ -332,13 +333,13 @@ export function TripWorkspacePage() {
             </section>
 
             {trip.notes ? (
-              <Card className="flex items-start gap-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+              <Card className="flex items-start gap-3" variant="grouped">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50/80 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">
                   <NotebookText className="size-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-950">旅行备注</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">{trip.notes}</p>
+                  <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">旅行备注</h3>
+                  <p className="mt-1 text-sm leading-6 tm-muted">{trip.notes}</p>
                 </div>
               </Card>
             ) : null}
@@ -363,11 +364,7 @@ export function TripWorkspacePage() {
 }
 
 function OverviewStatChip({ label }: { label: string }) {
-  return (
-    <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
-      {label}
-    </span>
-  )
+  return <Badge>{label}</Badge>
 }
 
 function OverviewAction({
@@ -381,7 +378,7 @@ function OverviewAction({
 }) {
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-slate-50 px-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-100 transition active:scale-[0.98]"
+      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-slate-50/80 px-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-100/80 transition active:scale-[0.98] dark:bg-slate-800/50 dark:text-slate-300 dark:ring-slate-700/70 tm-focus"
       onClick={onClick}
       type="button"
     >
@@ -402,18 +399,18 @@ function TripMapOverview({
   const linePoints = data.points.map((point) => `${point.x},${point.y}`).join(' ')
 
   return (
-    <Card className="overflow-hidden p-0" data-testid="trip-map-overview">
+    <Card className="overflow-hidden" data-testid="trip-map-overview" padding="none" variant="grouped">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-950">旅行地图</h3>
-          <p className="mt-0.5 truncate text-xs text-slate-500">
+          <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">旅行地图</h3>
+          <p className="mt-0.5 truncate text-xs tm-muted">
             {hasPoints
               ? `${data.coordinateCount} 个有坐标地点 · ${data.dayCount} 天`
               : '还没有可显示的坐标'}
           </p>
         </div>
         <button
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 ring-1 ring-sky-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-sky-50/80 px-3 text-xs font-semibold text-sky-700 ring-1 ring-sky-100/80 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25 tm-focus"
           disabled={!data.targetDay}
           onClick={onOpenMap}
           type="button"
@@ -423,7 +420,7 @@ function TripMapOverview({
         </button>
       </div>
       <div className="px-4 pb-4">
-        <div className="relative h-32 overflow-hidden rounded-2xl bg-slate-50 ring-1 ring-slate-100">
+        <div className="relative h-32 overflow-hidden rounded-2xl bg-slate-50/80 ring-1 ring-slate-100/80 dark:bg-slate-900/40 dark:ring-slate-700/60">
           <div className="absolute inset-0 opacity-75 [background-image:linear-gradient(to_right,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.16)_1px,transparent_1px)] [background-size:28px_28px]" />
           {hasPoints ? (
             <>
@@ -472,18 +469,18 @@ function TripMapOverview({
                   </g>
                 ))}
               </svg>
-              <p className="absolute bottom-2 left-3 right-3 truncate rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+              <p className="absolute bottom-2 left-3 right-3 truncate rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100 backdrop-blur dark:bg-slate-950/75 dark:text-slate-300 dark:ring-slate-700/70">
                 简化连线仅表示行程顺序
               </p>
             </>
           ) : (
             <div className="absolute inset-0 flex items-center gap-3 px-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 ring-1 ring-slate-100">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-slate-400 ring-1 ring-slate-100 dark:bg-slate-900/75 dark:ring-slate-700">
                 <MapPinned className="size-5" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-700">还没有可显示的坐标</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">还没有可显示的坐标</p>
+                <p className="mt-1 text-xs leading-5 tm-muted">
                   给行程点补充坐标后，这里会显示旅行地图概览。
                 </p>
               </div>

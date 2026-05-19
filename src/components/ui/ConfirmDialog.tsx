@@ -54,26 +54,26 @@ export function ConfirmDialog({
   return createPortal(
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-slate-950/60"
       role="dialog"
     >
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_18px_48px_rgba(38,53,76,0.18)] dark:border-slate-700/80 dark:bg-slate-900 dark:shadow-[0_18px_48px_rgba(0,0,0,0.42)]">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl tm-surface">
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50/80 text-red-500 dark:bg-red-500/10 dark:text-red-400">
               {icon || <AlertTriangle className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere]">
+              <h2 className="break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
                 {title}
               </h2>
-              <p className="mt-1 break-words text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">
+              <p className="mt-1 break-words text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
                 {body}
               </p>
             </div>
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t tm-row bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-slate-900/95">
           <Button disabled={loading} onClick={onCancel} variant="secondary">
             {cancelLabel}
           </Button>

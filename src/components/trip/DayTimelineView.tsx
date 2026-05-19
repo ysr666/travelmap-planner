@@ -59,8 +59,8 @@ export function DayTimelineView({
     <div className={compact ? 'space-y-4' : 'space-y-5'}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-slate-950">当天日程</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{items.length} 个行程点</p>
+          <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">当天日程</h3>
+          <p className="mt-0.5 text-xs tm-muted">{items.length} 个行程点</p>
         </div>
         <div className="flex shrink-0 gap-2">
           {onSwitchToMap ? (
@@ -79,7 +79,7 @@ export function DayTimelineView({
       </div>
 
       {actionError ? (
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
           {actionError}
         </div>
       ) : null}
@@ -105,22 +105,22 @@ export function DayTimelineView({
                   ) : null}
                   <div className="grid w-full grid-cols-[2.8rem_1fr] gap-3">
                     <div className="relative flex justify-center">
-                      <div className="z-10 flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-lg shadow-sky-200">
+                      <div className="z-10 flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-[0_6px_14px_var(--color-primary-shadow)]">
                         {index + 1}
                       </div>
                       {index !== items.length - 1 ? (
-                        <div className="absolute top-9 h-[calc(100%+0.75rem)] w-px bg-slate-200" />
+                        <div className="absolute top-9 h-[calc(100%+0.75rem)] w-px bg-slate-200 dark:bg-slate-700" />
                       ) : null}
                     </div>
-                    <Card className="p-4">
+                    <Card variant="grouped">
                       <button className="w-full text-left" onClick={() => onOpenItem(item)} type="button">
-                        <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold tm-muted">
                           <Clock3 className="size-3.5" />
                           {describeItemTime(item)} ·{' '}
                           {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
                         </p>
-                        <h3 className="mt-1 truncate text-lg font-bold text-slate-950">{item.title}</h3>
-                        <p className="mt-1 flex items-start gap-1.5 text-sm leading-5 text-slate-500">
+                        <h3 className="mt-1 truncate text-lg font-semibold text-slate-950 dark:text-slate-100">{item.title}</h3>
+                        <p className="mt-1 flex items-start gap-1.5 text-sm leading-5 tm-muted">
                           <MapPin className="mt-0.5 size-4 shrink-0" />
                           <span className="line-clamp-2">
                             {item.locationName || item.address || '地点未填写'}
@@ -130,8 +130,8 @@ export function DayTimelineView({
                       {previousItem ? (
                         <DirectionsLinks fromItem={previousItem} toItem={item} />
                       ) : null}
-                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                        <span className="flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t tm-row pt-3">
+                        <span className="tm-chip">
                           <Ticket className="size-3.5" />
                           {item.ticketIds.length}
                         </span>
@@ -144,11 +144,11 @@ export function DayTimelineView({
                             编辑
                           </Button>
                           <Button
-                            className="min-h-9 rounded-xl px-3 text-red-600"
+                            className="min-h-9 rounded-xl px-3"
                             disabled={deletingItemId === item.id}
                             icon={<Trash2 className="size-4" />}
                             onClick={() => setPendingDeleteItem(item)}
-                            variant="secondary"
+                            variant="destructive"
                           >
                             删除
                           </Button>
@@ -182,7 +182,7 @@ export function DayTimelineView({
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium leading-5 text-slate-500">
+    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-slate-50/80 px-3 py-2 text-xs font-medium leading-5 tm-muted dark:bg-slate-800/45">
       <ArrowDown className="size-3.5 shrink-0 text-slate-400" />
       <span className="min-w-0 truncate">{description}</span>
     </div>
@@ -195,7 +195,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
 
   if (!appleUrl || !googleUrl) {
     return (
-      <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400">
+      <p className="mt-3 rounded-xl bg-slate-50/80 px-3 py-2 text-xs font-medium tm-muted dark:bg-slate-800/45">
         上一站或当前地点信息不足
       </p>
     )
@@ -204,7 +204,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
   return (
     <div className="mt-3 grid grid-cols-2 gap-2">
       <a
-        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-sky-50 px-2 text-xs font-semibold text-sky-700"
+        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-sky-50/80 px-2 text-xs font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
         href={appleUrl}
         rel="noreferrer"
         target="_blank"
@@ -213,7 +213,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
         Apple 路线
       </a>
       <a
-        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-white px-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200"
+        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
         href={googleUrl}
         rel="noreferrer"
         target="_blank"

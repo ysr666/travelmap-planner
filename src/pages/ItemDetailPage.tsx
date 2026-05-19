@@ -154,11 +154,11 @@ export function ItemDetailPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      <header className="z-30 shrink-0 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+      <header className="z-30 shrink-0 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label={backLabel}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
             onClick={goBackToDay}
             type="button"
           >
@@ -170,7 +170,7 @@ export function ItemDetailPage() {
           </h1>
           <button
             aria-label="编辑行程点"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
             onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
             type="button"
           >
@@ -251,20 +251,20 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
 
   return (
     <div className="space-y-5 pb-2">
-      <Card className="space-y-4" data-testid="item-detail-core">
+      <Card variant="grouped" className="space-y-4" data-testid="item-detail-core">
         {actionError ? (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-300">
             {actionError}
           </div>
         ) : null}
         <div className="space-y-2">
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-sky-50/80 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
             <Clock3 className="size-3.5" />
             {formatDate(day.date)} · {describeItemTime(item)}
           </p>
-          <h2 className="text-2xl font-semibold leading-tight text-slate-950">{item.title}</h2>
+          <h2 className="text-2xl font-semibold leading-tight text-slate-950 dark:text-slate-100">{item.title}</h2>
           {item.transportMode ? (
-            <span className="inline-flex rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">
+            <span className="tm-chip text-xs">
               {transportModeLabels[item.transportMode]}
             </span>
           ) : null}
@@ -291,9 +291,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
         </div>
 
         {item.notes ? (
-          <section className="rounded-2xl bg-slate-50 px-3 py-3">
-            <p className="text-xs font-semibold text-slate-400">备注</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{item.notes}</p>
+          <section className="rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+            <p className="text-xs font-semibold tm-muted">备注</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{item.notes}</p>
           </section>
         ) : null}
       </Card>
@@ -311,8 +311,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
       <section className="space-y-3" data-testid="item-detail-tickets">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-slate-950">现场票据</h3>
-            <p className="mt-0.5 text-xs text-slate-500">{tickets.length} 张已绑定</p>
+            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">现场票据</h3>
+            <p className="mt-0.5 text-xs tm-muted">{tickets.length} 张已绑定</p>
           </div>
           <Button
             className="min-h-9 px-3"
@@ -324,17 +324,17 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
         </div>
         {isLoadingRelations ? (
           <div className="space-y-2">
-            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
           </div>
         ) : tickets.length === 0 ? (
-          <div className="rounded-2xl border border-white/80 bg-white/85 px-4 py-4 text-sm leading-6 text-slate-500 shadow-[0_8px_22px_rgba(47,65,88,0.035)]">
+          <div className="rounded-2xl px-4 py-4 text-sm leading-6 tm-muted tm-group">
             <div className="flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 ring-1 ring-sky-100">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
                 <Ticket className="size-5" />
               </span>
               <span>
-                <span className="block font-semibold text-slate-950">暂无绑定票据</span>
+                <span className="block font-semibold text-slate-950 dark:text-slate-100">暂无绑定票据</span>
                 可在票据库添加二维码截图、门票、车票或订单 PDF。
               </span>
             </div>
@@ -350,13 +350,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
             ))}
             {hiddenTicketCount > 0 ? (
               <button
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3.5 py-2.5 text-left text-sm font-semibold text-sky-700 transition active:bg-sky-100"
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3.5 py-2.5 text-left text-sm font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300 dark:active:bg-sky-950/50"
                 data-testid="item-ticket-view-all"
                 onClick={() => navigateTo('tickets', { tripId: trip.id })}
                 type="button"
               >
                 <span>查看全部票据</span>
-                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs">+{hiddenTicketCount}</span>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs dark:bg-slate-950/70">+{hiddenTicketCount}</span>
               </button>
             ) : null}
           </div>
@@ -364,11 +364,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
       </section>
 
       <section className="space-y-3" data-testid="item-detail-navigation">
-        <h3 className="text-base font-semibold text-slate-950">外部导航</h3>
+        <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">外部导航</h3>
         {hasCoordinates ? (
           <div className="grid grid-cols-2 gap-2">
             <a
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-100 dark:ring-slate-700/80"
               href={buildAppleMapsUrl(item)}
               rel="noreferrer"
               target="_blank"
@@ -377,7 +377,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
               Apple 地图
             </a>
             <a
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 active:scale-[0.98]"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-100 dark:ring-slate-700/80"
               href={buildGoogleMapsUrl(item)}
               rel="noreferrer"
               target="_blank"
@@ -387,18 +387,18 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
             </a>
           </div>
         ) : (
-          <div className="rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-slate-500 ring-1 ring-white/80">
+          <div className="rounded-2xl px-4 py-3 text-sm leading-6 tm-muted tm-group">
             暂无坐标，无法从这里打开外部地图导航。可以先编辑这个地点并补充坐标。
           </div>
         )}
       </section>
 
       <Button
-        className="w-full text-red-600"
+        className="w-full"
         disabled={isDeleting}
         icon={<Trash2 className="size-4" />}
         onClick={() => setIsDeleteConfirmOpen(true)}
-        variant="ghost"
+        variant="destructive"
       >
         删除行程点
       </Button>
@@ -485,16 +485,16 @@ function NeighborButton({
   return (
     <button
       aria-disabled={disabled}
-      className={`min-h-16 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-left shadow-[0_8px_22px_rgba(47,65,88,0.04)] transition active:scale-[0.99] ${
-        disabled ? 'cursor-not-allowed opacity-45' : 'active:bg-slate-50'
+      className={`min-h-16 rounded-2xl px-3 py-2 text-left transition active:scale-[0.99] tm-group tm-focus ${
+        disabled ? 'cursor-not-allowed opacity-45' : 'active:bg-slate-50 dark:active:bg-slate-800/70'
       }`}
       data-testid={`item-${direction}-button`}
       disabled={disabled}
       onClick={onClick}
       type="button"
     >
-      <span className="block text-xs font-semibold text-sky-600">{label}</span>
-      <span className="mt-1 block truncate text-sm font-semibold text-slate-950">
+      <span className="block text-xs font-semibold text-sky-600 dark:text-sky-300">{label}</span>
+      <span className="mt-1 block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
         {item ? item.title : direction === 'previous' ? '已经是第一项' : '已经是最后一项'}
       </span>
     </button>
@@ -511,13 +511,13 @@ function DetailRow({
   value?: string
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-3 py-3">
-      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 ring-1 ring-slate-100">
+    <div className="flex items-start gap-3 rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-white/90 text-slate-500 ring-1 ring-slate-100 dark:bg-slate-950/60 dark:text-slate-400 dark:ring-slate-800">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-sm font-semibold text-slate-950">{label}</span>
-        {value ? <span className="mt-0.5 block break-words text-sm leading-5 text-slate-500">{value}</span> : null}
+        <span className="block break-words text-sm font-semibold text-slate-950 dark:text-slate-100">{label}</span>
+        {value ? <span className="mt-0.5 block break-words text-sm leading-5 tm-muted">{value}</span> : null}
       </span>
     </div>
   )
@@ -535,7 +535,7 @@ function TicketCompactRow({
 
   return (
     <button
-      className="flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border border-white/80 bg-white/90 px-3 py-2.5 text-left shadow-[0_8px_22px_rgba(47,65,88,0.035)] transition active:scale-[0.99] active:bg-slate-50"
+      className="flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition active:scale-[0.99] active:bg-slate-50 tm-group tm-focus dark:active:bg-slate-800/70"
       data-testid="item-ticket-entry"
       onClick={onClick}
       type="button"
@@ -545,25 +545,25 @@ function TicketCompactRow({
         <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-slate-950">{getTicketDisplayTitle(ticket)}</span>
-        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{visual.storageLabel}</span>
+        <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{getTicketDisplayTitle(ticket)}</span>
+        <span className="mt-0.5 block truncate text-xs font-semibold tm-muted">{visual.storageLabel}</span>
         {secondary ? (
-          <span className="mt-0.5 block break-words text-xs leading-4 text-slate-400 [overflow-wrap:anywhere]">
+          <span className="mt-0.5 block break-words text-xs leading-4 tm-muted [overflow-wrap:anywhere]">
             {secondary}
           </span>
         ) : null}
       </span>
-      <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">查看</span>
+      <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-950/35 dark:text-sky-300">查看</span>
     </button>
   )
 }
 
 const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
-  rose: 'bg-rose-50 text-rose-700 ring-rose-100',
-  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
-  slate: 'bg-slate-50 text-slate-600 ring-slate-100',
-  violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
+  rose: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/35 dark:text-rose-300 dark:ring-rose-900/50',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50',
+  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50',
 }
 
 function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {

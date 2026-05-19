@@ -18,6 +18,12 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
+import {
+  FIELD_INPUT_CLASS,
+  FIELD_LABEL_CLASS,
+  FIELD_SELECT_CLASS,
+  FIELD_TEXTAREA_CLASS,
+} from '../components/ui/FormField'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { describeItemTime } from '../lib/itinerary'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -329,7 +335,7 @@ export function TicketLibraryPage() {
   if (isLoading) {
     return (
       <div className="space-y-5">
-        <Card className="space-y-3">
+        <Card variant="grouped" className="space-y-3">
           <SkeletonLine className="w-2/3" />
           <SkeletonLine className="w-full" />
           <SkeletonLine className="w-1/2" />
@@ -355,22 +361,22 @@ export function TicketLibraryPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-3">
+      <Card variant="grouped" className="space-y-3">
         <div>
-          <p className="text-xs font-semibold text-sky-600">{trip.title}</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-950">票据和订单</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
+          <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-slate-100">票据和订单</h2>
+          <p className="mt-2 text-sm leading-6 tm-muted">
             可保存文件副本，也可只记录文件位置或外部链接。
           </p>
         </div>
 
-        <div className="rounded-xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
+        <div className="rounded-xl bg-amber-50/80 px-3 py-3 text-sm leading-6 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
           清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。重要旅行出发前必须导出 zip 备份到 iCloud Drive。
         </div>
 
         {storageEstimate ? (
-          <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-            <HardDrive className="size-4 text-slate-400" />
+          <div className="flex items-center gap-2 rounded-xl bg-slate-50/75 px-3 py-2 text-xs font-semibold tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+            <HardDrive className="size-4 text-slate-400 dark:text-slate-500" />
             <span>
               已用 {formatStorageSize(storageEstimate.usage)} / 可用 {formatStorageSize(storageEstimate.quota)}
             </span>
@@ -380,14 +386,14 @@ export function TicketLibraryPage() {
 
       <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} />
 
-      <Card className="space-y-3">
+      <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
             <Upload className="size-4" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-950">添加票据</h3>
-            <p className="text-xs text-slate-500">文件副本单个建议不超过 20MB。</p>
+            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">添加票据</h3>
+            <p className="text-xs tm-muted">文件副本单个建议不超过 20MB。</p>
           </div>
         </div>
 
@@ -396,8 +402,8 @@ export function TicketLibraryPage() {
             <button
               className={`rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
                 storageMode === option.value
-                  ? 'border-sky-200 bg-sky-50 text-sky-800'
-                  : 'border-slate-100 bg-white text-slate-600'
+                  ? 'border-sky-200 bg-sky-50/85 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/35 dark:text-sky-200'
+                  : 'border-slate-100 bg-white/80 text-slate-600 dark:border-slate-800/70 dark:bg-slate-900/45 dark:text-slate-300'
               }`}
               key={option.value}
               onClick={() => {
@@ -410,7 +416,7 @@ export function TicketLibraryPage() {
                 {option.icon}
                 {option.label}
               </span>
-              <span className="mt-1 block text-xs leading-5 text-slate-500">{option.description}</span>
+              <span className="mt-1 block text-xs leading-5 tm-muted">{option.description}</span>
             </button>
           ))}
         </div>
@@ -450,9 +456,9 @@ export function TicketLibraryPage() {
         ) : null}
 
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">绑定对象</span>
+          <span className={FIELD_LABEL_CLASS}>绑定对象</span>
           <select
-            className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className={FIELD_SELECT_CLASS}
             onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
             value={bindingTarget}
           >
@@ -467,9 +473,9 @@ export function TicketLibraryPage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">备注</span>
+          <span className={FIELD_LABEL_CLASS}>备注</span>
           <textarea
-            className="mt-2 min-h-20 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className={`${FIELD_TEXTAREA_CLASS} min-h-20 resize-none`}
             onChange={(event) => setNote(event.target.value)}
             placeholder="例如：酒店订单、门票二维码、登机牌"
             value={note}
@@ -477,7 +483,7 @@ export function TicketLibraryPage() {
         </label>
 
         {actionError ? (
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
             {actionError}
           </p>
         ) : null}
@@ -494,11 +500,11 @@ export function TicketLibraryPage() {
 
       <section className="space-y-3">
         <SectionHeader title="票据库" />
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
           {filterOptions.map((option) => (
             <button
               className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-semibold ${
-                filter === option.value ? 'bg-primary text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'
+                filter === option.value ? 'bg-primary text-white shadow-[0_4px_12px_var(--color-primary-shadow)]' : 'tm-chip'
               }`}
               key={option.value}
               onClick={() => setFilter(option.value)}
@@ -576,7 +582,7 @@ function TicketCard({
   const visual = getTicketDisplayMeta(ticket)
 
   return (
-    <Card className="flex min-h-[12.25rem] flex-col p-2.5" data-testid="ticket-card">
+    <Card variant="grouped" className="flex min-h-[12.25rem] flex-col p-2.5" data-testid="ticket-card">
       <button
         aria-label={`查看${displayTitle}`}
         className="flex min-h-0 flex-1 flex-col rounded-xl px-0.5 py-0.5 text-left transition active:scale-[0.99]"
@@ -588,33 +594,33 @@ function TicketCard({
             {renderTicketDisplayIcon(visual.iconKind)}
             <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
           </span>
-          <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100">
+          <span className="tm-chip text-[11px]">
             {visual.storageLabel}
           </span>
         </span>
 
         <span className="mt-3 min-w-0">
-          <span className="block break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">
+          <span className="block break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
             {displayTitle}
           </span>
-          <span className="mt-1 block break-words text-[11px] leading-4 text-slate-500 [overflow-wrap:anywhere]">
+          <span className="mt-1 block break-words text-[11px] leading-4 tm-muted [overflow-wrap:anywhere]">
             {visual.secondaryLine}
           </span>
         </span>
 
         <span className="mt-auto pt-3">
-          <span className="block truncate text-[11px] font-semibold text-slate-400">
+          <span className="block truncate text-[11px] font-semibold tm-muted">
             {bindingLabel}
           </span>
-          <span className="mt-0.5 block text-[11px] text-slate-400">
+          <span className="mt-0.5 block text-[11px] tm-muted">
             {formatTicketCreatedAt(ticket.createdAt)}
           </span>
         </span>
       </button>
 
-      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+      <div className="mt-2 flex items-center justify-between gap-2 border-t tm-row pt-2">
         <button
-          className="min-h-8 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 active:bg-sky-100"
+          className="min-h-8 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
           type="button"
         >
@@ -622,7 +628,7 @@ function TicketCard({
         </button>
         <button
           aria-label={`删除${displayTitle}`}
-          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-slate-400 active:bg-red-50 active:text-red-600"
+          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-slate-400 transition active:bg-red-50 active:text-red-600 tm-focus dark:text-slate-500 dark:active:bg-red-950/35 dark:active:text-red-300"
           onClick={onDelete}
           type="button"
         >
@@ -635,11 +641,11 @@ function TicketCard({
 }
 
 const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
-  rose: 'bg-rose-50 text-rose-700 ring-rose-100',
-  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
-  slate: 'bg-slate-50 text-slate-600 ring-slate-100',
-  violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
+  rose: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/35 dark:text-rose-300 dark:ring-rose-900/50',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50',
+  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50',
 }
 
 function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
@@ -661,15 +667,15 @@ function CopyTicketFields({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-semibold text-slate-700">文件 *</span>
+      <span className={FIELD_LABEL_CLASS}>文件 *</span>
       <input
-        className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+        className="mt-2 block w-full min-w-0 tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
         key={fileInputKey}
         onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
         type="file"
       />
       {selectedFile ? (
-        <span className="mt-2 block rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        <span className="mt-2 block rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
           已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
         </span>
       ) : null}
@@ -703,7 +709,7 @@ function ReferenceTicketFields({
         required
         value={location}
       />
-      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+      <p className="rounded-xl bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
         旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
     </div>
@@ -725,12 +731,12 @@ function TextField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-semibold text-slate-700">
+      <span className={FIELD_LABEL_CLASS}>
         {label}
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
       <input
-        className="mt-2 h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+        className={FIELD_INPUT_CLASS}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}
@@ -821,5 +827,5 @@ function formatStorageSize(size?: number) {
 }
 
 function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
+  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800 ${className}`} />
 }

@@ -687,39 +687,41 @@ function MarkerPreviewCard({
 
   return (
     <div
-      className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'bottom-[calc(10.75rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(10.25rem+env(safe-area-inset-bottom))]'}`}
+      className={`pointer-events-none absolute left-4 right-4 z-[60] ${showBelowHeader ? 'bottom-[calc(10.75rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(10.25rem+env(safe-area-inset-bottom))]'}`}
     >
       <div
-        className="pointer-events-auto relative mx-auto max-w-sm rounded-2xl border border-white/75 bg-white/92 p-2 shadow-[0_14px_34px_rgba(47,65,88,0.14)] backdrop-blur-xl"
+        className="relative mx-auto max-w-sm rounded-2xl p-2 backdrop-blur-xl tm-surface tm-pass-through"
         data-testid="map-marker-card"
       >
-        <button
+        <div
           aria-label={`打开 ${item.title} 详情`}
-          className="flex min-h-20 w-full items-center gap-3 rounded-xl px-2.5 py-2 pr-10 text-left transition active:bg-slate-50"
-          data-testid="map-marker-card-open"
-          onClick={() => onOpenItem(item)}
-          type="button"
+          className="pointer-events-none flex min-h-20 w-full items-center gap-3 rounded-xl px-2.5 py-2 pr-10 text-left"
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
+          <span className="pointer-events-none flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50/80 text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
             <MapPin className="size-5" />
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</span>
-            <span className="mt-0.5 block truncate text-sm font-semibold text-slate-950">{item.title}</span>
-            <span className="mt-0.5 block truncate text-xs text-slate-500">{location}</span>
+          <span className="pointer-events-none min-w-0 flex-1">
+            <span className="pointer-events-none text-xs font-semibold text-sky-600">{describeItemTime(item)}</span>
+            <span className="pointer-events-none mt-0.5 block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</span>
+            <span className="pointer-events-none mt-0.5 block truncate text-xs tm-muted">{location}</span>
             {transportDescription ? (
-              <span className="mt-1 inline-flex max-w-full items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100">
-                <span className="truncate">{transportDescription}</span>
+              <span className="pointer-events-none mt-1 inline-flex max-w-full items-center tm-chip text-[11px]">
+                <span className="pointer-events-none truncate">{transportDescription}</span>
               </span>
             ) : null}
           </span>
-          <span className="shrink-0 text-xs font-semibold text-sky-600">
+          <button
+            className="pointer-events-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-sky-600 transition active:scale-[0.98] tm-focus dark:text-sky-300"
+            data-testid="map-marker-card-open"
+            onClick={() => onOpenItem(item)}
+            type="button"
+          >
             详情
-          </span>
-        </button>
+          </button>
+        </div>
         <button
           aria-label="关闭地点卡片"
-          className="absolute right-2.5 top-2.5 flex size-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 ring-1 ring-slate-100 active:scale-[0.98]"
+          className="pointer-events-auto absolute right-2.5 top-2.5 flex size-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 ring-1 ring-slate-100 transition active:scale-[0.98] tm-focus dark:bg-slate-900/70 dark:text-slate-400 dark:ring-slate-800"
           data-testid="map-marker-card-close"
           onClick={onClose}
           type="button"
@@ -746,10 +748,10 @@ function MapHeader({
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-      <div className="pointer-events-auto mx-auto flex items-center gap-2 rounded-2xl border border-white/70 bg-white/88 p-2 shadow-[0_10px_28px_rgba(47,65,88,0.10)] backdrop-blur-xl">
+      <div className="pointer-events-auto mx-auto flex items-center gap-2 rounded-2xl p-2 backdrop-blur-xl tm-surface">
         <button
           aria-label="返回日程"
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
           onClick={onBackToSchedule}
           type="button"
         >
@@ -757,10 +759,10 @@ function MapHeader({
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold text-sky-600">{trip.title}</p>
-          <h2 className="truncate text-base font-semibold leading-tight text-slate-950">
+          <h2 className="truncate text-base font-semibold leading-tight text-slate-950 dark:text-slate-100">
             {day.title}
           </h2>
-          <p className="truncate text-xs text-slate-500">
+          <p className="truncate text-xs tm-muted">
             {formatDate(day.date)} · {itemCount} 个行程 · {mappedCount} 个坐标
           </p>
         </div>
@@ -940,7 +942,7 @@ function MapBottomSheet({
 
   return (
     <section
-      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-[1.75rem] border border-white/75 bg-white/94 shadow-[0_-8px_24px_rgba(47,65,88,0.09)] backdrop-blur-xl ${
+      className={`absolute bottom-0 left-3 right-3 z-40 flex min-h-0 flex-col rounded-t-[1.75rem] border border-white/75 bg-white/94 shadow-[0_-8px_24px_rgba(47,65,88,0.09)] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/94 dark:shadow-[0_-8px_24px_rgba(0,0,0,0.22)] ${
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
       data-testid="map-sheet"
@@ -957,7 +959,7 @@ function MapBottomSheet({
         role="button"
         tabIndex={0}
       >
-        <div className="h-1 w-10 rounded-full bg-slate-300/80" />
+        <div className="h-1 w-10 rounded-full bg-slate-300/80 dark:bg-slate-700" />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -966,15 +968,15 @@ function MapBottomSheet({
             <p className="truncate text-xs font-semibold text-sky-600">
               {formatDate(day.date)}
             </p>
-            <h2 className="truncate text-base font-semibold text-slate-950">{day.title}</h2>
-            <p className="mt-0.5 truncate text-xs text-slate-500">
+            <h2 className="truncate text-base font-semibold text-slate-950 dark:text-slate-100">{day.title}</h2>
+            <p className="mt-0.5 truncate text-xs tm-muted">
               {sheetState === 'collapsed'
                 ? `${items.length} 个行程点 · ${mappedCount} 个坐标 · ${getSheetRouteSummary(routeState, routeWarnings)}`
                 : `${items.length} 个行程点 · ${mappedCount} 个带坐标`}
             </p>
           </div>
           <Button
-            className={`shrink-0 whitespace-nowrap rounded-full bg-slate-50/70 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
+            className={`shrink-0 whitespace-nowrap rounded-full bg-slate-50/70 dark:bg-slate-900/60 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
             data-testid="map-sheet-schedule-button"
             icon={<Navigation className="size-3.5" />}
             onClick={onBackToSchedule}
@@ -1015,14 +1017,14 @@ function MapBottomSheet({
           ) : null}
 
           {mapError ? (
-            <div className="rounded-xl bg-amber-50/70 px-3 py-2 text-sm text-amber-700">
+            <div className="rounded-xl bg-amber-50/80 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
               {mapError}
             </div>
           ) : null}
 
           {notice ? (
-            <div className="flex items-start gap-2 rounded-xl bg-slate-50/70 px-3 py-2 text-sm text-slate-600">
-              <AlertCircle className="mt-0.5 size-4 shrink-0 text-slate-400" />
+            <div className="flex items-start gap-2 rounded-xl bg-slate-50/70 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-slate-400 dark:text-slate-500" />
               <span>{notice}</span>
             </div>
           ) : null}
@@ -1043,7 +1045,7 @@ function MapBottomSheet({
               trip={trip}
             />
           ) : sheetState !== 'expanded' ? (
-            <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm text-slate-500">
+            <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:ring-slate-800/70">
               {items.length === 0
                 ? '这一天还没有行程点。'
                 : '选择地图标记或列表行程查看详情。'}
@@ -1073,7 +1075,7 @@ function MapBottomSheet({
               onSelectItem={onSelectItem}
               selectedItemId={selectedItemId}
             />
-            <p className="mt-2 text-center text-xs text-slate-400">
+            <p className="mt-2 text-center text-xs tm-muted">
               上拉查看完整行程
             </p>
           </div>
@@ -1106,14 +1108,14 @@ function RouteStatusChip({
     <div className={`pointer-events-none absolute left-4 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
       <button
         aria-label="打开路线设置"
-        className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[11px] font-semibold shadow-[0_6px_16px_rgba(47,65,88,0.08)] backdrop-blur-xl transition active:scale-[0.98] ${chip.className}`}
+        className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
         data-testid="route-chip"
         onClick={onClick}
         type="button"
       >
         <span className={`size-1.5 shrink-0 rounded-full opacity-80 ${routeStatusDotClassName(state, configured)}`} />
         <span className="min-w-0 truncate" data-testid="route-status-pill">{chip.label}</span>
-        <ChevronDown className="size-3 shrink-0 text-slate-400" />
+        <ChevronDown className="size-3 shrink-0 text-slate-400 dark:text-slate-500" />
       </button>
     </div>
   )
@@ -1136,7 +1138,7 @@ function MapFloatingControls({
     <div className={`pointer-events-none absolute right-4 z-40 flex flex-col gap-2 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
       <button
         aria-label="回到当天行程范围"
-        className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-700 shadow-[0_8px_22px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98]"
+        className="pointer-events-auto flex size-11 items-center justify-center rounded-full text-slate-700 backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200"
         data-testid="map-recenter-button"
         onClick={onRecenter}
         title="回到当天行程范围"
@@ -1146,7 +1148,7 @@ function MapFloatingControls({
       </button>
       <button
         aria-label={locationLoading ? '正在获取当前位置' : '显示当前位置'}
-        className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-700 shadow-[0_8px_22px_rgba(47,65,88,0.10)] backdrop-blur-xl transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
+        className="pointer-events-auto flex size-11 items-center justify-center rounded-full text-slate-700 backdrop-blur-xl transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-70 tm-surface tm-focus dark:text-slate-200"
         data-testid="map-user-location-button"
         disabled={locationLoading}
         onClick={onRequestUserLocation}
@@ -1169,7 +1171,7 @@ function MapControlNotice({
   return (
     <div className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'top-40' : 'top-20'}`}>
       <div
-        className="ml-auto max-w-[17rem] rounded-2xl border border-white/70 bg-white/92 px-3 py-2 text-xs font-medium leading-5 text-slate-600 shadow-[0_10px_24px_rgba(47,65,88,0.10)] backdrop-blur-xl"
+        className="ml-auto max-w-[17rem] rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-slate-600 backdrop-blur-xl tm-surface dark:text-slate-300"
         data-testid="map-location-notice"
       >
         {message}
@@ -1192,14 +1194,14 @@ function RouteControlsSummary({
   return (
     <button
       aria-expanded={open}
-      className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50/60 px-3 py-1.5 text-left text-xs transition active:scale-[0.99]"
+      className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50/60 px-3 py-1.5 text-left text-xs transition active:scale-[0.99] tm-focus dark:bg-slate-900/45"
       data-testid="route-more-toggle"
       onClick={onToggle}
       type="button"
     >
-      <span className="font-semibold text-slate-700">路线</span>
-      <span className="min-w-0 flex-1 truncate text-right text-slate-500">{getSheetRouteSummary(state, warnings)}</span>
-      <ChevronDown className={`size-3.5 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      <span className="font-semibold text-slate-700 dark:text-slate-200">路线</span>
+      <span className="min-w-0 flex-1 truncate text-right tm-muted">{getSheetRouteSummary(state, warnings)}</span>
+      <ChevronDown className={`size-3.5 shrink-0 text-slate-400 transition-transform dark:text-slate-500 ${open ? 'rotate-180' : ''}`} />
     </button>
   )
 }
@@ -1237,19 +1239,19 @@ function RouteControlsSection({
 
   return (
     <div
-      className="space-y-1.5 rounded-xl bg-white/60 px-2.5 py-2 text-xs text-slate-600 ring-1 ring-slate-100/80"
+      className="space-y-1.5 rounded-xl bg-white/60 px-2.5 py-2 text-xs text-slate-600 ring-1 ring-slate-100/80 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70"
       data-testid="route-controls-section"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-semibold text-slate-800">路线</span>
+        <span className="font-semibold text-slate-800 dark:text-slate-100">路线</span>
         <span className={`min-w-0 truncate text-right font-semibold ${chip.className}`}>{chip.label}</span>
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-0.5 rounded-full bg-slate-100/70 p-0.5">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-0.5 rounded-full bg-slate-100/70 p-0.5 dark:bg-slate-950/55">
           <button
             className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-              displayMode === 'straight' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70' : 'text-slate-500'
+              displayMode === 'straight' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/70' : 'text-slate-500 dark:text-slate-400'
             }`}
             data-testid="route-mode-segment-straight"
             onClick={onResetToStraight}
@@ -1259,7 +1261,7 @@ function RouteControlsSection({
           </button>
           <button
             className={`min-h-7 rounded-full px-2 text-xs font-semibold transition active:scale-[0.98] ${
-              displayMode === 'road' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70' : 'text-slate-500'
+              displayMode === 'road' ? 'bg-white/95 text-slate-900 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/70' : 'text-slate-500 dark:text-slate-400'
             }`}
             data-testid="route-mode-segment-road"
             onClick={onSelectRoadDisplay}
@@ -1283,7 +1285,7 @@ function RouteControlsSection({
         {ROAD_TRANSPORT_MODES.map((mode) => (
           <button
             className={`min-h-7 shrink-0 rounded-full px-2.5 text-xs font-semibold transition active:scale-[0.98] ${
-              activeRoadMode === mode ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200/80' : 'bg-slate-50/70 text-slate-500'
+              activeRoadMode === mode ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50' : 'bg-slate-50/70 text-slate-500 dark:bg-slate-900/55 dark:text-slate-400'
             }`}
             data-testid={`route-transport-${mode}`}
             disabled={!activeSegmentItem}
@@ -1295,13 +1297,13 @@ function RouteControlsSection({
           </button>
         ))}
         {!activeSegmentItem ? (
-          <span className="shrink-0 text-slate-400">需要至少两个地点</span>
+          <span className="shrink-0 text-slate-400 dark:text-slate-500">需要至少两个地点</span>
         ) : null}
       </div>
 
       {warningSummary || hasDetails ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/60 px-2.5 py-1.5 [overflow-wrap:anywhere]">
-          <span className="min-w-0 truncate text-slate-500" data-testid="route-warning-summary">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/60 px-2.5 py-1.5 [overflow-wrap:anywhere] dark:bg-slate-950/40">
+          <span className="min-w-0 truncate tm-muted" data-testid="route-warning-summary">
             {warningSummary ?? '路线详情'}
           </span>
           {hasDetails ? (
@@ -1318,8 +1320,8 @@ function RouteControlsSection({
       ) : null}
 
       {detailsOpen ? (
-        <div className="space-y-1.5 rounded-xl bg-slate-50/55 px-2.5 py-2">
-          <div className="space-y-1 leading-5 text-slate-500 [overflow-wrap:anywhere]" data-testid="route-more-panel">
+        <div className="space-y-1.5 rounded-xl bg-slate-50/55 px-2.5 py-2 dark:bg-slate-950/35">
+          <div className="space-y-1 leading-5 tm-muted [overflow-wrap:anywhere]" data-testid="route-more-panel">
             <p>{routeSourceDetail(state, configured)}</p>
             {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
             {activeRoadMode === 'bus' || hasBusWarning(warnings) ? (
@@ -1330,7 +1332,7 @@ function RouteControlsSection({
           {warnings.length > 0 ? (
             <div className="space-y-1 [overflow-wrap:anywhere]" data-testid="route-warning-details">
               {warnings.map((warning) => (
-                <p className="break-words text-amber-600" key={warning}>
+                <p className="break-words text-amber-600 dark:text-amber-300" key={warning}>
                   {warning}
                 </p>
               ))}
@@ -1339,7 +1341,7 @@ function RouteControlsSection({
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
-              className="min-h-7 rounded-full bg-white/80 px-2.5 font-semibold text-slate-600 ring-1 ring-slate-200/70 active:scale-[0.98]"
+              className="min-h-7 rounded-full bg-white/80 px-2.5 font-semibold text-slate-600 ring-1 ring-slate-200/70 transition active:scale-[0.98] tm-focus dark:bg-slate-900/70 dark:text-slate-300 dark:ring-slate-700/70"
               data-testid="route-reset-button"
               onClick={onResetToStraight}
               type="button"
@@ -1347,7 +1349,7 @@ function RouteControlsSection({
               回到直线
             </button>
             <button
-              className="min-h-7 rounded-full px-2.5 font-semibold text-slate-400 active:scale-[0.98]"
+              className="min-h-7 rounded-full px-2.5 font-semibold text-slate-400 transition active:scale-[0.98] tm-focus dark:text-slate-500"
               onClick={onClearRouteCache}
               type="button"
             >
@@ -1375,25 +1377,25 @@ function CompactItemLine({
   return (
     <button
       aria-label={`打开 ${item.title} 详情`}
-      className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left transition active:bg-slate-50 ${
-        selected ? 'bg-sky-50/65 text-slate-950 ring-1 ring-sky-100/80' : 'bg-white/60 text-slate-700 ring-1 ring-slate-100/70'
+      className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left transition active:bg-slate-50 tm-focus dark:active:bg-slate-800/70 ${
+        selected ? 'bg-sky-50/65 text-slate-950 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-slate-100 dark:ring-sky-900/50' : 'bg-white/60 text-slate-700 ring-1 ring-slate-100/70 dark:bg-slate-900/35 dark:text-slate-200 dark:ring-slate-800/70'
       }`}
       data-testid="map-collapsed-item-preview"
       onClick={() => onOpenItem(item)}
       type="button"
     >
-      <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100/80">
+      <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100/80 dark:bg-slate-950/55 dark:text-slate-300 dark:ring-slate-800/70">
         {describeItemTime(item)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold">{item.title}</span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-slate-500">
-          <MapPin className="size-3 shrink-0 text-slate-400" />
+        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs tm-muted">
+          <MapPin className="size-3 shrink-0 text-slate-400 dark:text-slate-500" />
           <span className="truncate">{location}</span>
         </span>
       </span>
       {transportDescription ? (
-        <span className="hidden max-w-[6rem] shrink-0 truncate rounded-full bg-slate-50/80 px-2 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100/70 min-[380px]:block">
+        <span className="hidden max-w-[6rem] shrink-0 truncate tm-chip text-[11px] min-[380px]:block">
           {transportDescription}
         </span>
       ) : null}
@@ -1628,7 +1630,7 @@ function ItineraryPreviewList({
   const previewItems = items.slice(0, 3)
   if (previewItems.length === 0) {
     return (
-      <p className="py-3 text-sm text-slate-500">
+      <p className="py-3 text-sm tm-muted">
         这一天还没有行程点。
       </p>
     )
@@ -1638,8 +1640,8 @@ function ItineraryPreviewList({
     <div className="space-y-1.5">
       {previewItems.map((item, index) => (
         <button
-          className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
-            selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80' : 'bg-white/35 ring-1 ring-transparent'
+          className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 tm-focus dark:active:bg-slate-800/70 ${
+            selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:ring-sky-900/50' : 'bg-white/35 ring-1 ring-transparent dark:bg-slate-900/25'
           }`}
           key={item.id}
           onClick={() => onSelectItem(item, 'list')}
@@ -1648,14 +1650,14 @@ function ItineraryPreviewList({
           }}
           type="button"
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-xs font-bold text-slate-500">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100/80 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
             {index + 1}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-slate-900">{item.title}</span>
-            <span className="block truncate text-xs text-slate-400">{item.locationName || item.address || '地点未填写'}</span>
+            <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</span>
+            <span className="block truncate text-xs tm-muted">{item.locationName || item.address || '地点未填写'}</span>
           </span>
-          <span className="shrink-0 text-xs text-slate-400">{describeItemTime(item)}</span>
+          <span className="shrink-0 text-xs tm-muted">{describeItemTime(item)}</span>
         </button>
       ))}
       {items.length > previewItems.length ? (
@@ -1684,7 +1686,7 @@ function ItineraryList({
 }) {
   if (items.length === 0) {
     return (
-      <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm text-slate-500">
+      <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:ring-slate-800/70">
         这一天还没有行程点。
       </p>
     )
@@ -1702,8 +1704,8 @@ function ItineraryList({
               <TransportSegment description={previousTransportDescription} />
             ) : null}
             <button
-              className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 ${
-                selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80' : 'bg-white/35 ring-1 ring-transparent'
+              className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition active:bg-slate-50 tm-focus dark:active:bg-slate-800/70 ${
+                selectedItemId === item.id ? 'bg-sky-50/70 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:ring-sky-900/50' : 'bg-white/35 ring-1 ring-transparent dark:bg-slate-900/25'
               }`}
               onClick={() => onSelectItem(item, 'list')}
               ref={(node) => {
@@ -1713,21 +1715,21 @@ function ItineraryList({
             >
               <span
                 className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  hasCoordinates ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100/80' : 'bg-slate-100/80 text-slate-400'
+                  hasCoordinates ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50' : 'bg-slate-100/80 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
                 }`}
               >
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-slate-950">
+                <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
                   {item.title}
                 </span>
-                <span className="flex items-center gap-1 truncate text-xs text-slate-500">
+                <span className="flex items-center gap-1 truncate text-xs tm-muted">
                   <MapPin className="size-3.5 shrink-0" />
                   {item.locationName || item.address || '地点未填写'}
                 </span>
               </span>
-              <span className="shrink-0 text-xs font-semibold text-slate-400">
+              <span className="shrink-0 text-xs font-semibold tm-muted">
                 {describeItemTime(item)}
               </span>
             </button>
@@ -1774,12 +1776,12 @@ function SelectedItemCard({
   const hasCoordinates = hasValidCoordinates(item)
 
   return (
-    <div className="rounded-xl bg-slate-50/60 px-3 py-2.5 ring-1 ring-slate-100/70">
+    <div className="rounded-xl bg-slate-50/60 px-3 py-2.5 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:ring-slate-800/70">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
-          <h3 className="mt-0.5 truncate text-sm font-semibold text-slate-950">{item.title}</h3>
-          <p className="mt-0.5 truncate text-xs text-slate-500">{item.locationName || '地点未填写'}</p>
+          <h3 className="mt-0.5 truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</h3>
+          <p className="mt-0.5 truncate text-xs tm-muted">{item.locationName || '地点未填写'}</p>
         </div>
         <Button
           className="min-h-8 shrink-0 rounded-full px-2.5 text-xs"
@@ -1790,12 +1792,12 @@ function SelectedItemCard({
         </Button>
       </div>
       {!compact ? (
-        <p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.address || '地址未填写'}</p>
+        <p className="mt-1 line-clamp-1 text-xs tm-muted">{item.address || '地址未填写'}</p>
       ) : null}
       <div className="mt-2 flex gap-2">
         <a
           className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
-            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70' : 'bg-slate-100/70 text-slate-400'
+            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70 dark:bg-slate-950/55 dark:text-slate-200 dark:ring-slate-800/70' : 'bg-slate-100/70 text-slate-400 dark:bg-slate-800/70 dark:text-slate-500'
           }`}
           href={hasCoordinates ? buildAppleMapsUrl(item) : undefined}
           rel="noreferrer"
@@ -1806,7 +1808,7 @@ function SelectedItemCard({
         </a>
         <a
           className={`inline-flex min-h-8 flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold ${
-            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70' : 'bg-slate-100/70 text-slate-400'
+            hasCoordinates ? 'bg-white/80 text-slate-700 ring-1 ring-slate-200/70 dark:bg-slate-950/55 dark:text-slate-200 dark:ring-slate-800/70' : 'bg-slate-100/70 text-slate-400 dark:bg-slate-800/70 dark:text-slate-500'
           }`}
           href={hasCoordinates ? buildGoogleMapsUrl(item) : undefined}
           rel="noreferrer"
@@ -1946,8 +1948,8 @@ function clamp(value: number, min: number, max: number) {
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="mx-1 flex w-fit max-w-[calc(100%-0.5rem)] items-center gap-1.5 rounded-full bg-slate-50/75 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100/70">
-      <ArrowDown className="size-3 shrink-0 text-slate-400" />
+    <div className="mx-1 flex w-fit max-w-[calc(100%-0.5rem)] items-center gap-1.5 tm-chip text-[11px]">
+      <ArrowDown className="size-3 shrink-0 text-slate-400 dark:text-slate-500" />
       <span className="min-w-0 truncate">{description}</span>
     </div>
   )

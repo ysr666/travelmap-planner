@@ -77,6 +77,7 @@ html.dark {
 
 .dark .bg-slate-50,
 .dark .bg-slate-50\/80,
+.dark .bg-slate-50\/75,
 .dark .bg-slate-50\/70,
 .dark .bg-slate-50\/60,
 .dark .bg-slate-50\/55 {
@@ -94,6 +95,7 @@ html.dark {
 
 .dark .bg-sky-50,
 .dark .bg-sky-50\/80,
+.dark .bg-sky-50\/75,
 .dark .bg-sky-50\/70,
 .dark .bg-sky-50\/65 {
   background-color: rgb(14 116 144 / 0.22);
@@ -222,6 +224,124 @@ html.dark {
 
 .dark .text-rose-700 { color: rgb(253 164 175); }
 .dark .text-red-600 { color: rgb(248 113 113); }
+
+/* ── TripMap grouped UI tokens ─────────────────────────────────── */
+
+.tm-app-bg {
+  background: linear-gradient(180deg, var(--color-surface) 0%, #eaf1f7 100%);
+}
+
+.dark .tm-app-bg {
+  background: linear-gradient(180deg, #101827 0%, #0b1220 100%);
+}
+
+.tm-surface {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.80);
+  box-shadow: 0 1px 3px rgba(47, 65, 88, 0.04);
+}
+
+.dark .tm-surface {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(51, 65, 85, 0.65);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.tm-group {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(241, 245, 249, 0.90);
+  box-shadow: none;
+}
+
+.dark .tm-group {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(51, 65, 85, 0.50);
+}
+
+.tm-row {
+  border-color: rgba(241, 245, 249, 0.90);
+}
+
+.dark .tm-row {
+  border-color: rgba(51, 65, 85, 0.45);
+}
+
+.tm-field {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.90);
+  border-radius: 0.75rem;
+}
+
+.dark .tm-field {
+  background: rgba(15, 23, 42, 0.70);
+  border-color: rgba(51, 65, 85, 0.65);
+}
+
+.tm-muted {
+  color: rgb(100 116 139);
+}
+
+.dark .tm-muted {
+  color: rgb(148 163 184);
+}
+
+.tm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  border-radius: 9999px;
+  background: rgba(241, 245, 249, 0.85);
+  color: rgb(71 85 105);
+}
+
+.dark .tm-chip {
+  background: rgba(51, 65, 85, 0.45);
+  color: rgb(203 213 225);
+}
+
+.tm-focus:focus-visible {
+  outline: 2px solid rgb(56 149 255);
+  outline-offset: 2px;
+}
+
+.tm-pass-through,
+.tm-pass-through * {
+  pointer-events: none !important;
+}
+
+.tm-pass-through button {
+  pointer-events: auto !important;
+}
+
+.tm-danger {
+  color: rgb(220 38 38);
+}
+
+.dark .tm-danger {
+  color: rgb(248 113 113);
+}
+
+.tm-warning {
+  color: rgb(180 83 9);
+}
+
+.dark .tm-warning {
+  color: rgb(252 211 77);
+}
+
+.tm-success {
+  color: rgb(5 150 105);
+}
+
+.dark .tm-success {
+  color: rgb(110 231 183);
+}
+
+/* ── Base resets ───────────────────────────────────────────────── */
 
 button,
 input,

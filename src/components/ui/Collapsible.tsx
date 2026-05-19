@@ -13,20 +13,22 @@ export function Collapsible({ title, subtitle, defaultOpen = false, children }: 
 
   return (
     <details
-      className="group rounded-xl bg-white ring-1 ring-slate-200/80 dark:bg-slate-900 dark:ring-slate-700/80"
+      className="group rounded-2xl tm-group"
       open={defaultOpen}
       ref={detailsRef}
     >
-      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 select-none marker:hidden [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="size-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90" />
+      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 select-none marker:hidden [&::-webkit-details-marker]:hidden tm-focus">
+        <ChevronRight className="size-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90 dark:text-slate-500" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-950">{title}</p>
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {title}
+          </p>
           {subtitle ? (
-            <p className="mt-0.5 truncate text-xs text-slate-400">{subtitle}</p>
+            <p className="mt-0.5 truncate text-xs tm-muted">{subtitle}</p>
           ) : null}
         </div>
       </summary>
-      <div className="border-t border-slate-100 px-4 pb-4 pt-3 dark:border-slate-800">
+      <div className="border-t tm-row px-4 pb-4 pt-3">
         {children}
       </div>
     </details>

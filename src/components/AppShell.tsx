@@ -35,23 +35,23 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   const pageTitle = routeTitles[activeRoute]
 
   return (
-    <div className="app-viewport mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#eef3f8] shadow-[0_18px_60px_rgba(55,70,92,0.12)] dark:bg-slate-950 dark:shadow-[0_18px_60px_rgba(0,0,0,0.32)]">
+    <div className="app-viewport tm-app-bg mx-auto flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_18px_60px_rgba(55,70,92,0.10)] dark:shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
       {!isTrip ? (
-        <header className="z-30 border-b border-white/70 bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <header className="z-30 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             {isHome ? (
               <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl tm-surface">
                   <img alt="" className="size-7 rounded-lg" src="/favicon.svg" />
                 </span>
-                <h1 className="min-w-0 truncate text-xl font-semibold leading-tight text-slate-950">
+                <h1 className="min-w-0 truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
                   {pageTitle}
                 </h1>
               </div>
             ) : (
               <button
                 aria-label="返回首页"
-                className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+                className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
                 onClick={() => navigateTo('home')}
                 type="button"
               >
@@ -59,7 +59,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
               </button>
             )}
             {!isHome ? (
-              <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950">
+              <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
                 {pageTitle}
               </h1>
             ) : null}
@@ -68,7 +68,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
             ) : (
               <button
                 aria-label="设置"
-                className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200/80 active:scale-[0.98]"
+                className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
                 onClick={() => navigateTo('settings')}
                 type="button"
               >
@@ -149,14 +149,14 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
   ]
 
   return (
-    <nav className={`rounded-2xl border border-white/80 bg-white/90 p-1.5 shadow-[0_8px_22px_rgba(47,65,88,0.05)] ${className}`}>
+    <nav className={`rounded-2xl tm-surface p-1.5 ${className}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (
             <button
               className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] ${
-                item.active ? 'bg-primary text-white shadow-sm' : 'text-slate-500 active:bg-slate-50'
+                item.active ? 'bg-primary text-white shadow-sm' : 'text-slate-500 active:bg-slate-50/80 dark:text-slate-400 dark:active:bg-slate-800/60'
               }`}
               key={item.id}
               onClick={item.onClick}

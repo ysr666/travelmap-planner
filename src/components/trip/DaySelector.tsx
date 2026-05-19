@@ -26,8 +26,8 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
             <button
               className={`${isCompact ? 'min-h-9 rounded-xl px-2.5' : 'min-h-12 rounded-2xl px-3'} text-left transition active:scale-[0.98] ${
                 active
-                  ? 'bg-primary text-white shadow-[0_8px_18px_var(--color-primary-shadow-lg)]'
-                  : 'bg-white text-slate-600 ring-1 ring-slate-200/80'
+                  ? 'bg-primary text-white shadow-[0_6px_14px_var(--color-primary-shadow)]'
+                  : 'tm-surface text-slate-600 dark:text-slate-300'
               }`}
               key={day.id}
               onClick={() => onSelectDay(day)}

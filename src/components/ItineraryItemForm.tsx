@@ -5,7 +5,7 @@ import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
-import { FormField } from './ui/FormField'
+import { FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS, FormField } from './ui/FormField'
 import { PlaceSearchInput, type PlaceResult } from './ui/PlaceSearchInput'
 
 export type ItineraryItemFormValue = {
@@ -192,9 +192,9 @@ export function ItineraryItemForm({
         value={form.address}
       />
       <label className="block">
-        <span className="text-sm font-semibold text-slate-700">交通方式</span>
+        <span className={FIELD_LABEL_CLASS}>交通方式</span>
         <select
-          className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          className={FIELD_SELECT_CLASS}
           onChange={(event) =>
             setForm((current) => ({
               ...current,
@@ -210,18 +210,18 @@ export function ItineraryItemForm({
           ))}
         </select>
       </label>
-      <section className="space-y-3 border-t border-slate-100 pt-4">
+      <section className="space-y-3 border-t tm-row pt-4">
         <div>
-          <h4 className="text-sm font-semibold text-slate-950">从上一站到此处</h4>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
+          <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">从上一站到此处</h4>
+          <p className="mt-1 text-xs leading-5 tm-muted">
             可先用外部地图查看路线，再记录交通方式、预计耗时和备注。
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="text-sm font-semibold text-slate-700">交通方式</span>
+            <span className={FIELD_LABEL_CLASS}>交通方式</span>
             <select
-              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              className={FIELD_SELECT_CLASS}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -249,9 +249,9 @@ export function ItineraryItemForm({
           />
         </div>
         <label className="block">
-          <span className="text-sm font-semibold text-slate-700">交通备注</span>
+          <span className={FIELD_LABEL_CLASS}>交通备注</span>
           <textarea
-            className="mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+            className={`${FIELD_TEXTAREA_CLASS} min-h-28 resize-y leading-6`}
             onChange={(event) =>
               setForm((current) => ({ ...current, previousTransportNote: event.target.value }))
             }
@@ -261,9 +261,9 @@ export function ItineraryItemForm({
         </label>
       </section>
       {googleMapsKeyConfigured ? (
-        <section className="space-y-3 border-t border-slate-100 pt-4">
+        <section className="space-y-3 border-t tm-row pt-4">
           <button
-            className="flex w-full items-center justify-between rounded-xl px-0 py-1 text-left text-sm font-semibold text-slate-700"
+            className="flex w-full items-center justify-between rounded-xl px-0 py-1 text-left text-sm font-semibold text-slate-700 transition active:scale-[0.99] dark:text-slate-200"
             onClick={() => setShowManualCoords((current) => !current)}
             type="button"
           >
@@ -286,7 +286,7 @@ export function ItineraryItemForm({
               >
                 解析坐标
               </Button>
-              {parseMessage ? <p className="text-xs text-slate-500">{parseMessage}</p> : null}
+              {parseMessage ? <p className="text-xs tm-muted">{parseMessage}</p> : null}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
                   label="纬度 lat"
@@ -307,10 +307,10 @@ export function ItineraryItemForm({
           ) : null}
         </section>
       ) : (
-        <section className="space-y-3 border-t border-slate-100 pt-4">
+        <section className="space-y-3 border-t tm-row pt-4">
           <div>
-            <h4 className="text-sm font-semibold text-slate-950">坐标</h4>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
+            <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">坐标</h4>
+            <p className="mt-1 text-xs leading-5 tm-muted">
               可粘贴地图链接解析，也可以手动填写纬度和经度。
             </p>
           </div>
@@ -329,7 +329,7 @@ export function ItineraryItemForm({
             >
               解析坐标
             </Button>
-            {parseMessage ? <p className="mt-2 text-xs text-slate-500">{parseMessage}</p> : null}
+            {parseMessage ? <p className="mt-2 text-xs tm-muted">{parseMessage}</p> : null}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
@@ -350,16 +350,16 @@ export function ItineraryItemForm({
         </section>
       )}
       <label className="block">
-        <span className="text-sm font-semibold text-slate-700">备注</span>
+        <span className={FIELD_LABEL_CLASS}>备注</span>
         <textarea
-          className="mt-2 min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          className={`${FIELD_TEXTAREA_CLASS} min-h-32 resize-y leading-6`}
           onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
           placeholder="可选：预约信息、注意事项或备用方案"
           value={form.notes}
         />
       </label>
       {error ? (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
           {error}
         </p>
       ) : null}

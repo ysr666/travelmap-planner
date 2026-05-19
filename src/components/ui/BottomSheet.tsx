@@ -52,7 +52,7 @@ export function BottomSheet({
   return createPortal(
     <div
       aria-modal="true"
-      className="fixed inset-0 flex items-end justify-center bg-slate-950/30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      className="fixed inset-0 flex items-end justify-center bg-slate-950/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm dark:bg-slate-950/60"
       role="dialog"
       style={{ zIndex }}
       onClick={(event) => {
@@ -62,23 +62,23 @@ export function BottomSheet({
       }}
     >
       <div
-        className="flex w-full flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_-10px_28px_rgba(38,53,76,0.14)]"
+        className="flex w-full flex-col overflow-hidden rounded-3xl tm-surface"
         style={{ maxHeight }}
       >
         {showHandle ? (
           <div className="shrink-0 pt-3 pb-1 text-center">
-            <div className="mx-auto h-1.5 w-11 rounded-full bg-slate-300" />
+            <div className="mx-auto h-1.5 w-11 rounded-full bg-slate-300/60 dark:bg-slate-600/60" />
           </div>
         ) : null}
 
         {title ? (
           <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3">
-            <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-950">
+            <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 dark:text-slate-100">
               {title}
             </h3>
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 transition hover:bg-slate-200/60 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700/50 tm-focus"
               onClick={onClose}
               type="button"
             >
@@ -89,7 +89,7 @@ export function BottomSheet({
           <div className="shrink-0 px-4 pb-2 text-right">
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 transition hover:bg-slate-200/60 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700/50 tm-focus"
               onClick={onClose}
               type="button"
             >

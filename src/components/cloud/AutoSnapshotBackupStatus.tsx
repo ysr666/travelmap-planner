@@ -53,7 +53,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
     return {
       className: 'bg-sky-50 text-sky-700',
       icon: <LoaderCircle className="size-3.5 animate-spin" />,
-      text: '正在备份到云端',
+      text: '正在创建云端快照',
       weight: 'active',
     }
   }
@@ -62,7 +62,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
     return {
       className: 'bg-amber-50 text-amber-800',
       icon: <CloudOff className="size-3.5" />,
-      text: '云端备份失败，可稍后重试',
+      text: '云端快照失败，可稍后重试',
       weight: 'active',
     }
   }
@@ -71,7 +71,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
     return {
       className: 'bg-emerald-50 text-emerald-700',
       icon: <Cloud className="size-3.5" />,
-      text: '已备份到云端',
+      text: '已创建云端快照',
       weight: 'quiet',
     }
   }

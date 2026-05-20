@@ -30,6 +30,12 @@ export type CloudSnapshotCheckState = {
   updatedAt: number | null
 }
 
+export type CloudSnapshotVersionContextRow = {
+  description: string
+  label: string
+  value: string
+}
+
 type BackupWithLegacyTripId = CloudBackupSummary & {
   tripId?: string
 }
@@ -210,11 +216,48 @@ export function formatVersionTimestamp(epochMs: number | null): string | null {
   return `${valueByType.year}-${valueByType.month}-${valueByType.day} ${valueByType.hour}:${valueByType.minute}`
 }
 
+export function buildCloudSnapshotVersionContextRows(
+  result: Pick<CloudSnapshotCheckResult, 'cloudVersion' | 'dirtyAt' | 'localVersion' | 'tripUpdatedAt'>,
+): CloudSnapshotVersionContextRow[] {
+  const rows: CloudSnapshotVersionContextRow[] = []
+  const localTime = formatVersionTimestamp(result.localVersion)
+  const cloudTime = formatVersionTimestamp(result.cloudVersion)
+  const dirtyTime = formatVersionTimestamp(result.dirtyAt)
+  const localSource =
+    result.dirtyAt && result.localVersion === result.dirtyAt
+      ? '来自当前设备未上传修改时间'
+      : '来自当前设备旅行最后更新时间'
+
+  if (localTime) {
+    rows.push({
+      description: localSource,
+      label: '本地版本',
+      value: localTime,
+    })
+  }
+  if (cloudTime) {
+    rows.push({
+      description: '来自云端快照导出时间',
+      label: '云端快照',
+      value: cloudTime,
+    })
+  }
+  if (dirtyTime) {
+    rows.push({
+      description: '当前设备尚未上传到云端快照的修改',
+      label: '未上传修改',
+      value: dirtyTime,
+    })
+  }
+
+  return rows
+}
+
 export function groupLatestCloudBackupsByTripId(backups: CloudBackupSummary[]) {
   const byTripId = new Map<string, CloudBackupSummary>()
 
   for (const backup of backups) {
-    const tripId = getBackupTripId(backup)
+    const tripId = getCloudBackupTripIdentity(backup)
     const version = getCloudBackupVersion(backup)
     if (!tripId || !version) {
       continue
@@ -354,7 +397,7 @@ export function resetCloudSnapshotChecksForTests() {
   }
 }
 
-function getBackupTripId(backup: CloudBackupSummary) {
+export function getCloudBackupTripIdentity(backup: CloudBackupSummary) {
   const candidate = backup as BackupWithLegacyTripId
   return backup.originalTripId || candidate.tripId || null
 }

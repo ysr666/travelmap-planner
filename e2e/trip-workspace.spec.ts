@@ -55,7 +55,8 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   expect(currentTripId).toBe(tripId)
   expect(currentDayId).toBeTruthy()
 
-  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: '总览' }).click()
+  await expect(page).toHaveURL(/#\/trip\?/)
   await expect(page.getByText('每日行程')).toBeVisible()
   await expect(page.getByText('第一天')).toBeVisible()
   await expect(page.getByText('第二天')).toBeVisible()
@@ -84,7 +85,8 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toBeVisible()
 
-  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: '总览' }).click()
+  await expect(page).toHaveURL(/#\/trip\?/)
 
   await page.getByRole('button', { name: '更多' }).click()
   const moreMenu = page.getByTestId('trip-more-menu')
@@ -99,7 +101,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
 
-  await page.locator('header').getByRole('button', { name: '返回旅行总览' }).click()
+  await page.getByRole('button', { name: '总览' }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
   await page.getByRole('button', { name: '票据库' }).click()
   await expect(page).toHaveURL(/#\/tickets\?/)

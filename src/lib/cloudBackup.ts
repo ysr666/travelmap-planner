@@ -68,6 +68,8 @@ export type CloudBackupResult = {
 }
 
 export type RestoreCloudBackupResult = {
+  restoredAt?: number
+  restoredFromCloudExportedAt?: string
   tripId: string
   title: string
   warnings: string[]
@@ -100,6 +102,20 @@ export type BuildCloudSnapshotResult = {
   warnings: string[]
 }
 
+type CloudRestoreMetadata = {
+  backupId: string
+  exportedAt: string
+  originalTripId: string
+}
+
+type E2eCloudFixture = {
+  backups?: CloudBackupSummary[]
+  user?: {
+    email?: string
+    id: string
+  }
+}
+
 type CloudStorageListEntry = {
   name: string
 }
@@ -128,6 +144,11 @@ type CloudBackupRow = CloudBackupInsertRecord & {
 }
 
 export async function getCurrentSession(): Promise<Session | null> {
+  const fixtureUser = readE2eCloudFixture()?.user
+  if (fixtureUser) {
+    return { user: fixtureUser } as Session
+  }
+
   const client = requireSupabaseClient()
   const { data, error } = await client.auth.getSession()
   if (error) {
@@ -138,6 +159,11 @@ export async function getCurrentSession(): Promise<Session | null> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
+  const fixtureUser = readE2eCloudFixture()?.user
+  if (fixtureUser) {
+    return fixtureUser as User
+  }
+
   const client = requireSupabaseClient()
   const { data, error } = await client.auth.getUser()
   if (error) {
@@ -182,6 +208,11 @@ export async function signOut() {
 }
 
 export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
+  const fixture = readE2eCloudFixture()
+  if (fixture?.user) {
+    return fixture.backups ?? []
+  }
+
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const { data, error } = await client
@@ -275,9 +306,23 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
     })
   }
 
-  const records = buildCloudRestoreRecords(snapshot, ticketBlobs)
+  const restoredAt = Date.now()
+  const records = buildCloudRestoreRecords(snapshot, ticketBlobs, {
+    now: restoredAt,
+    restoreMetadata: {
+      backupId,
+      exportedAt: snapshot.exportedAt,
+      originalTripId: snapshot.originalTripId,
+    },
+  })
   const result = await importTripPlanRecords(records, { markDirty: false })
-  return { title: result.title, tripId: result.tripId, warnings }
+  return {
+    restoredAt,
+    restoredFromCloudExportedAt: snapshot.exportedAt,
+    title: result.title,
+    tripId: result.tripId,
+    warnings,
+  }
 }
 
 export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBackupResult> {
@@ -416,7 +461,11 @@ export function buildCloudSnapshotFromRecords({
 export function buildCloudRestoreRecords(
   snapshotInput: CloudTripSnapshot,
   ticketBlobs: TicketBlob[],
-  options: { createIdFn?: (prefix: string) => string; now?: number } = {},
+  options: {
+    createIdFn?: (prefix: string) => string
+    now?: number
+    restoreMetadata?: CloudRestoreMetadata
+  } = {},
 ) {
   const snapshot = parseCloudSnapshot(snapshotInput)
   validateSnapshotGraph(snapshot)
@@ -432,6 +481,14 @@ export function buildCloudRestoreRecords(
     ...snapshot.trip,
     createdAt: now,
     id: nextTripId,
+    ...(options.restoreMetadata
+      ? {
+          restoredAt: now,
+          restoredFromCloudBackupId: options.restoreMetadata.backupId,
+          restoredFromCloudExportedAt: options.restoreMetadata.exportedAt,
+          restoredFromCloudOriginalTripId: options.restoreMetadata.originalTripId,
+        }
+      : {}),
     updatedAt: now,
   }
   const days: Day[] = snapshot.days.map((day) => ({
@@ -649,6 +706,34 @@ function mapCloudBackupRow(row: CloudBackupRow): CloudBackupSummary {
     updatedAt: row.updated_at,
     userId: row.user_id,
     warnings: Array.isArray(row.warnings) ? row.warnings.filter(isString) : [],
+  }
+}
+
+function readE2eCloudFixture(): E2eCloudFixture | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const hostname = window.location.hostname
+    const isLocalTestHost = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+    if (!isLocalTestHost) {
+      return null
+    }
+
+    const raw = window.localStorage.getItem('tripmap:e2e:cloud-fixture')
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as E2eCloudFixture
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    return parsed
+  } catch {
+    return null
   }
 }
 

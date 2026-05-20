@@ -9,6 +9,10 @@ export type Trip = {
   startDate: string
   endDate: string
   notes?: string
+  restoredAt?: number
+  restoredFromCloudBackupId?: string
+  restoredFromCloudExportedAt?: string
+  restoredFromCloudOriginalTripId?: string
   createdAt: number
   updatedAt: number
 }

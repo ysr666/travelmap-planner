@@ -13,14 +13,15 @@ import {
   uploadTripCloudBackup,
 } from '../../lib/cloudBackup'
 import {
+  buildCloudSnapshotVersionContextRows,
   dismissCloudSnapshotPrompt,
-  formatVersionTimestamp,
   getCloudSnapshotCheckState,
   refreshCloudSnapshotChecks,
   subscribeCloudSnapshotChecks,
   suppressCloudSnapshotPrompt,
   type CloudSnapshotCheckResult,
 } from '../../lib/cloudSnapshotCheck'
+import { getCloudSnapshotPromptCopy } from '../../lib/cloudSnapshotPromptCopy'
 import { navigateTo } from '../../lib/routes'
 
 type CloudSnapshotCheckPromptsProps = {
@@ -68,7 +69,7 @@ export function CloudSnapshotCheckPrompts({
       if (autoBackupStatus?.dirtyAt) {
         completeTripAutoSnapshotSuccess(result.tripId, autoBackupStatus.dirtyAt)
       }
-      setMessage('本地快照已上传到云端。')
+      setMessage('本地快照已上传，已创建新的云端快照。')
       await refreshCloudSnapshotChecks()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '上传本地快照失败。')
@@ -120,7 +121,7 @@ export function CloudSnapshotCheckPrompts({
       if (autoBackupStatus?.dirtyAt) {
         completeTripAutoSnapshotSuccess(target.tripId, autoBackupStatus.dirtyAt)
       }
-      setMessage('本地快照已上传到云端。')
+      setMessage('本地快照已上传，已创建新的云端快照。')
       setUploadConfirmTarget(null)
       await refreshCloudSnapshotChecks()
     } catch (caught) {
@@ -153,12 +154,12 @@ export function CloudSnapshotCheckPrompts({
       ))}
       {hiddenCount > 0 ? (
         <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          还有 {hiddenCount} 个云端快照提醒，请在云端备份列表中查看。
+          还有 {hiddenCount} 个云端快照提醒，请在云端快照列表中查看。
         </p>
       ) : null}
       <ConfirmDialog
-        body="恢复会创建一个新的本地旅行，不会覆盖当前本地数据。"
-        confirmLabel="恢复为新旅行"
+        body="恢复会创建一个新的本地旅行副本，不会覆盖当前本地旅行，也不会删除云端快照。恢复后 Home 可能出现两个同名旅行，恢复副本会带有来源标识。"
+        confirmLabel="恢复为新旅行副本"
         icon={<Download className="size-5" />}
         loading={Boolean(busySignature && restoreTarget?.signature === busySignature)}
         onCancel={() => {
@@ -168,10 +169,10 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
-        title="恢复云端快照？"
+        title="恢复为新旅行副本？"
       />
       <ConfirmDialog
-        body="上传本地快照后会创建一个新的云端备份快照，不会覆盖已有的云端备份。如果云端也有你需要的数据，建议先恢复云端备份再上传。"
+        body="上传会创建一个新的云端快照，不会删除旧快照，也不会把云端修改合并到当前本地旅行。如果云端快照里有你需要的数据，请先恢复为新旅行副本后再决定。"
         confirmLabel="上传本地快照"
         icon={<Upload className="size-5" />}
         loading={Boolean(busySignature && uploadConfirmTarget?.signature === busySignature)}
@@ -189,8 +190,8 @@ export function CloudSnapshotCheckPrompts({
 }
 
 function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) {
-  const lines = buildVersionContextLines(result)
-  if (lines.length === 0) {
+  const rows = buildCloudSnapshotVersionContextRows(result)
+  if (rows.length === 0) {
     return null
   }
 
@@ -202,33 +203,35 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
         <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
       </summary>
       <div className="mt-2 space-y-1 pl-4">
-        {lines.map((line, i) => (
-          <p key={i} className="leading-5 text-slate-500">{line}</p>
+        {rows.map((row) => (
+          <p key={row.label} className="leading-5 text-slate-500">
+            {row.label}：{row.value}（{row.description}）
+          </p>
         ))}
         <p className="pt-1 leading-5 text-slate-400">
-          系统只会提醒您版本差异，不会自动覆盖或合并任何数据。
+          系统只会提醒版本差异，不会自动覆盖、合并或删除任何数据。若本地或云端版本变化，提醒可能再次出现。
         </p>
       </div>
     </details>
   )
 }
 
-function buildVersionContextLines(result: CloudSnapshotCheckResult): string[] {
-  const lines: string[] = []
-  const localTime = formatVersionTimestamp(result.tripUpdatedAt)
-  const cloudTime = formatVersionTimestamp(result.cloudVersion)
-  const dirtyTime = formatVersionTimestamp(result.dirtyAt)
+function VersionContextSummary({ result }: { result: CloudSnapshotCheckResult }) {
+  const rows = buildCloudSnapshotVersionContextRows(result)
+  if (rows.length === 0) {
+    return null
+  }
 
-  if (localTime) {
-    lines.push(`本地版本来自：${localTime}（旅行数据最后更新时间）`)
-  }
-  if (cloudTime) {
-    lines.push(`云端版本来自：${cloudTime}（云端备份导出时间）`)
-  }
-  if (dirtyTime) {
-    lines.push(`未上传修改：${dirtyTime}`)
-  }
-  return lines
+  return (
+    <div className="grid gap-1.5 rounded-xl bg-white/75 p-2 text-xs ring-1 ring-slate-100 dark:bg-slate-900/60 dark:ring-slate-700/70">
+      {rows.map((row) => (
+        <div className="flex min-w-0 items-start justify-between gap-2" key={row.label}>
+          <span className="shrink-0 font-semibold text-slate-500 dark:text-slate-400">{row.label}</span>
+          <span className="min-w-0 text-right font-medium text-slate-800 dark:text-slate-100">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function CloudSnapshotPromptCard({
@@ -274,6 +277,7 @@ function CloudSnapshotPromptCard({
           </p>
         </div>
       </div>
+      <VersionContextSummary result={result} />
       <VersionContextDetail result={result} />
       <div className={result.status === 'possible_conflict' ? 'grid gap-2' : 'grid grid-cols-2 gap-2'}>
         {result.status === 'local_newer' || result.status === 'possible_conflict' ? (
@@ -295,7 +299,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onRestore}
           >
-            恢复为新旅行
+            恢复为新旅行副本
           </Button>
         ) : null}
         <Button
@@ -304,7 +308,7 @@ function CloudSnapshotPromptCard({
           onClick={() => navigateTo('settings', { section: 'cloud' })}
           variant="secondary"
         >
-          查看云端备份
+          查看云端快照
         </Button>
       </div>
       <button
@@ -320,40 +324,42 @@ function CloudSnapshotPromptCard({
 }
 
 function getPromptView(result: CloudSnapshotCheckResult) {
+  const copy = getCloudSnapshotPromptCopy(result.status)
+
   if (result.status === 'cloud_newer') {
     return {
-      detail: '云端有一份比本地更新的备份，恢复后会创建一个新的本地旅行，不会覆盖当前本地数据。',
+      detail: copy.detail,
       icon: <Cloud className="size-4" />,
-      title: '云端有较新的备份',
+      title: copy.title,
     }
   }
 
   if (result.status === 'local_newer') {
     return {
-      detail: '本地有未同步到云端的修改，上传后会创建一个新的云端备份快照，不会覆盖已有的云端备份。',
+      detail: copy.detail,
       icon: <Upload className="size-4" />,
-      title: '本地版本较新',
+      title: copy.title,
     }
   }
 
   return {
-    detail: '本地有未同步的修改，同时云端也有新的备份。请手动选择保留哪一份，或先查看详情再决定。',
+    detail: copy.detail,
     icon: <AlertTriangle className="size-4" />,
-    title: '本地和云端可能都有更新',
+    title: copy.title,
   }
 }
 
 async function ensureCloudSnapshotActionReady() {
   if (!getSupabaseConfigStatus().configured) {
-    throw new Error('云端备份未配置，请先配置 Supabase 环境变量。')
+    throw new Error('云端快照未配置，请先配置 Supabase 环境变量。')
   }
 
   if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
-    throw new Error('当前离线，无法访问云端备份。')
+    throw new Error('当前离线，无法访问云端快照。')
   }
 
   const session = await getCurrentSession().catch(() => null)
   if (!session) {
-    throw new Error('请先登录云端备份账号。')
+    throw new Error('请先登录云端快照账号。')
   }
 }

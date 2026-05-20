@@ -30,6 +30,15 @@ export function getSupabaseConfigStatus(env: SupabaseEnv = import.meta.env): Sup
     }
   }
 
+  if (shouldUseE2eSupabaseFixture()) {
+    return {
+      anonKey: 'tripmap-e2e-fixture-key',
+      configured: true,
+      missing: [],
+      url: 'https://tripmap-e2e.supabase.co',
+    }
+  }
+
   const url = env.VITE_SUPABASE_URL?.trim()
   const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim()
   const missing = [
@@ -76,19 +85,27 @@ export function requireSupabaseClient() {
 export type { Session, User }
 
 function shouldForceSupabaseUnconfigured() {
+  return readLocalE2eFlag('tripmap:e2e:supabase-unconfigured') === '1'
+}
+
+function shouldUseE2eSupabaseFixture() {
+  return Boolean(readLocalE2eFlag('tripmap:e2e:cloud-fixture'))
+}
+
+function readLocalE2eFlag(key: string) {
   if (typeof window === 'undefined') {
-    return false
+    return null
   }
 
   try {
     const hostname = window.location.hostname
     const isLocalTestHost = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
     if (!isLocalTestHost) {
-      return false
+      return null
     }
 
-    return window.localStorage.getItem('tripmap:e2e:supabase-unconfigured') === '1'
+    return window.localStorage.getItem(key)
   } catch {
-    return false
+    return null
   }
 }

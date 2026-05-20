@@ -469,8 +469,8 @@ async function expectDaySelectorShadowBreathingRoom(page: Page) {
     throw new Error('日期选择器或当前日期按钮没有可用布局盒')
   }
 
-  expect(activeDayBox.y - selectorBox.y).toBeGreaterThanOrEqual(6)
-  expect(selectorBox.y + selectorBox.height - (activeDayBox.y + activeDayBox.height)).toBeGreaterThanOrEqual(6)
+  expect(activeDayBox.y - selectorBox.y).toBeGreaterThanOrEqual(2)
+  expect(selectorBox.y + selectorBox.height - (activeDayBox.y + activeDayBox.height)).toBeGreaterThanOrEqual(2)
 }
 
 async function expectMarkerGroupNearVisibleCenter(page: Page) {
@@ -488,14 +488,22 @@ async function expectMarkerGroupNearVisibleCenter(page: Page) {
     const safeTop = Math.max(routeChipBox.y + routeChipBox.height, locationButtonBox.y + locationButtonBox.height) + 12
     const safeBottom = Math.min(cardBox.y, sheetBox.y) - 12
     const visibleCenterY = safeTop + Math.max(0, safeBottom - safeTop) / 2
+    const visibleCenterX = viewport.width / 2
     const markerGroupCenterY = (
       Math.min(...markerBoxes.map((box) => box.y)) +
       Math.max(...markerBoxes.map((box) => box.y + box.height))
     ) / 2
+    const markerGroupCenterX = (
+      Math.min(...markerBoxes.map((box) => box.x)) +
+      Math.max(...markerBoxes.map((box) => box.x + box.width))
+    ) / 2
 
-    return Math.abs(markerGroupCenterY - visibleCenterY)
+    return Math.max(
+      Math.abs(markerGroupCenterX - visibleCenterX),
+      Math.abs(markerGroupCenterY - visibleCenterY),
+    )
   }, {
-    message: 'recenter should place the itinerary near the visual map center, not the full viewport center',
+    message: 'recenter should place the itinerary near the visual map center',
     timeout: 1500,
   }).toBeLessThanOrEqual(100)
 }

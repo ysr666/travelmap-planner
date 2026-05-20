@@ -1971,6 +1971,7 @@ function getMeasuredMapPadding({
     return fallback
   }
 
+  const measuredRight = Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect))
   const next = normalizeEdgeInsets({
     top: Math.max(
       fallback.top,
@@ -1978,13 +1979,13 @@ function getMeasuredMapPadding({
       getTopInset(stageRect, floatingControlsRect),
       getTopInset(stageRect, controlNoticeRect),
     ),
-    right: Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect)),
+    right: measuredRight,
     bottom: Math.max(
       fallback.bottom,
       getBottomInset(stageRect, sheetRect),
       getBottomInset(stageRect, markerCardRect),
     ),
-    left: fallback.left,
+    left: Math.max(fallback.left, measuredRight),
   }, fallback)
 
   return constrainPaddingToStage(next, stageRect)

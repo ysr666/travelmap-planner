@@ -2,9 +2,18 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
 import { MapLibreAdapter } from '../lib/maplibreAdapter'
-import type { MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
+import type { EdgeInsets, MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
 import { markMapStartup } from '../lib/mapStartupMetrics'
-import { buildDayMapViewportPlan, isValidLngLat, type DayMapRecenterResult } from '../lib/dayMapViewport'
+import {
+  DEFAULT_DAY_MAP_PADDING,
+  MARKER_FOCUS_COMFORT_ZOOM,
+  buildDayMapViewportPlan,
+  getMarkerFocusCorrection,
+  isValidLngLat,
+  normalizeEdgeInsets,
+  type DayMapRecenterResult,
+  type ScreenRect,
+} from '../lib/dayMapViewport'
 import { sortItineraryItems } from '../lib/itinerary'
 import { getItemLngLat, type LngLat } from '../lib/routing'
 import type { DayPrewarmTarget } from '../lib/mapPrewarm'
@@ -18,6 +27,8 @@ type DayMapProps = {
   heightClassName?: string
   surface?: 'card' | 'fullscreen'
   resizeSignal?: number
+  viewportPadding?: EdgeInsets
+  markerFocusPadding?: EdgeInsets
   routeLineStrings?: LngLat[][]
   userLocation?: LngLat | null
   onSelectItem: (item: ItineraryItem) => void
@@ -27,7 +38,7 @@ type DayMapProps = {
 }
 
 export type DayMapHandle = {
-  cancelPrewarm: () => void
+  cancelPrewarm: (options?: { restoreCamera?: boolean }) => void
   isReady: () => boolean
   prewarmBounds: (targets: DayPrewarmTarget[]) => Promise<void>
   recenter: () => DayMapRecenterResult
@@ -69,6 +80,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   heightClassName = 'h-[52dvh] min-h-[360px]',
   surface = 'card',
   resizeSignal,
+  viewportPadding,
+  markerFocusPadding,
   routeLineStrings,
   userLocation,
   onSelectItem,
@@ -91,7 +104,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const coordinateKeyRef = useRef('')
   const routeLineStringsRef = useRef<LngLat[][] | undefined>(routeLineStrings)
   const userLocationRef = useRef<LngLat | null>(userLocation ?? null)
+  const viewportPaddingRef = useRef<EdgeInsets>(DEFAULT_DAY_MAP_PADDING)
+  const markerFocusPaddingRef = useRef<EdgeInsets>(DEFAULT_DAY_MAP_PADDING)
   const resizeFrameRef = useRef<number | null>(null)
+  const markerFocusFrameRef = useRef<number | null>(null)
   const prewarmSessionRef = useRef<PrewarmSession | null>(null)
   const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
@@ -124,6 +140,21 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const hasMappableItems = validItems.length > 0
   const hasMapTargets = hasMappableItems || Boolean(userLocation)
   const showBaseLoading = hasMapTargets && !mapError && !isMapReady
+  const normalizedViewportPadding = useMemo(
+    () => normalizeEdgeInsets(viewportPadding, DEFAULT_DAY_MAP_PADDING),
+    [viewportPadding],
+  )
+  const normalizedMarkerFocusPadding = useMemo(
+    () => normalizeEdgeInsets(markerFocusPadding, normalizedViewportPadding),
+    [markerFocusPadding, normalizedViewportPadding],
+  )
+  validItemsRef.current = validItems
+  coordinateKeyRef.current = coordinateKey
+  routeLineStringsRef.current = routeLineStrings
+  userLocationRef.current = userLocation ?? null
+  selectedItemIdRef.current = selectedItemId
+  viewportPaddingRef.current = normalizedViewportPadding
+  markerFocusPaddingRef.current = normalizedMarkerFocusPadding
 
   const clearMarkers = useCallback(() => {
     markersRef.current.forEach(({ handle }) => handle.remove())
@@ -143,6 +174,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
     clearMarkers()
     clearUserLocationMarker()
+    if (markerFocusFrameRef.current !== null) {
+      window.cancelAnimationFrame(markerFocusFrameRef.current)
+      markerFocusFrameRef.current = null
+    }
     if (mapRef.current) {
       mapRef.current.remove()
       mapRef.current = null
@@ -201,14 +236,18 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     markMapStartup('prewarm restored current camera')
   }, [])
 
-  const cancelPrewarm = useCallback(() => {
+  const cancelPrewarm = useCallback((options?: { restoreCamera?: boolean }) => {
     const session = prewarmSessionRef.current
     if (!session) {
       return
     }
 
     session.cancelled = true
-    restorePrewarmCamera(session)
+    if (options?.restoreCamera !== false) {
+      restorePrewarmCamera(session)
+    } else {
+      session.restored = true
+    }
     prewarmSessionRef.current = null
     markMapStartup('prewarm cancelled')
   }, [restorePrewarmCamera])
@@ -275,7 +314,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     })
     const map = mapRef.current
     if (map && loadedRef.current) {
-      applyViewportPlan(map, plan)
+      applyViewportPlan(map, plan, markerFocusPaddingRef.current)
     }
     markMapStartup('manual recenter completed', {
       includedUserLocation: plan.includedUserLocation,
@@ -381,8 +420,54 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     const plan = buildDayMapViewportPlan({
       itineraryCoordinates: mapItems.map((item) => getItemLngLat(item)),
     })
-    applyViewportPlan(map, plan)
+    applyViewportPlan(map, plan, viewportPaddingRef.current)
     markMapStartup('first fitBounds completed', { points: mapItems.length })
+  }, [])
+
+  const focusSelectedItem = useCallback((source: 'marker' | 'list' | null | undefined) => {
+    const selectedId = selectedItemIdRef.current
+    if (!selectedId) {
+      return
+    }
+
+    const selectedItem = validItemsRef.current.find((item) => item.id === selectedId)
+    const selectedLngLat = selectedItem ? getItemLngLat(selectedItem) : null
+    const map = mapRef.current
+    if (!map || !loadedRef.current || !selectedLngLat) {
+      return
+    }
+
+    const currentZoom = map.getCamera().zoom
+    const markerRecord = markersRef.current.find((marker) => marker.itemId === selectedId)
+    const container = containerRef.current
+
+    if (markerRecord && container) {
+      const correction = getMarkerFocusCorrection({
+        currentZoom,
+        markerRect: domRectToScreenRect(markerRecord.element.getBoundingClientRect()),
+        padding: markerFocusPaddingRef.current,
+        viewportRect: domRectToScreenRect(container.getBoundingClientRect()),
+      })
+
+      if (!correction.shouldMove) {
+        return
+      }
+
+      map.easeTo(selectedLngLat as unknown as MapLngLat, correction.nextZoom, 420)
+      markMapStartup('selected marker camera corrected', {
+        reason: correction.reason,
+        source: source ?? 'unknown',
+      })
+      return
+    }
+
+    if (source !== 'marker') {
+      map.easeTo(
+        selectedLngLat as unknown as MapLngLat,
+        Math.max(currentZoom, MARKER_FOCUS_COMFORT_ZOOM),
+        420,
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -408,6 +493,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   useEffect(() => {
     selectedItemIdRef.current = selectedItemId
   }, [selectedItemId])
+
+  useEffect(() => {
+    viewportPaddingRef.current = normalizedViewportPadding
+  }, [normalizedViewportPadding])
+
+  useEffect(() => {
+    markerFocusPaddingRef.current = normalizedMarkerFocusPadding
+  }, [normalizedMarkerFocusPadding])
 
   useEffect(() => {
     validItemsRef.current = validItems
@@ -512,18 +605,26 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     selectedItemIdRef.current = selectedItemId
     updateMarkerSelection()
 
-    if (selectedItemSource === 'marker') {
+    if (!selectedItemId) {
       return
     }
 
-    const selectedItem = validItemsRef.current.find((item) => item.id === selectedItemId)
-    const selectedLngLat = selectedItem ? getItemLngLat(selectedItem) : null
-    const map = mapRef.current
-    if (map && loadedRef.current && selectedLngLat) {
-      const currentZoom = map.getCamera().zoom
-      map.easeTo(selectedLngLat as unknown as MapLngLat, Math.max(currentZoom, 13.5), 450)
+    if (markerFocusFrameRef.current !== null) {
+      window.cancelAnimationFrame(markerFocusFrameRef.current)
     }
-  }, [selectedItemId, selectedItemSource, updateMarkerSelection])
+
+    markerFocusFrameRef.current = window.requestAnimationFrame(() => {
+      markerFocusFrameRef.current = null
+      focusSelectedItem(selectedItemSource)
+    })
+
+    return () => {
+      if (markerFocusFrameRef.current !== null) {
+        window.cancelAnimationFrame(markerFocusFrameRef.current)
+        markerFocusFrameRef.current = null
+      }
+    }
+  }, [focusSelectedItem, normalizedMarkerFocusPadding, selectedItemId, selectedItemSource, updateMarkerSelection])
 
   useEffect(() => {
     const container = containerRef.current
@@ -682,18 +783,33 @@ function buildLineStrings(items: ItineraryItem[], routeLineStrings?: LngLat[][])
   )
 }
 
-function applyViewportPlan(map: MapInstance, plan: ReturnType<typeof buildDayMapViewportPlan>) {
+function applyViewportPlan(
+  map: MapInstance,
+  plan: ReturnType<typeof buildDayMapViewportPlan>,
+  padding: EdgeInsets,
+) {
   if (plan.bounds) {
     map.fitBounds(plan.bounds as unknown as LngLatBounds, {
       duration: 700,
       maxZoom: 14,
-      padding: 72,
+      padding,
     })
     return
   }
 
   if (plan.center && plan.zoom) {
     map.flyTo(plan.center as unknown as MapLngLat, plan.zoom, 600)
+  }
+}
+
+function domRectToScreenRect(rect: DOMRect): ScreenRect {
+  return {
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
   }
 }
 

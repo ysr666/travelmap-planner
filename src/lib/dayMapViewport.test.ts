@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   USER_LOCATION_DISTANCE_THRESHOLD_METERS,
+  buildSafeScreenRect,
   buildDayMapViewportPlan,
   getDistanceMeters,
+  getMarkerFocusCorrection,
+  normalizeEdgeInsets,
   normalizeLngLat,
 } from './dayMapViewport'
 import type { LngLat } from './routing'
@@ -113,4 +116,88 @@ describe('day map viewport helpers', () => {
       userLocation: [140.45, 35.89],
     }).excludedUserLocationForDistance).toBe(true)
   })
+
+  it('keeps a marker inside the safe rect without camera correction', () => {
+    const correction = getMarkerFocusCorrection({
+      currentZoom: 13,
+      markerRect: rect({ left: 180, top: 260, width: 44, height: 44 }),
+      padding: { top: 88, right: 72, bottom: 180, left: 24 },
+      viewportRect: rect({ left: 0, top: 0, width: 390, height: 640 }),
+    })
+
+    expect(correction.shouldMove).toBe(false)
+    expect(correction.reason).toBe('already-visible')
+  })
+
+  it('recommends correction when a marker is hidden by the bottom inset', () => {
+    const correction = getMarkerFocusCorrection({
+      currentZoom: 13,
+      markerRect: rect({ left: 180, top: 500, width: 44, height: 44 }),
+      padding: { top: 72, right: 72, bottom: 180, left: 24 },
+      viewportRect: rect({ left: 0, top: 0, width: 390, height: 640 }),
+    })
+
+    expect(correction.shouldMove).toBe(true)
+    expect(correction.reason).toBe('outside-safe-area')
+    expect(correction.safeRect.bottom).toBe(460)
+  })
+
+  it('uses mild minimum zoom only when marker context is too far out', () => {
+    const correction = getMarkerFocusCorrection({
+      currentZoom: 8.5,
+      markerRect: rect({ left: 180, top: 260, width: 44, height: 44 }),
+      padding: { top: 72, right: 72, bottom: 160, left: 24 },
+      viewportRect: rect({ left: 0, top: 0, width: 390, height: 640 }),
+    })
+
+    expect(correction.shouldMove).toBe(true)
+    expect(correction.reason).toBe('zoom-too-low')
+    expect(correction.nextZoom).toBe(13.25)
+  })
+
+  it('normalizes missing measured insets with conservative fallbacks', () => {
+    expect(normalizeEdgeInsets({ bottom: 188 }, { top: 80, right: 64, bottom: 150, left: 20 })).toEqual({
+      top: 80,
+      right: 64,
+      bottom: 188,
+      left: 20,
+    })
+    expect(normalizeEdgeInsets(48)).toEqual({
+      top: 48,
+      right: 48,
+      bottom: 48,
+      left: 48,
+    })
+  })
+
+  it('keeps a usable safe rect even when overlays consume most of the viewport', () => {
+    const safeRect = buildSafeScreenRect(
+      rect({ left: 0, top: 0, width: 390, height: 240 }),
+      { top: 120, right: 24, bottom: 150, left: 24 },
+    )
+
+    expect(safeRect.height).toBeGreaterThanOrEqual(96)
+    expect(safeRect.width).toBeGreaterThanOrEqual(96)
+  })
 })
+
+function rect({
+  left,
+  top,
+  width,
+  height,
+}: {
+  left: number
+  top: number
+  width: number
+  height: number
+}) {
+  return {
+    top,
+    right: left + width,
+    bottom: top + height,
+    left,
+    width,
+    height,
+  }
+}

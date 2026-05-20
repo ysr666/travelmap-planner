@@ -81,7 +81,8 @@ const ROAD_TRANSPORT_LABELS: Record<RoadTransportMode, string> = {
   bus: '公交',
 }
 const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回到当天行程范围'
-const LOCATION_UNAVAILABLE_MESSAGE = '当前浏览器暂时无法获取位置。'
+const LOCATION_UNAVAILABLE_MESSAGE = '暂时无法取得位置，请稍后重试。'
+const LOCATION_PERMISSION_MESSAGE = '定位失败，请在地址栏允许位置后重试'
 const MAP_OVERLAY_GAP = 12
 const MARKER_EDGE_RESERVE = 96
 const MARKER_CARD_FALLBACK_HEIGHT = 136
@@ -576,11 +577,15 @@ export function DayMapView({
         setUserLocation(nextLocation)
         setUserLocationStatus('ready')
       },
-      () => {
+      (error) => {
         pendingUserLocationRecenterRef.current = false
         setUserLocation(null)
         setUserLocationStatus('error')
-        setCurrentMapControlNotice('无法取得当前位置，请检查浏览器权限。')
+        setCurrentMapControlNotice(
+          error.code === error.PERMISSION_DENIED
+            ? LOCATION_PERMISSION_MESSAGE
+            : LOCATION_UNAVAILABLE_MESSAGE,
+        )
       },
       {
         enableHighAccuracy: false,
@@ -1283,9 +1288,9 @@ function MapControlNotice({
   showBelowHeader: boolean
 }) {
   return (
-    <div className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'top-40' : 'top-20'}`}>
+    <div className={`pointer-events-none absolute left-4 right-[4.75rem] z-30 ${showBelowHeader ? 'top-[9.25rem]' : 'top-[4.25rem]'}`}>
       <div
-        className="ml-auto max-w-[17rem] rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-slate-600 backdrop-blur-xl tm-surface dark:text-slate-300"
+        className="ml-auto flex h-11 max-w-[17rem] items-center truncate whitespace-nowrap rounded-2xl px-3 text-xs font-medium leading-5 text-slate-600 backdrop-blur-xl tm-surface dark:text-slate-300"
         data-testid="map-location-notice"
       >
         {message}

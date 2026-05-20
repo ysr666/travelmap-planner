@@ -798,8 +798,22 @@ function applyViewportPlan(
   }
 
   if (plan.center && plan.zoom) {
-    map.flyTo(plan.center as unknown as MapLngLat, plan.zoom, 600)
+    map.fitBounds(buildCenteredBounds(plan.center), {
+      duration: 600,
+      maxZoom: plan.zoom,
+      padding,
+    })
   }
+}
+
+function buildCenteredBounds(center: LngLat): LngLatBounds {
+  const [lng, lat] = center
+  const padding = 0.0015
+
+  return [
+    [lng - padding, lat - padding],
+    [lng + padding, lat + padding],
+  ]
 }
 
 function domRectToScreenRect(rect: DOMRect): ScreenRect {

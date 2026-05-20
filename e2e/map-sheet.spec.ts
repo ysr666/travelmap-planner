@@ -226,7 +226,8 @@ test('当前位置权限被拒绝时显示轻量 fallback', async ({ page, conte
   await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('map-user-location-button').click()
-  await expect(page.getByTestId('map-location-notice')).toContainText('无法取得当前位置，请检查浏览器权限。')
+  await expect(page.getByTestId('map-location-notice')).toContainText('请在地址栏允许位置后重试')
+  await expectLocationNoticeAlignedWithButton(page)
   await expect(page.getByTestId('map-user-location-marker')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -451,4 +452,19 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
     message: 'selected marker and marker card should fit in the usable map area',
     timeout: 1500,
   }).toBe(true)
+}
+
+async function expectLocationNoticeAlignedWithButton(page: Page) {
+  const noticeBox = await page.getByTestId('map-location-notice').boundingBox()
+  const locationButtonBox = await page.getByTestId('map-user-location-button').boundingBox()
+
+  expect(noticeBox).not.toBeNull()
+  expect(locationButtonBox).not.toBeNull()
+  if (!noticeBox || !locationButtonBox) {
+    throw new Error('定位提示或定位按钮没有可用布局盒')
+  }
+
+  expect(Math.abs(noticeBox.y - locationButtonBox.y)).toBeLessThanOrEqual(2)
+  expect(Math.abs(noticeBox.height - locationButtonBox.height)).toBeLessThanOrEqual(4)
+  expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(locationButtonBox.x - 8)
 }

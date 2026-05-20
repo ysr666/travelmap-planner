@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured, mockMapStyle } from './helpers'
 
 test.beforeEach(async ({ page }) => {
@@ -26,7 +26,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await expect(page.getByTestId('route-generate-button')).toBeHidden()
   await expect(page.getByTestId('map-collapsed-sheet')).toBeVisible()
-  await expect(page.getByTestId('map-collapsed-item-preview')).toBeVisible()
+  await expect(page.getByTestId('map-collapsed-item-preview')).toHaveCount(0)
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
   await expect(page.getByText('上拉查看行程')).toBeHidden()
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
@@ -77,18 +77,22 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expectNoHorizontalOverflow(page)
 })
 
-test('collapsed sheet uses a lightweight item preview that opens detail', async ({ page }) => {
+test('collapsed sheet stays summary-only and marker card owns item preview', async ({ page }) => {
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
 
   await expect(page.getByTestId('map-collapsed-sheet')).toBeVisible()
-  await expect(page.getByTestId('map-collapsed-item-preview')).toBeVisible()
+  await expect(page.getByTestId('map-collapsed-item-preview')).toHaveCount(0)
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
 
-  await page.getByTestId('map-collapsed-item-preview').click()
+  await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
+  await expect(page.getByTestId('map-marker-card')).toBeVisible()
+  await expect(page.getByTestId('map-collapsed-item-preview')).toHaveCount(0)
+  await page.getByTestId('map-marker-card-open').click()
   await expect(page).toHaveURL(/#\/item\?/)
+  await expect(page).toHaveURL(/view=map/)
   await expect(page.getByRole('heading', { name: /Hotel Metropolitan Tokyo/ })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
@@ -101,20 +105,25 @@ test('点击地图 marker 显示轻量地点卡片并可进入详情', async ({ 
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
 
   const hotelMarker = page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ })
-  await expect(hotelMarker).toBeVisible()
-  await hotelMarker.click()
+  const shibuyaSkyMarker = page.getByRole('button', { name: /选择 Shibuya Sky 夜景/ })
+  await expect(shibuyaSkyMarker).toBeVisible()
+  await shibuyaSkyMarker.click()
 
   const markerCard = page.getByTestId('map-marker-card')
   await expect(markerCard).toBeVisible()
+  await expect(markerCard).toContainText('Shibuya Sky 夜景')
+  await expectMarkerAndCardInUsableMapArea(page, shibuyaSkyMarker, markerCard)
+
+  await page.getByTestId('map-recenter-button').click()
+  await expect(hotelMarker).toBeVisible()
+  await hotelMarker.click()
+
   await expect(markerCard).toContainText('15:00')
   await expect(markerCard).toContainText('Hotel Metropolitan Tokyo 入住')
   await expect(markerCard).toContainText('Hotel Metropolitan Tokyo')
+  await expectMarkerAndCardInUsableMapArea(page, hotelMarker, markerCard)
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
-
-  await page.getByRole('button', { name: /选择 明治神宫散步/ }).click()
-  await expect(markerCard).toContainText('明治神宫散步')
-  await expect(markerCard).toContainText('Meiji Shrine')
 
   await page.getByTestId('map-marker-card-close').click()
   await expect(markerCard).toBeHidden()
@@ -153,6 +162,7 @@ test('地图重定位不会生成路线且保留 marker 卡片和路线控件', 
 
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
+  await expect(page.getByTestId('map-marker-card')).toBeHidden()
   await page.getByTestId('map-recenter-button').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
   expect(routeRequestCount).toBe(0)
@@ -411,3 +421,34 @@ test('公交段生成道路路线时显示近似提示', async ({ page }) => {
   expect(sawDrivingCarRequest).toBe(true)
   await expectNoHorizontalOverflow(page)
 })
+
+async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, markerCard: Locator) {
+  await expect(marker).toBeVisible()
+  await expect(markerCard).toBeVisible()
+
+  await expect.poll(async () => {
+    const viewport = page.viewportSize()
+    const markerBox = await marker.boundingBox()
+    const cardBox = await markerCard.boundingBox()
+    const sheetBox = await page.getByTestId('map-sheet').boundingBox()
+    if (!viewport || !markerBox || !cardBox || !sheetBox) {
+      return false
+    }
+
+    const tolerance = 12
+    const markerBottomLimit = Math.min(sheetBox.y, cardBox.y) - 4
+    return (
+      markerBox.x >= -tolerance &&
+      markerBox.x + markerBox.width <= viewport.width + tolerance &&
+      markerBox.y >= -tolerance &&
+      markerBox.y + markerBox.height <= markerBottomLimit + tolerance &&
+      cardBox.x >= 8 &&
+      cardBox.x + cardBox.width <= viewport.width - 8 &&
+      cardBox.y >= 48 &&
+      cardBox.y + cardBox.height <= sheetBox.y + tolerance
+    )
+  }, {
+    message: 'selected marker and marker card should fit in the usable map area',
+    timeout: 1500,
+  }).toBe(true)
+}

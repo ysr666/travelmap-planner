@@ -2,6 +2,15 @@ export type LngLat = [number, number]
 
 export type LngLatBounds = [LngLat, LngLat]
 
+export type EdgeInsets = {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+export type MapPadding = number | EdgeInsets
+
 export type CameraState = {
   center: LngLat
   zoom: number
@@ -10,7 +19,7 @@ export type CameraState = {
 }
 
 export type FitBoundsOptions = {
-  padding?: number
+  padding?: MapPadding
   maxZoom?: number
   duration?: number
 }

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -8,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, ChevronRight, Crosshair, ExternalLink, Locate, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, Crosshair, ExternalLink, Locate, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -16,6 +17,8 @@ import { updateItineraryItem } from '../../db'
 import { buildAppleMapsUrl, buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
 import { describeItemTime, describePreviousTransport, sortItineraryItems } from '../../lib/itinerary'
 import { formatDate } from '../../lib/dates'
+import { DEFAULT_DAY_MAP_PADDING, normalizeEdgeInsets, type ScreenRect } from '../../lib/dayMapViewport'
+import type { EdgeInsets } from '../../lib/mapEngine'
 import {
   ROUTING_CONFIG_CHANGED_EVENT,
   fetchDayRoute,
@@ -65,8 +68,8 @@ type DayMapViewProps = {
 }
 
 const DEFAULT_SNAP_POINTS: SnapPoints = {
-  collapsed: 220,
-  middle: 450,
+  collapsed: 136,
+  middle: 360,
   expanded: 760,
 }
 
@@ -79,6 +82,9 @@ const ROAD_TRANSPORT_LABELS: Record<RoadTransportMode, string> = {
 }
 const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回到当天行程范围'
 const LOCATION_UNAVAILABLE_MESSAGE = '当前浏览器暂时无法获取位置。'
+const MAP_OVERLAY_GAP = 12
+const MARKER_EDGE_RESERVE = 96
+const MARKER_CARD_FALLBACK_HEIGHT = 136
 
 export function DayMapView({
   trip,
@@ -133,10 +139,20 @@ export function DayMapView({
   const routeAbortRef = useRef<AbortController | null>(null)
   const dayMapRef = useRef<DayMapHandle | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const markerCardRef = useRef<HTMLDivElement | null>(null)
+  const routeChipRef = useRef<HTMLDivElement | null>(null)
+  const floatingControlsRef = useRef<HTMLDivElement | null>(null)
+  const sheetOverlayRef = useRef<HTMLElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const pendingRouteEditNoticeRef = useRef<string[] | null>(null)
   const pendingUserLocationRecenterRef = useRef(false)
   const [mapReadyToken, setMapReadyToken] = useState(0)
+  const [mapViewportPadding, setMapViewportPadding] = useState<EdgeInsets>(() =>
+    getFallbackMapPadding({ includeMarkerCard: false, sheetState: 'collapsed', showFloatingHeader }),
+  )
+  const [markerFocusPadding, setMarkerFocusPadding] = useState<EdgeInsets>(() =>
+    getFallbackMapPadding({ includeMarkerCard: false, sheetState: 'collapsed', showFloatingHeader }),
+  )
 
   const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
   const orderedItems = useMemo(() => sortItineraryItems(items), [items])
@@ -154,6 +170,15 @@ export function DayMapView({
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
   }, [mappedItems, markerCardItemId])
+  const routeControlsActive = sheetState !== 'collapsed' && routeControlsOpen
+  const markerCardVisible = Boolean(
+    isVisible &&
+    sheetState === 'collapsed' &&
+    markerCardItem &&
+    !routeControlsActive &&
+    !mapBaseLoading &&
+    !mapError,
+  )
   const activeSegmentItem = useMemo(() => {
     if (orderedItems.length < 2) {
       return null
@@ -209,8 +234,8 @@ export function DayMapView({
         .join('|'),
     [prewarmQueue],
   )
-  const cancelDayMapPrewarm = useCallback(() => {
-    dayMapRef.current?.cancelPrewarm()
+  const cancelDayMapPrewarm = useCallback((options?: { restoreCamera?: boolean }) => {
+    dayMapRef.current?.cancelPrewarm(options)
   }, [])
   const setCurrentMapControlNotice = useCallback((message: string | null) => {
     setMapControlNotice(message ? { dayId: day.id, message } : null)
@@ -288,13 +313,16 @@ export function DayMapView({
   useEffect(() => {
     return () => {
       routeAbortRef.current?.abort()
-      cancelDayMapPrewarm()
+      cancelDayMapPrewarm({ restoreCamera: false })
     }
   }, [cancelDayMapPrewarm])
 
   useEffect(() => {
     if (!prewarmEnabled) {
-      dayMapRef.current?.cancelPrewarm()
+      dayMapRef.current?.cancelPrewarm({ restoreCamera: false })
+      if (isVisible) {
+        dayMapRef.current?.recenter()
+      }
       markMapStartup('prewarm skipped: map visible')
       return
     }
@@ -328,9 +356,9 @@ export function DayMapView({
     return () => {
       cancelled = true
       cancelIdle()
-      cancelDayMapPrewarm()
+      cancelDayMapPrewarm({ restoreCamera: false })
     }
-  }, [cancelDayMapPrewarm, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
+  }, [cancelDayMapPrewarm, isVisible, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
 
   const applyMapRecenterNotice = useCallback((result: ReturnType<DayMapHandle['recenter']> | undefined) => {
     if (!result) {
@@ -562,6 +590,71 @@ export function DayMapView({
     )
   }
 
+  const updateMapOverlayPadding = useCallback(() => {
+    const stageRect = toScreenRect(rootRef.current?.getBoundingClientRect() ?? null)
+    const fallbackBasePadding = getFallbackMapPadding({
+      includeMarkerCard: false,
+      sheetState,
+      showFloatingHeader,
+    })
+    const fallbackFocusPadding = getFallbackMapPadding({
+      includeMarkerCard: markerCardVisible,
+      sheetState,
+      showFloatingHeader,
+    })
+
+    const nextBasePadding = getMeasuredMapPadding({
+      fallbackPadding: fallbackBasePadding,
+      floatingControlsRect: toScreenRect(floatingControlsRef.current?.getBoundingClientRect() ?? null),
+      markerCardRect: null,
+      routeChipRect: toScreenRect(routeChipRef.current?.getBoundingClientRect() ?? null),
+      sheetRect: toScreenRect(sheetOverlayRef.current?.getBoundingClientRect() ?? null),
+      stageRect,
+    })
+    const nextFocusPadding = getMeasuredMapPadding({
+      fallbackPadding: fallbackFocusPadding,
+      floatingControlsRect: toScreenRect(floatingControlsRef.current?.getBoundingClientRect() ?? null),
+      markerCardRect: markerCardVisible
+        ? toScreenRect(markerCardRef.current?.getBoundingClientRect() ?? null)
+        : null,
+      routeChipRect: toScreenRect(routeChipRef.current?.getBoundingClientRect() ?? null),
+      sheetRect: toScreenRect(sheetOverlayRef.current?.getBoundingClientRect() ?? null),
+      stageRect,
+    })
+
+    setMapViewportPadding((current) => (
+      edgeInsetsEqual(current, nextBasePadding) ? current : nextBasePadding
+    ))
+    setMarkerFocusPadding((current) => (
+      edgeInsetsEqual(current, nextFocusPadding) ? current : nextFocusPadding
+    ))
+  }, [markerCardVisible, sheetState, showFloatingHeader])
+
+  useLayoutEffect(() => {
+    updateMapOverlayPadding()
+
+    const resizeObserver = new ResizeObserver(updateMapOverlayPadding)
+    const observedElements = [
+      rootRef.current,
+      sheetOverlayRef.current,
+      markerCardRef.current,
+      routeChipRef.current,
+      floatingControlsRef.current,
+    ].filter((element): element is HTMLElement => element !== null)
+
+    observedElements.forEach((element) => resizeObserver.observe(element))
+    window.addEventListener('resize', updateMapOverlayPadding)
+    window.visualViewport?.addEventListener('resize', updateMapOverlayPadding)
+    const measureTimeout = window.setTimeout(updateMapOverlayPadding, 0)
+
+    return () => {
+      window.clearTimeout(measureTimeout)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateMapOverlayPadding)
+      window.visualViewport?.removeEventListener('resize', updateMapOverlayPadding)
+    }
+  }, [resizeSignal, routeControlsOpen, updateMapOverlayPadding])
+
   return (
     <div ref={rootRef} className={`${embedded ? 'relative h-full min-h-0' : 'app-viewport relative'} min-h-0 overflow-hidden bg-map-bg`}>
       <div className="absolute inset-0 z-0">
@@ -579,17 +672,21 @@ export function DayMapView({
             onMapError={(message) => setMapError(message)}
             onMapReady={() => setMapReadyToken((current) => current + 1)}
             onSelectItem={(item) => handleSelectItem(item, 'marker')}
+            markerFocusPadding={markerFocusPadding}
             routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
             selectedItemSource={selectedItemSource}
             surface="fullscreen"
             userLocation={userLocation}
+            viewportPadding={mapViewportPadding}
           />
         )}
 
-        {isVisible && sheetState === 'collapsed' && markerCardItem && !mapBaseLoading && !mapError ? (
+        {/* Route controls use the middle sheet as the active surface; marker selection is preserved so the card can resume after collapsing. */}
+        {markerCardVisible && markerCardItem ? (
           <MarkerPreviewCard
+            containerRef={markerCardRef}
             item={markerCardItem}
             onClose={() => setMarkerCardSelection(null)}
             onOpenItem={onOpenItem}
@@ -604,6 +701,7 @@ export function DayMapView({
           configured={routeConfigured}
           displayMode={routeDisplayMode}
           onClick={handleOpenRouteControls}
+          containerRef={routeChipRef}
           showBelowHeader={showFloatingHeader}
           state={routeUiState}
           warnings={routeWarnings}
@@ -612,6 +710,7 @@ export function DayMapView({
 
       {isVisible && items.length > 0 && !mapBaseLoading && !mapError ? (
         <MapFloatingControls
+          containerRef={floatingControlsRef}
           locationStatus={userLocationStatus}
           onRecenter={handleRecenterMap}
           onRequestUserLocation={handleRequestUserLocation}
@@ -662,6 +761,7 @@ export function DayMapView({
           selectedItem={selectedItem}
           selectedItemId={selectedItemId}
           setSheetState={setSheetState}
+          sheetRef={sheetOverlayRef}
           sheetState={sheetState}
           stageRef={rootRef}
           trip={trip}
@@ -672,11 +772,13 @@ export function DayMapView({
 }
 
 function MarkerPreviewCard({
+  containerRef,
   item,
   onClose,
   onOpenItem,
   showBelowHeader,
 }: {
+  containerRef?: RefObject<HTMLDivElement | null>
   item: ItineraryItem
   onClose: () => void
   onOpenItem: (item: ItineraryItem) => void
@@ -688,6 +790,7 @@ function MarkerPreviewCard({
   return (
     <div
       className={`pointer-events-none absolute left-4 right-4 z-[60] ${showBelowHeader ? 'bottom-[calc(10.75rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(10.25rem+env(safe-area-inset-bottom))]'}`}
+      ref={containerRef}
     >
       <div
         className="relative mx-auto max-w-sm rounded-2xl p-2 backdrop-blur-xl tm-surface tm-pass-through"
@@ -801,6 +904,7 @@ type MapBottomSheetProps = {
   onChangeRoadTransportMode: (mode: RoadTransportMode) => void
   onClearRouteCache: () => void
   itemRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>
+  sheetRef?: RefObject<HTMLElement | null>
   stageRef: RefObject<HTMLDivElement | null>
 }
 
@@ -834,6 +938,7 @@ function MapBottomSheet({
   onChangeRoadTransportMode,
   onClearRouteCache,
   itemRefs,
+  sheetRef,
   stageRef,
 }: MapBottomSheetProps) {
   const [snapPoints, setSnapPoints] = useState<SnapPoints>(() => getSheetSnapPoints())
@@ -946,6 +1051,7 @@ function MapBottomSheet({
         isDragging ? '' : 'transition-[height] duration-300 ease-out motion-reduce:duration-0'
       }`}
       data-testid="map-sheet"
+      ref={sheetRef}
       style={{ height: `${sheetHeight}px` }}
     >
       <div
@@ -990,14 +1096,24 @@ function MapBottomSheet({
           className="shrink-0 space-y-2 px-4"
           data-testid={sheetState === 'collapsed' ? 'map-collapsed-sheet' : undefined}
         >
-          {sheetState !== 'collapsed' ? (
+          {sheetState === 'collapsed' ? (
+            <RouteControlsSummary
+              open={false}
+              onToggle={() => {
+                setSheetState('middle')
+                setRouteControlsOpen(true)
+              }}
+              state={routeState}
+              warnings={routeWarnings}
+            />
+          ) : (
             <RouteControlsSummary
               open={routeControlsOpen}
               onToggle={() => setRouteControlsOpen((current) => !current)}
               state={routeState}
               warnings={routeWarnings}
             />
-          ) : null}
+          )}
 
           {sheetState !== 'collapsed' && routeControlsOpen ? (
             <RouteControlsSection
@@ -1029,13 +1145,7 @@ function MapBottomSheet({
             </div>
           ) : null}
 
-          {selectedItem && sheetState === 'collapsed' ? (
-            <CompactItemLine
-              item={selectedItem}
-              onOpenItem={onOpenItem}
-              selected={selectedItem.id === selectedItemId}
-            />
-          ) : selectedItem && sheetState === 'middle' ? (
+          {selectedItem && sheetState === 'middle' ? (
             <SelectedItemCard
               compact
               day={day}
@@ -1044,7 +1154,7 @@ function MapBottomSheet({
               onOpenItem={onOpenItem}
               trip={trip}
             />
-          ) : sheetState !== 'expanded' ? (
+          ) : sheetState !== 'expanded' && sheetState !== 'collapsed' ? (
             <p className="rounded-xl bg-slate-50/70 px-3 py-4 text-sm tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:ring-slate-800/70">
               {items.length === 0
                 ? '这一天还没有行程点。'
@@ -1086,6 +1196,7 @@ function MapBottomSheet({
 }
 
 function RouteStatusChip({
+  containerRef,
   state,
   configured,
   displayMode,
@@ -1094,6 +1205,7 @@ function RouteStatusChip({
   showBelowHeader,
   onClick,
 }: {
+  containerRef?: RefObject<HTMLDivElement | null>
   state: RouteUiState
   configured: boolean
   displayMode: RouteDisplayMode
@@ -1105,7 +1217,7 @@ function RouteStatusChip({
   const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
 
   return (
-    <div className={`pointer-events-none absolute left-4 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
+    <div className={`pointer-events-none absolute left-4 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
       <button
         aria-label="打开路线设置"
         className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
@@ -1122,11 +1234,13 @@ function RouteStatusChip({
 }
 
 function MapFloatingControls({
+  containerRef,
   locationStatus,
   showBelowHeader,
   onRecenter,
   onRequestUserLocation,
 }: {
+  containerRef?: RefObject<HTMLDivElement | null>
   locationStatus: UserLocationStatus
   showBelowHeader: boolean
   onRecenter: () => void
@@ -1135,7 +1249,7 @@ function MapFloatingControls({
   const locationLoading = locationStatus === 'loading'
 
   return (
-    <div className={`pointer-events-none absolute right-4 z-40 flex flex-col gap-2 ${showBelowHeader ? 'top-24' : 'top-4'}`}>
+    <div className={`pointer-events-none absolute right-4 z-40 flex flex-col gap-2 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
       <button
         aria-label="回到当天行程范围"
         className="pointer-events-auto flex size-11 items-center justify-center rounded-full text-slate-700 backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200"
@@ -1359,51 +1473,6 @@ function RouteControlsSection({
         </div>
       ) : null}
     </div>
-  )
-}
-
-function CompactItemLine({
-  item,
-  selected,
-  onOpenItem,
-}: {
-  item: ItineraryItem
-  selected: boolean
-  onOpenItem: (item: ItineraryItem) => void
-}) {
-  const location = item.locationName || item.address || '地点未填写'
-  const transportDescription = describePreviousTransport(item)
-
-  return (
-    <button
-      aria-label={`打开 ${item.title} 详情`}
-      className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left transition active:bg-slate-50 tm-focus dark:active:bg-slate-800/70 ${
-        selected ? 'bg-sky-50/65 text-slate-950 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-slate-100 dark:ring-sky-900/50' : 'bg-white/60 text-slate-700 ring-1 ring-slate-100/70 dark:bg-slate-900/35 dark:text-slate-200 dark:ring-slate-800/70'
-      }`}
-      data-testid="map-collapsed-item-preview"
-      onClick={() => onOpenItem(item)}
-      type="button"
-    >
-      <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-100/80 dark:bg-slate-950/55 dark:text-slate-300 dark:ring-slate-800/70">
-        {describeItemTime(item)}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold">{item.title}</span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs tm-muted">
-          <MapPin className="size-3 shrink-0 text-slate-400 dark:text-slate-500" />
-          <span className="truncate">{location}</span>
-        </span>
-      </span>
-      {transportDescription ? (
-        <span className="hidden max-w-[6rem] shrink-0 truncate tm-chip text-[11px] min-[380px]:block">
-          {transportDescription}
-        </span>
-      ) : null}
-      <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-sky-600">
-        详情
-        <ChevronRight className="size-3.5" />
-      </span>
-    </button>
   )
 }
 
@@ -1846,6 +1915,120 @@ function MapEmptyBackdrop({ title, body }: { title: string; body: string }) {
   )
 }
 
+function getFallbackMapPadding({
+  includeMarkerCard,
+  sheetState,
+  showFloatingHeader,
+}: {
+  includeMarkerCard: boolean
+  sheetState: SheetState
+  showFloatingHeader: boolean
+}): EdgeInsets {
+  const snapPoints = getSheetSnapPoints()
+  const sheetHeight = snapPoints[sheetState] ?? snapPoints.collapsed
+  const top = showFloatingHeader ? 164 : 76
+  const markerCardReserve = includeMarkerCard ? MARKER_CARD_FALLBACK_HEIGHT + 48 : 0
+
+  return normalizeEdgeInsets({
+    top,
+    right: 76,
+    bottom: sheetHeight + MAP_OVERLAY_GAP + MARKER_EDGE_RESERVE + markerCardReserve,
+    left: 20,
+  }, DEFAULT_DAY_MAP_PADDING)
+}
+
+function getMeasuredMapPadding({
+  fallbackPadding,
+  floatingControlsRect,
+  markerCardRect,
+  routeChipRect,
+  sheetRect,
+  stageRect,
+}: {
+  fallbackPadding: EdgeInsets
+  floatingControlsRect: ScreenRect | null
+  markerCardRect: ScreenRect | null
+  routeChipRect: ScreenRect | null
+  sheetRect: ScreenRect | null
+  stageRect: ScreenRect | null
+}): EdgeInsets {
+  const fallback = normalizeEdgeInsets(fallbackPadding)
+  if (!stageRect) {
+    return fallback
+  }
+
+  const next = normalizeEdgeInsets({
+    top: Math.max(
+      fallback.top,
+      getTopInset(stageRect, routeChipRect),
+      getTopInset(stageRect, floatingControlsRect),
+    ),
+    right: Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect)),
+    bottom: Math.max(
+      fallback.bottom,
+      getBottomInset(stageRect, sheetRect),
+      getBottomInset(stageRect, markerCardRect),
+    ),
+    left: fallback.left,
+  }, fallback)
+
+  return constrainPaddingToStage(next, stageRect)
+}
+
+function toScreenRect(rect: DOMRect | null): ScreenRect | null {
+  if (!rect) {
+    return null
+  }
+
+  return {
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+  }
+}
+
+function getBottomInset(stageRect: ScreenRect, overlayRect: ScreenRect | null) {
+  if (!overlayRect || overlayRect.bottom <= stageRect.top || overlayRect.top >= stageRect.bottom) {
+    return 0
+  }
+  return Math.max(0, Math.ceil(stageRect.bottom - overlayRect.top + MAP_OVERLAY_GAP + MARKER_EDGE_RESERVE))
+}
+
+function getTopInset(stageRect: ScreenRect, overlayRect: ScreenRect | null) {
+  if (!overlayRect || overlayRect.bottom <= stageRect.top || overlayRect.top >= stageRect.bottom) {
+    return 0
+  }
+  return Math.max(0, Math.ceil(overlayRect.bottom - stageRect.top + MAP_OVERLAY_GAP))
+}
+
+function getRightInset(stageRect: ScreenRect, overlayRect: ScreenRect | null) {
+  if (!overlayRect || overlayRect.right <= stageRect.left || overlayRect.left >= stageRect.right) {
+    return 0
+  }
+  return Math.max(0, Math.ceil(stageRect.right - overlayRect.left + MAP_OVERLAY_GAP))
+}
+
+function constrainPaddingToStage(padding: EdgeInsets, stageRect: ScreenRect): EdgeInsets {
+  const minSafeWidth = 120
+  const minSafeHeight = 120
+  const right = Math.min(padding.right, Math.max(0, stageRect.width - padding.left - minSafeWidth))
+  const bottom = Math.min(padding.bottom, Math.max(0, stageRect.height - padding.top - minSafeHeight))
+
+  return {
+    top: padding.top,
+    right,
+    bottom,
+    left: padding.left,
+  }
+}
+
+function edgeInsetsEqual(a: EdgeInsets, b: EdgeInsets) {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left
+}
+
 function getSheetSnapPoints(stageHeight?: number): SnapPoints {
   if (typeof window === 'undefined') {
     return DEFAULT_SNAP_POINTS
@@ -1855,8 +2038,8 @@ function getSheetSnapPoints(stageHeight?: number): SnapPoints {
     ? stageHeight
     : window.visualViewport?.height ?? window.innerHeight
   const expandedTopGap = 10
-  const collapsed = Math.max(150, Math.round(baseHeight * 0.21))
-  const middle = Math.max(collapsed + 82, Math.round(baseHeight * 0.54))
+  const collapsed = Math.max(132, Math.round(baseHeight * 0.17))
+  const middle = Math.max(collapsed + 128, Math.round(baseHeight * 0.46))
   const expanded = Math.max(middle + 96, Math.round(baseHeight - expandedTopGap))
 
   return {

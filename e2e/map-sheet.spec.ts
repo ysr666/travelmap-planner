@@ -31,6 +31,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByText('上拉查看行程')).toBeHidden()
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
+  await expectDaySelectorShadowBreathingRoom(page)
 
   const routeChipBox = await page.getByTestId('route-chip').boundingBox()
   const viewport = page.viewportSize()
@@ -39,8 +40,8 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   if (!routeChipBox || !viewport) {
     throw new Error('路线 chip 或视口没有可用布局盒')
   }
-  expect(routeChipBox.x).toBeGreaterThanOrEqual(12)
-  expect(routeChipBox.x + routeChipBox.width).toBeLessThanOrEqual(viewport.width - 8)
+  expect(routeChipBox.x).toBeGreaterThanOrEqual(16)
+  expect(routeChipBox.x + routeChipBox.width).toBeLessThanOrEqual(viewport.width - 16)
 
   const before = await sheet.boundingBox()
   const handleBox = await handle.boundingBox()
@@ -456,6 +457,20 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
     message: 'selected marker and marker card should fit in the usable map area',
     timeout: 1500,
   }).toBe(true)
+}
+
+async function expectDaySelectorShadowBreathingRoom(page: Page) {
+  const selectorBox = await page.getByTestId('day-selector').boundingBox()
+  const activeDayBox = await page.getByTestId('day-selector').getByRole('button', { name: /Day 1/ }).boundingBox()
+
+  expect(selectorBox).not.toBeNull()
+  expect(activeDayBox).not.toBeNull()
+  if (!selectorBox || !activeDayBox) {
+    throw new Error('日期选择器或当前日期按钮没有可用布局盒')
+  }
+
+  expect(activeDayBox.y - selectorBox.y).toBeGreaterThanOrEqual(6)
+  expect(selectorBox.y + selectorBox.height - (activeDayBox.y + activeDayBox.height)).toBeGreaterThanOrEqual(6)
 }
 
 async function expectMarkerGroupNearVisibleCenter(page: Page) {

@@ -142,7 +142,7 @@ async function runAutoBackup(
     completeTripAutoSnapshotFailure(
       tripId,
       dirtyAt,
-      caught instanceof Error ? caught.message : '云端备份失败，可稍后重试。',
+      caught instanceof Error ? caught.message : '云端快照失败，可稍后重试。',
     )
   } finally {
     inFlight.delete(tripId)

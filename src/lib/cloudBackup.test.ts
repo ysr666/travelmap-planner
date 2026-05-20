@@ -194,6 +194,68 @@ describe('supabase cloud backup helpers', () => {
     expect(records.ticketBlobs[0].ticketId).toBe(records.ticketMetas[0].id)
   })
 
+  it('sets current cloud restore lineage metadata without renaming the trip', async () => {
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'old-backup-id',
+      days,
+      exportedAt: '2026-04-01T00:00:00.000Z',
+      itineraryItems: items.map((item) => ({ ...item, ticketIds: [] })),
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip: {
+        ...trip,
+        restoredAt: 111,
+        restoredFromCloudBackupId: 'stale_backup',
+        restoredFromCloudExportedAt: '2026-03-01T00:00:00.000Z',
+        restoredFromCloudOriginalTripId: 'stale_trip',
+      },
+      userId: 'user-id',
+    }).snapshot
+    const records = buildCloudRestoreRecords(snapshot, [], {
+      createIdFn: (prefix) => `${prefix}_new`,
+      now: 999,
+      restoreMetadata: {
+        backupId: 'current-backup-id',
+        exportedAt: snapshot.exportedAt,
+        originalTripId: snapshot.originalTripId,
+      },
+    })
+
+    expect(records.trip.title).toBe(trip.title)
+    expect(records.trip.restoredAt).toBe(999)
+    expect(records.trip.restoredFromCloudBackupId).toBe('current-backup-id')
+    expect(records.trip.restoredFromCloudOriginalTripId).toBe(trip.id)
+    expect(records.trip.restoredFromCloudExportedAt).toBe('2026-04-01T00:00:00.000Z')
+  })
+
+  it('preserves optional restored metadata in cloud snapshots while using the current local trip id', () => {
+    const restoredTrip: Trip = {
+      ...trip,
+      id: 'trip_restored_local',
+      restoredAt: 999,
+      restoredFromCloudBackupId: 'backup_original',
+      restoredFromCloudExportedAt: '2026-04-01T00:00:00.000Z',
+      restoredFromCloudOriginalTripId: 'trip_original',
+    }
+    const result = buildCloudSnapshotFromRecords({
+      appVersion: '0.2.0.2',
+      backupId: 'backup-id',
+      days: days.map((day) => ({ ...day, tripId: restoredTrip.id })),
+      exportedAt: '2026-04-02T00:00:00.000Z',
+      itineraryItems: items.map((item) => ({ ...item, tripId: restoredTrip.id })),
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip: restoredTrip,
+      userId: 'user-id',
+    })
+
+    expect(result.snapshot.originalTripId).toBe(restoredTrip.id)
+    expect(result.metadata.original_trip_id).toBe(restoredTrip.id)
+    expect(result.snapshot.trip.restoredFromCloudBackupId).toBe('backup_original')
+    expect(result.snapshot.schemaVersion).toBe(1)
+  })
+
   it('rejects unsupported cloud snapshot schema and broken references', () => {
     expect(() => parseCloudSnapshot({ schemaVersion: 2, type: 'cloud-trip-backup' })).toThrow(
       '不支持的云端备份版本',

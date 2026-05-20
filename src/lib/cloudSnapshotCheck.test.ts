@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  buildCloudSnapshotVersionContextRows,
   buildCloudSnapshotCheckResults,
   buildCloudSnapshotCheckSignature,
   compareCloudSnapshotVersions,
@@ -311,6 +312,58 @@ describe('cloud snapshot version context fields', () => {
     expect(results).toHaveLength(1)
     expect(results[0].dirtyAt).toBeNull()
     expect(results[0].tripUpdatedAt).toBe(baseTrip.updatedAt)
+  })
+
+  it('builds visible version context rows with explicit sources', () => {
+    const dirtyAt = Date.parse('2026-04-02T12:00:00.000Z')
+    const [result] = buildCloudSnapshotCheckResults({
+      autoStatusByTripId: {
+        trip_1: createAutoStatus({ dirtyAt, lastSuccessAt: Date.parse('2026-04-02T10:30:00.000Z') }),
+      },
+      backups: [createBackup({ exportedAt: '2026-04-02T09:00:00.000Z' })],
+      trips: [baseTrip],
+    })
+
+    expect(buildCloudSnapshotVersionContextRows(result)).toEqual([
+      {
+        description: '来自当前设备未上传修改时间',
+        label: '本地版本',
+        value: '2026-04-02 20:00',
+      },
+      {
+        description: '来自云端快照导出时间',
+        label: '云端快照',
+        value: '2026-04-02 17:00',
+      },
+      {
+        description: '当前设备尚未上传到云端快照的修改',
+        label: '未上传修改',
+        value: '2026-04-02 20:00',
+      },
+    ])
+  })
+
+  it('ignores restored-source metadata when building startup comparison results', () => {
+    const plainResult = buildCloudSnapshotCheckResults({
+      backups: [createBackup({ exportedAt: '2026-04-03T00:00:00.000Z' })],
+      trips: [baseTrip],
+    })[0]
+    const restoredResult = buildCloudSnapshotCheckResults({
+      backups: [createBackup({ exportedAt: '2026-04-03T00:00:00.000Z' })],
+      trips: [
+        {
+          ...baseTrip,
+          restoredAt: Date.parse('2026-04-04T00:00:00.000Z'),
+          restoredFromCloudBackupId: 'old_backup',
+          restoredFromCloudExportedAt: '2026-04-01T00:00:00.000Z',
+          restoredFromCloudOriginalTripId: 'original_trip',
+        },
+      ],
+    })[0]
+
+    expect(restoredResult.signature).toBe(plainResult.signature)
+    expect(restoredResult.status).toBe(plainResult.status)
+    expect(restoredResult.localVersion).toBe(plainResult.localVersion)
   })
 })
 

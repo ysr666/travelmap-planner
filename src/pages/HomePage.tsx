@@ -10,6 +10,7 @@ import {
 } from '../db'
 import { navigateTo } from '../lib/routes'
 import { formatDateRange } from '../lib/dates'
+import { buildRestoredTripSourceLabel } from '../lib/tripRestoreSource'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
@@ -231,6 +232,7 @@ function TripCard({
   isDeleting: boolean
 }) {
   const status = getTripStatus(trip)
+  const restoredSourceLabel = buildRestoredTripSourceLabel(trip, 'compact')
 
   return (
     <Card className="relative overflow-hidden" data-testid="trip-card" padding="none" variant="grouped">
@@ -245,6 +247,14 @@ function TripCard({
           </div>
           <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950 dark:text-slate-100">{trip.title}</h3>
           <p className="mt-0.5 truncate text-sm tm-muted">{trip.destination}</p>
+          {restoredSourceLabel ? (
+            <p
+              className="mt-1 truncate text-xs font-semibold text-sky-600 dark:text-sky-300"
+              data-testid="restored-trip-source-label"
+            >
+              {restoredSourceLabel}
+            </p>
+          ) : null}
           {stats ? (
             <p className="mt-1 truncate text-xs font-medium tm-muted">
               {stats.dayCount} 天 · {stats.itemCount} 个行程点 · {stats.ticketCount} 张票据

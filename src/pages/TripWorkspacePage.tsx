@@ -22,6 +22,7 @@ import { sortItineraryItems } from '../lib/itinerary'
 import { hasValidCoordinates } from '../lib/mapLinks'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
+import { buildRestoredTripSourceLabel } from '../lib/tripRestoreSource'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
 import type { Day, ItineraryItem, TicketMeta } from '../types'
@@ -142,6 +143,7 @@ export function TripWorkspacePage() {
     })
     return buildTripBrief(context, analyzeTripContext(context))
   }, [allItems, days, loadedTripContextKey, selectedDay?.id, ticketMetas, trip, tripContextKey])
+  const restoredSourceLabel = trip ? buildRestoredTripSourceLabel(trip, 'full') : null
 
   async function handleGenerateDays() {
     if (!trip) {
@@ -218,6 +220,14 @@ export function TripWorkspacePage() {
             <p className="truncate text-xs text-slate-500">
               {formatDateRange(trip.startDate, trip.endDate)}
             </p>
+            {restoredSourceLabel ? (
+              <p
+                className="mt-1 truncate text-xs font-semibold text-sky-600 dark:text-sky-300"
+                data-testid="trip-restored-source-label"
+              >
+                {restoredSourceLabel}
+              </p>
+            ) : null}
           </div>
           <TripMoreMenu tripId={trip.id} />
         </div>
@@ -261,6 +271,14 @@ export function TripWorkspacePage() {
                   <p className="mt-1 text-sm tm-muted">
                     {formatDateRange(trip.startDate, trip.endDate)}
                   </p>
+                  {restoredSourceLabel ? (
+                    <p
+                      className="mt-1 break-words text-xs font-semibold leading-5 text-sky-600 [overflow-wrap:anywhere] dark:text-sky-300"
+                      data-testid="trip-home-restored-source-label"
+                    >
+                      {restoredSourceLabel}
+                    </p>
+                  ) : null}
                   <div className="mt-2">
                     <AutoSnapshotBackupStatus tripId={trip.id} />
                   </div>

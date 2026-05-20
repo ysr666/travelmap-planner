@@ -34,7 +34,7 @@ When using Codex Lead + Claude Worker mode, Codex must:
 Delegate only low-risk, well-bounded work such as:
 
 - UI component extraction
-- small styling polish
+- small styling polish after Codex has already defined the exact visual target and allowed files
 - empty state copy
 - stable test selectors
 - straightforward E2E updates
@@ -42,6 +42,11 @@ Delegate only low-risk, well-bounded work such as:
 - docs sync
 - repetitive refactors
 - running build/lint/unit/e2e and summarizing failures
+- mechanical migration to existing shared classes or primitives, for example replacing repeated input classes with an existing `FIELD_INPUT_CLASS`
+- grep/text based code audits, for example listing hardcoded colors, old class patterns, missing test ids, or files that still import a deprecated helper
+- narrow bug reproduction and failure summarization, when the expected behavior and commands are explicitly provided
+
+Claude Code should be treated as a narrow implementation worker or second-pass checker, not as a product/design decision maker. Codex remains responsible for deciding whether the result is actually good for TripMap.
 
 ## What Codex must NOT delegate without explicit user approval
 
@@ -59,6 +64,28 @@ Do not delegate these decisions to Claude Code:
 - external API key handling
 - new dependencies
 - final merge decision
+- visual direction, design taste, screenshot review, visual QA interpretation, or deciding whether a page "feels right"
+
+For UI work, Claude may make mechanical class or component edits only after Codex has specified the desired pattern. Claude must not be asked to perform open-ended visual audit work, compare screenshots, judge layout quality, choose visual hierarchy, or decide the final look and feel.
+
+## Effective Claude Worker usage
+
+Prefer Claude for tasks that are concrete, textual, and easy to verify by diff or tests:
+
+- **Test maintenance**: add stable selectors, update brittle E2E locators, add no-horizontal-overflow checks, or add unit tests for pure helpers.
+- **Mechanical UI migration**: apply an already-approved shared primitive or class constant to a specified file set.
+- **Static code search**: report remaining occurrences of a class pattern, deprecated helper, hardcoded color, or missing test id. This is a code/text audit, not a visual audit.
+- **Docs sync**: update README or internal workflow docs to match behavior that Codex has already confirmed.
+- **Failure triage**: run a specified command, summarize failing files/tests, and identify the smallest likely area to inspect.
+- **Repetitive refactors**: rename a local helper, extract a small component, or remove duplicated low-risk code inside an allowed file scope.
+
+Do not use Claude for tasks that require holistic judgement or protected-area ownership:
+
+- visual critique or screenshot-based acceptance
+- final UX/design direction
+- deciding what content to remove or de-emphasize
+- protected storage, sync, map, route, AI privacy, schema, or service-worker changes
+- broad "polish this page" work without exact file scope and class/component targets
 
 ## Claude Worker prompt requirements
 
@@ -83,6 +110,8 @@ Use specific prompts like:
 - "Only edit `e2e/item-detail.spec.ts` to restore direct tickets route navigation."
 - "Only add dark-mode classes to these UI primitives: Button, Card, EmptyState."
 - "Do not modify schema, routes, cloud sync, map cache, or unrelated tests."
+- "Only replace repeated input/select/textarea Tailwind classes in `src/pages/TripFormPage.tsx` with the existing exported field class constants. Do not change labels, handlers, validation, navigation, or tests."
+- "Only search for remaining `bg-white/90` and `shadow-[...]` usages under `src/pages`; report file paths and surrounding component names. Do not edit files."
 
 ## Terminal use of Claude Code
 

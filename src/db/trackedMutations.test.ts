@@ -93,6 +93,10 @@ describe('tracked db mutations', () => {
     expect(getTripAutoSnapshotStatus(result.tripId)).toMatchObject({ status: 'dirty' })
 
     const cloudRecords = buildImportRecords('trip_cloud_restore')
+    cloudRecords.trip.restoredAt = Date.parse('2026-04-02T00:00:00.000Z')
+    cloudRecords.trip.restoredFromCloudBackupId = 'backup_1'
+    cloudRecords.trip.restoredFromCloudExportedAt = '2026-04-01T00:00:00.000Z'
+    cloudRecords.trip.restoredFromCloudOriginalTripId = 'trip_original'
     const cloudResult = await importTripPlanRecords(cloudRecords, { markDirty: false })
     expect(getTripAutoSnapshotStatus(cloudResult.tripId)).toBeNull()
   })

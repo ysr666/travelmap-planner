@@ -197,9 +197,9 @@ const aiPrivacyGroups: Array<{
         title: '票据图片/PDF 内容',
       },
       {
-        description: '云端备份或同步状态；默认关闭。',
+        description: '云端快照备份状态；默认关闭。',
         key: 'allowCloudSyncStatus',
-        title: '云端同步状态',
+        title: '云端快照状态',
       },
     ],
   },
@@ -691,7 +691,7 @@ export function SettingsPage() {
         defaultOpen={shouldOpenCloudBackup}
         key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
         subtitle="Supabase 快照备份与恢复"
-        title="云端备份"
+        title="云端快照"
       >
         <CloudBackupPanel trip={null} />
       </Collapsible>
@@ -1030,7 +1030,7 @@ function AiPrivacySettingsPanel({
         ))}
 
         <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 备份、Supabase 快照或云端同步。
+          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 备份或 Supabase 云端快照。
         </p>
       </Card>
     </section>

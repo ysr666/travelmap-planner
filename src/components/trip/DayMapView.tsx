@@ -81,7 +81,8 @@ const ROAD_TRANSPORT_LABELS: Record<RoadTransportMode, string> = {
   bus: '公交',
 }
 const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回到当天行程范围'
-const LOCATION_UNAVAILABLE_MESSAGE = '当前浏览器暂时无法获取位置。'
+const LOCATION_UNAVAILABLE_MESSAGE = '暂时无法取得位置，请稍后重试。'
+const LOCATION_PERMISSION_MESSAGE = '定位失败，请在地址栏允许位置后重试'
 const MAP_OVERLAY_GAP = 12
 const MARKER_EDGE_RESERVE = 96
 const MARKER_CARD_FALLBACK_HEIGHT = 136
@@ -142,6 +143,7 @@ export function DayMapView({
   const markerCardRef = useRef<HTMLDivElement | null>(null)
   const routeChipRef = useRef<HTMLDivElement | null>(null)
   const floatingControlsRef = useRef<HTMLDivElement | null>(null)
+  const mapControlNoticeRef = useRef<HTMLDivElement | null>(null)
   const sheetOverlayRef = useRef<HTMLElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const pendingRouteEditNoticeRef = useRef<string[] | null>(null)
@@ -240,6 +242,26 @@ export function DayMapView({
   const setCurrentMapControlNotice = useCallback((message: string | null) => {
     setMapControlNotice(message ? { dayId: day.id, message } : null)
   }, [day.id])
+  const getCurrentMapPadding = useCallback((includeMarkerCard: boolean) => {
+    const stageRect = toScreenRect(rootRef.current?.getBoundingClientRect() ?? null)
+    const fallbackPadding = getFallbackMapPadding({
+      includeMarkerCard,
+      sheetState,
+      showFloatingHeader,
+    })
+
+    return getMeasuredMapPadding({
+      controlNoticeRect: toScreenRect(mapControlNoticeRef.current?.getBoundingClientRect() ?? null),
+      fallbackPadding,
+      floatingControlsRect: toScreenRect(floatingControlsRef.current?.getBoundingClientRect() ?? null),
+      markerCardRect: includeMarkerCard
+        ? toScreenRect(markerCardRef.current?.getBoundingClientRect() ?? null)
+        : null,
+      routeChipRect: toScreenRect(routeChipRef.current?.getBoundingClientRect() ?? null),
+      sheetRect: toScreenRect(sheetOverlayRef.current?.getBoundingClientRect() ?? null),
+      stageRect,
+    })
+  }, [sheetState, showFloatingHeader])
 
   useEffect(() => {
     function refreshConfig() {
@@ -321,7 +343,9 @@ export function DayMapView({
     if (!prewarmEnabled) {
       dayMapRef.current?.cancelPrewarm({ restoreCamera: false })
       if (isVisible) {
-        dayMapRef.current?.recenter()
+        dayMapRef.current?.recenter({
+          padding: getCurrentMapPadding(markerCardVisible),
+        })
       }
       markMapStartup('prewarm skipped: map visible')
       return
@@ -358,7 +382,7 @@ export function DayMapView({
       cancelIdle()
       cancelDayMapPrewarm({ restoreCamera: false })
     }
-  }, [cancelDayMapPrewarm, isVisible, mapReadyToken, prewarmEnabled, prewarmQueue, prewarmQueueKey])
+  }, [cancelDayMapPrewarm, getCurrentMapPadding, isVisible, mapReadyToken, markerCardVisible, prewarmEnabled, prewarmQueue, prewarmQueueKey])
 
   const applyMapRecenterNotice = useCallback((result: ReturnType<DayMapHandle['recenter']> | undefined) => {
     if (!result) {
@@ -385,8 +409,10 @@ export function DayMapView({
     }
 
     pendingUserLocationRecenterRef.current = false
-    applyMapRecenterNotice(dayMapRef.current.recenter())
-  }, [applyMapRecenterNotice, day.id, mapReadyToken, userLocation])
+    applyMapRecenterNotice(dayMapRef.current.recenter({
+      padding: getCurrentMapPadding(markerCardVisible),
+    }))
+  }, [applyMapRecenterNotice, day.id, getCurrentMapPadding, mapReadyToken, markerCardVisible, userLocation])
 
   const handleSelectItem = useCallback((item: ItineraryItem, source: SelectSource) => {
     setSelectedItemSelection({
@@ -552,7 +578,9 @@ export function DayMapView({
   }
 
   function handleRecenterMap() {
-    applyMapRecenterNotice(dayMapRef.current?.recenter())
+    applyMapRecenterNotice(dayMapRef.current?.recenter({
+      padding: getCurrentMapPadding(markerCardVisible),
+    }))
   }
 
   function handleRequestUserLocation() {
@@ -576,11 +604,15 @@ export function DayMapView({
         setUserLocation(nextLocation)
         setUserLocationStatus('ready')
       },
-      () => {
+      (error) => {
         pendingUserLocationRecenterRef.current = false
         setUserLocation(null)
         setUserLocationStatus('error')
-        setCurrentMapControlNotice('无法取得当前位置，请检查浏览器权限。')
+        setCurrentMapControlNotice(
+          error.code === error.PERMISSION_DENIED
+            ? LOCATION_PERMISSION_MESSAGE
+            : LOCATION_UNAVAILABLE_MESSAGE,
+        )
       },
       {
         enableHighAccuracy: false,
@@ -591,36 +623,8 @@ export function DayMapView({
   }
 
   const updateMapOverlayPadding = useCallback(() => {
-    const stageRect = toScreenRect(rootRef.current?.getBoundingClientRect() ?? null)
-    const fallbackBasePadding = getFallbackMapPadding({
-      includeMarkerCard: false,
-      sheetState,
-      showFloatingHeader,
-    })
-    const fallbackFocusPadding = getFallbackMapPadding({
-      includeMarkerCard: markerCardVisible,
-      sheetState,
-      showFloatingHeader,
-    })
-
-    const nextBasePadding = getMeasuredMapPadding({
-      fallbackPadding: fallbackBasePadding,
-      floatingControlsRect: toScreenRect(floatingControlsRef.current?.getBoundingClientRect() ?? null),
-      markerCardRect: null,
-      routeChipRect: toScreenRect(routeChipRef.current?.getBoundingClientRect() ?? null),
-      sheetRect: toScreenRect(sheetOverlayRef.current?.getBoundingClientRect() ?? null),
-      stageRect,
-    })
-    const nextFocusPadding = getMeasuredMapPadding({
-      fallbackPadding: fallbackFocusPadding,
-      floatingControlsRect: toScreenRect(floatingControlsRef.current?.getBoundingClientRect() ?? null),
-      markerCardRect: markerCardVisible
-        ? toScreenRect(markerCardRef.current?.getBoundingClientRect() ?? null)
-        : null,
-      routeChipRect: toScreenRect(routeChipRef.current?.getBoundingClientRect() ?? null),
-      sheetRect: toScreenRect(sheetOverlayRef.current?.getBoundingClientRect() ?? null),
-      stageRect,
-    })
+    const nextBasePadding = getCurrentMapPadding(false)
+    const nextFocusPadding = getCurrentMapPadding(markerCardVisible)
 
     setMapViewportPadding((current) => (
       edgeInsetsEqual(current, nextBasePadding) ? current : nextBasePadding
@@ -628,16 +632,15 @@ export function DayMapView({
     setMarkerFocusPadding((current) => (
       edgeInsetsEqual(current, nextFocusPadding) ? current : nextFocusPadding
     ))
-  }, [markerCardVisible, sheetState, showFloatingHeader])
+  }, [getCurrentMapPadding, markerCardVisible])
 
   useLayoutEffect(() => {
-    updateMapOverlayPadding()
-
     const resizeObserver = new ResizeObserver(updateMapOverlayPadding)
     const observedElements = [
       rootRef.current,
       sheetOverlayRef.current,
       markerCardRef.current,
+      mapControlNoticeRef.current,
       routeChipRef.current,
       floatingControlsRef.current,
     ].filter((element): element is HTMLElement => element !== null)
@@ -645,9 +648,11 @@ export function DayMapView({
     observedElements.forEach((element) => resizeObserver.observe(element))
     window.addEventListener('resize', updateMapOverlayPadding)
     window.visualViewport?.addEventListener('resize', updateMapOverlayPadding)
+    const measureFrame = window.requestAnimationFrame(updateMapOverlayPadding)
     const measureTimeout = window.setTimeout(updateMapOverlayPadding, 0)
 
     return () => {
+      window.cancelAnimationFrame(measureFrame)
       window.clearTimeout(measureTimeout)
       resizeObserver.disconnect()
       window.removeEventListener('resize', updateMapOverlayPadding)
@@ -719,7 +724,11 @@ export function DayMapView({
       ) : null}
 
       {isVisible && mapControlNoticeMessage && !mapBaseLoading && !mapError ? (
-        <MapControlNotice message={mapControlNoticeMessage} showBelowHeader={showFloatingHeader} />
+        <MapControlNotice
+          containerRef={mapControlNoticeRef}
+          message={mapControlNoticeMessage}
+          showBelowHeader={showFloatingHeader}
+        />
       ) : null}
 
       {isVisible && showFloatingHeader ? (
@@ -1276,19 +1285,22 @@ function MapFloatingControls({
 }
 
 function MapControlNotice({
+  containerRef,
   message,
   showBelowHeader,
 }: {
+  containerRef?: RefObject<HTMLDivElement | null>
   message: string
   showBelowHeader: boolean
 }) {
   return (
-    <div className={`pointer-events-none absolute left-4 right-4 z-30 ${showBelowHeader ? 'top-40' : 'top-20'}`}>
+    <div className={`pointer-events-none absolute left-4 right-[4.75rem] z-30 ${showBelowHeader ? 'top-[9.25rem]' : 'top-[4.25rem]'}`}>
       <div
-        className="ml-auto max-w-[17rem] rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-slate-600 backdrop-blur-xl tm-surface dark:text-slate-300"
+        className="ml-auto flex min-h-11 w-fit max-w-full items-center rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-slate-600 backdrop-blur-xl tm-surface dark:text-slate-300"
         data-testid="map-location-notice"
+        ref={containerRef}
       >
-        {message}
+        <span className="min-w-0 [overflow-wrap:anywhere]">{message}</span>
       </div>
     </div>
   )
@@ -1938,6 +1950,7 @@ function getFallbackMapPadding({
 }
 
 function getMeasuredMapPadding({
+  controlNoticeRect,
   fallbackPadding,
   floatingControlsRect,
   markerCardRect,
@@ -1945,6 +1958,7 @@ function getMeasuredMapPadding({
   sheetRect,
   stageRect,
 }: {
+  controlNoticeRect: ScreenRect | null
   fallbackPadding: EdgeInsets
   floatingControlsRect: ScreenRect | null
   markerCardRect: ScreenRect | null
@@ -1962,6 +1976,7 @@ function getMeasuredMapPadding({
       fallback.top,
       getTopInset(stageRect, routeChipRect),
       getTopInset(stageRect, floatingControlsRect),
+      getTopInset(stageRect, controlNoticeRect),
     ),
     right: Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect)),
     bottom: Math.max(

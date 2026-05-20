@@ -159,6 +159,8 @@ test('地图重定位不会生成路线且保留 marker 卡片和路线控件', 
   await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
   await expect(page.getByTestId('map-marker-card')).toBeVisible()
   await expect(page.getByTestId('map-marker-card')).toContainText('Hotel Metropolitan Tokyo 入住')
+  await page.getByTestId('map-recenter-button').click()
+  await expectMarkerGroupNearVisibleCenter(page)
 
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
@@ -180,6 +182,7 @@ test('使用 mocked geolocation 显示当前位置且远距离时优先回到行
   await page.getByTestId('map-user-location-button').click()
   await expect(page.getByTestId('map-user-location-marker')).toHaveCount(1)
   await expect(page.getByTestId('map-location-notice')).toContainText('当前位置距离行程较远，已优先回到当天行程范围')
+  await expectNoTextOverflow(page.getByTestId('map-location-notice'))
   await expectNoHorizontalOverflow(page)
 })
 
@@ -226,7 +229,9 @@ test('当前位置权限被拒绝时显示轻量 fallback', async ({ page, conte
   await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('map-user-location-button').click()
-  await expect(page.getByTestId('map-location-notice')).toContainText('无法取得当前位置，请检查浏览器权限。')
+  await expect(page.getByTestId('map-location-notice')).toContainText('请在地址栏允许位置后重试')
+  await expectLocationNoticeAlignedWithButton(page)
+  await expectNoTextOverflow(page.getByTestId('map-location-notice'))
   await expect(page.getByTestId('map-user-location-marker')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -451,4 +456,71 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
     message: 'selected marker and marker card should fit in the usable map area',
     timeout: 1500,
   }).toBe(true)
+}
+
+async function expectMarkerGroupNearVisibleCenter(page: Page) {
+  await expect.poll(async () => {
+    const viewport = page.viewportSize()
+    const markerBoxes = await getVisibleMarkerBoxes(page)
+    const cardBox = await page.getByTestId('map-marker-card').boundingBox()
+    const sheetBox = await page.getByTestId('map-sheet').boundingBox()
+    const routeChipBox = await page.getByTestId('route-chip').boundingBox()
+    const locationButtonBox = await page.getByTestId('map-user-location-button').boundingBox()
+    if (!viewport || markerBoxes.length === 0 || !cardBox || !sheetBox || !routeChipBox || !locationButtonBox) {
+      return Number.POSITIVE_INFINITY
+    }
+
+    const safeTop = Math.max(routeChipBox.y + routeChipBox.height, locationButtonBox.y + locationButtonBox.height) + 12
+    const safeBottom = Math.min(cardBox.y, sheetBox.y) - 12
+    const visibleCenterY = safeTop + Math.max(0, safeBottom - safeTop) / 2
+    const markerGroupCenterY = (
+      Math.min(...markerBoxes.map((box) => box.y)) +
+      Math.max(...markerBoxes.map((box) => box.y + box.height))
+    ) / 2
+
+    return Math.abs(markerGroupCenterY - visibleCenterY)
+  }, {
+    message: 'recenter should place the itinerary near the visual map center, not the full viewport center',
+    timeout: 1500,
+  }).toBeLessThanOrEqual(100)
+}
+
+async function getVisibleMarkerBoxes(page: Page) {
+  const markers = page.getByTestId('day-map-marker')
+  const markerCount = await markers.count()
+  const boxes = []
+  for (let index = 0; index < markerCount; index += 1) {
+    const box = await markers.nth(index).boundingBox()
+    if (box) {
+      boxes.push(box)
+    }
+  }
+  return boxes
+}
+
+async function expectNoTextOverflow(locator: Locator) {
+  const overflow = await locator.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth,
+  }))
+
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1)
+  expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight + 1)
+}
+
+async function expectLocationNoticeAlignedWithButton(page: Page) {
+  const noticeBox = await page.getByTestId('map-location-notice').boundingBox()
+  const locationButtonBox = await page.getByTestId('map-user-location-button').boundingBox()
+
+  expect(noticeBox).not.toBeNull()
+  expect(locationButtonBox).not.toBeNull()
+  if (!noticeBox || !locationButtonBox) {
+    throw new Error('定位提示或定位按钮没有可用布局盒')
+  }
+
+  expect(Math.abs(noticeBox.y - locationButtonBox.y)).toBeLessThanOrEqual(2)
+  expect(Math.abs(noticeBox.height - locationButtonBox.height)).toBeLessThanOrEqual(4)
+  expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(locationButtonBox.x - 8)
 }

@@ -41,7 +41,12 @@ export type DayMapHandle = {
   cancelPrewarm: (options?: { restoreCamera?: boolean }) => void
   isReady: () => boolean
   prewarmBounds: (targets: DayPrewarmTarget[]) => Promise<void>
-  recenter: () => DayMapRecenterResult
+  recenter: (options?: DayMapRecenterOptions) => DayMapRecenterResult
+}
+
+export type DayMapRecenterOptions = {
+  focusSelected?: boolean
+  padding?: EdgeInsets
 }
 
 type MarkerRecord = {
@@ -307,14 +312,29 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
   }, [cancelPrewarm, restorePrewarmCamera])
 
-  const recenter = useCallback((): DayMapRecenterResult => {
+  const getSelectedLngLat = useCallback(() => {
+    const selectedId = selectedItemIdRef.current
+    if (!selectedId) {
+      return null
+    }
+    const selectedItem = validItemsRef.current.find((item) => item.id === selectedId)
+    return selectedItem ? getItemLngLat(selectedItem) : null
+  }, [])
+
+  const recenter = useCallback((options?: DayMapRecenterOptions): DayMapRecenterResult => {
     const plan = buildDayMapViewportPlan({
       itineraryCoordinates: validItemsRef.current.map((item) => getItemLngLat(item)),
       userLocation: userLocationRef.current,
     })
     const map = mapRef.current
     if (map && loadedRef.current) {
-      applyViewportPlan(map, plan, markerFocusPaddingRef.current)
+      const padding = options?.padding ?? markerFocusPaddingRef.current
+      const selectedLngLat = options?.focusSelected ? getSelectedLngLat() : null
+      if (selectedLngLat) {
+        applyCenteredViewport(map, selectedLngLat, Math.max(map.getCamera().zoom, MARKER_FOCUS_COMFORT_ZOOM), padding)
+      } else {
+        applyViewportPlan(map, plan, padding)
+      }
     }
     markMapStartup('manual recenter completed', {
       includedUserLocation: plan.includedUserLocation,
@@ -325,7 +345,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       includedUserLocation: plan.includedUserLocation,
       usedItineraryPoints: plan.usedItineraryPoints,
     }
-  }, [])
+  }, [getSelectedLngLat])
 
   useImperativeHandle(ref, () => ({
     cancelPrewarm,
@@ -453,7 +473,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         return
       }
 
-      map.easeTo(selectedLngLat as unknown as MapLngLat, correction.nextZoom, 420)
+      applyCenteredViewport(map, selectedLngLat, correction.nextZoom, markerFocusPaddingRef.current)
       markMapStartup('selected marker camera corrected', {
         reason: correction.reason,
         source: source ?? 'unknown',
@@ -462,10 +482,11 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
 
     if (source !== 'marker') {
-      map.easeTo(
-        selectedLngLat as unknown as MapLngLat,
+      applyCenteredViewport(
+        map,
+        selectedLngLat,
         Math.max(currentZoom, MARKER_FOCUS_COMFORT_ZOOM),
-        420,
+        markerFocusPaddingRef.current,
       )
     }
   }, [])
@@ -798,12 +819,21 @@ function applyViewportPlan(
   }
 
   if (plan.center && plan.zoom) {
-    map.fitBounds(buildCenteredBounds(plan.center), {
-      duration: 600,
-      maxZoom: plan.zoom,
-      padding,
-    })
+    applyCenteredViewport(map, plan.center, plan.zoom, padding)
   }
+}
+
+function applyCenteredViewport(
+  map: MapInstance,
+  center: LngLat,
+  zoom: number,
+  padding: EdgeInsets,
+) {
+  map.fitBounds(buildCenteredBounds(center), {
+    duration: 600,
+    maxZoom: zoom,
+    padding,
+  })
 }
 
 function buildCenteredBounds(center: LngLat): LngLatBounds {

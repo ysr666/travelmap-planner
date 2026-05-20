@@ -1226,10 +1226,10 @@ function RouteStatusChip({
   const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
 
   return (
-    <div className={`pointer-events-none absolute left-4 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
+    <div className={`pointer-events-none absolute left-8 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
       <button
         aria-label="打开路线设置"
-        className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
+        className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-4rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
         data-testid="route-chip"
         onClick={onClick}
         type="button"
@@ -1971,6 +1971,7 @@ function getMeasuredMapPadding({
     return fallback
   }
 
+  const measuredRight = Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect))
   const next = normalizeEdgeInsets({
     top: Math.max(
       fallback.top,
@@ -1978,13 +1979,13 @@ function getMeasuredMapPadding({
       getTopInset(stageRect, floatingControlsRect),
       getTopInset(stageRect, controlNoticeRect),
     ),
-    right: Math.max(fallback.right, getRightInset(stageRect, floatingControlsRect)),
+    right: measuredRight,
     bottom: Math.max(
       fallback.bottom,
       getBottomInset(stageRect, sheetRect),
       getBottomInset(stageRect, markerCardRect),
     ),
-    left: fallback.left,
+    left: Math.max(fallback.left, measuredRight),
   }, fallback)
 
   return constrainPaddingToStage(next, stageRect)

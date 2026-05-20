@@ -31,6 +31,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByText('上拉查看行程')).toBeHidden()
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
+  await expectDaySelectorShadowBreathingRoom(page)
 
   const routeChipBox = await page.getByTestId('route-chip').boundingBox()
   const viewport = page.viewportSize()
@@ -39,8 +40,8 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   if (!routeChipBox || !viewport) {
     throw new Error('路线 chip 或视口没有可用布局盒')
   }
-  expect(routeChipBox.x).toBeGreaterThanOrEqual(12)
-  expect(routeChipBox.x + routeChipBox.width).toBeLessThanOrEqual(viewport.width - 8)
+  expect(routeChipBox.x).toBeGreaterThanOrEqual(16)
+  expect(routeChipBox.x + routeChipBox.width).toBeLessThanOrEqual(viewport.width - 16)
 
   const before = await sheet.boundingBox()
   const handleBox = await handle.boundingBox()
@@ -458,6 +459,20 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
   }).toBe(true)
 }
 
+async function expectDaySelectorShadowBreathingRoom(page: Page) {
+  const selectorBox = await page.getByTestId('day-selector').boundingBox()
+  const activeDayBox = await page.getByTestId('day-selector').getByRole('button', { name: /Day 1/ }).boundingBox()
+
+  expect(selectorBox).not.toBeNull()
+  expect(activeDayBox).not.toBeNull()
+  if (!selectorBox || !activeDayBox) {
+    throw new Error('日期选择器或当前日期按钮没有可用布局盒')
+  }
+
+  expect(activeDayBox.y - selectorBox.y).toBeGreaterThanOrEqual(2)
+  expect(selectorBox.y + selectorBox.height - (activeDayBox.y + activeDayBox.height)).toBeGreaterThanOrEqual(2)
+}
+
 async function expectMarkerGroupNearVisibleCenter(page: Page) {
   await expect.poll(async () => {
     const viewport = page.viewportSize()
@@ -473,14 +488,22 @@ async function expectMarkerGroupNearVisibleCenter(page: Page) {
     const safeTop = Math.max(routeChipBox.y + routeChipBox.height, locationButtonBox.y + locationButtonBox.height) + 12
     const safeBottom = Math.min(cardBox.y, sheetBox.y) - 12
     const visibleCenterY = safeTop + Math.max(0, safeBottom - safeTop) / 2
+    const visibleCenterX = viewport.width / 2
     const markerGroupCenterY = (
       Math.min(...markerBoxes.map((box) => box.y)) +
       Math.max(...markerBoxes.map((box) => box.y + box.height))
     ) / 2
+    const markerGroupCenterX = (
+      Math.min(...markerBoxes.map((box) => box.x)) +
+      Math.max(...markerBoxes.map((box) => box.x + box.width))
+    ) / 2
 
-    return Math.abs(markerGroupCenterY - visibleCenterY)
+    return Math.max(
+      Math.abs(markerGroupCenterX - visibleCenterX),
+      Math.abs(markerGroupCenterY - visibleCenterY),
+    )
   }, {
-    message: 'recenter should place the itinerary near the visual map center, not the full viewport center',
+    message: 'recenter should place the itinerary near the visual map center',
     timeout: 1500,
   }).toBeLessThanOrEqual(100)
 }

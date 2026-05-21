@@ -102,6 +102,26 @@ describe('route cache storage', () => {
     expect((await loadRouteCache(identity.signature))?.provider).toBe('openrouteservice')
   })
 
+  it('expires cached Google route geometry', async () => {
+    const identity = buildCurrentRouteCacheIdentity({
+      tripId: 'trip',
+      dayId: 'trip-preview',
+      items: [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2)],
+      provider: 'google',
+      scope: 'trip-preview',
+    })
+
+    await saveRouteCache({
+      tripId: 'trip',
+      dayId: 'trip-preview',
+      ...identity,
+      lineStrings: sampleLineStrings(),
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+    })
+
+    expect(await loadRouteCache(identity.signature)).toBeNull()
+  })
+
   it('prunes stale signatures for the same day', async () => {
     const base = [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2)]
     const current = buildCurrentRouteCacheIdentity({ tripId: 'trip', dayId: 'day', items: base })

@@ -53,6 +53,15 @@ export type FetchDayRouteOptions = {
   fetcher?: typeof fetch
 }
 
+export type GoogleRouteOptimizationResult = {
+  originalItems: ItineraryItem[]
+  suggestedItems: ItineraryItem[]
+  optimizedIntermediateWaypointIndex: number[]
+  distanceMeters?: number
+  durationSeconds?: number
+  lineStrings: LngLat[][]
+}
+
 export const ROUTING_PROVIDER_STORAGE_KEY = 'tripmap:routing:provider'
 export const ROUTING_API_KEY_STORAGE_KEY = 'tripmap:routing:openrouteservice-api-key'
 export const ROUTING_CONFIG_CHANGED_EVENT = 'tripmap:routing-config-changed'
@@ -355,6 +364,96 @@ export async function fetchRouteSegment(
       segmentIndex: request.segmentIndex,
       fromItemId: request.fromItemId,
       toItemId: request.toItemId,
+    }
+  } finally {
+    cleanup()
+  }
+}
+
+export async function fetchGoogleRouteOptimization(
+  items: ItineraryItem[],
+  apiKey: string,
+  options: {
+    signal?: AbortSignal
+    timeoutMs?: number
+    fetcher?: typeof fetch
+  } = {},
+): Promise<GoogleRouteOptimizationResult> {
+  const orderedItems = getOrderedMappableItems(items)
+  if (orderedItems.length < 3) {
+    throw new Error('至少需要 3 个带坐标的行程点才能生成顺序建议。')
+  }
+  if (orderedItems.length > 10) {
+    throw new Error('路线顺序建议最多支持 10 个带坐标地点。')
+  }
+
+  const origin = getItemLngLat(orderedItems[0])
+  const destination = getItemLngLat(orderedItems[orderedItems.length - 1])
+  const intermediates = orderedItems.slice(1, -1)
+  if (!origin || !destination || intermediates.some((item) => !getItemLngLat(item))) {
+    throw new Error('路线顺序建议需要完整坐标。')
+  }
+
+  const { signal, cleanup } = createTimeoutSignal(options.signal, options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+  const fetcher = options.fetcher ?? fetch
+
+  try {
+    const response = await fetcher(GOOGLE_ROUTES_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex',
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: { latitude: origin[1], longitude: origin[0] } } },
+        destination: { location: { latLng: { latitude: destination[1], longitude: destination[0] } } },
+        intermediates: intermediates.map((item) => {
+          const coordinate = getItemLngLat(item) as LngLat
+          return {
+            location: { latLng: { latitude: coordinate[1], longitude: coordinate[0] } },
+          }
+        }),
+        optimizeWaypointOrder: true,
+        routingPreference: 'TRAFFIC_UNAWARE',
+        travelMode: 'DRIVE',
+      }),
+      signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(mapGoogleRoutesStatus(response.status))
+    }
+
+    const data = await response.json()
+    const route = data.routes?.[0]
+    const optimizedIndexes = Array.isArray(route?.optimizedIntermediateWaypointIndex)
+      ? route.optimizedIntermediateWaypointIndex
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isInteger(value) && value >= 0 && value < intermediates.length)
+      : []
+    if (optimizedIndexes.length !== intermediates.length) {
+      throw new Error('Google 路线服务没有返回完整的顺序建议。')
+    }
+
+    const coordinates = route?.polyline?.encodedPolyline
+      ? decodeGooglePolyline(route.polyline.encodedPolyline)
+      : []
+    const durationSeconds = typeof route?.duration === 'string'
+      ? Number.parseFloat(route.duration.replace('s', ''))
+      : undefined
+
+    return {
+      originalItems: orderedItems,
+      suggestedItems: [
+        orderedItems[0],
+        ...optimizedIndexes.map((index: number) => intermediates[index]),
+        orderedItems[orderedItems.length - 1],
+      ],
+      optimizedIntermediateWaypointIndex: optimizedIndexes,
+      distanceMeters: typeof route?.distanceMeters === 'number' ? route.distanceMeters : undefined,
+      durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : undefined,
+      lineStrings: coordinates.length >= 2 ? [coordinates] : [],
     }
   } finally {
     cleanup()

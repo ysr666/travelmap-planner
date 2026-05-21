@@ -3,6 +3,7 @@ import {
   clearTravelDatabase,
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  mockMapStyle,
 } from './helpers'
 
 test('设置页可以切换外观模式并在刷新后保留', async ({ page }) => {
@@ -28,11 +29,12 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   await expect(page.getByText('还没有旅行')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
+  await mockMapStyle(page)
   const tripId = await createDemoTripViaUi(page)
   await expect(html).toHaveClass(/dark/)
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trip-map-overview')).toBeVisible()
-  await expect(page.getByTestId('trip-map-overview')).toContainText('行程位置示意')
+  await expect(page.getByTestId('trip-map-overview')).toContainText('行程地图预览')
   await expect(html).toHaveClass(/dark/)
   await expectNoHorizontalOverflow(page)
 

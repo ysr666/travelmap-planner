@@ -3,6 +3,7 @@ import {
   BUS_APPROXIMATION_WARNING,
   buildFallbackStraightRoute,
   fetchDayRoute,
+  fetchGoogleRouteOptimization,
   fetchRouteSegment,
   mapTransportModeToRoutingProfile,
   parseOpenRouteServiceGeoJson,
@@ -150,6 +151,40 @@ describe('OpenRouteService response parser', () => {
   it('rejects malformed route responses', () => {
     expect(() => parseOpenRouteServiceGeoJson({ features: [] })).toThrow('路线服务返回的数据格式不正确')
     expect(() => parseOpenRouteServiceGeoJson(orsFixture([[139.1, 35.1]]))).toThrow('没有返回可用路线')
+  })
+})
+
+describe('Google route optimization', () => {
+  it('returns suggested waypoint order without mutating itinerary items', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        routes: [
+          {
+            distanceMeters: 4200,
+            duration: '900s',
+            optimizedIntermediateWaypointIndex: [1, 0],
+            polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const items = [
+      item('a', 35.1, 139.1, 1),
+      item('b', 35.2, 139.2, 2),
+      item('c', 35.3, 139.3, 3),
+      item('d', 35.4, 139.4, 4),
+    ]
+
+    const result = await fetchGoogleRouteOptimization(items, 'google-key', { fetcher })
+
+    expect(result.suggestedItems.map((nextItem) => nextItem.id)).toEqual(['a', 'c', 'b', 'd'])
+    expect(items.map((nextItem) => nextItem.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(result.distanceMeters).toBe(4200)
+    expect(result.durationSeconds).toBe(900)
+    const [, init] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.optimizeWaypointOrder).toBe(true)
+    expect((init.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('google-key')
   })
 })
 

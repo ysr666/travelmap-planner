@@ -2,11 +2,16 @@ import Dexie, { type Table } from 'dexie'
 import { getOrderedMappableItems, mapTransportModeToRoutingProfile, type LngLat, type RoutingProvider } from './routing'
 import type { ItineraryItem } from '../types'
 
+export type RouteCacheScope = 'day-map' | 'trip-preview'
+
+export type PersistentRouteCacheProvider = Extract<RoutingProvider, 'openrouteservice' | 'google'>
+
 export type RouteCacheEntry = {
   id: string
   tripId: string
   dayId: string
-  provider: 'openrouteservice'
+  scope?: RouteCacheScope
+  provider: PersistentRouteCacheProvider
   routingVersion: 1
   signature: string
   coordinateKey: string
@@ -20,12 +25,14 @@ export type RouteCacheEntry = {
   createdAt: string
   updatedAt: string
   lastUsedAt: string
+  expiresAt?: string
 }
 
 export type SaveRouteCacheInput = {
   tripId: string
   dayId: string
-  provider: 'openrouteservice'
+  scope?: RouteCacheScope
+  provider: PersistentRouteCacheProvider
   signature: string
   coordinateKey: string
   modeKey: string
@@ -34,6 +41,7 @@ export type SaveRouteCacheInput = {
   status?: 'road' | 'mixed' | 'straight'
   distanceMeters?: number
   durationSeconds?: number
+  expiresAt?: string
 }
 
 export type RouteCacheStats = {
@@ -96,13 +104,15 @@ export function buildRouteCacheSignature({
   tripId,
   dayId,
   provider,
+  scope = 'day-map',
   coordinateKey,
   modeKey,
   routingVersion = ROUTING_VERSION,
 }: {
   tripId: string
   dayId: string
-  provider: RoutingProvider | 'openrouteservice'
+  provider: PersistentRouteCacheProvider
+  scope?: RouteCacheScope
   coordinateKey: string
   modeKey: string
   routingVersion?: number
@@ -110,6 +120,7 @@ export function buildRouteCacheSignature({
   return [
     'route-cache',
     routingVersion,
+    scope,
     provider,
     tripId,
     dayId,
@@ -123,11 +134,13 @@ export function buildCurrentRouteCacheIdentity({
   dayId,
   items,
   provider = 'openrouteservice',
+  scope = 'day-map',
 }: {
   tripId: string
   dayId: string
   items: ItineraryItem[]
-  provider?: 'openrouteservice'
+  provider?: PersistentRouteCacheProvider
+  scope?: RouteCacheScope
 }) {
   const coordinateKey = buildRouteCoordinateKey(items)
   const modeKey = buildRouteModeKey(items)
@@ -135,6 +148,7 @@ export function buildCurrentRouteCacheIdentity({
     tripId,
     dayId,
     provider,
+    scope,
     coordinateKey,
     modeKey,
     routingVersion: ROUTING_VERSION,
@@ -142,6 +156,7 @@ export function buildCurrentRouteCacheIdentity({
 
   return {
     provider,
+    scope,
     routingVersion: ROUTING_VERSION,
     coordinateKey,
     modeKey,
@@ -152,6 +167,12 @@ export function buildCurrentRouteCacheIdentity({
 export async function loadRouteCache(signature: string) {
   const entry = await routeCacheDb.routeCaches.get(signature)
   if (!entry) {
+    return null
+  }
+
+  if (entry.expiresAt && new Date(entry.expiresAt).getTime() <= Date.now()) {
+    await routeCacheDb.routeCaches.delete(entry.id)
+    dispatchRouteCacheChanged()
     return null
   }
 
@@ -175,6 +196,7 @@ export async function saveRouteCache(input: SaveRouteCacheInput) {
   const draft = {
     tripId: input.tripId,
     dayId: input.dayId,
+    scope: input.scope ?? 'day-map',
     provider: input.provider,
     routingVersion: ROUTING_VERSION,
     signature: input.signature,
@@ -185,6 +207,7 @@ export async function saveRouteCache(input: SaveRouteCacheInput) {
     status: input.status,
     distanceMeters: input.distanceMeters,
     durationSeconds: input.durationSeconds,
+    expiresAt: input.expiresAt,
   }
   const sizeBytes = estimateRouteCacheSize(draft)
   if (sizeBytes > maxBytes) {

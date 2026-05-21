@@ -36,6 +36,7 @@ import {
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
   isAutoSnapshotBackupEnabled,
+  markTripAutoSnapshotSynced,
   setAutoSnapshotBackupEnabled,
   subscribeAutoSnapshotBackup,
 } from '../../lib/autoSnapshotBackup'
@@ -85,7 +86,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         setBackups([])
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '读取云端快照状态失败。')
+      setError(caught instanceof Error ? caught.message : '读取云端保存状态失败。')
     } finally {
       setIsLoading(false)
     }
@@ -129,7 +130,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     const nextValue = !autoBackupEnabled
     setAutoSnapshotBackupEnabled(nextValue)
     setAutoBackupEnabledState(nextValue)
-    setMessage(nextValue ? '自动云端快照备份已开启。' : '自动云端快照备份已关闭。')
+    setMessage(nextValue ? '自动云端保存已开启。' : '自动云端保存已关闭。')
     setError(null)
   }
 
@@ -167,7 +168,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       await verifyEmailOtp(trimmedEmail, token)
       setOtp('')
-      setMessage('已登录云端快照账号。')
+      setMessage('已登录云端保存账号。')
       await refreshCloudBackups()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '验证码验证失败。')
@@ -185,7 +186,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setUser(null)
       setBackups([])
       setRestoreResult(null)
-      setMessage('已退出云端快照账号。')
+      setMessage('已退出云端保存账号。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
     } finally {
@@ -195,7 +196,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   async function handleUpload() {
     if (!trip) {
-      setError('请先进入某个旅行，再上传本地快照。')
+      setError('请先进入某个旅行，再上传本地数据。')
       return
     }
 
@@ -207,14 +208,21 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       const result = await uploadTripCloudBackup(trip.id)
       const autoBackupStatus = getTripAutoSnapshotStatus(trip.id)
+      const exportedAt = Date.parse(result.exportedAt)
       if (autoBackupStatus?.dirtyAt) {
-        completeTripAutoSnapshotSuccess(trip.id, autoBackupStatus.dirtyAt)
+        completeTripAutoSnapshotSuccess(
+          trip.id,
+          autoBackupStatus.dirtyAt,
+          Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+        )
+      } else {
+        markTripAutoSnapshotSynced(trip.id, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地快照已上传，已创建新的云端快照。')
+      setMessage('本地数据已上传，云端保存已更新。')
       setWarnings(result.warnings)
       await refreshCloudBackups()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '上传本地快照失败。')
+      setError(caught instanceof Error ? caught.message : '更新云端保存失败。')
     } finally {
       setIsUploading(false)
     }
@@ -232,15 +240,17 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setWarnings([])
     try {
       const result = await restoreCloudBackup(restoreTarget.id)
+      const exportedAt = Date.parse(result.exportedAt)
+      markTripAutoSnapshotSynced(result.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       setRestoreTarget(null)
       if (result.warnings.length > 0) {
         setRestoreResult(result)
-        setMessage('云端快照已恢复为新的本地旅行副本。请先检查下列提醒。')
+        setMessage('云端保存已更新到本地旅行。请先检查下列提醒。')
       } else {
         navigateTo('trip', { tripId: result.tripId })
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '恢复云端快照失败。')
+      setError(caught instanceof Error ? caught.message : '用云端保存更新本地失败。')
     } finally {
       setIsRestoring(false)
     }
@@ -259,11 +269,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       const result = await deleteCloudBackup(deleteTarget.id)
       setDeleteTarget(null)
-      setMessage('云端快照已删除。本地旅行不受影响。')
+      setMessage('云端保存已删除。本地旅行不受影响。')
       setWarnings(result.warnings)
       await refreshCloudBackups()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '删除云端快照失败。')
+      setError(caught instanceof Error ? caught.message : '删除云端保存失败。')
     } finally {
       setIsDeleting(false)
     }
@@ -271,16 +281,16 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   return (
     <section className="space-y-3" data-testid="cloud-backup-section">
-      <SectionHeader title="云端快照" />
+      <SectionHeader title="云端保存" />
       <Card className="space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
             <Cloud className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950">Supabase 云端快照备份</h3>
+            <h3 className="text-base font-semibold text-slate-950">Supabase 云端保存</h3>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              云端快照适合跨设备恢复。IndexedDB 仍是主数据源，不会实时同步，也不会自动合并多设备修改。
+              云端保存适合跨设备延续同一旅行。IndexedDB 仍是主数据源，不会实时同步，也不会自动合并多设备修改。
             </p>
           </div>
         </div>
@@ -288,7 +298,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         <div className="grid gap-2">
           <CloudInfoPill
             icon={<Upload className="size-4" />}
-            text="上传本地快照会创建新的云端快照，包含旅行数据和 copy 票据附件。"
+            text="上传本地数据会更新同一个云端保存，包含旅行数据和 copy 票据附件。"
           />
           <CloudInfoPill
             icon={<ShieldAlert className="size-4" />}
@@ -315,7 +325,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800"
             data-testid="supabase-unconfigured-message"
           >
-            <p className="font-semibold">云端快照未配置</p>
+            <p className="font-semibold">云端保存未配置</p>
             <p className="mt-1">
               请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。未配置时，本地 zip 备份和 IndexedDB
               功能仍可正常使用。
@@ -323,7 +333,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           </div>
         ) : isLoading ? (
           <div aria-busy="true" className="space-y-2" data-testid="cloud-loading-state" role="status">
-            <p className="text-sm font-semibold text-slate-500">正在读取云端快照状态...</p>
+            <p className="text-sm font-semibold text-slate-500">正在读取云端保存状态...</p>
             <SkeletonLine />
             <SkeletonLine className="w-2/3" />
           </div>
@@ -350,11 +360,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
                 loading={isUploading}
                 onClick={() => void handleUpload()}
               >
-                上传本地快照
+                上传本地数据
               </Button>
               {!trip ? (
                 <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-                  请先进入某个旅行，再上传本地快照。
+                  请先进入某个旅行，再上传本地数据。
                 </p>
               ) : null}
               <Button
@@ -425,24 +435,24 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       </Card>
 
       <ConfirmDialog
-        body="恢复会创建一个新的本地旅行副本，不会覆盖当前本地旅行，也不会删除云端快照。恢复后 Home 可能出现两个同名旅行，恢复副本会带有来源标识。"
-        confirmLabel="恢复为新旅行副本"
+        body="恢复会用云端保存原地更新这个本地旅行，不会创建副本。当前设备中同一旅行的本地内容会被云端版本替换。"
+        confirmLabel="用云端更新本地"
         icon={<Download className="size-5" />}
         loading={isRestoring}
         onCancel={() => setRestoreTarget(null)}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
-        title="恢复为新旅行副本？"
+        title="用云端保存更新本地？"
       />
       <ConfirmDialog
-        body="删除这个云端快照不会删除本地旅行，也不会影响其他云端快照。"
-        confirmLabel="删除云端快照"
+        body="删除这个云端保存不会删除本地旅行，也不会影响其他云端保存。"
+        confirmLabel="删除云端保存"
         icon={<Trash2 className="size-5" />}
         loading={isDeleting}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => void handleDeleteConfirmed()}
         open={Boolean(deleteTarget)}
-        title="删除云端快照？"
+        title="删除云端保存？"
       />
     </section>
   )
@@ -457,7 +467,7 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
       <div>
         <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
         <p className="mt-1 text-xs leading-5 text-emerald-800">
-          恢复已创建新的本地旅行副本，不会覆盖当前本地旅行。恢复副本会带有云端快照来源标识。
+          云端保存已原地更新到本地旅行，不会创建新的旅行副本。
         </p>
       </div>
       <ul className="list-inside list-disc space-y-1 text-xs leading-5">
@@ -468,7 +478,7 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
         ))}
       </ul>
       <Button className="w-full" onClick={() => navigateTo('trip', { tripId: result.tripId })}>
-        进入恢复的旅行副本
+        进入更新后的旅行
       </Button>
     </div>
   )
@@ -488,8 +498,8 @@ function AutoCloudBackupSetting({
   const helperText = !configured
     ? '配置 Supabase 后才能开启。'
     : signedIn
-      ? '开启后，本机数据变化会延迟上传旅行云端快照。不会自动恢复或合并冲突。'
-      : '可以先保存设置；登录云端快照账号后才会开始自动上传。'
+      ? '开启后，本机数据变化会延迟更新旅行云端保存。可能冲突时仍会提示确认。'
+      : '可以先保存设置；登录云端保存账号后才会开始自动上传。'
 
   return (
     <div
@@ -498,14 +508,14 @@ function AutoCloudBackupSetting({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-950">自动云端快照备份</p>
+          <p className="text-sm font-semibold text-slate-950">自动云端保存</p>
           <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
             {helperText}
           </p>
         </div>
         <button
           aria-checked={enabled && configured}
-          aria-label="自动云端快照备份"
+          aria-label="自动云端保存"
           className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition ${
             enabled && configured ? 'bg-sky-500' : 'bg-slate-200'
           } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -538,9 +548,9 @@ function CloudBackupList({
   if (backups.length === 0) {
     return (
       <EmptyState
-        body="上传当前旅行后，这里会显示可恢复的云端快照。"
+        body="上传当前旅行后，这里会显示可用于更新本地的云端保存。"
         icon={<Cloud className="size-6" />}
-        title="还没有云端快照"
+        title="还没有云端保存"
       />
     )
   }
@@ -556,12 +566,12 @@ function CloudBackupList({
           key={group.groupKey}
         >
           <div className="space-y-1 px-3 py-3">
-            <p className="text-xs font-semibold text-slate-400">原旅行</p>
+            <p className="text-xs font-semibold text-slate-400">旅行</p>
             <h4 className="break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
               {group.title}
             </h4>
             <p className="break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
-              {group.destination || '目的地未填写'} · {group.backups.length} 个云端快照
+              {group.destination || '目的地未填写'} · {group.backups.length} 个云端保存
             </p>
           </div>
           <div className="divide-y divide-slate-100">
@@ -569,13 +579,13 @@ function CloudBackupList({
               <article className="space-y-3 px-3 py-3" data-testid="cloud-backup-card" key={backup.id}>
                 <div className="grid gap-2 text-xs">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300">云端快照</span>
+                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300">云端保存</span>
                     <span className="min-w-0 text-right font-medium text-slate-800 dark:text-slate-100">
-                      第 {group.backups.length - index} 个快照
+                      第 {group.backups.length - index} 个保存
                     </span>
                   </div>
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-slate-400 dark:text-slate-500">快照时间</span>
+                    <span className="shrink-0 font-semibold text-slate-400 dark:text-slate-500">保存时间</span>
                     <span className="min-w-0 text-right text-slate-500 dark:text-slate-300">
                       {formatCloudDate(backup.exportedAt || backup.createdAt)}
                     </span>
@@ -597,14 +607,14 @@ function CloudBackupList({
                 ) : null}
                 <div className="grid grid-cols-2 gap-2">
                   <Button
-                    aria-label="恢复这个云端快照为新的本地旅行副本"
+                    aria-label="用这个云端保存更新本地旅行"
                     className="px-2 text-xs"
                     data-testid="cloud-restore-backup"
                     icon={<Download className="size-4" />}
                     onClick={() => onRestore(backup)}
                     variant="secondary"
                   >
-                    恢复为新旅行副本
+                    用云端更新本地
                   </Button>
                   <Button
                     className="px-2 text-xs text-red-600"
@@ -613,7 +623,7 @@ function CloudBackupList({
                     onClick={() => onDelete(backup)}
                     variant="secondary"
                   >
-                    删除云端快照
+                    删除云端保存
                   </Button>
                 </div>
               </article>

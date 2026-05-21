@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import {
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
+  markTripAutoSnapshotSynced,
 } from '../../lib/autoSnapshotBackup'
 import {
   getCurrentSession,
@@ -70,12 +71,14 @@ export function CloudSnapshotCheckPrompts({
     try {
       await ensureCloudSnapshotActionReady()
       const result = await restoreCloudBackup(target.backupId)
+      const exportedAt = Date.parse(result.exportedAt)
+      markTripAutoSnapshotSynced(target.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       suppressCloudSnapshotPrompt(target.signature)
       setRestoreTarget(null)
       await refreshCloudSnapshotChecks()
       navigateTo('trip', { tripId: result.tripId })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '恢复云端快照失败。')
+      setError(caught instanceof Error ? caught.message : '用云端保存更新本地失败。')
     } finally {
       setBusySignature(null)
     }
@@ -96,16 +99,23 @@ export function CloudSnapshotCheckPrompts({
     setMessage(null)
     try {
       await ensureCloudSnapshotActionReady()
-      await uploadTripCloudBackup(target.tripId)
+      const result = await uploadTripCloudBackup(target.tripId)
       const autoBackupStatus = getTripAutoSnapshotStatus(target.tripId)
+      const exportedAt = Date.parse(result.exportedAt)
       if (autoBackupStatus?.dirtyAt) {
-        completeTripAutoSnapshotSuccess(target.tripId, autoBackupStatus.dirtyAt)
+        completeTripAutoSnapshotSuccess(
+          target.tripId,
+          autoBackupStatus.dirtyAt,
+          Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+        )
+      } else {
+        markTripAutoSnapshotSynced(target.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地快照已上传，已创建新的云端快照。')
+      setMessage('本地数据已上传，云端保存已更新。')
       setUploadConfirmTarget(null)
       await refreshCloudSnapshotChecks()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '上传本地快照失败。')
+      setError(caught instanceof Error ? caught.message : '更新云端保存失败。')
     } finally {
       setBusySignature(null)
     }
@@ -134,12 +144,12 @@ export function CloudSnapshotCheckPrompts({
       ))}
       {hiddenCount > 0 ? (
         <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          还有 {hiddenCount} 个云端快照提醒，请在云端快照列表中查看。
+          还有 {hiddenCount} 个云端保存提醒，请在云端保存列表中查看。
         </p>
       ) : null}
       <ConfirmDialog
-        body="恢复会创建一个新的本地旅行副本，不会覆盖当前本地旅行，也不会删除云端快照。恢复后 Home 可能出现两个同名旅行，恢复副本会带有来源标识。"
-        confirmLabel="恢复为新旅行副本"
+        body="恢复会用云端保存原地更新这个本地旅行，不会创建副本。当前设备中同一旅行的本地内容会被云端版本替换。"
+        confirmLabel="用云端更新本地"
         icon={<Download className="size-5" />}
         loading={Boolean(busySignature && restoreTarget?.signature === busySignature)}
         onCancel={() => {
@@ -149,11 +159,11 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
-        title="恢复为新旅行副本？"
+        title="用云端保存更新本地？"
       />
       <ConfirmDialog
-        body="上传会创建一个新的云端快照，不会删除旧快照，也不会把云端修改合并到当前本地旅行。如果云端快照里有你需要的数据，请先恢复为新旅行副本后再决定。"
-        confirmLabel="上传本地快照"
+        body="上传会用当前设备上的旅行数据更新同一个云端保存。若云端也有你需要保留的更新，请先取消并选择用云端更新本地。"
+        confirmLabel="上传并更新云端"
         icon={<Upload className="size-5" />}
         loading={Boolean(busySignature && uploadConfirmTarget?.signature === busySignature)}
         onCancel={() => {
@@ -163,7 +173,7 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleUploadConfirmed()}
         open={Boolean(uploadConfirmTarget)}
-        title="上传本地快照？"
+        title="用本地数据更新云端？"
       />
     </section>
   )
@@ -189,7 +199,7 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
           </p>
         ))}
         <p className="pt-1 leading-5 text-slate-400">
-          系统只会提醒版本差异，不会自动覆盖、合并或删除任何数据。若本地或云端版本变化，提醒可能再次出现。
+          系统不会做字段级合并或云端删除；若本地或云端版本变化，提醒可能再次出现。
         </p>
       </div>
     </details>
@@ -268,7 +278,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onUpload}
           >
-            上传本地快照
+            上传并更新云端
           </Button>
         ) : null}
         {result.status === 'cloud_newer' || result.status === 'possible_conflict' ? (
@@ -279,7 +289,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onRestore}
           >
-            恢复为新旅行副本
+            用云端更新本地
           </Button>
         ) : null}
         <Button
@@ -288,7 +298,7 @@ function CloudSnapshotPromptCard({
           onClick={() => navigateTo('settings', { section: 'cloud' })}
           variant="secondary"
         >
-          查看云端快照
+          查看云端保存
         </Button>
       </div>
       <button
@@ -331,15 +341,15 @@ function getPromptView(result: CloudSnapshotCheckResult) {
 
 async function ensureCloudSnapshotActionReady() {
   if (!getSupabaseConfigStatus().configured) {
-    throw new Error('云端快照未配置，请先配置 Supabase 环境变量。')
+    throw new Error('云端保存未配置，请先配置 Supabase 环境变量。')
   }
 
   if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
-    throw new Error('当前离线，无法访问云端快照。')
+    throw new Error('当前离线，无法访问云端保存。')
   }
 
   const session = await getCurrentSession().catch(() => null)
   if (!session) {
-    throw new Error('请先登录云端快照账号。')
+    throw new Error('请先登录云端保存账号。')
   }
 }

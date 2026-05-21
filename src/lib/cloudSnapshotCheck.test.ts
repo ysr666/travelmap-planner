@@ -74,6 +74,18 @@ describe('cloud snapshot version comparison', () => {
     expect(comparison.localVersion).toBe(dirtyAt)
   })
 
+  it('treats a cloud save covered by lastSuccessAt as in sync', () => {
+    const lastSuccessAt = Date.parse('2026-04-02T11:05:00.000Z')
+    const comparison = compareCloudSnapshotVersions({
+      autoStatus: createAutoStatus({ dirtyAt: undefined, lastSuccessAt }),
+      backup: createBackup({ exportedAt: '2026-04-02T11:00:00.000Z' }),
+      trip: baseTrip,
+    })
+
+    expect(comparison.status).toBe('in_sync')
+    expect(comparison.localVersion).toBe(lastSuccessAt)
+  })
+
   it('classifies dirty local state without lastSuccessAt as possible conflict', () => {
     expect(
       compareCloudSnapshotVersions({
@@ -331,12 +343,12 @@ describe('cloud snapshot version context fields', () => {
         value: '2026-04-02 20:00',
       },
       {
-        description: '来自云端快照导出时间',
-        label: '云端快照',
+        description: '来自云端保存更新时间',
+        label: '云端保存',
         value: '2026-04-02 17:00',
       },
       {
-        description: '当前设备尚未上传到云端快照的修改',
+        description: '当前设备尚未上传到云端保存的修改',
         label: '未上传修改',
         value: '2026-04-02 20:00',
       },

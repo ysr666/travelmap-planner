@@ -125,3 +125,14 @@ export async function importTripPlanRecords(
   }
   return result
 }
+
+export async function replaceTripPlanRecords(
+  input: Parameters<typeof repo.replaceTripPlanRecords>[0],
+  options: MarkDirtyOptions = {},
+) {
+  const result = await repo.replaceTripPlanRecords(input)
+  if (options.markDirty !== false) {
+    markTripAutoSnapshotDirty(result.tripId, 'cloud-backup-restored')
+  }
+  return result
+}

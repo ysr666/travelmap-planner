@@ -85,6 +85,12 @@ export function listDirtyAutoSnapshotTrips() {
     .map(cloneEntry)
 }
 
+export function hasPendingAutoSnapshotTrips() {
+  return Object.values(readAutoSnapshotBackupState().trips).some(
+    (entry) => typeof entry.dirtyAt === 'number' || entry.status === 'uploading',
+  )
+}
+
 export function setTripAutoSnapshotUploading(tripId: string, dirtyAt: number, now = Date.now()) {
   updateTripStatusIfDirtyUnchanged(tripId, dirtyAt, {
     lastAttemptAt: now,
@@ -109,6 +115,24 @@ export function completeTripAutoSnapshotSuccess(tripId: string, dirtyAt: number,
   writeAutoSnapshotBackupState(state)
   emitAutoSnapshotBackupEvent({ kind: 'status', tripId })
   return true
+}
+
+export function markTripAutoSnapshotSynced(tripId: string, now = Date.now()) {
+  if (!tripId) {
+    return
+  }
+
+  const state = readAutoSnapshotBackupState()
+  state.trips[tripId] = {
+    ...state.trips[tripId],
+    dirtyAt: undefined,
+    lastError: undefined,
+    lastSuccessAt: now,
+    status: 'synced',
+    tripId,
+  }
+  writeAutoSnapshotBackupState(state)
+  emitAutoSnapshotBackupEvent({ kind: 'status', tripId })
 }
 
 export function completeTripAutoSnapshotFailure(

@@ -1,11 +1,21 @@
 import { useEffect } from 'react'
 import { listTrips } from '../../db'
-import { getTripAutoSnapshotStatus, subscribeAutoSnapshotBackup } from '../../lib/autoSnapshotBackup'
-import { getCurrentSession, getSupabaseConfigStatus, listCloudBackups } from '../../lib/cloudBackup'
+import {
+  getTripAutoSnapshotStatus,
+  markTripAutoSnapshotSynced,
+  subscribeAutoSnapshotBackup,
+} from '../../lib/autoSnapshotBackup'
+import {
+  getCurrentSession,
+  getSupabaseConfigStatus,
+  listCloudBackups,
+  restoreCloudBackup,
+} from '../../lib/cloudBackup'
 import {
   buildCloudSnapshotCheckResults,
   refreshCloudSnapshotChecks,
   setCloudSnapshotCheckRefreshProvider,
+  suppressCloudSnapshotPrompt,
 } from '../../lib/cloudSnapshotCheck'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 
@@ -29,11 +39,30 @@ export function StartupCloudSnapshotCheckController() {
         trips.map((trip) => [trip.id, getTripAutoSnapshotStatus(trip.id)]),
       )
 
-      return buildCloudSnapshotCheckResults({
+      const results = buildCloudSnapshotCheckResults({
         autoStatusByTripId,
         backups,
         trips,
       })
+      const remainingResults = []
+
+      for (const result of results) {
+        if (result.status !== 'cloud_newer') {
+          remainingResults.push(result)
+          continue
+        }
+
+        try {
+          const restoreResult = await restoreCloudBackup(result.backupId)
+          const exportedAt = Date.parse(restoreResult.exportedAt)
+          markTripAutoSnapshotSynced(result.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
+          suppressCloudSnapshotPrompt(result.signature)
+        } catch {
+          remainingResults.push(result)
+        }
+      }
+
+      return remainingResults
     })
 
     const requestRefresh = () => {

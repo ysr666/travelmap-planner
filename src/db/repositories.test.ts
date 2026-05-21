@@ -21,6 +21,7 @@ import {
   listItemsByTrip,
   listTicketsByItem,
   listTicketsByTrip,
+  replaceTripPlanRecords,
   listTrips,
   saveTicketBlob,
   updateDay,
@@ -260,5 +261,114 @@ describe('importTripPlanRecords', () => {
     expect(await getTrip('import-trip')).toBeTruthy()
     expect(await getDay('import-day')).toBeTruthy()
     expect(await getItineraryItem('import-item')).toBeTruthy()
+  })
+})
+
+describe('replaceTripPlanRecords', () => {
+  it('replaces an existing trip graph in place without changing ids', async () => {
+    const trip = await createTrip({
+      destination: 'Tokyo',
+      endDate: '2025-05-02',
+      startDate: '2025-05-01',
+      title: 'Old title',
+    })
+    const oldDay = await createDay({
+      date: '2025-05-01',
+      sortOrder: 1,
+      title: 'Old day',
+      tripId: trip.id,
+    })
+    const oldItem = await createItineraryItem({
+      dayId: oldDay.id,
+      sortOrder: 1,
+      ticketIds: [],
+      title: 'Old item',
+      tripId: trip.id,
+    })
+
+    const result = await replaceTripPlanRecords({
+      days: [
+        {
+          date: '2025-05-01',
+          id: 'cloud-day',
+          sortOrder: 1,
+          title: 'Cloud day',
+          tripId: trip.id,
+        },
+      ],
+      itineraryItems: [
+        {
+          createdAt: 300,
+          dayId: 'cloud-day',
+          id: 'cloud-item',
+          sortOrder: 1,
+          ticketIds: ['cloud-ticket'],
+          title: 'Cloud item',
+          tripId: trip.id,
+          updatedAt: 300,
+        },
+      ],
+      ticketBlobs: [{ blob: new Blob(['pdf'], { type: 'application/pdf' }), ticketId: 'cloud-ticket' }],
+      ticketMetas: [
+        {
+          createdAt: 300,
+          fileName: 'cloud.pdf',
+          fileType: 'pdf',
+          id: 'cloud-ticket',
+          itemId: 'cloud-item',
+          mimeType: 'application/pdf',
+          size: 3,
+          storageMode: 'copy',
+          title: 'Cloud ticket',
+          tripId: trip.id,
+          updatedAt: 300,
+        },
+      ],
+      trip: {
+        ...trip,
+        title: 'Cloud title',
+        updatedAt: 300,
+      },
+    })
+
+    expect(result.tripId).toBe(trip.id)
+    expect((await getTrip(trip.id))?.title).toBe('Cloud title')
+    expect(await getDay(oldDay.id)).toBeUndefined()
+    expect(await getItineraryItem(oldItem.id)).toBeUndefined()
+    expect(await getDay('cloud-day')).toBeTruthy()
+    expect(await getItineraryItem('cloud-item')).toBeTruthy()
+    expect(await getTicketMeta('cloud-ticket')).toBeTruthy()
+    expect(await getTicketBlob('cloud-ticket')).toBeTruthy()
+  })
+
+  it('rejects incoming record ids that belong to another local trip', async () => {
+    const first = await createTrip({
+      destination: 'Tokyo',
+      endDate: '2025-05-02',
+      startDate: '2025-05-01',
+      title: 'First',
+    })
+    const second = await createTrip({
+      destination: 'Kyoto',
+      endDate: '2025-05-04',
+      startDate: '2025-05-03',
+      title: 'Second',
+    })
+    const foreignDay = await createDay({
+      date: '2025-05-03',
+      sortOrder: 1,
+      title: 'Foreign',
+      tripId: second.id,
+    })
+
+    await expect(
+      replaceTripPlanRecords({
+        days: [{ ...foreignDay, tripId: first.id }],
+        itineraryItems: [],
+        ticketBlobs: [],
+        ticketMetas: [],
+        trip: first,
+      }),
+    ).rejects.toThrow('记录 ID 与其他本地旅行冲突')
   })
 })

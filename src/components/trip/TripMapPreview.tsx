@@ -505,7 +505,7 @@ function RouteOptimizationPanel({
               <div>
                 <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">应用路线顺序建议？</h4>
                 <p className="mt-1 text-xs leading-5 tm-muted">
-                  只会更新 {state.day.title} 内行程点的排序，不会修改地点、时间、票据或云端快照。
+                  只会更新 {state.day.title} 内行程点的排序，不会修改地点、时间、票据或云端保存。
                 </p>
               </div>
               <button

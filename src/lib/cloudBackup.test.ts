@@ -4,6 +4,7 @@ import {
   buildCloudRestoreRecords,
   buildCloudSnapshotFromRecords,
   buildCloudSnapshotPath,
+  buildStableCloudBackupId,
   buildMissingCloudFileRefWarnings,
   parseCloudSnapshot,
   parseCloudSnapshotText,
@@ -20,7 +21,7 @@ const trip: Trip = {
   id: 'trip_old',
   notes: '测试',
   startDate: '2026-04-01',
-  title: '云端备份测试',
+  title: '云端保存测试',
   updatedAt: 200,
 }
 
@@ -160,13 +161,23 @@ describe('supabase cloud backup helpers', () => {
     )
   })
 
+  it('builds one stable uuid backup id per user and trip', async () => {
+    const first = await buildStableCloudBackupId('user-id', 'trip-id')
+    const second = await buildStableCloudBackupId('user-id', 'trip-id')
+    const otherTrip = await buildStableCloudBackupId('user-id', 'other-trip')
+
+    expect(first).toBe(second)
+    expect(first).not.toBe(otherTrip)
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+
   it('rejects metadata snapshot paths outside the current user and backup', () => {
     expect(() =>
       validateCloudBackupSnapshotPath('user-id', 'backup-id', 'user-id/other-backup/snapshot.json'),
     ).toThrow('snapshot 路径')
   })
 
-  it('remaps all ids when restoring records', async () => {
+  it('preserves all ids when restoring cloud records', async () => {
     const blob = new Blob(['pdf'], { type: 'application/pdf' })
     const snapshot = buildCloudSnapshotFromRecords({
       appVersion: '0.2.0.2',
@@ -179,22 +190,21 @@ describe('supabase cloud backup helpers', () => {
       trip,
       userId: 'user-id',
     }).snapshot
-    let index = 0
-    const records = buildCloudRestoreRecords(snapshot, [{ blob, ticketId: copyTicket.id }], {
-      createIdFn: (prefix) => `${prefix}_new_${index++}`,
-      now: 999,
-    })
+    const records = buildCloudRestoreRecords(snapshot, [{ blob, ticketId: copyTicket.id }])
 
-    expect(records.trip.id).not.toBe(trip.id)
-    expect(records.trip.updatedAt).toBe(999)
+    expect(records.trip.id).toBe(trip.id)
+    expect(records.trip.updatedAt).toBe(trip.updatedAt)
     expect(records.days[0].tripId).toBe(records.trip.id)
-    expect(records.itineraryItems[0].dayId).toBe(records.days[0].id)
-    expect(records.ticketMetas[0].itemId).toBe(records.itineraryItems[0].id)
-    expect(records.itineraryItems[0].ticketIds).toEqual([records.ticketMetas[0].id])
-    expect(records.ticketBlobs[0].ticketId).toBe(records.ticketMetas[0].id)
+    expect(records.days[0].id).toBe(days[0].id)
+    expect(records.itineraryItems[0].id).toBe(items[0].id)
+    expect(records.itineraryItems[0].dayId).toBe(days[0].id)
+    expect(records.ticketMetas[0].id).toBe(copyTicket.id)
+    expect(records.ticketMetas[0].itemId).toBe(items[0].id)
+    expect(records.itineraryItems[0].ticketIds).toEqual([copyTicket.id])
+    expect(records.ticketBlobs[0].ticketId).toBe(copyTicket.id)
   })
 
-  it('sets current cloud restore lineage metadata without renaming the trip', async () => {
+  it('removes legacy restore lineage metadata when restoring into the same trip identity', async () => {
     const snapshot = buildCloudSnapshotFromRecords({
       appVersion: '0.2.0.2',
       backupId: 'old-backup-id',
@@ -212,21 +222,14 @@ describe('supabase cloud backup helpers', () => {
       },
       userId: 'user-id',
     }).snapshot
-    const records = buildCloudRestoreRecords(snapshot, [], {
-      createIdFn: (prefix) => `${prefix}_new`,
-      now: 999,
-      restoreMetadata: {
-        backupId: 'current-backup-id',
-        exportedAt: snapshot.exportedAt,
-        originalTripId: snapshot.originalTripId,
-      },
-    })
+    const records = buildCloudRestoreRecords(snapshot, [])
 
     expect(records.trip.title).toBe(trip.title)
-    expect(records.trip.restoredAt).toBe(999)
-    expect(records.trip.restoredFromCloudBackupId).toBe('current-backup-id')
-    expect(records.trip.restoredFromCloudOriginalTripId).toBe(trip.id)
-    expect(records.trip.restoredFromCloudExportedAt).toBe('2026-04-01T00:00:00.000Z')
+    expect(records.trip.id).toBe(trip.id)
+    expect(records.trip.restoredAt).toBeUndefined()
+    expect(records.trip.restoredFromCloudBackupId).toBeUndefined()
+    expect(records.trip.restoredFromCloudOriginalTripId).toBeUndefined()
+    expect(records.trip.restoredFromCloudExportedAt).toBeUndefined()
   })
 
   it('preserves optional restored metadata in cloud snapshots while using the current local trip id', () => {
@@ -258,7 +261,7 @@ describe('supabase cloud backup helpers', () => {
 
   it('rejects unsupported cloud snapshot schema and broken references', () => {
     expect(() => parseCloudSnapshot({ schemaVersion: 2, type: 'cloud-trip-backup' })).toThrow(
-      '不支持的云端备份版本',
+      '不支持的云端保存版本',
     )
 
     const snapshot = buildCloudSnapshotFromRecords({
@@ -277,7 +280,7 @@ describe('supabase cloud backup helpers', () => {
   })
 
   it('reports invalid snapshot json with a user-facing error', () => {
-    expect(() => parseCloudSnapshotText('{not json')).toThrow('云端备份 snapshot.json 无法解析')
+    expect(() => parseCloudSnapshotText('{not json')).toThrow('云端保存 snapshot.json 无法解析')
   })
 
   it('rejects file refs outside the current backup storage prefix', () => {
@@ -297,7 +300,7 @@ describe('supabase cloud backup helpers', () => {
     snapshot.fileRefs[0].path = 'user-id/another-backup/files/ticket_copy/order.pdf'
 
     expect(() => validateCloudSnapshotForRestore(snapshot, 'user-id', 'backup-id')).toThrow(
-      '文件路径不属于当前备份',
+      '文件路径不属于当前保存记录',
     )
   })
 
@@ -318,7 +321,7 @@ describe('supabase cloud backup helpers', () => {
     snapshot.fileRefs[0].path = 'user-id/backup-id/files/another-ticket/order.pdf'
 
     expect(() => validateCloudSnapshotForRestore(snapshot, 'user-id', 'backup-id')).toThrow(
-      '文件路径不属于当前备份',
+      '文件路径不属于当前保存记录',
     )
   })
 

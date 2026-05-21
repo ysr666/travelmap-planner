@@ -2,13 +2,13 @@ import type { Session, User } from '@supabase/supabase-js'
 import {
   getTicketBlob,
   getTrip,
-  importTripPlanRecords,
   listDaysByTrip,
   listItemsByTrip,
   listTicketsByTrip,
+  replaceTripPlanRecords,
 } from '../db'
-import { createId } from '../db/ids'
 import { safeFileName } from './backup'
+import { emitTravelDataChanged } from './dataEvents'
 import { requireSupabaseClient } from './supabaseClient'
 import { formatFileSize, shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
@@ -64,12 +64,12 @@ export type CloudBackupSummary = {
 
 export type CloudBackupResult = {
   backupId: string
+  exportedAt: string
   warnings: string[]
 }
 
 export type RestoreCloudBackupResult = {
-  restoredAt?: number
-  restoredFromCloudExportedAt?: string
+  exportedAt: string
   tripId: string
   title: string
   warnings: string[]
@@ -102,12 +102,6 @@ export type BuildCloudSnapshotResult = {
   warnings: string[]
 }
 
-type CloudRestoreMetadata = {
-  backupId: string
-  exportedAt: string
-  originalTripId: string
-}
-
 type E2eCloudFixture = {
   backups?: CloudBackupSummary[]
   user?: {
@@ -134,6 +128,7 @@ type CloudBackupInsertRecord = {
   snapshot_path: string
   files_count: number
   total_size_bytes: number
+  updated_at?: string
   warnings: string[]
   notes: string | null
 }
@@ -222,7 +217,7 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    throw new Error('获取云端备份列表失败：' + error.message)
+    throw new Error('获取云端保存列表失败：' + error.message)
   }
 
   return (data as CloudBackupRow[] | null ?? []).map(mapCloudBackupRow)
@@ -231,49 +226,51 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
 export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackupResult> {
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
-  const backupId = crypto.randomUUID()
+  const backupId = await buildStableCloudBackupId(user.id, tripId)
   const snapshotResult = await buildCloudSnapshotForTrip(tripId, user.id, backupId)
   const bucket = client.storage.from(CLOUD_BACKUP_BUCKET)
-  const uploadedPaths: string[] = []
 
-  try {
-    for (const file of snapshotResult.fileUploads) {
-      const { error } = await bucket.upload(file.path, file.blob, {
-        contentType: file.mimeType,
-        upsert: false,
-      })
-      if (error) {
-        throw new Error('票据文件上传失败：' + error.message)
-      }
-      uploadedPaths.push(file.path)
-    }
-
-    const snapshotBlob = new Blob([JSON.stringify(snapshotResult.snapshot, null, 2)], {
-      type: 'application/json',
+  for (const file of snapshotResult.fileUploads) {
+    const { error } = await bucket.upload(file.path, file.blob, {
+      contentType: file.mimeType,
+      upsert: true,
     })
-    const { error: snapshotError } = await bucket.upload(
-      snapshotResult.metadata.snapshot_path,
-      snapshotBlob,
-      {
-        contentType: 'application/json',
-        upsert: false,
-      },
-    )
-    if (snapshotError) {
-      throw new Error('快照上传失败：' + snapshotError.message)
+    if (error) {
+      throw new Error('票据文件上传失败：' + error.message)
     }
-    uploadedPaths.push(snapshotResult.metadata.snapshot_path)
-
-    const { error: insertError } = await client.from(CLOUD_BACKUP_TABLE).insert(snapshotResult.metadata)
-    if (insertError) {
-      throw new Error('备份记录写入失败：' + insertError.message)
-    }
-
-    return { backupId, warnings: snapshotResult.warnings }
-  } catch (caught) {
-    await cleanupUploadedObjects(uploadedPaths)
-    throw caught
   }
+
+  const snapshotBlob = new Blob([JSON.stringify(snapshotResult.snapshot, null, 2)], {
+    type: 'application/json',
+  })
+  const { error: snapshotError } = await bucket.upload(snapshotResult.metadata.snapshot_path, snapshotBlob, {
+    contentType: 'application/json',
+    upsert: true,
+  })
+  if (snapshotError) {
+    throw new Error('云端保存文件上传失败：' + snapshotError.message)
+  }
+
+  const { error: upsertError } = await client.from(CLOUD_BACKUP_TABLE).upsert(snapshotResult.metadata, {
+    onConflict: 'id',
+  })
+  if (upsertError) {
+    throw new Error('云端保存记录写入失败：' + upsertError.message)
+  }
+
+  const warnings = [...snapshotResult.warnings]
+  try {
+    await removeStaleCloudBackupObjects(
+      bucket,
+      user.id,
+      backupId,
+      new Set([snapshotResult.metadata.snapshot_path, ...snapshotResult.snapshot.fileRefs.map((fileRef) => fileRef.path)]),
+    )
+  } catch {
+    warnings.push('旧云端附件清理失败，下一次更新云端保存时会再次尝试。')
+  }
+
+  return { backupId, exportedAt: snapshotResult.snapshot.exportedAt, warnings }
 }
 
 export async function restoreCloudBackup(backupId: string): Promise<RestoreCloudBackupResult> {
@@ -285,7 +282,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
   const { data: snapshotBlob, error: snapshotError } = await bucket.download(metadata.snapshot_path)
 
   if (snapshotError || !snapshotBlob) {
-    throw new Error(snapshotError?.message ?? '云端备份 snapshot.json 下载失败。')
+    throw new Error(snapshotError?.message ?? '云端保存 snapshot.json 下载失败。')
   }
 
   const snapshot = parseCloudSnapshotText(await snapshotBlob.text())
@@ -306,19 +303,11 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
     })
   }
 
-  const restoredAt = Date.now()
-  const records = buildCloudRestoreRecords(snapshot, ticketBlobs, {
-    now: restoredAt,
-    restoreMetadata: {
-      backupId,
-      exportedAt: snapshot.exportedAt,
-      originalTripId: snapshot.originalTripId,
-    },
-  })
-  const result = await importTripPlanRecords(records, { markDirty: false })
+  const records = buildCloudRestoreRecords(snapshot, ticketBlobs)
+  const result = await replaceTripPlanRecords(records, { markDirty: false })
+  emitTravelDataChanged()
   return {
-    restoredAt,
-    restoredFromCloudExportedAt: snapshot.exportedAt,
+    exportedAt: snapshot.exportedAt,
     title: result.title,
     tripId: result.tripId,
     warnings,
@@ -357,7 +346,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
   })
 
   if (safePathsToRemove.length === 0) {
-    throw new Error('没有找到可删除的云端备份文件。')
+    throw new Error('没有找到可删除的云端保存文件。')
   }
 
   const { error: removeError } = await bucket.remove(safePathsToRemove)
@@ -372,7 +361,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
     .eq('user_id', user.id)
 
   if (deleteError) {
-    throw new Error(`云端文件已清理，但 metadata 删除失败。请在 Supabase 后台检查该备份记录：${deleteError.message}`)
+    throw new Error(`云端文件已清理，但 metadata 删除失败。请在 Supabase 后台检查该云端保存记录：${deleteError.message}`)
   }
 
   return { warnings }
@@ -450,6 +439,7 @@ export function buildCloudSnapshotFromRecords({
       snapshot_path: snapshotPath,
       title: trip.title,
       total_size_bytes: totalSizeBytes,
+      updated_at: exportedAt,
       user_id: userId,
       warnings,
     },
@@ -461,53 +451,28 @@ export function buildCloudSnapshotFromRecords({
 export function buildCloudRestoreRecords(
   snapshotInput: CloudTripSnapshot,
   ticketBlobs: TicketBlob[],
-  options: {
-    createIdFn?: (prefix: string) => string
-    now?: number
-    restoreMetadata?: CloudRestoreMetadata
-  } = {},
 ) {
   const snapshot = parseCloudSnapshot(snapshotInput)
   validateSnapshotGraph(snapshot)
 
-  const createIdFn = options.createIdFn ?? createId
-  const now = options.now ?? Date.now()
-  const nextTripId = createIdFn('trip')
-  const dayIdMap = new Map(snapshot.days.map((day) => [day.id, createIdFn('day')]))
-  const itemIdMap = new Map(snapshot.itineraryItems.map((item) => [item.id, createIdFn('item')]))
-  const ticketIdMap = new Map(snapshot.ticketMetas.map((ticket) => [ticket.id, createIdFn('ticket')]))
-
   const trip: Trip = {
     ...snapshot.trip,
-    createdAt: now,
-    id: nextTripId,
-    ...(options.restoreMetadata
-      ? {
-          restoredAt: now,
-          restoredFromCloudBackupId: options.restoreMetadata.backupId,
-          restoredFromCloudExportedAt: options.restoreMetadata.exportedAt,
-          restoredFromCloudOriginalTripId: options.restoreMetadata.originalTripId,
-        }
-      : {}),
-    updatedAt: now,
+    restoredAt: undefined,
+    restoredFromCloudBackupId: undefined,
+    restoredFromCloudExportedAt: undefined,
+    restoredFromCloudOriginalTripId: undefined,
   }
   const days: Day[] = snapshot.days.map((day) => ({
     ...day,
-    id: requireMappedCloudId(dayIdMap, day.id),
-    tripId: nextTripId,
+    tripId: snapshot.trip.id,
   }))
   const itineraryItems: ItineraryItem[] = snapshot.itineraryItems.map((item) => ({
     ...item,
-    dayId: requireMappedCloudId(dayIdMap, item.dayId),
-    id: requireMappedCloudId(itemIdMap, item.id),
-    ticketIds: item.ticketIds.map((ticketId) => requireMappedCloudId(ticketIdMap, ticketId)),
-    tripId: nextTripId,
+    tripId: snapshot.trip.id,
   }))
   const ticketMetas: TicketMeta[] = snapshot.ticketMetas.map((ticket) => ({
     ...ticket,
-    id: requireMappedCloudId(ticketIdMap, ticket.id),
-    itemId: ticket.itemId ? requireMappedCloudId(itemIdMap, ticket.itemId) : undefined,
-    tripId: nextTripId,
+    tripId: snapshot.trip.id,
   }))
   const copyTicketIds = new Set(
     snapshot.ticketMetas.filter(shouldExpectTicketBlob).map((ticket) => ticket.id),
@@ -516,9 +481,8 @@ export function buildCloudRestoreRecords(
   const nextTicketBlobs: TicketBlob[] = []
 
   for (const [oldTicketId, blob] of ticketBlobsById) {
-    const nextTicketId = ticketIdMap.get(oldTicketId)
-    if (nextTicketId && copyTicketIds.has(oldTicketId)) {
-      nextTicketBlobs.push({ blob, ticketId: nextTicketId })
+    if (copyTicketIds.has(oldTicketId)) {
+      nextTicketBlobs.push({ blob, ticketId: oldTicketId })
     }
   }
 
@@ -546,10 +510,21 @@ export function buildCloudBackupPrefix(userId: string, backupId: string) {
   return `${safeCloudPathSegment(userId)}/${safeCloudPathSegment(backupId)}`
 }
 
+export async function buildStableCloudBackupId(userId: string, tripId: string) {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`tripmap-cloud-backup:v1:${userId}:${tripId}`),
+  )
+  const bytes = new Uint8Array(digest).slice(0, 16)
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  return formatUuidBytes(bytes)
+}
+
 export function validateCloudBackupSnapshotPath(userId: string, backupId: string, snapshotPath: string) {
   const expectedPath = buildCloudSnapshotPath(userId, backupId)
   if (snapshotPath !== expectedPath) {
-    throw new Error('云端备份 metadata 中的 snapshot 路径与当前用户或备份不匹配。')
+    throw new Error('云端保存 metadata 中的 snapshot 路径与当前用户或保存记录不匹配。')
   }
 }
 
@@ -562,19 +537,19 @@ export function buildMissingCloudFileRefWarnings(snapshot: CloudTripSnapshot) {
 
 export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
   if (!isRecord(value)) {
-    throw new Error('云端备份 snapshot.json 格式不正确。')
+    throw new Error('云端保存 snapshot.json 格式不正确。')
   }
   if (value.schemaVersion !== CLOUD_BACKUP_SCHEMA_VERSION) {
-    throw new Error(`不支持的云端备份版本：${String(value.schemaVersion)}`)
+    throw new Error(`不支持的云端保存版本：${String(value.schemaVersion)}`)
   }
   if (value.type !== CLOUD_BACKUP_TYPE) {
-    throw new Error('这不是旅图云端旅行备份。')
+    throw new Error('这不是旅图云端旅行保存。')
   }
   if (!isRecord(value.trip) || !Array.isArray(value.days) || !Array.isArray(value.itineraryItems)) {
-    throw new Error('云端备份缺少必要的旅行结构化数据。')
+    throw new Error('云端保存缺少必要的旅行结构化数据。')
   }
   if (!Array.isArray(value.ticketMetas) || !Array.isArray(value.fileRefs)) {
-    throw new Error('云端备份缺少票据元数据。')
+    throw new Error('云端保存缺少票据元数据。')
   }
 
   return {
@@ -603,7 +578,7 @@ export function parseCloudSnapshotText(text: string): CloudTripSnapshot {
   try {
     value = JSON.parse(text)
   } catch {
-    throw new Error('云端备份 snapshot.json 无法解析。')
+    throw new Error('云端保存 snapshot.json 无法解析。')
   }
 
   return parseCloudSnapshot(value)
@@ -651,7 +626,7 @@ async function buildCloudSnapshotForTrip(tripId: string, userId: string, backupI
 async function requireCurrentUser() {
   const user = await getCurrentUser()
   if (!user) {
-    throw new Error('请先登录后再使用云端备份。')
+    throw new Error('请先登录后再使用云端保存。')
   }
 
   return user
@@ -670,22 +645,27 @@ async function getCloudBackupRow(backupId: string, userId: string) {
     throw new Error(error.message)
   }
   if (!data) {
-    throw new Error('没有找到该云端备份。')
+    throw new Error('没有找到该云端保存。')
   }
 
   return data as CloudBackupRow
 }
 
-async function cleanupUploadedObjects(paths: string[]) {
-  if (paths.length === 0) {
+async function removeStaleCloudBackupObjects(
+  bucket: CloudStorageBucket,
+  userId: string,
+  backupId: string,
+  keepPaths: Set<string>,
+) {
+  const listedPaths = await listCloudBackupObjectPaths(bucket, userId, backupId)
+  const pathsToRemove = listedPaths.filter((path) => !keepPaths.has(path))
+  if (pathsToRemove.length === 0) {
     return
   }
 
-  try {
-    const client = requireSupabaseClient()
-    await client.storage.from(CLOUD_BACKUP_BUCKET).remove(paths)
-  } catch {
-    // Best-effort cleanup must not hide the original upload failure.
+  const { error } = await bucket.remove(pathsToRemove)
+  if (error) {
+    throw new Error(error.message)
   }
 }
 
@@ -739,16 +719,16 @@ function readE2eCloudFixture(): E2eCloudFixture | null {
 
 function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   if (!snapshot.trip.id || !snapshot.trip.title) {
-    throw new Error('云端备份中的旅行数据不完整。')
+    throw new Error('云端保存中的旅行数据不完整。')
   }
 
   const dayIds = new Set<string>()
   for (const day of snapshot.days) {
     if (!day.id || day.tripId !== snapshot.trip.id) {
-      throw new Error('云端备份中的 Day 数据引用不正确。')
+      throw new Error('云端保存中的 Day 数据引用不正确。')
     }
     if (dayIds.has(day.id)) {
-      throw new Error(`云端备份中的 Day 数据存在重复 ID：${day.id}`)
+      throw new Error(`云端保存中的 Day 数据存在重复 ID：${day.id}`)
     }
     dayIds.add(day.id)
   }
@@ -756,13 +736,13 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const itemIds = new Set<string>()
   for (const item of snapshot.itineraryItems) {
     if (!item.id || item.tripId !== snapshot.trip.id || !dayIds.has(item.dayId)) {
-      throw new Error('云端备份中的行程点引用不正确。')
+      throw new Error('云端保存中的行程点引用不正确。')
     }
     if (itemIds.has(item.id)) {
-      throw new Error(`云端备份中的行程点存在重复 ID：${item.id}`)
+      throw new Error(`云端保存中的行程点存在重复 ID：${item.id}`)
     }
     if (!Array.isArray(item.ticketIds)) {
-      throw new Error('云端备份中的行程点票据列表格式不正确。')
+      throw new Error('云端保存中的行程点票据列表格式不正确。')
     }
     itemIds.add(item.id)
   }
@@ -771,13 +751,13 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const ticketMap = new Map<string, TicketMeta>()
   for (const ticket of snapshot.ticketMetas) {
     if (!ticket.id || ticket.tripId !== snapshot.trip.id) {
-      throw new Error('云端备份中的票据元数据引用不正确。')
+      throw new Error('云端保存中的票据元数据引用不正确。')
     }
     if (ticket.itemId && !itemIds.has(ticket.itemId)) {
-      throw new Error('云端备份中的票据绑定了不存在的行程点。')
+      throw new Error('云端保存中的票据绑定了不存在的行程点。')
     }
     if (ticketIds.has(ticket.id)) {
-      throw new Error(`云端备份中的票据存在重复 ID：${ticket.id}`)
+      throw new Error(`云端保存中的票据存在重复 ID：${ticket.id}`)
     }
     ticketIds.add(ticket.id)
     ticketMap.set(ticket.id, ticket)
@@ -786,7 +766,7 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   for (const item of snapshot.itineraryItems) {
     for (const ticketId of item.ticketIds) {
       if (!ticketIds.has(ticketId)) {
-        throw new Error('云端备份中的行程点引用了不存在的票据。')
+        throw new Error('云端保存中的行程点引用了不存在的票据。')
       }
     }
   }
@@ -794,19 +774,19 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const fileRefTicketIds = new Set<string>()
   for (const rawFileRef of snapshot.fileRefs as unknown[]) {
     if (!isCloudFileRefShape(rawFileRef)) {
-      throw new Error('云端备份中的文件引用格式不正确。')
+      throw new Error('云端保存中的文件引用格式不正确。')
     }
     const fileRef = rawFileRef
     if (fileRefTicketIds.has(fileRef.ticketId)) {
-      throw new Error('云端备份中的文件引用存在重复票据。')
+      throw new Error('云端保存中的文件引用存在重复票据。')
     }
     fileRefTicketIds.add(fileRef.ticketId)
     if (!ticketIds.has(fileRef.ticketId)) {
-      throw new Error('云端备份中的文件引用了不存在的票据。')
+      throw new Error('云端保存中的文件引用了不存在的票据。')
     }
     const ticket = ticketMap.get(fileRef.ticketId)
     if (!ticket || !shouldExpectTicketBlob(ticket)) {
-      throw new Error('云端备份中的文件引用只能绑定 copy 模式票据。')
+      throw new Error('云端保存中的文件引用只能绑定 copy 模式票据。')
     }
   }
 }
@@ -816,11 +796,11 @@ function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, 
 
   for (const rawFileRef of snapshot.fileRefs as unknown[]) {
     if (!isCloudFileRefShape(rawFileRef)) {
-      throw new Error('云端备份中的文件引用格式不正确。')
+      throw new Error('云端保存中的文件引用格式不正确。')
     }
     const fileRef = rawFileRef
     if (seenTicketIds.has(fileRef.ticketId)) {
-      throw new Error('云端备份中的文件引用存在重复票据。')
+      throw new Error('云端保存中的文件引用存在重复票据。')
     }
     seenTicketIds.add(fileRef.ticketId)
 
@@ -828,7 +808,7 @@ function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, 
       fileRef.ticketId,
     )}/`
     if (!isSafeCloudObjectPath(fileRef.path, expectedPrefix)) {
-      throw new Error('云端备份中的文件路径不属于当前备份。')
+      throw new Error('云端保存中的文件路径不属于当前保存记录。')
     }
   }
 }
@@ -897,7 +877,7 @@ async function listCloudStorageFolder(bucket: CloudStorageBucket, path: string) 
 function assertCloudObjectPathInBackup(path: string, userId: string, backupId: string) {
   const expectedPrefix = `${buildCloudBackupPrefix(userId, backupId)}/`
   if (!isSafeCloudObjectPath(path, expectedPrefix)) {
-    throw new Error('云端备份文件路径不属于当前用户或备份。')
+    throw new Error('云端保存文件路径不属于当前用户或保存记录。')
   }
 }
 
@@ -938,19 +918,10 @@ function hasControlCharacter(value: string) {
   return false
 }
 
-function requireMappedCloudId(idMap: Map<string, string>, id: string) {
-  const mappedId = idMap.get(id)
-  if (!mappedId) {
-    throw new Error(`云端备份数据引用了不存在的 ID：${id}`)
-  }
-
-  return mappedId
-}
-
 function safeCloudPathSegment(value: string) {
   const clean = safeFileName(value, 'segment')
   if (clean.includes('/') || clean.includes('\\') || clean === '.' || clean === '..') {
-    throw new Error('云端备份路径包含不安全片段。')
+    throw new Error('云端保存路径包含不安全片段。')
   }
 
   return clean
@@ -962,4 +933,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string'
+}
+
+function formatUuidBytes(bytes: Uint8Array) {
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

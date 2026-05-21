@@ -56,7 +56,9 @@ test('新建旅行页面可以创建旅行并跳转到工作台', async ({ page 
 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
   await expect(page.locator('h2').filter({ hasText: '测试旅行' })).toBeVisible()
+  await expect(page.getByTestId('trip-map-overview')).toContainText('行程位置示意')
   await expect(page.getByTestId('trip-map-overview')).toContainText('还没有可显示的坐标')
+  await expect(page.getByTestId('trip-map-overview')).toContainText('给行程点补充坐标后，这里会显示位置示意。')
   await expect(page.getByTestId('trip-map-overview').getByRole('button', { name: '查看地图' })).toBeVisible()
 })
 

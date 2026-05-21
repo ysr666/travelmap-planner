@@ -78,8 +78,19 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectNoHorizontalOverflow(page)
 
   await expect(mapOverview).toBeVisible()
-  await expect(mapOverview).toContainText('旅行地图')
+  await expect(mapOverview).toContainText('行程位置示意')
   await expect(mapOverview).toContainText('5 个有坐标地点')
+  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
+  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
+    '位置示意仅展示相对方位；连线仅表示行程顺序。',
+  )
+  const noteIsOutsidePlot = await mapOverview.evaluate((overview) => {
+    const plot = overview.querySelector('[data-testid="trip-map-overview-plot"]')
+    const note = overview.querySelector('[data-testid="trip-map-overview-note"]')
+    return Boolean(plot && note && !plot.contains(note))
+  })
+  expect(noteIsOutsidePlot).toBe(true)
+  await expectNoHorizontalOverflow(page)
   await mapOverview.getByRole('button', { name: '查看地图' }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)

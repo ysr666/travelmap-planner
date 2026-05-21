@@ -32,6 +32,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   await expect(html).toHaveClass(/dark/)
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trip-map-overview')).toBeVisible()
+  await expect(page.getByTestId('trip-map-overview')).toContainText('行程位置示意')
   await expect(html).toHaveClass(/dark/)
   await expectNoHorizontalOverflow(page)
 

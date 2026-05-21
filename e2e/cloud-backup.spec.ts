@@ -109,6 +109,44 @@ test('Trip Home 云端快照提醒展示版本来源并明确恢复语义', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 本地版本较新时上传本地快照需要二次确认', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const trip = createSeedTrip({ id: 'trip_local_newer', updatedAt: Date.parse('2026-04-02T14:00:00.000Z') })
+  await seedTravelRecords(page, {
+    days: [createSeedDay(trip.id)],
+    trips: [trip],
+  })
+  await forceSupabaseFixture(page, {
+    backups: [
+      createCloudBackup({
+        exportedAt: '2026-04-02T12:00:00.000Z',
+        id: 'backup_local_older',
+        originalTripId: trip.id,
+      }),
+    ],
+    user: { email: 'qa@example.com', id: 'user_1' },
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/trip?tripId=${trip.id}`, { waitUntil: 'domcontentloaded' })
+
+  const card = page.getByTestId('cloud-snapshot-check-card').first()
+  await expect(card).toContainText('本地版本较新')
+  await expect(card.getByTestId('cloud-snapshot-upload')).toContainText('上传本地快照')
+
+  await card.getByTestId('cloud-snapshot-upload').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('上传本地快照？')
+  await expect(dialog).toContainText('上传会创建一个新的云端快照')
+  await expect(dialog).toContainText('不会删除旧快照')
+  await expect(dialog).toContainText('不会把云端修改合并到当前本地旅行')
+
+  await dialog.getByRole('button', { name: '取消' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(card).toContainText('本地版本较新')
+  await expect(page.getByText('本地快照已上传，已创建新的云端快照。')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('首页显示云端快照恢复副本来源标识', async ({ page }) => {
   await clearTravelDatabase(page)
   const original = createSeedTrip({ id: 'trip_original', updatedAt: Date.parse('2026-04-02T10:00:00.000Z') })
@@ -128,8 +166,21 @@ test('首页显示云端快照恢复副本来源标识', async ({ page }) => {
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByTestId('trip-card')).toHaveCount(2)
-  await expect(page.getByTestId('restored-trip-source-label')).toContainText('由云端快照恢复')
-  await expect(page.getByTestId('restored-trip-source-label')).toContainText('恢复于')
+  const restoredLabel = page.getByTestId('restored-trip-source-label')
+  await expect(restoredLabel).toContainText('由云端快照恢复')
+  await expect(restoredLabel).toContainText('恢复于')
+  const restoredLabelLayout = await restoredLabel.evaluate((element) => {
+    const style = window.getComputedStyle(element)
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+    }
+  })
+  expect(restoredLabelLayout.whiteSpace).not.toBe('nowrap')
+  expect(restoredLabelLayout.textOverflow).not.toBe('ellipsis')
+  expect(restoredLabelLayout.scrollWidth).toBeLessThanOrEqual(restoredLabelLayout.clientWidth + 1)
   await expectNoHorizontalOverflow(page)
 })
 

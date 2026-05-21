@@ -249,7 +249,7 @@ function TripCard({
           <p className="mt-0.5 truncate text-sm tm-muted">{trip.destination}</p>
           {restoredSourceLabel ? (
             <p
-              className="mt-1 truncate text-xs font-semibold text-sky-600 dark:text-sky-300"
+              className="mt-1 break-words text-xs font-semibold leading-5 text-sky-600 [overflow-wrap:anywhere] dark:text-sky-300"
               data-testid="restored-trip-source-label"
             >
               {restoredSourceLabel}

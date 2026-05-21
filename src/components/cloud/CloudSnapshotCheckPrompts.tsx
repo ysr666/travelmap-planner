@@ -55,27 +55,7 @@ export function CloudSnapshotCheckPrompts({
   }
 
   async function handleUpload(result: CloudSnapshotCheckResult) {
-    if (result.status === 'possible_conflict') {
-      setUploadConfirmTarget(result)
-      return
-    }
-    setBusySignature(result.signature)
-    setError(null)
-    setMessage(null)
-    try {
-      await ensureCloudSnapshotActionReady()
-      await uploadTripCloudBackup(result.tripId)
-      const autoBackupStatus = getTripAutoSnapshotStatus(result.tripId)
-      if (autoBackupStatus?.dirtyAt) {
-        completeTripAutoSnapshotSuccess(result.tripId, autoBackupStatus.dirtyAt)
-      }
-      setMessage('本地快照已上传，已创建新的云端快照。')
-      await refreshCloudSnapshotChecks()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '上传本地快照失败。')
-    } finally {
-      setBusySignature(null)
-    }
+    setUploadConfirmTarget(result)
   }
 
   async function handleRestoreConfirmed() {

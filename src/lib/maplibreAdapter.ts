@@ -179,21 +179,25 @@ export class MapLibreAdapter {
   readonly type = 'maplibre' as const
 
   createMap(container: HTMLElement, options: MapInitOptions): MapInstance {
+    const interactive = options.interactive ?? true
     const map = new maplibregl.Map({
       attributionControl: false,
       center: options.center,
       container,
       dragRotate: false,
+      interactive,
       pitchWithRotate: false,
       style: options.style ?? 'https://tiles.openfreemap.org/styles/positron',
       touchPitch: false,
       zoom: options.zoom,
     })
 
-    map.dragPan.enable()
-    map.touchZoomRotate.enable()
-    map.touchZoomRotate.disableRotation()
-    map.dragRotate.disable()
+    if (interactive) {
+      map.dragPan.enable()
+      map.touchZoomRotate.enable()
+      map.touchZoomRotate.disableRotation()
+      map.dragRotate.disable()
+    }
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
 
     return new MapLibreMapInstance(map)

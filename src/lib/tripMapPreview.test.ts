@@ -4,6 +4,7 @@ import { clearRouteCache } from './routeCache'
 import {
   buildTripPreviewRouteCacheIdentity,
   fetchTripPreviewRoute,
+  getTripPreviewOptimizationDay,
   selectTripPreviewRoutingConfig,
 } from './tripMapPreview'
 import type { Day, ItineraryItem, TransportMode } from '../types'
@@ -76,6 +77,36 @@ describe('trip map preview route provider selection', () => {
   })
 })
 
+describe('trip map preview optimization eligibility', () => {
+  it('requires at least two intermediate waypoints before showing Google order suggestions', () => {
+    const days = [day('day-1', 1)]
+
+    expect(getTripPreviewOptimizationDay({
+      days,
+      itemsByDay: {
+        'day-1': [
+          item('a', 35.1, 139.1, 1),
+          item('b', 35.2, 139.2, 2),
+          item('c', 35.3, 139.3, 3),
+        ],
+      },
+      selectedDay: days[0],
+    })).toBeNull()
+    expect(getTripPreviewOptimizationDay({
+      days,
+      itemsByDay: {
+        'day-1': [
+          item('a', 35.1, 139.1, 1),
+          item('b', 35.2, 139.2, 2),
+          item('c', 35.3, 139.3, 3),
+          item('d', 35.4, 139.4, 4),
+        ],
+      },
+      selectedDay: days[0],
+    })?.id).toBe('day-1')
+  })
+})
+
 describe('trip map preview route fetching', () => {
   beforeEach(async () => {
     await clearRouteCache()
@@ -96,6 +127,30 @@ describe('trip map preview route fetching', () => {
 
     expect(first.source).toBe('generated')
     expect(second.source).toBe('cache')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('generates route geometry per day without connecting separate days', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      void _url
+      const body = JSON.parse(init?.body as string)
+      return new Response(JSON.stringify(orsFixture(body.coordinates)), { status: 200 })
+    }) as unknown as typeof fetch
+    const days = [day('day-1', 1), day('day-2', 2)]
+    const itemsByDay = {
+      'day-1': [item('a', 35.11, 139.11, 1), item('b', 35.22, 139.22, 2)],
+      'day-2': [
+        { ...item('c', 35.33, 139.33, 1), dayId: 'day-2' },
+        { ...item('d', 35.44, 139.44, 2), dayId: 'day-2' },
+      ],
+    }
+
+    const result = await fetchTripPreviewRoute({ config: orsConfig, days, fetcher, itemsByDay, tripId: 'trip' })
+
+    expect(result.lineStrings).toEqual([
+      [[139.11, 35.11], [139.22, 35.22]],
+      [[139.33, 35.33], [139.44, 35.44]],
+    ])
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 })

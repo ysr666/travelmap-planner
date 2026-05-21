@@ -26,6 +26,7 @@ export type FitBoundsOptions = {
 
 export type MapInitOptions = {
   center: LngLat
+  interactive?: boolean
   zoom: number
   style?: string
 }

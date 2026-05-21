@@ -8,7 +8,7 @@ import {
   GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT,
   waitForGoogleMaps,
 } from '../../lib/googleMaps'
-import type { LngLat, MapInstance } from '../../lib/mapEngine'
+import type { LngLat, MapInstance, MarkerHandle } from '../../lib/mapEngine'
 import { MapLibreAdapter } from '../../lib/maplibreAdapter'
 import {
   fetchGoogleRouteOptimization,
@@ -67,6 +67,7 @@ export function TripMapPreview({
 }: TripMapPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapInstance | null>(null)
+  const markerHandlesRef = useRef<MarkerHandle[]>([])
   const [engine, setEngine] = useState<TripMapPreviewEngine | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
   const [isMapBaseSlow, setIsMapBaseSlow] = useState(false)
@@ -95,10 +96,16 @@ export function TripMapPreview({
     [routeResult],
   )
 
+  const clearMapMarkers = useCallback(() => {
+    markerHandlesRef.current.forEach((marker) => marker.remove())
+    markerHandlesRef.current = []
+  }, [])
+
   const cleanupMap = useCallback(() => {
+    clearMapMarkers()
     mapRef.current?.remove()
     mapRef.current = null
-  }, [])
+  }, [clearMapMarkers])
 
   useEffect(() => {
     function refreshConfig() {
@@ -203,8 +210,8 @@ export function TripMapPreview({
       clearReadinessTimeout()
       const first = data.records[0]?.coordinate ?? [139.7671, 35.6812]
       const map = engine === 'google'
-        ? googleMapsAdapter.createMap(containerRef.current, { center: first, zoom: 11 })
-        : maplibreAdapter.createMap(containerRef.current, { center: first, zoom: 11, style: styleUrl })
+        ? googleMapsAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11 })
+        : maplibreAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11, style: styleUrl })
       mapRef.current = map
       readinessTimeout = window.setTimeout(() => {
         if (!disposed) {
@@ -320,11 +327,25 @@ export function TripMapPreview({
     fitPreviewBounds(map, data.records, routeResult?.lineStrings ?? [])
   }, [data.records, dataKey, hasPoints, isMapReady, routeKey, routeResult])
 
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isMapReady || !hasPoints) {
+      clearMapMarkers()
+      return
+    }
+
+    clearMapMarkers()
+    markerHandlesRef.current = buildNativePreviewMarkers(data.records).map((marker) =>
+      map.addMarker(marker.coordinate, createPreviewMarkerElement(marker.record, marker.index)),
+    )
+    return clearMapMarkers
+  }, [clearMapMarkers, data.records, dataKey, hasPoints, isMapReady])
+
   const handleCheckOptimization = useCallback(async () => {
     const day = optimizationDay
     const apiKey = getGoogleMapsApiKey()
     if (!day || !apiKey) {
-      setOptimizationState({ status: 'error', message: '需要配置 Google Maps API key，且当天至少有 3 个带坐标地点。' })
+      setOptimizationState({ status: 'error', message: '需要配置 Google Maps API key，且当天至少有 4 个带坐标地点。' })
       return
     }
 
@@ -390,8 +411,15 @@ export function TripMapPreview({
         >
           {hasPoints ? (
             <>
-              <div className="absolute inset-0" data-testid="trip-map-preview-map" ref={containerRef} />
-              <PreviewRouteOverlay lineStrings={routeResult?.lineStrings ?? []} records={data.records} />
+              <div
+                className="absolute inset-0"
+                data-interactive="false"
+                data-testid="trip-map-preview-map"
+                ref={containerRef}
+              />
+              {!isMapReady ? (
+                <PreviewRouteOverlay lineStrings={routeResult?.lineStrings ?? []} records={data.records} />
+              ) : null}
               {(!engine || (!isMapReady && !isMapBaseSlow) || previewRouteLoading) ? (
                 <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-950/80 dark:text-slate-300 dark:ring-slate-700">
                   <Loader2 className="size-3.5 animate-spin" />
@@ -608,7 +636,7 @@ function buildPreviewOverlay(records: TripMapPreviewRecord[], lineStrings: LngLa
   const baseLineStrings = lineStrings.length > 0
     ? lineStrings
     : records.length > 1
-      ? [records.map((record) => record.coordinate)]
+      ? buildRecordFallbackLines(records)
       : []
   const projectedBoundsPoints = [...records.map((record) => record.coordinate), ...routeCoordinates]
     .map(projectPreviewCoordinate)
@@ -645,11 +673,48 @@ function buildPreviewOverlay(records: TripMapPreviewRecord[], lineStrings: LngLa
   return { lines, markers }
 }
 
+function buildNativePreviewMarkers(records: TripMapPreviewRecord[]) {
+  return separateNearbyRecordMarkers(records.map((record, index) => ({
+    coordinate: record.coordinate,
+    index,
+    record,
+  })))
+}
+
+function createPreviewMarkerElement(record: TripMapPreviewRecord, index: number) {
+  const element = document.createElement('div')
+  element.className = [
+    'flex size-7 items-center justify-center rounded-full border-[3px] border-slate-950',
+    'bg-sky-300 text-[13px] font-bold leading-none text-slate-950 shadow-[0_4px_12px_rgba(2,6,23,0.35)]',
+    'dark:border-slate-950 dark:bg-sky-300 dark:text-slate-950',
+  ].join(' ')
+  element.dataset.testid = 'trip-map-overview-marker'
+  element.setAttribute('aria-label', `${index + 1}. ${record.item.title}`)
+  element.textContent = String(index + 1)
+  return element
+}
+
+function buildRecordFallbackLines(records: TripMapPreviewRecord[]) {
+  const groups = new Map<string, LngLat[]>()
+  records.forEach((record) => {
+    const line = groups.get(record.day.id) ?? []
+    line.push(record.coordinate)
+    groups.set(record.day.id, line)
+  })
+  return Array.from(groups.values()).filter((line) => line.length > 1)
+}
+
 type OverlayMarker = {
   index: number
   record: TripMapPreviewRecord
   x: number
   y: number
+}
+
+type NativePreviewMarker = {
+  coordinate: LngLat
+  index: number
+  record: TripMapPreviewRecord
 }
 
 function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
@@ -683,6 +748,46 @@ function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
 
 function getOverlayDistance(first: OverlayMarker, second: OverlayMarker) {
   return Math.hypot(first.x - second.x, first.y - second.y)
+}
+
+function separateNearbyRecordMarkers(markers: NativePreviewMarker[]) {
+  const groups: NativePreviewMarker[][] = []
+  markers.forEach((marker) => {
+    const group = groups.find((candidate) =>
+      candidate.some((member) => getCoordinateDistanceMeters(member.coordinate, marker.coordinate) < 18),
+    )
+    if (group) {
+      group.push(marker)
+    } else {
+      groups.push([marker])
+    }
+  })
+
+  return groups.flatMap((group) => {
+    if (group.length === 1) {
+      return group
+    }
+
+    return group.map((marker, groupIndex) => ({
+      ...marker,
+      coordinate: offsetCoordinate(marker.coordinate, groupIndex, group.length),
+    }))
+  }).sort((first, second) => first.index - second.index)
+}
+
+function offsetCoordinate(coordinate: LngLat, groupIndex: number, groupSize: number): LngLat {
+  const angle = (Math.PI * 2 * groupIndex) / groupSize - Math.PI / 2
+  const distanceMeters = 18
+  const latOffset = (Math.sin(angle) * distanceMeters) / 111_320
+  const lngScale = Math.max(0.2, Math.cos(coordinate[1] * Math.PI / 180))
+  const lngOffset = (Math.cos(angle) * distanceMeters) / (111_320 * lngScale)
+  return [coordinate[0] + lngOffset, coordinate[1] + latOffset]
+}
+
+function getCoordinateDistanceMeters(first: LngLat, second: LngLat) {
+  const latScale = 111_320
+  const lngScale = 111_320 * Math.cos(((first[1] + second[1]) / 2) * Math.PI / 180)
+  return Math.hypot((first[0] - second[0]) * lngScale, (first[1] - second[1]) * latScale)
 }
 
 function projectPreviewCoordinate([lng, lat]: LngLat) {
@@ -731,12 +836,12 @@ function describeRoutePreview(result: TripPreviewRouteResult | null, loading: bo
     return '地图底图用于查看空间关系；'
   }
   if (result.provider === 'google') {
-    return result.source === 'cache' ? '使用已缓存的 Google 路线几何；' : '使用 Google 路线几何；'
+    return result.source === 'cache' ? '使用已缓存的 Google 路线几何，按每天行程顺序预览；' : '使用 Google 路线几何，按每天行程顺序预览；'
   }
   if (result.provider === 'openrouteservice') {
-    return result.source === 'cache' ? '使用已缓存的 ORS 路线几何；' : '使用 ORS 路线几何；'
+    return result.source === 'cache' ? '使用已缓存的 ORS 路线几何，按每天行程顺序预览；' : '使用 ORS 路线几何，按每天行程顺序预览；'
   }
-  return '路线服务未配置，直线仅连接行程顺序；'
+  return '路线服务未配置，直线仅按每天行程顺序连接；'
 }
 
 function buildPreviewDataKey(data: TripMapPreviewData) {

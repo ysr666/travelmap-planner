@@ -155,6 +155,16 @@ describe('OpenRouteService response parser', () => {
 })
 
 describe('Google route optimization', () => {
+  it('does not request optimization when there is only one intermediate waypoint', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    await expect(fetchGoogleRouteOptimization([
+      item('a', 35.1, 139.1, 1),
+      item('b', 35.2, 139.2, 2),
+      item('c', 35.3, 139.3, 3),
+    ], 'google-key', { fetcher })).rejects.toThrow('至少需要 4 个带坐标地点')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('returns suggested waypoint order without mutating itinerary items', async () => {
     const fetcher = vi.fn(async () => {
       return new Response(JSON.stringify({
@@ -185,6 +195,26 @@ describe('Google route optimization', () => {
     const body = JSON.parse(init.body as string)
     expect(body.optimizeWaypointOrder).toBe(true)
     expect((init.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('google-key')
+  })
+
+  it('accepts the plural optimized waypoint field used by the Maps JavaScript routes library', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        routes: [
+          {
+            optimizedIntermediateWaypointIndices: [1, 0],
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const result = await fetchGoogleRouteOptimization([
+      item('a', 35.1, 139.1, 1),
+      item('b', 35.2, 139.2, 2),
+      item('c', 35.3, 139.3, 3),
+      item('d', 35.4, 139.4, 4),
+    ], 'google-key', { fetcher })
+
+    expect(result.suggestedItems.map((nextItem) => nextItem.id)).toEqual(['a', 'c', 'b', 'd'])
   })
 })
 

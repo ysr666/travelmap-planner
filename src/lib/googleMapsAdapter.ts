@@ -202,14 +202,19 @@ export class GoogleMapsEngineAdapter {
   readonly type = 'google' as const
 
   createMap(container: HTMLElement, options: MapInitOptions): MapInstance {
+    const interactive = options.interactive ?? true
     const map = new google.maps.Map(container, {
       center: { lng: options.center[0], lat: options.center[1] },
       zoom: options.zoom,
+      clickableIcons: interactive,
+      disableDoubleClickZoom: !interactive,
+      draggable: interactive,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      zoomControl: true,
-      gestureHandling: 'greedy',
+      keyboardShortcuts: interactive,
+      zoomControl: interactive,
+      gestureHandling: interactive ? 'greedy' : 'none',
     })
 
     return new GoogleMapInstance(map)

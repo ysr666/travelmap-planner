@@ -380,8 +380,8 @@ export async function fetchGoogleRouteOptimization(
   } = {},
 ): Promise<GoogleRouteOptimizationResult> {
   const orderedItems = getOrderedMappableItems(items)
-  if (orderedItems.length < 3) {
-    throw new Error('至少需要 3 个带坐标的行程点才能生成顺序建议。')
+  if (orderedItems.length < 4) {
+    throw new Error('至少需要 4 个带坐标地点才能生成有意义的顺序建议。')
   }
   if (orderedItems.length > 10) {
     throw new Error('路线顺序建议最多支持 10 个带坐标地点。')
@@ -427,13 +427,14 @@ export async function fetchGoogleRouteOptimization(
 
     const data = await response.json()
     const route = data.routes?.[0]
-    const optimizedIndexes = Array.isArray(route?.optimizedIntermediateWaypointIndex)
-      ? route.optimizedIntermediateWaypointIndex
+    const rawOptimizedIndexes = route?.optimizedIntermediateWaypointIndex ?? route?.optimizedIntermediateWaypointIndices
+    const optimizedIndexes = Array.isArray(rawOptimizedIndexes)
+      ? rawOptimizedIndexes
           .map((value: unknown) => Number(value))
           .filter((value: number) => Number.isInteger(value) && value >= 0 && value < intermediates.length)
       : []
     if (optimizedIndexes.length !== intermediates.length) {
-      throw new Error('Google 路线服务没有返回完整的顺序建议。')
+      throw new Error('Google 路线服务本次没有返回可用的顺序建议；请确认 Routes API waypoint optimization 可用，或换一个包含更多地点的行程日。')
     }
 
     const coordinates = route?.polyline?.encodedPolyline

@@ -151,8 +151,8 @@ export async function fetchTripPreviewRoute({
   tripId: string
 }): Promise<TripPreviewRouteResult> {
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
-  const records = getTripPreviewRecords(orderedDays, itemsByDay)
-  const orderedItems = records.map((record) => record.item)
+  const itemGroups = getTripPreviewItemGroups(orderedDays, itemsByDay)
+  const orderedItems = itemGroups.flat()
 
   if (orderedItems.length < 2) {
     return {
@@ -166,14 +166,13 @@ export async function fetchTripPreviewRoute({
   }
 
   if (!isPersistentRouteProvider(config.provider) || !isRoutingConfigured(config)) {
-    const fallback = buildFallbackStraightRoute(orderedItems, '路线服务未配置，地图预览已显示直线连接。')
     return {
-      cacheKey: fallback.cacheKey,
-      lineStrings: fallback.lineStrings,
+      cacheKey: 'trip-preview::straight',
+      lineStrings: buildStraightPreviewLineStrings(itemGroups),
       provider: 'none',
       source: 'straight',
-      status: fallback.status,
-      warnings: fallback.warnings,
+      status: 'straight',
+      warnings: ['路线服务未配置，地图预览已按每天行程顺序显示直线连接。'],
     }
   }
 
@@ -209,7 +208,7 @@ export async function fetchTripPreviewRoute({
     config,
     fetcher,
     identity,
-    orderedItems,
+    itemGroups,
     provider,
     signal,
     tripId,
@@ -237,7 +236,7 @@ export function getTripPreviewOptimizationDay({
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
   const candidates = orderedDays.filter((day) => {
     const count = getOrderedMappableItems(itemsByDay[day.id] ?? []).length
-    return count >= 3 && count <= 10
+    return count >= 4 && count <= 10
   })
 
   if (selectedDay && candidates.some((day) => day.id === selectedDay.id)) {
@@ -258,11 +257,17 @@ function getTripPreviewRecords(days: Day[], itemsByDay: Record<string, Itinerary
   )
 }
 
+function getTripPreviewItemGroups(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): ItineraryItem[][] {
+  return days
+    .map((day) => getOrderedMappableItems(itemsByDay[day.id] ?? []))
+    .filter((items) => items.length >= 2)
+}
+
 async function generateAndCacheTripPreviewRoute({
   config,
   fetcher,
   identity,
-  orderedItems,
+  itemGroups,
   provider,
   signal,
   tripId,
@@ -270,17 +275,23 @@ async function generateAndCacheTripPreviewRoute({
   config: RoutingConfig
   fetcher?: typeof fetch
   identity: ReturnType<typeof buildTripPreviewRouteCacheIdentity>
-  orderedItems: ItineraryItem[]
+  itemGroups: ItineraryItem[][]
   provider: PersistentRouteCacheProvider
   signal?: AbortSignal
   tripId: string
 }): Promise<TripPreviewRouteResult> {
-  const result = await fetchDayRoute(orderedItems, config, { fetcher, signal })
+  const results = await Promise.all(
+    itemGroups.map((items) => fetchDayRoute(items, config, { fetcher, signal })),
+  )
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : new Error('aborted')
   }
 
-  const hasRoadGeometry = result.segments.some((segment) => segment.kind === 'road')
+  const segments = results.flatMap((result) => result.segments)
+  const lineStrings = results.flatMap((result) => result.lineStrings)
+  const warnings = uniqueMessages(results.flatMap((result) => result.warnings))
+  const status = getPreviewRouteStatus(results)
+  const hasRoadGeometry = segments.some((segment) => segment.kind === 'road')
   if (hasRoadGeometry) {
     const expiresAt = provider === 'google'
       ? new Date(Date.now() + GOOGLE_TRIP_PREVIEW_CACHE_TTL_MS).toISOString()
@@ -293,22 +304,22 @@ async function generateAndCacheTripPreviewRoute({
       signature: identity.signature,
       coordinateKey: identity.coordinateKey,
       modeKey: identity.modeKey,
-      lineStrings: result.lineStrings,
-      warnings: result.warnings,
-      status: result.status === 'failed' ? 'mixed' : result.status,
-      distanceMeters: sumOptional(result.segments.map((segment) => segment.distanceMeters)),
-      durationSeconds: sumOptional(result.segments.map((segment) => segment.durationSeconds)),
+      lineStrings,
+      warnings,
+      status,
+      distanceMeters: sumOptional(segments.map((segment) => segment.distanceMeters)),
+      durationSeconds: sumOptional(segments.map((segment) => segment.durationSeconds)),
       expiresAt,
     })
   }
 
   return {
     cacheKey: identity.signature,
-    lineStrings: result.lineStrings,
+    lineStrings,
     provider,
     source: 'generated',
-    status: result.status,
-    warnings: result.warnings,
+    status,
+    warnings,
   }
 }
 
@@ -329,18 +340,21 @@ function buildTripPreviewCoordinateKey(records: TripMapPreviewRecord[]) {
 }
 
 function buildTripPreviewModeKey(records: TripMapPreviewRecord[]) {
-  return records.slice(1).map(({ day, item }, index) => {
-    const previous = records[index]
+  return records.flatMap(({ day, item }, index) => {
+    const previous = records[index - 1]
+    if (!previous || previous.day.id !== day.id) {
+      return []
+    }
     const mode = item.previousTransportMode ?? item.transportMode ?? 'unknown'
     const profile = mapTransportModeToRoutingProfile(mode).profile ?? 'straight-fallback'
-    return [
+    return [[
       previous.day.id,
       previous.item.id,
       day.id,
       item.id,
       mode,
       profile,
-    ].join(':')
+    ].join(':')]
   }).join('|')
 }
 
@@ -372,4 +386,23 @@ function isPersistentRouteProvider(provider: RoutingConfig['provider']): provide
 function sumOptional(values: Array<number | undefined>) {
   const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
   return present.length ? present.reduce((sum, value) => sum + value, 0) : undefined
+}
+
+function buildStraightPreviewLineStrings(itemGroups: ItineraryItem[][]) {
+  return itemGroups.flatMap((items) => buildFallbackStraightRoute(items).lineStrings)
+}
+
+function getPreviewRouteStatus(results: DayRouteResult[]): 'road' | 'mixed' | 'straight' {
+  const statuses = results.map((result) => result.status)
+  if (statuses.some((status) => status === 'road') && statuses.every((status) => status === 'road')) {
+    return 'road'
+  }
+  if (statuses.some((status) => status === 'road' || status === 'mixed')) {
+    return 'mixed'
+  }
+  return 'straight'
+}
+
+function uniqueMessages(messages: string[]) {
+  return Array.from(new Set(messages.filter(Boolean)))
 }

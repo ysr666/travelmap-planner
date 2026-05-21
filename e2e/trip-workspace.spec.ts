@@ -82,6 +82,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(mapOverview).toBeVisible()
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview).toContainText('5 个有坐标地点')
+  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
     '路线仅供预览，不会自动改行程顺序。',
@@ -204,6 +205,7 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
   const mapOverview = page.getByTestId('trip-map-overview')
   await expect(mapOverview).toContainText('行程地图预览')
+  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('ORS 路线几何')
   expect(orsCalls).toBeGreaterThan(0)

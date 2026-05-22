@@ -16,6 +16,18 @@ At the start of every non-trivial task, ask the user to choose one mode unless t
 
 If the task is small and low-risk, Codex may still choose Codex Solo after briefly explaining why.
 
+## Token-saving defaults
+
+Preserve quality and safety while keeping prompts, worker handoffs, and reports compact.
+
+- Treat this `AGENTS.md` as persistent background. Future task prompts should say "assume project rules from AGENTS.md" instead of repeating branch, staging, protected-area, validation, and reporting rules.
+- Include only task-specific deltas: goal, important context, allowed files, forbidden areas, acceptance criteria, and any intentional test scope changes.
+- Use short English technical bullets for Codex/Claude prompts when possible. Use Chinese only for user-facing app copy, docs, and final user reports when requested.
+- For small or low-risk tasks, skip long formal plans unless the user asks for one or product/architecture ambiguity remains.
+- Prefer targeted evidence gathering (`rg`, `git diff --name-only`, focused tests, exact screenshots) over broad codebase rereads and large context dumps.
+- Final reports should be concise by default: mode, branch, changed files, delegated work, tests, commit, and remaining risks. Add detail only for high-risk logic, failed validation, or user-requested analysis.
+- Do not restate unchanged project history in every handoff. Mention prior work only when it changes the implementation or acceptance criteria.
+
 ## Codex Lead responsibilities
 
 When using Codex Lead + Claude Worker mode, Codex must:
@@ -91,19 +103,45 @@ Do not use Claude for tasks that require holistic judgement or protected-area ow
 
 Every Claude worker task must be concrete, narrow, and checkable.
 
-A Claude worker prompt must include:
+A Claude worker prompt should be short. It must include:
 
 - Goal
-- Current branch and expected state
+- Current branch and expected state, if relevant
 - Allowed files
 - Forbidden files/areas
-- Exact implementation steps or constraints
-- No-go rules
+- Exact tasks or implementation constraints
 - Tests to run
 - Whether Claude may commit
 - Required return format
 
 Claude worker prompts must not be vague. Avoid prompts like "polish this page" or "fix tests".
+
+Use the shortest prompt that is still safe. Default template:
+
+    Goal:
+    - <one concrete task>
+
+    Allowed files:
+    - <exact files/globs>
+
+    Forbidden:
+    - schema, sync, backup/restore, routes, map lifecycle, route cache/provider, AI privacy, new deps, unrelated files
+    - no commits
+
+    Tasks:
+    1. <exact step>
+    2. Stop if scope expands.
+
+    Commands:
+    - <specific command(s)>
+
+    Return:
+    - Findings first: severity + file/line
+    - Changed files, if any
+    - Tests run + result
+    - Blockers/skips
+
+For read-only checks, add: "Read-only only. Do not edit, write, stage, or commit."
 
 Use specific prompts like:
 
@@ -145,6 +183,8 @@ If Claude changes files, Codex must run:
     git diff --name-only
 
 Then Codex must verify that Claude only touched allowed files.
+
+Claude's return should stay terse. Codex should ask Claude for findings, touched files, tests, and blockers instead of long prose or full context summaries.
 
 If Claude touched forbidden files or broadened scope, Codex must stop and either revert those changes or ask the user before continuing.
 
@@ -194,7 +234,7 @@ Treat these as high-risk and do not modify casually:
 
 ## Reporting format
 
-Every task report should include:
+Every task report should be concise by default and include:
 
 - Mode used: Codex Solo or Codex Lead + Claude Worker
 - Branch
@@ -204,6 +244,8 @@ Every task report should include:
 - Tests run
 - Commit hash
 - Remaining risks
+
+For small docs, copy, selector, or single-file tasks, one compact paragraph plus tests/commit is enough. Use expanded reporting only for protected logic, architecture, data compatibility, failed tests, or user-requested detail.
 
 ## TripMap task routing guideline
 
@@ -226,3 +268,11 @@ Use **Codex Lead + Claude Worker** when:
 - such as UI primitive styling, test selectors, docs sync, unit tests, or small E2E fixes
 
 Codex must never treat Claude output as final without review.
+
+## Task sizing guideline
+
+- Prefer medium feature packages when one coherent acceptance test can cover the work. Avoid splitting tightly coupled helper, UI, and test changes into many tiny branches.
+- Use small hotfix branches only for obvious isolated bugs.
+- Use audit-only tasks before code when product direction, UX direction, or protected-area ownership is uncertain.
+- After merge, delete one-off branches when practical so future prompts do not need to explain stale branch history.
+- Do not create a Claude worker call for every minor check. Use Claude when the delegated work saves meaningful Codex context or runtime.

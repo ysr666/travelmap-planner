@@ -189,6 +189,24 @@ export async function loadRouteCache(signature: string) {
   }
 }
 
+export async function peekRouteCache(signature: string) {
+  const entry = await routeCacheDb.routeCaches.get(signature)
+  if (!entry || isRouteCacheExpired(entry)) {
+    return null
+  }
+
+  return entry
+}
+
+export async function listRouteCachesForDay(tripId: string, dayId: string) {
+  const entries = await routeCacheDb.routeCaches
+    .where('[tripId+dayId]')
+    .equals([tripId, dayId])
+    .toArray()
+
+  return entries.filter((entry) => !isRouteCacheExpired(entry))
+}
+
 export async function saveRouteCache(input: SaveRouteCacheInput) {
   const normalizedLineStrings = normalizeRouteGeometry(input.lineStrings)
   const maxBytes = getRouteCacheMaxBytes()
@@ -381,4 +399,8 @@ function dispatchRouteCacheChanged() {
     return
   }
   window.dispatchEvent(new Event(ROUTE_CACHE_CHANGED_EVENT))
+}
+
+function isRouteCacheExpired(entry: Pick<RouteCacheEntry, 'expiresAt'>) {
+  return Boolean(entry.expiresAt && new Date(entry.expiresAt).getTime() <= Date.now())
 }

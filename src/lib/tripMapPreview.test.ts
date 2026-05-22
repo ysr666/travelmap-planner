@@ -1,12 +1,13 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearRouteCache } from './routeCache'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearRouteCache, saveRouteCache } from './routeCache'
 import {
   buildTripPreviewRouteCacheIdentity,
   fetchTripPreviewRoute,
   getTripPreviewOptimizationDay,
   selectTripPreviewRoutingConfig,
 } from './tripMapPreview'
+import type { LngLat } from './routing'
 import type { Day, ItineraryItem, TransportMode } from '../types'
 
 const googleConfig = {
@@ -112,30 +113,38 @@ describe('trip map preview route fetching', () => {
     await clearRouteCache()
   })
 
-  it('caches generated ORS geometry and reuses it for the same trip preview identity', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.2, 35.2]])), {
-      status: 200,
-    })) as unknown as typeof fetch
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('loads cached ORS geometry for the same trip preview identity', async () => {
     const days = [day('day-1', 1), day('day-2', 2)]
     const itemsByDay = {
       'day-1': [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2)],
       'day-2': [item('c', 35.3, 139.3, 1)],
     }
+    const identity = buildTripPreviewRouteCacheIdentity({
+      days,
+      itemsByDay,
+      provider: 'openrouteservice',
+      tripId: 'trip',
+    })
+    await saveRouteCache({
+      ...identity,
+      lineStrings: [[[139.1, 35.1], [139.2, 35.2]]] as LngLat[][],
+      scope: 'trip-preview',
+      tripId: 'trip',
+    })
 
-    const first = await fetchTripPreviewRoute({ config: orsConfig, days, fetcher, itemsByDay, tripId: 'trip' })
-    const second = await fetchTripPreviewRoute({ config: orsConfig, days, fetcher, itemsByDay, tripId: 'trip' })
+    const result = await fetchTripPreviewRoute({ config: orsConfig, days, itemsByDay, tripId: 'trip' })
 
-    expect(first.source).toBe('generated')
-    expect(second.source).toBe('cache')
-    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(result.source).toBe('cache')
+    expect(result.lineStrings).toEqual([[[139.1, 35.1], [139.2, 35.2]]])
   })
 
-  it('generates route geometry per day without connecting separate days', async () => {
-    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      void _url
-      const body = JSON.parse(init?.body as string)
-      return new Response(JSON.stringify(orsFixture(body.coordinates)), { status: 200 })
-    }) as unknown as typeof fetch
+  it('falls back to straight lines without calling route services', async () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
     const days = [day('day-1', 1), day('day-2', 2)]
     const itemsByDay = {
       'day-1': [item('a', 35.11, 139.11, 1), item('b', 35.22, 139.22, 2)],
@@ -145,13 +154,14 @@ describe('trip map preview route fetching', () => {
       ],
     }
 
-    const result = await fetchTripPreviewRoute({ config: orsConfig, days, fetcher, itemsByDay, tripId: 'trip' })
+    const result = await fetchTripPreviewRoute({ config: orsConfig, days, itemsByDay, tripId: 'trip' })
 
+    expect(result.source).toBe('straight')
     expect(result.lineStrings).toEqual([
       [[139.11, 35.11], [139.22, 35.22]],
       [[139.33, 35.33], [139.44, 35.44]],
     ])
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher).not.toHaveBeenCalled()
   })
 })
 
@@ -184,18 +194,5 @@ function item(
     title: id,
     tripId: 'trip',
     updatedAt: 1,
-  }
-}
-
-function orsFixture(coordinates: number[][]) {
-  return {
-    features: [
-      {
-        geometry: { coordinates, type: 'LineString' },
-        properties: { summary: { distance: 1000, duration: 600 } },
-        type: 'Feature',
-      },
-    ],
-    type: 'FeatureCollection',
   }
 }

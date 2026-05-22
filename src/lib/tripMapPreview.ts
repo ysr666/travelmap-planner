@@ -2,10 +2,8 @@ import { sortItineraryItems } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
 import {
   buildFallbackStraightRoute,
-  fetchDayRoute,
   getItemLngLat,
   getOrderedMappableItems,
-  isRoutingConfigured,
   mapTransportModeToRoutingProfile,
   type DayRouteResult,
   type LngLat,
@@ -13,9 +11,9 @@ import {
 } from './routing'
 import {
   buildRouteCacheSignature,
-  loadRouteCache,
+  listRouteCachesForDay,
   ROUTING_VERSION,
-  saveRouteCache,
+  type RouteCacheEntry,
   type PersistentRouteCacheProvider,
 } from './routeCache'
 import type { Day, ItineraryItem } from '../types'
@@ -48,7 +46,6 @@ export type TripPreviewRouteResult = {
 export const TRIP_PREVIEW_CACHE_DAY_ID = '__trip_preview__'
 export const TRIP_PREVIEW_CACHE_SCOPE = 'trip-preview'
 export const GOOGLE_TRIP_PREVIEW_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
-const tripPreviewRouteRequests = new Map<string, Promise<TripPreviewRouteResult>>()
 
 export function buildTripMapPreviewData({
   days,
@@ -138,16 +135,12 @@ export function buildTripPreviewRouteCacheIdentity({
 export async function fetchTripPreviewRoute({
   config,
   days,
-  itemsByDay,
-  signal,
   tripId,
-  fetcher,
+  itemsByDay,
 }: {
   config: RoutingConfig
   days: Day[]
-  fetcher?: typeof fetch
   itemsByDay: Record<string, ItineraryItem[]>
-  signal?: AbortSignal
   tripId: string
 }): Promise<TripPreviewRouteResult> {
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
@@ -165,32 +158,15 @@ export async function fetchTripPreviewRoute({
     }
   }
 
-  if (!isPersistentRouteProvider(config.provider) || !isRoutingConfigured(config)) {
-    return {
-      cacheKey: 'trip-preview::straight',
-      lineStrings: buildStraightPreviewLineStrings(itemGroups),
-      provider: 'none',
-      source: 'straight',
-      status: 'straight',
-      warnings: ['路线服务未配置，地图预览已按每天行程顺序显示直线连接。'],
-    }
-  }
-
-  const provider = config.provider
-  const identity = buildTripPreviewRouteCacheIdentity({
+  const cached = await findCachedTripPreviewRoute({
     days: orderedDays,
     itemsByDay,
-    provider,
+    provider: isPersistentRouteProvider(config.provider) ? config.provider : null,
     tripId,
   })
-  const cached = await loadRouteCache(identity.signature)
-  if (
-    cached &&
-    cached.scope === TRIP_PREVIEW_CACHE_SCOPE &&
-    cached.provider === provider
-  ) {
+  if (cached) {
     return {
-      cacheKey: identity.signature,
+      cacheKey: cached.signature,
       lineStrings: cached.lineStrings,
       provider: cached.provider,
       source: 'cache',
@@ -199,28 +175,17 @@ export async function fetchTripPreviewRoute({
     }
   }
 
-  const pending = tripPreviewRouteRequests.get(identity.signature)
-  if (pending) {
-    return pending
-  }
-
-  const request = generateAndCacheTripPreviewRoute({
-    config,
-    fetcher,
-    identity,
-    itemGroups,
-    provider,
-    signal,
-    tripId,
-  })
-  tripPreviewRouteRequests.set(identity.signature, request)
-
-  try {
-    return await request
-  } finally {
-    if (tripPreviewRouteRequests.get(identity.signature) === request) {
-      tripPreviewRouteRequests.delete(identity.signature)
-    }
+  return {
+    cacheKey: 'trip-preview::straight',
+    lineStrings: buildStraightPreviewLineStrings(itemGroups),
+    provider: 'none',
+    source: 'straight',
+    status: 'straight',
+    warnings: [
+      isPersistentRouteProvider(config.provider)
+        ? '尚未生成路线预览，已按每天行程顺序显示直线连接。'
+        : '路线服务未配置，地图预览已按每天行程顺序显示直线连接。',
+    ],
   }
 }
 
@@ -261,66 +226,6 @@ function getTripPreviewItemGroups(days: Day[], itemsByDay: Record<string, Itiner
   return days
     .map((day) => getOrderedMappableItems(itemsByDay[day.id] ?? []))
     .filter((items) => items.length >= 2)
-}
-
-async function generateAndCacheTripPreviewRoute({
-  config,
-  fetcher,
-  identity,
-  itemGroups,
-  provider,
-  signal,
-  tripId,
-}: {
-  config: RoutingConfig
-  fetcher?: typeof fetch
-  identity: ReturnType<typeof buildTripPreviewRouteCacheIdentity>
-  itemGroups: ItineraryItem[][]
-  provider: PersistentRouteCacheProvider
-  signal?: AbortSignal
-  tripId: string
-}): Promise<TripPreviewRouteResult> {
-  const results = await Promise.all(
-    itemGroups.map((items) => fetchDayRoute(items, config, { fetcher, signal })),
-  )
-  if (signal?.aborted) {
-    throw signal.reason instanceof Error ? signal.reason : new Error('aborted')
-  }
-
-  const segments = results.flatMap((result) => result.segments)
-  const lineStrings = results.flatMap((result) => result.lineStrings)
-  const warnings = uniqueMessages(results.flatMap((result) => result.warnings))
-  const status = getPreviewRouteStatus(results)
-  const hasRoadGeometry = segments.some((segment) => segment.kind === 'road')
-  if (hasRoadGeometry) {
-    const expiresAt = provider === 'google'
-      ? new Date(Date.now() + GOOGLE_TRIP_PREVIEW_CACHE_TTL_MS).toISOString()
-      : undefined
-    await saveRouteCache({
-      tripId,
-      dayId: TRIP_PREVIEW_CACHE_DAY_ID,
-      scope: TRIP_PREVIEW_CACHE_SCOPE,
-      provider,
-      signature: identity.signature,
-      coordinateKey: identity.coordinateKey,
-      modeKey: identity.modeKey,
-      lineStrings,
-      warnings,
-      status,
-      distanceMeters: sumOptional(segments.map((segment) => segment.distanceMeters)),
-      durationSeconds: sumOptional(segments.map((segment) => segment.durationSeconds)),
-      expiresAt,
-    })
-  }
-
-  return {
-    cacheKey: identity.signature,
-    lineStrings,
-    provider,
-    source: 'generated',
-    status,
-    warnings,
-  }
 }
 
 function buildTripPreviewCoordinateKey(records: TripMapPreviewRecord[]) {
@@ -383,26 +288,33 @@ function isPersistentRouteProvider(provider: RoutingConfig['provider']): provide
   return provider === 'openrouteservice' || provider === 'google'
 }
 
-function sumOptional(values: Array<number | undefined>) {
-  const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  return present.length ? present.reduce((sum, value) => sum + value, 0) : undefined
-}
-
 function buildStraightPreviewLineStrings(itemGroups: ItineraryItem[][]) {
   return itemGroups.flatMap((items) => buildFallbackStraightRoute(items).lineStrings)
 }
 
-function getPreviewRouteStatus(results: DayRouteResult[]): 'road' | 'mixed' | 'straight' {
-  const statuses = results.map((result) => result.status)
-  if (statuses.some((status) => status === 'road') && statuses.every((status) => status === 'road')) {
-    return 'road'
-  }
-  if (statuses.some((status) => status === 'road' || status === 'mixed')) {
-    return 'mixed'
-  }
-  return 'straight'
-}
-
-function uniqueMessages(messages: string[]) {
-  return Array.from(new Set(messages.filter(Boolean)))
+async function findCachedTripPreviewRoute({
+  days,
+  itemsByDay,
+  provider,
+  tripId,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  provider: PersistentRouteCacheProvider | null
+  tripId: string
+}): Promise<RouteCacheEntry | null> {
+  const providers = provider ? [provider] : (['openrouteservice', 'google'] as PersistentRouteCacheProvider[])
+  const identities = providers.map((candidate) =>
+    buildTripPreviewRouteCacheIdentity({
+      days,
+      itemsByDay,
+      provider: candidate,
+      tripId,
+    }),
+  )
+  const entries = await listRouteCachesForDay(tripId, TRIP_PREVIEW_CACHE_DAY_ID)
+  return entries.find((entry) =>
+    entry.scope === TRIP_PREVIEW_CACHE_SCOPE &&
+    identities.some((identity) => identity.signature === entry.signature && identity.provider === entry.provider),
+  ) ?? null
 }

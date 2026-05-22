@@ -15,6 +15,7 @@ import {
   getRoutingConfig,
   type GoogleRouteOptimizationResult,
 } from '../../lib/routing'
+import { ROUTE_CACHE_CHANGED_EVENT } from '../../lib/routeCache'
 import {
   buildTripMapPreviewData,
   fetchTripPreviewRoute,
@@ -108,10 +109,12 @@ export function TripMapPreview({
     }
 
     window.addEventListener(GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT, refreshConfig)
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshConfig)
     window.addEventListener('storage', refreshConfig)
     window.addEventListener('tripmap:routing-config-changed', refreshConfig)
     return () => {
       window.removeEventListener(GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT, refreshConfig)
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshConfig)
       window.removeEventListener('storage', refreshConfig)
       window.removeEventListener('tripmap:routing-config-changed', refreshConfig)
     }
@@ -309,7 +312,6 @@ export function TripMapPreview({
       config: selectedConfig,
       days,
       itemsByDay,
-      signal: controller.signal,
       tripId,
     }).then((result) => {
       if (!controller.signal.aborted) {
@@ -703,6 +705,9 @@ function describeRoutePreview(result: TripPreviewRouteResult | null, loading: bo
   }
   if (result.provider === 'openrouteservice') {
     return result.source === 'cache' ? '使用已缓存的 ORS 路线几何，按每天行程顺序预览；' : '使用 ORS 路线几何，按每天行程顺序预览；'
+  }
+  if (result.warnings[0]?.includes('尚未生成路线预览')) {
+    return '尚未生成路线预览，直线仅按每天行程顺序连接；'
   }
   return '路线服务未配置，直线仅按每天行程顺序连接；'
 }

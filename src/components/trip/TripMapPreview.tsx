@@ -8,7 +8,7 @@ import {
   GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT,
   waitForGoogleMaps,
 } from '../../lib/googleMaps'
-import type { LngLat, MapInstance } from '../../lib/mapEngine'
+import type { LngLat, MapInstance, MarkerHandle } from '../../lib/mapEngine'
 import { MapLibreAdapter } from '../../lib/maplibreAdapter'
 import {
   fetchGoogleRouteOptimization,
@@ -47,14 +47,8 @@ type OptimizationState =
 
 const maplibreAdapter = new MapLibreAdapter()
 const googleMapsAdapter = new GoogleMapsEngineAdapter()
-const OVERLAY_WIDTH = 100
-const OVERLAY_HEIGHT = 44
-const OVERLAY_PADDING_X = 9
-const OVERLAY_PADDING_Y = 6
-const OVERLAY_MERCATOR_MAX_LAT = 85.05112878
-const OVERLAY_MIN_SPAN = 0.0000001
-const OVERLAY_OVERLAP_THRESHOLD = 1.8
-const OVERLAY_OVERLAP_OFFSET = 2.4
+const NATIVE_MARKER_OVERLAP_THRESHOLD_METERS = 18
+const NATIVE_MARKER_OVERLAP_OFFSET_PX = 11
 
 export function TripMapPreview({
   days,
@@ -67,9 +61,11 @@ export function TripMapPreview({
 }: TripMapPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapInstance | null>(null)
+  const markerHandlesRef = useRef<MarkerHandle[]>([])
   const [engine, setEngine] = useState<TripMapPreviewEngine | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
   const [isMapBaseSlow, setIsMapBaseSlow] = useState(false)
+  const [mapInstanceVersion, setMapInstanceVersion] = useState(0)
   const [mapNotice, setMapNotice] = useState<string | null>(null)
   const [routeResult, setRouteResult] = useState<TripPreviewRouteResult | null>(null)
   const [routeLoading, setRouteLoading] = useState(false)
@@ -95,10 +91,16 @@ export function TripMapPreview({
     [routeResult],
   )
 
+  const clearMapMarkers = useCallback(() => {
+    markerHandlesRef.current.forEach((marker) => marker.remove())
+    markerHandlesRef.current = []
+  }, [])
+
   const cleanupMap = useCallback(() => {
+    clearMapMarkers()
     mapRef.current?.remove()
     mapRef.current = null
-  }, [])
+  }, [clearMapMarkers])
 
   useEffect(() => {
     function refreshConfig() {
@@ -215,6 +217,9 @@ export function TripMapPreview({
           style,
         })
       mapRef.current = map
+      setMapInstanceVersion((version) => version + 1)
+      map.resize()
+      fitPreviewBounds(map, data.records)
       readinessTimeout = window.setTimeout(() => {
         if (!disposed) {
           setIsMapBaseSlow(true)
@@ -331,13 +336,28 @@ export function TripMapPreview({
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !isMapReady || !hasPoints) {
+    if (!map || !hasPoints) {
       return
     }
 
+    map.resize()
     map.setRouteLine(routeResult?.lineStrings ?? [])
     fitPreviewBounds(map, data.records, routeResult?.lineStrings ?? [])
-  }, [data.records, dataKey, hasPoints, isMapReady, routeKey, routeResult])
+  }, [data.records, dataKey, hasPoints, mapInstanceVersion, routeKey, routeResult])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !hasPoints) {
+      clearMapMarkers()
+      return
+    }
+
+    clearMapMarkers()
+    markerHandlesRef.current = buildNativePreviewMarkers(data.records).map((marker) =>
+      map.addMarker(marker.coordinate, createPreviewMarkerElement(marker)),
+    )
+    return clearMapMarkers
+  }, [clearMapMarkers, data.records, dataKey, engine, hasPoints, mapInstanceVersion])
 
   const handleCheckOptimization = useCallback(async () => {
     const day = optimizationDay
@@ -420,7 +440,6 @@ export function TripMapPreview({
                   ref={containerRef}
                 />
               </div>
-              <PreviewRouteOverlay lineStrings={routeResult?.lineStrings ?? []} records={data.records} />
               {(!engine || (!isMapReady && !isMapBaseSlow) || previewRouteLoading) ? (
                 <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-950/80 dark:text-slate-300 dark:ring-slate-700">
                   <Loader2 className="size-3.5 animate-spin" />
@@ -571,131 +590,46 @@ function RouteOptimizationPanel({
   )
 }
 
-function PreviewRouteOverlay({
-  lineStrings,
-  records,
-}: {
-  lineStrings: LngLat[][]
-  records: TripMapPreviewRecord[]
-}) {
-  const overlay = useMemo(() => buildPreviewOverlay(records, lineStrings), [lineStrings, records])
-  return (
-    <svg
-      aria-label="行程地图预览路线和地点"
-      className="pointer-events-none absolute inset-0 z-10 size-full"
-      data-testid="trip-map-preview-overlay"
-      preserveAspectRatio="xMidYMid meet"
-      viewBox={`0 0 ${OVERLAY_WIDTH} ${OVERLAY_HEIGHT}`}
-    >
-      {overlay.lines.map((line, index) =>
-        line.length > 1 ? (
-          <g key={`line-${index}`}>
-            <polyline
-              className="fill-none stroke-white/85 dark:stroke-slate-950/80"
-              points={line.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="3.2"
-            />
-            <polyline
-              className="fill-none stroke-sky-500/90 dark:stroke-sky-300/90"
-              points={line.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.55"
-            />
-          </g>
-        ) : null,
-      )}
-      {overlay.markers.map((marker) => (
-        <g
-          aria-label={`${marker.index + 1}. ${marker.record.item.title}`}
-          data-testid="trip-map-overview-marker"
-          key={marker.record.item.id}
-          transform={`translate(${marker.x.toFixed(2)} ${marker.y.toFixed(2)})`}
-        >
-          <circle
-            className="fill-sky-600 stroke-white drop-shadow-sm dark:fill-sky-300 dark:stroke-slate-950"
-            r="3.35"
-            strokeWidth="1.15"
-          />
-          <text
-            className="fill-white text-[3px] font-bold dark:fill-slate-950"
-            dominantBaseline="central"
-            textAnchor="middle"
-          >
-            {marker.index + 1}
-          </text>
-        </g>
-      ))}
-    </svg>
-  )
-}
-
-function buildPreviewOverlay(records: TripMapPreviewRecord[], lineStrings: LngLat[][]) {
-  const routeCoordinates = lineStrings.flat()
-  const baseLineStrings = lineStrings.length > 0
-    ? lineStrings
-    : records.length > 1
-      ? buildRecordFallbackLines(records)
-      : []
-  const projectedBoundsPoints = [...records.map((record) => record.coordinate), ...routeCoordinates]
-    .map(projectPreviewCoordinate)
-  if (projectedBoundsPoints.length === 0) {
-    return { lines: [] as Array<Array<{ x: number; y: number }>>, markers: [] as OverlayMarker[] }
-  }
-
-  const xs = projectedBoundsPoints.map((point) => point.x)
-  const ys = projectedBoundsPoints.map((point) => point.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const spanX = Math.max(maxX - minX, OVERLAY_MIN_SPAN)
-  const spanY = Math.max(maxY - minY, OVERLAY_MIN_SPAN)
-  const usableWidth = OVERLAY_WIDTH - OVERLAY_PADDING_X * 2
-  const usableHeight = OVERLAY_HEIGHT - OVERLAY_PADDING_Y * 2
-  const scale = Math.min(usableWidth / spanX, usableHeight / spanY)
-  const offsetX = (OVERLAY_WIDTH - (maxX - minX) * scale) / 2 - minX * scale
-  const offsetY = (OVERLAY_HEIGHT - (maxY - minY) * scale) / 2 - minY * scale
-
-  function toOverlayPoint(coordinate: LngLat) {
-    const projected = projectPreviewCoordinate(coordinate)
-    return {
-      x: clamp(projected.x * scale + offsetX, OVERLAY_PADDING_X / 2, OVERLAY_WIDTH - OVERLAY_PADDING_X / 2),
-      y: clamp(projected.y * scale + offsetY, OVERLAY_PADDING_Y / 2, OVERLAY_HEIGHT - OVERLAY_PADDING_Y / 2),
-    }
-  }
-
-  const lines = baseLineStrings.map((line) => line.map(toOverlayPoint))
-  const markers = separateOverlayMarkerOverlaps(
-    records.map((record, index) => ({ ...toOverlayPoint(record.coordinate), index, record })),
-  )
-  return { lines, markers }
-}
-
-function buildRecordFallbackLines(records: TripMapPreviewRecord[]) {
-  const groups = new Map<string, LngLat[]>()
-  records.forEach((record) => {
-    const line = groups.get(record.day.id) ?? []
-    line.push(record.coordinate)
-    groups.set(record.day.id, line)
-  })
-  return Array.from(groups.values()).filter((line) => line.length > 1)
-}
-
-type OverlayMarker = {
+type NativePreviewMarker = {
+  coordinate: LngLat
   index: number
+  offset: { x: number; y: number }
   record: TripMapPreviewRecord
-  x: number
-  y: number
 }
 
-function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
-  const groups: OverlayMarker[][] = []
+function buildNativePreviewMarkers(records: TripMapPreviewRecord[]): NativePreviewMarker[] {
+  return separateNearbyRecordMarkers(records.map((record, index) => ({
+    coordinate: record.coordinate,
+    index,
+    offset: { x: 0, y: 0 },
+    record,
+  })))
+}
+
+function createPreviewMarkerElement(marker: NativePreviewMarker) {
+  const outer = document.createElement('div')
+  outer.className = 'pointer-events-none relative size-0'
+
+  const inner = document.createElement('div')
+  inner.className = [
+    'absolute flex size-7 items-center justify-center rounded-full border-[3px] border-white',
+    'bg-sky-600 text-[13px] font-bold leading-none text-white shadow-[0_4px_12px_rgba(2,6,23,0.35)]',
+    'dark:border-slate-950 dark:bg-sky-300 dark:text-slate-950',
+  ].join(' ')
+  inner.dataset.testid = 'trip-map-overview-marker'
+  inner.setAttribute('aria-label', `${marker.index + 1}. ${marker.record.item.title}`)
+  inner.style.transform = `translate(calc(-50% + ${marker.offset.x}px), calc(-50% + ${marker.offset.y}px))`
+  inner.textContent = String(marker.index + 1)
+
+  outer.appendChild(inner)
+  return outer
+}
+
+function separateNearbyRecordMarkers(markers: NativePreviewMarker[]) {
+  const groups: NativePreviewMarker[][] = []
   markers.forEach((marker) => {
     const group = groups.find((candidate) =>
-      candidate.some((member) => getOverlayDistance(member, marker) < OVERLAY_OVERLAP_THRESHOLD),
+      candidate.some((member) => getCoordinateDistanceMeters(member.coordinate, marker.coordinate) < NATIVE_MARKER_OVERLAP_THRESHOLD_METERS),
     )
     if (group) {
       group.push(marker)
@@ -713,24 +647,19 @@ function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
       const angle = (Math.PI * 2 * groupIndex) / group.length - Math.PI / 2
       return {
         ...marker,
-        x: clamp(marker.x + Math.cos(angle) * OVERLAY_OVERLAP_OFFSET, OVERLAY_PADDING_X / 2, OVERLAY_WIDTH - OVERLAY_PADDING_X / 2),
-        y: clamp(marker.y + Math.sin(angle) * OVERLAY_OVERLAP_OFFSET, OVERLAY_PADDING_Y / 2, OVERLAY_HEIGHT - OVERLAY_PADDING_Y / 2),
+        offset: {
+          x: Math.cos(angle) * NATIVE_MARKER_OVERLAP_OFFSET_PX,
+          y: Math.sin(angle) * NATIVE_MARKER_OVERLAP_OFFSET_PX,
+        },
       }
     })
   }).sort((first, second) => first.index - second.index)
 }
 
-function getOverlayDistance(first: OverlayMarker, second: OverlayMarker) {
-  return Math.hypot(first.x - second.x, first.y - second.y)
-}
-
-function projectPreviewCoordinate([lng, lat]: LngLat) {
-  const safeLat = clamp(lat, -OVERLAY_MERCATOR_MAX_LAT, OVERLAY_MERCATOR_MAX_LAT)
-  const latRad = safeLat * Math.PI / 180
-  return {
-    x: (lng + 180) / 360,
-    y: (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2,
-  }
+function getCoordinateDistanceMeters(first: LngLat, second: LngLat) {
+  const latScale = 111_320
+  const lngScale = 111_320 * Math.cos(((first[1] + second[1]) / 2) * Math.PI / 180)
+  return Math.hypot((first[0] - second[0]) * lngScale, (first[1] - second[1]) * latScale)
 }
 
 function fitPreviewBounds(map: MapInstance, records: TripMapPreviewRecord[], lineStrings: LngLat[][] = []) {
@@ -758,7 +687,7 @@ function fitPreviewBounds(map: MapInstance, records: TripMapPreviewRecord[], lin
   map.fitBounds([[minLng, minLat], [maxLng, maxLat]], {
     duration: 0,
     maxZoom: 13,
-    padding: { bottom: 28, left: 28, right: 28, top: 28 },
+    padding: { bottom: 56, left: 28, right: 28, top: 28 },
   })
 }
 
@@ -786,10 +715,6 @@ function buildPreviewDataKey(data: TripMapPreviewData) {
 
 function sameItemOrder(first: ItineraryItem[], second: ItineraryItem[]) {
   return first.map((item) => item.id).join('|') === second.map((item) => item.id).join('|')
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
 }
 
 function formatDistance(value?: number) {

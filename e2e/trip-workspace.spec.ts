@@ -84,6 +84,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(mapOverview).toContainText('5 个有坐标地点')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
   await expectTripPreviewMapCanvasInPlot(page)
+  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
     '路线仅供预览，不会自动改行程顺序。',
@@ -208,6 +209,7 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
   await expectTripPreviewMapCanvasInPlot(page)
+  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('ORS 路线几何')
   expect(orsCalls).toBeGreaterThan(0)
@@ -252,6 +254,7 @@ test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', 
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
   await expectTripPreviewMapCanvasInPlot(page)
+  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByText('地图底图暂时无法加载，已切换为轻量预览。')).toBeVisible()
   await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
@@ -285,7 +288,9 @@ test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) =
   const mapOverview = page.getByTestId('trip-map-overview')
 
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
+  await expect(mapOverview.getByTestId('trip-map-google-route-line')).toHaveCount(1)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('Google 路线几何')
   await expect(mapOverview.locator('.maplibregl-map')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
@@ -407,10 +412,23 @@ async function mockGoogleMapsScript(page: Page) {
           class Polyline {
             constructor(options) {
               this.path = options.path ?? [];
-              this.map = options.map ?? null;
+              this.element = document.createElement('div');
+              this.element.dataset.testid = 'trip-map-google-route-line';
+              this.element.setAttribute('data-point-count', String(this.path.length));
+              this.setMap(options.map ?? null);
             }
-            setMap(map) { this.map = map; }
-            setPath(path) { this.path = path; }
+            setMap(map) {
+              this.map = map;
+              this.element.remove();
+              if (map && this.path.length > 0) {
+                map.container.appendChild(this.element);
+              }
+            }
+            setPath(path) {
+              this.path = path;
+              this.element.setAttribute('data-point-count', String(this.path.length));
+              this.setMap(this.map);
+            }
           }
           const event = {
             addListener(target, name, handler) {

@@ -12,6 +12,8 @@ class MapLibreMapInstance implements MapInstance {
   private routeVisible = true
   private disposed = false
   private listeners = new Map<() => void, (event?: unknown) => void>()
+  private pendingRouteLineStrings: LngLat[][] | null = null
+  private pendingRouteLineListenerAttached = false
 
   constructor(map: maplibregl.Map) {
     this.map = map
@@ -91,6 +93,35 @@ class MapLibreMapInstance implements MapInstance {
   setRouteLine(lineStrings: LngLat[][]) {
     if (this.disposed) return
 
+    try {
+      this.applyRouteLine(lineStrings)
+      this.pendingRouteLineStrings = null
+    } catch (caught) {
+      if (!isMapLibreStyleLoadingError(caught)) {
+        throw caught
+      }
+      this.queueRouteLine(lineStrings)
+    }
+  }
+
+  private queueRouteLine(lineStrings: LngLat[][]) {
+    this.pendingRouteLineStrings = lineStrings
+    if (this.pendingRouteLineListenerAttached) {
+      return
+    }
+
+    this.pendingRouteLineListenerAttached = true
+    this.map.once('load', () => {
+      this.pendingRouteLineListenerAttached = false
+      const pending = this.pendingRouteLineStrings
+      this.pendingRouteLineStrings = null
+      if (pending && !this.disposed) {
+        this.setRouteLine(pending)
+      }
+    })
+  }
+
+  private applyRouteLine(lineStrings: LngLat[][]) {
     const feature = {
       type: 'Feature' as const,
       geometry: { type: 'MultiLineString' as const, coordinates: lineStrings },
@@ -205,4 +236,8 @@ export class MapLibreAdapter {
 
     return new MapLibreMapInstance(map)
   }
+}
+
+function isMapLibreStyleLoadingError(caught: unknown) {
+  return caught instanceof Error && /style.*(not.*done|load)/i.test(caught.message)
 }

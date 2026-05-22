@@ -196,6 +196,7 @@ If Claude touched forbidden files or broadened scope, Codex must stop and either
 - Do not switch branches if tracked changes exist.
 - Do not use `git add .`.
 - Stage only explicit project files.
+- Do not run `git push` for this project. Treat future push requests as requiring explicit confirmation that this no-push rule is being overridden for that one action.
 - Never stage or commit:
   - `output/`
   - screenshots

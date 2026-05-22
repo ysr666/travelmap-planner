@@ -28,7 +28,7 @@ export type MapInitOptions = {
   center: LngLat
   interactive?: boolean
   zoom: number
-  style?: string
+  style?: string | Record<string, unknown>
 }
 
 export type MapEventType = 'load' | 'idle' | 'error' | 'moveend' | 'resize' | 'zoom'

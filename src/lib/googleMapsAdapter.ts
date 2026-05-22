@@ -5,7 +5,7 @@ const IDLE_TIMEOUT_MS = 15000
 
 class GoogleMapInstance implements MapInstance {
   private map: google.maps.Map
-  private markers: google.maps.marker.AdvancedMarkerElement[] = []
+  private markers: MarkerHandle[] = []
   private polyline: google.maps.Polyline | null = null
   private disposed = false
   private listeners = new Map<() => void, google.maps.MapsEventListener>()
@@ -18,7 +18,7 @@ class GoogleMapInstance implements MapInstance {
   remove() {
     this.disposed = true
     for (const marker of this.markers) {
-      marker.map = null
+      marker.remove()
     }
     this.markers = []
     if (this.polyline) {
@@ -98,20 +98,9 @@ class GoogleMapInstance implements MapInstance {
   }
 
   addMarker(lngLat: LngLat, element: HTMLElement): MarkerHandle {
-    const marker = new google.maps.marker.AdvancedMarkerElement({
-      position: { lng: lngLat[0], lat: lngLat[1] },
-      content: element,
-      map: this.map,
-    })
+    const marker = createGoogleDomMarker(lngLat, element, this.map)
     this.markers.push(marker)
-    return {
-      setLngLat(nextLngLat) {
-        marker.position = { lng: nextLngLat[0], lat: nextLngLat[1] }
-      },
-      remove() {
-        marker.map = null
-      },
-    }
+    return marker
   }
 
   setRouteLine(lineStrings: LngLat[][]) {
@@ -185,6 +174,51 @@ class GoogleMapInstance implements MapInstance {
       }
     })
   }
+}
+
+function createGoogleDomMarker(lngLat: LngLat, element: HTMLElement, map: google.maps.Map): MarkerHandle {
+  class GoogleDomMarker extends google.maps.OverlayView implements MarkerHandle {
+    private position: google.maps.LatLng
+    private element: HTMLElement
+
+    constructor(initialLngLat: LngLat, markerElement: HTMLElement) {
+      super()
+      this.position = new google.maps.LatLng(initialLngLat[1], initialLngLat[0])
+      this.element = markerElement
+      this.element.style.position = 'absolute'
+      this.element.style.transform = 'translate(-50%, -50%)'
+      this.element.style.willChange = 'transform'
+      this.setMap(map)
+    }
+
+    onAdd() {
+      this.getPanes()?.overlayMouseTarget.appendChild(this.element)
+    }
+
+    draw() {
+      const projection = this.getProjection()
+      if (!projection) return
+      const point = projection.fromLatLngToDivPixel(this.position)
+      if (!point) return
+      this.element.style.left = `${point.x}px`
+      this.element.style.top = `${point.y}px`
+    }
+
+    onRemove() {
+      this.element.remove()
+    }
+
+    setLngLat(nextLngLat: LngLat) {
+      this.position = new google.maps.LatLng(nextLngLat[1], nextLngLat[0])
+      this.draw()
+    }
+
+    remove() {
+      this.setMap(null)
+    }
+  }
+
+  return new GoogleDomMarker(lngLat, element)
 }
 
 function toGoogleEvent(event: MapEventType): string | null {

@@ -6,3 +6,8 @@ export const MAP_STYLES = {
 
 export const DEFAULT_MAP_STYLE = MAP_STYLES.positron
 export const FALLBACK_MAP_STYLE = MAP_STYLES.liberty
+export const EMPTY_MAP_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [],
+} as const

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles, X } from 'lucide-react'
 import { updateItineraryItem } from '../../db'
-import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../../lib/mapConfig'
+import { DEFAULT_MAP_STYLE, EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
 import {
   getGoogleMapsApiKey,
@@ -198,10 +198,10 @@ export function TripMapPreview({
       clearReadinessTimeout()
       setIsMapBaseSlow(false)
       setIsMapReady(true)
-      setMapNotice(notice ?? null)
+      setMapNotice((current) => notice ?? current)
     }
 
-    function createMap(styleUrl: string, isFallback = false) {
+    function createMap(style: string | Record<string, unknown>, fallbackLevel: 0 | 1 | 2 = 0) {
       if (!containerRef.current || disposed || !engine) {
         return
       }
@@ -211,7 +211,7 @@ export function TripMapPreview({
       const first = data.records[0]?.coordinate ?? [139.7671, 35.6812]
       const map = engine === 'google'
         ? googleMapsAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11 })
-        : maplibreAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11, style: styleUrl })
+        : maplibreAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11, style })
       mapRef.current = map
       readinessTimeout = window.setTimeout(() => {
         if (!disposed) {
@@ -227,13 +227,24 @@ export function TripMapPreview({
         markMapReady()
       })
       map.on('error', () => {
-        if (disposed || isFallback || engine === 'google') {
+        if (disposed || engine === 'google') {
           clearReadinessTimeout()
           setIsMapBaseSlow(true)
           setMapNotice('地图底图暂时无法加载，但行程地点仍可查看。')
           return
         }
-        createMap(FALLBACK_MAP_STYLE, true)
+        if (fallbackLevel === 0) {
+          createMap(FALLBACK_MAP_STYLE, 1)
+          return
+        }
+        if (fallbackLevel === 1) {
+          setMapNotice('地图底图暂时无法加载，已切换为轻量预览。')
+          createMap(EMPTY_MAP_STYLE, 2)
+          return
+        }
+        clearReadinessTimeout()
+        setIsMapBaseSlow(true)
+        setMapNotice('地图底图暂时无法加载，但行程地点仍可查看。')
       })
     }
 

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
@@ -237,6 +237,56 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', async ({ page }) => {
+  await page.route('https://tiles.openfreemap.org/styles/**', (route) => route.abort())
+  const tripId = await createDemoTripViaUi(page)
+  const dayId = getHashParam(page.url(), 'dayId')
+  expect(dayId).toBeTruthy()
+
+  await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
+  const mapOverview = page.getByTestId('trip-map-overview')
+
+  await expect(mapOverview).toContainText('行程地图预览')
+  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
+  await expect(mapOverview.getByText('地图底图暂时无法加载，已切换为轻量预览。')).toBeVisible()
+  await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) => {
+  await mockGoogleMapsScript(page)
+  await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
+    await route.fulfill({
+      body: JSON.stringify({
+        routes: [
+          {
+            distanceMeters: 1200,
+            duration: '600s',
+            polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
+          },
+        ],
+      }),
+      contentType: 'application/json',
+    })
+  })
+  const tripId = await createDemoTripViaUi(page)
+  const dayId = getHashParam(page.url(), 'dayId')
+  expect(dayId).toBeTruthy()
+
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')
+  })
+  await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
+  const mapOverview = page.getByTestId('trip-map-overview')
+
+  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
+  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('Google 路线几何')
+  await expect(mapOverview.locator('.maplibregl-map')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 async function readDayItemOrder(page: import('@playwright/test').Page, dayId: string) {
   return page.evaluate(async (currentDayId) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -254,4 +304,106 @@ async function readDayItemOrder(page: import('@playwright/test').Page, dayId: st
     db.close()
     return items.sort((first, second) => first.sortOrder - second.sortOrder).map((item) => item.id)
   }, dayId)
+}
+
+async function mockGoogleMapsScript(page: Page) {
+  await page.route('https://maps.googleapis.com/maps/api/js**', async (route) => {
+    await route.fulfill({
+      body: `
+        (() => {
+          const listeners = new WeakMap();
+          function getListeners(target, event) {
+            let targetListeners = listeners.get(target);
+            if (!targetListeners) {
+              targetListeners = {};
+              listeners.set(target, targetListeners);
+            }
+            targetListeners[event] ||= [];
+            return targetListeners[event];
+          }
+          class LatLng {
+            constructor(lat, lng) {
+              this._lat = lat;
+              this._lng = lng;
+            }
+            lat() { return this._lat; }
+            lng() { return this._lng; }
+          }
+          class LatLngBounds {
+            constructor(sw, ne) {
+              this.sw = sw;
+              this.ne = ne;
+            }
+          }
+          class Map {
+            constructor(container, options) {
+              this.container = container;
+              this.center = new LatLng(options.center.lat, options.center.lng);
+              this.zoom = options.zoom;
+              this.panes = { overlayMouseTarget: container };
+              window.setTimeout(() => {
+                google.maps.event.trigger(this, 'tilesloaded');
+                google.maps.event.trigger(this, 'idle');
+              }, 0);
+            }
+            fitBounds() { google.maps.event.trigger(this, 'idle'); }
+            getCenter() { return this.center; }
+            getZoom() { return this.zoom; }
+            panTo(center) { this.center = new LatLng(center.lat, center.lng); google.maps.event.trigger(this, 'idle'); }
+            setCenter(center) { this.center = new LatLng(center.lat, center.lng); }
+            setOptions(options) {
+              if (options.center) this.setCenter(options.center);
+              if (options.zoom != null) this.zoom = options.zoom;
+            }
+            setZoom(zoom) { this.zoom = zoom; }
+          }
+          class OverlayView {
+            setMap(map) {
+              this.map = map;
+              if (map) {
+                this.onAdd?.();
+                this.draw?.();
+              } else {
+                this.onRemove?.();
+              }
+            }
+            getPanes() { return this.map?.panes; }
+            getProjection() {
+              return {
+                fromLatLngToDivPixel: (position) => ({
+                  x: (position.lng() - 139) * 1000 + 160,
+                  y: (36 - position.lat()) * 1000 + 80,
+                }),
+              };
+            }
+          }
+          class Polyline {
+            constructor(options) {
+              this.path = options.path ?? [];
+              this.map = options.map ?? null;
+            }
+            setMap(map) { this.map = map; }
+            setPath(path) { this.path = path; }
+          }
+          const event = {
+            addListener(target, name, handler) {
+              getListeners(target, name).push(handler);
+              return { remove() {} };
+            },
+            addListenerOnce(target, name, handler) {
+              const wrapped = () => handler();
+              getListeners(target, name).push(wrapped);
+              return { remove() {} };
+            },
+            trigger(target, name) {
+              for (const handler of getListeners(target, name)) handler();
+            },
+          };
+          window.google = { maps: { event, LatLng, LatLngBounds, Map, OverlayView, Polyline } };
+          window.__googleMapsInitCallback?.();
+        })();
+      `,
+      contentType: 'application/javascript',
+    })
+  })
 }

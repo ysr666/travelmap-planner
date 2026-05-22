@@ -1,4 +1,4 @@
-import maplibregl from 'maplibre-gl'
+import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { MapEventType, MapInstance, MapInitOptions, FitBoundsOptions, CameraState, MarkerHandle, LngLat, LngLatBounds } from './mapEngine'
 
@@ -187,7 +187,7 @@ export class MapLibreAdapter {
       dragRotate: false,
       interactive,
       pitchWithRotate: false,
-      style: options.style ?? 'https://tiles.openfreemap.org/styles/positron',
+      style: (options.style ?? 'https://tiles.openfreemap.org/styles/positron') as string | StyleSpecification,
       touchPitch: false,
       zoom: options.zoom,
     })

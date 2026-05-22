@@ -25,6 +25,7 @@ export type FitBoundsOptions = {
 }
 
 export type MapInitOptions = {
+  attributionPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
   center: LngLat
   interactive?: boolean
   zoom: number

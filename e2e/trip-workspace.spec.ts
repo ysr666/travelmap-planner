@@ -83,6 +83,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview).toContainText('5 个有坐标地点')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expectTripPreviewMapCanvasInPlot(page)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
     '路线仅供预览，不会自动改行程顺序。',
@@ -206,15 +207,16 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   const mapOverview = page.getByTestId('trip-map-overview')
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expectTripPreviewMapCanvasInPlot(page)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('ORS 路线几何')
   expect(orsCalls).toBeGreaterThan(0)
-  await page.waitForLoadState('networkidle')
+  await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
 
   const callsAfterFirstLoad = orsCalls
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trip-map-overview').getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
-  await page.waitForLoadState('networkidle')
+  await expect(page.getByTestId('trip-map-overview').getByText('加载地图预览...')).toHaveCount(0)
   expect(orsCalls).toBe(callsAfterFirstLoad)
 
   await page.evaluate(() => {
@@ -238,6 +240,7 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
 })
 
 test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', async ({ page }) => {
+  await page.route('https://*.basemaps.cartocdn.com/**', (route) => route.abort())
   await page.route('https://tiles.openfreemap.org/styles/**', (route) => route.abort())
   const tripId = await createDemoTripViaUi(page)
   const dayId = getHashParam(page.url(), 'dayId')
@@ -248,6 +251,7 @@ test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', 
 
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
+  await expectTripPreviewMapCanvasInPlot(page)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByText('地图底图暂时无法加载，已切换为轻量预览。')).toBeVisible()
   await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
@@ -304,6 +308,29 @@ async function readDayItemOrder(page: import('@playwright/test').Page, dayId: st
     db.close()
     return items.sort((first, second) => first.sortOrder - second.sortOrder).map((item) => item.id)
   }, dayId)
+}
+
+async function expectTripPreviewMapCanvasInPlot(page: Page) {
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const plot = document.querySelector('[data-testid="trip-map-overview-plot"]')
+      const map = document.querySelector('[data-testid="trip-map-preview-map"]')
+      const canvas = map?.querySelector('canvas')
+      if (!plot || !map || !canvas) return false
+
+      const plotRect = plot.getBoundingClientRect()
+      const mapRect = map.getBoundingClientRect()
+      const canvasRect = canvas.getBoundingClientRect()
+      return (
+        mapRect.width > 0 &&
+        mapRect.height > 0 &&
+        canvasRect.width > 0 &&
+        canvasRect.height > 0 &&
+        Math.abs(mapRect.height - plotRect.height) <= 1 &&
+        Math.abs(canvasRect.height - plotRect.height) <= 1
+      )
+    })
+  }).toBe(true)
 }
 
 async function mockGoogleMapsScript(page: Page) {

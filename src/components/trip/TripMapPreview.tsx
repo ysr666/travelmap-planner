@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles, X } from 'lucide-react'
 import { updateItineraryItem } from '../../db'
-import { DEFAULT_MAP_STYLE, EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE } from '../../lib/mapConfig'
+import { EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE, TRIP_PREVIEW_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
 import {
   getGoogleMapsApiKey,
   GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT,
   waitForGoogleMaps,
 } from '../../lib/googleMaps'
-import type { LngLat, MapInstance, MarkerHandle } from '../../lib/mapEngine'
+import type { LngLat, MapInstance } from '../../lib/mapEngine'
 import { MapLibreAdapter } from '../../lib/maplibreAdapter'
 import {
   fetchGoogleRouteOptimization,
@@ -67,7 +67,6 @@ export function TripMapPreview({
 }: TripMapPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapInstance | null>(null)
-  const markerHandlesRef = useRef<MarkerHandle[]>([])
   const [engine, setEngine] = useState<TripMapPreviewEngine | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
   const [isMapBaseSlow, setIsMapBaseSlow] = useState(false)
@@ -96,16 +95,10 @@ export function TripMapPreview({
     [routeResult],
   )
 
-  const clearMapMarkers = useCallback(() => {
-    markerHandlesRef.current.forEach((marker) => marker.remove())
-    markerHandlesRef.current = []
-  }, [])
-
   const cleanupMap = useCallback(() => {
-    clearMapMarkers()
     mapRef.current?.remove()
     mapRef.current = null
-  }, [clearMapMarkers])
+  }, [])
 
   useEffect(() => {
     function refreshConfig() {
@@ -198,7 +191,10 @@ export function TripMapPreview({
       clearReadinessTimeout()
       setIsMapBaseSlow(false)
       setIsMapReady(true)
-      setMapNotice((current) => notice ?? current)
+      setMapNotice((current) => {
+        if (notice) return notice
+        return current === '地图底图加载较慢，地点和路线预览仍可查看。' ? null : current
+      })
     }
 
     function createMap(style: string | Record<string, unknown>, fallbackLevel: 0 | 1 | 2 = 0) {
@@ -211,12 +207,17 @@ export function TripMapPreview({
       const first = data.records[0]?.coordinate ?? [139.7671, 35.6812]
       const map = engine === 'google'
         ? googleMapsAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11 })
-        : maplibreAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11, style })
+        : maplibreAdapter.createMap(containerRef.current, {
+          attributionPosition: 'bottom-right',
+          center: first,
+          interactive: false,
+          zoom: 11,
+          style,
+        })
       mapRef.current = map
       readinessTimeout = window.setTimeout(() => {
         if (!disposed) {
           setIsMapBaseSlow(true)
-          setMapNotice('地图底图加载较慢，地点和路线预览仍可查看。')
         }
       }, 2000)
 
@@ -248,7 +249,7 @@ export function TripMapPreview({
       })
     }
 
-    createMap(DEFAULT_MAP_STYLE)
+    createMap(TRIP_PREVIEW_MAP_STYLE)
 
     return () => {
       disposed = true
@@ -338,20 +339,6 @@ export function TripMapPreview({
     fitPreviewBounds(map, data.records, routeResult?.lineStrings ?? [])
   }, [data.records, dataKey, hasPoints, isMapReady, routeKey, routeResult])
 
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !isMapReady || !hasPoints) {
-      clearMapMarkers()
-      return
-    }
-
-    clearMapMarkers()
-    markerHandlesRef.current = buildNativePreviewMarkers(data.records).map((marker) =>
-      map.addMarker(marker.coordinate, createPreviewMarkerElement(marker.record, marker.index)),
-    )
-    return clearMapMarkers
-  }, [clearMapMarkers, data.records, dataKey, hasPoints, isMapReady])
-
   const handleCheckOptimization = useCallback(async () => {
     const day = optimizationDay
     const apiKey = getGoogleMapsApiKey()
@@ -425,12 +412,15 @@ export function TripMapPreview({
               <div
                 className="absolute inset-0"
                 data-interactive="false"
-                data-testid="trip-map-preview-map"
-                ref={containerRef}
-              />
-              {!isMapReady ? (
-                <PreviewRouteOverlay lineStrings={routeResult?.lineStrings ?? []} records={data.records} />
-              ) : null}
+              >
+                <div
+                  className="size-full"
+                  data-interactive="false"
+                  data-testid="trip-map-preview-map"
+                  ref={containerRef}
+                />
+              </div>
+              <PreviewRouteOverlay lineStrings={routeResult?.lineStrings ?? []} records={data.records} />
               {(!engine || (!isMapReady && !isMapBaseSlow) || previewRouteLoading) ? (
                 <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-950/80 dark:text-slate-300 dark:ring-slate-700">
                   <Loader2 className="size-3.5 animate-spin" />
@@ -684,27 +674,6 @@ function buildPreviewOverlay(records: TripMapPreviewRecord[], lineStrings: LngLa
   return { lines, markers }
 }
 
-function buildNativePreviewMarkers(records: TripMapPreviewRecord[]) {
-  return separateNearbyRecordMarkers(records.map((record, index) => ({
-    coordinate: record.coordinate,
-    index,
-    record,
-  })))
-}
-
-function createPreviewMarkerElement(record: TripMapPreviewRecord, index: number) {
-  const element = document.createElement('div')
-  element.className = [
-    'flex size-7 items-center justify-center rounded-full border-[3px] border-slate-950',
-    'bg-sky-300 text-[13px] font-bold leading-none text-slate-950 shadow-[0_4px_12px_rgba(2,6,23,0.35)]',
-    'dark:border-slate-950 dark:bg-sky-300 dark:text-slate-950',
-  ].join(' ')
-  element.dataset.testid = 'trip-map-overview-marker'
-  element.setAttribute('aria-label', `${index + 1}. ${record.item.title}`)
-  element.textContent = String(index + 1)
-  return element
-}
-
 function buildRecordFallbackLines(records: TripMapPreviewRecord[]) {
   const groups = new Map<string, LngLat[]>()
   records.forEach((record) => {
@@ -720,12 +689,6 @@ type OverlayMarker = {
   record: TripMapPreviewRecord
   x: number
   y: number
-}
-
-type NativePreviewMarker = {
-  coordinate: LngLat
-  index: number
-  record: TripMapPreviewRecord
 }
 
 function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
@@ -759,46 +722,6 @@ function separateOverlayMarkerOverlaps(markers: OverlayMarker[]) {
 
 function getOverlayDistance(first: OverlayMarker, second: OverlayMarker) {
   return Math.hypot(first.x - second.x, first.y - second.y)
-}
-
-function separateNearbyRecordMarkers(markers: NativePreviewMarker[]) {
-  const groups: NativePreviewMarker[][] = []
-  markers.forEach((marker) => {
-    const group = groups.find((candidate) =>
-      candidate.some((member) => getCoordinateDistanceMeters(member.coordinate, marker.coordinate) < 18),
-    )
-    if (group) {
-      group.push(marker)
-    } else {
-      groups.push([marker])
-    }
-  })
-
-  return groups.flatMap((group) => {
-    if (group.length === 1) {
-      return group
-    }
-
-    return group.map((marker, groupIndex) => ({
-      ...marker,
-      coordinate: offsetCoordinate(marker.coordinate, groupIndex, group.length),
-    }))
-  }).sort((first, second) => first.index - second.index)
-}
-
-function offsetCoordinate(coordinate: LngLat, groupIndex: number, groupSize: number): LngLat {
-  const angle = (Math.PI * 2 * groupIndex) / groupSize - Math.PI / 2
-  const distanceMeters = 18
-  const latOffset = (Math.sin(angle) * distanceMeters) / 111_320
-  const lngScale = Math.max(0.2, Math.cos(coordinate[1] * Math.PI / 180))
-  const lngOffset = (Math.cos(angle) * distanceMeters) / (111_320 * lngScale)
-  return [coordinate[0] + lngOffset, coordinate[1] + latOffset]
-}
-
-function getCoordinateDistanceMeters(first: LngLat, second: LngLat) {
-  const latScale = 111_320
-  const lngScale = 111_320 * Math.cos(((first[1] + second[1]) / 2) * Math.PI / 180)
-  return Math.hypot((first[0] - second[0]) * lngScale, (first[1] - second[1]) * latScale)
 }
 
 function projectPreviewCoordinate([lng, lat]: LngLat) {

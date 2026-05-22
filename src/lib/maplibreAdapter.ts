@@ -198,7 +198,10 @@ export class MapLibreAdapter {
       map.touchZoomRotate.disableRotation()
       map.dragRotate.disable()
     }
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      options.attributionPosition ?? 'bottom-left',
+    )
 
     return new MapLibreMapInstance(map)
   }

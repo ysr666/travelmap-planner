@@ -5,9 +5,11 @@ import {
   completeTripAutoSnapshotFailure,
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
+  hasPendingAutoSnapshotTrips,
   isAutoSnapshotBackupEnabled,
   listDirtyAutoSnapshotTrips,
   markTripAutoSnapshotDirty,
+  markTripAutoSnapshotSynced,
   resetAutoSnapshotBackupForTests,
   setAutoSnapshotBackupEnabled,
   setTripAutoSnapshotUploading,
@@ -64,11 +66,23 @@ describe('auto snapshot backup local state', () => {
     markTripAutoSnapshotDirty('trip_1', 'ticket-updated', 100)
     completeTripAutoSnapshotFailure('trip_1', 100, '上传失败', 130)
 
+    expect(hasPendingAutoSnapshotTrips()).toBe(true)
     expect(getTripAutoSnapshotStatus('trip_1')).toMatchObject({
       dirtyAt: 100,
       lastAttemptAt: 130,
       lastError: '上传失败',
       status: 'error',
+    })
+  })
+
+  it('can mark a trip synced without an active dirty entry', () => {
+    markTripAutoSnapshotSynced('trip_1', 200)
+
+    expect(hasPendingAutoSnapshotTrips()).toBe(false)
+    expect(getTripAutoSnapshotStatus('trip_1')).toMatchObject({
+      lastSuccessAt: 200,
+      status: 'synced',
+      tripId: 'trip_1',
     })
   })
 

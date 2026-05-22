@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
+import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import { formatDateKey } from '../lib/dates'
 import type { Day, ItineraryItem, Trip } from '../types'
 
@@ -147,6 +148,8 @@ export function useTripData({ tripId, dayId }: UseTripDataOptions): UseTripDataR
       window.clearTimeout(timeout)
     }
   }, [refresh])
+
+  useEffect(() => subscribeTravelDataChanged(() => void refresh()), [refresh])
 
   return {
     trip,

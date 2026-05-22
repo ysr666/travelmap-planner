@@ -7,7 +7,7 @@
 - 轻量化不是删内容。必要信息要保留，空壳 card、chip、分栏和无意义留白要删除。
 - 独立页面不等于表单完成。新建 / 编辑页面需要继续做移动端布局、重叠、错误提示和键盘场景 QA。
 - 路由拆分不等于交互完成。Trip Home / Day View / Item Detail 已拆开，但 Day View 仍未完成理想的“marker → 轻卡片 → Item Detail”地图交互。
-- 继续保持 local-first。IndexedDB 是主数据源；Supabase 是快照备份，不是实时表同步。
+- 继续保持 local-first。IndexedDB 是主数据源；Supabase 是单旅行云端保存，不是实时表同步。
 - AI 和地图 API 只做辅助。AI 只建议，用户确认；API key 保存在本机；不缓存商业地图瓦片。
 
 ## 已完成基线
@@ -18,8 +18,8 @@
 - Phase 12-pre-D：Trip Home / Day View 拆分实施计划完成。
 - Phase 12-pre-E：共享数据加载与路由拆分铺垫完成。
 - Phase 12-pre-F：Trip Home / Day View / Item Detail 导航回归检查完成。
-- Phase 12A：自动云端快照备份基础完成。
-- Phase 12B：PWA 启动云端快照检查完成。
+- Phase 12A：自动云端保存基础完成。
+- Phase 12B：PWA 启动云端保存检查完成。
 - Phase 12C：冲突感知云端提示与操作链路完成。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
 
@@ -94,8 +94,8 @@
 - 用户可见文案保持中文。
 - 本地 IndexedDB 仍是主数据源。
 - 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
-- Supabase 是手动 / 自动云端快照备份，不是实时表同步。
-- 启动云端快照检查只提示，不自动恢复、覆盖、合并或删除。
+- Supabase 是手动 / 自动单旅行云端保存，不是实时表同步。
+- 启动云端保存检查会按“哪个更新用哪个”补偿：云端较新时原地恢复，本地较新时更新同一个云端保存；可能冲突时提示用户确认。
 - 本地 zip 备份仍然重要。
 - OpenRouteService / Google Maps 等 API key 只保存在本机或前端环境变量，不进入 IndexedDB、zip、Supabase 或 trip-plan。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。

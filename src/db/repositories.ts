@@ -434,6 +434,62 @@ export async function importTripPlanRecords({
   )
 }
 
+export async function replaceTripPlanRecords({
+  trip,
+  days,
+  itineraryItems,
+  ticketMetas,
+  ticketBlobs,
+}: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
+  assertUniqueIds('Day', days.map((day) => day.id))
+  assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
+  assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+
+  return db.transaction(
+    'rw',
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    async () => {
+      await assertIncomingRecordsBelongToTrip({
+        days,
+        itineraryItems,
+        ticketMetas,
+        tripId: trip.id,
+      })
+
+      const [existingDays, existingItems, existingTicketMetas] = await Promise.all([
+        db.days.where('tripId').equals(trip.id).toArray(),
+        db.itineraryItems.where('tripId').equals(trip.id).toArray(),
+        db.ticketMetas.where('tripId').equals(trip.id).toArray(),
+      ])
+      const existingTicketIds = existingTicketMetas.map((ticket) => ticket.id)
+
+      await Promise.all([
+        db.trips.delete(trip.id),
+        existingDays.length > 0 ? db.days.bulkDelete(existingDays.map((day) => day.id)) : Promise.resolve(),
+        existingItems.length > 0 ? db.itineraryItems.bulkDelete(existingItems.map((item) => item.id)) : Promise.resolve(),
+        existingTicketIds.length > 0 ? db.ticketMetas.bulkDelete(existingTicketIds) : Promise.resolve(),
+        existingTicketIds.length > 0 ? db.ticketBlobs.bulkDelete(existingTicketIds) : Promise.resolve(),
+      ])
+
+      await db.trips.put(trip)
+      if (days.length > 0) {
+        await db.days.bulkPut(days)
+      }
+      if (itineraryItems.length > 0) {
+        await db.itineraryItems.bulkPut(itineraryItems)
+      }
+      if (ticketMetas.length > 0) {
+        await db.ticketMetas.bulkPut(ticketMetas)
+      }
+      if (ticketBlobs.length > 0) {
+        await db.ticketBlobs.bulkPut(ticketBlobs)
+      }
+
+      return { title: trip.title, tripId: trip.id }
+    },
+  )
+}
+
 const DexieMinKey = Dexie.minKey
 const DexieMaxKey = Dexie.maxKey
 
@@ -453,4 +509,32 @@ function requireMappedId(idMap: Map<string, string>, id: string) {
     throw new Error(`备份数据引用了不存在的 ID：${id}`)
   }
   return mappedId
+}
+
+async function assertIncomingRecordsBelongToTrip({
+  days,
+  itineraryItems,
+  ticketMetas,
+  tripId,
+}: {
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  tripId: string
+}) {
+  const [existingDays, existingItems, existingTicketMetas] = await Promise.all([
+    days.length > 0 ? db.days.bulkGet(days.map((day) => day.id)) : Promise.resolve([]),
+    itineraryItems.length > 0
+      ? db.itineraryItems.bulkGet(itineraryItems.map((item) => item.id))
+      : Promise.resolve([]),
+    ticketMetas.length > 0 ? db.ticketMetas.bulkGet(ticketMetas.map((ticket) => ticket.id)) : Promise.resolve([]),
+  ])
+  const hasForeignRecord =
+    existingDays.some((day) => day && day.tripId !== tripId) ||
+    existingItems.some((item) => item && item.tripId !== tripId) ||
+    existingTicketMetas.some((ticket) => ticket && ticket.tripId !== tripId)
+
+  if (hasForeignRecord) {
+    throw new Error('云端保存中的记录 ID 与其他本地旅行冲突，已停止恢复以避免覆盖。')
+  }
 }

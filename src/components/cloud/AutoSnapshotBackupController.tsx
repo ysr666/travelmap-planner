@@ -1,16 +1,27 @@
 import { useEffect, useRef } from 'react'
-import { getTrip } from '../../db'
+import { getTrip, listTrips } from '../../db'
 import {
   completeTripAutoSnapshotFailure,
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
+  hasPendingAutoSnapshotTrips,
   isAutoSnapshotBackupEnabled,
   listDirtyAutoSnapshotTrips,
+  markTripAutoSnapshotDirty,
   setTripAutoSnapshotUploading,
   subscribeAutoSnapshotBackup,
   clearTripAutoSnapshotState,
 } from '../../lib/autoSnapshotBackup'
-import { getCurrentSession, getSupabaseConfigStatus, uploadTripCloudBackup } from '../../lib/cloudBackup'
+import {
+  getCurrentSession,
+  getSupabaseConfigStatus,
+  listCloudBackups,
+  uploadTripCloudBackup,
+} from '../../lib/cloudBackup'
+import {
+  compareCloudSnapshotVersions,
+  groupLatestCloudBackupsByTripId,
+} from '../../lib/cloudSnapshotCheck'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 
 const AUTO_BACKUP_DEBOUNCE_MS = 10_000
@@ -41,16 +52,21 @@ export function AutoSnapshotBackupController() {
       }
     }
 
-    const scheduleAllDirty = () => {
+    const scheduleDirtyTrips = (delay = AUTO_BACKUP_DEBOUNCE_MS) => {
       if (!isAutoSnapshotBackupEnabled()) {
         return
       }
 
       for (const entry of listDirtyAutoSnapshotTrips()) {
         if (entry?.tripId) {
-          scheduleTrip(entry.tripId)
+          scheduleTrip(entry.tripId, delay)
         }
       }
+    }
+
+    const scanAndScheduleEligibleTrips = () => {
+      scheduleDirtyTrips()
+      void markEligibleTripsDirtyAndSchedule(scheduleTrip)
     }
 
     const cancelAll = () => {
@@ -68,7 +84,7 @@ export function AutoSnapshotBackupController() {
 
       if (detail.kind === 'settings') {
         if (isAutoSnapshotBackupEnabled()) {
-          scheduleAllDirty()
+          scanAndScheduleEligibleTrips()
         } else {
           cancelAll()
         }
@@ -82,19 +98,53 @@ export function AutoSnapshotBackupController() {
       }
     })
 
-    const handleOnline = () => scheduleAllDirty()
+    const flushPending = () => {
+      if (!isAutoSnapshotBackupEnabled()) {
+        return
+      }
+      cancelAll()
+      for (const entry of listDirtyAutoSnapshotTrips()) {
+        if (entry?.tripId) {
+          void runAutoBackup(entry.tripId, scheduleTrip, inFlightRef.current)
+        }
+      }
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasPendingAutoSnapshotTrips() && timersRef.current.size === 0 && inFlightRef.current.size === 0) {
+        return
+      }
+      flushPending()
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    const handlePageHide = () => flushPending()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPending()
+      }
+    }
+
+    const handleOnline = () => scanAndScheduleEligibleTrips()
     window.addEventListener('online', handleOnline)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('pagehide', handlePageHide)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     const client = getSupabaseClient()
     const authSubscription = client?.auth.onAuthStateChange(() => {
-      scheduleAllDirty()
+      scanAndScheduleEligibleTrips()
     }).data.subscription
 
-    const initialTimer = window.setTimeout(scheduleAllDirty, 0)
+    const initialTimer = window.setTimeout(scanAndScheduleEligibleTrips, 0)
 
     return () => {
       window.clearTimeout(initialTimer)
       window.removeEventListener('online', handleOnline)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('pagehide', handlePageHide)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       authSubscription?.unsubscribe()
       unsubscribe()
       cancelAll()
@@ -133,8 +183,13 @@ async function runAutoBackup(
   inFlight.add(tripId)
   setTripAutoSnapshotUploading(tripId, dirtyAt)
   try {
-    await uploadTripCloudBackup(tripId)
-    const cleared = completeTripAutoSnapshotSuccess(tripId, dirtyAt)
+    const result = await uploadTripCloudBackup(tripId)
+    const exportedAt = Date.parse(result.exportedAt)
+    const cleared = completeTripAutoSnapshotSuccess(
+      tripId,
+      dirtyAt,
+      Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+    )
     if (!cleared) {
       scheduleTrip(tripId, 0)
     }
@@ -142,13 +197,61 @@ async function runAutoBackup(
     completeTripAutoSnapshotFailure(
       tripId,
       dirtyAt,
-      caught instanceof Error ? caught.message : '云端快照失败，可稍后重试。',
+      caught instanceof Error ? caught.message : '云端保存失败，可稍后重试。',
     )
   } finally {
     inFlight.delete(tripId)
     const latestEntry = getTripAutoSnapshotStatus(tripId)
     if (latestEntry?.dirtyAt && latestEntry.dirtyAt !== dirtyAt && canAttemptAutoBackup()) {
       scheduleTrip(tripId)
+    }
+  }
+}
+
+async function markEligibleTripsDirtyAndSchedule(scheduleTrip: (tripId: string, delay?: number) => void) {
+  if (!canAttemptAutoBackup()) {
+    return
+  }
+
+  const session = await getCurrentSession().catch(() => null)
+  if (!session) {
+    return
+  }
+
+  let syncInputs: [
+    Awaited<ReturnType<typeof listTrips>>,
+    Awaited<ReturnType<typeof listCloudBackups>>,
+  ]
+  try {
+    syncInputs = await Promise.all([listTrips(), listCloudBackups()])
+  } catch {
+    return
+  }
+  const [trips, backups] = syncInputs
+  const backupByTripId = groupLatestCloudBackupsByTripId(backups)
+
+  for (const trip of trips) {
+    const entry = getTripAutoSnapshotStatus(trip.id)
+    if (entry?.dirtyAt) {
+      scheduleTrip(trip.id)
+      continue
+    }
+
+    const backup = backupByTripId.get(trip.id)
+    if (!backup) {
+      markTripAutoSnapshotDirty(trip.id, 'cloud-backup-missing')
+      scheduleTrip(trip.id, 0)
+      continue
+    }
+
+    const comparison = compareCloudSnapshotVersions({
+      autoStatus: entry,
+      backup,
+      trip,
+    })
+    if (comparison.status === 'local_newer') {
+      markTripAutoSnapshotDirty(trip.id, 'local-newer-than-cloud')
+      scheduleTrip(trip.id, 0)
     }
   }
 }

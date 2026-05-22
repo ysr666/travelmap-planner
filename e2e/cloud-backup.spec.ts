@@ -8,7 +8,7 @@ import {
   seedTravelRecords,
 } from './helpers'
 
-test('设置页 Supabase 未配置时显示云端备份提示且不显示登录上传控件', async ({ page }) => {
+test('设置页 Supabase 未配置时显示云端保存提示且不显示登录上传控件', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
@@ -16,20 +16,20 @@ test('设置页 Supabase 未配置时显示云端备份提示且不显示登录�
   if (!(await cloudSection.isVisible().catch(() => false))) {
     await page
       .locator('summary')
-      .filter({ hasText: 'Supabase 快照备份与恢复' })
+      .filter({ hasText: 'Supabase 云端保存与恢复' })
       .first()
       .click()
   }
 
   await expect(cloudSection).toBeVisible()
   const message = page.getByTestId('supabase-unconfigured-message')
-  await expect(message).toContainText('云端快照未配置')
+  await expect(message).toContainText('云端保存未配置')
   await expect(message).toContainText('VITE_SUPABASE_URL')
   await expect(message).toContainText('VITE_SUPABASE_ANON_KEY')
   await expect(
     page.getByText('真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。'),
   ).toBeVisible()
-  await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('自动云端快照备份')
+  await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('自动云端保存')
   await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('配置 Supabase 后才能开启。')
   await expect(page.getByTestId('auto-cloud-backup-toggle')).toBeDisabled()
   await expect(page.getByTestId('cloud-login-form')).toHaveCount(0)
@@ -39,7 +39,7 @@ test('设置页 Supabase 未配置时显示云端备份提示且不显示登录�
   await expectNoHorizontalOverflow(page)
 })
 
-test('设置页通过 section=cloud 可以直接打开云端备份区域', async ({ page }) => {
+test('设置页通过 section=cloud 可以直接打开云端保存区域', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
@@ -48,7 +48,7 @@ test('设置页通过 section=cloud 可以直接打开云端备份区域', async
   await expectNoHorizontalOverflow(page)
 })
 
-test('Day View 不显示云端快照检查提醒', async ({ page }) => {
+test('Day View 不显示云端保存检查提醒', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await createDemoTripViaUi(page)
@@ -57,7 +57,7 @@ test('Day View 不显示云端快照检查提醒', async ({ page }) => {
   await expectNoHorizontalOverflow(page)
 })
 
-test('本地新建和编辑旅行不受云端快照提醒干扰', async ({ page }) => {
+test('本地新建和编辑旅行不受云端保存提醒干扰', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
@@ -75,7 +75,7 @@ test('本地新建和编辑旅行不受云端快照提醒干扰', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 云端快照提醒展示版本来源并明确恢复语义', async ({ page }) => {
+test('Trip Home 云端保存冲突提醒展示版本来源并明确原地更新语义', async ({ page }) => {
   await clearTravelDatabase(page)
   const trip = createSeedTrip({ id: 'trip_prompt', updatedAt: Date.parse('2026-04-02T10:00:00.000Z') })
   await seedTravelRecords(page, {
@@ -92,24 +92,42 @@ test('Trip Home 云端快照提醒展示版本来源并明确恢复语义', asyn
     ],
     user: { email: 'qa@example.com', id: 'user_1' },
   })
+  await page.evaluate((tripId) => {
+    window.localStorage.setItem(
+      'tripmap:cloud-auto-snapshot:state',
+      JSON.stringify({
+        trips: {
+          [tripId]: {
+            dirtyAt: Date.parse('2026-04-02T13:00:00.000Z'),
+            lastSuccessAt: Date.parse('2026-04-02T10:30:00.000Z'),
+            status: 'dirty',
+            tripId,
+          },
+        },
+        version: 1,
+      }),
+    )
+  }, trip.id)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.goto(`/#/trip?tripId=${trip.id}`, { waitUntil: 'domcontentloaded' })
 
   const card = page.getByTestId('cloud-snapshot-check-card').first()
-  await expect(card).toContainText('云端快照较新')
+  await expect(card).toContainText('本地和云端可能都有更新')
   await expect(card).toContainText('本地版本')
-  await expect(card).toContainText('云端快照')
-  await expect(card.getByTestId('cloud-snapshot-restore')).toContainText('恢复为新旅行副本')
+  await expect(card).toContainText('云端保存')
+  await expect(card).toContainText('未上传修改')
+  await expect(card.getByTestId('cloud-snapshot-restore')).toContainText('用云端更新本地')
 
   await card.getByTestId('cloud-snapshot-restore').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('会创建一个新的本地旅行副本')
-  await expect(dialog).toContainText('不会覆盖当前本地旅行')
-  await expect(dialog).toContainText('不会删除云端快照')
+  await expect(dialog).toContainText('用云端保存更新本地？')
+  await expect(dialog).toContainText('原地更新这个本地旅行')
+  await expect(dialog).toContainText('不会创建副本')
+  await expect(dialog).toContainText('本地内容会被云端版本替换')
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 本地版本较新时上传本地快照需要二次确认', async ({ page }) => {
+test('Trip Home 本地版本较新时上传本地数据需要二次确认', async ({ page }) => {
   await clearTravelDatabase(page)
   const trip = createSeedTrip({ id: 'trip_local_newer', updatedAt: Date.parse('2026-04-02T14:00:00.000Z') })
   await seedTravelRecords(page, {
@@ -131,60 +149,22 @@ test('Trip Home 本地版本较新时上传本地快照需要二次确认', asyn
 
   const card = page.getByTestId('cloud-snapshot-check-card').first()
   await expect(card).toContainText('本地版本较新')
-  await expect(card.getByTestId('cloud-snapshot-upload')).toContainText('上传本地快照')
+  await expect(card.getByTestId('cloud-snapshot-upload')).toContainText('上传并更新云端')
 
   await card.getByTestId('cloud-snapshot-upload').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('上传本地快照？')
-  await expect(dialog).toContainText('上传会创建一个新的云端快照')
-  await expect(dialog).toContainText('不会删除旧快照')
-  await expect(dialog).toContainText('不会把云端修改合并到当前本地旅行')
+  await expect(dialog).toContainText('用本地数据更新云端？')
+  await expect(dialog).toContainText('更新同一个云端保存')
+  await expect(dialog).toContainText('若云端也有你需要保留的更新')
 
   await dialog.getByRole('button', { name: '取消' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(card).toContainText('本地版本较新')
-  await expect(page.getByText('本地快照已上传，已创建新的云端快照。')).toHaveCount(0)
+  await expect(page.getByText('本地数据已上传，云端保存已更新。')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
 
-test('首页显示云端快照恢复副本来源标识', async ({ page }) => {
-  await clearTravelDatabase(page)
-  const original = createSeedTrip({ id: 'trip_original', updatedAt: Date.parse('2026-04-02T10:00:00.000Z') })
-  const restored = createSeedTrip({
-    id: 'trip_restored',
-    restoredAt: Date.parse('2026-04-02T12:30:00.000Z'),
-    restoredFromCloudBackupId: 'backup_1',
-    restoredFromCloudExportedAt: '2026-04-02T10:00:00.000Z',
-    restoredFromCloudOriginalTripId: original.id,
-    updatedAt: Date.parse('2026-04-02T12:30:00.000Z'),
-  })
-  await seedTravelRecords(page, {
-    days: [createSeedDay(original.id, 'day_original'), createSeedDay(restored.id, 'day_restored')],
-    trips: [original, restored],
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
-
-  await expect(page.getByTestId('trip-card')).toHaveCount(2)
-  const restoredLabel = page.getByTestId('restored-trip-source-label')
-  await expect(restoredLabel).toContainText('由云端快照恢复')
-  await expect(restoredLabel).toContainText('恢复于')
-  const restoredLabelLayout = await restoredLabel.evaluate((element) => {
-    const style = window.getComputedStyle(element)
-    return {
-      clientWidth: element.clientWidth,
-      scrollWidth: element.scrollWidth,
-      textOverflow: style.textOverflow,
-      whiteSpace: style.whiteSpace,
-    }
-  })
-  expect(restoredLabelLayout.whiteSpace).not.toBe('nowrap')
-  expect(restoredLabelLayout.textOverflow).not.toBe('ellipsis')
-  expect(restoredLabelLayout.scrollWidth).toBeLessThanOrEqual(restoredLabelLayout.clientWidth + 1)
-  await expectNoHorizontalOverflow(page)
-})
-
-test('设置页云端列表按快照语义展示同一原旅行的多次快照', async ({ page }) => {
+test('设置页云端列表展示历史遗留的同一旅行多条云端保存', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseFixture(page, {
     backups: [
@@ -206,12 +186,12 @@ test('设置页云端列表按快照语义展示同一原旅行的多次快照',
   await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
 
   const list = page.getByTestId('cloud-backup-list')
-  await expect(list).toContainText('原旅行')
-  await expect(list).toContainText('2 个云端快照')
-  await expect(list).toContainText('云端快照')
-  await expect(list).toContainText('快照时间')
+  await expect(list).toContainText('旅行')
+  await expect(list).toContainText('2 个云端保存')
+  await expect(list).toContainText('云端保存')
+  await expect(list).toContainText('保存时间')
   await expect(list).toContainText('附件数量')
-  await expect(list.getByTestId('cloud-restore-backup').first()).toContainText('恢复为新旅行副本')
+  await expect(list.getByTestId('cloud-restore-backup').first()).toContainText('用云端更新本地')
   await expectNoHorizontalOverflow(page)
 })
 

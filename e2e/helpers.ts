@@ -4,6 +4,9 @@ export async function clearTravelDatabase(page: Page) {
   await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
     window.localStorage.removeItem('tripmap:e2e:cloud-fixture')
+    window.localStorage.removeItem('tripmap:cloud-auto-snapshot:enabled')
+    window.localStorage.removeItem('tripmap:cloud-auto-snapshot:state')
+    window.sessionStorage.removeItem('tripmap:cloud-snapshot-check:dismissed')
     function deleteDatabase(name: string) {
       return new Promise<void>((resolve, reject) => {
         const request = indexedDB.deleteDatabase(name)

@@ -84,7 +84,17 @@ export function compareCloudSnapshotVersions({
     }
   }
 
-  const localVersion = Math.max(tripUpdatedAt, dirtyAt ?? 0)
+  const localVersion = Math.max(tripUpdatedAt, dirtyAt ?? 0, lastSuccessAt ?? 0)
+
+  if (!dirtyAt && lastSuccessAt && cloudVersion.time <= lastSuccessAt + VERSION_TOLERANCE_MS) {
+    return {
+      cloudVersion: cloudVersion.time,
+      dirtyAt,
+      localVersion,
+      status: 'in_sync' as CloudSnapshotCheckStatus,
+      tripUpdatedAt,
+    }
+  }
 
   if (dirtyAt) {
     if (!lastSuccessAt || cloudVersion.time > lastSuccessAt + VERSION_TOLERANCE_MS) {
@@ -237,14 +247,14 @@ export function buildCloudSnapshotVersionContextRows(
   }
   if (cloudTime) {
     rows.push({
-      description: '来自云端快照导出时间',
-      label: '云端快照',
+      description: '来自云端保存更新时间',
+      label: '云端保存',
       value: cloudTime,
     })
   }
   if (dirtyTime) {
     rows.push({
-      description: '当前设备尚未上传到云端快照的修改',
+      description: '当前设备尚未上传到云端保存的修改',
       label: '未上传修改',
       value: dirtyTime,
     })
@@ -348,7 +358,7 @@ export async function refreshCloudSnapshotChecks() {
     .catch((caught) => {
       setCloudSnapshotCheckState({
         ...currentState,
-        error: caught instanceof Error ? caught.message : '检查云端快照失败。',
+        error: caught instanceof Error ? caught.message : '检查云端保存失败。',
         isChecking: false,
       })
       return []

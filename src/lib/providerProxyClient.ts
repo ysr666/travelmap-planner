@@ -289,7 +289,8 @@ function normalizeErrorCode(value: string): ProviderProxyErrorCode {
     value === 'provider_error' ||
     value === 'provider_unavailable' ||
     value === 'quota_exceeded' ||
-    value === 'unsupported'
+    value === 'unsupported' ||
+    value === 'invalid_response'
   ) {
     return value
   }

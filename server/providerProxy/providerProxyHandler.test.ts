@@ -225,6 +225,31 @@ describe('provider proxy handler ai_trip_draft', () => {
     expect(text).not.toContain('secret-ai-key')
     expect(text).not.toContain('TRIPMAP_AI_PROVIDER_KEY')
   })
+
+  it('returns unsupported when AI provider key is set but mock is off', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_PROVIDER_KEY: 'some-key' },
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(501)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: 'unsupported', ok: false })
+  })
+
+  it('mock draft still passes validateAiTripDraft through provider abstraction', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    const validation = validateAiTripDraft(body.draft)
+    expect(validation.valid).toBe(true)
+    expect(body.source).toBe('mock')
+    expect(body.warnings).toContain('当前为本地示例草稿，非真实 AI 生成。')
+  })
 })
 
 function validAiDraftRequest() {

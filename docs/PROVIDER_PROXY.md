@@ -227,3 +227,38 @@ When a real AI provider is integrated:
 - The response `source` field changes to `"future_ai"`.
 - The draft must still pass `validateAiTripDraft` schema validation.
 - User must still confirm before writing to IndexedDB.
+
+### Real Provider Preparation
+
+Current phase adds server-side infrastructure for future AI provider integration. No real AI calls are made.
+
+**Modules:**
+
+- `aiDraftLimits.ts` — per-request resource bounds (prompt size, output tokens, free text embed limit).
+- `aiDraftPrompt.ts` — pure function that builds prompt from validated request. Free text capped at 500 chars per field. Prompt requires JSON-only output matching AiTripDraft schema.
+- `aiDraftProvider.ts` — provider-agnostic interface with three implementations: `mock` (deterministic), `unavailable` (no key), `disabled` (key exists but no real provider yet).
+- `aiDraftResponse.ts` — extracts JSON from raw AI output (pure JSON or fenced blocks), validates against `validateAiTripDraft`. Returns `invalid_response` on failure.
+
+**Prompt boundary:**
+
+- Prompt does not include: ticket blobs, ticket images/PDF, cloud tokens, provider keys, full database, route cache, precise coordinates.
+- Prompt instructs: dates must be YYYY-MM-DD, times must be HH:mm, no tickets, no routes, no cloud fields, no provider metadata, no fabricated transit line numbers, no route reordering.
+
+**Response boundary:**
+
+- Raw model output goes through `extractAiDraftJson` → `validateAiTripDraft`.
+- Invalid output returns `invalid_response` error; raw model text is never passed to frontend.
+- Error messages are generic; they do not contain raw model output or user input.
+
+**Error codes:**
+
+- `provider_unavailable` — no AI provider configured.
+- `unsupported` — AI provider key exists but no real provider implemented.
+- `invalid_response` — AI output cannot be parsed or validated.
+- `provider_error`, `network_error`, `quota_exceeded` — standard provider errors.
+
+**Production requirements:**
+
+- Durable quota store (KV / Supabase / Redis) to replace in-memory Map.
+- Origin allowlist and account/session/IP controls.
+- Billing and abuse protection.

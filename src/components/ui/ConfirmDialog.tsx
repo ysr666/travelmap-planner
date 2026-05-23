@@ -67,7 +67,7 @@ export function ConfirmDialog({
               <h2 className="break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
                 {title}
               </h2>
-              <p className="mt-1 break-words text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
+              <p className="mt-1 break-words whitespace-pre-line text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
                 {body}
               </p>
             </div>

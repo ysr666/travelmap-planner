@@ -29,6 +29,15 @@ const unavailableConfig: RoutingConfig = {
   source: 'none',
 }
 
+const proxyConfig: RoutingConfig = {
+  provider: 'openrouteservice',
+  apiKey: null,
+  googleMapsKey: null,
+  routeProxyUrl: '/api/provider-proxy',
+  configured: true,
+  source: 'proxy',
+}
+
 describe('route preparation readiness', () => {
   beforeEach(async () => {
     await clearRouteCache()
@@ -139,6 +148,7 @@ describe('route preparation readiness', () => {
     })
 
     expect(getPersistentRouteProvider(orsConfig)).toBe('openrouteservice')
+    expect(getPersistentRouteProvider(proxyConfig)).toBe('openrouteservice')
     expect(result.providerConfigured).toBe(false)
     expect(result.canGenerate).toBe(false)
     expect(result.days[0].status).toBe('ready_to_generate')

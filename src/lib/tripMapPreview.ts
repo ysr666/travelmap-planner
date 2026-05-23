@@ -73,6 +73,10 @@ export function selectTripPreviewRoutingConfig(
   engine: TripMapPreviewEngine,
   config: RoutingConfig,
 ): RoutingConfig {
+  if (config.source === 'proxy' && config.configured) {
+    return config
+  }
+
   if (engine === 'google' && config.googleMapsKey) {
     return {
       provider: 'google',

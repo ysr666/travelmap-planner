@@ -6,7 +6,6 @@ import {
   Database,
   FileJson,
   Import,
-  KeyRound,
   Monitor,
   Moon,
   RefreshCw,
@@ -58,19 +57,9 @@ import {
 } from '../lib/routeCache'
 import {
   ROUTING_CONFIG_CHANGED_EVENT,
-  clearLocalOpenRouteServiceApiKey,
-  getLocalOpenRouteServiceApiKey,
   getRoutingConfig,
-  saveLocalOpenRouteServiceApiKey,
   type RoutingConfig,
 } from '../lib/routing'
-import {
-  GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT as GOOGLE_MAPS_CONFIG_CHANGED_EVENT,
-  clearGoogleMapsApiKey,
-  getGoogleMapsApiKey,
-  isGoogleMapsConfigured,
-  saveGoogleMapsApiKey,
-} from '../lib/googleMaps'
 import {
   getStoredTravelProfile,
   normalizeTravelProfile,
@@ -230,11 +219,6 @@ export function SettingsPage() {
   const [copyPromptMessage, setCopyPromptMessage] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
-  const [routingKeyInput, setRoutingKeyInput] = useState(() => getLocalOpenRouteServiceApiKey())
-  const [routingMessage, setRoutingMessage] = useState<string | null>(null)
-  const [googleMapsKeyInput, setGoogleMapsKeyInput] = useState(() => getGoogleMapsApiKey())
-  const [googleMapsConfigured, setGoogleMapsConfigured] = useState(() => isGoogleMapsConfigured())
-  const [googleMapsMessage, setGoogleMapsMessage] = useState<string | null>(null)
   const [routeCacheStats, setRouteCacheStats] = useState<RouteCacheStats | null>(null)
   const [routeCacheError, setRouteCacheError] = useState<string | null>(null)
   const [isClearingRouteCache, setIsClearingRouteCache] = useState(false)
@@ -305,7 +289,6 @@ export function SettingsPage() {
   useEffect(() => {
     function refreshRoutingConfig() {
       setRoutingConfig(getRoutingConfig())
-      setRoutingKeyInput(getLocalOpenRouteServiceApiKey())
     }
 
     window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutingConfig)
@@ -313,20 +296,6 @@ export function SettingsPage() {
     return () => {
       window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutingConfig)
       window.removeEventListener('storage', refreshRoutingConfig)
-    }
-  }, [])
-
-  useEffect(() => {
-    function refreshGoogleMapsConfig() {
-      setGoogleMapsKeyInput(getGoogleMapsApiKey())
-      setGoogleMapsConfigured(isGoogleMapsConfigured())
-    }
-
-    window.addEventListener(GOOGLE_MAPS_CONFIG_CHANGED_EVENT, refreshGoogleMapsConfig)
-    window.addEventListener('storage', refreshGoogleMapsConfig)
-    return () => {
-      window.removeEventListener(GOOGLE_MAPS_CONFIG_CHANGED_EVENT, refreshGoogleMapsConfig)
-      window.removeEventListener('storage', refreshGoogleMapsConfig)
     }
   }, [])
 
@@ -471,43 +440,6 @@ export function SettingsPage() {
       saveAiPrivacySettings(next)
       return getStoredAiPrivacySettings()
     })
-  }
-
-  function handleSaveRoutingKey() {
-    if (!routingKeyInput.trim()) {
-      setRoutingMessage('请输入 OpenRouteService API key。')
-      return
-    }
-    saveLocalOpenRouteServiceApiKey(routingKeyInput)
-    setRoutingConfig(getRoutingConfig())
-    setRoutingMessage('路线服务 key 已保存到当前浏览器本机。')
-  }
-
-  function handleClearRoutingKey() {
-    clearLocalOpenRouteServiceApiKey()
-    setRoutingKeyInput('')
-    setRoutingConfig(getRoutingConfig())
-    setRoutingMessage('已清除本机路线服务 key，地图会回到直线连接。')
-  }
-
-  function handleSaveGoogleMapsKey() {
-    const trimmed = googleMapsKeyInput.trim()
-    if (!trimmed) {
-      setGoogleMapsMessage('请输入 Google Maps API key。')
-      return
-    }
-    saveGoogleMapsApiKey(trimmed)
-    setGoogleMapsConfigured(true)
-    setRoutingConfig(getRoutingConfig())
-    setGoogleMapsMessage('Google Maps API key 已保存。重新加载页面后生效。')
-  }
-
-  function handleClearGoogleMapsKey() {
-    clearGoogleMapsApiKey()
-    setGoogleMapsKeyInput('')
-    setGoogleMapsConfigured(false)
-    setRoutingConfig(getRoutingConfig())
-    setGoogleMapsMessage('已清除 Google Maps API key，将使用 MapLibre + OpenFreeMap。')
   }
 
   async function handleRouteCacheMaxBytesChange(bytes: number) {
@@ -769,31 +701,15 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible subtitle="底图、地点搜索与公交路线" title="Google Maps 配置">
-        <GoogleMapsSettings
-        configured={googleMapsConfigured}
-        keyInput={googleMapsKeyInput}
-        message={googleMapsMessage}
-        onClear={handleClearGoogleMapsKey}
-        onKeyInputChange={setGoogleMapsKeyInput}
-        onSave={handleSaveGoogleMapsKey}
-      />
-      </Collapsible>
-
-      <Collapsible subtitle="步行/驾车路线与缓存管理" title="路线服务配置">
+      <Collapsible subtitle="旅图路线服务与缓存管理" title="路线服务">
         <RouteServiceSettings
         config={routingConfig}
-        keyInput={routingKeyInput}
         cacheError={routeCacheError}
         cacheStats={routeCacheStats}
         isClearingCache={isClearingRouteCache}
         isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
-        message={routingMessage}
         onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
-        onClear={handleClearRoutingKey}
         onClearCache={() => void handleClearRouteCache()}
-        onKeyInputChange={setRoutingKeyInput}
-        onSave={handleSaveRoutingKey}
       />
       </Collapsible>
 
@@ -1109,122 +1025,20 @@ function ToggleRow({
   )
 }
 
-function GoogleMapsSettings({
-  configured,
-  keyInput,
-  message,
-  onKeyInputChange,
-  onSave,
-  onClear,
-}: {
-  configured: boolean
-  keyInput: string
-  message: string | null
-  onKeyInputChange: (value: string) => void
-  onSave: () => void
-  onClear: () => void
-}) {
-  return (
-    <section className="space-y-3" data-testid="google-maps-settings-section">
-        <Card variant="grouped" className="space-y-3">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
-            <Route className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">Google Maps API</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">
-              配置后可使用 Google 地图底图、地点搜索和公交路线（含真实公交地铁换乘）。
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <InfoPill
-            icon={<AlertTriangle className="size-4" />}
-            text="Google Maps API key 会进入前端 bundle。建议在 Google Cloud Console 设置 HTTP 引用限制。"
-            tone="warning"
-          />
-        </div>
-
-        <div className="rounded-xl bg-slate-50/75 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:text-slate-300 dark:ring-slate-800/70">
-          当前状态：<span className="font-semibold text-slate-800 dark:text-slate-100">{configured ? '已配置' : '未配置'}</span>
-          {configured ? (
-            <span className="ml-2 text-xs tm-muted">（底图 + 地点搜索 + 路线规划）</span>
-          ) : null}
-        </div>
-
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>Google Maps API Key</span>
-          <input
-            autoComplete="off"
-            className={FIELD_INPUT_CLASS}
-            data-testid="google-maps-key-input"
-            onChange={(event) => onKeyInputChange(event.target.value)}
-            placeholder="只保存在当前浏览器本机"
-            type="password"
-            value={keyInput}
-          />
-        </label>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            className="w-full"
-            data-testid="google-maps-key-save"
-            icon={<KeyRound className="size-4" />}
-            onClick={onSave}
-            variant="secondary"
-          >
-            保存 key
-          </Button>
-          <Button
-            className="w-full"
-            data-testid="google-maps-key-clear"
-            onClick={onClear}
-            variant="ghost"
-          >
-            清除
-          </Button>
-        </div>
-
-        {message ? (
-          <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-            {message}
-          </p>
-        ) : null}
-
-        <p className="text-xs leading-5 tm-muted">
-          key 只保存在当前浏览器 localStorage，不会进入备份或云端。需要在 Google Cloud Console 启用 Maps JavaScript API、Places API 和 Routes API。
-        </p>
-      </Card>
-    </section>
-  )
-}
-
 function RouteServiceSettings({
   config,
-  keyInput,
   cacheStats,
   cacheError,
   isClearingCache,
   isUpdatingCacheLimit,
-  message,
-  onKeyInputChange,
-  onSave,
-  onClear,
   onCacheMaxBytesChange,
   onClearCache,
 }: {
   config: RoutingConfig
-  keyInput: string
   cacheStats: RouteCacheStats | null
   cacheError: string | null
   isClearingCache: boolean
   isUpdatingCacheLimit: boolean
-  message: string | null
-  onKeyInputChange: (value: string) => void
-  onSave: () => void
-  onClear: () => void
   onCacheMaxBytesChange: (bytes: number) => void
   onClearCache: () => void
 }) {
@@ -1239,9 +1053,9 @@ function RouteServiceSettings({
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">道路路线 polyline</h3>
+            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">路线服务</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
-              不配置时，地图继续使用直线连接。配置 OpenRouteService 后，可以在地图页手动生成道路路线。
+              地图默认使用直线连接。路线服务可用时，可以在地图页手动生成道路路线。
             </p>
           </div>
         </div>
@@ -1249,12 +1063,7 @@ function RouteServiceSettings({
         <div className="grid gap-2">
           <InfoPill
             icon={<AlertTriangle className="size-4" />}
-            text="生成道路路线会把地点坐标发送给第三方路线服务；路线仅供参考，不包含实时交通。"
-            tone="warning"
-          />
-          <InfoPill
-            icon={<KeyRound className="size-4" />}
-            text="VITE_OPENROUTESERVICE_API_KEY 会进入前端 bundle。个人部署可用，公开部署不建议；未来公开服务应使用后端代理。"
+            text="生成道路路线会发送相邻地点坐标；路线仅供参考，不包含实时交通。"
             tone="warning"
           />
         </div>
@@ -1263,47 +1072,8 @@ function RouteServiceSettings({
           当前状态：<span className="font-semibold text-slate-800 dark:text-slate-100">{configLabel}</span>
         </div>
 
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>本机 OpenRouteService API key</span>
-          <input
-            autoComplete="off"
-            className={FIELD_INPUT_CLASS}
-            data-testid="routing-api-key-input"
-            onChange={(event) => onKeyInputChange(event.target.value)}
-            placeholder="只保存在当前浏览器本机"
-            type="password"
-            value={keyInput}
-          />
-        </label>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            className="w-full"
-            data-testid="routing-api-key-save"
-            icon={<KeyRound className="size-4" />}
-            onClick={onSave}
-            variant="secondary"
-          >
-            保存本机 key
-          </Button>
-          <Button
-            className="w-full"
-            data-testid="routing-api-key-clear"
-            onClick={onClear}
-            variant="ghost"
-          >
-            清除
-          </Button>
-        </div>
-
-        {message ? (
-          <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-            {message}
-          </p>
-        ) : null}
-
         <p className="text-xs leading-5 tm-muted">
-          本机 key 不进入 IndexedDB、zip 备份、Supabase 云备份或 AI 行程包，只保存在当前浏览器 localStorage。
+          旅图不会要求你填写 Google、OpenRouteService 或 AI provider key。
         </p>
 
         <div className="space-y-3 rounded-2xl border border-slate-100/80 bg-slate-50/75 p-3 dark:border-slate-800/70 dark:bg-slate-900/40">
@@ -1378,16 +1148,16 @@ function RouteServiceSettings({
 const DEFAULT_ROUTE_CACHE_MAX_BYTES_FALLBACK = 20 * 1024 * 1024
 
 function getRoutingConfigLabel(config: RoutingConfig) {
+  if (config.configured && config.source === 'proxy') {
+    return '路线服务由旅图提供'
+  }
   if (config.configured && config.source === 'local') {
-    return '已使用本机 key'
+    return '路线服务由旅图提供'
   }
   if (config.configured && config.source === 'env') {
-    return '已通过环境变量配置'
+    return '路线服务由旅图提供'
   }
-  if (config.provider === 'openrouteservice') {
-    return '已选择 OpenRouteService，但尚未配置 key'
-  }
-  return '未配置，地图使用直线连接'
+  return '路线服务暂不可用'
 }
 
 function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {

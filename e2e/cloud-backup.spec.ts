@@ -195,23 +195,19 @@ test('设置页云端列表展示历史遗留的同一旅行多条云端保存',
   await expectNoHorizontalOverflow(page)
 })
 
-test('设置页可以保存和清除本机路线服务 key', async ({ page }) => {
+test('设置页只显示通用路线服务状态和缓存管理', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-  await page.getByText('路线服务配置', { exact: true }).click()
+  await page.getByText('旅图路线服务与缓存管理', { exact: true }).click()
 
   await expect(page.getByTestId('routing-settings-section')).toBeVisible()
-  const input = page.getByTestId('routing-api-key-input')
-  await input.fill('local-routing-key')
-  await page.getByTestId('routing-api-key-save').click()
-  await expect(page.getByText('路线服务 key 已保存到当前浏览器本机。')).toBeVisible()
-
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.getByText('路线服务配置', { exact: true }).click()
-  await expect(page.getByTestId('routing-settings-section')).toContainText('已使用本机 key')
-  await page.getByTestId('routing-api-key-clear').click()
-  await expect(page.getByText('已清除本机路线服务 key')).toBeVisible()
+  await expect(page.getByTestId('routing-settings-section')).toContainText(/路线服务由旅图提供|路线服务暂不可用/)
+  await expect(page.getByTestId('routing-api-key-input')).toHaveCount(0)
+  await expect(page.getByTestId('routing-api-key-save')).toHaveCount(0)
+  await expect(page.getByTestId('routing-api-key-clear')).toHaveCount(0)
+  await expect(page.getByTestId('google-maps-key-input')).toHaveCount(0)
+  await expect(page.getByTestId('route-cache-stats')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

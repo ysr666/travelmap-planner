@@ -26,6 +26,15 @@ const orsConfig = {
   source: 'local' as const,
 }
 
+const proxyConfig = {
+  provider: 'openrouteservice' as const,
+  apiKey: null,
+  googleMapsKey: 'google-key',
+  routeProxyUrl: '/api/provider-proxy',
+  configured: true,
+  source: 'proxy' as const,
+}
+
 describe('trip map preview cache identity', () => {
   it('changes on coordinate order mode or provider changes but ignores titles', () => {
     const days = [day('day-1', 1)]
@@ -75,6 +84,7 @@ describe('trip map preview route provider selection', () => {
     expect(selectTripPreviewRoutingConfig('maplibre', googleConfig).provider).toBe('none')
     expect(selectTripPreviewRoutingConfig('maplibre', orsConfig).provider).toBe('openrouteservice')
     expect(selectTripPreviewRoutingConfig('google', { ...orsConfig, googleMapsKey: 'google-key' }).provider).toBe('google')
+    expect(selectTripPreviewRoutingConfig('google', proxyConfig).provider).toBe('openrouteservice')
   })
 })
 

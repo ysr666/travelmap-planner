@@ -1,0 +1,547 @@
+import {
+  PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+  buildProviderProxyErrorResponse,
+  defaultProviderProxyErrorMessage,
+  isProviderProxyConcreteProvider,
+  type ProviderProxyConcreteProvider,
+  type ProviderProxyErrorCode,
+  type ProviderProxyRoutePreviewRequest,
+  type ProviderProxyRoutePreviewSuccessResponse,
+  type ProviderProxyRouteSegment,
+  validateProviderProxyRoutePreviewRequest,
+} from '../../src/lib/providerProxyContract'
+import type { LngLat } from '../../src/lib/routing'
+import {
+  checkAndConsumeProviderProxyQuota,
+  type ProviderProxyQuotaLimits,
+  type ProviderProxyQuotaStore,
+} from './quotaGuard'
+
+type ProviderProxyHandlerEnv = {
+  GOOGLE_ROUTES_API_KEY?: string
+  OPENROUTESERVICE_API_KEY?: string
+  TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
+  TRIPMAP_PROVIDER_PROXY_MOCK?: string
+}
+
+export type ProviderProxyHandlerInput = {
+  env?: ProviderProxyHandlerEnv
+  fetcher?: typeof fetch
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}
+
+const OPENROUTESERVICE_ENDPOINT = 'https://api.openrouteservice.org/v2/directions'
+const GOOGLE_ROUTES_ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes'
+
+export async function handleProviderProxyRequest({
+  env = {},
+  fetcher = fetch,
+  quotaLimits,
+  quotaStore,
+  request,
+}: ProviderProxyHandlerInput): Promise<Response> {
+  const corsHeaders = getCorsHeaders(request, env)
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Max-Age': '86400',
+        Allow: 'POST, OPTIONS',
+      },
+      status: 204,
+    })
+  }
+
+  if (request.method !== 'POST') {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: 'unsupported',
+        message: 'Provider proxy only supports POST requests.',
+      }),
+      405,
+      corsHeaders,
+      { Allow: 'POST, OPTIONS' },
+    )
+  }
+
+  if (!isJsonContentType(request.headers.get('Content-Type'))) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: 'invalid_request',
+        message: 'Provider proxy requires application/json.',
+      }),
+      415,
+      corsHeaders,
+    )
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({ code: 'invalid_request' }),
+      400,
+      corsHeaders,
+    )
+  }
+
+  const validation = validateProviderProxyRoutePreviewRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const routeRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: routeRequest.coordinates.length,
+    identity: getQuotaIdentity(request, routeRequest),
+    limits: quotaLimits,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+        requestId: routeRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    const provider = selectProvider(routeRequest, env)
+    if (isMockMode(env)) {
+      return jsonResponse(buildMockRoutePreviewResponse(routeRequest, provider), 200, corsHeaders)
+    }
+
+    const apiKey = getProviderSecret(provider, env)
+    if (!apiKey) {
+      throw new ProviderProxyServerError('provider_unavailable', 503, provider)
+    }
+
+    const response = await fetchRoutePreviewFromProvider({
+      apiKey,
+      fetcher,
+      provider,
+      request: routeRequest,
+    })
+    return jsonResponse(response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, routeRequest)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+async function fetchRoutePreviewFromProvider({
+  apiKey,
+  fetcher,
+  provider,
+  request,
+}: {
+  apiKey: string
+  fetcher: typeof fetch
+  provider: ProviderProxyConcreteProvider
+  request: ProviderProxyRoutePreviewRequest
+}): Promise<ProviderProxyRoutePreviewSuccessResponse> {
+  const segments = provider === 'openrouteservice'
+    ? await fetchOpenRouteServiceSegments(request, apiKey, fetcher)
+    : await fetchGoogleRouteSegments(request, apiKey, fetcher)
+
+  return buildRoutePreviewSuccessResponse(request, provider, segments)
+}
+
+async function fetchOpenRouteServiceSegments(
+  request: ProviderProxyRoutePreviewRequest,
+  apiKey: string,
+  fetcher: typeof fetch,
+): Promise<ProviderProxyRouteSegment[]> {
+  const segments: ProviderProxyRouteSegment[] = []
+  for (const segment of request.segments) {
+    const from = request.coordinates[segment.fromCoordinateIndex]
+    const to = request.coordinates[segment.toCoordinateIndex]
+    let response: Response
+    try {
+      response = await fetcher(`${OPENROUTESERVICE_ENDPOINT}/${segment.profile}/geojson`, {
+        body: JSON.stringify({ coordinates: [from, to] }),
+        headers: {
+          Authorization: apiKey,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+    } catch {
+      throw new ProviderProxyServerError('network_error', 502, 'openrouteservice')
+    }
+
+    if (!response.ok) {
+      throw mapProviderStatusToError(response.status, 'openrouteservice')
+    }
+
+    const data = await readProviderJson(response, 'openrouteservice')
+    const parsed = parseOpenRouteServiceGeoJson(data)
+    segments.push({
+      coordinates: parsed.coordinates,
+      distanceMeters: parsed.distanceMeters,
+      durationSeconds: parsed.durationSeconds,
+      fromItemId: segment.fromItemId,
+      kind: 'road',
+      segmentIndex: segment.segmentIndex,
+      toItemId: segment.toItemId,
+    })
+  }
+  return segments
+}
+
+async function fetchGoogleRouteSegments(
+  request: ProviderProxyRoutePreviewRequest,
+  apiKey: string,
+  fetcher: typeof fetch,
+): Promise<ProviderProxyRouteSegment[]> {
+  const segments: ProviderProxyRouteSegment[] = []
+  for (const segment of request.segments) {
+    const from = request.coordinates[segment.fromCoordinateIndex]
+    const to = request.coordinates[segment.toCoordinateIndex]
+    let response: Response
+    try {
+      response = await fetcher(GOOGLE_ROUTES_ENDPOINT, {
+        body: JSON.stringify({
+          destination: { location: { latLng: { latitude: to[1], longitude: to[0] } } },
+          origin: { location: { latLng: { latitude: from[1], longitude: from[0] } } },
+          routingPreference: 'TRAFFIC_UNAWARE',
+          travelMode: mapGoogleTravelMode(segment.mode),
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
+        },
+        method: 'POST',
+      })
+    } catch {
+      throw new ProviderProxyServerError('network_error', 502, 'google')
+    }
+
+    if (!response.ok) {
+      throw mapProviderStatusToError(response.status, 'google')
+    }
+
+    const data = await readProviderJson(response, 'google')
+    const parsed = parseGoogleRouteResponse(data)
+    segments.push({
+      coordinates: parsed.coordinates,
+      distanceMeters: parsed.distanceMeters,
+      durationSeconds: parsed.durationSeconds,
+      fromItemId: segment.fromItemId,
+      kind: 'road',
+      segmentIndex: segment.segmentIndex,
+      toItemId: segment.toItemId,
+    })
+  }
+  return segments
+}
+
+function buildRoutePreviewSuccessResponse(
+  request: ProviderProxyRoutePreviewRequest,
+  provider: ProviderProxyConcreteProvider,
+  segments: ProviderProxyRouteSegment[],
+): ProviderProxyRoutePreviewSuccessResponse {
+  return {
+    ok: true,
+    operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+    provider,
+    requestId: request.requestId,
+    route: {
+      distanceMeters: sumOptional(segments.map((segment) => segment.distanceMeters)),
+      durationSeconds: sumOptional(segments.map((segment) => segment.durationSeconds)),
+      lineStrings: segments.map((segment) => segment.coordinates),
+      segments,
+      status: segments.length > 0 ? 'road' : 'failed',
+      warnings: [],
+    },
+  }
+}
+
+function buildMockRoutePreviewResponse(
+  request: ProviderProxyRoutePreviewRequest,
+  provider: ProviderProxyConcreteProvider,
+): ProviderProxyRoutePreviewSuccessResponse {
+  const segments = request.segments.map((segment) => {
+    const from = request.coordinates[segment.fromCoordinateIndex]
+    const to = request.coordinates[segment.toCoordinateIndex]
+    return {
+      coordinates: [from, to],
+      distanceMeters: estimateDistanceMeters(from, to),
+      durationSeconds: Math.max(60, Math.round(estimateDistanceMeters(from, to) / 8)),
+      fromItemId: segment.fromItemId,
+      kind: 'road' as const,
+      segmentIndex: segment.segmentIndex,
+      toItemId: segment.toItemId,
+    }
+  })
+  return buildRoutePreviewSuccessResponse(request, provider, segments)
+}
+
+function selectProvider(
+  request: ProviderProxyRoutePreviewRequest,
+  env: ProviderProxyHandlerEnv,
+): ProviderProxyConcreteProvider {
+  if (isProviderProxyConcreteProvider(request.provider)) {
+    return request.provider
+  }
+  if (env.OPENROUTESERVICE_API_KEY || isMockMode(env)) {
+    return 'openrouteservice'
+  }
+  if (env.GOOGLE_ROUTES_API_KEY) {
+    return 'google'
+  }
+  throw new ProviderProxyServerError('provider_unavailable', 503)
+}
+
+function getProviderSecret(provider: ProviderProxyConcreteProvider, env: ProviderProxyHandlerEnv) {
+  return provider === 'google' ? env.GOOGLE_ROUTES_API_KEY?.trim() : env.OPENROUTESERVICE_API_KEY?.trim()
+}
+
+function normalizeProviderProxyHandlerError(
+  caught: unknown,
+  request: ProviderProxyRoutePreviewRequest,
+) {
+  if (caught instanceof ProviderProxyServerError) {
+    return {
+      body: buildProviderProxyErrorResponse({
+        code: caught.code,
+        operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+        provider: caught.provider,
+        requestId: request.requestId,
+      }),
+      status: caught.status,
+    }
+  }
+
+  return {
+    body: buildProviderProxyErrorResponse({
+      code: 'provider_error',
+      operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+      requestId: request.requestId,
+    }),
+    status: 502,
+  }
+}
+
+function mapProviderStatusToError(status: number, provider: ProviderProxyConcreteProvider) {
+  if (status === 429) {
+    return new ProviderProxyServerError('quota_exceeded', 429, provider)
+  }
+  if (status === 401 || status === 403 || status >= 500) {
+    return new ProviderProxyServerError('provider_unavailable', 503, provider)
+  }
+  return new ProviderProxyServerError('provider_error', 502, provider)
+}
+
+async function readProviderJson(response: Response, provider: ProviderProxyConcreteProvider) {
+  try {
+    return await response.json()
+  } catch {
+    throw new ProviderProxyServerError('provider_error', 502, provider)
+  }
+}
+
+function parseOpenRouteServiceGeoJson(input: unknown): {
+  coordinates: LngLat[]
+  distanceMeters?: number
+  durationSeconds?: number
+} {
+  const features = readRecord(input).features
+  const feature = Array.isArray(features) ? features[0] : null
+  const geometry = readRecord(feature).geometry
+  const coordinates = readRecord(geometry).coordinates
+  if (!Array.isArray(coordinates)) {
+    throw new ProviderProxyServerError('provider_error', 502, 'openrouteservice')
+  }
+
+  const parsedCoordinates = coordinates.flatMap((coordinate) => {
+    const lngLat = normalizeLngLat(coordinate)
+    return lngLat ? [lngLat] : []
+  })
+  if (parsedCoordinates.length < 2) {
+    throw new ProviderProxyServerError('provider_error', 502, 'openrouteservice')
+  }
+
+  const summary = readRecord(readRecord(feature).properties).summary
+  const distance = Number(readRecord(summary).distance)
+  const duration = Number(readRecord(summary).duration)
+
+  return {
+    coordinates: parsedCoordinates,
+    distanceMeters: Number.isFinite(distance) ? distance : undefined,
+    durationSeconds: Number.isFinite(duration) ? duration : undefined,
+  }
+}
+
+function parseGoogleRouteResponse(input: unknown): {
+  coordinates: LngLat[]
+  distanceMeters?: number
+  durationSeconds?: number
+} {
+  const routes = readRecord(input).routes
+  const route = Array.isArray(routes) ? readRecord(routes[0]) : {}
+  const polyline = readRecord(route.polyline).encodedPolyline
+  if (typeof polyline !== 'string') {
+    throw new ProviderProxyServerError('provider_error', 502, 'google')
+  }
+  const coordinates = decodeGooglePolyline(polyline)
+  if (coordinates.length < 2) {
+    throw new ProviderProxyServerError('provider_error', 502, 'google')
+  }
+  const durationSeconds = typeof route.duration === 'string'
+    ? Number.parseFloat(route.duration.replace('s', ''))
+    : undefined
+  return {
+    coordinates,
+    distanceMeters: typeof route.distanceMeters === 'number' ? route.distanceMeters : undefined,
+    durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : undefined,
+  }
+}
+
+function decodeGooglePolyline(encoded: string): LngLat[] {
+  const coordinates: LngLat[] = []
+  let lat = 0
+  let lng = 0
+  let index = 0
+
+  while (index < encoded.length) {
+    let shift = 0
+    let result = 0
+    let byte: number
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1)
+
+    shift = 0
+    result = 0
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1)
+
+    coordinates.push([lng / 1e5, lat / 1e5])
+  }
+
+  return coordinates
+}
+
+function normalizeLngLat(input: unknown): LngLat | null {
+  if (!Array.isArray(input) || input.length < 2) {
+    return null
+  }
+  const lng = Number(input[0])
+  const lat = Number(input[1])
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null
+  }
+  if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+    return null
+  }
+  return [lng, lat]
+}
+
+function mapGoogleTravelMode(mode: string) {
+  if (mode === 'walk') return 'WALK'
+  if (mode === 'bus' || mode === 'train' || mode === 'transit' || mode === 'subway') return 'TRANSIT'
+  if (mode === 'cycling') return 'BICYCLE'
+  return 'DRIVE'
+}
+
+function getQuotaIdentity(request: Request, routeRequest: ProviderProxyRoutePreviewRequest) {
+  const ip = request.headers.get('CF-Connecting-IP') ?? request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
+  return [
+    routeRequest.quotaSessionId ?? 'no-session',
+    ip ?? 'no-ip',
+  ].join('|')
+}
+
+function getCorsHeaders(request: Request, env: ProviderProxyHandlerEnv): Record<string, string> {
+  const origin = request.headers.get('Origin')
+  if (!origin) {
+    return {}
+  }
+
+  const allowedOrigins = parseAllowedOrigins(env.TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS)
+  if (!allowedOrigins.has(origin) && !allowedOrigins.has('*')) {
+    return {}
+  }
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.has('*') ? '*' : origin,
+    'Vary': 'Origin',
+  }
+}
+
+function parseAllowedOrigins(value?: string) {
+  return new Set((value ?? '').split(',').map((origin) => origin.trim()).filter(Boolean))
+}
+
+function isJsonContentType(value: string | null) {
+  return value?.toLowerCase().split(';')[0].trim() === 'application/json'
+}
+
+function isMockMode(env: ProviderProxyHandlerEnv) {
+  return env.TRIPMAP_PROVIDER_PROXY_MOCK === '1' || env.TRIPMAP_PROVIDER_PROXY_MOCK === 'true'
+}
+
+function jsonResponse(
+  body: unknown,
+  status: number,
+  corsHeaders: Record<string, string>,
+  extraHeaders: Record<string, string> = {},
+) {
+  return new Response(JSON.stringify(body), {
+    headers: {
+      ...corsHeaders,
+      ...extraHeaders,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    status,
+  })
+}
+
+function estimateDistanceMeters(first: LngLat, second: LngLat) {
+  const latScale = 111_320
+  const lngScale = 111_320 * Math.cos(((first[1] + second[1]) / 2) * Math.PI / 180)
+  return Math.round(Math.hypot((first[0] - second[0]) * lngScale, (first[1] - second[1]) * latScale))
+}
+
+function sumOptional(values: Array<number | undefined>) {
+  const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return present.length ? present.reduce((sum, value) => sum + value, 0) : undefined
+}
+
+function readRecord(input: unknown): Record<string, unknown> {
+  return input && typeof input === 'object' ? input as Record<string, unknown> : {}
+}
+
+class ProviderProxyServerError extends Error {
+  readonly code: ProviderProxyErrorCode
+  readonly provider?: ProviderProxyConcreteProvider
+  readonly status: number
+
+  constructor(code: ProviderProxyErrorCode, status: number, provider?: ProviderProxyConcreteProvider) {
+    super(defaultProviderProxyErrorMessage(code))
+    this.name = 'ProviderProxyServerError'
+    this.code = code
+    this.provider = provider
+    this.status = status
+  }
+}

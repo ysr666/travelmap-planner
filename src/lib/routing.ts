@@ -1,5 +1,11 @@
 import { hasValidCoordinates } from './mapLinks'
 import { sortItineraryItems } from './itinerary'
+import {
+  fetchProviderProxyRoutePreview,
+  getProviderProxyConfig,
+  type ProviderProxyClientOptions,
+} from './providerProxyClient'
+import type { ProviderProxyRoutePreviewRequest } from './providerProxyContract'
 import type { ItineraryItem, TransportMode } from '../types'
 
 export type RoutingProvider = 'none' | 'openrouteservice' | 'google'
@@ -11,8 +17,9 @@ export type RoutingConfig = {
   provider: RoutingProvider
   apiKey: string | null
   googleMapsKey: string | null
+  routeProxyUrl?: string | null
   configured: boolean
-  source: 'local' | 'env' | 'none'
+  source: 'local' | 'env' | 'proxy' | 'none'
 }
 
 export type RouteSegmentRequest = {
@@ -89,6 +96,18 @@ export function getRoutingConfig(
   const localGoogleKey = storage?.getItem('tripmap:google-maps-api-key')?.trim() || ''
   const envGoogleKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || ''
   const googleMapsKey = localGoogleKey || envGoogleKey || null
+  const proxyConfig = getProviderProxyConfig({ env, storage })
+
+  if (proxyConfig.configured && proxyConfig.provider && proxyConfig.proxyUrl) {
+    return {
+      provider: proxyConfig.provider,
+      apiKey: null,
+      googleMapsKey,
+      routeProxyUrl: proxyConfig.proxyUrl,
+      configured: true,
+      source: 'proxy',
+    }
+  }
 
   if (rawLocalProvider === 'none') {
     return { provider: 'none', apiKey: null, googleMapsKey, configured: false, source: 'none' }
@@ -122,6 +141,10 @@ export function getRoutingConfig(
 }
 
 export function isRoutingConfigured(config = getRoutingConfig()) {
+  if (isProxyRoutingConfig(config)) {
+    return true
+  }
+
   if (config.provider === 'google' && config.googleMapsKey) {
     return true
   }
@@ -252,6 +275,10 @@ export async function fetchDayRoute(
     return cacheDayRoute(cacheKey, buildFallbackStraightRoute(items, '路线服务未配置，已显示直线连接。'))
   }
 
+  if (isProxyRoutingConfig(config)) {
+    return fetchDayRouteViaProxy(items, config, options, cacheKey)
+  }
+
   const fetcher = options.fetcher ?? fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const warnings: string[] = []
@@ -317,6 +344,131 @@ export async function fetchDayRoute(
   })
 }
 
+async function fetchDayRouteViaProxy(
+  items: ItineraryItem[],
+  config: RoutingConfig & { provider: Exclude<RoutingProvider, 'none'>; routeProxyUrl: string; source: 'proxy' },
+  options: FetchDayRouteOptions,
+  cacheKey: string,
+): Promise<DayRouteResult> {
+  const orderedItems = getOrderedMappableItems(items)
+  const warnings: string[] = []
+  const segmentResults = new Map<number, RouteSegmentResult>()
+  const coordinates: LngLat[] = []
+  const coordinateIndexes = new Map<string, number>()
+  const proxySegments: ProviderProxyRoutePreviewRequest['segments'] = []
+  const roadSegmentItems = new Map<number, { fromItem: ItineraryItem; toItem: ItineraryItem; warning?: string }>()
+
+  function getCoordinateIndex(item: ItineraryItem, coordinate: LngLat) {
+    const key = `${item.id}:${coordinate[0]},${coordinate[1]}`
+    const existing = coordinateIndexes.get(key)
+    if (existing !== undefined) {
+      return existing
+    }
+    const nextIndex = coordinates.length
+    coordinates.push(coordinate)
+    coordinateIndexes.set(key, nextIndex)
+    return nextIndex
+  }
+
+  for (let index = 1; index < orderedItems.length; index += 1) {
+    const fromItem = orderedItems[index - 1]
+    const toItem = orderedItems[index]
+    const from = getItemLngLat(fromItem)
+    const to = getItemLngLat(toItem)
+    if (!from || !to) {
+      continue
+    }
+
+    const mode = toItem.previousTransportMode ?? toItem.transportMode ?? 'unknown'
+    const mappedMode = mapTransportModeToRoutingProfile(mode)
+    if (!mappedMode.profile) {
+      if (mappedMode.warning) {
+        warnings.push(mappedMode.warning)
+      }
+      segmentResults.set(index - 1, createStraightSegment(fromItem, toItem, index - 1, config.provider, mappedMode.warning))
+      continue
+    }
+
+    if (mappedMode.warning) {
+      warnings.push(mappedMode.warning)
+    }
+
+    proxySegments.push({
+      fromCoordinateIndex: getCoordinateIndex(fromItem, from),
+      fromItemId: fromItem.id,
+      mode,
+      profile: mappedMode.profile,
+      segmentIndex: index - 1,
+      toCoordinateIndex: getCoordinateIndex(toItem, to),
+      toItemId: toItem.id,
+    })
+    roadSegmentItems.set(index - 1, { fromItem, toItem, warning: mappedMode.warning })
+  }
+
+  if (proxySegments.length > 0) {
+    try {
+      const response = await fetchProviderProxyRoutePreview({
+        coordinates,
+        dayId: orderedItems[0]?.dayId,
+        operation: 'route_preview',
+        provider: config.provider,
+        requestId: createRouteRequestId(),
+        segments: proxySegments,
+        tripId: orderedItems[0]?.tripId,
+      }, config.routeProxyUrl, toProviderProxyClientOptions(options))
+
+      if (response.provider !== config.provider) {
+        throw new Error('路线服务请求失败。')
+      }
+
+      for (const proxySegment of response.route.segments) {
+        const segmentItems = roadSegmentItems.get(proxySegment.segmentIndex)
+        if (!segmentItems) {
+          continue
+        }
+        segmentResults.set(proxySegment.segmentIndex, {
+          coordinates: proxySegment.coordinates,
+          distanceMeters: proxySegment.distanceMeters,
+          durationSeconds: proxySegment.durationSeconds,
+          fromItemId: proxySegment.fromItemId ?? segmentItems.fromItem.id,
+          kind: 'road',
+          provider: response.provider,
+          segmentIndex: proxySegment.segmentIndex,
+          toItemId: proxySegment.toItemId ?? segmentItems.toItem.id,
+        })
+      }
+      warnings.push(...response.route.warnings)
+    } catch (caught) {
+      const message = normalizeRoutingError(caught)
+      warnings.push(message)
+    }
+  }
+
+  let failedRoadSegmentCount = 0
+  for (const [segmentIndex, segmentItems] of roadSegmentItems) {
+    if (!segmentResults.has(segmentIndex)) {
+      failedRoadSegmentCount += 1
+      segmentResults.set(
+        segmentIndex,
+        createStraightSegment(segmentItems.fromItem, segmentItems.toItem, segmentIndex, config.provider, '路线服务暂不可用。'),
+      )
+    }
+  }
+
+  const segments = Array.from(segmentResults.values()).sort((first, second) => first.segmentIndex - second.segmentIndex)
+  const roadSegmentCount = segments.filter((segment) => segment.kind === 'road').length
+  const status = getRouteStatus(segments, roadSegmentCount, failedRoadSegmentCount)
+
+  return cacheDayRoute(cacheKey, {
+    segments,
+    lineStrings: segments.map((segment) => segment.coordinates),
+    warnings: uniqueMessages(warnings),
+    provider: config.provider,
+    status,
+    cacheKey,
+  })
+}
+
 export async function fetchRouteSegment(
   request: RouteSegmentRequest,
   config: RoutingConfig,
@@ -326,6 +478,10 @@ export async function fetchRouteSegment(
     fetcher?: typeof fetch
   } = {},
 ): Promise<RouteSegmentResult> {
+  if (isProxyRoutingConfig(config)) {
+    throw new Error('路线服务暂不可用。')
+  }
+
   if (config.provider === 'google' && config.googleMapsKey) {
     return fetchGoogleRouteSegment(request, config.googleMapsKey, options)
   }
@@ -368,6 +524,18 @@ export async function fetchRouteSegment(
   } finally {
     cleanup()
   }
+}
+
+function isProxyRoutingConfig(config: RoutingConfig): config is RoutingConfig & {
+  provider: Exclude<RoutingProvider, 'none'>
+  routeProxyUrl: string
+  source: 'proxy'
+} {
+  return (
+    config.source === 'proxy' &&
+    (config.provider === 'google' || config.provider === 'openrouteservice') &&
+    Boolean(config.routeProxyUrl)
+  )
 }
 
 export async function fetchGoogleRouteOptimization(
@@ -705,6 +873,21 @@ function createTimeoutSignal(parentSignal: AbortSignal | undefined, timeoutMs: n
       parentSignal?.removeEventListener('abort', abortFromParent)
     },
   }
+}
+
+function toProviderProxyClientOptions(options: FetchDayRouteOptions): ProviderProxyClientOptions {
+  return {
+    fetcher: options.fetcher,
+    signal: options.signal,
+    storage: getBrowserStorage(),
+  }
+}
+
+function createRouteRequestId() {
+  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  return `route_${random}`
 }
 
 function mapOpenRouteServiceStatus(status: number) {

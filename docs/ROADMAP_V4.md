@@ -8,7 +8,7 @@
 - 独立页面不等于表单完成。新建 / 编辑页面需要继续做移动端布局、重叠、错误提示和键盘场景 QA。
 - 路由拆分不等于交互完成。Trip Home / Day View / Item Detail 已拆开，但 Day View 仍未完成理想的“marker → 轻卡片 → Item Detail”地图交互。
 - 继续保持 local-first。IndexedDB 是主数据源；Supabase 是单旅行云端保存，不是实时表同步。
-- AI 和地图 API 只做辅助。AI 只建议，用户确认；API key 保存在本机；不缓存商业地图瓦片。
+- AI 和地图 API 只做辅助。AI 只建议，用户确认；server-only provider keys 通过后端 proxy 保存；不缓存商业地图瓦片。
 
 ## 已完成基线
 
@@ -97,6 +97,6 @@
 - Supabase 是手动 / 自动单旅行云端保存，不是实时表同步。
 - 启动云端保存检查会按“哪个更新用哪个”补偿：云端较新时原地恢复，本地较新时更新同一个云端保存；可能冲突时提示用户确认。
 - 本地 zip 备份仍然重要。
-- OpenRouteService / Google Maps 等 API key 只保存在本机或前端环境变量，不进入 IndexedDB、zip、Supabase 或 trip-plan。
+- OpenRouteService / Google Routes / future AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
 - 390px 移动端宽度是基础验收线。

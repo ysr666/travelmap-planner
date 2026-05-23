@@ -27,6 +27,15 @@ const unconfigured: RoutingConfig = {
   source: 'none',
 }
 
+const proxyConfigured: RoutingConfig = {
+  provider: 'openrouteservice',
+  apiKey: null,
+  googleMapsKey: null,
+  routeProxyUrl: '/api/provider-proxy',
+  configured: true,
+  source: 'proxy',
+}
+
 describe('routing profile mapping', () => {
   it('maps supported transport modes to real OpenRouteService profiles', () => {
     expect(mapTransportModeToRoutingProfile('walk').profile).toBe('foot-walking')
@@ -144,6 +153,47 @@ describe('OpenRouteService requests', () => {
     expect(result.warnings).toContain(BUS_APPROXIMATION_WARNING)
     const [url] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
     expect(url).toContain('/driving-car/')
+  })
+
+  it('can generate a day route through the provider proxy without sending secrets', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body.provider).toBe('openrouteservice')
+      expect(body.coordinates).toEqual([[139.1, 35.1], [139.2, 35.2]])
+      expect(JSON.stringify(body)).not.toContain('test-key')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: [[[139.1, 35.1], [139.2, 35.2]]],
+          segments: [
+            {
+              coordinates: [[139.1, 35.1], [139.2, 35.2]],
+              distanceMeters: 1200,
+              durationSeconds: 600,
+              fromItemId: 'a',
+              kind: 'road',
+              segmentIndex: 0,
+              toItemId: 'b',
+            },
+          ],
+          status: 'road',
+          warnings: [],
+        },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchDayRoute([
+      item('a', 35.1, 139.1, 1),
+      item('b', 35.2, 139.2, 2),
+    ], proxyConfigured, { fetcher, forceRefresh: true })
+
+    expect(result.status).toBe('road')
+    expect(result.provider).toBe('openrouteservice')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    const [url] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    expect(url).toBe('/api/provider-proxy')
   })
 })
 

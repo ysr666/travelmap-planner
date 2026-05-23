@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, ChevronRight, HardDriveDownload, NotebookText, RotateCw, Ticket } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, HardDriveDownload, Loader2, NotebookText, RotateCw, Route as RouteIcon, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -13,6 +13,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Collapsible } from '../components/ui/Collapsible'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
@@ -23,6 +24,10 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
+import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../lib/routeGeneration'
+import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
+import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
+import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import type { Day, TicketMeta } from '../types'
 
 export function TripWorkspacePage() {
@@ -49,6 +54,13 @@ export function TripWorkspacePage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
+  const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
+  const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
+  const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
+  const [routeGenerationConfirmOpen, setRouteGenerationConfirmOpen] = useState(false)
+  const [routeGenerationLoading, setRouteGenerationLoading] = useState(false)
+  const [routeGenerationResult, setRouteGenerationResult] = useState<RouteGenerationBatchResult | null>(null)
+  const [routeGenerationError, setRouteGenerationError] = useState<string | null>(null)
 
   const tripContextKey = useMemo(() => {
     if (!trip || days.length === 0) {
@@ -98,6 +110,60 @@ export function TripWorkspacePage() {
     }
   }, [days, isLoading, setItemsByDay, trip, tripContextKey])
 
+  useEffect(() => {
+    function refreshRoutePreparation() {
+      setRoutePreparationVersion((version) => version + 1)
+    }
+
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
+    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
+    window.addEventListener('storage', refreshRoutePreparation)
+    return () => {
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
+      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
+      window.removeEventListener('storage', refreshRoutePreparation)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
+      queueMicrotask(() => {
+        setRoutePreparation(null)
+        setRoutePreparationLoading(false)
+      })
+      return
+    }
+
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setRoutePreparationLoading(true)
+      }
+    })
+    void loadTripRoutePreparation({
+      days,
+      itemsByDay,
+      provider: getPersistentRouteProvider(getRoutingConfig()),
+      tripId: trip.id,
+    }).then((preparation) => {
+      if (!cancelled) {
+        setRoutePreparation(preparation)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setRoutePreparation(null)
+      }
+    }).finally(() => {
+      if (!cancelled) {
+        setRoutePreparationLoading(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [days, itemsByDay, loadedTripContextKey, routePreparationVersion, trip, tripContextKey])
+
   const itemsByDayCount = useMemo(() => {
     return allItems.reduce<Record<string, number>>((acc, item) => {
       acc[item.dayId] = (acc[item.dayId] ?? 0) + 1
@@ -141,6 +207,31 @@ export function TripWorkspacePage() {
       setActionError(caught instanceof Error ? caught.message : '生成每日行程失败')
     } finally {
       setIsGeneratingDays(false)
+    }
+  }
+
+  async function handleConfirmGenerateRoutes() {
+    if (!trip || !routePreparation?.canGenerate) {
+      return
+    }
+
+    setRouteGenerationLoading(true)
+    setRouteGenerationError(null)
+    setRouteGenerationResult(null)
+    try {
+      const result = await generateRoutePreviewsForTrip({
+        config: getRoutingConfig(),
+        days,
+        itemsByDay,
+        tripId: trip.id,
+      })
+      setRouteGenerationResult(result)
+      setRouteGenerationConfirmOpen(false)
+      setRoutePreparationVersion((version) => version + 1)
+    } catch (caught) {
+      setRouteGenerationError(caught instanceof Error ? caught.message : '路线预览生成失败。')
+    } finally {
+      setRouteGenerationLoading(false)
     }
   }
 
@@ -280,6 +371,15 @@ export function TripWorkspacePage() {
                 tripId={trip.id}
               />
 
+            <RoutePreparationPanel
+              error={routeGenerationError}
+              loading={routePreparationLoading}
+              onGenerate={() => setRouteGenerationConfirmOpen(true)}
+              preparation={routePreparation}
+              result={routeGenerationResult}
+              submitting={routeGenerationLoading}
+            />
+
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">每日行程</h3>
               <Card className="divide-y tm-row" padding="none" variant="grouped">
@@ -341,8 +441,126 @@ export function TripWorkspacePage() {
           tripId={trip.id}
         />
       </div>
+
+      <ConfirmDialog
+        body={buildRouteGenerationConfirmBody(routePreparation)}
+        cancelLabel="暂不生成"
+        confirmLabel="确认生成"
+        icon={<RouteIcon className="size-5" />}
+        loading={routeGenerationLoading}
+        onCancel={() => {
+          if (!routeGenerationLoading) {
+            setRouteGenerationConfirmOpen(false)
+          }
+        }}
+        onConfirm={() => void handleConfirmGenerateRoutes()}
+        open={routeGenerationConfirmOpen}
+        title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
+      />
     </div>
   )
+}
+
+function RoutePreparationPanel({
+  error,
+  loading,
+  onGenerate,
+  preparation,
+  result,
+  submitting,
+}: {
+  error: string | null
+  loading: boolean
+  onGenerate: () => void
+  preparation: TripRoutePreparation | null
+  result: RouteGenerationBatchResult | null
+  submitting: boolean
+}) {
+  const eligibleCount = preparation?.eligibleDayCount ?? 0
+  const targetCount = preparation?.targetDayIds.length ?? 0
+  const cachedCount = preparation?.cachedDayCount ?? 0
+  const hasUnavailableProvider = Boolean(preparation && !preparation.providerConfigured && eligibleCount > cachedCount)
+  const canGenerate = Boolean(preparation?.canGenerate && !submitting)
+
+  return (
+    <Card className="space-y-3" data-testid="route-preparation-panel" variant="grouped">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <RouteIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-300" />
+            <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线准备</h3>
+          </div>
+          <p className="mt-1 text-xs leading-5 tm-muted" data-testid="route-preparation-summary">
+            {describeRoutePreparation(preparation, loading)}
+          </p>
+          {cachedCount > 0 ? (
+            <p className="mt-0.5 text-[11px] leading-5 tm-muted">已有 {cachedCount} 天路线缓存</p>
+          ) : null}
+          {hasUnavailableProvider ? (
+            <p className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-300" data-testid="route-preparation-provider-warning">
+              当前路线服务不可用
+            </p>
+          ) : null}
+        </div>
+        <Button
+          className="min-h-9 shrink-0 px-3 text-xs"
+          disabled={!canGenerate}
+          icon={submitting ? <Loader2 className="size-3.5 animate-spin" /> : <RouteIcon className="size-3.5" />}
+          loading={submitting}
+          onClick={onGenerate}
+          variant="secondary"
+        >
+          生成路线预览
+        </Button>
+      </div>
+      {result ? (
+        <p className="flex items-start gap-2 rounded-xl bg-sky-50/75 px-3 py-2 text-xs leading-5 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200" data-testid="route-preparation-result">
+          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+          <span>{describeRouteGenerationResult(result)}</span>
+        </p>
+      ) : null}
+      {error ? (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-500/10 dark:text-red-300" data-testid="route-preparation-error">
+          {error}
+        </p>
+      ) : null}
+      {targetCount > 0 && preparation?.staleDayCount ? (
+        <p className="text-[11px] leading-5 tm-muted">有 {preparation.staleDayCount} 天路线可能需要更新。</p>
+      ) : null}
+    </Card>
+  )
+}
+
+function describeRoutePreparation(preparation: TripRoutePreparation | null, loading: boolean) {
+  if (loading || !preparation) {
+    return '正在检查路线缓存…'
+  }
+  if (preparation.eligibleDayCount === 0) {
+    return '补充至少两个有坐标的行程点后，可生成路线预览。'
+  }
+  if (preparation.targetDayIds.length === 0 && preparation.cachedDayCount === preparation.eligibleDayCount) {
+    return '路线预览已准备'
+  }
+  if (!preparation.providerConfigured) {
+    return `可为 ${preparation.eligibleDayCount - preparation.cachedDayCount} 天生成路线预览`
+  }
+  return `可为 ${preparation.targetDayIds.length} 天生成路线预览`
+}
+
+function describeRouteGenerationResult(result: RouteGenerationBatchResult) {
+  const parts = [`已生成 ${result.generatedCount} 天路线预览`]
+  if (result.failedCount > 0) {
+    parts.push(`${result.failedCount} 天失败`)
+  }
+  if (!result.previewCacheSaved && result.generatedCount > 0) {
+    parts.push('地图预览缓存未更新')
+  }
+  return `${parts.join('，')}。`
+}
+
+function buildRouteGenerationConfirmBody(preparation: TripRoutePreparation | null) {
+  const count = preparation?.targetDayIds.length ?? 0
+  return `将调用路线服务生成路线预览，可能消耗 API 次数。只为有足够坐标的日期生成（共 ${count} 天），不会自动调整行程顺序，不会生成公交/地铁线路号。`
 }
 
 function OverviewStatChip({ label }: { label: string }) {

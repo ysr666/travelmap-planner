@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
+  clearTravelDatabase,
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
   forceSupabaseUnconfigured,
   getHashParam,
   mockMapStyle,
+  seedTravelRecords,
 } from './helpers'
 
 test('旅行工作台可以在日程和地图视图之间切换', async ({ page }) => {
@@ -132,6 +134,47 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '日本东京',
+      endDate: '2026-04-12',
+      id: 'trip-no-route-coords',
+      startDate: '2026-04-12',
+      title: '坐标待补充旅行',
+      updatedAt: now,
+    }],
+    days: [{
+      date: '2026-04-12',
+      id: 'day-no-route-coords',
+      sortOrder: 1,
+      title: '坐标待补充',
+      tripId: 'trip-no-route-coords',
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'day-no-route-coords',
+      id: 'item-no-route-coords',
+      sortOrder: 1,
+      ticketIds: [],
+      title: '还没有坐标的地点',
+      tripId: 'trip-no-route-coords',
+      updatedAt: now,
+    }],
+  })
+
+  await page.goto('/#/trip?tripId=trip-no-route-coords&dayId=day-no-route-coords', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('route-preparation-panel')
+
+  await expect(panel).toBeVisible()
+  await expect(panel.getByTestId('route-preparation-summary')).toContainText('补充至少两个有坐标的行程点后，可生成路线预览。')
+  await expect(panel.getByRole('button', { name: '生成路线预览' })).toBeDisabled()
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', async ({ page }) => {
   await mockMapStyle(page)
   let orsCalls = 0
@@ -211,15 +254,32 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await expectTripPreviewMapCanvasInPlot(page)
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('ORS 路线几何')
-  expect(orsCalls).toBeGreaterThan(0)
+  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
+  await expect(page.getByTestId('route-preparation-panel')).toContainText('路线准备')
+  await expect(page.getByTestId('route-preparation-summary')).toContainText('可为 2 天生成路线预览')
+  expect(orsCalls).toBe(0)
+  expect(await readRouteCacheEntryCount(page)).toBe(0)
   await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
 
-  const callsAfterFirstLoad = orsCalls
+  await page.getByTestId('route-preparation-panel').getByRole('button', { name: '生成路线预览' }).click()
+  await expect(page.getByRole('dialog')).toContainText('将调用路线服务生成路线预览')
+  await expect(page.getByRole('dialog')).toContainText('可能消耗 API 次数')
+  await expect(page.getByRole('dialog')).toContainText('只为有足够坐标的日期生成')
+  await expect(page.getByRole('dialog')).toContainText('不会自动调整行程顺序')
+  await expect(page.getByRole('dialog')).toContainText('不会生成公交/地铁线路号')
+  expect(orsCalls).toBe(0)
+  expect(await readRouteCacheEntryCount(page)).toBe(0)
+
+  await page.getByRole('button', { name: '确认生成' }).click()
+  await expect(page.getByTestId('route-preparation-result')).toContainText('已生成 1 天路线预览')
+  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
+  expect(orsCalls).toBeGreaterThan(0)
+
+  const callsAfterGeneration = orsCalls
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trip-map-overview').getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
   await expect(page.getByTestId('trip-map-overview').getByText('加载地图预览...')).toHaveCount(0)
-  expect(orsCalls).toBe(callsAfterFirstLoad)
+  expect(orsCalls).toBe(callsAfterGeneration)
 
   await page.evaluate(() => {
     window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')
@@ -263,7 +323,9 @@ test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', 
 
 test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) => {
   await mockGoogleMapsScript(page)
+  let googleRouteCalls = 0
   await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
+    googleRouteCalls += 1
     await route.fulfill({
       body: JSON.stringify({
         routes: [
@@ -291,8 +353,9 @@ test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) =
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByTestId('trip-map-google-route-line')).toHaveCount(1)
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('Google 路线几何')
+  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
   await expect(mapOverview.locator('.maplibregl-map')).toHaveCount(0)
+  expect(googleRouteCalls).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
 
@@ -313,6 +376,28 @@ async function readDayItemOrder(page: import('@playwright/test').Page, dayId: st
     db.close()
     return items.sort((first, second) => first.sortOrder - second.sortOrder).map((item) => item.id)
   }, dayId)
+}
+
+async function readRouteCacheEntryCount(page: import('@playwright/test').Page) {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TripMapRouteCacheDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    if (!Array.from(db.objectStoreNames).includes('routeCaches')) {
+      db.close()
+      return 0
+    }
+    const tx = db.transaction(['routeCaches'], 'readonly')
+    const count = await new Promise<number>((resolve, reject) => {
+      const request = tx.objectStore('routeCaches').count()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return count
+  })
 }
 
 async function expectTripPreviewMapCanvasInPlot(page: Page) {

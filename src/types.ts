@@ -85,3 +85,4 @@ export type RouteId =
   | 'trip/edit'
   | 'item/new'
   | 'item/edit'
+  | 'ai-draft'

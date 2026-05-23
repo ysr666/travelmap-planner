@@ -11,6 +11,7 @@ const routeIds: RouteId[] = [
   'trip/edit',
   'item/new',
   'item/edit',
+  'ai-draft',
 ]
 
 const legacyRedirects: Record<string, RouteId> = {

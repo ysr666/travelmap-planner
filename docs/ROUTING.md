@@ -11,28 +11,28 @@
 - 不支持离线路线。
 - 路线生成失败时，旅图会回退到直线连接。
 
-## Provider
+## Provider Proxy
 
-第一版支持 OpenRouteService。
-
-本地开发或个人部署可以在环境变量中配置：
+生产路线服务应通过 TripMap provider proxy 调用后端 provider。前端只知道 proxy URL 和用于 route cache identity 的具体 provider，不保存也不展示 provider secrets。
 
 ```env
-VITE_ROUTING_PROVIDER=openrouteservice
-VITE_OPENROUTESERVICE_API_KEY=your_openrouteservice_key
+VITE_ROUTE_PROXY_URL=/api/provider-proxy
+VITE_ROUTE_PROXY_PROVIDER=openrouteservice
 ```
 
-也可以在设置页的“路线服务”中填写本机 API key。这个 key 只保存在当前浏览器 `localStorage`，不会进入 IndexedDB、zip 备份、Supabase 云备份或 AI 行程包。
+Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRouteService、Google Routes 和未来 AI provider secrets 只应来自后端运行时 env binding，例如 `OPENROUTESERVICE_API_KEY` 和 `GOOGLE_ROUTES_API_KEY`。
+
+浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应在 Google Cloud Console 通过 referrer 限制。它不能替代 server-only Google Routes key。
 
 ## 前端 Key 风险
 
-`VITE_OPENROUTESERVICE_API_KEY` 会被 Vite 打进前端 bundle。个人部署通常可以接受；公开部署不建议把 provider key 放进前端。未来如果要做公开服务，应使用后端代理或边缘函数保存 key，并配合限流。
+不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 或 future AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS key 输入、保存、清除或展示控件。
 
-本阶段不实现后端代理。
+本地开发仍保留 legacy direct provider path 方便既有 QA，但公开部署应使用 provider proxy。详见 [Provider Proxy](PROVIDER_PROXY.md)。
 
 ## 隐私说明
 
-生成道路路线时，旅图会把相邻行程点的坐标发送给 OpenRouteService。旅图不会发送地点标题、地址、备注、票据或用户账号信息。
+生成道路路线时，旅图会把相邻行程点的坐标发送给 TripMap 路线服务及其后端 provider。旅图不会发送地点标题、地址、备注、票据或用户账号信息。
 
 路线服务、地图底图和外部 Apple / Google Maps 链接都由第三方提供。出发前请以实际导航软件和官方交通信息为准。
 
@@ -43,10 +43,10 @@ VITE_OPENROUTESERVICE_API_KEY=your_openrouteservice_key
 - 不进入旅行完整 zip 备份。
 - 不上传到 Supabase 云端保存。
 - 不进入 AI trip-plan import/export。
-- 不保存 OpenRouteService API key。
+- 不保存 provider API key。
 - 不缓存 OpenFreeMap tiles / glyph / sprite。
 
-下次打开同一 Trip / Day 时，如果行程点坐标、顺序、交通模式和 provider 版本没有变化，地图会自动显示“本地缓存路线”。即使当前没有配置 OpenRouteService key，也可以查看已有缓存路线；缺少 key 只会禁用重新生成。路线缓存 signature 不包含 API key、环境变量来源或 localStorage key 值。
+下次打开同一 Trip / Day 时，如果行程点坐标、顺序、交通模式和 provider 版本没有变化，地图会自动显示“本地缓存路线”。即使路线服务暂不可用，也可以查看已有缓存路线；服务不可用只会禁用重新生成。路线缓存 signature 不包含 API key、环境变量来源或 localStorage key 值。
 
 如果地点坐标、排序、交通模式或路线算法版本变化，旧缓存会失效并删除，地图回到直线连接，用户可重新生成。清理路线缓存后，当前地图页会收到 `tripmap:route-cache-changed` 事件并回到直线连接。
 

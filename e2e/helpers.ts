@@ -6,6 +6,9 @@ export async function clearTravelDatabase(page: Page) {
     window.localStorage.removeItem('tripmap:e2e:cloud-fixture')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:enabled')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:state')
+    window.localStorage.removeItem('tripmap:dev:route-proxy-provider')
+    window.localStorage.removeItem('tripmap:dev:route-proxy-url')
+    window.localStorage.removeItem('tripmap:provider-proxy:session-id')
     window.sessionStorage.removeItem('tripmap:cloud-snapshot-check:dismissed')
     function deleteDatabase(name: string) {
       return new Promise<void>((resolve, reject) => {
@@ -123,9 +126,23 @@ export async function seedTravelRecords(page: Page, seed: {
 export async function forceRoutingUnconfigured(page: Page) {
   await page.route('https://api.openrouteservice.org/**', (route) => route.abort())
   await page.evaluate(() => {
+    window.localStorage.removeItem('tripmap:dev:route-proxy-provider')
+    window.localStorage.removeItem('tripmap:dev:route-proxy-url')
     window.localStorage.setItem('tripmap:routing:provider', 'none')
     window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
   })
+}
+
+export async function forceRouteProxyFixture(page: Page, options: { provider?: 'google' | 'openrouteservice'; url?: string } = {}) {
+  const proxyUrl = options.url ?? '/api/provider-proxy'
+  const provider = options.provider ?? 'openrouteservice'
+  await page.evaluate((config) => {
+    window.localStorage.removeItem('tripmap:routing:provider')
+    window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', config.provider)
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', config.proxyUrl)
+    window.dispatchEvent(new Event('tripmap:routing-config-changed'))
+  }, { provider, proxyUrl })
 }
 
 export async function mockMapStyle(page: Page) {

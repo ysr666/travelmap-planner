@@ -254,7 +254,7 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
   await expect(page.getByTestId('route-more-panel')).toBeHidden()
   await page.getByTestId('route-details-toggle').click()
-  await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
+  await expect(page.getByTestId('route-more-panel')).toContainText('路线服务暂不可用')
   await expectNoHorizontalOverflow(page)
 })
 
@@ -362,7 +362,7 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await expect(page.getByTestId('route-generate-button')).toBeDisabled()
   await expect(page.getByTestId('route-more-panel')).toBeHidden()
   await page.getByTestId('route-details-toggle').click()
-  await expect(page.getByTestId('route-more-panel')).toContainText('未配置 ORS')
+  await expect(page.getByTestId('route-more-panel')).toContainText('路线服务暂不可用')
   expect(routeRequestCount).toBe(requestsAfterCacheLoad)
 
   await page.getByRole('button', { name: '清理缓存' }).click()

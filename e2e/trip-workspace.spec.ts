@@ -3,6 +3,7 @@ import {
   clearTravelDatabase,
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  forceRouteProxyFixture,
   forceSupabaseUnconfigured,
   getHashParam,
   mockMapStyle,
@@ -111,7 +112,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(moreMenu).toBeVisible()
   await expect(moreMenu.getByRole('button', { name: '设置' })).toBeVisible()
   await expect(moreMenu.getByText('设置与存储说明')).toHaveCount(0)
-  await expect(moreMenu.getByText(/Google Maps 配置|路线服务配置|设备存储/)).toHaveCount(0)
+  await expect(moreMenu.getByText(/Google Maps 配置|路线服务配置|路线服务|设备存储/)).toHaveCount(0)
   await moreMenu.getByRole('button', { name: '更多' }).click()
   await expectNoHorizontalOverflow(page)
 
@@ -298,6 +299,77 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await page.getByTestId('trip-map-optimization-apply').click()
   await page.getByTestId('trip-map-optimization-confirm-apply').click()
   await expect.poll(() => readDayItemOrder(page, dayId as string)).not.toEqual(originalOrder)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Trip Home 路线生成可在确认后使用 mock provider proxy', async ({ page }) => {
+  await mockMapStyle(page)
+  let proxyCalls = 0
+  await page.route('**/api/provider-proxy', async (route) => {
+    proxyCalls += 1
+    const body = route.request().postDataJSON() as {
+      coordinates: number[][]
+      operation: string
+      provider: string
+      quotaSessionId?: string
+      segments: Array<{
+        fromCoordinateIndex: number
+        fromItemId?: string
+        segmentIndex: number
+        toCoordinateIndex: number
+        toItemId?: string
+      }>
+    }
+    expect(body.operation).toBe('route_preview')
+    expect(body.provider).toBe('openrouteservice')
+    expect(body.quotaSessionId).toBeTruthy()
+    expect(JSON.stringify(body)).not.toContain('OPENROUTESERVICE_API_KEY')
+    expect(JSON.stringify(body)).not.toContain('GOOGLE_ROUTES_API_KEY')
+    await route.fulfill({
+      body: JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: body.segments.map((segment) => [
+            body.coordinates[segment.fromCoordinateIndex],
+            body.coordinates[segment.toCoordinateIndex],
+          ]),
+          segments: body.segments.map((segment) => ({
+            coordinates: [
+              body.coordinates[segment.fromCoordinateIndex],
+              body.coordinates[segment.toCoordinateIndex],
+            ],
+            distanceMeters: 1200,
+            durationSeconds: 600,
+            fromItemId: segment.fromItemId,
+            kind: 'road',
+            segmentIndex: segment.segmentIndex,
+            toItemId: segment.toItemId,
+          })),
+          status: 'road',
+          warnings: [],
+        },
+      }),
+      contentType: 'application/json',
+    })
+  })
+
+  const tripId = await createDemoTripViaUi(page)
+  const dayId = getHashParam(page.url(), 'dayId')
+  expect(dayId).toBeTruthy()
+  await forceRouteProxyFixture(page)
+  await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByTestId('route-preparation-summary')).toContainText('可为')
+  expect(proxyCalls).toBe(0)
+  await page.getByTestId('route-preparation-panel').getByRole('button', { name: '生成路线预览' }).click()
+  await expect(page.getByRole('dialog')).toContainText('将调用路线服务生成路线预览')
+  expect(proxyCalls).toBe(0)
+  await page.getByRole('button', { name: '确认生成' }).click()
+
+  await expect(page.getByTestId('route-preparation-result')).toContainText('已生成')
+  expect(proxyCalls).toBeGreaterThan(0)
   await expectNoHorizontalOverflow(page)
 })
 

@@ -28,6 +28,7 @@ import {
   type LngLat,
   type RoutingConfig,
 } from '../../lib/routing'
+import { getPersistentRouteProvider } from '../../lib/routePreparation'
 import {
   ROUTE_CACHE_CHANGED_EVENT,
   buildCurrentRouteCacheIdentity,
@@ -200,14 +201,15 @@ export function DayMapView({
   const activeRoadMode = roadModeOverride?.dayId === day.id && roadModeOverride.segmentItemId === activeSegmentItem?.id
     ? roadModeOverride.mode
     : storedRoadMode
+  const persistentRouteProvider = getPersistentRouteProvider(routingConfig) ?? 'openrouteservice'
   const routeCacheIdentity = useMemo(
     () => buildCurrentRouteCacheIdentity({
       tripId: trip.id,
       dayId: day.id,
       items,
-      provider: 'openrouteservice',
+      provider: persistentRouteProvider,
     }),
-    [day.id, items, trip.id],
+    [day.id, items, persistentRouteProvider, trip.id],
   )
   const routeIdentityKey = routeCacheIdentity.signature
   const routeLineStrings = routeDisplayMode === 'road' ? routeResult?.lineStrings : undefined
@@ -476,7 +478,7 @@ export function DayMapView({
         const saveResult = await saveRouteCache({
           tripId: trip.id,
           dayId: day.id,
-          provider: 'openrouteservice',
+          provider: getPersistentRouteProvider(latestConfig) ?? persistentRouteProvider,
           signature: routeCacheIdentity.signature,
           coordinateKey: routeCacheIdentity.coordinateKey,
           modeKey: routeCacheIdentity.modeKey,
@@ -1449,7 +1451,7 @@ function RouteControlsSection({
         <div className="space-y-1.5 rounded-xl bg-slate-50/55 px-2.5 py-2 dark:bg-slate-950/35">
           <div className="space-y-1 leading-5 tm-muted [overflow-wrap:anywhere]" data-testid="route-more-panel">
             <p>{routeSourceDetail(state, configured)}</p>
-            {!configured ? <p>未配置 ORS 时，可以查看已有缓存路线，但不能重新生成。</p> : null}
+            {!configured ? <p>路线服务暂不可用时，可以查看已有缓存路线，但不能重新生成。</p> : null}
             {activeRoadMode === 'bus' || hasBusWarning(warnings) ? (
               <p>公交为道路近似，不含站点、班次、换乘和实时交通。</p>
             ) : null}
@@ -1510,7 +1512,7 @@ function getRouteWarningSummary(
   activeRoadMode: RoadTransportMode | null,
 ) {
   if (!configured) {
-    return '未配置 ORS'
+    return '路线服务暂不可用'
   }
   if (activeRoadMode === 'bus' || hasBusWarning(warnings)) {
     return '公交近似'

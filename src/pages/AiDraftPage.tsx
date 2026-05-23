@@ -19,6 +19,7 @@ import {
 } from '../lib/aiTripDraftRequest'
 import { generateMockAiTripDraft } from '../lib/aiTripDraftMock'
 import { getStoredTravelProfile } from '../lib/travelProfile'
+import { fetchProviderProxyAiTripDraft, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
 import { importTripPlanRecords } from '../db'
 import type { Trip, Day, ItineraryItem } from '../types'
 
@@ -92,6 +93,12 @@ export function AiDraftPage() {
   const [requestFreeText, setRequestFreeText] = useState('')
   const [requestErrors, setRequestErrors] = useState<AiTripDraftRequestValidationError[]>([])
 
+  // Proxy state
+  const proxyConfig = getProviderProxyConfig()
+  const [proxyGenerating, setProxyGenerating] = useState(false)
+  const [proxyError, setProxyError] = useState<string | null>(null)
+  const [showProxyConfirm, setShowProxyConfirm] = useState(false)
+
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
     setJsonText(text)
@@ -159,6 +166,67 @@ export function AiDraftPage() {
     setRequestErrors([])
     const mockDraft = generateMockAiTripDraft(validation.request)
     previewDraftObject(mockDraft)
+  }
+
+  function handleProxyConfirm() {
+    setShowProxyConfirm(false)
+    handleGenerateViaProxy()
+  }
+
+  async function handleGenerateViaProxy() {
+    if (!proxyConfig.proxyUrl) return
+
+    const built = buildAiTripDraftRequest(
+      {
+        destination: requestDestination,
+        startDate: requestStartDate,
+        endDate: requestEndDate,
+        pace: requestPace,
+        preferTransport: requestPreferTransport,
+        mustVisitText: requestMustVisit,
+        avoidText: requestAvoid,
+        freeTextRequirement: requestFreeText,
+      },
+      { pace: profile.pace, preferTransport: profile.preferTransport },
+    )
+
+    const validation = validateAiTripDraftRequest(built)
+    if (!validation.valid || !validation.request) {
+      setRequestErrors(validation.errors)
+      setErrors([])
+      setDraft(null)
+      return
+    }
+
+    setRequestErrors([])
+    setProxyError(null)
+    setProxyGenerating(true)
+    try {
+      const result = await fetchProviderProxyAiTripDraft(
+        {
+          destination: validation.request.destination,
+          endDate: validation.request.endDate,
+          freeTextRequirement: validation.request.freeTextRequirement,
+          mealTimeProtection: validation.request.mealTimeProtection,
+          mustVisitText: validation.request.mustVisitText,
+          avoidText: validation.request.avoidText,
+          operation: 'ai_trip_draft',
+          pace: validation.request.pace,
+          preferTransport: validation.request.preferTransport,
+          startDate: validation.request.startDate,
+        },
+        proxyConfig.proxyUrl,
+      )
+      previewDraftObject(result.draft)
+    } catch (caught) {
+      const message = caught instanceof ProviderProxyClientError
+        ? caught.message
+        : 'AI 草稿服务请求失败。'
+      setProxyError(message)
+      setDraft(null)
+    } finally {
+      setProxyGenerating(false)
+    }
   }
 
   async function handleConfirmImport() {
@@ -335,6 +403,12 @@ export function AiDraftPage() {
             当前为本地示例草稿，不会调用外部 AI，不会上传数据。
             <br />
             生成后仍需预览和确认，确认导入后才会创建本地旅行。
+            {proxyConfig.configured && (
+              <>
+                <br />
+                如通过旅图服务生成，请求将包含目的地和日期等基本信息，不会包含票据内容。
+              </>
+            )}
           </p>
         </Card>
 
@@ -352,6 +426,27 @@ export function AiDraftPage() {
         <Button onClick={handleGenerateMock} className="w-full">
           根据表单生成示例草稿
         </Button>
+
+        {proxyConfig.configured ? (
+          <Button
+            onClick={() => setShowProxyConfirm(true)}
+            variant="secondary"
+            className="w-full"
+            loading={proxyGenerating}
+          >
+            通过旅图服务生成草稿
+          </Button>
+        ) : (
+          <Button disabled className="w-full" variant="secondary">
+            当前未配置 AI 生成服务
+          </Button>
+        )}
+
+        {proxyError && (
+          <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
+            <p className="text-sm text-red-700 dark:text-red-300">{proxyError}</p>
+          </Card>
+        )}
       </div>
 
       <Collapsible title="粘贴 JSON 草稿" subtitle="如果你已经有符合格式的草稿 JSON，可以在这里粘贴。">
@@ -459,6 +554,17 @@ export function AiDraftPage() {
         loading={importing}
         onCancel={() => setShowConfirm(false)}
         onConfirm={handleConfirmImport}
+      />
+
+      <ConfirmDialog
+        open={showProxyConfirm}
+        title="通过旅图服务生成草稿"
+        body={`将通过旅图服务生成行程草稿\n可能消耗服务额度\n不会自动创建旅行\n生成后仍需预览和确认\n当前不会读取票据图片/PDF`}
+        confirmLabel="确认生成"
+        cancelLabel="取消"
+        loading={proxyGenerating}
+        onCancel={() => setShowProxyConfirm(false)}
+        onConfirm={handleProxyConfirm}
       />
     </div>
   )

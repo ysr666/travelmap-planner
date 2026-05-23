@@ -161,6 +161,11 @@ test.describe('AI Draft Page', () => {
     const body = await page.evaluate(() => document.body.scrollWidth)
     expect(body).toBeLessThanOrEqual(390)
   })
+
+  test('shows proxy button as disabled when proxy not configured', async ({ page }) => {
+    await expect(page.getByRole('button', { name: '当前未配置 AI 生成服务' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '当前未配置 AI 生成服务' })).toBeDisabled()
+  })
 })
 
 test.describe('Settings AI draft entry', () => {

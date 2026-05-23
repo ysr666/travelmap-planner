@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test'
 
+const playwrightProxy = process.env.PLAYWRIGHT_PROXY?.trim()
+const playwrightChannel = process.env.PLAYWRIGHT_CHANNEL?.trim()
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -8,6 +11,13 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',
+    ...(playwrightChannel ? { channel: playwrightChannel } : {}),
+    ...(playwrightProxy ? {
+      proxy: {
+        bypass: '127.0.0.1,localhost',
+        server: playwrightProxy,
+      },
+    } : {}),
   },
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1',

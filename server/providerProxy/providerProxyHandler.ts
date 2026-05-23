@@ -1,11 +1,11 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
-  buildMockAiTripDraftProxyResponse,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
   validateProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
@@ -20,6 +20,15 @@ import {
   type ProviderProxyQuotaLimits,
   type ProviderProxyQuotaStore,
 } from './quotaGuard'
+import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
+import {
+  createDisabledAiDraftProvider,
+  createMockAiDraftProvider,
+  createUnavailableAiDraftProvider,
+  type AiDraftProvider,
+  type AiDraftProviderErrorCode,
+} from './aiDraftProvider'
+import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
 
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
@@ -148,18 +157,65 @@ async function handleAiTripDraftRequest({
   }
 
   try {
-    if (isMockMode(env)) {
-      return jsonResponse(buildMockAiTripDraftProxyResponse(draftRequest), 200, corsHeaders)
+    const provider = selectAiDraftProvider(env, draftRequest)
+    const providerInput = buildAiTripDraftProviderInput(draftRequest, draftRequest.requestId)
+    const result = await provider.generateDraft(providerInput)
+
+    if (!result.ok) {
+      const status = mapAiDraftErrorCodeToStatus(result.errorCode)
+      throw new ProviderProxyServerError(result.errorCode, status)
     }
 
-    if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
-      throw new ProviderProxyServerError('provider_unavailable', 503)
+    if (result.kind === 'draft') {
+      return jsonResponse({
+        draft: result.draft,
+        ok: true,
+        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+        requestId: draftRequest.requestId,
+        source: result.source,
+        warnings: result.warnings,
+      }, 200, corsHeaders)
     }
 
-    throw new ProviderProxyServerError('unsupported', 501)
+    const extraction = normalizeAiDraftProviderOutput(result.rawText)
+    if (!extraction.ok) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+
+    return jsonResponse({
+      draft: extraction.draft,
+      ok: true,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+      requestId: draftRequest.requestId,
+      source: 'future_ai',
+    }, 200, corsHeaders)
   } catch (caught) {
     const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION, draftRequest.requestId)
     return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAiDraftProvider(
+  env: ProviderProxyHandlerEnv,
+  request: ProviderProxyAiTripDraftRequest,
+): AiDraftProvider {
+  if (isMockMode(env)) {
+    return createMockAiDraftProvider(request)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAiDraftProvider()
+  }
+  return createDisabledAiDraftProvider()
+}
+
+function mapAiDraftErrorCodeToStatus(code: AiDraftProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
   }
 }
 

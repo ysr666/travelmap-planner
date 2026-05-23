@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildProviderProxyErrorResponse,
+  defaultProviderProxyErrorMessage,
   PROVIDER_PROXY_MAX_COORDINATES,
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
@@ -126,3 +128,23 @@ function validAiDraftRequest() {
     startDate: '2025-04-01',
   }
 }
+
+describe('invalid_response error code', () => {
+  it('returns a non-empty message for ai_trip_draft', () => {
+    const message = defaultProviderProxyErrorMessage('invalid_response', 'ai_trip_draft')
+    expect(message.length).toBeGreaterThan(0)
+    expect(message).toContain('解析')
+  })
+
+  it('returns a non-empty message for general branch', () => {
+    const message = defaultProviderProxyErrorMessage('invalid_response')
+    expect(message.length).toBeGreaterThan(0)
+  })
+
+  it('builds a valid error response', () => {
+    const response = buildProviderProxyErrorResponse({ code: 'invalid_response' })
+    expect(response.ok).toBe(false)
+    expect(response.code).toBe('invalid_response')
+    expect(response.message.length).toBeGreaterThan(0)
+  })
+})

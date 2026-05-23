@@ -22,6 +22,7 @@ export type ProviderProxyErrorCode =
   | 'provider_error'
   | 'network_error'
   | 'unsupported'
+  | 'invalid_response'
 
 export type ProviderProxyRoutePreviewSegmentRequest = {
   fromCoordinateIndex: number
@@ -266,6 +267,7 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'provider_error') return 'AI 草稿服务请求失败。'
     if (code === 'network_error') return '网络异常或请求超时。'
     if (code === 'unsupported') return '当前 AI 草稿请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 草稿服务返回的内容无法解析。'
     return 'AI 草稿服务暂不可用。'
   }
   if (code === 'quota_exceeded') return '今日路线生成次数已达上限。'
@@ -273,6 +275,7 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
   if (code === 'provider_error') return '路线服务请求失败。'
   if (code === 'network_error') return '网络异常或请求超时。'
   if (code === 'unsupported') return '当前路线请求暂不支持。'
+  if (code === 'invalid_response') return '服务返回的内容无法解析。'
   return '路线服务暂不可用。'
 }
 
@@ -349,7 +352,7 @@ function isRoutingProfile(value: unknown): value is RoutingProfile {
 }
 
 const MAX_AI_DESTINATION_LENGTH = 200
-const MAX_AI_FREE_TEXT_LENGTH = 2000
+export const MAX_AI_FREE_TEXT_LENGTH = 2000
 const MAX_AI_DAYS = 120
 
 export function validateProviderProxyAiTripDraftRequest(input: unknown): ProviderProxyAiTripDraftValidationResult {

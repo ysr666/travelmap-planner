@@ -250,6 +250,96 @@ describe('provider proxy handler ai_trip_draft', () => {
     expect(body.source).toBe('mock')
     expect(body.warnings).toContain('当前为本地示例草稿，非真实 AI 生成。')
   })
+
+  it('mock mode takes priority over openai_compatible provider', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+      },
+      fetcher,
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.source).toBe('mock')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('openai_compatible with missing env returns provider_unavailable', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_PROVIDER: 'openai_compatible' },
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: 'provider_unavailable', ok: false })
+  })
+
+  it('openai_compatible returns valid draft from injected fetch', async () => {
+    const draft = {
+      title: '东京之旅',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-05',
+      days: [
+        { date: '2025-04-01', items: [{ title: '浅草寺' }] },
+        { date: '2025-04-02', items: [{ title: '明治神宫' }] },
+        { date: '2025-04-03', items: [{ title: '涩谷' }] },
+        { date: '2025-04-04', items: [{ title: '银座' }] },
+        { date: '2025-04-05', items: [{ title: '新宿' }] },
+      ],
+    }
+    const fetcher = vi.fn(async () => new Response(
+      JSON.stringify({ choices: [{ message: { content: JSON.stringify(draft) } }] }),
+      { status: 200 },
+    )) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.source).toBe('future_ai')
+    expect(body.draft.title).toBe('东京之旅')
+  })
+
+  it('openai_compatible does not leak API key in response', async () => {
+    const fetcher = vi.fn(async () => new Response(
+      JSON.stringify({ choices: [{ message: { content: 'invalid json' } }] }),
+      { status: 200 },
+    )) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-ai-key-12345',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    const text = await response.text()
+    expect(text).not.toContain('secret-ai-key-12345')
+    expect(text).not.toContain('Bearer')
+  })
 })
 
 function validAiDraftRequest() {

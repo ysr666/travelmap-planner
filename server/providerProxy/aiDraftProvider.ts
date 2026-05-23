@@ -1,3 +1,5 @@
+export { createOpenAiCompatibleAiDraftProvider } from './aiDraftRealProvider'
+
 import type { AiTripDraft } from '../../src/lib/aiTripDraft'
 import { generateMockAiTripDraft } from '../../src/lib/aiTripDraftMock'
 import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'

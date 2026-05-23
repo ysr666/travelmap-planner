@@ -126,10 +126,11 @@ export async function seedTravelRecords(page: Page, seed: {
 export async function forceRoutingUnconfigured(page: Page) {
   await page.route('https://api.openrouteservice.org/**', (route) => route.abort())
   await page.evaluate(() => {
-    window.localStorage.removeItem('tripmap:dev:route-proxy-provider')
-    window.localStorage.removeItem('tripmap:dev:route-proxy-url')
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', '')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '')
     window.localStorage.setItem('tripmap:routing:provider', 'none')
     window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
+    window.dispatchEvent(new Event('tripmap:routing-config-changed'))
   })
 }
 
@@ -157,6 +158,47 @@ export async function mockMapStyle(page: Page) {
       contentType: 'application/json',
     }),
   )
+}
+
+export async function setRouteProxyConfig(page: Page) {
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/provider-proxy')
+    window.dispatchEvent(new Event('tripmap:routing-config-changed'))
+  })
+}
+
+export async function mockProviderProxyForOrsRoute(page: Page) {
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation !== 'route_preview') {
+      await route.fallback()
+      return
+    }
+    const coords = body.coordinates ?? [[139.1, 35.1], [139.2, 35.2]]
+    const segments = (body.segments ?? []).map((seg: Record<string, unknown>, i: number) => ({
+      coordinates: [coords[seg.fromCoordinateIndex as number] ?? coords[0], coords[seg.toCoordinateIndex as number] ?? coords[1]],
+      distanceMeters: 1200,
+      durationSeconds: 600,
+      fromItemId: seg.fromItemId,
+      segmentIndex: seg.segmentIndex ?? i,
+      toItemId: seg.toItemId,
+    }))
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: segments.map((s: { coordinates: unknown }) => s.coordinates),
+          segments,
+          status: 'road',
+          warnings: [],
+        },
+      }),
+    })
+  })
 }
 
 export function getHashParam(url: string, key: string) {

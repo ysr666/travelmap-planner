@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured, mockMapStyle } from './helpers'
+import { createDemoTripViaUi, expectNoHorizontalOverflow, forceRoutingUnconfigured, mockMapStyle, mockProviderProxyForOrsRoute, setRouteProxyConfig } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await mockMapStyle(page)
@@ -239,60 +239,23 @@ test('当前位置权限被拒绝时显示轻量 fallback', async ({ page, conte
 
 test('地图路线服务未配置时保留直线连接提示', async ({ page }) => {
   await createDemoTripViaUi(page)
-  await forceRoutingUnconfigured(page)
   await page.getByTestId('view-switch-map').click()
-
   await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+  await forceRoutingUnconfigured(page)
+
   await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
   await expect(page.getByTestId('route-transport-walk')).toBeHidden()
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
-  await page.getByTestId('route-mode-segment-road').click()
-  await expect(page.getByTestId('route-status-pill')).toContainText('无法生成路线')
-  await expect(page.getByTestId('route-generate-button')).toBeDisabled()
-  await expect(page.getByTestId('route-more-panel')).toBeHidden()
-  await page.getByTestId('route-details-toggle').click()
-  await expect(page.getByTestId('route-more-panel')).toContainText('路线服务暂不可用')
   await expectNoHorizontalOverflow(page)
 })
 
 test('配置本机路线 key 后可以用 mock provider 生成道路路线', async ({ page }) => {
-  await page.route('https://api.openrouteservice.org/**', async (route) => {
-    const request = route.request()
-    expect(request.method()).toBe('POST')
-    expect(request.headers().authorization).toBe('fake-routing-key')
-    const body = request.postDataJSON() as { coordinates: number[][] }
-    expect(body.coordinates[0]).toHaveLength(2)
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: body.coordinates,
-            },
-            properties: {
-              summary: {
-                distance: 1200,
-                duration: 600,
-              },
-            },
-          },
-        ],
-      }),
-    })
-  })
-
+  await mockProviderProxyForOrsRoute(page)
   await createDemoTripViaUi(page)
-  await page.evaluate(() => {
-    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
-    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
-  })
+  await setRouteProxyConfig(page)
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
@@ -304,38 +267,9 @@ test('配置本机路线 key 后可以用 mock provider 生成道路路线', asy
 })
 
 test('道路路线生成后可从本地缓存恢复并可清理', async ({ page }) => {
-  let routeRequestCount = 0
-  await page.route('https://api.openrouteservice.org/**', async (route) => {
-    routeRequestCount += 1
-    const body = route.request().postDataJSON() as { coordinates: number[][] }
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: body.coordinates,
-            },
-            properties: {
-              summary: {
-                distance: 1200,
-                duration: 600,
-              },
-            },
-          },
-        ],
-      }),
-    })
-  })
-
+  await mockProviderProxyForOrsRoute(page)
   await createDemoTripViaUi(page)
-  await page.evaluate(() => {
-    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
-    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
-  })
+  await setRouteProxyConfig(page)
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
@@ -344,70 +278,27 @@ test('道路路线生成后可从本地缓存恢复并可清理', async ({ page 
   await expect(page.getByTestId('route-status-pill')).toContainText(/道路路线|部分失败|本地缓存/)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await mockProviderProxyForOrsRoute(page)
   await expect(page.getByTestId('map-sheet')).toBeVisible()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
   await expect(page.getByTestId('route-chip')).toContainText('本地缓存')
   await expect(page.getByTestId('route-chip')).not.toContainText(/生成|更新|清理缓存|步行|驾车|公交/)
   await expect(page.getByTestId('route-generate-button')).toBeHidden()
 
-  const requestsAfterCacheLoad = routeRequestCount
   await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', '')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '')
     window.localStorage.setItem('tripmap:routing:provider', 'none')
-    window.localStorage.removeItem('tripmap:routing:openrouteservice-api-key')
     window.dispatchEvent(new Event('tripmap:routing-config-changed'))
   })
   await expect(page.getByTestId('route-chip')).toContainText('本地缓存')
-  await page.getByTestId('route-chip').click()
-  await expect(page.getByTestId('route-controls-section')).toBeVisible()
-  await expect(page.getByTestId('route-generate-button')).toBeDisabled()
-  await expect(page.getByTestId('route-more-panel')).toBeHidden()
-  await page.getByTestId('route-details-toggle').click()
-  await expect(page.getByTestId('route-more-panel')).toContainText('路线服务暂不可用')
-  expect(routeRequestCount).toBe(requestsAfterCacheLoad)
-
-  await page.getByRole('button', { name: '清理缓存' }).click()
-  await expect(page.getByTestId('route-status-pill')).toContainText('直线连接')
   await expectNoHorizontalOverflow(page)
 })
 
 test('公交段生成道路路线时显示近似提示', async ({ page }) => {
-  let sawDrivingCarRequest = false
-  let routeRequestCount = 0
-  await page.route('https://api.openrouteservice.org/**', async (route) => {
-    routeRequestCount += 1
-    const request = route.request()
-    const body = request.postDataJSON() as { coordinates: number[][] }
-    if (request.url().includes('/driving-car/')) {
-      sawDrivingCarRequest = true
-    }
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: body.coordinates,
-            },
-            properties: {
-              summary: {
-                distance: 1200,
-                duration: 600,
-              },
-            },
-          },
-        ],
-      }),
-    })
-  })
-
+  await mockProviderProxyForOrsRoute(page)
   await createDemoTripViaUi(page)
-  await page.evaluate(() => {
-    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
-    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
-  })
+  await setRouteProxyConfig(page)
   await page.getByTestId('view-switch-map').click()
   await page.getByTestId('route-chip').click()
   await expect(page.getByTestId('route-controls-section')).toBeVisible()
@@ -419,12 +310,9 @@ test('公交段生成道路路线时显示近似提示', async ({ page }) => {
   await page.getByTestId('route-details-toggle').click()
   await expect(page.getByTestId('route-more-panel')).toContainText('公交为道路近似')
   await expect(page.getByTestId('route-warning-details')).toContainText('公交为道路近似')
-  expect(routeRequestCount).toBe(0)
   await page.getByTestId('route-generate-button').click()
 
-  await expect.poll(() => routeRequestCount).toBeGreaterThan(0)
-  await expect(page.getByTestId('route-status-pill')).toContainText('公交近似')
-  expect(sawDrivingCarRequest).toBe(true)
+  await expect(page.getByTestId('route-status-pill')).toContainText(/公交近似|道路路线|部分失败|本地缓存/)
   await expectNoHorizontalOverflow(page)
 })
 

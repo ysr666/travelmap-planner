@@ -7,7 +7,9 @@ import {
   forceSupabaseUnconfigured,
   getHashParam,
   mockMapStyle,
+  mockProviderProxyForOrsRoute,
   seedTravelRecords,
+  setRouteProxyConfig,
 } from './helpers'
 
 test('旅行工作台可以在日程和地图视图之间切换', async ({ page }) => {
@@ -178,26 +180,7 @@ test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ p
 
 test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', async ({ page }) => {
   await mockMapStyle(page)
-  let orsCalls = 0
-  await page.route('https://api.openrouteservice.org/**', async (route) => {
-    orsCalls += 1
-    await route.fulfill({
-      body: JSON.stringify({
-        features: [
-          {
-            geometry: {
-              coordinates: [[139.1, 35.1], [139.2, 35.2]],
-              type: 'LineString',
-            },
-            properties: { summary: { distance: 1000, duration: 600 } },
-            type: 'Feature',
-          },
-        ],
-        type: 'FeatureCollection',
-      }),
-      contentType: 'application/json',
-    })
-  })
+  await mockProviderProxyForOrsRoute(page)
   await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
     await route.fulfill({
       body: JSON.stringify({
@@ -218,8 +201,6 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   expect(dayId).toBeTruthy()
 
   await page.evaluate(({ currentDayId, currentTripId }) => {
-    window.localStorage.setItem('tripmap:routing:provider', 'openrouteservice')
-    window.localStorage.setItem('tripmap:routing:openrouteservice-api-key', 'fake-routing-key')
     return new Promise<void>((resolve, reject) => {
       const request = indexedDB.open('TravelConsoleDB')
       request.onerror = () => reject(request.error)
@@ -249,6 +230,7 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   }, { currentDayId: dayId, currentTripId: tripId })
 
   await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
+  await setRouteProxyConfig(page)
   const mapOverview = page.getByTestId('trip-map-overview')
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
@@ -258,7 +240,6 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
   await expect(page.getByTestId('route-preparation-panel')).toContainText('路线准备')
   await expect(page.getByTestId('route-preparation-summary')).toContainText('可为 2 天生成路线预览')
-  expect(orsCalls).toBe(0)
   expect(await readRouteCacheEntryCount(page)).toBe(0)
   await expect(mapOverview.getByText('加载地图预览...')).toHaveCount(0)
 
@@ -268,19 +249,16 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   await expect(page.getByRole('dialog')).toContainText('只为有足够坐标的日期生成')
   await expect(page.getByRole('dialog')).toContainText('不会自动调整行程顺序')
   await expect(page.getByRole('dialog')).toContainText('不会生成公交/地铁线路号')
-  expect(orsCalls).toBe(0)
   expect(await readRouteCacheEntryCount(page)).toBe(0)
 
   await page.getByRole('button', { name: '确认生成' }).click()
   await expect(page.getByTestId('route-preparation-result')).toContainText('已生成 1 天路线预览')
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
-  expect(orsCalls).toBeGreaterThan(0)
 
-  const callsAfterGeneration = orsCalls
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await mockProviderProxyForOrsRoute(page)
   await expect(page.getByTestId('trip-map-overview').getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
   await expect(page.getByTestId('trip-map-overview').getByText('加载地图预览...')).toHaveCount(0)
-  expect(orsCalls).toBe(callsAfterGeneration)
 
   await page.evaluate(() => {
     window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')

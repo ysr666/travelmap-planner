@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  mockMapStyle,
 } from './helpers'
 
 type DemoRecords = {
@@ -262,6 +263,7 @@ test('日程来源详情可按当天顺序切换上一项和下一项', async ({
 })
 
 test('地图来源详情编辑后保留地图上下文', async ({ page }) => {
+  await mockMapStyle(page)
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
   await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
@@ -288,6 +290,7 @@ test('地图来源详情编辑后保留地图上下文', async ({ page }) => {
 })
 
 test('地图来源详情上一项下一项保留地图上下文', async ({ page }) => {
+  await mockMapStyle(page)
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
   await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })

@@ -289,3 +289,30 @@ Real AI draft provider 已完成最小真实链路验证（DeepSeek `deepseek-v4
 - Schema validation。
 - ConfirmDialog 确认。
 - 用户确认后才写入本地旅行。
+
+### AI Draft Quality Guardrails
+
+本地质量检查在 preview 阶段运行，纯函数，不调用网络。
+
+检查规则：
+
+- 单日行程点过多（根据 Travel Profile 节奏阈值）。
+- 时间间隔过短（相邻 timed items 间隔 < 30 分钟）。
+- 时间重叠。
+- 单日跨度过长（> 12 小时）。
+- 缺少地点信息。
+- 标题过于笼统（同一天多个泛化标题）。
+- 缺少用餐安排（保护饭点模式下）。
+- 缺少交通信息（info 级别）。
+
+Findings 是非阻塞提醒，不阻止导入。用户仍可选择直接导入。
+
+AI 修复（`ai_trip_draft_repair`）通过 provider proxy 调用，修复后的 draft 替换当前 preview，必须重新经过 schema validation 和 ConfirmDialog 才能导入。
+
+修复流程不：
+
+- 自动写入本地旅行。
+- 自动生成路线。
+- 创建票据。
+- 读取票据图片/PDF/OCR。
+- 上传云端。

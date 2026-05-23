@@ -352,3 +352,112 @@ function validAiDraftRequest() {
     startDate: '2025-04-01',
   }
 }
+
+describe('provider proxy handler ai_trip_draft_repair', () => {
+  it('returns mock repair in mock mode', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest(validRepairRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'ai_trip_draft_repair',
+      source: 'mock',
+    })
+  })
+
+  it('mock repair passes validateAiTripDraft', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest(validRepairRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    const validation = validateAiTripDraft(body.draft)
+    expect(validation.valid).toBe(true)
+  })
+
+  it('checks quota for repair requests', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      quotaLimits: { maxAiDraftRepairRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validRepairRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({ ...input, request: jsonRequest(validRepairRequest()) })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false })
+  })
+
+  it('returns provider_unavailable when no mock and no AI provider key', async () => {
+    const response = await handleProviderProxyRequest({
+      env: {},
+      request: jsonRequest(validRepairRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: 'provider_unavailable', ok: false })
+  })
+
+  it('does not leak env secrets in repair response', async () => {
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_PROVIDER_KEY: 'secret-ai-key',
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+      },
+      request: jsonRequest(validRepairRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('secret-ai-key')
+    expect(text).not.toContain('TRIPMAP_AI_PROVIDER_KEY')
+  })
+
+  it('rejects repair request with invalid draft', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({
+        ...validRepairRequest(),
+        draft: { title: '', startDate: 'bad', endDate: '2025-04-05', days: [] },
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+})
+
+function validRepairRequest() {
+  return {
+    operation: 'ai_trip_draft_repair',
+    requestId: 'repair-1',
+    quotaSessionId: 'session-repair-1',
+    draft: {
+      title: '东京之旅',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-05',
+      days: [
+        {
+          date: '2025-04-01',
+          items: [
+            { title: '浅草寺', locationName: '浅草寺', startTime: '09:00', endTime: '11:00' },
+          ],
+        },
+      ],
+    },
+    qualityFindings: [
+      { ruleId: 'dense_day', severity: 'warning', title: '行程偏密', message: '当天行程偏密。', dayDate: '2025-04-01' },
+    ],
+  }
+}

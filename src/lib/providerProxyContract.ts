@@ -1,5 +1,6 @@
 import type { RoutingMode, RoutingProfile, LngLat } from './routing'
 import type { AiTripDraft } from './aiTripDraft'
+import { validateAiTripDraft } from './aiTripDraft'
 import { generateMockAiTripDraft } from './aiTripDraftMock'
 import { isValidPlainDate, listPlainDateRangeInclusive } from './plainDate'
 import type { TravelPace, TravelTransportPreference } from './travelProfile'
@@ -7,12 +8,14 @@ import { isTravelPace, isTravelTransportPreference } from './travelProfile'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
+export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repair' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
+export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyErrorCode =
@@ -124,6 +127,44 @@ export type ProviderProxyAiTripDraftResponse =
 
 export type ProviderProxyAiTripDraftValidationResult =
   | { ok: true; request: ProviderProxyAiTripDraftRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+const VALID_REASONING_MODES = new Set(['off', 'auto', 'high'])
+const MAX_REPAIR_INSTRUCTION_LENGTH = 1000
+
+export type SanitizedQualityFinding = {
+  ruleId: string
+  severity: string
+  title: string
+  message: string
+  dayDate?: string
+}
+
+export type ProviderProxyAiTripDraftRepairRequest = {
+  operation: typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  draft: AiTripDraft
+  qualityFindings: SanitizedQualityFinding[]
+  repairInstruction?: string
+  reasoningMode?: 'off' | 'auto' | 'high'
+}
+
+export type ProviderProxyAiTripDraftRepairSuccessResponse = {
+  draft: AiTripDraft
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  warnings?: string[]
+}
+
+export type ProviderProxyAiTripDraftRepairResponse =
+  | ProviderProxyAiTripDraftRepairSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyAiTripDraftRepairValidationResult =
+  | { ok: true; request: ProviderProxyAiTripDraftRepairRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
@@ -269,6 +310,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前 AI 草稿请求暂不支持。'
     if (code === 'invalid_response') return 'AI 草稿服务返回的内容无法解析。'
     return 'AI 草稿服务暂不可用。'
+  }
+  if (operation === 'ai_trip_draft_repair') {
+    if (code === 'quota_exceeded') return '今日 AI 草稿修复次数已达上限。'
+    if (code === 'invalid_request') return 'AI 草稿修复请求无效。'
+    if (code === 'provider_error') return 'AI 草稿修复服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 草稿修复请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 草稿修复服务返回的内容无法解析。'
+    return 'AI 草稿修复服务暂不可用。'
   }
   if (code === 'quota_exceeded') return '今日路线生成次数已达上限。'
   if (code === 'invalid_request') return '路线请求无效。'
@@ -478,5 +528,86 @@ function aiDraftInvalidRequest(message: string, requestId?: string): ProviderPro
       requestId,
     }),
     ok: false,
+  }
+}
+
+function aiDraftRepairInvalidRequest(message: string, requestId?: string): ProviderProxyAiTripDraftRepairValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+export function validateProviderProxyAiTripDraftRepairRequest(input: unknown): ProviderProxyAiTripDraftRepairValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
+    return aiDraftRepairInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  if (record.draft === undefined || record.draft === null) {
+    return aiDraftRepairInvalidRequest('缺少 draft 参数。', requestId)
+  }
+
+  const draftValidation = validateAiTripDraft(record.draft)
+  if (!draftValidation.valid) {
+    return aiDraftRepairInvalidRequest('draft 未通过 schema 校验。', requestId)
+  }
+
+  if (!Array.isArray(record.qualityFindings)) {
+    return aiDraftRepairInvalidRequest('qualityFindings 必须是数组。', requestId)
+  }
+
+  for (let i = 0; i < record.qualityFindings.length; i++) {
+    const f = record.qualityFindings[i]
+    if (!f || typeof f !== 'object') {
+      return aiDraftRepairInvalidRequest(`qualityFindings[${i}] 格式无效。`, requestId)
+    }
+    if (typeof f.ruleId !== 'string' || !f.ruleId.trim()) {
+      return aiDraftRepairInvalidRequest(`qualityFindings[${i}].ruleId 无效。`, requestId)
+    }
+    if (typeof f.severity !== 'string' || !f.severity.trim()) {
+      return aiDraftRepairInvalidRequest(`qualityFindings[${i}].severity 无效。`, requestId)
+    }
+    if (typeof f.title !== 'string' || !f.title.trim()) {
+      return aiDraftRepairInvalidRequest(`qualityFindings[${i}].title 无效。`, requestId)
+    }
+    if (typeof f.message !== 'string' || !f.message.trim()) {
+      return aiDraftRepairInvalidRequest(`qualityFindings[${i}].message 无效。`, requestId)
+    }
+  }
+
+  const repairInstruction = readOptionalString(record.repairInstruction, MAX_REPAIR_INSTRUCTION_LENGTH)
+  if (record.repairInstruction !== undefined && typeof record.repairInstruction !== 'string') {
+    return aiDraftRepairInvalidRequest('repairInstruction 必须是字符串。', requestId)
+  }
+  if (typeof record.repairInstruction === 'string' && record.repairInstruction.length > MAX_REPAIR_INSTRUCTION_LENGTH) {
+    return aiDraftRepairInvalidRequest(`repairInstruction 不能超过 ${MAX_REPAIR_INSTRUCTION_LENGTH} 个字符。`, requestId)
+  }
+
+  const reasoningMode = record.reasoningMode
+  if (reasoningMode !== undefined && (typeof reasoningMode !== 'string' || !VALID_REASONING_MODES.has(reasoningMode))) {
+    return aiDraftRepairInvalidRequest('reasoningMode 必须是 off、auto 或 high。', requestId)
+  }
+
+  const quotaSessionId = readOptionalString(record.quotaSessionId, 128)
+
+  return {
+    ok: true,
+    request: {
+      draft: draftValidation.draft!,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+      qualityFindings: record.qualityFindings as SanitizedQualityFinding[],
+      quotaSessionId: quotaSessionId ?? undefined,
+      reasoningMode: (reasoningMode as 'off' | 'auto' | 'high') ?? undefined,
+      repairInstruction: repairInstruction ?? undefined,
+      requestId: requestId ?? undefined,
+    },
   }
 }

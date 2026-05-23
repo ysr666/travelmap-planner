@@ -5,6 +5,7 @@ import {
   PROVIDER_PROXY_MAX_COORDINATES,
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
+  validateProviderProxyAiTripDraftRepairRequest,
 } from './providerProxyContract'
 
 describe('provider proxy route preview contract', () => {
@@ -148,3 +149,90 @@ describe('invalid_response error code', () => {
     expect(response.message.length).toBeGreaterThan(0)
   })
 })
+
+describe('provider proxy ai_trip_draft_repair contract', () => {
+  it('accepts a valid repair request', () => {
+    const result = validateProviderProxyAiTripDraftRepairRequest(validRepairRequest())
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.draft.title).toBe('东京之旅')
+      expect(result.request.qualityFindings).toHaveLength(1)
+    }
+  })
+
+  it('rejects missing draft', () => {
+    const req = validRepairRequest()
+    delete (req as Record<string, unknown>).draft
+    const result = validateProviderProxyAiTripDraftRepairRequest(req)
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects invalid draft', () => {
+    const result = validateProviderProxyAiTripDraftRepairRequest({
+      ...validRepairRequest(),
+      draft: { title: '', startDate: 'bad', endDate: '2025-04-05', days: [] },
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects missing qualityFindings', () => {
+    const req = validRepairRequest()
+    delete (req as Record<string, unknown>).qualityFindings
+    const result = validateProviderProxyAiTripDraftRepairRequest(req)
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects oversized repairInstruction', () => {
+    const result = validateProviderProxyAiTripDraftRepairRequest({
+      ...validRepairRequest(),
+      repairInstruction: 'x'.repeat(1001),
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects invalid reasoningMode', () => {
+    const result = validateProviderProxyAiTripDraftRepairRequest({
+      ...validRepairRequest(),
+      reasoningMode: 'extreme',
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects unknown operation', () => {
+    const result = validateProviderProxyAiTripDraftRepairRequest({
+      ...validRepairRequest(),
+      operation: 'unknown',
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('returns non-empty error message for repair operation', () => {
+    const message = defaultProviderProxyErrorMessage('invalid_response', 'ai_trip_draft_repair')
+    expect(message.length).toBeGreaterThan(0)
+    expect(message).toContain('修复')
+  })
+})
+
+function validRepairRequest() {
+  return {
+    operation: 'ai_trip_draft_repair',
+    requestId: 'repair-1',
+    draft: {
+      title: '东京之旅',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-05',
+      days: [
+        {
+          date: '2025-04-01',
+          items: [
+            { title: '浅草寺', locationName: '浅草寺', startTime: '09:00', endTime: '11:00' },
+          ],
+        },
+      ],
+    },
+    qualityFindings: [
+      { ruleId: 'dense_day', severity: 'warning', title: '行程偏密', message: '当天行程偏密。', dayDate: '2025-04-01' },
+    ],
+  }
+}

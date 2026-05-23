@@ -162,9 +162,130 @@ test.describe('AI Draft Page', () => {
     expect(body).toBeLessThanOrEqual(390)
   })
 
-  test('shows proxy button as disabled when proxy not configured', async ({ page }) => {
-    await expect(page.getByRole('button', { name: '当前未配置 AI 生成服务' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '当前未配置 AI 生成服务' })).toBeDisabled()
+  test('shows proxy generate button', async ({ page }) => {
+    // In e2e environment, proxy is configured so the button is enabled
+    const proxyBtn = page.getByRole('button', { name: '通过旅图服务生成草稿' })
+    await proxyBtn.scrollIntoViewIfNeeded()
+    await expect(proxyBtn).toBeVisible()
+  })
+})
+
+test.describe('AI Draft Quality Check', () => {
+  test('shows quality check card after generating mock draft', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    await page.getByLabel(/目的地/).fill('东京')
+    await page.getByLabel(/开始日期/).fill('2025-06-01')
+    await page.getByLabel(/结束日期/).fill('2025-06-03')
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await expect(page.getByText('草稿摘要')).toBeVisible()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+  })
+
+  test('shows quality findings for draft with issues', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    // Paste a draft with many items in one day (triggers dense_day)
+    const denseDraft = {
+      title: '密集行程',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '景点A', locationName: 'A', startTime: '08:00', endTime: '09:00' },
+          { title: '景点B', locationName: 'B', startTime: '09:30', endTime: '10:30' },
+          { title: '景点C', locationName: 'C', startTime: '11:00', endTime: '12:00' },
+          { title: '景点D', locationName: 'D', startTime: '13:00', endTime: '14:00' },
+          { title: '景点E', locationName: 'E', startTime: '14:30', endTime: '15:30' },
+          { title: '景点F', locationName: 'F', startTime: '16:00', endTime: '17:00' },
+          { title: '景点G', locationName: 'G', startTime: '17:30', endTime: '18:30' },
+        ],
+      }],
+    }
+    await page.getByText('粘贴 JSON 草稿').click()
+    await page.getByPlaceholder('{"title": "...", "startDate').fill(JSON.stringify(denseDraft))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+    await expect(page.getByText('这些提示不会阻止导入，请在确认前检查。')).toBeVisible()
+  })
+
+  test('shows clean status for well-structured draft', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    const cleanDraft = {
+      title: '轻松旅行',
+      destination: '杭州',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '游览西湖', locationName: '西湖', address: '杭州市西湖区', startTime: '09:00', endTime: '11:00', previousTransportMode: 'walk' },
+          { title: '午餐休息', locationName: '楼外楼', address: '杭州市上城区', startTime: '12:00', endTime: '13:00' },
+          { title: '参观灵隐寺', locationName: '灵隐寺', address: '杭州市西湖区', startTime: '14:00', endTime: '16:00', previousTransportMode: 'transit' },
+        ],
+      }],
+    }
+    await page.getByText('粘贴 JSON 草稿').click()
+    await page.getByPlaceholder('{"title": "...", "startDate').fill(JSON.stringify(cleanDraft))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+    // Clean draft should not show warning findings
+    await expect(page.getByText('这些提示不会阻止导入，请在确认前检查。')).not.toBeVisible()
+  })
+
+  test('shows repair button when draft has warnings', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    // Paste a draft with dense day (7 items triggers dense_day warning)
+    const draftWithIssues = {
+      title: '密集行程',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '景点A', locationName: 'A', startTime: '08:00', endTime: '09:00' },
+          { title: '景点B', locationName: 'B', startTime: '09:30', endTime: '10:30' },
+          { title: '景点C', locationName: 'C', startTime: '11:00', endTime: '12:00' },
+          { title: '景点D', locationName: 'D', startTime: '13:00', endTime: '14:00' },
+          { title: '景点E', locationName: 'E', startTime: '14:30', endTime: '15:30' },
+          { title: '景点F', locationName: 'F', startTime: '16:00', endTime: '17:00' },
+          { title: '景点G', locationName: 'G', startTime: '17:30', endTime: '18:30' },
+        ],
+      }],
+    }
+    await page.getByText('粘贴 JSON 草稿').click()
+    await page.getByPlaceholder('{"title": "...", "startDate').fill(JSON.stringify(draftWithIssues))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+    await expect(page.getByText('这些提示不会阻止导入，请在确认前检查。')).toBeVisible()
+    // Repair button should be visible when draft has warnings
+    const repairBtn = page.getByRole('button', { name: '让 AI 修复草稿' })
+    await repairBtn.scrollIntoViewIfNeeded()
+    await expect(repairBtn).toBeVisible()
+  })
+
+  test('no horizontal overflow at 390px with quality card', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    const draft = {
+      title: '测试',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '景点A', locationName: 'A', startTime: '09:00', endTime: '10:00' },
+          { title: '景点B', locationName: 'B', startTime: '10:30', endTime: '11:30' },
+        ],
+      }],
+    }
+    await page.getByText('粘贴 JSON 草稿').click()
+    await page.getByPlaceholder('{"title": "...", "startDate').fill(JSON.stringify(draft))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+    const body = await page.evaluate(() => document.body.scrollWidth)
+    expect(body).toBeLessThanOrEqual(390)
   })
 })
 

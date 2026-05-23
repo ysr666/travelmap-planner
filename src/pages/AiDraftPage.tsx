@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -19,7 +19,8 @@ import {
 } from '../lib/aiTripDraftRequest'
 import { generateMockAiTripDraft } from '../lib/aiTripDraftMock'
 import { getStoredTravelProfile } from '../lib/travelProfile'
-import { fetchProviderProxyAiTripDraft, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
+import { analyzeAiTripDraftQuality } from '../lib/aiTripDraftQuality'
+import { fetchProviderProxyAiTripDraft, fetchProviderProxyAiTripDraftRepair, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
 import { importTripPlanRecords } from '../db'
 import type { Trip, Day, ItineraryItem } from '../types'
 
@@ -99,6 +100,16 @@ export function AiDraftPage() {
   const [proxyError, setProxyError] = useState<string | null>(null)
   const [showProxyConfirm, setShowProxyConfirm] = useState(false)
 
+  // Quality check state
+  const qualityResult = useMemo(
+    () => draft ? analyzeAiTripDraftQuality(draft, { pace: profile.pace, mealTimeProtection: profile.mealTimeProtection }) : null,
+    [draft, profile.pace, profile.mealTimeProtection],
+  )
+  const [repairGenerating, setRepairGenerating] = useState(false)
+  const [repairError, setRepairError] = useState<string | null>(null)
+  const [showRepairConfirm, setShowRepairConfirm] = useState(false)
+  const [repairSuccessMessage, setRepairSuccessMessage] = useState<string | null>(null)
+
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
     setJsonText(text)
@@ -171,6 +182,57 @@ export function AiDraftPage() {
   function handleProxyConfirm() {
     setShowProxyConfirm(false)
     handleGenerateViaProxy()
+  }
+
+  function handleRepairConfirm() {
+    setShowRepairConfirm(false)
+    handleRepairViaProxy()
+  }
+
+  async function handleRepairViaProxy() {
+    if (!proxyConfig.proxyUrl || !draft) return
+
+    setRepairError(null)
+    setRepairSuccessMessage(null)
+    setRepairGenerating(true)
+    try {
+      const sanitizedFindings = [
+        ...(qualityResult?.warnings ?? []),
+        ...(qualityResult?.criticals ?? []),
+      ].map((f) => ({
+        ruleId: f.ruleId,
+        severity: f.severity,
+        title: f.title,
+        message: f.message,
+        dayDate: f.dayDate,
+      }))
+
+      const result = await fetchProviderProxyAiTripDraftRepair(
+        {
+          operation: 'ai_trip_draft_repair',
+          draft,
+          qualityFindings: sanitizedFindings,
+        },
+        proxyConfig.proxyUrl,
+      )
+
+      const revalidation = validateAiTripDraft(result.draft)
+      if (!revalidation.valid || !revalidation.draft) {
+        setRepairError('修复结果未通过校验，请重试。')
+        return
+      }
+
+      previewDraftObject(revalidation.draft)
+      setRepairSuccessMessage('已生成修复版草稿，请重新检查。')
+    } catch (caught) {
+      if (caught instanceof ProviderProxyClientError) {
+        setRepairError(caught.message)
+      } else {
+        setRepairError('修复请求失败，请重试。')
+      }
+    } finally {
+      setRepairGenerating(false)
+    }
   }
 
   async function handleGenerateViaProxy() {
@@ -503,6 +565,68 @@ export function AiDraftPage() {
           </Card>
 
           <Card className="space-y-3">
+            <h3 className="font-medium text-slate-900 dark:text-slate-100">草稿检查</h3>
+            {qualityResult && qualityResult.status === 'clean' && (
+              <p className="text-sm text-green-700 dark:text-green-300">未发现明显问题。</p>
+            )}
+            {qualityResult && qualityResult.status !== 'clean' && (
+              <div className="space-y-2">
+                {[...qualityResult.criticals, ...qualityResult.warnings].slice(0, 5).map((f) => (
+                  <div key={f.id} className="flex items-start gap-2 text-sm">
+                    <span className={f.severity === 'critical' ? 'text-red-500' : 'text-amber-500'}>
+                      {f.severity === 'critical' ? '!' : '!'}
+                    </span>
+                    <span className="text-slate-700 dark:text-slate-300">
+                      <span className="font-medium">{f.title}</span>
+                      {f.dayDate && <span className="tm-muted ml-1">({f.dayDate})</span>}
+                      <span className="tm-muted ml-1">{f.message}</span>
+                    </span>
+                  </div>
+                ))}
+                {(qualityResult.criticals.length + qualityResult.warnings.length) > 5 && (
+                  <p className="text-xs tm-muted">
+                    还有 {(qualityResult.criticals.length + qualityResult.warnings.length) - 5} 条提醒未显示。
+                  </p>
+                )}
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  这些提示不会阻止导入，请在确认前检查。
+                </p>
+              </div>
+            )}
+          </Card>
+
+          {qualityResult && qualityResult.status !== 'clean' && (
+            <>
+              {proxyConfig.configured ? (
+                <Button
+                  onClick={() => setShowRepairConfirm(true)}
+                  variant="secondary"
+                  className="w-full"
+                  loading={repairGenerating}
+                >
+                  让 AI 修复草稿
+                </Button>
+              ) : (
+                <Button disabled className="w-full" variant="secondary">
+                  当前未配置 AI 修复服务
+                </Button>
+              )}
+            </>
+          )}
+
+          {repairSuccessMessage && (
+            <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30">
+              <p className="text-sm text-green-700 dark:text-green-300">{repairSuccessMessage}</p>
+            </Card>
+          )}
+
+          {repairError && (
+            <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
+              <p className="text-sm text-red-700 dark:text-red-300">{repairError}</p>
+            </Card>
+          )}
+
+          <Card className="space-y-3">
             <h3 className="font-medium text-slate-900 dark:text-slate-100">行程预览</h3>
             <div className="space-y-4">
               {draft!.days.map((day, dayIndex) => (
@@ -565,6 +689,17 @@ export function AiDraftPage() {
         loading={proxyGenerating}
         onCancel={() => setShowProxyConfirm(false)}
         onConfirm={handleProxyConfirm}
+      />
+
+      <ConfirmDialog
+        open={showRepairConfirm}
+        title="让 AI 修复草稿"
+        body={`将通过旅图服务尝试修复当前草稿\n可能消耗服务额度\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认`}
+        confirmLabel="确认修复"
+        cancelLabel="取消"
+        loading={repairGenerating}
+        onCancel={() => setShowRepairConfirm(false)}
+        onConfirm={handleRepairConfirm}
       />
     </div>
   )

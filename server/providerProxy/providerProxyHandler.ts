@@ -1,10 +1,12 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+  PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
   validateProviderProxyAiTripDraftRequest,
+  validateProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
@@ -21,13 +23,18 @@ import {
   type ProviderProxyQuotaStore,
 } from './quotaGuard'
 import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
+import { buildAiTripDraftRepairProviderInput } from './aiDraftRepairPrompt'
 import {
   createDisabledAiDraftProvider,
+  createDisabledAiDraftRepairProvider,
   createMockAiDraftProvider,
+  createMockAiDraftRepairProvider,
   createOpenAiCompatibleAiDraftProvider,
   createUnavailableAiDraftProvider,
+  createUnavailableAiDraftRepairProvider,
   type AiDraftProvider,
   type AiDraftProviderErrorCode,
+  type AiDraftRepairProvider,
 } from './aiDraftProvider'
 import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
 
@@ -115,6 +122,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
     return handleAiTripDraftRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
+    return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
@@ -227,6 +238,172 @@ function mapAiDraftErrorCodeToStatus(code: AiDraftProviderErrorCode): number {
     case 'network_error': return 502
     case 'provider_error': return 502
     default: return 502
+  }
+}
+
+async function handleAiTripDraftRepairRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiTripDraftRepairRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const repairRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: 0,
+    identity: getQuotaIdentity(request, repairRequest.quotaSessionId),
+    limits: quotaLimits,
+    operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+        requestId: repairRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    const provider = selectAiDraftRepairProvider(env, repairRequest, fetcher)
+    const providerInput = buildAiTripDraftRepairProviderInput(repairRequest, repairRequest.requestId)
+    const result = await provider.repairDraft(providerInput)
+
+    if (!result.ok) {
+      const status = mapAiDraftErrorCodeToStatus(result.errorCode)
+      throw new ProviderProxyServerError(result.errorCode, status)
+    }
+
+    if (result.kind === 'draft') {
+      return jsonResponse({
+        draft: result.draft,
+        ok: true,
+        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+        requestId: repairRequest.requestId,
+        source: result.source,
+        warnings: result.warnings,
+      }, 200, corsHeaders)
+    }
+
+    const extraction = normalizeAiDraftProviderOutput(result.rawText)
+    if (!extraction.ok) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+
+    return jsonResponse({
+      draft: extraction.draft,
+      ok: true,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+      requestId: repairRequest.requestId,
+      source: 'future_ai',
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION, repairRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAiDraftRepairProvider(
+  env: ProviderProxyHandlerEnv,
+  request: import('../../src/lib/providerProxyContract').ProviderProxyAiTripDraftRepairRequest,
+  fetchImpl?: typeof fetch,
+): AiDraftRepairProvider {
+  if (isMockMode(env)) {
+    return createMockAiDraftRepairProvider(request)
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleRepairProvider(env, request, fetchImpl)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAiDraftRepairProvider()
+  }
+  return createDisabledAiDraftRepairProvider()
+}
+
+function createOpenAiCompatibleRepairProvider(
+  env: ProviderProxyHandlerEnv,
+  request: import('../../src/lib/providerProxyContract').ProviderProxyAiTripDraftRepairRequest,
+  fetchImpl?: typeof fetch,
+): AiDraftRepairProvider {
+  const apiKey = env.TRIPMAP_AI_API_KEY?.trim()
+  const baseUrl = env.TRIPMAP_AI_BASE_URL?.trim()
+  const model = env.TRIPMAP_AI_MODEL?.trim()
+
+  return {
+    name: 'openai_compatible',
+    async repairDraft(input) {
+      if (!apiKey || !baseUrl || !model) {
+        return { ok: false, errorCode: 'provider_unavailable', message: 'AI provider environment is not fully configured.' }
+      }
+
+      const endpoint = baseUrl.replace(/\/+$/, '') + '/chat/completions'
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30_000)
+
+      try {
+        const response = await (fetchImpl ?? fetch)(endpoint, {
+          body: JSON.stringify({
+            max_tokens: input.maxOutputTokens ?? 4000,
+            messages: [
+              { role: 'system', content: input.prompt },
+            ],
+            model,
+            temperature: 0.2,
+          }),
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned an error.' }
+        }
+
+        const data = await response.json() as Record<string, unknown>
+        const choices = data.choices
+        if (!Array.isArray(choices) || choices.length === 0) {
+          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned empty content.' }
+        }
+        const choice = choices[0] as Record<string, unknown>
+        const message = choice?.message as Record<string, unknown> | undefined
+        const content = message?.content
+        if (typeof content !== 'string' || !content.trim()) {
+          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned empty content.' }
+        }
+
+        return { kind: 'raw', ok: true, rawText: content }
+      } catch (caught) {
+        if (caught instanceof Error && caught.name === 'AbortError') {
+          return { ok: false, errorCode: 'network_error', message: 'AI provider request timed out.' }
+        }
+        return { ok: false, errorCode: 'network_error', message: 'AI provider request failed.' }
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    },
   }
 }
 

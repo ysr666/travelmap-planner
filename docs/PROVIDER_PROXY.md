@@ -321,3 +321,50 @@ When doing local QA or development with `wrangler pages dev`, a stale PWA servic
 3. Hard refresh the page.
 
 This is a local dev/QA workflow issue, not a provider adapter bug.
+
+### AI Trip Draft Repair Operation
+
+The `ai_trip_draft_repair` operation allows the AI Draft page to request draft repair through the provider proxy.
+
+#### Request Contract
+
+```json
+{
+  "operation": "ai_trip_draft_repair",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "draft": { "title": "...", "destination": "...", "days": [...] },
+  "qualityFindings": [
+    { "ruleId": "dense_day", "severity": "warning", "title": "...", "message": "..." }
+  ],
+  "repairInstruction": "optional user guidance, max 1000 chars",
+  "reasoningMode": "auto"
+}
+```
+
+- `draft` must pass `validateAiTripDraft` before sending.
+- `qualityFindings` is a sanitized subset: ruleId, severity, title, message, dayDate.
+- `repairInstruction` max 1000 chars.
+- `reasoningMode`: `off` (0.1), `auto` (0.2), `high` (0.4).
+- No ticket blobs, cloud tokens, provider secrets, route cache, or API keys in the request.
+
+#### Response Contract
+
+Same shape as `ai_trip_draft` response, with `operation: "ai_trip_draft_repair"`.
+
+#### Quota
+
+- Max 5 requests per 60-second window.
+- Identity prefix: `ai_draft_repair|` — isolated from `ai_draft|` and `route|` quotas.
+
+#### Provider Behavior
+
+- Mock mode: deterministic simple repair (add meal items, replace generic titles).
+- Real provider: OpenAI-compatible adapter, same raw text → JSON extraction → validate flow.
+- Disabled/unavailable: returns `provider_unavailable` / `unsupported`.
+
+#### Security
+
+- No API key, raw provider body, or stack trace in response.
+- Draft goes through `normalizeAiDraftProviderOutput` → `validateAiTripDraft`.
+- Invalid output returns `invalid_response`.

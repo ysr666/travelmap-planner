@@ -4,7 +4,11 @@ import {
   isProviderProxyConcreteProvider,
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
+  validateProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRepairRequest,
+  type ProviderProxyAiTripDraftRepairResponse,
+  type ProviderProxyAiTripDraftRepairSuccessResponse,
   type ProviderProxyAiTripDraftResponse,
   type ProviderProxyAiTripDraftSuccessResponse,
   type ProviderProxyConcreteProvider,
@@ -143,6 +147,49 @@ export async function fetchProviderProxyAiTripDraft(
   return parsed
 }
 
+export async function fetchProviderProxyAiTripDraftRepair(
+  request: ProviderProxyAiTripDraftRepairRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiTripDraftRepairSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyAiTripDraftRepairRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' }), response.status)
+  }
+
+  const parsed = parseProviderProxyAiTripDraftRepairResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -219,6 +266,49 @@ function parseProviderProxyAiTripDraftResponse(input: unknown): ProviderProxyAiT
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft' })
+}
+
+function parseProviderProxyAiTripDraftRepairResponse(input: unknown): ProviderProxyAiTripDraftRepairResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyAiTripDraftRepairSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'ai_trip_draft_repair'),
+      operation: 'ai_trip_draft_repair',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' })
+}
+
+function validateProviderProxyAiTripDraftRepairSuccessResponse(record: Record<string, unknown>): ProviderProxyAiTripDraftRepairSuccessResponse | null {
+  if (record.operation !== 'ai_trip_draft_repair') {
+    return null
+  }
+  if (typeof record.draft !== 'object' || record.draft === null || !Array.isArray((record.draft as Record<string, unknown>).days)) {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  return {
+    draft: record.draft as ProviderProxyAiTripDraftRepairSuccessResponse['draft'],
+    ok: true,
+    operation: 'ai_trip_draft_repair',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    source: record.source,
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((w: unknown) => typeof w === 'string') : undefined,
+  }
 }
 
 function validateProviderProxyRoutePreviewResponse(record: Record<string, unknown>): ProviderProxyRoutePreviewResponse | null {

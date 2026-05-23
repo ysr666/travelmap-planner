@@ -76,4 +76,36 @@ describe('provider proxy quota guard', () => {
       store,
     })).toMatchObject({ allowed: false, reason: 'day_batch_size' })
   })
+
+  it('ai_draft quota is independent from route_preview quota', () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const limits = { maxRouteRequestsPerWindow: 1, maxAiDraftRequestsPerWindow: 1, windowMs: 1000 }
+
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 2,
+      identity: 'session-a',
+      limits,
+      nowMs: 100,
+      operation: 'route_preview',
+      store,
+    }).allowed).toBe(true)
+
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 2,
+      identity: 'session-a',
+      limits,
+      nowMs: 200,
+      operation: 'route_preview',
+      store,
+    }).allowed).toBe(false)
+
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 300,
+      operation: 'ai_trip_draft',
+      store,
+    }).allowed).toBe(true)
+  })
 })

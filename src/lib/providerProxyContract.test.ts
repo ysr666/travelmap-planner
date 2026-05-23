@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PROVIDER_PROXY_MAX_COORDINATES,
   validateProviderProxyRoutePreviewRequest,
+  validateProviderProxyAiTripDraftRequest,
 } from './providerProxyContract'
 
 describe('provider proxy route preview contract', () => {
@@ -71,5 +72,57 @@ function validRequest() {
       },
     ],
     tripId: 'trip',
+  }
+}
+
+describe('provider proxy ai_trip_draft contract', () => {
+  it('accepts a valid ai_trip_draft request', () => {
+    const result = validateProviderProxyAiTripDraftRequest(validAiDraftRequest())
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.destination).toBe('东京')
+      expect(result.request.startDate).toBe('2025-04-01')
+      expect(result.request.endDate).toBe('2025-04-05')
+    }
+  })
+
+  it('rejects empty destination', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), destination: '' })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects non-padded date', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), startDate: '2025-4-1' })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects full ISO datetime', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), startDate: '2025-04-01T00:00:00Z' })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects end before start', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), startDate: '2025-04-10', endDate: '2025-04-01' })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects free text too long', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), freeTextRequirement: 'x'.repeat(2001) })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects unknown operation', () => {
+    const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), operation: 'unknown' })
+    expect(result.ok).toBe(false)
+  })
+})
+
+function validAiDraftRequest() {
+  return {
+    destination: '东京',
+    endDate: '2025-04-05',
+    operation: 'ai_trip_draft',
+    requestId: 'req-1',
+    startDate: '2025-04-01',
   }
 }

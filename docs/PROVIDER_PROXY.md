@@ -139,3 +139,91 @@ Later:
 
 - Route order suggestion should become a separate proxy operation.
 - Future AI generation should reuse the same contract, quota guard, normalized errors, and server-secret boundary.
+
+## AI Trip Draft Operation
+
+The `ai_trip_draft` operation allows the AI Draft page to request draft generation through the provider proxy.
+
+### Request Contract
+
+```json
+{
+  "operation": "ai_trip_draft",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "destination": "东京",
+  "startDate": "2025-04-01",
+  "endDate": "2025-04-05",
+  "pace": "moderate",
+  "preferTransport": "mixed",
+  "mealTimeProtection": true,
+  "mustVisitText": "浅草寺、秋叶原",
+  "avoidText": "不要购物商场",
+  "freeTextRequirement": "带老人出行，节奏放慢"
+}
+```
+
+Limits:
+
+- Destination: required, max 200 characters.
+- Dates: strict YYYY-MM-DD format, endDate >= startDate, max 120 days.
+- Free text fields: max 2000 characters each.
+- No ticket blobs, cloud tokens, provider secrets, or API keys in the request.
+
+### Response Contract
+
+Success:
+
+```json
+{
+  "ok": true,
+  "operation": "ai_trip_draft",
+  "source": "mock",
+  "draft": {
+    "title": "东京之旅",
+    "destination": "东京",
+    "startDate": "2025-04-01",
+    "endDate": "2025-04-05",
+    "days": [...]
+  },
+  "warnings": ["当前为本地示例草稿，非真实 AI 生成。"]
+}
+```
+
+Errors use the same normalized error codes as `route_preview`.
+
+### Current Behavior
+
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1`: Returns a deterministic mock draft using the same generator as the local mock button.
+- No mock and no AI provider key: Returns `provider_unavailable`.
+- No real AI provider integration exists yet.
+
+### Quota
+
+AI draft requests have a separate, more conservative quota:
+
+- Max 10 requests per 60-second window (vs 60 for route_preview).
+- Quota is independent from route_preview quota.
+- Identity is prefixed with `ai_draft|` to isolate from route quotas.
+
+### Frontend
+
+The proxy button appears only when `VITE_ROUTE_PROXY_URL` and `VITE_ROUTE_PROXY_PROVIDER` are configured. When not configured, a disabled button with "当前未配置 AI 生成服务" is shown.
+
+Before calling the proxy, a confirmation dialog explains:
+
+- Will generate via TripMap service
+- May consume service quota
+- Will not auto-create trip
+- Preview and confirmation still required
+- Will not read ticket images/PDF
+
+### Future
+
+When a real AI provider is integrated:
+
+- The provider key lives only in server-side env (`TRIPMAP_AI_PROVIDER_KEY`).
+- The frontend never sees the key.
+- The response `source` field changes to `"future_ai"`.
+- The draft must still pass `validateAiTripDraft` schema validation.
+- User must still confirm before writing to IndexedDB.

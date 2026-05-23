@@ -3,6 +3,10 @@ import {
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
   validateProviderProxyRoutePreviewRequest,
+  validateProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftResponse,
+  type ProviderProxyAiTripDraftSuccessResponse,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyErrorResponse,
@@ -96,6 +100,49 @@ export async function fetchProviderProxyRoutePreview(
   return parsed
 }
 
+export async function fetchProviderProxyAiTripDraft(
+  request: ProviderProxyAiTripDraftRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiTripDraftSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyAiTripDraftRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft' }), response.status)
+  }
+
+  const parsed = parseProviderProxyAiTripDraftResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -151,6 +198,29 @@ function parseProviderProxyResponse(input: unknown): ProviderProxyRoutePreviewRe
   return buildProviderProxyErrorResponse({ code: 'network_error' })
 }
 
+function parseProviderProxyAiTripDraftResponse(input: unknown): ProviderProxyAiTripDraftResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyAiTripDraftSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'ai_trip_draft'),
+      operation: 'ai_trip_draft',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft' })
+}
+
 function validateProviderProxyRoutePreviewResponse(record: Record<string, unknown>): ProviderProxyRoutePreviewResponse | null {
   if (!isProviderProxyConcreteProvider(record.provider)) {
     return null
@@ -176,6 +246,30 @@ function validateProviderProxyRoutePreviewResponse(record: Record<string, unknow
         ? route.warnings.filter((warning): warning is string => typeof warning === 'string')
         : [],
     },
+  }
+}
+
+function validateProviderProxyAiTripDraftSuccessResponse(record: Record<string, unknown>): ProviderProxyAiTripDraftSuccessResponse | null {
+  if (record.operation !== 'ai_trip_draft') {
+    return null
+  }
+  const draft = record.draft
+  if (!draft || typeof draft !== 'object') {
+    return null
+  }
+  const source = record.source
+  if (source !== 'mock' && source !== 'future_ai') {
+    return null
+  }
+  return {
+    draft: draft as ProviderProxyAiTripDraftSuccessResponse['draft'],
+    ok: true,
+    operation: 'ai_trip_draft',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    source,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((w): w is string => typeof w === 'string')
+      : [],
   }
 }
 

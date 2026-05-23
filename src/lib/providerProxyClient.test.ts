@@ -3,6 +3,7 @@ import {
   PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY,
   PROVIDER_PROXY_DEV_URL_STORAGE_KEY,
   fetchProviderProxyRoutePreview,
+  fetchProviderProxyAiTripDraft,
   getProviderProxyConfig,
 } from './providerProxyClient'
 
@@ -90,6 +91,75 @@ describe('provider proxy client request', () => {
     expect(result.ok).toBe(true)
     const [, init] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+})
+
+describe('provider proxy ai_trip_draft client', () => {
+  it('does not include provider secrets in the ai_trip_draft payload', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(JSON.stringify(body)).not.toContain('secret-ai-key')
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_PROVIDER_KEY')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'ai_trip_draft',
+        source: 'mock',
+        draft: {
+          title: '东京之旅',
+          destination: '东京',
+          startDate: '2025-04-01',
+          endDate: '2025-04-02',
+          days: [{ date: '2025-04-01', items: [{ title: '上午游览' }] }],
+        },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAiTripDraft({
+      destination: '东京',
+      endDate: '2025-04-02',
+      operation: 'ai_trip_draft',
+      startDate: '2025-04-01',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-ai-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.draft.title).toBe('东京之旅')
+    expect(result.source).toBe('mock')
+  })
+
+  it('returns valid response from mock proxy', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'ai_trip_draft',
+        source: 'mock',
+        draft: {
+          title: '巴黎之旅',
+          destination: '巴黎',
+          startDate: '2025-07-01',
+          endDate: '2025-07-03',
+          days: [
+            { date: '2025-07-01', items: [{ title: '上午游览' }] },
+            { date: '2025-07-02', items: [{ title: '下午参观' }] },
+            { date: '2025-07-03', items: [{ title: '晚间散步' }] },
+          ],
+        },
+        warnings: ['当前为本地示例草稿，非真实 AI 生成。'],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAiTripDraft({
+      destination: '巴黎',
+      endDate: '2025-07-03',
+      operation: 'ai_trip_draft',
+      startDate: '2025-07-01',
+    }, '/api/provider-proxy', { fetcher })
+
+    expect(result.ok).toBe(true)
+    expect(result.draft.destination).toBe('巴黎')
+    expect(result.draft.days).toHaveLength(3)
   })
 })
 

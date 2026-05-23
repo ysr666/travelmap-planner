@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { validateAiTripDraft } from '../../src/lib/aiTripDraft'
 import { createProviderProxyMemoryQuotaStore } from './quotaGuard'
 import { handleProviderProxyRequest } from './providerProxyHandler'
 
@@ -149,5 +150,90 @@ function validRequest() {
       },
     ],
     tripId: 'trip',
+  }
+}
+
+describe('provider proxy handler ai_trip_draft', () => {
+  it('returns mock draft in mock mode without calling fetcher', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'ai_trip_draft',
+      source: 'mock',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('mock draft passes validateAiTripDraft', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    const validation = validateAiTripDraft(body.draft)
+    expect(validation.valid).toBe(true)
+    expect(validation.errors).toHaveLength(0)
+  })
+
+  it('returns provider_unavailable when no mock and no AI provider key', async () => {
+    const response = await handleProviderProxyRequest({
+      env: {},
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: 'provider_unavailable', ok: false })
+  })
+
+  it('checks quota for ai_trip_draft requests', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      quotaLimits: { maxAiDraftRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validAiDraftRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({ ...input, request: jsonRequest(validAiDraftRequest()) })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false })
+  })
+
+  it('does not leak env secrets in ai_trip_draft response', async () => {
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_PROVIDER_KEY: 'secret-ai-key',
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+      },
+      request: jsonRequest(validAiDraftRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('secret-ai-key')
+    expect(text).not.toContain('TRIPMAP_AI_PROVIDER_KEY')
+  })
+})
+
+function validAiDraftRequest() {
+  return {
+    destination: '东京',
+    endDate: '2025-04-05',
+    operation: 'ai_trip_draft',
+    quotaSessionId: 'session-ai-1',
+    requestId: 'req-ai-1',
+    startDate: '2025-04-01',
   }
 }

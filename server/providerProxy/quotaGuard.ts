@@ -1,9 +1,13 @@
 import {
+  PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+  PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_COORDINATES,
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
+  type ProviderProxyOperation,
 } from '../../src/lib/providerProxyContract'
 
 export type ProviderProxyQuotaLimits = {
+  maxAiDraftRequestsPerWindow: number
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
   maxRouteRequestsPerWindow: number
@@ -21,6 +25,7 @@ export type ProviderProxyQuotaCheckInput = {
   identity: string
   limits?: Partial<ProviderProxyQuotaLimits>
   nowMs?: number
+  operation?: ProviderProxyOperation
   store?: ProviderProxyQuotaStore
 }
 
@@ -29,6 +34,7 @@ export type ProviderProxyQuotaCheckResult =
   | { allowed: false; reason: 'request_size' | 'day_batch_size' | 'rate_limit'; resetAt?: number }
 
 export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
+  maxAiDraftRequestsPerWindow: PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   maxRouteRequestsPerWindow: 60,
@@ -47,6 +53,7 @@ export function checkAndConsumeProviderProxyQuota({
   identity,
   limits,
   nowMs = Date.now(),
+  operation,
   store = defaultQuotaStore,
 }: ProviderProxyQuotaCheckInput): ProviderProxyQuotaCheckResult {
   const effectiveLimits = {
@@ -62,7 +69,13 @@ export function checkAndConsumeProviderProxyQuota({
     return { allowed: false, reason: 'day_batch_size' }
   }
 
-  const safeIdentity = identity.trim() || 'anonymous'
+  const isAiDraft = operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION
+  const maxRequests = isAiDraft
+    ? effectiveLimits.maxAiDraftRequestsPerWindow
+    : effectiveLimits.maxRouteRequestsPerWindow
+  const identityPrefix = isAiDraft ? 'ai_draft|' : 'route|'
+  const safeIdentity = `${identityPrefix}${identity.trim() || 'anonymous'}`
+
   const current = store.get(safeIdentity)
   const resetAt = current ? current.windowStartedAt + effectiveLimits.windowMs : nowMs + effectiveLimits.windowMs
   if (!current || resetAt <= nowMs) {
@@ -72,12 +85,12 @@ export function checkAndConsumeProviderProxyQuota({
     })
     return {
       allowed: true,
-      remaining: effectiveLimits.maxRouteRequestsPerWindow - 1,
+      remaining: maxRequests - 1,
       resetAt: nowMs + effectiveLimits.windowMs,
     }
   }
 
-  if (current.count >= effectiveLimits.maxRouteRequestsPerWindow) {
+  if (current.count >= maxRequests) {
     return {
       allowed: false,
       reason: 'rate_limit',
@@ -89,7 +102,7 @@ export function checkAndConsumeProviderProxyQuota({
   store.set(safeIdentity, current)
   return {
     allowed: true,
-    remaining: effectiveLimits.maxRouteRequestsPerWindow - current.count,
+    remaining: maxRequests - current.count,
     resetAt,
   }
 }

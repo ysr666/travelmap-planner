@@ -1,10 +1,14 @@
 import {
+  PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+  buildMockAiTripDraftProxyResponse,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
+  validateProviderProxyAiTripDraftRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
+  type ProviderProxyOperation,
   type ProviderProxyRoutePreviewRequest,
   type ProviderProxyRoutePreviewSuccessResponse,
   type ProviderProxyRouteSegment,
@@ -20,6 +24,7 @@ import {
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
   OPENROUTESERVICE_API_KEY?: string
+  TRIPMAP_AI_PROVIDER_KEY?: string
   TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
 }
@@ -91,6 +96,90 @@ export async function handleProviderProxyRequest({
     )
   }
 
+  const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+  const operation = bodyRecord.operation
+
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
+    return handleAiTripDraftRequest({ body, corsHeaders, env, quotaLimits, quotaStore, request })
+  }
+
+  return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+}
+
+async function handleAiTripDraftRequest({
+  body,
+  corsHeaders,
+  env,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiTripDraftRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const draftRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: 0,
+    identity: getQuotaIdentity(request, draftRequest.quotaSessionId),
+    limits: quotaLimits,
+    operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+        requestId: draftRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    if (isMockMode(env)) {
+      return jsonResponse(buildMockAiTripDraftProxyResponse(draftRequest), 200, corsHeaders)
+    }
+
+    if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+      throw new ProviderProxyServerError('provider_unavailable', 503)
+    }
+
+    throw new ProviderProxyServerError('unsupported', 501)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION, draftRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+async function handleRoutePreviewRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
   const validation = validateProviderProxyRoutePreviewRequest(body)
   if (!validation.ok) {
     return jsonResponse(validation.error, 400, corsHeaders)
@@ -99,8 +188,9 @@ export async function handleProviderProxyRequest({
   const routeRequest = validation.request
   const quota = checkAndConsumeProviderProxyQuota({
     coordinateCount: routeRequest.coordinates.length,
-    identity: getQuotaIdentity(request, routeRequest),
+    identity: getQuotaIdentity(request, routeRequest.quotaSessionId),
     limits: quotaLimits,
+    operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
     store: quotaStore,
   })
   if (!quota.allowed) {
@@ -135,7 +225,7 @@ export async function handleProviderProxyRequest({
     })
     return jsonResponse(response, 200, corsHeaders)
   } catch (caught) {
-    const error = normalizeProviderProxyHandlerError(caught, routeRequest)
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION, routeRequest.requestId)
     return jsonResponse(error.body, error.status, corsHeaders)
   }
 }
@@ -311,15 +401,16 @@ function getProviderSecret(provider: ProviderProxyConcreteProvider, env: Provide
 
 function normalizeProviderProxyHandlerError(
   caught: unknown,
-  request: ProviderProxyRoutePreviewRequest,
+  operation: ProviderProxyOperation,
+  requestId?: string,
 ) {
   if (caught instanceof ProviderProxyServerError) {
     return {
       body: buildProviderProxyErrorResponse({
         code: caught.code,
-        operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+        operation,
         provider: caught.provider,
-        requestId: request.requestId,
+        requestId,
       }),
       status: caught.status,
     }
@@ -328,8 +419,8 @@ function normalizeProviderProxyHandlerError(
   return {
     body: buildProviderProxyErrorResponse({
       code: 'provider_error',
-      operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
-      requestId: request.requestId,
+      operation,
+      requestId,
     }),
     status: 502,
   }
@@ -464,10 +555,10 @@ function mapGoogleTravelMode(mode: string) {
   return 'DRIVE'
 }
 
-function getQuotaIdentity(request: Request, routeRequest: ProviderProxyRoutePreviewRequest) {
+function getQuotaIdentity(request: Request, quotaSessionId?: string) {
   const ip = request.headers.get('CF-Connecting-IP') ?? request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
   return [
-    routeRequest.quotaSessionId ?? 'no-session',
+    quotaSessionId ?? 'no-session',
     ip ?? 'no-ip',
   ].join('|')
 }

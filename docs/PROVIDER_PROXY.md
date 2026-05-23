@@ -286,3 +286,38 @@ The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `v
 Mock mode (`TRIPMAP_PROVIDER_PROXY_MOCK=1`) always takes priority over real provider.
 
 Frontend behavior is unchanged: the "通过旅图服务生成草稿" button triggers the same proxy flow regardless of whether mock or real provider responds. User confirmation is still required before writing to IndexedDB.
+
+### Real Provider Smoke QA
+
+DeepSeek `deepseek-v4-flash` was used through the OpenAI-compatible adapter for a 1-request smoke test on branch `main` (commit `68df05c`).
+
+**Request budget:** Exactly 1 real API call. Zero requests before user confirmation.
+
+**Results:**
+
+- Confirmation dialog appeared before any provider request.
+- After user confirmed, exactly 1 request was sent to the AI provider endpoint.
+- Response went through `extractAiDraftJson` + `validateAiTripDraft` successfully.
+- Preview displayed a valid draft with correct title, dates, days, and itinerary items.
+- IndexedDB had zero trip/route/ticket writes before user clicked "确认导入".
+- No ticket, blob, cloud token, route cache, or provider metadata in request or response.
+- No API key, raw provider body, Authorization header content, or stack trace visible in page text.
+- Response `source` field was `future_ai` (not `mock`).
+
+**Security:**
+
+- AI key configured: yes, masked.
+- `.env.local` / `.dev.vars` are gitignored and never committed.
+- If a key or key prefix was ever copied into chat logs or session context, consider rotating the key.
+
+### PWA Service Worker — Local QA Note
+
+When doing local QA or development with `wrangler pages dev`, a stale PWA service worker may cache an older build bundle. Symptoms: the page loads but the UI shows an outdated state (e.g., "当前未配置 AI 生成服务" button remains disabled even though env vars are set).
+
+**Workaround:**
+
+1. Unregister the service worker (browser DevTools → Application → Service Workers → Unregister).
+2. Clear site data / cache (DevTools → Application → Storage → Clear site data).
+3. Hard refresh the page.
+
+This is a local dev/QA workflow issue, not a provider adapter bug.

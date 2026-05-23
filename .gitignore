@@ -18,6 +18,7 @@ test-results
 .env
 .env.*
 !.env.example
+.dev.vars
 
 # Local agent/tool state
 .claude/

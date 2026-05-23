@@ -266,3 +266,26 @@ Prompt 边界：
 - 真实 AI 只在 server proxy 内调用。
 - 用户仍必须确认后才写入 IndexedDB。
 - 本地 mock 仍可用作 demo/fallback。
+
+### Real Provider Smoke Boundary
+
+Real AI draft provider 已完成最小真实链路验证（DeepSeek `deepseek-v4-flash`，1-request smoke）。
+
+验证确认的边界：
+
+- Real AI 请求只在用户点击"确认生成"之后发生。
+- 确认前零 provider 请求。
+- 返回内容经过 JSON extraction 和 `validateAiTripDraft`。
+- 成功进入 preview。
+- 确认导入前没有写 IndexedDB（无 trip、route、ticket 创建）。
+- 不自动生成路线。
+- 不创建票据。
+- 不上传云端。
+- 不读取票据图片/PDF/OCR。
+
+仍必须保留的流程：
+
+- Preview 展示。
+- Schema validation。
+- ConfirmDialog 确认。
+- 用户确认后才写入本地旅行。

@@ -262,3 +262,27 @@ Current phase adds server-side infrastructure for future AI provider integration
 - Durable quota store (KV / Supabase / Redis) to replace in-memory Map.
 - Origin allowlist and account/session/IP controls.
 - Billing and abuse protection.
+
+### Real AI Provider Configuration
+
+Real AI calls are disabled by default. To enable, set server-side env vars:
+
+```env
+TRIPMAP_AI_PROVIDER=openai_compatible
+TRIPMAP_AI_API_KEY=your-api-key
+TRIPMAP_AI_BASE_URL=https://api.example.com/v1
+TRIPMAP_AI_MODEL=gpt-4o-mini
+```
+
+- `TRIPMAP_AI_PROVIDER` — `disabled` (default), `mock`, or `openai_compatible`.
+- `TRIPMAP_AI_API_KEY` — server-only secret, never exposed to frontend.
+- `TRIPMAP_AI_BASE_URL` — OpenAI-compatible endpoint. Recommended form: `https://.../v1`.
+- `TRIPMAP_AI_MODEL` — model identifier.
+
+When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), and max_tokens. No tickets, blobs, cloud tokens, or provider secrets are included in the request body.
+
+The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
+
+Mock mode (`TRIPMAP_PROVIDER_PROXY_MOCK=1`) always takes priority over real provider.
+
+Frontend behavior is unchanged: the "通过旅图服务生成草稿" button triggers the same proxy flow regardless of whether mock or real provider responds. User confirmation is still required before writing to IndexedDB.

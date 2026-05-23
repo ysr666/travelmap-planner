@@ -24,6 +24,7 @@ import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
 import {
   createDisabledAiDraftProvider,
   createMockAiDraftProvider,
+  createOpenAiCompatibleAiDraftProvider,
   createUnavailableAiDraftProvider,
   type AiDraftProvider,
   type AiDraftProviderErrorCode,
@@ -33,6 +34,10 @@ import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
   OPENROUTESERVICE_API_KEY?: string
+  TRIPMAP_AI_PROVIDER?: string
+  TRIPMAP_AI_API_KEY?: string
+  TRIPMAP_AI_BASE_URL?: string
+  TRIPMAP_AI_MODEL?: string
   TRIPMAP_AI_PROVIDER_KEY?: string
   TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
@@ -109,7 +114,7 @@ export async function handleProviderProxyRequest({
   const operation = bodyRecord.operation
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
-    return handleAiTripDraftRequest({ body, corsHeaders, env, quotaLimits, quotaStore, request })
+    return handleAiTripDraftRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
@@ -119,6 +124,7 @@ async function handleAiTripDraftRequest({
   body,
   corsHeaders,
   env,
+  fetcher,
   quotaLimits,
   quotaStore,
   request,
@@ -126,6 +132,7 @@ async function handleAiTripDraftRequest({
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
   quotaStore?: ProviderProxyQuotaStore
   request: Request
@@ -157,7 +164,7 @@ async function handleAiTripDraftRequest({
   }
 
   try {
-    const provider = selectAiDraftProvider(env, draftRequest)
+    const provider = selectAiDraftProvider(env, draftRequest, fetcher)
     const providerInput = buildAiTripDraftProviderInput(draftRequest, draftRequest.requestId)
     const result = await provider.generateDraft(providerInput)
 
@@ -198,9 +205,13 @@ async function handleAiTripDraftRequest({
 function selectAiDraftProvider(
   env: ProviderProxyHandlerEnv,
   request: ProviderProxyAiTripDraftRequest,
+  fetchImpl?: typeof fetch,
 ): AiDraftProvider {
   if (isMockMode(env)) {
     return createMockAiDraftProvider(request)
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleAiDraftProvider(env, request, fetchImpl)
   }
   if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
     return createUnavailableAiDraftProvider()

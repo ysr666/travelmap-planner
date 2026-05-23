@@ -229,3 +229,40 @@ Prompt 边界：
 - 需要 durable quota（KV / Supabase / Redis）替代内存 Map。
 - 需要 origin allowlist 和 account/session/IP 控制。
 - 需要计费和滥用防护。
+
+### Real AI Provider Adapter
+
+真实 AI provider adapter 已实现，但默认关闭。
+
+配置方式（server-side env only）：
+
+- `TRIPMAP_AI_PROVIDER=openai_compatible` 启用真实 AI。
+- `TRIPMAP_AI_API_KEY` — server-only 密钥，前端不可见。
+- `TRIPMAP_AI_BASE_URL` — OpenAI-compatible endpoint，推荐 `https://.../v1`。
+- `TRIPMAP_AI_MODEL` — 模型标识。
+
+默认行为：
+
+- `TRIPMAP_AI_PROVIDER` 未设置或为 `disabled` → 不调用真实 AI。
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` → 优先走 mock，忽略真实 provider。
+- env 不完整（缺 key/baseURL/model）→ 返回 `provider_unavailable`。
+
+请求边界：
+
+- 请求体只包含 model、messages、temperature (0.2)、max_tokens。
+- 不包含票据、blob、cloud token、provider key、route cache。
+- Authorization header 使用 server env API key。
+
+响应边界：
+
+- Provider 返回 raw text → handler 调用 `normalizeAiDraftProviderOutput`。
+- JSON extraction → `validateAiTripDraft` 校验。
+- 校验失败返回 `invalid_response`，不透传 raw model text。
+- 错误不包含 API key、raw body、stack trace。
+
+前端不变：
+
+- 按钮、流程、ConfirmDialog、preview、import 全部不变。
+- 真实 AI 只在 server proxy 内调用。
+- 用户仍必须确认后才写入 IndexedDB。
+- 本地 mock 仍可用作 demo/fallback。

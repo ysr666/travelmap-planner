@@ -29,6 +29,9 @@ const TripFormPage = lazy(() =>
 const ItemFormPage = lazy(() =>
   import('./pages/ItemFormPage').then((module) => ({ default: module.ItemFormPage })),
 )
+const AiDraftPage = lazy(() =>
+  import('./pages/AiDraftPage').then((module) => ({ default: module.AiDraftPage })),
+)
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
@@ -69,6 +72,7 @@ function App() {
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
+            {activeRoute === 'ai-draft' ? <AiDraftPage /> : null}
           </Suspense>
         </ErrorBoundary>
       ) : null}

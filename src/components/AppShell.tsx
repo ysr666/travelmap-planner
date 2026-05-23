@@ -25,6 +25,7 @@ const routeTitles: Record<RouteId, string> = {
   'trip/edit': '编辑旅行',
   'item/new': '新增行程点',
   'item/edit': '编辑行程点',
+  'ai-draft': 'AI 行程草稿',
 }
 
 export function AppShell({ activeRoute, children }: AppShellProps) {

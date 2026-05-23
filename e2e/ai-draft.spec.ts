@@ -5,10 +5,15 @@ test.describe('AI Draft Page', () => {
     await page.goto('/#/ai-draft')
   })
 
+  test('shows description and context note', async ({ page }) => {
+    await expect(page.getByText('先生成或粘贴草稿，检查无误后再导入为本地旅行')).toBeVisible()
+    await expect(page.getByText('当前为本地示例流程，不会调用外部 AI')).toBeVisible()
+  })
+
   test('shows request builder section', async ({ page }) => {
-    await expect(page.getByText('生成草稿请求')).toBeVisible()
+    await expect(page.getByText('填写行程信息')).toBeVisible()
     await expect(page.getByLabel(/目的地/)).toBeVisible()
-    await expect(page.getByRole('button', { name: '生成本地示例草稿' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '根据表单生成示例草稿' })).toBeVisible()
   })
 
   test('shows paste area section', async ({ page }) => {
@@ -16,7 +21,7 @@ test.describe('AI Draft Page', () => {
   })
 
   test('shows validation error for empty destination', async ({ page }) => {
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('请输入目的地。')).toBeVisible()
   })
 
@@ -24,7 +29,7 @@ test.describe('AI Draft Page', () => {
     await page.getByLabel(/目的地/).fill('东京')
     await page.getByLabel(/开始日期/).fill('2025-06-01')
     await page.getByLabel(/结束日期/).fill('2025-06-03')
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('草稿摘要')).toBeVisible()
     await expect(page.getByText('东京之旅', { exact: true })).toBeVisible()
     await expect(page.getByText('3 天')).toBeVisible()
@@ -34,14 +39,14 @@ test.describe('AI Draft Page', () => {
     await page.getByLabel(/目的地/).fill('巴黎')
     await page.getByLabel(/开始日期/).fill('2025-07-01')
     await page.getByLabel(/结束日期/).fill('2025-07-02')
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('行程预览')).toBeVisible()
     await expect(page.getByRole('button', { name: '确认导入' })).toBeVisible()
   })
 
   test('loads sample draft', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     const textarea = page.getByPlaceholder('{"title": "...", "startDate')
     const value = await textarea.inputValue()
     expect(value).toContain('东京五日游')
@@ -51,13 +56,13 @@ test.describe('AI Draft Page', () => {
     await page.getByText('粘贴 JSON 草稿').click()
     await page.getByPlaceholder('{"title": "...", "startDate').fill('{"title": ""}')
     await page.getByRole('button', { name: '解析草稿' }).click()
-    await expect(page.getByText('验证错误')).toBeVisible()
+    await expect(page.getByText('草稿错误')).toBeVisible()
     await expect(page.getByText('旅行标题不能为空。')).toBeVisible()
   })
 
   test('shows summary for valid draft', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByText('草稿摘要')).toBeVisible()
     await expect(page.getByRole('heading', { name: '草稿摘要' })).toBeVisible()
@@ -70,7 +75,7 @@ test.describe('AI Draft Page', () => {
 
   test('shows preview for valid draft', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByText('行程预览')).toBeVisible()
     await expect(page.locator('li').filter({ hasText: '浅草寺' }).first()).toBeVisible()
@@ -79,7 +84,7 @@ test.describe('AI Draft Page', () => {
 
   test('shows privacy notice', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByText('当前仅在本机解析草稿，不会调用外部 AI。')).toBeVisible()
     await expect(page.getByText('确认导入后才会写入本地旅行。')).toBeVisible()
@@ -88,14 +93,14 @@ test.describe('AI Draft Page', () => {
   test('shows confirm button only for valid draft', async ({ page }) => {
     await expect(page.getByRole('button', { name: '确认导入' })).not.toBeVisible()
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByRole('button', { name: '确认导入' })).toBeVisible()
   })
 
   test('shows confirm dialog on import click', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await page.getByRole('button', { name: '确认导入' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
@@ -108,7 +113,7 @@ test.describe('AI Draft Page', () => {
 
   test('creates trip on confirm from pasted draft', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await page.getByRole('button', { name: '确认导入' }).click()
     await page.getByRole('dialog').getByRole('button', { name: '确认导入' }).click()
@@ -120,7 +125,7 @@ test.describe('AI Draft Page', () => {
     await page.getByLabel(/目的地/).fill('大阪')
     await page.getByLabel(/开始日期/).fill('2025-08-01')
     await page.getByLabel(/结束日期/).fill('2025-08-02')
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('草稿摘要')).toBeVisible()
     await page.getByRole('button', { name: '确认导入' }).click()
     await page.getByRole('dialog').getByRole('button', { name: '确认导入' }).click()
@@ -130,7 +135,7 @@ test.describe('AI Draft Page', () => {
 
   test('does not create trip before confirm', async ({ page }) => {
     await page.getByText('粘贴 JSON 草稿').click()
-    await page.getByRole('button', { name: '加载示例草稿' }).click()
+    await page.getByRole('button', { name: '加载固定示例' }).click()
     await page.getByRole('button', { name: '解析草稿' }).click()
     await page.goto('/#/home')
     await expect(page.locator('h1').filter({ hasText: '东京五日游' })).not.toBeVisible()
@@ -140,7 +145,7 @@ test.describe('AI Draft Page', () => {
     await page.getByLabel(/目的地/).fill('京都')
     await page.getByLabel(/开始日期/).fill('2025-09-01')
     await page.getByLabel(/结束日期/).fill('2025-09-02')
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('草稿摘要')).toBeVisible()
     await page.goto('/#/home')
     await expect(page.locator('h1').filter({ hasText: '京都之旅' })).not.toBeVisible()
@@ -151,9 +156,19 @@ test.describe('AI Draft Page', () => {
     await page.getByLabel(/目的地/).fill('东京')
     await page.getByLabel(/开始日期/).fill('2025-06-01')
     await page.getByLabel(/结束日期/).fill('2025-06-03')
-    await page.getByRole('button', { name: '生成本地示例草稿' }).click()
+    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByText('草稿摘要')).toBeVisible()
     const body = await page.evaluate(() => document.body.scrollWidth)
     expect(body).toBeLessThanOrEqual(390)
+  })
+})
+
+test.describe('Settings AI draft entry', () => {
+  test('settings page links to ai-draft page', async ({ page }) => {
+    await page.goto('/#/settings')
+    await page.getByText('AI 行程导入').click()
+    await page.getByRole('button', { name: '或者，试试本地草稿生成 →' }).click()
+    await page.waitForURL(/#\/ai-draft/)
+    await expect(page.getByText('AI 行程草稿')).toBeVisible()
   })
 })

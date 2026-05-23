@@ -698,6 +698,16 @@ export function SettingsPage() {
             copyMessage={copyPromptMessage}
             onCopyPrompt={() => void handleCopyAiPrompt()}
           />
+
+          <p className="pt-1 text-center text-sm">
+            <button
+              type="button"
+              className="text-sky-600 underline underline-offset-2 dark:text-sky-400"
+              onClick={() => navigateTo('ai-draft')}
+            >
+              或者，试试本地草稿生成 →
+            </button>
+          </p>
         </Card>
       </Collapsible>
 

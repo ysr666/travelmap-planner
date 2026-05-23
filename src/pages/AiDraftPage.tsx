@@ -3,7 +3,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Collapsible } from '../components/ui/Collapsible'
-import { FormField, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS } from '../components/ui/FormField'
+import { FormField, FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS } from '../components/ui/FormField'
 import { navigateTo } from '../lib/routes'
 import { createId } from '../db/ids'
 import {
@@ -230,105 +230,131 @@ export function AiDraftPage() {
   }
 
   const summary = draft ? summarizeAiTripDraft(draft) : null
-  const allErrors = [...requestErrors, ...errors]
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
-      <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI 行程草稿</h1>
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI 行程草稿</h1>
+        <p className="text-sm leading-6 tm-muted">
+          先生成或粘贴草稿，检查无误后再导入为本地旅行
+        </p>
+        <p className="text-xs tm-muted">
+          当前为本地示例流程，不会调用外部 AI
+        </p>
+      </div>
 
-      <Collapsible title="生成草稿请求" subtitle="填写目的地和偏好，生成本地示例草稿" defaultOpen>
-        <div className="space-y-3">
+      <div className="space-y-3">
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">填写行程信息</p>
+        <p className="text-xs tm-muted">
+          根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
+        </p>
+
+        <FormField
+          label="目的地"
+          value={requestDestination}
+          onChange={setRequestDestination}
+          placeholder="例如：东京、巴黎、曼谷"
+          required
+        />
+        <div className="grid grid-cols-2 gap-3">
           <FormField
-            label="目的地"
-            value={requestDestination}
-            onChange={setRequestDestination}
-            placeholder="例如：东京、巴黎、曼谷"
+            label="开始日期"
+            value={requestStartDate}
+            onChange={setRequestStartDate}
+            type="date"
             required
           />
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="开始日期"
-              value={requestStartDate}
-              onChange={setRequestStartDate}
-              type="date"
-              required
-            />
-            <FormField
-              label="结束日期"
-              value={requestEndDate}
-              onChange={setRequestEndDate}
-              type="date"
-              required
-            />
-          </div>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">旅行节奏</span>
-            <select
-              className={FIELD_SELECT_CLASS}
-              value={requestPace}
-              onChange={(e) => setRequestPace(e.target.value as typeof requestPace)}
-            >
-              <option value="relaxed">轻松</option>
-              <option value="moderate">适中</option>
-              <option value="compact">紧凑</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">交通偏好</span>
-            <select
-              className={FIELD_SELECT_CLASS}
-              value={requestPreferTransport}
-              onChange={(e) => setRequestPreferTransport(e.target.value as typeof requestPreferTransport)}
-            >
-              <option value="public_transport">公共交通</option>
-              <option value="walking">步行</option>
-              <option value="taxi">打车</option>
-              <option value="mixed">综合</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">想去的地方</span>
-            <textarea
-              className={`${FIELD_TEXTAREA_CLASS} h-20`}
-              placeholder="例如：浅草寺、秋叶原"
-              value={requestMustVisit}
-              onChange={(e) => setRequestMustVisit(e.target.value)}
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">不想要的安排</span>
-            <textarea
-              className={`${FIELD_TEXTAREA_CLASS} h-20`}
-              placeholder="例如：不要购物商场"
-              value={requestAvoid}
-              onChange={(e) => setRequestAvoid(e.target.value)}
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">补充要求</span>
-            <textarea
-              className={`${FIELD_TEXTAREA_CLASS} h-20`}
-              placeholder="例如：带老人出行，节奏放慢"
-              value={requestFreeText}
-              onChange={(e) => setRequestFreeText(e.target.value)}
-            />
-          </label>
-
-          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              当前为本地示例草稿，不会调用外部 AI，不会上传数据。
-              <br />
-              生成后仍需预览和确认，确认导入后才会创建本地旅行。
-            </p>
-          </Card>
-
-          <Button onClick={handleGenerateMock} className="w-full">
-            生成本地示例草稿
-          </Button>
+          <FormField
+            label="结束日期"
+            value={requestEndDate}
+            onChange={setRequestEndDate}
+            type="date"
+            required
+          />
         </div>
-      </Collapsible>
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>旅行节奏</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            value={requestPace}
+            onChange={(e) => setRequestPace(e.target.value as typeof requestPace)}
+          >
+            <option value="relaxed">轻松</option>
+            <option value="moderate">适中</option>
+            <option value="compact">紧凑</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>交通偏好</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            value={requestPreferTransport}
+            onChange={(e) => setRequestPreferTransport(e.target.value as typeof requestPreferTransport)}
+          >
+            <option value="public_transport">公共交通</option>
+            <option value="walking">步行</option>
+            <option value="taxi">打车</option>
+            <option value="mixed">综合</option>
+          </select>
+        </label>
 
-      <Collapsible title="粘贴 JSON 草稿" subtitle="手动粘贴或加载示例 JSON">
+        <Collapsible title="更多偏好（可选）" subtitle="想去的地方、不想要的安排、补充要求">
+          <div className="space-y-3">
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>想去的地方</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                placeholder="例如：浅草寺、秋叶原"
+                value={requestMustVisit}
+                onChange={(e) => setRequestMustVisit(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>不想要的安排</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                placeholder="例如：不要购物商场"
+                value={requestAvoid}
+                onChange={(e) => setRequestAvoid(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>补充要求</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                placeholder="例如：带老人出行，节奏放慢"
+                value={requestFreeText}
+                onChange={(e) => setRequestFreeText(e.target.value)}
+              />
+            </label>
+          </div>
+        </Collapsible>
+
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            当前为本地示例草稿，不会调用外部 AI，不会上传数据。
+            <br />
+            生成后仍需预览和确认，确认导入后才会创建本地旅行。
+          </p>
+        </Card>
+
+        {requestErrors.length > 0 && (
+          <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
+            <h3 className="mb-2 font-medium text-red-800 dark:text-red-200">表单错误</h3>
+            <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+              {requestErrors.map((error, i) => (
+                <li key={i}>{error.message}</li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        <Button onClick={handleGenerateMock} className="w-full">
+          根据表单生成示例草稿
+        </Button>
+      </div>
+
+      <Collapsible title="粘贴 JSON 草稿" subtitle="如果你已经有符合格式的草稿 JSON，可以在这里粘贴。">
         <div className="space-y-4">
           <div className="space-y-2">
             <textarea
@@ -340,7 +366,7 @@ export function AiDraftPage() {
           </div>
           <div className="flex gap-2">
             <Button onClick={handleLoadSample} variant="secondary">
-              加载示例草稿
+              加载固定示例
             </Button>
             <Button onClick={handleParse} disabled={!jsonText.trim()}>
               解析草稿
@@ -349,11 +375,11 @@ export function AiDraftPage() {
         </div>
       </Collapsible>
 
-      {allErrors.length > 0 && (
+      {errors.length > 0 && (
         <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
-          <h3 className="mb-2 font-medium text-red-800 dark:text-red-200">验证错误</h3>
+          <h3 className="mb-2 font-medium text-red-800 dark:text-red-200">草稿错误</h3>
           <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
-            {allErrors.map((error, i) => (
+            {errors.map((error, i) => (
               <li key={i}>
                 {error.path !== 'root' && <span className="font-mono text-xs">{error.path}: </span>}
                 {error.message}

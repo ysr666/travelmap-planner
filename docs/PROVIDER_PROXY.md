@@ -357,6 +357,15 @@ Same shape as `ai_trip_draft` response, with `operation: "ai_trip_draft_repair"`
 - Max 5 requests per 60-second window.
 - Identity prefix: `ai_draft_repair|` — isolated from `ai_draft|` and `route|` quotas.
 
+### Client-Side Privacy Filtering
+
+Before sending AI draft or repair requests to the proxy, the client applies privacy settings (`src/lib/aiPrivacyGuard.ts`):
+
+- **Generation requests** already contain only explicit form fields — no extra data attached.
+- **Repair requests**: item `note` fields are stripped or truncated based on the `allowFullNotes` and `allowNotesSummary` settings. Quality findings are filtered too.
+- Privacy settings are read from `localStorage` at request time and applied as pure functions before the fetch call.
+- This filtering is applied client-side; the server also validates required fields but does not enforce user privacy preferences.
+
 #### Provider Behavior
 
 - Mock mode: deterministic simple repair (add meal items, replace generic titles).

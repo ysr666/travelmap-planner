@@ -534,7 +534,7 @@ export function SettingsPage() {
         />
       </Collapsible>
 
-      <Collapsible subtitle="未来 AI 功能可读取的数据范围" title="AI 与隐私">
+      <Collapsible subtitle="控制 AI 草稿生成和修复时可发送的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
           onChange={updateAiPrivacySetting}
           settings={aiPrivacySettings}
@@ -918,7 +918,7 @@ function AiPrivacySettingsPanel({
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 与隐私</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
-              这些开关用于控制未来 AI 功能可读取的数据范围；当前“本地检查”不会上传数据，也不会调用外部 AI。
+              这些开关控制 AI 草稿生成和修复时通过旅图服务发送的数据范围；本地检查不会上传数据，也不会调用外部 AI。
             </p>
           </div>
         </div>

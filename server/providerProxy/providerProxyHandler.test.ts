@@ -407,6 +407,51 @@ describe('provider proxy handler ai_trip_draft_repair', () => {
     expect(body).toMatchObject({ code: 'provider_unavailable', ok: false })
   })
 
+  it('openai_compatible returns valid repaired draft from injected fetch', async () => {
+    const repairedDraft = {
+      ...validRepairRequest().draft,
+      days: [
+        {
+          date: '2025-04-01',
+          items: [
+            { title: '浅草寺深度参观', locationName: '浅草寺', startTime: '09:00', endTime: '11:00' },
+            { title: '午餐休息', startTime: '12:00', endTime: '13:00' },
+          ],
+        },
+      ],
+    }
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.response_format).toEqual({ type: 'json_object' })
+      expect(body.thinking).toEqual({ type: 'disabled' })
+      expect(JSON.stringify(body)).not.toContain('secret-key')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCaches')
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(repairedDraft) } }] }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validRepairRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.operation).toBe('ai_trip_draft_repair')
+    expect(body.source).toBe('future_ai')
+    expect(body.draft.days[0].items[1].title).toBe('午餐休息')
+  })
+
   it('does not leak env secrets in repair response', async () => {
     const response = await handleProviderProxyRequest({
       env: {

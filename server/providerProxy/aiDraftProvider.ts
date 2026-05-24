@@ -1,4 +1,7 @@
-export { createOpenAiCompatibleAiDraftProvider } from './aiDraftRealProvider'
+export {
+  createOpenAiCompatibleAiDraftProvider,
+  createOpenAiCompatibleAiDraftRepairProvider,
+} from './aiDraftRealProvider'
 
 import type { AiTripDraft, AiTripDraftDay } from '../../src/lib/aiTripDraft'
 import { validateAiTripDraft } from '../../src/lib/aiTripDraft'

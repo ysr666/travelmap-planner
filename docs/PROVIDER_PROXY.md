@@ -279,7 +279,7 @@ TRIPMAP_AI_MODEL=gpt-4o-mini
 - `TRIPMAP_AI_BASE_URL` — OpenAI-compatible endpoint. Recommended form: `https://.../v1`.
 - `TRIPMAP_AI_MODEL` — model identifier.
 
-When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), and max_tokens. No tickets, blobs, cloud tokens, or provider secrets are included in the request body.
+When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), max_tokens, `response_format: { type: "json_object" }`, and `thinking: { type: "disabled" }`. The upstream timeout is 60 seconds. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
 
 The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
 
@@ -322,6 +322,12 @@ When doing local QA or development with `wrangler pages dev`, a stale PWA servic
 
 This is a local dev/QA workflow issue, not a provider adapter bug.
 
+### Local Shell Proxy Env - Local QA Note
+
+When doing real-provider smoke QA with `wrangler pages dev`, local shell proxy variables such as `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` can affect the Workerd process even when the browser and direct `curl` checks look healthy. If a real provider smoke fails only through the local Pages dev proxy with intermittent `network_error` / timeout, restart `wrangler pages dev` with those proxy env vars unset before diagnosing provider credentials or model behavior.
+
+This is a local dev/QA workflow issue. AI provider keys must still stay server-side in `.dev.vars`, `.env.local`, or the deployment runtime; do not add `VITE_` AI secrets or user-facing API key settings.
+
 ### AI Trip Draft Repair Operation
 
 The `ai_trip_draft_repair` operation allows the AI Draft page to request draft repair through the provider proxy.
@@ -345,7 +351,7 @@ The `ai_trip_draft_repair` operation allows the AI Draft page to request draft r
 - `draft` must pass `validateAiTripDraft` before sending.
 - `qualityFindings` is a sanitized subset: ruleId, severity, title, message, dayDate.
 - `repairInstruction` max 1000 chars.
-- `reasoningMode`: `off` (0.1), `auto` (0.2), `high` (0.4).
+- `reasoningMode`: accepted for client contract compatibility. The OpenAI-compatible JSON repair path currently keeps `temperature: 0.2` and sends `thinking: { type: "disabled" }`.
 - No ticket blobs, cloud tokens, provider secrets, route cache, or API keys in the request.
 
 #### Response Contract

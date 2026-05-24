@@ -1,11 +1,11 @@
 # Provider Proxy
 
-TripMap uses a provider proxy so production route and future AI requests can use owner-provided provider keys without shipping those keys to the PWA.
+TripMap uses a provider proxy so production route and AI requests can use owner-provided provider keys without shipping those keys to the PWA.
 
 ## Security Boundary
 
 - The browser calls a TripMap-owned endpoint, normally `/api/provider-proxy`.
-- The proxy calls Google Routes, OpenRouteService, and future AI providers with server-side runtime secrets.
+- The proxy calls Google Routes, OpenRouteService, and AI providers with server-side runtime secrets.
 - Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY` and `GOOGLE_ROUTES_API_KEY`.
 - Server-only secrets must never be exposed through `VITE_*` variables, IndexedDB, zip backups, Supabase backups, AI import/export, tests, or frontend bundles.
 - A browser-visible Google Maps JavaScript rendering key is different: it is inherently public and must be restricted by referrer in Google Cloud. It must not be reused as a server-only Google Routes secret.
@@ -134,11 +134,13 @@ Now:
 - Manual day route generation can use the proxy when configured.
 - Trip Home route generation can use the proxy after user confirmation.
 - Trip Home map preview still reads cached route geometry or displays straight lines; it does not silently call providers.
+- AI draft generation can use the proxy after user confirmation.
+- AI draft repair can use the proxy after user confirmation and only updates the draft preview.
 
 Later:
 
 - Route order suggestion should become a separate proxy operation.
-- Future AI generation should reuse the same contract, quota guard, normalized errors, and server-secret boundary.
+- Web search and AI trip edit agents should become separate proxy operations with their own contracts, quota, source display, and write confirmation boundaries.
 
 ## AI Trip Draft Operation
 
@@ -195,8 +197,9 @@ Errors use the same normalized error codes as `route_preview`.
 ### Current Behavior
 
 - `TRIPMAP_PROVIDER_PROXY_MOCK=1`: Returns a deterministic mock draft using the same generator as the local mock button.
-- No mock and no AI provider key: Returns `provider_unavailable`.
-- No real AI provider integration exists yet.
+- `TRIPMAP_AI_PROVIDER=openai_compatible` with complete server-side env: calls the configured OpenAI-compatible AI provider.
+- No mock and incomplete AI env: returns `provider_unavailable`.
+- Real DeepSeek `deepseek-v4-flash` generation smoke has passed through this operation.
 
 ### Quota
 
@@ -218,25 +221,26 @@ Before calling the proxy, a confirmation dialog explains:
 - Preview and confirmation still required
 - Will not read ticket images/PDF
 
-### Future
+### Real Provider Boundary
 
-When a real AI provider is integrated:
+When a real AI provider is configured:
 
-- The provider key lives only in server-side env (`TRIPMAP_AI_PROVIDER_KEY`).
-- The frontend never sees the key.
-- The response `source` field changes to `"future_ai"`.
-- The draft must still pass `validateAiTripDraft` schema validation.
+- The provider key lives only in server-side env (`TRIPMAP_AI_API_KEY`).
+- The frontend never sees the key and never sends provider secrets.
+- The response `source` field is `"future_ai"`.
+- The draft must still pass JSON extraction and `validateAiTripDraft` schema validation.
 - User must still confirm before writing to IndexedDB.
+- The provider does not read tickets, blobs, cloud tokens, route cache, or full local DB.
 
-### Real Provider Preparation
+### Real Provider Infrastructure
 
-Current phase adds server-side infrastructure for future AI provider integration. No real AI calls are made.
+Current phase includes server-side infrastructure for real AI provider integration. Real calls are disabled by default and only enabled by server-side env.
 
 **Modules:**
 
 - `aiDraftLimits.ts` — per-request resource bounds (prompt size, output tokens, free text embed limit).
 - `aiDraftPrompt.ts` — pure function that builds prompt from validated request. Free text capped at 500 chars per field. Prompt requires JSON-only output matching AiTripDraft schema.
-- `aiDraftProvider.ts` — provider-agnostic interface with three implementations: `mock` (deterministic), `unavailable` (no key), `disabled` (key exists but no real provider yet).
+- `aiDraftProvider.ts` / `aiDraftRealProvider.ts` — provider-agnostic interface with mock, unavailable, disabled, and OpenAI-compatible real provider implementations.
 - `aiDraftResponse.ts` — extracts JSON from raw AI output (pure JSON or fenced blocks), validates against `validateAiTripDraft`. Returns `invalid_response` on failure.
 
 **Prompt boundary:**
@@ -253,7 +257,7 @@ Current phase adds server-side infrastructure for future AI provider integration
 **Error codes:**
 
 - `provider_unavailable` — no AI provider configured.
-- `unsupported` — AI provider key exists but no real provider implemented.
+- `unsupported` — provider or operation is not implemented for the selected configuration.
 - `invalid_response` — AI output cannot be parsed or validated.
 - `provider_error`, `network_error`, `quota_exceeded` — standard provider errors.
 
@@ -279,7 +283,9 @@ TRIPMAP_AI_MODEL=gpt-4o-mini
 - `TRIPMAP_AI_BASE_URL` — OpenAI-compatible endpoint. Recommended form: `https://.../v1`.
 - `TRIPMAP_AI_MODEL` — model identifier.
 
-When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), and max_tokens. No tickets, blobs, cloud tokens, or provider secrets are included in the request body.
+For DeepSeek smoke QA, the current model is `deepseek-v4-flash` with `TRIPMAP_AI_BASE_URL` pointing to the DeepSeek OpenAI-compatible API base. Do not put the AI key in `VITE_*` env or user-facing settings.
+
+When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), max_tokens, `response_format: { type: "json_object" }`, and `thinking: { type: "disabled" }`. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
 
 The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
 
@@ -287,22 +293,42 @@ Mock mode (`TRIPMAP_PROVIDER_PROXY_MOCK=1`) always takes priority over real prov
 
 Frontend behavior is unchanged: the "通过旅图服务生成草稿" button triggers the same proxy flow regardless of whether mock or real provider responds. User confirmation is still required before writing to IndexedDB.
 
+### AI Provider Runtime Notes
+
+Current usable AI provider status:
+
+- Real generation: usable behind `/api/provider-proxy`; DeepSeek `deepseek-v4-flash` smoke passed.
+- Real repair: usable behind `/api/provider-proxy`; DeepSeek `deepseek-v4-flash` repair smoke passed.
+- Key boundary: `TRIPMAP_AI_API_KEY` stays server-side. It must not appear in frontend bundles, IndexedDB, zip backups, Supabase snapshots, reports, logs, screenshots, or docs.
+- Validation path: provider raw text → JSON extraction → `validateAiTripDraft` → preview update. Import still requires final user confirmation.
+- Thinking mode: explicitly disabled with `thinking: { type: "disabled" }` for JSON-only draft generation and repair. This prioritizes stable structured output and lower latency.
+- Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, or web sources.
+
+Future AI provider work should keep web search separate from repair. Search should be a new provider proxy operation with retrieved sources, `retrievedAt`, confidence, quota, and source display in the UI.
+
 ### Real Provider Smoke QA
 
-DeepSeek `deepseek-v4-flash` was used through the OpenAI-compatible adapter for a 1-request smoke test on branch `main` (commit `68df05c`).
+DeepSeek `deepseek-v4-flash` was used through the OpenAI-compatible adapter for real provider smoke tests.
 
-**Request budget:** Exactly 1 real API call. Zero requests before user confirmation.
+**Generation smoke result:**
 
-**Results:**
-
-- Confirmation dialog appeared before any provider request.
+- User confirmation appeared before any provider request.
 - After user confirmed, exactly 1 request was sent to the AI provider endpoint.
 - Response went through `extractAiDraftJson` + `validateAiTripDraft` successfully.
-- Preview displayed a valid draft with correct title, dates, days, and itinerary items.
+- Preview displayed a valid draft.
 - IndexedDB had zero trip/route/ticket writes before user clicked "确认导入".
-- No ticket, blob, cloud token, route cache, or provider metadata in request or response.
-- No API key, raw provider body, Authorization header content, or stack trace visible in page text.
+- No ticket, blob, cloud token, route cache, provider metadata, API key, raw provider body, Authorization header content, or stack trace was visible in page text.
 - Response `source` field was `future_ai` (not `mock`).
+
+**Repair smoke result:**
+
+- User clicked repair, saw ConfirmDialog, then confirmed.
+- Successful smoke sent exactly 1 frontend `ai_trip_draft_repair` request to `/api/provider-proxy`.
+- Server-to-DeepSeek `/chat/completions` count was not browser-observable; it is inferred as 1 from the handler's single fetch/no retry path.
+- Repaired draft returned, JSON extraction succeeded, `validateAiTripDraft` passed, preview and JSON textarea updated.
+- Before final import, IndexedDB counts stayed unchanged.
+- No route generation/cache, ticket creation, cloud upload/delete, or sortOrder optimization occurred.
+- Page/dist checks found no API key, Bearer header, raw provider body such as `choices`, or stack trace leakage.
 
 **Security:**
 
@@ -321,6 +347,14 @@ When doing local QA or development with `wrangler pages dev`, a stale PWA servic
 3. Hard refresh the page.
 
 This is a local dev/QA workflow issue, not a provider adapter bug.
+
+### Local Shell Proxy Env - Local QA Note
+
+When doing real-provider smoke QA with `wrangler pages dev`, local shell proxy variables such as `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` can affect the Workerd process even if direct DeepSeek checks are healthy. During repair diagnostics, direct DeepSeek API checks were fast and successful, while the local Pages dev proxy chain showed intermittent 30-second `network_error` timeouts.
+
+If a real provider smoke fails only through local `wrangler pages dev`, restart the wrangler process with those proxy env vars unset before diagnosing credentials, model access, DNS, or TLS.
+
+This is a local dev/QA workflow issue. Keep AI provider keys server-side in `.dev.vars`, `.env.local`, or deployment runtime bindings; do not add `VITE_` AI secrets or user-facing API key settings.
 
 ### AI Trip Draft Repair Operation
 
@@ -345,7 +379,7 @@ The `ai_trip_draft_repair` operation allows the AI Draft page to request draft r
 - `draft` must pass `validateAiTripDraft` before sending.
 - `qualityFindings` is a sanitized subset: ruleId, severity, title, message, dayDate.
 - `repairInstruction` max 1000 chars.
-- `reasoningMode`: `off` (0.1), `auto` (0.2), `high` (0.4).
+- `reasoningMode`: accepted for client contract compatibility. The current OpenAI-compatible JSON repair path keeps `temperature: 0.2` and sends `thinking: { type: "disabled" }`; no reasoning mode UI is implemented yet.
 - No ticket blobs, cloud tokens, provider secrets, route cache, or API keys in the request.
 
 #### Response Contract
@@ -371,6 +405,7 @@ Before sending AI draft or repair requests to the proxy, the client applies priv
 - Mock mode: deterministic simple repair (add meal items, replace generic titles).
 - Real provider: OpenAI-compatible adapter, same raw text → JSON extraction → validate flow.
 - Disabled/unavailable: returns `provider_unavailable` / `unsupported`.
+- Repair is draft-level only: it does not search the web, read ticket images/PDF/OCR, or modify saved trips directly.
 
 #### Security
 

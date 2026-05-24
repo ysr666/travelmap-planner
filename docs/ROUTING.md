@@ -20,13 +20,13 @@ VITE_ROUTE_PROXY_URL=/api/provider-proxy
 VITE_ROUTE_PROXY_PROVIDER=openrouteservice
 ```
 
-Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRouteService、Google Routes 和未来 AI provider secrets 只应来自后端运行时 env binding，例如 `OPENROUTESERVICE_API_KEY` 和 `GOOGLE_ROUTES_API_KEY`。
+Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRouteService、Google Routes 和 AI provider secrets 只应来自后端运行时 env binding，例如 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 和 `TRIPMAP_AI_API_KEY`。
 
 浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应在 Google Cloud Console 通过 referrer 限制。它不能替代 server-only Google Routes key。
 
 ## 前端 Key 风险
 
-不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 或 future AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS key 输入、保存、清除或展示控件。
+不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 或 AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS/AI key 输入、保存、清除或展示控件。
 
 本地开发仍保留 legacy direct provider path 方便既有 QA，但公开部署应使用 provider proxy。详见 [Provider Proxy](PROVIDER_PROXY.md)。
 

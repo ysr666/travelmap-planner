@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-05-17  
-基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、Trip Home 层级平衡和冲突感知提示均已完成。
+更新时间：2026-05-24
+基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、cloud save wording 和 E2E locator hardening 均已完成。
 
 ## 当前定位
 
@@ -22,6 +22,7 @@
 #/item/edit?tripId=...&dayId=...&itemId=...
 #/tickets
 #/settings
+#/ai-draft
 ```
 
 已完成的路由拆分语义：
@@ -44,6 +45,9 @@
 - 票据 copy / reference / external 三模式。
 - 完整 zip 备份导出 / 导入。
 - AI trip-plan JSON / zip 导入，含 copy 附件和本地校验预览。
+- AI Draft 页面：本地 mock 草稿、手动 JSON 草稿、provider proxy 真实草稿生成、草稿质量检查和 AI repair preview flow。
+- AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
+- DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
 - Supabase 手动云端保存 / 原地恢复。
 - 自动云端保存基础。
 - PWA 启动云端保存检查。
@@ -62,6 +66,8 @@
 - Phase 12B：启动云端保存检查。
 - Phase 12C：冲突感知云端提示。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复。
+- AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
+- E2E locator hardening。
 
 ## 不要误判为完成
 
@@ -71,6 +77,9 @@
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
 - 时区与日期语义审计待做。
+- AI web search 尚未实现：当前 AI 不查询实时营业时间、票价、交通、天气或网页来源。
+- AI thinking / reasoning mode UI 尚未实现：当前 DeepSeek JSON 草稿生成和修复显式关闭 thinking mode，优先稳定结构化输出。
+- AI trip edit agent 尚未实现：AI repair 只更新草稿 preview，不直接修改已保存旅行。
 
 ## 云端与同步状态
 
@@ -89,10 +98,28 @@
 - 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
 - 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
-- Server-only OpenRouteService / Google Routes / future AI provider secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
+- Server-only OpenRouteService / Google Routes / AI provider secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
-- AI 只生成建议；用户必须核对地点、坐标、交通时间和票据。
+- AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
+- AI provider 请求只通过 `/api/provider-proxy`；server-only AI key 不进入前端 bundle、用户设置页、IndexedDB、zip、Supabase、日志或报告。
+- AI repair 使用当前草稿、质量检查结果和隐私过滤后的数据；不读取票据图片/PDF/OCR，不搜索网页，不直接修改已保存旅行。
 - 不缓存商业地图瓦片，不通过 PWA service worker 做瓦片离线缓存。
+
+## AI Provider 与 Repair 状态
+
+- Real AI draft generation：DeepSeek `deepseek-v4-flash` 通过 OpenAI-compatible provider proxy smoke passed。
+- Real AI draft repair：DeepSeek `deepseek-v4-flash` 通过 `/api/provider-proxy` smoke passed；用户确认后触发一次 repair 请求，修复草稿返回并更新 preview / JSON textarea。
+- Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
+- Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
+- Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
+- DeepSeek thinking mode：当前显式发送 `thinking: { type: "disabled" }`，因为 JSON-only draft generation / repair 优先稳定 structured output 和较低延迟。
+- Web search：当前未接入。未来应作为单独 provider proxy operation，实现 sources、retrievedAt、confidence 和来源展示，而不是混入 repair。
+
+## 本地 QA 注意事项
+
+- `wrangler pages dev` / Workerd 可能受 shell `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 影响。若 direct DeepSeek 检查健康但本地 provider proxy repair 间歇性 `network_error` / timeout，先用 unset proxy env 的 wrangler 进程重测。
+- PWA service worker 可能在本地 QA 时提供旧 bundle。若页面行为和最新 build 不一致，先 unregister service worker、clear site data、hard refresh。
+- `.env.local` 和 `.dev.vars` 必须保持 gitignored，不得提交。报告不得包含真实 key、key prefix、raw provider body、full prompt 或 raw model output；如任何 key prefix 曾被复制进聊天或日志，应 rotate key。
 
 ## 下一步建议
 
@@ -101,5 +128,6 @@
 1. 时区与日期语义审计（Phase 12F）。
 2. Trip Home 地图概览与入口优化（Phase 13A）。
 3. Day View marker-card interaction（Phase 13B）。
+4. AI durable quota、reasoning mode controls、search provider proxy 和 AI trip edit agent。
 
-在时区审计完成前，不建议继续推进 Map Provider、AI-native 或 Transit Hints 等新能力。
+在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应先补 durable quota 和明确的 provider proxy / confirmation boundary。

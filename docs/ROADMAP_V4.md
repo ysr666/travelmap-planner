@@ -8,7 +8,7 @@
 - 独立页面不等于表单完成。新建 / 编辑页面需要继续做移动端布局、重叠、错误提示和键盘场景 QA。
 - 路由拆分不等于交互完成。Trip Home / Day View / Item Detail 已拆开，但 Day View 仍未完成理想的“marker → 轻卡片 → Item Detail”地图交互。
 - 继续保持 local-first。IndexedDB 是主数据源；Supabase 是单旅行云端保存，不是实时表同步。
-- AI 和地图 API 只做辅助。AI 只建议，用户确认；server-only provider keys 通过后端 proxy 保存；不缓存商业地图瓦片。
+- AI 和地图 API 只做辅助。AI draft generation / repair 只更新草稿 preview，用户确认后才写入；server-only provider keys 通过后端 proxy 保存；不缓存商业地图瓦片。
 
 ## 已完成基线
 
@@ -22,6 +22,8 @@
 - Phase 12B：PWA 启动云端保存检查完成。
 - Phase 12C：冲突感知云端提示与操作链路完成。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
+- AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails 完成。
+- E2E locator hardening 完成。
 
 当前 canonical routes：
 
@@ -36,6 +38,7 @@
 #/item/edit?tripId=...&dayId=...&itemId=...
 #/tickets
 #/settings
+#/ai-draft
 ```
 
 ## 不要误判为完成
@@ -46,6 +49,9 @@
 - Ticket Library 仍偏文件列表，还不是票据画廊。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
 - 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
+- AI reasoning mode UI 尚未实现：当前 DeepSeek thinking mode 为 JSON 草稿生成 / 修复显式关闭。
+- AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气或网页来源。
+- AI trip edit agent 尚未实现：当前 repair 是草稿级 preview 修复，不直接修改已保存旅行。
 
 ## 后续路线图
 
@@ -85,9 +91,40 @@
 
 ### 6. AI-native PWA
 
-- Phase 20A：AI Trip Generation Prompt / Schema。
-- 先做 prompt 和 schema 文档，再考虑 API。
-- AI 只生成 draft / 建议；地点、坐标、路线、交通时间和票据绑定必须由用户确认后写入。
+- Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
+- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary。
+- 当前限制：不接入 web search，不提供 thinking mode UI，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。
+- AI 只生成 draft / 修复 draft preview；地点、坐标、路线、交通时间和票据绑定必须由用户确认后写入。
+
+### 7. AI-first future work
+
+#### Reasoning Mode Controls
+
+- 增加用户可理解的模式：`快速模式` / `深度思考`。
+- 默认保持快速 / off，继续优先稳定 JSON output 和低延迟。
+- 深度思考必须显示成本、耗时和额度提示。
+- Provider request shape 仍保持 server-side，不能把 AI key 暴露给前端。
+
+#### Search Provider Proxy Foundation
+
+- Web search 必须是独立 provider proxy operation，不混入 draft repair。
+- 返回内容需要 sources、source title / URL、retrievedAt、confidence 和摘要。
+- UI 必须展示来源和时间，不能把实时营业时间、票价或交通状态伪装成模型常识。
+- 搜索请求和 AI 请求应有独立 quota、normalized errors 和 no-secret boundary。
+
+#### AI Trip Edit Agent
+
+- 用户用自然语言说明如何修改已保存旅行。
+- AI 输出 patch / diff，而不是直接写 IndexedDB。
+- Patch 必须经过 schema validation、冲突检查、预览和用户确认。
+- 默认不得读取票据图片/PDF/OCR、cloud token、route cache、provider key 或完整本地 DB。
+
+#### Durable Quota And Abuse Controls
+
+- 用 KV / Supabase / Redis 等 durable store 替代当前内存 quota。
+- 结合 account、session、IP 和 server-observed signals。
+- 保持 route、AI generation、AI repair、future search 的 quota namespace 隔离。
+- Public beta 前需要 origin allowlist、billing / abuse protection 和近生产 Cloudflare smoke。
 
 ## 长期边界
 
@@ -99,6 +136,8 @@
 - 云端版本较新时使用云端版本覆盖本地，本地版本较新时用本地覆盖云端；可能冲突时提示用户确认方向，不做自动合并。
 - 旧版多条云端记录和旧版恢复出的本地副本可能仍存在；不自动迁移、合并、删除或清理。
 - 本地 zip 备份仍然重要。
-- OpenRouteService / Google Routes / future AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
+- OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
+- DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；thinking mode 对 JSON-only 草稿任务显式关闭，未来深度思考需要单独产品入口。
+- 当前 AI 不联网搜索。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
 - 390px 移动端宽度是基础验收线。

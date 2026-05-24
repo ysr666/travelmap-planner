@@ -1,6 +1,6 @@
 # 旅图 TripMap AI 行程包开放格式
 
-旅图不内置 AI，也不会调用 AI API。你可以使用 ChatGPT、Claude、Gemini、DeepSeek 或其他工具生成符合本格式的 `trip-plan.json`，再在旅图中本地导入。
+本格式用于导入外部 AI 或其他工具生成的 `trip-plan.json` / `trip-plan.zip`。旅图也有独立的 AI Draft 页面，可通过本地 mock 或 TripMap provider proxy 生成 / 修复草稿；两者都必须在用户确认后才写入本地旅行。
 
 导入过程只读取你选择的 JSON / zip 文件，不上传服务器。
 

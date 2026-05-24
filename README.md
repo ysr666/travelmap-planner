@@ -31,12 +31,17 @@
 - Supabase 云端保存：登录后手动覆盖同一旅行的云端保存，可选开启自动云端保存，并用云端版本覆盖本地旅行
 - PWA：支持 iPhone Safari 添加到主屏幕，并缓存基础 app shell
 
-## 🤖 使用外部 AI 生成行程
+## 🤖 AI 草稿与外部 AI 行程包
 
-旅图不内置 AI，也不会调用 AI API。你可以使用 ChatGPT、Claude、Gemini、DeepSeek 或其他工具生成符合开放格式的 `trip-plan.json` / `trip-plan.zip`，再在设置页的“导入 AI 行程包”区域本地导入。
+旅图支持两类 AI 相关流程：
+
+- AI Draft 页面：可以本地 mock 生成草稿、粘贴 JSON 草稿，或在配置 TripMap provider proxy 后通过真实 AI provider 生成 / 修复草稿。真实 provider key 只放在后端运行时环境，不进入前端 `VITE_*`、IndexedDB、zip、Supabase 或用户设置页。
+- 外部 AI 行程包：你也可以使用 ChatGPT、Claude、Gemini、DeepSeek 或其他工具生成符合开放格式的 `trip-plan.json` / `trip-plan.zip`，再在设置页的“导入 AI 行程包”区域本地导入。
 
 需要注意：
 
+- AI Draft 生成 / 修复只更新草稿 preview；用户点击最终“确认导入”前不会写入本地旅行。
+- 当前 AI Draft 不联网搜索，不查询实时营业时间、票价、交通或网页来源，也不读取票据图片/PDF/OCR。
 - AI 行程包导入用于新建旅行，不替代完整 zip 备份恢复。
 - JSON 单文件适合导入行程、坐标、交通段、reference / external 票据。
 - copy 模式真实附件必须使用 zip 行程包，并把文件放在 zip 内 `files/` 目录；`filePath` 必须是 `files/` 下的安全相对路径。
@@ -47,6 +52,8 @@
 
 - [AI 行程包开放格式](docs/AI_IMPORT_SPEC.md)
 - [外部 AI 提示词模板](docs/AI_PROMPT_TEMPLATE.md)
+- [AI Agent Foundation](docs/AI_AGENT_FOUNDATION.md)
+- [Provider Proxy](docs/PROVIDER_PROXY.md)
 - [trip-plan 示例](examples/README.md)
 
 ## 🧱 技术栈
@@ -132,7 +139,7 @@ VITE_ROUTE_PROXY_URL=/api/provider-proxy
 VITE_ROUTE_PROXY_PROVIDER=openrouteservice
 ```
 
-Provider secrets 只应配置在后端运行时，例如 Cloudflare Pages Function 的 env binding。不要把 OpenRouteService、Google Routes 或未来 AI provider secrets 放进 `VITE_*` 变量，也不要要求用户在设置页填写 key。浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应使用 referrer 限制，不能当作 server-only Routes key。
+Provider secrets 只应配置在后端运行时，例如 Cloudflare Pages Function 的 env binding。不要把 OpenRouteService、Google Routes 或 AI provider secrets 放进 `VITE_*` 变量，也不要要求用户在设置页填写 key。浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应使用 referrer 限制，不能当作 server-only Routes key。
 
 道路路线生成成功后会保存为本地路线缓存，只存在当前浏览器的独立 `TripMapRouteCacheDB` 中，不进入 zip 备份、Supabase 云备份或 AI 行程包。下次打开同一旅行和同一天时，如果地点坐标、顺序和交通方式没有变化，地图会自动显示“本地缓存路线”；即使路线服务暂不可用，也可以查看已有缓存，但不能重新生成。修改地点坐标、顺序或交通方式后，旧路线缓存会失效并删除。设置页可以查看缓存大小、设置上限并清理缓存。
 

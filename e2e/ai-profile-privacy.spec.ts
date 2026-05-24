@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { createDemoTripViaUi, expectNoHorizontalOverflow } from './helpers'
 
-test('设置页可以配置旅行偏好和未来 AI 数据范围', async ({ page }) => {
+test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page }) => {
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
     window.localStorage.removeItem('tripmap:appearance')
@@ -35,8 +35,8 @@ test('设置页可以配置旅行偏好和未来 AI 数据范围', async ({ page
   await page.locator('summary').filter({ hasText: 'AI 与隐私' }).click()
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
-  await expect(privacySection).toContainText('未来 AI 功能可读取的数据范围')
-  await expect(privacySection).toContainText('当前“本地检查”不会上传数据，也不会调用外部 AI')
+  await expect(privacySection).toContainText('这些开关控制 AI 草稿生成和修复时')
+  await expect(privacySection).toContainText('本地检查不会上传数据，也不会调用外部 AI')
   await expect(privacySection).toContainText('票据图片/PDF 内容默认不可读取')
 
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')

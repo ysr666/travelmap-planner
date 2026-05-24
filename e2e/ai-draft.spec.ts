@@ -233,6 +233,83 @@ test.describe('AI Draft Quality Check', () => {
     await expect(page.getByText('这些提示不会阻止导入，请在确认前检查。')).not.toBeVisible()
   })
 
+  test('repair request strips notes when privacy is default (all off)', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    // Ensure default privacy (all off) which strips notes
+    await page.evaluate(() => localStorage.setItem('tripmap:ai-privacy', JSON.stringify({
+      allowItineraryBasics: false,
+      allowLocationText: false,
+      allowCoordinateState: false,
+      allowTransportInfo: false,
+      allowTicketMetadata: false,
+      allowTicketFileNames: false,
+      allowNotesSummary: false,
+      allowFullNotes: false,
+      allowTicketFileContent: false,
+      allowCloudSyncStatus: false,
+    })))
+
+    // Paste a draft with notes and enough items to trigger quality warnings
+    const draftWithNotes = {
+      title: '测试行程',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '景点A', locationName: 'A', startTime: '08:00', endTime: '09:00', note: '这是用户备注，不应发送给 AI' },
+          { title: '景点B', locationName: 'B', startTime: '09:30', endTime: '10:30' },
+          { title: '景点C', locationName: 'C', startTime: '11:00', endTime: '12:00' },
+          { title: '景点D', locationName: 'D', startTime: '13:00', endTime: '14:00' },
+          { title: '景点E', locationName: 'E', startTime: '14:30', endTime: '15:30' },
+          { title: '景点F', locationName: 'F', startTime: '16:00', endTime: '17:00' },
+          { title: '景点G', locationName: 'G', startTime: '17:30', endTime: '18:30' },
+        ],
+      }],
+    }
+    await page.getByText('粘贴 JSON 草稿').click()
+    await page.getByPlaceholder('{"title": "...", "startDate').fill(JSON.stringify(draftWithNotes))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByText('草稿检查')).toBeVisible()
+
+    // Intercept the repair request to verify no notes
+    let repairedDraftJson: string | null = null
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.operation === 'ai_trip_draft_repair') {
+        repairedDraftJson = JSON.stringify(body.draft)
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          draft: draftWithNotes,
+          operation: 'ai_trip_draft_repair',
+          source: 'mock',
+        }),
+      })
+    })
+
+    // Click repair and confirm
+    const repairBtn = page.getByRole('button', { name: '让 AI 修复草稿' })
+    await repairBtn.scrollIntoViewIfNeeded()
+    await repairBtn.click()
+    await page.getByRole('dialog').getByRole('button', { name: '确认修复' }).click()
+
+    // Wait for intercepted request
+    await page.waitForTimeout(1000)
+    expect(repairedDraftJson).not.toBeNull()
+
+    // Verify notes are stripped from the repaired draft
+    const repairedDraft = JSON.parse(repairedDraftJson!)
+    const itemWithNote = repairedDraft.days[0].items.find(
+      (item: { title: string }) => item.title === '景点A',
+    )
+    expect(itemWithNote.note).toBeUndefined()
+  })
+
   test('shows repair button when draft has warnings', async ({ page }) => {
     await page.goto('/#/ai-draft')
     // Paste a draft with dense day (7 items triggers dense_day warning)

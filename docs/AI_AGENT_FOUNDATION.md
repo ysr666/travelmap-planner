@@ -18,16 +18,26 @@ Travel Profile 只保存在当前浏览器 `localStorage` 的 `tripmap:travel-pr
 
 ## AI 隐私与数据范围
 
-AI 隐私设置用于控制未来 AI 功能可读取的数据范围。当前本地检查不受这些开关限制：它仍只在设备内使用已存在的安全结构化上下文，不上传数据，也不调用外部 AI。
+AI 隐私设置控制 AI 草稿生成和修复时通过旅图服务发送的数据范围。当前本地检查不受这些开关限制：它仍只在设备内使用已存在的安全结构化上下文，不上传数据，也不调用外部 AI。
 
 数据范围设置只保存在当前浏览器 `localStorage` 的 `tripmap:ai-privacy`。它不进入 IndexedDB、zip 备份、Supabase 云端保存或云端同步。
 
-默认策略保持保守：未来 AI 可读取的数据范围默认全部关闭，尤其是以下字段必须默认关闭：
+默认策略保持保守：AI 可读取的数据范围默认全部关闭，尤其是以下字段必须默认关闭：
 
 - 票据文件名 / 标题。
 - 完整备注内容。
 - 票据图片/PDF 内容。
 - 云端保存/同步状态。
+
+### AI Privacy Guard
+
+`src/lib/aiPrivacyGuard.ts` 中的纯函数在 AI 请求发送给 provider proxy 前进行数据过滤：
+
+- `sanitizeAiDraftRepairDraftForProxy` — 根据隐私设置处理 draft 中 item 的备注字段。allowFullNotes 开启时保留完整备注，allowNotesSummary 开启时截取前 80 字符，都关闭时移除备注。
+- `sanitizeAiDraftRepairFindingsForProxy` — 过滤 quality findings（当前为 pass-through）。
+- `summarizeAiPrivacyForAiRequest` — 生成简短中文说明，在确认对话框向用户展示已限制哪些数据类型。
+
+这些函数不读 localStorage、不读写 IndexedDB、不调用网络、不修改输入对象。
 
 票据图片、PDF、Blob 或文件正文在本阶段不可开启，也不得被读取、解析、上传或发送。
 

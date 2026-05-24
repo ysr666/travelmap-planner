@@ -19,6 +19,12 @@ import {
 } from '../lib/aiTripDraftRequest'
 import { generateMockAiTripDraft } from '../lib/aiTripDraftMock'
 import { getStoredTravelProfile } from '../lib/travelProfile'
+import { getStoredAiPrivacySettings } from '../lib/aiPrivacy'
+import {
+  sanitizeAiDraftRepairDraftForProxy,
+  sanitizeAiDraftRepairFindingsForProxy,
+  summarizeAiPrivacyForAiRequest,
+} from '../lib/aiPrivacyGuard'
 import { analyzeAiTripDraftQuality } from '../lib/aiTripDraftQuality'
 import { fetchProviderProxyAiTripDraft, fetchProviderProxyAiTripDraftRepair, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
 import { importTripPlanRecords } from '../db'
@@ -76,6 +82,7 @@ const SAMPLE_DRAFT = {
 
 export function AiDraftPage() {
   const profile = getStoredTravelProfile()
+  const privacy = getStoredAiPrivacySettings()
 
   const [jsonText, setJsonText] = useState('')
   const [draft, setDraft] = useState<AiTripDraft | null>(null)
@@ -196,21 +203,23 @@ export function AiDraftPage() {
     setRepairSuccessMessage(null)
     setRepairGenerating(true)
     try {
-      const sanitizedFindings = [
-        ...(qualityResult?.warnings ?? []),
-        ...(qualityResult?.criticals ?? []),
-      ].map((f) => ({
-        ruleId: f.ruleId,
-        severity: f.severity,
-        title: f.title,
-        message: f.message,
-        dayDate: f.dayDate,
-      }))
+      const sanitizedFindings = sanitizeAiDraftRepairFindingsForProxy(
+        [
+          ...(qualityResult?.warnings ?? []),
+          ...(qualityResult?.criticals ?? []),
+        ].map((f) => ({
+          ruleId: f.ruleId,
+          severity: f.severity,
+          title: f.title,
+          message: f.message,
+          dayDate: f.dayDate,
+        })),
+      )
 
       const result = await fetchProviderProxyAiTripDraftRepair(
         {
           operation: 'ai_trip_draft_repair',
-          draft,
+          draft: sanitizeAiDraftRepairDraftForProxy(draft, privacy),
           qualityFindings: sanitizedFindings,
         },
         proxyConfig.proxyUrl,
@@ -360,6 +369,7 @@ export function AiDraftPage() {
   }
 
   const summary = draft ? summarizeAiTripDraft(draft) : null
+  const repairPrivacyNotice = draft ? summarizeAiPrivacyForAiRequest(privacy, 'repair') : null
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
@@ -694,7 +704,7 @@ export function AiDraftPage() {
       <ConfirmDialog
         open={showRepairConfirm}
         title="让 AI 修复草稿"
-        body={`将通过旅图服务尝试修复当前草稿\n可能消耗服务额度\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认`}
+        body={`将通过旅图服务尝试修复当前草稿\n可能消耗服务额度\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认${repairPrivacyNotice ? `\n${repairPrivacyNotice}` : ''}`}
         confirmLabel="确认修复"
         cancelLabel="取消"
         loading={repairGenerating}

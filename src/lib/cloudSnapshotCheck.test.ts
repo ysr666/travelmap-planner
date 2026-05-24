@@ -344,7 +344,7 @@ describe('cloud snapshot version context fields', () => {
       },
       {
         description: '来自云端保存更新时间',
-        label: '云端保存',
+        label: '云端版本',
         value: '2026-04-02 17:00',
       },
       {

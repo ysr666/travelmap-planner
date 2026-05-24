@@ -248,7 +248,7 @@ export function buildCloudSnapshotVersionContextRows(
   if (cloudTime) {
     rows.push({
       description: '来自云端保存更新时间',
-      label: '云端保存',
+      label: '云端版本',
       value: cloudTime,
     })
   }

@@ -61,6 +61,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [isRestoring, setIsRestoring] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<CloudBackupSummary | null>(null)
   const [restoreResult, setRestoreResult] = useState<RestoreCloudBackupResult | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupSummary | null>(null)
@@ -194,9 +195,19 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     }
   }
 
-  async function handleUpload() {
+  function handleUploadRequest() {
     if (!trip) {
       setError('请先进入某个旅行，再上传本地数据。')
+      return
+    }
+
+    setUploadConfirmOpen(true)
+  }
+
+  async function handleUploadConfirmed() {
+    if (!trip) {
+      setError('请先进入某个旅行，再上传本地数据。')
+      setUploadConfirmOpen(false)
       return
     }
 
@@ -218,11 +229,13 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       } else {
         markTripAutoSnapshotSynced(trip.id, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地数据已上传，云端保存已更新。')
+      setMessage('本地版本已上传，云端保存已覆盖更新。')
+      setUploadConfirmOpen(false)
       setWarnings(result.warnings)
       await refreshCloudBackups()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '更新云端保存失败。')
+      setUploadConfirmOpen(false)
+      setError(caught instanceof Error ? caught.message : '覆盖云端保存失败。')
     } finally {
       setIsUploading(false)
     }
@@ -245,12 +258,12 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setRestoreTarget(null)
       if (result.warnings.length > 0) {
         setRestoreResult(result)
-        setMessage('云端保存已更新到本地旅行。请先检查下列提醒。')
+        setMessage('云端版本已覆盖当前本地旅行。请先检查下列提醒。')
       } else {
         navigateTo('trip', { tripId: result.tripId })
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '用云端保存更新本地失败。')
+      setError(caught instanceof Error ? caught.message : '使用云端版本覆盖本地失败。')
     } finally {
       setIsRestoring(false)
     }
@@ -298,7 +311,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         <div className="grid gap-2">
           <CloudInfoPill
             icon={<Upload className="size-4" />}
-            text="上传本地数据会更新同一个云端保存，包含旅行数据和 copy 票据附件。"
+            text="上传本地数据会覆盖当前旅行的云端保存，包含旅行数据和 copy 票据附件。"
           />
           <CloudInfoPill
             icon={<ShieldAlert className="size-4" />}
@@ -358,9 +371,9 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
                 disabled={!trip}
                 icon={<Upload className="size-4" />}
                 loading={isUploading}
-                onClick={() => void handleUpload()}
+                onClick={handleUploadRequest}
               >
-                上传本地数据
+                更新云端保存
               </Button>
               {!trip ? (
                 <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
@@ -435,14 +448,28 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       </Card>
 
       <ConfirmDialog
-        body="恢复会用云端保存原地更新这个本地旅行，不会创建副本。当前设备中同一旅行的本地内容会被云端版本替换。"
-        confirmLabel="用云端更新本地"
+        body={buildCloudBackupUploadConfirmBody()}
+        confirmLabel="更新云端保存"
+        icon={<Upload className="size-5" />}
+        loading={isUploading}
+        onCancel={() => {
+          if (!isUploading) {
+            setUploadConfirmOpen(false)
+          }
+        }}
+        onConfirm={() => void handleUploadConfirmed()}
+        open={uploadConfirmOpen}
+        title="更新当前旅行的云端保存？"
+      />
+      <ConfirmDialog
+        body={buildCloudBackupRestoreConfirmBody(restoreTarget)}
+        confirmLabel="用云端覆盖本地"
         icon={<Download className="size-5" />}
         loading={isRestoring}
         onCancel={() => setRestoreTarget(null)}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
-        title="用云端保存更新本地？"
+        title="用云端覆盖本地？"
       />
       <ConfirmDialog
         body="删除这个云端保存不会删除本地旅行，也不会影响其他云端保存。"
@@ -467,7 +494,7 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
       <div>
         <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
         <p className="mt-1 text-xs leading-5 text-emerald-800">
-          云端保存已原地更新到本地旅行，不会创建新的旅行副本。
+          云端版本已覆盖当前本地旅行，不会创建新的旅行副本。
         </p>
       </div>
       <ul className="list-inside list-disc space-y-1 text-xs leading-5">
@@ -548,7 +575,7 @@ function CloudBackupList({
   if (backups.length === 0) {
     return (
       <EmptyState
-        body="上传当前旅行后，这里会显示可用于更新本地的云端保存。"
+        body="更新当前旅行的云端保存后，这里会显示可用于覆盖本地的云端版本。"
         icon={<Cloud className="size-6" />}
         title="还没有云端保存"
       />
@@ -566,13 +593,20 @@ function CloudBackupList({
           key={group.groupKey}
         >
           <div className="space-y-1 px-3 py-3">
-            <p className="text-xs font-semibold text-slate-400">旅行</p>
+            <p className="text-xs font-semibold text-slate-400">
+              {group.isGrouped ? '历史备份（旧版本）' : '当前旅行'}
+            </p>
             <h4 className="break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
               {group.title}
             </h4>
             <p className="break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
-              {group.destination || '目的地未填写'} · {group.backups.length} 个云端保存
+              {group.destination || '目的地未填写'} · {group.isGrouped ? `${group.backups.length} 条历史备份` : '当前旅行的云端保存'}
             </p>
+            {group.isGrouped ? (
+              <p className="break-words text-xs leading-5 text-amber-700 [overflow-wrap:anywhere] dark:text-amber-300">
+                旧版本可能留下多条云端保存；这些记录仅为兼容保留，不会自动清理。
+              </p>
+            ) : null}
           </div>
           <div className="divide-y divide-slate-100">
             {group.backups.map((backup, index) => (
@@ -581,11 +615,11 @@ function CloudBackupList({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300">云端保存</span>
                     <span className="min-w-0 text-right font-medium text-slate-800 dark:text-slate-100">
-                      第 {group.backups.length - index} 个保存
+                      {group.isGrouped ? `旧版备份 ${group.backups.length - index}` : '当前旅行的云端保存'}
                     </span>
                   </div>
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-slate-400 dark:text-slate-500">保存时间</span>
+                    <span className="shrink-0 font-semibold text-slate-400 dark:text-slate-500">云端版本时间</span>
                     <span className="min-w-0 text-right text-slate-500 dark:text-slate-300">
                       {formatCloudDate(backup.exportedAt || backup.createdAt)}
                     </span>
@@ -607,14 +641,14 @@ function CloudBackupList({
                 ) : null}
                 <div className="grid grid-cols-2 gap-2">
                   <Button
-                    aria-label="用这个云端保存更新本地旅行"
+                    aria-label="用这个云端保存覆盖本地旅行"
                     className="px-2 text-xs"
                     data-testid="cloud-restore-backup"
                     icon={<Download className="size-4" />}
                     onClick={() => onRestore(backup)}
                     variant="secondary"
                   >
-                    用云端更新本地
+                    用云端覆盖本地
                   </Button>
                   <Button
                     className="px-2 text-xs text-red-600"
@@ -715,6 +749,28 @@ function CloudNotice({
 
 function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`h-4 animate-pulse rounded-full bg-slate-100 ${className}`} />
+}
+
+function buildCloudBackupUploadConfirmBody() {
+  return [
+    '将用当前本地版本更新云端保存。',
+    '云端原有版本会被覆盖。',
+    '不会创建新的云端快照列表。',
+    '不会自动合并云端修改。',
+  ].join('\n')
+}
+
+function buildCloudBackupRestoreConfirmBody(backup: CloudBackupSummary | null) {
+  const cloudTime = backup ? formatCloudDate(backup.exportedAt || backup.createdAt) : null
+  const versionLine = cloudTime ? `\n\n云端版本时间：${cloudTime}` : ''
+
+  return [
+    '将用云端版本覆盖当前本地旅行。',
+    '当前未上传的本地修改可能被覆盖。',
+    '不会创建新的本地旅行副本。',
+    '这是按方向覆盖，不会自动合并本地和云端修改。',
+    '建议确认方向后再继续。',
+  ].join('\n') + versionLine
 }
 
 function formatCloudDate(value: string) {

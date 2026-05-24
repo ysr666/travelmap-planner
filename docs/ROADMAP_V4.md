@@ -95,7 +95,9 @@
 - 本地 IndexedDB 仍是主数据源。
 - 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
 - Supabase 是手动 / 自动单旅行云端保存，不是实时表同步。
-- 启动云端保存检查会按“哪个更新用哪个”补偿：云端较新时原地恢复，本地较新时更新同一个云端保存；可能冲突时提示用户确认。
+- 从当前版本开始，一个本地 `trip.id` 对应一个云端保存；上传会覆盖该旅行的云端保存。
+- 云端版本较新时使用云端版本覆盖本地，本地版本较新时用本地覆盖云端；可能冲突时提示用户确认方向，不做自动合并。
+- 旧版多条云端记录和旧版恢复出的本地副本可能仍存在；不自动迁移、合并、删除或清理。
 - 本地 zip 备份仍然重要。
 - OpenRouteService / Google Routes / future AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。

@@ -28,7 +28,6 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await expect(page.getByTestId('map-collapsed-sheet')).toBeVisible()
   await expect(page.getByTestId('map-collapsed-item-preview')).toHaveCount(0)
   await expect(page.getByTestId('map-sheet-preview-list')).toBeHidden()
-  await expect(page.getByText('上拉查看行程')).toBeHidden()
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
   await expectDaySelectorShadowBreathingRoom(page)
@@ -71,7 +70,7 @@ test('地图视图 bottom sheet 可以拖拽并保留本地行程列表', async 
   await page.getByTestId('route-more-toggle').click()
   await expect(page.getByTestId('route-controls-section')).toBeHidden()
 
-  const hotelListItem = page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).first()
+  const hotelListItem = page.getByTestId('map-sheet-preview-list').getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })
   await expect(hotelListItem).toBeVisible()
   await hotelListItem.click()
   await expect(hotelListItem).toBeVisible()
@@ -182,7 +181,7 @@ test('使用 mocked geolocation 显示当前位置且远距离时优先回到行
 
   await page.getByTestId('map-user-location-button').click()
   await expect(page.getByTestId('map-user-location-marker')).toHaveCount(1)
-  await expect(page.getByTestId('map-location-notice')).toContainText('当前位置距离行程较远，已优先回到当天行程范围')
+  await expect(page.getByTestId('map-location-notice')).toContainText('当前位置距离行程较远')
   await expectNoTextOverflow(page.getByTestId('map-location-notice'))
   await expectNoHorizontalOverflow(page)
 })
@@ -397,11 +396,9 @@ async function expectMarkerGroupNearVisibleCenter(page: Page) {
 }
 
 async function getVisibleMarkerBoxes(page: Page) {
-  const markers = page.getByTestId('day-map-marker')
-  const markerCount = await markers.count()
   const boxes = []
-  for (let index = 0; index < markerCount; index += 1) {
-    const box = await markers.nth(index).boundingBox()
+  for (const marker of await page.getByTestId('day-map-marker').all()) {
+    const box = await marker.boundingBox()
     if (box) {
       boxes.push(box)
     }

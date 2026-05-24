@@ -11,7 +11,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   const html = page.locator('html')
-  await expect(page.getByTestId('appearance-settings').getByRole('heading', { name: '外观' }).first()).toBeVisible()
+  await expect(page.getByTestId('appearance-settings').getByRole('heading', { name: '外观', level: 2 })).toBeVisible()
   await expect(page.getByTestId('appearance-mode-system')).toHaveAttribute('aria-pressed', 'true')
   await expectNoHorizontalOverflow(page)
 

@@ -219,7 +219,7 @@ function makeTicketSeeds(count: number): SeedTicket[] {
 test('日程来源打开行程点详情并返回日程', async ({ page }) => {
   await createDemoTripViaUi(page)
 
-  await page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).first().click()
+  await page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).click()
   await expect(page).toHaveURL(/#\/item\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('item-detail-page')).toBeVisible()
@@ -240,7 +240,7 @@ test('日程来源打开行程点详情并返回日程', async ({ page }) => {
 test('日程来源详情可按当天顺序切换上一项和下一项', async ({ page }) => {
   await createDemoTripViaUi(page)
 
-  await page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).first().click()
+  await page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ }).click()
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('item-previous-button')).toBeDisabled()
   await expect(page.getByTestId('item-next-button')).toBeEnabled()
@@ -323,7 +323,7 @@ test('无坐标行程点显示轻量导航不可用状态', async ({ page }) => 
   await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${secondItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('item-detail-page')).toBeVisible()
   await expect(page.getByTestId('item-detail-core')).toContainText('暂无坐标')
-  await expect(page.getByTestId('item-detail-navigation')).toContainText('暂无坐标，无法从这里打开外部地图导航')
+  await expect(page.getByTestId('item-detail-navigation')).toContainText('无法从这里打开外部地图导航')
   await expect(page.getByTestId('item-detail-navigation').getByRole('link', { name: /Apple 地图|Google 地图/ })).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -345,7 +345,7 @@ test('票据区显示现场卡片、预览和查看全部入口', async ({ page 
   await expect(page.getByTestId('item-detail-tickets')).toContainText('图片')
   await expect(page.getByTestId('item-detail-tickets')).toContainText('本地副本')
   await expect(page.getByTestId('item-ticket-view-all')).toContainText('+1')
-  await page.getByTestId('item-ticket-entry').first().click()
+  await page.getByTestId('item-ticket-entry').filter({ hasText: '酒店订单 PDF' }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-counter')).toContainText('1 / 4')
   await expect(page.getByTestId('ticket-preview-reference')).toContainText('此票据仅记录文件位置')

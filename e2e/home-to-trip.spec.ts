@@ -10,7 +10,7 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await expectNoHorizontalOverflow(page)
 
   await page.getByRole('button', { name: '创建示例旅行' }).click()
-  const tripCard = page.getByTestId('trip-card').first()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await expect(tripCard).toContainText('东京春日旅行')
   await expect(tripCard).toContainText('日本东京')
@@ -20,9 +20,8 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await clickTripCard(tripCard)
 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await expect(page.getByText('每日行程')).toBeVisible()
-  await expect(page.getByText('第一天')).toBeVisible()
-  await page.getByText('第一天', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
+  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()

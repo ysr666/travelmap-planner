@@ -5,7 +5,7 @@ import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigu
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 async function openAiTripImportSection(page: Page) {
-  await page.getByText('AI 行程导入', { exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'AI 行程导入' }).click()
   await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
 }
 
@@ -31,7 +31,7 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
 
   const preview = page.getByTestId('ai-trip-plan-preview')
   await expect(preview).toBeVisible()
-  await expect(page.getByText('AI 测试东京旅行')).toBeVisible()
+  await expect(preview).toContainText('AI 测试东京旅行')
   await expect(preview.getByText('行程点', { exact: true })).toBeVisible()
   await expect(page.getByTestId('ai-trip-plan-validation-status')).toContainText('可导入')
 
@@ -41,12 +41,11 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
   await expect(checklist.getByText('地图坐标是否准确')).toBeVisible()
   await checklist.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await expect(page.getByRole('heading', { name: 'AI 测试东京旅行' }).first()).toBeVisible()
-  await page.getByText('第一天', { exact: true }).click()
+  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
-  await expect(page.getByText('Hotel Metropolitan Tokyo 入住')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 
@@ -88,10 +87,9 @@ test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await expect(page.getByTestId('ai-trip-plan-success-checklist')).toBeVisible()
   await page.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await expect(page.getByRole('heading', { name: 'AI 缺坐标测试旅行' }).first()).toBeVisible()
-  await page.getByText('第一天', { exact: true }).click()
+  await page.getByRole('button', { name: /缺坐标测试日/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
-  await expect(page.getByText('无坐标餐厅')).toBeVisible()
+  await expect(page.getByRole('button', { name: /无坐标餐厅/ })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

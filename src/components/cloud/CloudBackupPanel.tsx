@@ -459,6 +459,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         }}
         onConfirm={() => void handleUploadConfirmed()}
         open={uploadConfirmOpen}
+        testId="cloud-save-confirm-dialog"
         title="更新当前旅行的云端保存？"
       />
       <ConfirmDialog
@@ -469,6 +470,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         onCancel={() => setRestoreTarget(null)}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
+        testId="cloud-save-confirm-dialog"
         title="用云端覆盖本地？"
       />
       <ConfirmDialog

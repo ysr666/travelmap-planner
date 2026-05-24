@@ -11,6 +11,7 @@ type ConfirmDialogProps = {
   cancelLabel?: string
   loading?: boolean
   icon?: ReactNode
+  testId?: string
   onCancel: () => void
   onConfirm: () => void
 }
@@ -23,6 +24,7 @@ export function ConfirmDialog({
   cancelLabel = '取消',
   loading = false,
   icon,
+  testId,
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -55,6 +57,7 @@ export function ConfirmDialog({
     <div
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-slate-950/60"
+      data-testid={testId}
       role="dialog"
     >
       <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl tm-surface">

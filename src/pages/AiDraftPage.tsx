@@ -383,7 +383,7 @@ export function AiDraftPage() {
         </p>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="ai-draft-request-form">
         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">填写行程信息</p>
         <p className="text-xs tm-muted">
           根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
@@ -521,26 +521,28 @@ export function AiDraftPage() {
         )}
       </div>
 
-      <Collapsible title="粘贴 JSON 草稿" subtitle="如果你已经有符合格式的草稿 JSON，可以在这里粘贴。">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <textarea
-              className="h-48 w-full rounded-xl border border-slate-200 p-3 font-mono text-sm tm-surface dark:border-slate-700"
-              placeholder='{"title": "...", "startDate": "YYYY-MM-DD", ...}'
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-            />
+      <div data-testid="ai-draft-json-section">
+        <Collapsible title="粘贴 JSON 草稿" subtitle="如果你已经有符合格式的草稿 JSON，可以在这里粘贴。">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <textarea
+                className="h-48 w-full rounded-xl border border-slate-200 p-3 font-mono text-sm tm-surface dark:border-slate-700"
+                placeholder='{"title": "...", "startDate": "YYYY-MM-DD", ...}'
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleLoadSample} variant="secondary">
+                加载固定示例
+              </Button>
+              <Button onClick={handleParse} disabled={!jsonText.trim()}>
+                解析草稿
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleLoadSample} variant="secondary">
-              加载固定示例
-            </Button>
-            <Button onClick={handleParse} disabled={!jsonText.trim()}>
-              解析草稿
-            </Button>
-          </div>
-        </div>
-      </Collapsible>
+        </Collapsible>
+      </div>
 
       {errors.length > 0 && (
         <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
@@ -558,7 +560,7 @@ export function AiDraftPage() {
 
       {summary && (
         <>
-          <Card className="space-y-3">
+          <Card className="space-y-3" data-testid="ai-draft-summary">
             <h3 className="font-medium text-slate-900 dark:text-slate-100">草稿摘要</h3>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <dt className="tm-muted">旅行标题</dt>
@@ -574,7 +576,7 @@ export function AiDraftPage() {
             </dl>
           </Card>
 
-          <Card className="space-y-3">
+          <Card className="space-y-3" data-testid="ai-draft-quality-card">
             <h3 className="font-medium text-slate-900 dark:text-slate-100">草稿检查</h3>
             {qualityResult && qualityResult.status === 'clean' && (
               <p className="text-sm text-green-700 dark:text-green-300">未发现明显问题。</p>
@@ -612,12 +614,13 @@ export function AiDraftPage() {
                   onClick={() => setShowRepairConfirm(true)}
                   variant="secondary"
                   className="w-full"
+                  data-testid="ai-draft-repair-action"
                   loading={repairGenerating}
                 >
                   让 AI 修复草稿
                 </Button>
               ) : (
-                <Button disabled className="w-full" variant="secondary">
+                <Button disabled className="w-full" data-testid="ai-draft-repair-action" variant="secondary">
                   当前未配置 AI 修复服务
                 </Button>
               )}
@@ -636,7 +639,7 @@ export function AiDraftPage() {
             </Card>
           )}
 
-          <Card className="space-y-3">
+          <Card className="space-y-3" data-testid="ai-draft-preview">
             <h3 className="font-medium text-slate-900 dark:text-slate-100">行程预览</h3>
             <div className="space-y-4">
               {draft!.days.map((day, dayIndex) => (
@@ -688,6 +691,7 @@ export function AiDraftPage() {
         loading={importing}
         onCancel={() => setShowConfirm(false)}
         onConfirm={handleConfirmImport}
+        testId="ai-draft-import-confirm-dialog"
       />
 
       <ConfirmDialog
@@ -699,6 +703,7 @@ export function AiDraftPage() {
         loading={proxyGenerating}
         onCancel={() => setShowProxyConfirm(false)}
         onConfirm={handleProxyConfirm}
+        testId="ai-draft-generate-confirm-dialog"
       />
 
       <ConfirmDialog
@@ -710,6 +715,7 @@ export function AiDraftPage() {
         loading={repairGenerating}
         onCancel={() => setShowRepairConfirm(false)}
         onConfirm={handleRepairConfirm}
+        testId="ai-draft-repair-confirm-dialog"
       />
     </div>
   )

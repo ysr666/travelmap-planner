@@ -455,6 +455,7 @@ export function TripWorkspacePage() {
         }}
         onConfirm={() => void handleConfirmGenerateRoutes()}
         open={routeGenerationConfirmOpen}
+        testId="route-generation-confirm-dialog"
         title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
       />
     </div>

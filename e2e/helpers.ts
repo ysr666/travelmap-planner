@@ -38,11 +38,11 @@ export async function createDemoTripViaUi(page: Page) {
   await expect(page.getByText('还没有旅行')).toBeVisible()
   await page.getByRole('button', { name: '创建示例旅行' }).click()
 
-  const tripCard = page.getByTestId('trip-card').first()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByText('第一天', { exact: true }).click()
+  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
@@ -51,7 +51,7 @@ export async function createDemoTripViaUi(page: Page) {
 }
 
 export async function clickTripCard(tripCard: Locator) {
-  const openButton = tripCard.getByRole('button').filter({ hasText: '东京春日旅行' }).first()
+  const openButton = tripCard.getByRole('button').filter({ hasText: '东京春日旅行' })
   if (await openButton.count()) {
     await openButton.click()
     return

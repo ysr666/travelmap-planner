@@ -159,6 +159,7 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
+        testId="cloud-save-confirm-dialog"
         title={restoreTarget?.status === 'possible_conflict' ? '用云端覆盖本地？' : '使用云端版本覆盖本地？'}
       />
       <ConfirmDialog
@@ -173,6 +174,7 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleUploadConfirmed()}
         open={Boolean(uploadConfirmTarget)}
+        testId="cloud-save-confirm-dialog"
         title={uploadConfirmTarget?.status === 'possible_conflict' ? '用本地覆盖云端？' : '上传并覆盖云端保存？'}
       />
     </section>
@@ -249,7 +251,7 @@ function CloudSnapshotPromptCard({
           ? 'space-y-2 rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2.5 shadow-[0_6px_18px_rgba(47,65,88,0.04)]'
           : 'space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 px-3 py-3'
       }
-      data-testid="cloud-snapshot-check-card"
+      data-testid={isTripVariant ? 'trip-home-cloud-save-card' : 'cloud-snapshot-check-card'}
     >
       <div className="flex items-start gap-2">
         <div

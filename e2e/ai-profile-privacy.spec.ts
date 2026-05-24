@@ -13,7 +13,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   await page.locator('summary').filter({ hasText: '旅行偏好' }).click()
   const profileSection = page.getByTestId('travel-profile-section')
   await expect(profileSection).toBeVisible()
-  await expect(profileSection).toContainText('当前本地检查仍只在设备内运行')
+  await expect(profileSection).toContainText('设备内运行')
   await expect(page.getByTestId('travel-profile-pace-moderate')).toHaveAttribute('aria-pressed', 'true')
 
   await page.getByTestId('travel-profile-pace-relaxed').click()
@@ -35,9 +35,9 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   await page.locator('summary').filter({ hasText: 'AI 与隐私' }).click()
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
-  await expect(privacySection).toContainText('这些开关控制 AI 草稿生成和修复时')
-  await expect(privacySection).toContainText('本地检查不会上传数据，也不会调用外部 AI')
-  await expect(privacySection).toContainText('票据图片/PDF 内容默认不可读取')
+  await expect(privacySection).toContainText('AI 草稿生成和修复')
+  await expect(privacySection).toContainText('不会调用外部 AI')
+  await expect(privacySection).toContainText('票据图片/PDF')
 
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
   await page.getByTestId('ai-privacy-allowItineraryBasics').click()

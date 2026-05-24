@@ -285,7 +285,7 @@ TRIPMAP_AI_MODEL=gpt-4o-mini
 
 For DeepSeek smoke QA, the current model is `deepseek-v4-flash` with `TRIPMAP_AI_BASE_URL` pointing to the DeepSeek OpenAI-compatible API base. Do not put the AI key in `VITE_*` env or user-facing settings.
 
-When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), max_tokens, `response_format: { type: "json_object" }`, and `thinking: { type: "disabled" }`. The upstream timeout is 60 seconds. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
+When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, max_tokens, `response_format: { type: "json_object" }`, and backend-selected reasoning fields. Default, simple, and `auto` requests use `temperature: 0.2` with `thinking: { type: "disabled" }`; backend-selected `high` requests use `thinking: { type: "enabled" }` with `reasoning_effort: "high"` and omit temperature. The upstream timeout is 60 seconds. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
 
 The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
 
@@ -301,10 +301,32 @@ Current usable AI provider status:
 - Real repair: usable behind `/api/provider-proxy`; DeepSeek `deepseek-v4-flash` repair smoke passed.
 - Key boundary: `TRIPMAP_AI_API_KEY` stays server-side. It must not appear in frontend bundles, IndexedDB, zip backups, Supabase snapshots, reports, logs, screenshots, or docs.
 - Validation path: provider raw text → JSON extraction → `validateAiTripDraft` → preview update. Import still requires final user confirmation.
-- Thinking mode: explicitly disabled with `thinking: { type: "disabled" }` for JSON-only draft generation and repair. This prioritizes stable structured output and lower latency.
-- Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, or web sources.
+- Reasoning mode: backend-managed policy, not a user-facing feature. The default path remains fast/stable JSON mode with `thinking: { type: "disabled" }`; complex tasks may be classified server-side for higher reasoning.
+- Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, reviews, events, or web sources, and must not claim it did.
 
-Future AI provider work should keep web search separate from repair. Search should be a new provider proxy operation with retrieved sources, `retrievedAt`, confidence, quota, and source display in the UI.
+Future AI provider work should keep web search separate from repair. Search should be a new provider proxy operation with sourced results shaped around title, URL, snippet, `retrievedAt`, source/domain, confidence, quota, and source display in the UI.
+
+### AI Backend Reasoning Policy
+
+Reasoning is selected server-side from operation complexity. The frontend does not expose model controls, reasoning selectors, search toggles, or localStorage-backed AI mode settings.
+
+- Generation defaults to `off`; longer trips may be classified as `auto` or `high` from date-range and item-count signals.
+- Repair defaults to `off`; many findings, critical findings, dense drafts, or long repair instructions may be classified as `auto` or `high`.
+- `off` maps to `thinking: { type: "disabled" }` and `temperature: 0.2`.
+- `auto` currently maps conservatively to the same disabled-thinking request shape for this release.
+- `high` maps to `thinking: { type: "enabled" }` and `reasoning_effort: "high"` and omits temperature.
+- Frontend-provided repair `reasoningMode` is accepted only for compatibility and does not force provider behavior.
+
+This policy keeps the user experience simple: users describe the travel task, while the backend chooses provider-specific reasoning behavior inside the secret-safe proxy boundary.
+
+### AI Search Readiness
+
+Search readiness is classification-only in this release. The server helper can mark that a future search operation might be relevant for opening hours, tickets, closures, transport disruption, recent reviews, or events, but runtime search remains disabled and no provider proxy search operation exists yet.
+
+- No search provider key or env var is defined.
+- No `webSearchEnabled` field is added to public AI request payloads.
+- No AI prompt should claim web search happened.
+- Future sourced search results should include title, URL, snippet, `retrievedAt`, source/domain, and confidence.
 
 ### Real Provider Smoke QA
 
@@ -379,7 +401,7 @@ The `ai_trip_draft_repair` operation allows the AI Draft page to request draft r
 - `draft` must pass `validateAiTripDraft` before sending.
 - `qualityFindings` is a sanitized subset: ruleId, severity, title, message, dayDate.
 - `repairInstruction` max 1000 chars.
-- `reasoningMode`: accepted for client contract compatibility. The current OpenAI-compatible JSON repair path keeps `temperature: 0.2` and sends `thinking: { type: "disabled" }`; no reasoning mode UI is implemented yet.
+- `reasoningMode`: accepted for client contract compatibility only. The handler computes the final reasoning mode from backend policy; the frontend cannot force high thinking.
 - No ticket blobs, cloud tokens, provider secrets, route cache, or API keys in the request.
 
 #### Response Contract

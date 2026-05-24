@@ -49,8 +49,8 @@
 - Ticket Library 仍偏文件列表，还不是票据画廊。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
 - 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
-- AI reasoning mode UI 尚未实现：当前 DeepSeek thinking mode 为 JSON 草稿生成 / 修复显式关闭。
-- AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气或网页来源。
+- AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
+- AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
 - AI trip edit agent 尚未实现：当前 repair 是草稿级 preview 修复，不直接修改已保存旅行。
 
 ## 后续路线图
@@ -93,22 +93,22 @@
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
 - 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary。
-- 当前限制：不接入 web search，不提供 thinking mode UI，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。
+- 当前限制：不接入 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。
 - AI 只生成 draft / 修复 draft preview；地点、坐标、路线、交通时间和票据绑定必须由用户确认后写入。
 
 ### 7. AI-first future work
 
-#### Reasoning Mode Controls
+#### Backend Reasoning Policy Evolution
 
-- 增加用户可理解的模式：`快速模式` / `深度思考`。
-- 默认保持快速 / off，继续优先稳定 JSON output 和低延迟。
-- 深度思考必须显示成本、耗时和额度提示。
-- Provider request shape 仍保持 server-side，不能把 AI key 暴露给前端。
+- 不做用户可见的模型控制开关；用户只表达旅行意图，后端按任务复杂度选择处理方式。
+- 默认保持 fast / stable JSON mode，优先结构化输出和低延迟。
+- 复杂任务可由后端自动提升 reasoning 强度，并在 provider proxy 内保持 provider-specific request shape。
+- 若未来需要向用户提示成本或耗时，应以任务级提示表达，不暴露 provider 参数或 AI key。
 
 #### Search Provider Proxy Foundation
 
 - Web search 必须是独立 provider proxy operation，不混入 draft repair。
-- 返回内容需要 sources、source title / URL、retrievedAt、confidence 和摘要。
+- 返回内容需要 source title、URL、snippet、retrievedAt、source/domain、confidence 和摘要。
 - UI 必须展示来源和时间，不能把实时营业时间、票价或交通状态伪装成模型常识。
 - 搜索请求和 AI 请求应有独立 quota、normalized errors 和 no-secret boundary。
 
@@ -137,7 +137,7 @@
 - 旧版多条云端记录和旧版恢复出的本地副本可能仍存在；不自动迁移、合并、删除或清理。
 - 本地 zip 备份仍然重要。
 - OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
-- DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；thinking mode 对 JSON-only 草稿任务显式关闭，未来深度思考需要单独产品入口。
-- 当前 AI 不联网搜索。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用。
+- DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
+- 当前 AI 不联网搜索。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
 - 390px 移动端宽度是基础验收线。

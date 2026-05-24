@@ -122,6 +122,27 @@ describe('createOpenAiCompatibleAiDraftProvider', () => {
     ])
   })
 
+  it('maps auto reasoning to disabled thinking for this release', async () => {
+    const fetcher = mockFetch({ choices: [{ message: { content: '{"title":"test"}' } }] })
+    const provider = createOpenAiCompatibleAiDraftProvider(validEnv(), validRequest(), fetcher)
+    await provider.generateDraft({ prompt: 'test', reasoningMode: 'auto' })
+    const body = firstFetchBody(fetcher)
+    expect(body.thinking).toEqual({ type: 'disabled' })
+    expect(body.temperature).toBe(0.2)
+    expect(body.reasoning_effort).toBeUndefined()
+  })
+
+  it('maps high reasoning to DeepSeek high thinking body', async () => {
+    const fetcher = mockFetch({ choices: [{ message: { content: '{"title":"test"}' } }] })
+    const provider = createOpenAiCompatibleAiDraftProvider(validEnv(), validRequest(), fetcher)
+    await provider.generateDraft({ prompt: 'test', reasoningMode: 'high' })
+    const body = firstFetchBody(fetcher)
+    expect(body.thinking).toEqual({ type: 'enabled' })
+    expect(body.reasoning_effort).toBe('high')
+    expect(body.response_format).toEqual({ type: 'json_object' })
+    expect(body.temperature).toBeUndefined()
+  })
+
   it('returns raw text on valid JSON response', async () => {
     const draft = { title: '东京之旅', destination: '东京', startDate: '2025-04-01', endDate: '2025-04-05', days: [] }
     const fetcher = mockFetch({ choices: [{ message: { content: JSON.stringify(draft) } }] })
@@ -205,6 +226,7 @@ describe('createOpenAiCompatibleAiDraftProvider', () => {
     expect(body).not.toContain('VITE_SUPABASE')
     expect(body).not.toContain('apiKey')
     expect(body).not.toContain('secret-ai-key')
+    expect(body).not.toContain('Bearer')
   })
 
   it('URL joining avoids double slashes', async () => {
@@ -242,6 +264,17 @@ describe('createOpenAiCompatibleAiDraftRepairProvider', () => {
     expect(body.response_format).toEqual({ type: 'json_object' })
     expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.messages).toEqual([{ role: 'system', content: 'repair prompt' }])
+  })
+
+  it('maps high reasoning to DeepSeek high thinking body for repair', async () => {
+    const fetcher = mockFetch({ choices: [{ message: { content: '{"title":"test"}' } }] })
+    const provider = createOpenAiCompatibleAiDraftRepairProvider(validEnv(), fetcher)
+    await provider.repairDraft({ prompt: 'repair prompt', reasoningMode: 'high' })
+    const body = firstFetchBody(fetcher)
+    expect(body.thinking).toEqual({ type: 'enabled' })
+    expect(body.reasoning_effort).toBe('high')
+    expect(body.response_format).toEqual({ type: 'json_object' })
+    expect(body.temperature).toBeUndefined()
   })
 
   it('repair request body omits secrets and local-only data fields', async () => {

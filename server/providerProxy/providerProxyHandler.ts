@@ -18,6 +18,8 @@ import {
   validateProviderProxyRoutePreviewRequest,
 } from '../../src/lib/providerProxyContract'
 import type { LngLat } from '../../src/lib/routing'
+import type { AiTripDraft } from '../../src/lib/aiTripDraft'
+import { listPlainDateRangeInclusive } from '../../src/lib/plainDate'
 import {
   checkAndConsumeProviderProxyQuota,
   type ProviderProxyQuotaLimits,
@@ -39,6 +41,7 @@ import {
   type AiDraftRepairProvider,
 } from './aiDraftProvider'
 import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
+import { chooseAiReasoningMode } from './aiReasoningPolicy'
 
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
@@ -179,7 +182,11 @@ async function handleAiTripDraftRequest({
   try {
     const provider = selectAiDraftProvider(env, draftRequest, fetcher)
     const providerInput = buildAiTripDraftProviderInput(draftRequest, draftRequest.requestId)
-    const result = await provider.generateDraft(providerInput)
+    const reasoningMode = chooseAiReasoningMode({
+      dayCount: listPlainDateRangeInclusive(draftRequest.startDate, draftRequest.endDate).length,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+    })
+    const result = await provider.generateDraft({ ...providerInput, reasoningMode })
 
     if (!result.ok) {
       const status = mapAiDraftErrorCodeToStatus(result.errorCode)
@@ -289,7 +296,14 @@ async function handleAiTripDraftRepairRequest({
   try {
     const provider = selectAiDraftRepairProvider(env, repairRequest, fetcher)
     const providerInput = buildAiTripDraftRepairProviderInput(repairRequest, repairRequest.requestId)
-    const result = await provider.repairDraft(providerInput)
+    const reasoningMode = chooseAiReasoningMode({
+      criticalCount: countCriticalFindings(repairRequest.qualityFindings),
+      findingCount: repairRequest.qualityFindings.length,
+      itemCount: countDraftItems(repairRequest.draft),
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+      repairInstructionLength: repairRequest.repairInstruction?.trim().length,
+    })
+    const result = await provider.repairDraft({ ...providerInput, reasoningMode })
 
     if (!result.ok) {
       const status = mapAiDraftErrorCodeToStatus(result.errorCode)
@@ -340,6 +354,14 @@ function selectAiDraftRepairProvider(
     return createUnavailableAiDraftRepairProvider()
   }
   return createDisabledAiDraftRepairProvider()
+}
+
+function countDraftItems(draft: AiTripDraft): number {
+  return draft.days.reduce((total, day) => total + day.items.length, 0)
+}
+
+function countCriticalFindings(findings: ProviderProxyAiTripDraftRepairRequest['qualityFindings']): number {
+  return findings.filter((finding) => finding.severity === 'critical').length
 }
 
 async function handleRoutePreviewRequest({

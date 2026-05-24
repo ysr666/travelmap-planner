@@ -4,11 +4,13 @@ import {
   AI_DRAFT_MAX_OUTPUT_TOKENS_HINT,
 } from './aiDraftLimits'
 import { listPlainDateRangeInclusive } from '../../src/lib/plainDate'
+import type { AiBackendReasoningMode } from './aiReasoningPolicy'
 
 export type AiDraftProviderInput = {
   requestId?: string
   prompt: string
   maxOutputTokens?: number
+  reasoningMode?: AiBackendReasoningMode
 }
 
 export function buildAiTripDraftPrompt(request: ProviderProxyAiTripDraftRequest): string {

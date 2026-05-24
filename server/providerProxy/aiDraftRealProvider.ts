@@ -1,11 +1,13 @@
 import { AI_DRAFT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
 import type { AiDraftProvider, AiDraftProviderResult, AiDraftRepairProvider } from './aiDraftProvider'
+import type { AiBackendReasoningMode } from './aiReasoningPolicy'
 import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'
 
 const REQUEST_TIMEOUT_MS = 60_000
 const CHAT_COMPLETIONS_PATH = '/chat/completions'
 const OPENAI_COMPATIBLE_JSON_RESPONSE_FORMAT = { type: 'json_object' } as const
 const OPENAI_COMPATIBLE_THINKING_DISABLED = { type: 'disabled' } as const
+const OPENAI_COMPATIBLE_THINKING_ENABLED = { type: 'enabled' } as const
 
 type OpenAiCompatibleEnv = {
   TRIPMAP_AI_API_KEY?: string
@@ -44,6 +46,7 @@ export function createOpenAiCompatibleAiDraftProvider(
           { role: 'user', content: `Plan a trip to ${request.destination} from ${request.startDate} to ${request.endDate}.` },
         ],
         model,
+        reasoningMode: input.reasoningMode,
       })
     },
   }
@@ -73,6 +76,7 @@ export function createOpenAiCompatibleAiDraftRepairProvider(
           { role: 'system', content: input.prompt },
         ],
         model,
+        reasoningMode: input.reasoningMode,
       })
     },
   }
@@ -85,6 +89,7 @@ async function requestOpenAiCompatibleDraft({
   maxTokens,
   messages,
   model,
+  reasoningMode = 'off',
 }: {
   apiKey: string
   endpoint: string
@@ -92,13 +97,14 @@ async function requestOpenAiCompatibleDraft({
   maxTokens: number
   messages: OpenAiCompatibleMessage[]
   model: string
+  reasoningMode?: AiBackendReasoningMode
 }): Promise<AiDraftProviderResult> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
     const response = await fetchImpl(endpoint, {
-      body: JSON.stringify(buildOpenAiCompatibleChatBody({ maxTokens, messages, model })),
+      body: JSON.stringify(buildOpenAiCompatibleChatBody({ maxTokens, messages, model, reasoningMode })),
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -132,11 +138,24 @@ function buildOpenAiCompatibleChatBody({
   maxTokens,
   messages,
   model,
+  reasoningMode,
 }: {
   maxTokens: number
   messages: OpenAiCompatibleMessage[]
   model: string
+  reasoningMode: AiBackendReasoningMode
 }): Record<string, unknown> {
+  if (reasoningMode === 'high') {
+    return {
+      max_tokens: maxTokens,
+      messages,
+      model,
+      reasoning_effort: 'high',
+      response_format: OPENAI_COMPATIBLE_JSON_RESPONSE_FORMAT,
+      thinking: OPENAI_COMPATIBLE_THINKING_ENABLED,
+    }
+  }
+
   return {
     max_tokens: maxTokens,
     messages,

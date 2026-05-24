@@ -77,8 +77,8 @@
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
 - 时区与日期语义审计待做。
-- AI web search 尚未实现：当前 AI 不查询实时营业时间、票价、交通、天气或网页来源。
-- AI thinking / reasoning mode UI 尚未实现：当前 DeepSeek JSON 草稿生成和修复显式关闭 thinking mode，优先稳定结构化输出。
+- AI web search 尚未实现：当前 AI 不查询实时营业时间、票价、交通、天气、近期评价、活动或网页来源。
+- AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
 - AI trip edit agent 尚未实现：AI repair 只更新草稿 preview，不直接修改已保存旅行。
 
 ## 云端与同步状态
@@ -112,8 +112,8 @@
 - Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
-- DeepSeek thinking mode：当前显式发送 `thinking: { type: "disabled" }`，因为 JSON-only draft generation / repair 优先稳定 structured output 和较低延迟。
-- Web search：当前未接入。未来应作为单独 provider proxy operation，实现 sources、retrievedAt、confidence 和来源展示，而不是混入 repair。
+- DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
+- Web search：当前未接入。未来应作为单独 provider proxy operation，实现 title、URL、snippet、retrievedAt、source/domain、confidence 和来源展示，而不是混入 repair。AI 不得在没有 future sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 
 ## 本地 QA 注意事项
 
@@ -128,6 +128,6 @@
 1. 时区与日期语义审计（Phase 12F）。
 2. Trip Home 地图概览与入口优化（Phase 13A）。
 3. Day View marker-card interaction（Phase 13B）。
-4. AI durable quota、reasoning mode controls、search provider proxy 和 AI trip edit agent。
+4. AI durable quota、backend reasoning policy evolution、search provider proxy 和 AI trip edit agent。
 
-在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应先补 durable quota 和明确的 provider proxy / confirmation boundary。
+在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应先补 durable quota，并继续保持 provider proxy / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。

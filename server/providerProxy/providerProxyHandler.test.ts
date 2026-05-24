@@ -452,13 +452,83 @@ describe('provider proxy handler ai_trip_draft_repair', () => {
     expect(body.draft.days[0].items[1].title).toBe('午餐休息')
   })
 
+  it('ignores frontend repair reasoningMode when backend policy keeps repair simple', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.thinking).toEqual({ type: 'disabled' })
+      expect(body.reasoning_effort).toBeUndefined()
+      expect(body.temperature).toBe(0.2)
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(validRepairRequest().draft) } }] }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest({
+        ...validRepairRequest(),
+        quotaSessionId: 'session-repair-reasoning-simple',
+        reasoningMode: 'high',
+        requestId: 'repair-reasoning-simple',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('uses high thinking only when backend repair policy marks complexity high', async () => {
+    const highComplexityRequest = {
+      ...validRepairRequest(),
+      quotaSessionId: 'session-repair-reasoning-high',
+      qualityFindings: [
+        { ruleId: 'time_overlap', severity: 'critical', title: '时间重叠', message: '当天有重叠时间。', dayDate: '2025-04-01' },
+      ],
+      requestId: 'repair-reasoning-high',
+    }
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.thinking).toEqual({ type: 'enabled' })
+      expect(body.reasoning_effort).toBe('high')
+      expect(body.temperature).toBeUndefined()
+      expect(JSON.stringify(body)).not.toContain('secret-key')
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(highComplexityRequest.draft) } }] }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(highComplexityRequest),
+    })
+
+    expect(response.status).toBe(200)
+  })
+
   it('does not leak env secrets in repair response', async () => {
     const response = await handleProviderProxyRequest({
       env: {
         TRIPMAP_AI_PROVIDER_KEY: 'secret-ai-key',
         TRIPMAP_PROVIDER_PROXY_MOCK: '1',
       },
-      request: jsonRequest(validRepairRequest()),
+      request: jsonRequest({
+        ...validRepairRequest(),
+        quotaSessionId: 'session-repair-secret-leak',
+        requestId: 'repair-secret-leak',
+      }),
     })
 
     expect(response.status).toBe(200)

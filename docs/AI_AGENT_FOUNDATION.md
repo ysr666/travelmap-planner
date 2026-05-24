@@ -20,8 +20,8 @@
 
 当前明确限制：
 
-- 不接入 web search，不查询实时营业时间、票价、交通、天气或网页来源。
-- 不提供 thinking / reasoning mode UI。DeepSeek thinking mode 当前在 provider 请求中显式关闭，以优先保证 JSON-only 输出稳定性和较低延迟。
+- 不接入 web search，不查询实时营业时间、票价、交通、天气或网页来源，也不会声称已查询实时来源。
+- 不提供 thinking / reasoning mode UI。推理模式由后端策略管理；默认保持 stable JSON mode，复杂任务才可由后端自动选择更高推理强度。
 - 不直接编辑已保存旅行，不输出自动写库 patch。
 - 不读取票据图片、PDF、OCR、Blob、完整本地数据库、云端 token、route cache 或 provider key。
 - 不自动生成路线、不优化行程顺序、不创建票据、不上传云端。
@@ -286,7 +286,7 @@ Prompt 边界：
 
 请求边界：
 
-- 请求体只包含 model、messages、temperature (0.2)、max_tokens、`response_format: { type: "json_object" }`、`thinking: { type: "disabled" }`。
+- 请求体只包含 model、messages、max_tokens、`response_format: { type: "json_object" }` 和后端策略选择的 reasoning 参数。默认 / simple / auto 路径使用 `temperature: 0.2` 与 `thinking: { type: "disabled" }`；high 路径由后端策略触发，使用 `thinking: { type: "enabled" }` 与 `reasoning_effort: "high"`，不发送 temperature。
 - 不包含票据、blob、cloud token、provider key、route cache。
 - Authorization header 使用 server env API key。
 

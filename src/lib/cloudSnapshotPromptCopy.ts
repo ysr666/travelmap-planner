@@ -8,21 +8,21 @@ export type CloudSnapshotPromptCopy = {
 export function getCloudSnapshotPromptCopy(status: CloudSnapshotCheckStatus): CloudSnapshotPromptCopy {
   if (status === 'cloud_newer') {
     return {
-      detail: '云端保存比当前本地旅行更新。使用云端会原地更新这个本地旅行，不会创建副本。',
-      title: '云端保存较新',
+      detail: '云端版本比当前本地版本更新。继续后会使用云端版本覆盖当前本地旅行，不会创建新的本地旅行副本。',
+      title: '云端版本较新',
     }
   }
 
   if (status === 'local_newer') {
     return {
-      detail: '当前设备上的旅行比云端保存更新。上传会更新同一个云端保存。',
+      detail: '本地版本比云端版本更新。上传后，当前本地修改会成为这次旅行的云端版本，并覆盖原有云端保存。',
       title: '本地版本较新',
     }
   }
 
   if (status === 'possible_conflict') {
     return {
-      detail: '当前本地旅行和云端保存都可能包含不同修改。请手动选择用本地更新云端、用云端更新本地，或暂不处理。',
+      detail: '本地版本和云端版本可能都包含不同修改。请选择用本地覆盖云端或用云端覆盖本地；系统不会自动合并。',
       title: '本地和云端可能都有更新',
     }
   }

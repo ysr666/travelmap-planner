@@ -78,7 +78,7 @@ export function CloudSnapshotCheckPrompts({
       await refreshCloudSnapshotChecks()
       navigateTo('trip', { tripId: result.tripId })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '用云端保存更新本地失败。')
+      setError(caught instanceof Error ? caught.message : '使用云端版本覆盖本地失败。')
     } finally {
       setBusySignature(null)
     }
@@ -111,11 +111,11 @@ export function CloudSnapshotCheckPrompts({
       } else {
         markTripAutoSnapshotSynced(target.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地数据已上传，云端保存已更新。')
+      setMessage('本地版本已上传，云端保存已覆盖更新。')
       setUploadConfirmTarget(null)
       await refreshCloudSnapshotChecks()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '更新云端保存失败。')
+      setError(caught instanceof Error ? caught.message : '覆盖云端保存失败。')
     } finally {
       setBusySignature(null)
     }
@@ -148,8 +148,8 @@ export function CloudSnapshotCheckPrompts({
         </p>
       ) : null}
       <ConfirmDialog
-        body="恢复会用云端保存原地更新这个本地旅行，不会创建副本。当前设备中同一旅行的本地内容会被云端版本替换。"
-        confirmLabel="用云端更新本地"
+        body={buildCloudRestoreConfirmBody(restoreTarget)}
+        confirmLabel={getRestoreActionLabel(restoreTarget?.status)}
         icon={<Download className="size-5" />}
         loading={Boolean(busySignature && restoreTarget?.signature === busySignature)}
         onCancel={() => {
@@ -159,11 +159,11 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
-        title="用云端保存更新本地？"
+        title={restoreTarget?.status === 'possible_conflict' ? '用云端覆盖本地？' : '使用云端版本覆盖本地？'}
       />
       <ConfirmDialog
-        body="上传会用当前设备上的旅行数据更新同一个云端保存。若云端也有你需要保留的更新，请先取消并选择用云端更新本地。"
-        confirmLabel="上传并更新云端"
+        body={buildCloudUploadConfirmBody(uploadConfirmTarget)}
+        confirmLabel={getUploadActionLabel(uploadConfirmTarget?.status)}
         icon={<Upload className="size-5" />}
         loading={Boolean(busySignature && uploadConfirmTarget?.signature === busySignature)}
         onCancel={() => {
@@ -173,7 +173,7 @@ export function CloudSnapshotCheckPrompts({
         }}
         onConfirm={() => void handleUploadConfirmed()}
         open={Boolean(uploadConfirmTarget)}
-        title="用本地数据更新云端？"
+        title={uploadConfirmTarget?.status === 'possible_conflict' ? '用本地覆盖云端？' : '上传并覆盖云端保存？'}
       />
     </section>
   )
@@ -278,7 +278,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onUpload}
           >
-            上传并更新云端
+            {getUploadActionLabel(result.status)}
           </Button>
         ) : null}
         {result.status === 'cloud_newer' || result.status === 'possible_conflict' ? (
@@ -289,7 +289,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onRestore}
           >
-            用云端更新本地
+            {getRestoreActionLabel(result.status)}
           </Button>
         ) : null}
         <Button
@@ -352,4 +352,47 @@ async function ensureCloudSnapshotActionReady() {
   if (!session) {
     throw new Error('请先登录云端保存账号。')
   }
+}
+
+function getUploadActionLabel(status: CloudSnapshotCheckResult['status'] | undefined) {
+  return status === 'possible_conflict' ? '用本地覆盖云端' : '上传并覆盖云端保存'
+}
+
+function getRestoreActionLabel(status: CloudSnapshotCheckResult['status'] | undefined) {
+  return status === 'possible_conflict' ? '用云端覆盖本地' : '使用云端版本覆盖本地'
+}
+
+function buildCloudUploadConfirmBody(result: CloudSnapshotCheckResult | null) {
+  return [
+    '将用当前本地版本更新云端保存。',
+    '云端原有版本会被覆盖。',
+    '不会创建新的云端快照列表。',
+    '不会自动合并云端修改。',
+    '这是按方向覆盖，不会自动合并本地和云端修改。',
+  ].join('\n') + buildVersionTimestampText(result)
+}
+
+function buildCloudRestoreConfirmBody(result: CloudSnapshotCheckResult | null) {
+  return [
+    '将用云端版本覆盖当前本地旅行。',
+    '当前未上传的本地修改可能被覆盖。',
+    '不会创建新的本地旅行副本。',
+    '这是按方向覆盖，不会自动合并本地和云端修改。',
+    '建议确认方向后再继续。',
+  ].join('\n') + buildVersionTimestampText(result)
+}
+
+function buildVersionTimestampText(result: CloudSnapshotCheckResult | null) {
+  if (!result) {
+    return ''
+  }
+
+  const rows = buildCloudSnapshotVersionContextRows(result).filter((row) => (
+    row.label === '本地版本' || row.label === '云端版本'
+  ))
+  if (rows.length === 0) {
+    return ''
+  }
+
+  return `\n\n${rows.map((row) => `${row.label}时间：${row.value}`).join('\n')}`
 }

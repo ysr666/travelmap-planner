@@ -8,6 +8,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
@@ -30,6 +31,7 @@ import {
   createMockAiDraftProvider,
   createMockAiDraftRepairProvider,
   createOpenAiCompatibleAiDraftProvider,
+  createOpenAiCompatibleAiDraftRepairProvider,
   createUnavailableAiDraftProvider,
   createUnavailableAiDraftRepairProvider,
   type AiDraftProvider,
@@ -325,86 +327,19 @@ async function handleAiTripDraftRepairRequest({
 
 function selectAiDraftRepairProvider(
   env: ProviderProxyHandlerEnv,
-  request: import('../../src/lib/providerProxyContract').ProviderProxyAiTripDraftRepairRequest,
+  request: ProviderProxyAiTripDraftRepairRequest,
   fetchImpl?: typeof fetch,
 ): AiDraftRepairProvider {
   if (isMockMode(env)) {
     return createMockAiDraftRepairProvider(request)
   }
   if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
-    return createOpenAiCompatibleRepairProvider(env, request, fetchImpl)
+    return createOpenAiCompatibleAiDraftRepairProvider(env, fetchImpl)
   }
   if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
     return createUnavailableAiDraftRepairProvider()
   }
   return createDisabledAiDraftRepairProvider()
-}
-
-function createOpenAiCompatibleRepairProvider(
-  env: ProviderProxyHandlerEnv,
-  request: import('../../src/lib/providerProxyContract').ProviderProxyAiTripDraftRepairRequest,
-  fetchImpl?: typeof fetch,
-): AiDraftRepairProvider {
-  const apiKey = env.TRIPMAP_AI_API_KEY?.trim()
-  const baseUrl = env.TRIPMAP_AI_BASE_URL?.trim()
-  const model = env.TRIPMAP_AI_MODEL?.trim()
-
-  return {
-    name: 'openai_compatible',
-    async repairDraft(input) {
-      if (!apiKey || !baseUrl || !model) {
-        return { ok: false, errorCode: 'provider_unavailable', message: 'AI provider environment is not fully configured.' }
-      }
-
-      const endpoint = baseUrl.replace(/\/+$/, '') + '/chat/completions'
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30_000)
-
-      try {
-        const response = await (fetchImpl ?? fetch)(endpoint, {
-          body: JSON.stringify({
-            max_tokens: input.maxOutputTokens ?? 4000,
-            messages: [
-              { role: 'system', content: input.prompt },
-            ],
-            model,
-            temperature: 0.2,
-          }),
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          method: 'POST',
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned an error.' }
-        }
-
-        const data = await response.json() as Record<string, unknown>
-        const choices = data.choices
-        if (!Array.isArray(choices) || choices.length === 0) {
-          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned empty content.' }
-        }
-        const choice = choices[0] as Record<string, unknown>
-        const message = choice?.message as Record<string, unknown> | undefined
-        const content = message?.content
-        if (typeof content !== 'string' || !content.trim()) {
-          return { ok: false, errorCode: 'provider_error', message: 'AI provider returned empty content.' }
-        }
-
-        return { kind: 'raw', ok: true, rawText: content }
-      } catch (caught) {
-        if (caught instanceof Error && caught.name === 'AbortError') {
-          return { ok: false, errorCode: 'network_error', message: 'AI provider request timed out.' }
-        }
-        return { ok: false, errorCode: 'network_error', message: 'AI provider request failed.' }
-      } finally {
-        clearTimeout(timeoutId)
-      }
-    },
-  }
 }
 
 async function handleRoutePreviewRequest({

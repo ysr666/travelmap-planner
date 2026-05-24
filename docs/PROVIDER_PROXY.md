@@ -285,7 +285,7 @@ TRIPMAP_AI_MODEL=gpt-4o-mini
 
 For DeepSeek smoke QA, the current model is `deepseek-v4-flash` with `TRIPMAP_AI_BASE_URL` pointing to the DeepSeek OpenAI-compatible API base. Do not put the AI key in `VITE_*` env or user-facing settings.
 
-When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), max_tokens, `response_format: { type: "json_object" }`, and `thinking: { type: "disabled" }`. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
+When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy sends a `POST` to `{baseURL}/chat/completions` with `Authorization: Bearer {apiKey}`. The request contains only model, messages, temperature (0.2), max_tokens, `response_format: { type: "json_object" }`, and `thinking: { type: "disabled" }`. The upstream timeout is 60 seconds. No tickets, blobs, cloud tokens, route cache data, or provider secrets are included in the request body.
 
 The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
 

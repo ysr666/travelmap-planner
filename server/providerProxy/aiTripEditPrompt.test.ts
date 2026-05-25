@@ -1,0 +1,49 @@
+import { describe, expect, it } from 'vitest'
+import { buildAiTripEditProviderInput, commandNeedsRealtimeSearch } from './aiTripEditPrompt'
+
+describe('aiTripEditPrompt', () => {
+  it('builds JSON-only patch-plan prompt without web-search claims', () => {
+    const input = buildAiTripEditProviderInput(editRequest('把第一天上午换成博物馆'), 'req-1')
+
+    expect(input.prompt).toContain('只输出 JSON')
+    expect(input.prompt).toContain('只允许以下 operation type')
+    expect(input.prompt).toContain('不要联网搜索')
+    expect(input.prompt).not.toContain('我会搜索')
+    expect(input.prompt).not.toContain('ticketBlobs')
+    expect(input.prompt).not.toContain('routeCache')
+    expect(input.prompt).not.toContain('cloudToken')
+    expect(input.maxOutputTokens).toBeGreaterThan(0)
+  })
+
+  it('adds realtime warning instruction for realtime commands', () => {
+    const input = buildAiTripEditProviderInput(editRequest('查一下最新票价，再帮我调整'), 'req-1')
+
+    expect(commandNeedsRealtimeSearch('查一下最新票价')).toBe(true)
+    expect(input.prompt).toContain('联网搜索暂未接入，未查询实时信息。')
+    expect(input.prompt).toContain('不要编造事实')
+  })
+})
+
+function editRequest(command: string) {
+  return {
+    command,
+    context: {
+      days: [
+        {
+          date: '2026-07-10',
+          id: 'day_1',
+          items: [{ dayId: 'day_1', id: 'item_1', title: '西湖' }],
+          title: '第一天',
+        },
+      ],
+      trip: {
+        destination: '杭州',
+        endDate: '2026-07-11',
+        id: 'trip_1',
+        startDate: '2026-07-10',
+        title: '杭州两日',
+      },
+    },
+    operation: 'ai_trip_edit_plan' as const,
+  }
+}

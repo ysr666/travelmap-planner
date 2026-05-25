@@ -6,6 +6,7 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -312,5 +313,75 @@ function validTravelSearchRequest() {
   return {
     operation: 'travel_search',
     query: '杭州博物馆',
+  }
+}
+
+describe('provider proxy ai_trip_edit_plan contract', () => {
+  it('accepts a valid edit plan request', () => {
+    const result = validateProviderProxyAiTripEditPlanRequest(validEditPlanRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.command).toBe('第二天太满了，帮我放松一点')
+      expect(result.request.context.days[0].items[0].id).toBe('item_1')
+    }
+  })
+
+  it('rejects invalid command and context', () => {
+    expect(validateProviderProxyAiTripEditPlanRequest({ ...validEditPlanRequest(), command: '' }).ok).toBe(false)
+    expect(validateProviderProxyAiTripEditPlanRequest({ ...validEditPlanRequest(), command: 'x'.repeat(1001) }).ok).toBe(false)
+    expect(validateProviderProxyAiTripEditPlanRequest({ ...validEditPlanRequest(), context: { days: [] } }).ok).toBe(false)
+  })
+
+  it('rejects forbidden sensitive fields recursively', () => {
+    const result = validateProviderProxyAiTripEditPlanRequest({
+      ...validEditPlanRequest(),
+      context: {
+        ...validEditPlanRequest().context,
+        ticketMetas: [{ fileName: 'secret.pdf' }],
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('invalid_request')
+    }
+  })
+
+  it('returns non-empty error message for edit plan operation', () => {
+    const message = defaultProviderProxyErrorMessage('invalid_response', 'ai_trip_edit_plan')
+    expect(message).toContain('修改建议')
+  })
+})
+
+function validEditPlanRequest() {
+  return {
+    command: '第二天太满了，帮我放松一点',
+    context: {
+      days: [
+        {
+          date: '2026-07-10',
+          id: 'day_1',
+          items: [
+            {
+              dayId: 'day_1',
+              id: 'item_1',
+              startTime: '09:00',
+              title: '西湖',
+            },
+          ],
+          title: '第一天',
+        },
+      ],
+      trip: {
+        destination: '杭州',
+        endDate: '2026-07-11',
+        id: 'trip_1',
+        startDate: '2026-07-10',
+        title: '杭州两日',
+      },
+    },
+    operation: 'ai_trip_edit_plan',
+    requestId: 'edit-1',
   }
 }

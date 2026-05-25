@@ -2,6 +2,9 @@ import type { RoutingMode, RoutingProfile, LngLat } from './routing'
 import type { AiTripDraft } from './aiTripDraft'
 import { validateAiTripDraft } from './aiTripDraft'
 import { generateMockAiTripDraft } from './aiTripDraftMock'
+import type { AiTripEditContext } from './aiTripEditContext'
+import { validateAiTripEditContext } from './aiTripEditContext'
+import type { AiTripEditPatchPlan } from './aiTripEditPatch'
 import { isValidPlainDate, listPlainDateRangeInclusive } from './plainDate'
 import type { TravelPace, TravelTransportPreference } from './travelProfile'
 import { isTravelPace, isTravelTransportPreference } from './travelProfile'
@@ -9,15 +12,17 @@ import { isTravelPace, isTravelTransportPreference } from './travelProfile'
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repair' as const
+export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as const
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
+export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyErrorCode =
@@ -133,6 +138,7 @@ export type ProviderProxyAiTripDraftValidationResult =
 
 const VALID_REASONING_MODES = new Set(['off', 'auto', 'high'])
 const MAX_REPAIR_INSTRUCTION_LENGTH = 1000
+const MAX_AI_TRIP_EDIT_COMMAND_LENGTH = 1000
 
 export type SanitizedQualityFinding = {
   ruleId: string
@@ -167,6 +173,31 @@ export type ProviderProxyAiTripDraftRepairResponse =
 
 export type ProviderProxyAiTripDraftRepairValidationResult =
   | { ok: true; request: ProviderProxyAiTripDraftRepairRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyAiTripEditPlanRequest = {
+  operation: typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  command: string
+  context: AiTripEditContext
+}
+
+export type ProviderProxyAiTripEditPlanSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  patchPlan: AiTripEditPatchPlan
+  warnings?: string[]
+}
+
+export type ProviderProxyAiTripEditPlanResponse =
+  | ProviderProxyAiTripEditPlanSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyAiTripEditPlanValidationResult =
+  | { ok: true; request: ProviderProxyAiTripEditPlanRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyTravelSearchLocale = 'zh-CN' | 'en-US'
@@ -245,6 +276,24 @@ const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
   'fullTrip',
   'Authorization',
   'headers',
+])
+const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
+  'apiKey',
+  'providerKey',
+  'token',
+  'cloudToken',
+  'ticketBlobs',
+  'ticketMetas',
+  'routeCache',
+  'localDb',
+  'fullTrip',
+  'Authorization',
+  'headers',
+  'lat',
+  'lng',
+  'coordinates',
+  'externalUrl',
+  'url',
 ])
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
@@ -387,6 +436,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前 AI 草稿修复请求暂不支持。'
     if (code === 'invalid_response') return 'AI 草稿修复服务返回的内容无法解析。'
     return 'AI 草稿修复服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
+    if (code === 'quota_exceeded') return '今日 AI 修改建议次数已达上限。'
+    if (code === 'invalid_request') return 'AI 修改建议请求无效。'
+    if (code === 'provider_error') return 'AI 修改建议服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 修改建议请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 修改建议服务返回的内容无法解析。'
+    return 'AI 修改建议服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
     if (code === 'quota_exceeded') return '今日搜索请求次数已达上限。'
@@ -620,6 +678,18 @@ function aiDraftRepairInvalidRequest(message: string, requestId?: string): Provi
   }
 }
 
+function aiTripEditPlanInvalidRequest(message: string, requestId?: string): ProviderProxyAiTripEditPlanValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
 function travelSearchInvalidRequest(message: string, requestId?: string): ProviderProxyTravelSearchValidationResult {
   return {
     error: buildProviderProxyErrorResponse({
@@ -701,6 +771,44 @@ export function validateProviderProxyAiTripDraftRepairRequest(input: unknown): P
   }
 }
 
+export function validateProviderProxyAiTripEditPlanRequest(input: unknown): ProviderProxyAiTripEditPlanValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
+    return aiTripEditPlanInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_AI_TRIP_EDIT_FIELDS)
+  if (forbiddenFieldPath) {
+    return aiTripEditPlanInvalidRequest('AI 修改建议请求包含不允许的敏感字段。', requestId)
+  }
+
+  const command = typeof record.command === 'string' ? record.command.trim() : ''
+  if (!command) {
+    return aiTripEditPlanInvalidRequest('请输入修改指令。', requestId)
+  }
+  if (command.length > MAX_AI_TRIP_EDIT_COMMAND_LENGTH) {
+    return aiTripEditPlanInvalidRequest(`修改指令不能超过 ${MAX_AI_TRIP_EDIT_COMMAND_LENGTH} 个字符。`, requestId)
+  }
+
+  const contextValidation = validateAiTripEditContext(record.context)
+  if (!contextValidation.ok) {
+    return aiTripEditPlanInvalidRequest('AI 修改上下文无效。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      command,
+      context: contextValidation.context,
+      operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+    },
+  }
+}
+
 export function validateProviderProxyTravelSearchRequest(input: unknown): ProviderProxyTravelSearchValidationResult {
   const record = readRecord(input)
   const requestId = readOptionalString(record.requestId, 128)
@@ -767,4 +875,29 @@ function isTravelSearchLocale(value: unknown): value is ProviderProxyTravelSearc
 
 function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchType {
   return typeof value === 'string' && VALID_TRAVEL_SEARCH_TYPES.has(value as ProviderProxyTravelSearchType)
+}
+
+function findForbiddenRequestFieldPath(
+  input: unknown,
+  forbiddenFields: Set<string>,
+  path = '$',
+): string | null {
+  if (!input || typeof input !== 'object') {
+    return null
+  }
+  if (Array.isArray(input)) {
+    for (const [index, value] of input.entries()) {
+      const nested = findForbiddenRequestFieldPath(value, forbiddenFields, `${path}[${index}]`)
+      if (nested) return nested
+    }
+    return null
+  }
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (forbiddenFields.has(key)) {
+      return `${path}.${key}`
+    }
+    const nested = findForbiddenRequestFieldPath(value, forbiddenFields, `${path}.${key}`)
+    if (nested) return nested
+  }
+  return null
 }

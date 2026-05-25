@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
 更新时间：2026-05-24
-基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、cloud save wording 和 E2E locator hardening 均已完成。
+基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、cloud save wording 和 E2E locator hardening 均已完成。
 
 ## 当前定位
 
@@ -46,6 +46,7 @@
 - 完整 zip 备份导出 / 导入。
 - AI trip-plan JSON / zip 导入，含 copy 附件和本地校验预览。
 - AI Draft 页面：本地 mock 草稿、手动 JSON 草稿、provider proxy 真实草稿生成、草稿质量检查和 AI repair preview flow。
+- Trip Home AI 修改建议：一次性用户指令 → 脱敏 saved-trip context → provider proxy patch plan → 本地校验 → diff preview → 二次确认后本地事务 apply。
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
 - Supabase 手动云端保存 / 原地恢复。
@@ -67,6 +68,7 @@
 - Phase 12C：冲突感知云端提示。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
+- Search provider proxy foundation / AI trip edit patch plan foundation。
 - E2E locator hardening。
 
 ## 不要误判为完成
@@ -79,7 +81,7 @@
 - 时区与日期语义审计待做。
 - AI web search 尚未实现：当前 AI 不查询实时营业时间、票价、交通、天气、近期评价、活动或网页来源。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
-- AI trip edit agent 尚未实现：AI repair 只更新草稿 preview，不直接修改已保存旅行。
+- AI trip edit 只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 云端与同步状态
 
@@ -101,6 +103,7 @@
 - Server-only OpenRouteService / Google Routes / AI provider secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
+- AI trip edit plan 不直接写库；只允许 `update_item` / `move_item` / `delete_item` / `add_item`，预览后必须二次确认才写入 IndexedDB。删除 ticket-bound item 会被拒绝，不删除或解绑票据。
 - AI provider 请求只通过 `/api/provider-proxy`；server-only AI key 不进入前端 bundle、用户设置页、IndexedDB、zip、Supabase、日志或报告。
 - AI repair 使用当前草稿、质量检查结果和隐私过滤后的数据；不读取票据图片/PDF/OCR，不搜索网页，不直接修改已保存旅行。
 - 不缓存商业地图瓦片，不通过 PWA service worker 做瓦片离线缓存。
@@ -110,6 +113,7 @@
 - Real AI draft generation：DeepSeek `deepseek-v4-flash` 通过 OpenAI-compatible provider proxy smoke passed。
 - Real AI draft repair：DeepSeek `deepseek-v4-flash` 通过 `/api/provider-proxy` smoke passed；用户确认后触发一次 repair 请求，修复草稿返回并更新 preview / JSON textarea。
 - Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
+- AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、坐标、票据文件/blob、cloud、route cache 或完整本地 DB；返回走 JSON extraction → `validateAiTripEditPatchPlan` → diff preview → final confirm → IndexedDB transaction apply。
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。

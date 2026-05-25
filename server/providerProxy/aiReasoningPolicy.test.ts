@@ -46,5 +46,14 @@ describe('chooseAiReasoningMode', () => {
   it('defaults missing signals to off', () => {
     expect(chooseAiReasoningMode({ operation: 'ai_trip_draft' })).toBe('off')
     expect(chooseAiReasoningMode({ operation: 'ai_trip_draft_repair' })).toBe('off')
+    expect(chooseAiReasoningMode({ operation: 'ai_trip_edit_plan' })).toBe('off')
+  })
+
+  it('keeps simple edit planning off and escalates only for complex edit signals', () => {
+    expect(chooseAiReasoningMode({ editCommandLength: 80, itemCount: 8, operation: 'ai_trip_edit_plan' })).toBe('off')
+    expect(chooseAiReasoningMode({ itemCount: 30, operation: 'ai_trip_edit_plan' })).toBe('auto')
+    expect(chooseAiReasoningMode({ editCommandLength: 300, operation: 'ai_trip_edit_plan' })).toBe('auto')
+    expect(chooseAiReasoningMode({ itemCount: 80, operation: 'ai_trip_edit_plan' })).toBe('high')
+    expect(chooseAiReasoningMode({ editCommandLength: 600, operation: 'ai_trip_edit_plan' })).toBe('high')
   })
 })

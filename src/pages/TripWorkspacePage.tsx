@@ -6,6 +6,7 @@ import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { TripNav } from '../components/AppShell'
+import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { TripBriefCard } from '../components/ai/TripBriefCard'
 import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
@@ -359,17 +360,26 @@ export function TripWorkspacePage() {
 
             {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
 
-              <TripMapPreview
-                days={days}
-                itemsByDay={itemsByDay}
-                onItemsReordered={async () => {
-                  await refresh()
-                }}
-                onOpenMap={(targetDay) => openDay(targetDay, 'map')}
-                routeDataReady={loadedTripContextKey === tripContextKey}
-                selectedDay={selectedDay}
-                tripId={trip.id}
-              />
+            <AiTripEditPanel
+              allItems={allItems}
+              days={days}
+              onApplied={async () => {
+                await refresh()
+              }}
+              trip={trip}
+            />
+
+            <TripMapPreview
+              days={days}
+              itemsByDay={itemsByDay}
+              onItemsReordered={async () => {
+                await refresh()
+              }}
+              onOpenMap={(targetDay) => openDay(targetDay, 'map')}
+              routeDataReady={loadedTripContextKey === tripContextKey}
+              selectedDay={selectedDay}
+              tripId={trip.id}
+            />
 
             <RoutePreparationPanel
               error={routeGenerationError}

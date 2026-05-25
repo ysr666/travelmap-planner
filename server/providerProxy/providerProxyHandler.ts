@@ -1,6 +1,7 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+  PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
@@ -8,9 +9,11 @@ import {
   isProviderProxyConcreteProvider,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
+  type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
@@ -19,6 +22,7 @@ import {
   type ProviderProxyRouteSegment,
   validateProviderProxyRoutePreviewRequest,
 } from '../../src/lib/providerProxyContract'
+import { validateAiTripEditPatchPlan } from '../../src/lib/aiTripEditPatch'
 import type { LngLat } from '../../src/lib/routing'
 import type { AiTripDraft } from '../../src/lib/aiTripDraft'
 import { listPlainDateRangeInclusive } from '../../src/lib/plainDate'
@@ -29,6 +33,7 @@ import {
 } from './quotaGuard'
 import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
 import { buildAiTripDraftRepairProviderInput } from './aiDraftRepairPrompt'
+import { buildAiTripEditProviderInput } from './aiTripEditPrompt'
 import {
   createDisabledAiDraftProvider,
   createDisabledAiDraftRepairProvider,
@@ -43,7 +48,16 @@ import {
   type AiDraftRepairProvider,
 } from './aiDraftProvider'
 import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
+import { extractJsonFromAiText } from './aiJson'
 import { chooseAiReasoningMode } from './aiReasoningPolicy'
+import {
+  createDisabledAiTripEditProvider,
+  createMockAiTripEditProvider,
+  createOpenAiCompatibleAiTripEditProvider,
+  createUnavailableAiTripEditProvider,
+  type AiTripEditProvider,
+  type AiTripEditProviderErrorCode,
+} from './aiTripEditProvider'
 import {
   createMockTravelSearchProvider,
   createUnavailableTravelSearchProvider,
@@ -139,6 +153,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
     return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
+    return handleAiTripEditPlanRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
   }
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
@@ -374,6 +392,128 @@ function countDraftItems(draft: AiTripDraft): number {
 
 function countCriticalFindings(findings: ProviderProxyAiTripDraftRepairRequest['qualityFindings']): number {
   return findings.filter((finding) => finding.severity === 'critical').length
+}
+
+async function handleAiTripEditPlanRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiTripEditPlanRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const editRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: 0,
+    identity: getQuotaIdentity(request, editRequest.quotaSessionId),
+    limits: quotaLimits,
+    operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+        requestId: editRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    const provider = selectAiTripEditProvider(env, editRequest, fetcher)
+    const providerInput = buildAiTripEditProviderInput(editRequest, editRequest.requestId)
+    const reasoningMode = chooseAiReasoningMode({
+      editCommandLength: editRequest.command.length,
+      itemCount: countEditContextItems(editRequest),
+      operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+    })
+    const result = await provider.planEdit({ ...providerInput, reasoningMode })
+
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapAiTripEditErrorCodeToStatus(result.errorCode))
+    }
+
+    if (result.kind === 'patch') {
+      return jsonResponse({
+        ok: true,
+        operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+        patchPlan: result.patchPlan,
+        requestId: editRequest.requestId,
+        source: result.source,
+        warnings: result.warnings,
+      }, 200, corsHeaders)
+    }
+
+    const extracted = extractJsonFromAiText(result.rawText)
+    if (!extracted) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+    const patchValidation = validateAiTripEditPatchPlan(extracted, editRequest.context)
+    if (!patchValidation.ok) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+
+    return jsonResponse({
+      ok: true,
+      operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+      patchPlan: patchValidation.plan,
+      requestId: editRequest.requestId,
+      source: 'future_ai',
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, editRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAiTripEditProvider(
+  env: ProviderProxyHandlerEnv,
+  request: ProviderProxyAiTripEditPlanRequest,
+  fetchImpl?: typeof fetch,
+): AiTripEditProvider {
+  if (isMockMode(env)) {
+    return createMockAiTripEditProvider(request)
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleAiTripEditProvider(env, fetchImpl)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAiTripEditProvider()
+  }
+  return createDisabledAiTripEditProvider()
+}
+
+function countEditContextItems(request: ProviderProxyAiTripEditPlanRequest): number {
+  return request.context.days.reduce((total, day) => total + day.items.length, 0)
+}
+
+function mapAiTripEditErrorCodeToStatus(code: AiTripEditProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
 }
 
 async function handleTravelSearchRequest({

@@ -669,3 +669,224 @@ function validRepairRequest() {
     ],
   }
 }
+
+describe('provider proxy handler ai_trip_edit_plan', () => {
+  it('returns deterministic mock edit patch without provider calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+    }
+
+    const first = await handleProviderProxyRequest({ ...input, request: jsonRequest(validEditRequest()) })
+    const second = await handleProviderProxyRequest({ ...input, request: jsonRequest(validEditRequest()) })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstBody = await first.json()
+    const secondBody = await second.json()
+    expect(firstBody).toEqual(secondBody)
+    expect(firstBody).toMatchObject({
+      ok: true,
+      operation: 'ai_trip_edit_plan',
+      source: 'mock',
+    })
+    expect(firstBody.patchPlan.operations.length).toBeGreaterThanOrEqual(1)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable when edit provider is not configured', async () => {
+    const response = await handleProviderProxyRequest({
+      request: jsonRequest(validEditRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'ai_trip_edit_plan',
+    })
+  })
+
+  it('rejects invalid and forbidden edit requests', async () => {
+    const invalid = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({ ...validEditRequest(), command: '' }),
+    })
+    const forbidden = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({
+        ...validEditRequest(),
+        context: { ...validEditRequest().context, routeCache: {} },
+      }),
+    })
+
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ code: 'invalid_request', ok: false })
+    expect(forbidden.status).toBe(400)
+    expect(await forbidden.json()).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+
+  it('checks isolated ai_trip_edit quota before mock provider', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      quotaLimits: { maxAiTripEditRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validEditRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({
+      ...input,
+      request: jsonRequest({ ...validEditRequest(), requestId: 'edit-2' }),
+    })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'ai_trip_edit_plan' })
+  })
+
+  it('returns valid future_ai patch from injected OpenAI-compatible fetch', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.response_format).toEqual({ type: 'json_object' })
+      expect(body.thinking).toEqual({ type: 'disabled' })
+      expect(JSON.stringify(body)).not.toContain('secret-key')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('cloudToken')
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              operations: [{ item: { title: '咖啡休息' }, targetDayId: 'day_1', type: 'add_item' }],
+              summary: '新增休息',
+            }),
+          },
+        }],
+      }))
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validEditRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.source).toBe('future_ai')
+    expect(body.patchPlan.operations[0].type).toBe('add_item')
+  })
+
+  it('returns invalid_response for invalid raw edit output', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: '{"summary":"bad","operations":[{"type":"rewrite_all"}]}' } }],
+    }))) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest({ ...validEditRequest(), quotaSessionId: 'session-edit-invalid' }),
+    })
+
+    expect(response.status).toBe(502)
+    const text = await response.text()
+    expect(text).not.toContain('rewrite_all')
+    expect(text).not.toContain('secret-key')
+    expect(JSON.parse(text)).toMatchObject({ code: 'invalid_response', ok: false })
+  })
+
+  it('uses high thinking only when backend edit policy marks complexity high', async () => {
+    const request = validEditRequestWithItemCount(80)
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.thinking).toEqual({ type: 'enabled' })
+      expect(body.reasoning_effort).toBe('high')
+      expect(body.temperature).toBeUndefined()
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              operations: [{ changes: { title: '更新标题' }, itemId: 'item_1', type: 'update_item' }],
+              summary: '更新标题',
+            }),
+          },
+        }],
+      }))
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(request),
+    })
+
+    expect(response.status).toBe(200)
+  })
+})
+
+function validEditRequest() {
+  return {
+    command: '第二天太满了，帮我放松一点',
+    context: {
+      days: [
+        {
+          date: '2026-07-10',
+          id: 'day_1',
+          items: [
+            { dayId: 'day_1', id: 'item_1', title: '西湖' },
+            { dayId: 'day_1', id: 'item_2', title: '商场' },
+          ],
+          title: '第一天',
+        },
+      ],
+      trip: {
+        destination: '杭州',
+        endDate: '2026-07-11',
+        id: 'trip_1',
+        startDate: '2026-07-10',
+        title: '杭州两日',
+      },
+    },
+    operation: 'ai_trip_edit_plan',
+    quotaSessionId: 'session-edit-1',
+    requestId: 'edit-1',
+  }
+}
+
+function validEditRequestWithItemCount(itemCount: number) {
+  return {
+    ...validEditRequest(),
+    context: {
+      ...validEditRequest().context,
+      days: [
+        {
+          ...validEditRequest().context.days[0],
+          items: Array.from({ length: itemCount }, (_, index) => ({
+            dayId: 'day_1',
+            id: `item_${index + 1}`,
+            title: `项目 ${index + 1}`,
+          })),
+        },
+      ],
+    },
+    quotaSessionId: 'session-edit-high',
+    requestId: 'edit-high',
+  }
+}

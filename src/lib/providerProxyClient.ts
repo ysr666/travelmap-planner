@@ -5,12 +5,16 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripEditPlanRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
   type ProviderProxyAiTripDraftRepairSuccessResponse,
   type ProviderProxyAiTripDraftResponse,
   type ProviderProxyAiTripDraftSuccessResponse,
+  type ProviderProxyAiTripEditPlanRequest,
+  type ProviderProxyAiTripEditPlanResponse,
+  type ProviderProxyAiTripEditPlanSuccessResponse,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyErrorResponse,
@@ -22,6 +26,7 @@ import {
   type ProviderProxyTravelSearchResponse,
   type ProviderProxyTravelSearchSuccessResponse,
 } from './providerProxyContract'
+import { validateAiTripEditPatchPlan } from './aiTripEditPatch'
 
 export type ProviderProxyRuntimeConfig = {
   configured: boolean
@@ -194,6 +199,49 @@ export async function fetchProviderProxyAiTripDraftRepair(
   return parsed
 }
 
+export async function fetchProviderProxyAiTripEditPlan(
+  request: ProviderProxyAiTripEditPlanRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiTripEditPlanSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyAiTripEditPlanRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_edit_plan' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_edit_plan' }), response.status)
+  }
+
+  const parsed = parseProviderProxyAiTripEditPlanResponse(body, validation.request)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export async function fetchProviderProxyTravelSearch(
   request: ProviderProxyTravelSearchRequest,
   proxyUrl: string,
@@ -338,6 +386,32 @@ function parseProviderProxyAiTripDraftRepairResponse(input: unknown): ProviderPr
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' })
 }
 
+function parseProviderProxyAiTripEditPlanResponse(
+  input: unknown,
+  request: ProviderProxyAiTripEditPlanRequest,
+): ProviderProxyAiTripEditPlanResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyAiTripEditPlanSuccessResponse(record, request)
+    if (validation) {
+      return validation
+    }
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'ai_trip_edit_plan'),
+      operation: 'ai_trip_edit_plan',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_edit_plan' })
+}
+
 function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTravelSearchResponse {
   const record = readRecord(input)
   if (record.ok === true) {
@@ -359,6 +433,33 @@ function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTr
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_search' })
+}
+
+function validateProviderProxyAiTripEditPlanSuccessResponse(
+  record: Record<string, unknown>,
+  request: ProviderProxyAiTripEditPlanRequest,
+): ProviderProxyAiTripEditPlanSuccessResponse | null {
+  if (record.operation !== 'ai_trip_edit_plan') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  const patchValidation = validateAiTripEditPatchPlan(record.patchPlan, request.context)
+  if (!patchValidation.ok) {
+    return null
+  }
+
+  return {
+    ok: true,
+    operation: 'ai_trip_edit_plan',
+    patchPlan: patchValidation.plan,
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    source: record.source,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((w): w is string => typeof w === 'string')
+      : patchValidation.warnings,
+  }
 }
 
 function validateProviderProxyTravelSearchSuccessResponse(record: Record<string, unknown>): ProviderProxyTravelSearchSuccessResponse | null {

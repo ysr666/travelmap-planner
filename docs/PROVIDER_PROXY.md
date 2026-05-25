@@ -111,8 +111,9 @@ The current quota guard is intentionally small:
 - In-memory/dev-only request windows.
 - Per-browser `quotaSessionId` plus server-observed IP placeholder.
 - Max route requests per window default: 60 requests per 60 seconds.
+- Max ai_trip_edit_plan requests per window default: 10 requests per 60 seconds.
 - Max travel_search requests per window default: 20 requests per 60 seconds.
-- `travel_search|` quota is isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
+- `ai_trip_edit|` and `travel_search|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
 
 This is not real abuse protection. The browser session id is spoofable. Before public launch, replace the in-memory store with durable KV, Supabase, Redis, or equivalent, and combine account/session/IP/fingerprint-like server signals where legally and technically appropriate.
 
@@ -138,12 +139,13 @@ Now:
 - Trip Home map preview still reads cached route geometry or displays straight lines; it does not silently call providers.
 - AI draft generation can use the proxy after user confirmation.
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
+- AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
 - `travel_search` foundation exists as a typed provider proxy operation, but current runtime is mock/disabled only and no UI calls it.
 
 Later:
 
 - Route order suggestion should become a separate proxy operation.
-- Real web search provider integration and AI trip edit agents should remain separate proxy operations with their own contracts, quota, source display, and write confirmation boundaries.
+- Real web search provider integration should remain a separate proxy operation with its own contract, quota, source display, and write confirmation boundary.
 
 ## Travel Search Operation
 
@@ -203,6 +205,93 @@ Success shape:
   "warnings": ["当前为模拟搜索结果，不代表实时网页信息。"]
 }
 ```
+
+## AI Trip Edit Plan Operation
+
+The `ai_trip_edit_plan` operation creates a safe patch plan for an already-saved local trip. It does not write IndexedDB, call route providers, create tickets, upload cloud snapshots, or call `travel_search`.
+
+Runtime behavior:
+
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns a deterministic mock patch plan.
+- `TRIPMAP_AI_PROVIDER=openai_compatible` with complete server-side AI env calls the configured AI provider.
+- Missing AI env returns `provider_unavailable`.
+- Real provider output follows rawText → JSON extraction → `validateAiTripEditPatchPlan`.
+- Invalid JSON, invalid IDs, forbidden fields, coordinates, ticket/route/cloud/provider fields, or unknown operations return `invalid_response`.
+- Source is `mock` for mock mode and `future_ai` for real provider output.
+
+Request contract:
+
+```json
+{
+  "operation": "ai_trip_edit_plan",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "command": "第二天太满了，帮我放松一点",
+  "context": {
+    "trip": {
+      "id": "trip-id",
+      "title": "杭州两日",
+      "destination": "杭州",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-11"
+    },
+    "days": [
+      {
+        "id": "day-id",
+        "date": "2026-07-10",
+        "title": "第一天",
+        "items": [
+          {
+            "id": "item-id",
+            "dayId": "day-id",
+            "title": "西湖",
+            "startTime": "09:00"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Context boundary:
+
+- Includes stable trip/day/item IDs, titles, dates, times, location text, transport mode/duration, and a boolean ticket-binding marker.
+- Default strips notes. When AI Privacy allows note summary, only a short truncated summary is sent.
+- Never sends coordinates, ticket filenames/content/blob, route cache, cloud token/status, provider keys, URLs, or full local DB.
+- Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketBlobs`, `ticketMetas`, `routeCache`, `localDb`, `fullTrip`, coordinates, and URLs are rejected as `invalid_request`.
+
+Success shape:
+
+```json
+{
+  "ok": true,
+  "operation": "ai_trip_edit_plan",
+  "source": "mock",
+  "patchPlan": {
+    "summary": "把西湖安排改得更明确。",
+    "operations": [
+      {
+        "type": "update_item",
+        "itemId": "item-id",
+        "changes": {
+          "title": "西湖深度散步"
+        }
+      }
+    ],
+    "warnings": []
+  }
+}
+```
+
+Patch whitelist:
+
+- `update_item`
+- `move_item`
+- `delete_item`
+- `add_item`
+
+The UI must keep two confirmation gates: one before sending sanitized context, and one before applying the validated patch locally. Ticket-bound items are not AI-deleted; `ticketMetas` and `ticketBlobs` are not touched.
 
 ## AI Trip Draft Operation
 
@@ -361,8 +450,10 @@ Current usable AI provider status:
 
 - Real generation: usable behind `/api/provider-proxy`; DeepSeek `deepseek-v4-flash` smoke passed.
 - Real repair: usable behind `/api/provider-proxy`; DeepSeek `deepseek-v4-flash` repair smoke passed.
+- Trip edit plan: foundation is usable behind `/api/provider-proxy`; it returns a validated patch plan and diff preview, not a direct database write.
 - Key boundary: `TRIPMAP_AI_API_KEY` stays server-side. It must not appear in frontend bundles, IndexedDB, zip backups, Supabase snapshots, reports, logs, screenshots, or docs.
-- Validation path: provider raw text → JSON extraction → `validateAiTripDraft` → preview update. Import still requires final user confirmation.
+- Validation path for drafts: provider raw text → JSON extraction → `validateAiTripDraft` → preview update. Import still requires final user confirmation.
+- Validation path for edit plans: provider raw text → JSON extraction → `validateAiTripEditPatchPlan` → diff preview → final local apply confirmation.
 - Reasoning mode: backend-managed policy, not a user-facing feature. The default path remains fast/stable JSON mode with `thinking: { type: "disabled" }`; complex tasks may be classified server-side for higher reasoning.
 - Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, reviews, events, or web sources, and must not claim it did.
 
@@ -374,6 +465,7 @@ Reasoning is selected server-side from operation complexity. The frontend does n
 
 - Generation defaults to `off`; longer trips may be classified as `auto` or `high` from date-range and item-count signals.
 - Repair defaults to `off`; many findings, critical findings, dense drafts, or long repair instructions may be classified as `auto` or `high`.
+- Trip edit planning defaults to `off`; very large contexts or long edit commands may be classified as `auto` or `high`.
 - `off` maps to `thinking: { type: "disabled" }` and `temperature: 0.2`.
 - `auto` currently maps conservatively to the same disabled-thinking request shape for this release.
 - `high` maps to `thinking: { type: "enabled" }` and `reasoning_effort: "high"` and omits temperature.

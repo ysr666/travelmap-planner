@@ -22,7 +22,7 @@
 - Phase 12B：PWA 启动云端保存检查完成。
 - Phase 12C：冲突感知云端提示与操作链路完成。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
-- AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails 完成。
+- AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation 完成。
 - E2E locator hardening 完成。
 
 当前 canonical routes：
@@ -51,7 +51,7 @@
 - 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
 - AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
-- AI trip edit agent 尚未实现：当前 repair 是草稿级 preview 修复，不直接修改已保存旅行。
+- AI trip edit 当前只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 后续路线图
 
@@ -92,9 +92,9 @@
 ### 6. AI-native PWA
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
-- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary。
-- 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
-- AI 只生成 draft / 修复 draft preview；地点、坐标、路线、交通时间和票据绑定必须由用户确认后写入。
+- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation。
+- 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
+- AI draft 只生成 / 修复 draft preview；AI trip edit 只生成 patch plan preview。地点、坐标、路线、交通时间、票据绑定和本地写入必须由用户确认。
 
 ### 7. AI-first future work
 
@@ -115,16 +115,17 @@
 
 #### AI Trip Edit Agent
 
-- 用户用自然语言说明如何修改已保存旅行。
-- AI 输出 patch / diff，而不是直接写 IndexedDB。
-- Patch 必须经过 schema validation、冲突检查、预览和用户确认。
-- 默认不得读取票据图片/PDF/OCR、cloud token、route cache、provider key 或完整本地 DB。
+- Foundation 已实现：用户用自然语言说明如何修改已保存旅行，AI 输出 patch / diff，而不是直接写 IndexedDB。
+- Patch 必须经过 schema validation、冲突检查、预览和二次用户确认。
+- 当前只支持 `update_item` / `move_item` / `delete_item` / `add_item` 白名单操作。
+- 默认不得读取 notes、坐标、票据图片/PDF/OCR、ticket filename/blob、cloud token/status、route cache、provider key、URL 或完整本地 DB。
+- 后续再评估 richer diff、undo/history、search-assisted edits 和多轮 chat；这些都不能绕过 preview/confirm write boundary。
 
 #### Durable Quota And Abuse Controls
 
 - 用 KV / Supabase / Redis 等 durable store 替代当前内存 quota。
 - 结合 account、session、IP 和 server-observed signals。
-- 保持 route、AI generation、AI repair、future search 的 quota namespace 隔离。
+- 保持 route、AI generation、AI repair、AI trip edit 和 future search 的 quota namespace 隔离。
 - Public beta 前需要 origin allowlist、billing / abuse protection 和近生产 Cloudflare smoke。
 
 ## 长期边界

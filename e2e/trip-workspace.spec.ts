@@ -405,6 +405,217 @@ test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) =
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let editRequests = 0
+  let travelSearchRequests = 0
+  let routePreviewRequests = 0
+  let cloudRequests = 0
+  let deepSeekRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'ai_trip_edit_plan') {
+      editRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticket_1')
+      expect(JSON.stringify(body)).not.toContain('ticketMetas')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('cloudToken')
+      expect(JSON.stringify(body)).not.toContain('lat')
+      expect(JSON.stringify(body)).not.toContain('lng')
+      expect(JSON.stringify(body)).not.toContain('默认不发送的备注')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_edit_plan',
+          patchPlan: {
+            operations: [
+              { changes: { title: '西湖深度散步' }, itemId: 'item_ai_edit_1', type: 'update_item' },
+            ],
+            summary: '把西湖安排改得更明确。',
+          },
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+    }
+    if (body.operation === 'route_preview') {
+      routePreviewRequests += 1
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    deepSeekRequests += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:e2e:supabase-unconfigured', '1')
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-07-11',
+      id: 'trip-ai-edit',
+      notes: '旅行备注也不应默认发送',
+      startDate: '2026-07-10',
+      title: '杭州 AI 修改测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-07-10', id: 'day_ai_edit_1', sortOrder: 1, title: '第一天', tripId: 'trip-ai-edit' },
+      { date: '2026-07-11', id: 'day_ai_edit_2', sortOrder: 2, title: '第二天', tripId: 'trip-ai-edit' },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'day_ai_edit_1',
+        id: 'item_ai_edit_1',
+        lat: 30.244,
+        lng: 120.155,
+        notes: '默认不发送的备注',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '西湖',
+        tripId: 'trip-ai-edit',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'day_ai_edit_1',
+        id: 'item_ai_edit_2',
+        sortOrder: 2,
+        ticketIds: ['ticket_1'],
+        title: '演出票项目',
+        tripId: 'trip-ai-edit',
+        updatedAt: now,
+      },
+    ],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket_1',
+      itemId: 'item_ai_edit_2',
+      mimeType: 'application/pdf',
+      size: 1,
+      tripId: 'trip-ai-edit',
+      updatedAt: now,
+    }],
+  })
+
+  await page.goto('/#/trip?tripId=trip-ai-edit&dayId=day_ai_edit_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('ai-trip-edit-panel')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('AI 修改建议')
+  await expect(panel.getByRole('button', { name: '生成修改方案' })).toBeDisabled()
+  await expectNoHorizontalOverflow(page)
+
+  const beforeCounts = await readAiEditBoundaryCounts(page)
+  await panel.getByTestId('ai-trip-edit-command').fill('第二天太满了，帮我放松一点')
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  await expect(page.getByTestId('ai-trip-edit-send-confirm-dialog')).toContainText('不会直接修改旅行')
+  expect(editRequests).toBe(0)
+  await page.getByRole('button', { name: '暂不发送' }).click()
+  expect(editRequests).toBe(0)
+  expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
+
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  await page.getByRole('button', { name: '确认发送' }).click()
+  await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖深度散步')
+  expect(editRequests).toBe(1)
+  expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
+  expect(await readAiEditBoundaryCounts(page)).toEqual(beforeCounts)
+
+  await panel.getByRole('button', { name: '应用修改' }).click()
+  await expect(page.getByTestId('ai-trip-edit-apply-confirm-dialog')).toContainText('不会自动生成路线')
+  await page.getByRole('button', { name: '确认应用' }).click()
+  await expect.poll(() => readItemTitle(page, 'item_ai_edit_1')).toBe('西湖深度散步')
+  const afterCounts = await readAiEditBoundaryCounts(page)
+  expect(afterCounts.trips).toBe(beforeCounts.trips)
+  expect(afterCounts.days).toBe(beforeCounts.days)
+  expect(afterCounts.itineraryItems).toBe(beforeCounts.itineraryItems)
+  expect(afterCounts.ticketMetas).toBe(beforeCounts.ticketMetas)
+  expect(afterCounts.ticketBlobs).toBe(beforeCounts.ticketBlobs)
+  expect(afterCounts.routeCaches).toBe(beforeCounts.routeCaches)
+  expect(travelSearchRequests).toBe(0)
+  expect(routePreviewRequests).toBe(0)
+  expect(cloudRequests).toBe(0)
+  expect(deepSeekRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+async function readItemTitle(page: import('@playwright/test').Page, itemId: string) {
+  return page.evaluate(async (currentItemId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const tx = db.transaction(['itineraryItems'], 'readonly')
+    const title = await new Promise<string | undefined>((resolve, reject) => {
+      const request = tx.objectStore('itineraryItems').get(currentItemId)
+      request.onsuccess = () => resolve(request.result?.title)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return title
+  }, itemId)
+}
+
+async function readAiEditBoundaryCounts(page: import('@playwright/test').Page) {
+  return page.evaluate(async () => {
+    async function openDb(name: string) {
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(name)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    async function countStore(db: IDBDatabase, storeName: string) {
+      if (!Array.from(db.objectStoreNames).includes(storeName)) return 0
+      const tx = db.transaction([storeName], 'readonly')
+      return new Promise<number>((resolve, reject) => {
+        const request = tx.objectStore(storeName).count()
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+
+    const travelDb = await openDb('TravelConsoleDB')
+    const routeDb = await openDb('TripMapRouteCacheDB')
+    const counts = {
+      days: await countStore(travelDb, 'days'),
+      itineraryItems: await countStore(travelDb, 'itineraryItems'),
+      routeCaches: await countStore(routeDb, 'routeCaches'),
+      ticketBlobs: await countStore(travelDb, 'ticketBlobs'),
+      ticketMetas: await countStore(travelDb, 'ticketMetas'),
+      trips: await countStore(travelDb, 'trips'),
+    }
+    travelDb.close()
+    routeDb.close()
+    return counts
+  })
+}
+
 async function readDayItemOrder(page: import('@playwright/test').Page, dayId: string) {
   return page.evaluate(async (currentDayId) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

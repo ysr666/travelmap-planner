@@ -114,6 +114,7 @@ describe('provider proxy quota guard', () => {
     const limits = {
       maxAiDraftRepairRequestsPerWindow: 1,
       maxAiDraftRequestsPerWindow: 1,
+      maxAiTripEditRequestsPerWindow: 1,
       maxRouteRequestsPerWindow: 1,
       maxTravelSearchRequestsPerWindow: 1,
       windowMs: 1000,
@@ -141,6 +142,14 @@ describe('provider proxy quota guard', () => {
       limits,
       nowMs: 120,
       operation: 'ai_trip_draft_repair',
+      store,
+    }).allowed).toBe(true)
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 125,
+      operation: 'ai_trip_edit_plan',
       store,
     }).allowed).toBe(true)
     expect(checkAndConsumeProviderProxyQuota({

@@ -1,12 +1,13 @@
 export type AiBackendReasoningMode = 'off' | 'auto' | 'high'
 
 export type AiReasoningPolicyInput = {
-  operation: 'ai_trip_draft' | 'ai_trip_draft_repair'
+  operation: 'ai_trip_draft' | 'ai_trip_draft_repair' | 'ai_trip_edit_plan'
   dayCount?: number
   itemCount?: number
   findingCount?: number
   criticalCount?: number
   repairInstructionLength?: number
+  editCommandLength?: number
 }
 
 export function chooseAiReasoningMode(input: AiReasoningPolicyInput): AiBackendReasoningMode {
@@ -16,19 +17,37 @@ export function chooseAiReasoningMode(input: AiReasoningPolicyInput): AiBackendR
     return 'off'
   }
 
+  if (input.operation === 'ai_trip_draft_repair') {
+    if (
+      atLeast(input.criticalCount, 1)
+      || atLeast(input.findingCount, 10)
+      || atLeast(input.itemCount, 25)
+      || atLeast(input.repairInstructionLength, 600)
+    ) {
+      return 'high'
+    }
+
+    if (
+      atLeast(input.findingCount, 6)
+      || atLeast(input.itemCount, 15)
+      || atLeast(input.repairInstructionLength, 300)
+    ) {
+      return 'auto'
+    }
+
+    return 'off'
+  }
+
   if (
-    atLeast(input.criticalCount, 1)
-    || atLeast(input.findingCount, 10)
-    || atLeast(input.itemCount, 25)
-    || atLeast(input.repairInstructionLength, 600)
+    atLeast(input.itemCount, 80)
+    || atLeast(input.editCommandLength, 600)
   ) {
     return 'high'
   }
 
   if (
-    atLeast(input.findingCount, 6)
-    || atLeast(input.itemCount, 15)
-    || atLeast(input.repairInstructionLength, 300)
+    atLeast(input.itemCount, 30)
+    || atLeast(input.editCommandLength, 300)
   ) {
     return 'auto'
   }

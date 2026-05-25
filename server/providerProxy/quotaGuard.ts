@@ -1,8 +1,10 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+  PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_COORDINATES,
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
@@ -13,6 +15,7 @@ import {
 export type ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: number
   maxAiDraftRequestsPerWindow: number
+  maxAiTripEditRequestsPerWindow: number
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
   maxRouteRequestsPerWindow: number
@@ -42,6 +45,7 @@ export type ProviderProxyQuotaCheckResult =
 export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW,
   maxAiDraftRequestsPerWindow: PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
+  maxAiTripEditRequestsPerWindow: PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   maxRouteRequestsPerWindow: 60,
@@ -79,15 +83,18 @@ export function checkAndConsumeProviderProxyQuota({
 
   const isAiDraft = operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION
   const isAiDraftRepair = operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
+  const isAiTripEdit = operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION
   const isTravelSearch = operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
   const maxRequests = isAiDraftRepair
     ? effectiveLimits.maxAiDraftRepairRequestsPerWindow
     : isAiDraft
       ? effectiveLimits.maxAiDraftRequestsPerWindow
-      : isTravelSearch
-        ? effectiveLimits.maxTravelSearchRequestsPerWindow
-        : effectiveLimits.maxRouteRequestsPerWindow
-  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : isTravelSearch ? 'travel_search|' : 'route|'
+      : isAiTripEdit
+        ? effectiveLimits.maxAiTripEditRequestsPerWindow
+        : isTravelSearch
+          ? effectiveLimits.maxTravelSearchRequestsPerWindow
+          : effectiveLimits.maxRouteRequestsPerWindow
+  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : isAiTripEdit ? 'ai_trip_edit|' : isTravelSearch ? 'travel_search|' : 'route|'
   const safeIdentity = `${identityPrefix}${identity.trim() || 'anonymous'}`
 
   const current = store.get(safeIdentity)

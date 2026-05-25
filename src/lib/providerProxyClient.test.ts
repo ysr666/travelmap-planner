@@ -5,6 +5,7 @@ import {
   ProviderProxyClientError,
   fetchProviderProxyRoutePreview,
   fetchProviderProxyAiTripDraft,
+  fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
 } from './providerProxyClient'
@@ -248,6 +249,95 @@ describe('provider proxy travel_search client', () => {
     })
   })
 })
+
+describe('provider proxy ai_trip_edit_plan client', () => {
+  it('validates and sends an edit payload without secrets', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        command: '第二天太满了，帮我放松一点',
+        operation: 'ai_trip_edit_plan',
+        quotaSessionId: 'session-edit-1',
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-ai-key')
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'ai_trip_edit_plan',
+        patchPlan: {
+          operations: [{ item: { title: '咖啡休息' }, targetDayId: 'day_1', type: 'add_item' }],
+          summary: '新增休息',
+        },
+        source: 'mock',
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAiTripEditPlan({
+      command: '第二天太满了，帮我放松一点',
+      context: editContext(),
+      operation: 'ai_trip_edit_plan',
+      quotaSessionId: 'session-edit-1',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-ai-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.patchPlan.operations[0].type).toBe('add_item')
+  })
+
+  it('rejects invalid edit requests before POST', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+
+    await expect(fetchProviderProxyAiTripEditPlan({
+      command: '',
+      context: editContext(),
+      operation: 'ai_trip_edit_plan',
+    }, '/api/provider-proxy', { fetcher })).rejects.toBeInstanceOf(ProviderProxyClientError)
+
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('throws ProviderProxyClientError for normalized edit errors', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        code: 'provider_unavailable',
+        message: 'AI 修改建议服务暂不可用。',
+        ok: false,
+        operation: 'ai_trip_edit_plan',
+      }), { status: 503 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyAiTripEditPlan({
+      command: '放松一点',
+      context: editContext(),
+      operation: 'ai_trip_edit_plan',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'provider_unavailable',
+      status: 503,
+    })
+  })
+})
+
+function editContext() {
+  return {
+    days: [
+      {
+        date: '2026-07-10',
+        id: 'day_1',
+        items: [{ dayId: 'day_1', id: 'item_1', title: '西湖' }],
+        title: '第一天',
+      },
+    ],
+    trip: {
+      destination: '杭州',
+      endDate: '2026-07-11',
+      id: 'trip_1',
+      startDate: '2026-07-10',
+      title: '杭州两日',
+    },
+  }
+}
 
 function memoryStorage(initial: Record<string, string> = {}): Storage {
   const values = new Map(Object.entries(initial))

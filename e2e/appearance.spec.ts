@@ -26,7 +26,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
 
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await expect(html).toHaveClass(/dark/)
-  await expect(page.getByText('还没有旅行')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await mockMapStyle(page)

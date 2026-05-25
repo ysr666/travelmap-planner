@@ -18,8 +18,12 @@ async function parseSampleDraft(page: Page) {
   return section
 }
 
+function requestForm(page: Page) {
+  return page.getByTestId('ai-draft-request-form')
+}
+
 function draftTextarea(page: Page) {
-  return page.getByPlaceholder('{"title": "...", "startDate')
+  return page.getByTestId('ai-draft-json-section').getByPlaceholder('{"title": "...", "startDate')
 }
 
 test.describe('AI Draft Page', () => {
@@ -28,12 +32,13 @@ test.describe('AI Draft Page', () => {
   })
 
   test('shows description and context note', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'AI 行程草稿' })).toBeVisible()
-    await expect(page.getByText('当前为本地示例流程')).toBeVisible()
+    const header = page.getByTestId('ai-draft-page-header')
+    await expect(header.getByRole('heading', { name: 'AI 行程草稿' })).toBeVisible()
+    await expect(header).toContainText('当前为本地示例流程')
   })
 
   test('shows request builder section', async ({ page }) => {
-    const form = page.getByTestId('ai-draft-request-form')
+    const form = requestForm(page)
     await expect(form.getByLabel(/目的地/)).toBeVisible()
     await expect(form.getByRole('button', { name: '根据表单生成示例草稿' })).toBeVisible()
   })
@@ -43,15 +48,17 @@ test.describe('AI Draft Page', () => {
   })
 
   test('shows validation error for empty destination', async ({ page }) => {
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
-    await expect(page.getByTestId('ai-draft-request-form')).toContainText('请输入目的地')
+    const form = requestForm(page)
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await expect(form).toContainText('请输入目的地')
   })
 
   test('generates mock draft from valid request', async ({ page }) => {
-    await page.getByLabel(/目的地/).fill('东京')
-    await page.getByLabel(/开始日期/).fill('2025-06-01')
-    await page.getByLabel(/结束日期/).fill('2025-06-03')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('东京')
+    await form.getByLabel(/开始日期/).fill('2025-06-01')
+    await form.getByLabel(/结束日期/).fill('2025-06-03')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     const summary = page.getByTestId('ai-draft-summary')
     await expect(summary).toBeVisible()
     await expect(summary).toContainText('东京之旅')
@@ -59,10 +66,11 @@ test.describe('AI Draft Page', () => {
   })
 
   test('generates mock draft shows preview', async ({ page }) => {
-    await page.getByLabel(/目的地/).fill('巴黎')
-    await page.getByLabel(/开始日期/).fill('2025-07-01')
-    await page.getByLabel(/结束日期/).fill('2025-07-02')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('巴黎')
+    await form.getByLabel(/开始日期/).fill('2025-07-01')
+    await form.getByLabel(/结束日期/).fill('2025-07-02')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByTestId('ai-draft-preview')).toBeVisible()
     await expect(page.getByRole('button', { name: '确认导入' })).toBeVisible()
   })
@@ -78,8 +86,9 @@ test.describe('AI Draft Page', () => {
     await openJsonDraftSection(page)
     await draftTextarea(page).fill('{"title": ""}')
     await page.getByRole('button', { name: '解析草稿' }).click()
-    await expect(page.getByRole('heading', { name: '草稿错误' })).toBeVisible()
-    await expect(page.getByText('旅行标题不能为空')).toBeVisible()
+    const errors = page.getByTestId('ai-draft-errors')
+    await expect(errors.getByRole('heading', { name: '草稿错误' })).toBeVisible()
+    await expect(errors).toContainText('旅行标题不能为空')
   })
 
   test('shows summary for valid draft', async ({ page }) => {
@@ -103,8 +112,9 @@ test.describe('AI Draft Page', () => {
 
   test('shows privacy notice', async ({ page }) => {
     await parseSampleDraft(page)
-    await expect(page.getByText('当前仅在本机解析草稿')).toBeVisible()
-    await expect(page.getByText('确认导入后才会写入本地旅行')).toBeVisible()
+    const privacyNote = page.getByTestId('ai-draft-privacy-note')
+    await expect(privacyNote).toContainText('当前仅在本机解析草稿')
+    await expect(privacyNote).toContainText('确认导入后才会写入本地旅行')
   })
 
   test('shows confirm button only for valid draft', async ({ page }) => {
@@ -134,10 +144,11 @@ test.describe('AI Draft Page', () => {
   })
 
   test('creates trip on confirm from generated draft', async ({ page }) => {
-    await page.getByLabel(/目的地/).fill('大阪')
-    await page.getByLabel(/开始日期/).fill('2025-08-01')
-    await page.getByLabel(/结束日期/).fill('2025-08-02')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('大阪')
+    await form.getByLabel(/开始日期/).fill('2025-08-01')
+    await form.getByLabel(/结束日期/).fill('2025-08-02')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await page.getByRole('button', { name: '确认导入' }).click()
     await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '确认导入' }).click()
@@ -152,10 +163,11 @@ test.describe('AI Draft Page', () => {
   })
 
   test('does not create trip from generated draft before confirm', async ({ page }) => {
-    await page.getByLabel(/目的地/).fill('京都')
-    await page.getByLabel(/开始日期/).fill('2025-09-01')
-    await page.getByLabel(/结束日期/).fill('2025-09-02')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('京都')
+    await form.getByLabel(/开始日期/).fill('2025-09-01')
+    await form.getByLabel(/结束日期/).fill('2025-09-02')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await page.goto('/#/home')
     await expect(page.locator('h1').filter({ hasText: '京都之旅' })).not.toBeVisible()
@@ -163,10 +175,11 @@ test.describe('AI Draft Page', () => {
 
   test('390px viewport does not overflow', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.getByLabel(/目的地/).fill('东京')
-    await page.getByLabel(/开始日期/).fill('2025-06-01')
-    await page.getByLabel(/结束日期/).fill('2025-06-03')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('东京')
+    await form.getByLabel(/开始日期/).fill('2025-06-01')
+    await form.getByLabel(/结束日期/).fill('2025-06-03')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     const body = await page.evaluate(() => document.body.scrollWidth)
     expect(body).toBeLessThanOrEqual(390)
@@ -183,10 +196,11 @@ test.describe('AI Draft Page', () => {
 test.describe('AI Draft Quality Check', () => {
   test('shows quality check card after generating mock draft', async ({ page }) => {
     await page.goto('/#/ai-draft')
-    await page.getByLabel(/目的地/).fill('东京')
-    await page.getByLabel(/开始日期/).fill('2025-06-01')
-    await page.getByLabel(/结束日期/).fill('2025-06-03')
-    await page.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('东京')
+    await form.getByLabel(/开始日期/).fill('2025-06-01')
+    await form.getByLabel(/结束日期/).fill('2025-06-03')
+    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
   })

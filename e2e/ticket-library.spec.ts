@@ -176,7 +176,7 @@ test('票据库空状态清楚可用', async ({ page }) => {
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
-  await expect(page.getByText('暂无票据')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '暂无票据' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

@@ -128,13 +128,14 @@ test('编辑行程点页面可以修改并保存', async ({ page }) => {
 
 test('缺少参数时显示错误并可返回', async ({ page }) => {
   await clearTravelDatabase(page)
+  const main = page.locator('main')
 
   await page.goto('/#/trip/edit', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('缺少旅行 ID')).toBeVisible()
+  await expect(main.getByText('缺少旅行 ID。')).toBeVisible()
 
   await page.goto('/#/item/new?tripId=fake', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('缺少旅行或日程 ID')).toBeVisible()
+  await expect(main.getByText('缺少旅行或日程 ID。')).toBeVisible()
 
   await page.goto('/#/item/edit?tripId=fake&dayId=fake', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('缺少行程点 ID')).toBeVisible()
+  await expect(main.getByText('缺少行程点 ID。')).toBeVisible()
 })

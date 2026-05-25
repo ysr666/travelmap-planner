@@ -22,7 +22,7 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
   await expect(page.getByTestId('ai-trip-plan-prompt-text')).toBeVisible()
   await page.getByTestId('ai-trip-plan-copy-prompt').click()
   await expect(
-    page.getByText(/已复制提示词。|当前浏览器不支持自动复制，请手动复制说明中的提示词。/),
+    guide.getByText(/已复制提示词。|当前浏览器不支持自动复制，请手动复制说明中的提示词。/),
   ).toBeVisible()
 
   await page

@@ -35,7 +35,7 @@ export async function clearTravelDatabase(page: Page) {
 
 export async function createDemoTripViaUi(page: Page) {
   await clearTravelDatabase(page)
-  await expect(page.getByText('还没有旅行')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
   await page.getByRole('button', { name: '创建示例旅行' }).click()
 
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })

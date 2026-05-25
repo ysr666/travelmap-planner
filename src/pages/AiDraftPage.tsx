@@ -373,7 +373,7 @@ export function AiDraftPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
-      <div className="space-y-1">
+      <div className="space-y-1" data-testid="ai-draft-page-header">
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI 行程草稿</h1>
         <p className="text-sm leading-6 tm-muted">
           先生成或粘贴草稿，检查无误后再导入为本地旅行
@@ -545,7 +545,7 @@ export function AiDraftPage() {
       </div>
 
       {errors.length > 0 && (
-        <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
+        <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30" data-testid="ai-draft-errors">
           <h3 className="mb-2 font-medium text-red-800 dark:text-red-200">草稿错误</h3>
           <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
             {errors.map((error, i) => (
@@ -668,7 +668,7 @@ export function AiDraftPage() {
             </div>
           </Card>
 
-          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
+          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30" data-testid="ai-draft-privacy-note">
             <p className="text-sm text-blue-800 dark:text-blue-200">
               当前仅在本机解析草稿，不会调用外部 AI。
               <br />

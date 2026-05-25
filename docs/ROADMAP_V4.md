@@ -108,8 +108,8 @@
 #### Search Provider Proxy Foundation
 
 - Web search 必须是独立 provider proxy operation，不混入 draft repair。
-- 当前 `travel_search` foundation 已保留合同和 quota，但默认无真实 provider 时返回 `provider_unavailable`；mock mode 仅返回 example 域名模拟结果。
-- 未来真实 provider 返回内容需要 source title、URL、snippet、retrievedAt、source/domain、confidence 和摘要。
+- 当前 `travel_search` foundation 已保留合同和独立 `search|` quota，但默认无真实 provider 时返回 `provider_unavailable`；mock mode 仅返回 example 域名模拟结果。
+- 未来真实 provider 返回内容需要 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence 和摘要。
 - UI 必须展示来源和时间，不能把实时营业时间、票价或交通状态伪装成模型常识。
 - 搜索请求和 AI 请求应有独立 quota、normalized errors 和 no-secret boundary。
 

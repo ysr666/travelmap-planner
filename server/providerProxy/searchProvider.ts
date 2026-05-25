@@ -3,6 +3,7 @@ import {
   type ProviderProxyErrorCode,
   type ProviderProxyValidatedTravelSearchRequest,
   type ProviderProxyTravelSearchResult,
+  type ProviderProxyTravelSearchSourceType,
   type ProviderProxyTravelSearchSuccessResponse,
 } from '../../src/lib/providerProxyContract'
 
@@ -31,6 +32,7 @@ export function createMockTravelSearchProvider(options: { now?: Date | string } 
           ok: true,
           operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
           query: request.query,
+          retrievedAt,
           requestId: request.requestId,
           results: buildMockSearchResults(request, retrievedAt),
           source: 'mock',
@@ -67,16 +69,26 @@ function buildMockSearchResults(
     const position = index + 1
     const id = `mock-${stableHash(`${request.searchType}:${request.query}:${request.region ?? ''}:${position}`)}`
     const slug = encodeURIComponent(`${request.searchType}-${request.query}-${position}`)
+    const url = `https://travel.example/search/${slug}`
     return {
       confidence: position === 1 ? 'medium' : 'low',
-      id,
+      displayUrl: `travel.example/search/${id}`,
+      domain: 'travel.example',
       retrievedAt,
       snippet: `模拟搜索片段 ${position}：${request.query}。此结果仅用于 provider proxy 合同测试，不代表实时网页信息。`,
-      sourceDomain: 'travel.example',
+      sourceType: mapMockSourceType(request.searchType),
       title: `模拟搜索结果 ${position}：${request.query}`,
-      url: `https://travel.example/search/${slug}`,
+      url,
     }
   })
+}
+
+function mapMockSourceType(searchType: ProviderProxyValidatedTravelSearchRequest['searchType']): ProviderProxyTravelSearchSourceType {
+  if (searchType === 'opening_hours' || searchType === 'official_site') return 'official'
+  if (searchType === 'ticket_price') return 'ticketing'
+  if (searchType === 'transport') return 'map'
+  if (searchType === 'nearby_food') return 'travel_site'
+  return 'unknown'
 }
 
 function normalizeRetrievedAt(value: Date | string | undefined): string {

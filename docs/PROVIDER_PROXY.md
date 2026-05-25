@@ -113,7 +113,7 @@ The current quota guard is intentionally small:
 - Max route requests per window default: 60 requests per 60 seconds.
 - Max ai_trip_edit_plan requests per window default: 10 requests per 60 seconds.
 - Max travel_search requests per window default: 20 requests per 60 seconds.
-- `ai_trip_edit|` and `travel_search|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
+- `ai_trip_edit|` and `search|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
 
 This is not real abuse protection. The browser session id is spoofable. Before public launch, replace the in-memory store with durable KV, Supabase, Redis, or equivalent, and combine account/session/IP/fingerprint-like server signals where legally and technically appropriate.
 
@@ -179,9 +179,9 @@ Limits:
 - `query`: required, 1-300 characters after trimming.
 - `locale`: optional, `zh-CN` or `en-US`.
 - `region`: optional, max 80 characters.
-- `searchType`: optional, `general`, `place`, `opening_hours`, `tickets`, `transport`, or `reviews`; default `general`.
-- `maxResults`: optional integer 1-10; default 5.
-- Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketBlobs`, `cloudToken`, `routeCache`, and `fullTrip` are rejected as `invalid_request`.
+- `searchType`: optional, `general`, `opening_hours`, `ticket_price`, `official_site`, `transport`, or `nearby_food`; default `general`. Legacy aliases such as `place`, `tickets`, and `reviews` are rejected.
+- `maxResults`: optional integer; missing defaults to 5, integers 1-5 are accepted, and integers above 5 are clamped to 5. Zero, negative numbers, decimals, and strings are rejected.
+- Sensitive fields such as `apiKey`, `providerKey`, `authorization`, `headers`, `ticketBlobs`, `ticketIds`, `cloudToken`, `routeCache`, `coordinates`, `items`, `itineraryItems`, `days`, `trip`, and `fullTrip` are rejected recursively as `invalid_request`.
 
 Success shape:
 
@@ -191,13 +191,15 @@ Success shape:
   "operation": "travel_search",
   "source": "mock",
   "query": "杭州博物馆 营业时间",
+  "retrievedAt": "2026-01-01T00:00:00.000Z",
   "results": [
     {
-      "id": "mock-example",
       "title": "模拟搜索结果",
       "url": "https://travel.example/search/mock-example",
-      "sourceDomain": "travel.example",
+      "displayUrl": "travel.example/search/mock-example",
+      "domain": "travel.example",
       "snippet": "模拟搜索片段，不代表实时网页信息。",
+      "sourceType": "official",
       "retrievedAt": "2026-01-01T00:00:00.000Z",
       "confidence": "low"
     }
@@ -205,6 +207,8 @@ Success shape:
   "warnings": ["当前为模拟搜索结果，不代表实时网页信息。"]
 }
 ```
+
+Clients must treat search success parsing as strict: each result needs a safe HTTP(S) `url`, `displayUrl`, `domain`, `title`, `snippet`, and `retrievedAt`. Unsafe schemes such as `javascript:` or `data:` are rejected rather than displayed.
 
 ## AI Trip Edit Plan Operation
 
@@ -462,7 +466,7 @@ Current usable AI provider status:
 - Reasoning mode: backend-managed policy, not a user-facing feature. The default path remains fast/stable JSON mode with `thinking: { type: "disabled" }`; complex tasks may be classified server-side for higher reasoning.
 - Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, reviews, events, or web sources, and must not claim it did.
 
-Future AI provider work should keep web search separate from repair. Search should be a new provider proxy operation with sourced results shaped around title, URL, snippet, `retrievedAt`, source/domain, confidence, quota, and source display in the UI.
+Future AI provider work should keep web search separate from repair and reasoning. Search should remain the `travel_search` provider proxy operation with sourced results shaped around title, URL, display URL, domain, snippet, `retrievedAt`, source type, confidence, quota, and source display in the UI. Future AI tool use must cite source URLs and `retrievedAt`; it must not mix unsourced realtime claims into normal AI reasoning.
 
 ### AI Backend Reasoning Policy
 
@@ -486,7 +490,8 @@ Search readiness is classification-only for AI flows in this release. The server
 - No `webSearchEnabled` field is added to public AI request payloads.
 - No AI prompt should claim web search happened.
 - `travel_search` exists only as a provider proxy foundation: mock succeeds in mock mode, default runtime returns `provider_unavailable`, and no page uses it yet.
-- Future sourced search results should include title, URL, snippet, `retrievedAt`, source/domain, and confidence.
+- Future sourced search results should include title, URL, display URL, domain, snippet, `retrievedAt`, source type, and confidence.
+- Production real search integration needs durable quota and provider policy review before any Google/Bing/SerpAPI/search-engine adapter is added.
 
 ### Real Provider Smoke QA
 

@@ -143,7 +143,7 @@ export function AiTripEditPanel({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">AI 修改建议</h3>
           <p className="mt-1 text-xs leading-5 tm-muted">
-            AI 只会生成修改方案，确认前不会改动行程。联网搜索暂未接入；AI 不会查询实时开放时间或票价。
+            AI 只会生成修改方案，确认前不会改动行程。联网搜索能力将通过旅图服务提供，当前仍不会自动查询网页或实时票价。
           </p>
         </div>
       </div>

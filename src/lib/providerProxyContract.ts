@@ -201,7 +201,8 @@ export type ProviderProxyAiTripEditPlanValidationResult =
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyTravelSearchLocale = 'zh-CN' | 'en-US'
-export type ProviderProxyTravelSearchType = 'general' | 'place' | 'opening_hours' | 'tickets' | 'transport' | 'reviews'
+export type ProviderProxyTravelSearchType = 'general' | 'opening_hours' | 'ticket_price' | 'official_site' | 'transport' | 'nearby_food'
+export type ProviderProxyTravelSearchSourceType = 'official' | 'map' | 'ticketing' | 'travel_site' | 'unknown'
 export type ProviderProxyTravelSearchConfidence = 'low' | 'medium' | 'high'
 
 export type ProviderProxyTravelSearchRequest = {
@@ -221,13 +222,14 @@ export type ProviderProxyValidatedTravelSearchRequest = ProviderProxyTravelSearc
 }
 
 export type ProviderProxyTravelSearchResult = {
-  id: string
   title: string
   url: string
-  sourceDomain: string
+  displayUrl: string
+  domain: string
   snippet: string
+  sourceType?: ProviderProxyTravelSearchSourceType
+  confidence?: ProviderProxyTravelSearchConfidence
   retrievedAt: string
-  confidence: ProviderProxyTravelSearchConfidence
 }
 
 export type ProviderProxyTravelSearchSuccessResponse = {
@@ -237,6 +239,7 @@ export type ProviderProxyTravelSearchSuccessResponse = {
   source: 'mock' | 'future_search'
   query: string
   results: ProviderProxyTravelSearchResult[]
+  retrievedAt: string
   warnings?: string[]
 }
 
@@ -263,19 +266,26 @@ const VALID_MODES = new Set<RoutingMode>([
 ])
 const VALID_PROFILES = new Set<RoutingProfile>(['cycling-regular', 'driving-car', 'foot-walking'])
 const VALID_TRAVEL_SEARCH_LOCALES = new Set<ProviderProxyTravelSearchLocale>(['zh-CN', 'en-US'])
-const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['general', 'place', 'opening_hours', 'tickets', 'transport', 'reviews'])
+const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['general', 'opening_hours', 'ticket_price', 'official_site', 'transport', 'nearby_food'])
 const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
-  'apiKey',
-  'providerKey',
-  'token',
-  'cloudToken',
-  'ticketBlobs',
-  'ticketMetas',
-  'routeCache',
-  'localDb',
-  'fullTrip',
-  'Authorization',
+  'apikey',
+  'authorization',
+  'cloudtoken',
+  'coordinates',
+  'days',
+  'fulltrip',
   'headers',
+  'itineraryitems',
+  'items',
+  'localdb',
+  'providerkey',
+  'routecache',
+  'ticketid',
+  'ticketids',
+  'ticketblobs',
+  'ticketmetas',
+  'token',
+  'trip',
 ])
 const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
   'apiKey',
@@ -826,10 +836,9 @@ export function validateProviderProxyTravelSearchRequest(input: unknown): Provid
     return travelSearchInvalidRequest('不支持的 provider proxy 操作。', requestId)
   }
 
-  for (const key of FORBIDDEN_TRAVEL_SEARCH_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(record, key)) {
-      return travelSearchInvalidRequest('搜索请求包含不允许的敏感字段。', requestId)
-    }
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_TRAVEL_SEARCH_FIELDS)
+  if (forbiddenFieldPath) {
+    return travelSearchInvalidRequest('搜索请求包含不允许的敏感字段。', requestId)
   }
 
   const query = typeof record.query === 'string' ? record.query.trim() : ''
@@ -858,9 +867,13 @@ export function validateProviderProxyTravelSearchRequest(input: unknown): Provid
     return travelSearchInvalidRequest('搜索类型无效。', requestId)
   }
 
-  const maxResults = record.maxResults ?? DEFAULT_TRAVEL_SEARCH_MAX_RESULTS
-  if (typeof maxResults !== 'number' || !Number.isInteger(maxResults) || maxResults < 1 || maxResults > 10) {
-    return travelSearchInvalidRequest('搜索结果数量必须是 1 到 10 之间的整数。', requestId)
+  const rawMaxResults = record.maxResults
+  let maxResults = DEFAULT_TRAVEL_SEARCH_MAX_RESULTS
+  if (rawMaxResults !== undefined) {
+    if (typeof rawMaxResults !== 'number' || !Number.isInteger(rawMaxResults) || rawMaxResults < 1) {
+      return travelSearchInvalidRequest('搜索结果数量必须是正整数。', requestId)
+    }
+    maxResults = Math.min(rawMaxResults, DEFAULT_TRAVEL_SEARCH_MAX_RESULTS)
   }
 
   return {
@@ -902,7 +915,7 @@ function findForbiddenRequestFieldPath(
     return null
   }
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (forbiddenFields.has(key)) {
+    if (forbiddenFields.has(key) || forbiddenFields.has(key.toLowerCase())) {
       return `${path}.${key}`
     }
     const nested = findForbiddenRequestFieldPath(value, forbiddenFields, `${path}.${key}`)

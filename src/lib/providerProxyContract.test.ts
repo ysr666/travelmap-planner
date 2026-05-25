@@ -262,7 +262,7 @@ describe('provider proxy travel_search contract', () => {
   it('accepts optional locale region searchType and maxResults', () => {
     const result = validateProviderProxyTravelSearchRequest({
       locale: 'zh-CN',
-      maxResults: 10,
+      maxResults: 3,
       operation: 'travel_search',
       query: '杭州博物馆',
       region: 'CN',
@@ -274,8 +274,39 @@ describe('provider proxy travel_search contract', () => {
       expect(result.request.locale).toBe('zh-CN')
       expect(result.request.region).toBe('CN')
       expect(result.request.searchType).toBe('opening_hours')
-      expect(result.request.maxResults).toBe(10)
+      expect(result.request.maxResults).toBe(3)
     }
+  })
+
+  it('accepts only canonical travel_search search types', () => {
+    for (const searchType of ['general', 'opening_hours', 'ticket_price', 'official_site', 'transport', 'nearby_food']) {
+      expect(validateProviderProxyTravelSearchRequest({
+        ...validTravelSearchRequest(),
+        searchType,
+      }).ok).toBe(true)
+    }
+  })
+
+  it('rejects legacy travel_search search type aliases', () => {
+    for (const searchType of ['place', 'tickets', 'reviews']) {
+      expect(validateProviderProxyTravelSearchRequest({
+        ...validTravelSearchRequest(),
+        searchType,
+      }).ok).toBe(false)
+    }
+  })
+
+  it('defaults and caps travel_search maxResults explicitly', () => {
+    const missing = validateProviderProxyTravelSearchRequest(validTravelSearchRequest())
+    const accepted = validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 5 })
+    const capped = validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 99 })
+
+    expect(missing.ok).toBe(true)
+    expect(accepted.ok).toBe(true)
+    expect(capped.ok).toBe(true)
+    if (missing.ok) expect(missing.request.maxResults).toBe(5)
+    if (accepted.ok) expect(accepted.request.maxResults).toBe(5)
+    if (capped.ok) expect(capped.request.maxResults).toBe(5)
   })
 
   it('rejects invalid travel_search inputs', () => {
@@ -286,21 +317,31 @@ describe('provider proxy travel_search contract', () => {
     expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), region: 'x'.repeat(81) }).ok).toBe(false)
     expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), searchType: 'weather' }).ok).toBe(false)
     expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 0 }).ok).toBe(false)
-    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 11 }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: -1 }).ok).toBe(false)
     expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 2.5 }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: '5' }).ok).toBe(false)
   })
 
-  it('rejects forbidden sensitive fields instead of ignoring them', () => {
-    for (const field of ['apiKey', 'providerKey', 'token', 'cloudToken', 'ticketBlobs', 'ticketMetas', 'routeCache', 'localDb', 'fullTrip', 'Authorization', 'headers']) {
+  it('rejects forbidden sensitive fields recursively instead of ignoring them', () => {
+    for (const field of ['apiKey', 'providerKey', 'token', 'cloudToken', 'ticketBlobs', 'ticketMetas', 'ticketIds', 'routeCache', 'localDb', 'fullTrip', 'authorization', 'headers', 'coordinates', 'items', 'itineraryItems', 'days', 'trip']) {
       const result = validateProviderProxyTravelSearchRequest({
         ...validTravelSearchRequest(),
-        [field]: 'secret',
+        nested: { [field]: 'secret' },
       })
       expect(result.ok).toBe(false)
       if (!result.ok) {
         expect(result.error.code).toBe('invalid_request')
       }
     }
+  })
+
+  it('does not reject sensitive words inside the query text', () => {
+    const result = validateProviderProxyTravelSearchRequest({
+      ...validTravelSearchRequest(),
+      query: 'apiKey authorization routeCache 这些词只是搜索文本',
+    })
+
+    expect(result.ok).toBe(true)
   })
 
   it('returns non-empty error message for travel_search operation', () => {

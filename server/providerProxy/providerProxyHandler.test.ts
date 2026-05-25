@@ -176,7 +176,11 @@ describe('provider proxy handler travel_search', () => {
       source: 'mock',
     })
     expect(firstBody.warnings).toContain('当前为模拟搜索结果，不代表实时网页信息。')
-    expect(firstBody.results[0].sourceDomain).toBe('travel.example')
+    expect(firstBody.retrievedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(firstBody.results[0].domain).toBe('travel.example')
+    expect(firstBody.results[0].displayUrl).toContain('travel.example')
+    expect(firstBody.results[0].sourceType).toBe('official')
+    expect(firstBody.results[0].confidence).toBe('medium')
     expect(firstBody.results[0].url).toMatch(/^https:\/\/travel\.example\//)
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -195,6 +199,23 @@ describe('provider proxy handler travel_search', () => {
       operation: 'travel_search',
     })
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('does not leak raw search provider messages or secrets when unavailable', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_PROVIDER_KEY: 'secret-ai-key' },
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const text = await response.text()
+    expect(text).not.toContain('secret-ai-key')
+    expect(text).not.toContain('Travel search provider is not configured')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'travel_search',
+    })
   })
 
   it('rejects invalid and forbidden travel_search requests', async () => {
@@ -242,7 +263,7 @@ function validSearchRequest() {
     query: '杭州博物馆',
     quotaSessionId: 'session-search-1',
     requestId: 'search-1',
-    searchType: 'place',
+    searchType: 'official_site',
   }
 }
 

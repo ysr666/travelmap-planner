@@ -10,7 +10,7 @@ function validSearchRequest() {
     maxResults: 3,
     operation: 'travel_search' as const,
     query: '杭州博物馆',
-    searchType: 'place' as const,
+    searchType: 'official_site' as const,
   }
 }
 
@@ -24,8 +24,11 @@ describe('travel search provider foundation', () => {
     expect(first.ok).toBe(true)
     if (first.ok) {
       expect(first.response.source).toBe('mock')
+      expect(first.response.retrievedAt).toBe('2026-02-03T04:05:06.000Z')
       expect(first.response.results).toHaveLength(3)
       expect(first.response.results[0].retrievedAt).toBe('2026-02-03T04:05:06.000Z')
+      expect(first.response.results[0].sourceType).toBe('official')
+      expect(first.response.results[0].confidence).toBe('medium')
     }
   })
 
@@ -37,10 +40,12 @@ describe('travel search provider foundation', () => {
     if (result.ok) {
       expect(result.response.warnings).toContain('当前为模拟搜索结果，不代表实时网页信息。')
       for (const item of result.response.results) {
-        expect(item.sourceDomain).toBe('travel.example')
+        expect(item.domain).toBe('travel.example')
+        expect(item.displayUrl).toContain('travel.example')
         expect(item.url).toMatch(/^https:\/\/travel\.example\//)
         expect(item.url).not.toContain('amap.com')
         expect(item.url).not.toContain('google.com')
+        expect(item.snippet).toContain('模拟搜索片段')
       }
     }
   })

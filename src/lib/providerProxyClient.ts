@@ -24,6 +24,7 @@ import {
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchResponse,
+  type ProviderProxyTravelSearchSourceType,
   type ProviderProxyTravelSearchSuccessResponse,
 } from './providerProxyContract'
 import { validateAiTripEditPatchPlan } from './aiTripEditPatch'
@@ -419,14 +420,14 @@ function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTr
     if (validation) {
       return validation
     }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'travel_search' })
   }
 
   if (record.ok === false && typeof record.code === 'string') {
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      details: typeof record.details === 'string' ? record.details : undefined,
-      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'travel_search'),
+      message: defaultProviderProxyErrorMessage(code, 'travel_search'),
       operation: 'travel_search',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -470,7 +471,8 @@ function validateProviderProxyTravelSearchSuccessResponse(record: Record<string,
     return null
   }
   const query = typeof record.query === 'string' ? record.query : null
-  if (!query || !Array.isArray(record.results)) {
+  const retrievedAt = typeof record.retrievedAt === 'string' ? record.retrievedAt : null
+  if (!query || !retrievedAt || !isValidIsoLikeDate(retrievedAt) || !Array.isArray(record.results)) {
     return null
   }
 
@@ -478,23 +480,28 @@ function validateProviderProxyTravelSearchSuccessResponse(record: Record<string,
   for (const result of record.results) {
     const item = readRecord(result)
     const confidence = item.confidence
+    const sourceType = item.sourceType
     if (
-      typeof item.id !== 'string'
-      || typeof item.title !== 'string'
-      || typeof item.url !== 'string'
-      || typeof item.sourceDomain !== 'string'
-      || typeof item.snippet !== 'string'
-      || typeof item.retrievedAt !== 'string'
-      || (confidence !== 'low' && confidence !== 'medium' && confidence !== 'high')
+      !isNonEmptyString(item.title)
+      || !isNonEmptyString(item.url)
+      || !isSafeHttpUrl(item.url)
+      || !isNonEmptyString(item.displayUrl)
+      || !isNonEmptyString(item.domain)
+      || !isNonEmptyString(item.snippet)
+      || !isNonEmptyString(item.retrievedAt)
+      || !isValidIsoLikeDate(item.retrievedAt)
+      || (confidence !== undefined && confidence !== 'low' && confidence !== 'medium' && confidence !== 'high')
+      || (sourceType !== undefined && !isTravelSearchSourceType(sourceType))
     ) {
       return null
     }
     results.push({
-      confidence,
-      id: item.id,
+      confidence: confidence as ProviderProxyTravelSearchSuccessResponse['results'][number]['confidence'],
+      displayUrl: item.displayUrl,
+      domain: item.domain,
       retrievedAt: item.retrievedAt,
       snippet: item.snippet,
-      sourceDomain: item.sourceDomain,
+      sourceType: sourceType as ProviderProxyTravelSearchSourceType | undefined,
       title: item.title,
       url: item.url,
     })
@@ -506,11 +513,33 @@ function validateProviderProxyTravelSearchSuccessResponse(record: Record<string,
     query,
     requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     results,
+    retrievedAt,
     source: record.source,
     warnings: Array.isArray(record.warnings)
       ? record.warnings.filter((w): w is string => typeof w === 'string')
       : undefined,
   }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function isValidIsoLikeDate(value: string): boolean {
+  return Number.isFinite(Date.parse(value))
+}
+
+function isTravelSearchSourceType(value: unknown): value is ProviderProxyTravelSearchSourceType {
+  return value === 'official' || value === 'map' || value === 'ticketing' || value === 'travel_site' || value === 'unknown'
 }
 
 function validateProviderProxyAiTripDraftRepairSuccessResponse(record: Record<string, unknown>): ProviderProxyAiTripDraftRepairSuccessResponse | null {

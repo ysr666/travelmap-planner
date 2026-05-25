@@ -175,7 +175,7 @@ describe('provider proxy travel_search client', () => {
         operation: 'travel_search',
         query: '杭州博物馆',
         quotaSessionId: 'session-search-1',
-        searchType: 'place',
+        searchType: 'official_site',
       })
       expect(JSON.stringify(body)).not.toContain('secret-search-key')
       expect(JSON.stringify(body)).not.toContain('Authorization')
@@ -183,14 +183,16 @@ describe('provider proxy travel_search client', () => {
         ok: true,
         operation: 'travel_search',
         query: '杭州博物馆',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
         source: 'mock',
         results: [
           {
             confidence: 'medium',
-            id: 'mock-1',
+            displayUrl: 'travel.example/search/mock-1',
+            domain: 'travel.example',
             retrievedAt: '2026-01-01T00:00:00.000Z',
             snippet: '当前为模拟搜索结果。',
-            sourceDomain: 'travel.example',
+            sourceType: 'official',
             title: '模拟搜索结果',
             url: 'https://travel.example/search/mock-1',
           },
@@ -204,7 +206,7 @@ describe('provider proxy travel_search client', () => {
       operation: 'travel_search',
       query: '杭州博物馆',
       quotaSessionId: 'session-search-1',
-      searchType: 'place',
+      searchType: 'official_site',
     }, '/api/provider-proxy', {
       fetcher,
       storage: memoryStorage({ unrelated: 'secret-search-key' }),
@@ -212,7 +214,9 @@ describe('provider proxy travel_search client', () => {
 
     expect(result.ok).toBe(true)
     expect(result.source).toBe('mock')
-    expect(result.results[0].sourceDomain).toBe('travel.example')
+    expect(result.retrievedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(result.results[0].domain).toBe('travel.example')
+    expect(result.results[0].displayUrl).toBe('travel.example/search/mock-1')
   })
 
   it('rejects invalid search requests before POST', async () => {
@@ -228,11 +232,70 @@ describe('provider proxy travel_search client', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed search success responses instead of accepting partial results', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'travel_search',
+        query: '杭州博物馆',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock',
+        results: [
+          {
+            domain: 'travel.example',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+            snippet: '缺少 displayUrl。',
+            title: '模拟搜索结果',
+            url: 'https://travel.example/search/mock-1',
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyTravelSearch({
+      operation: 'travel_search',
+      query: '杭州博物馆',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    })
+  })
+
+  it('rejects unsafe search result URLs', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'travel_search',
+        query: '杭州博物馆',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock',
+        results: [
+          {
+            displayUrl: 'javascript:alert(1)',
+            domain: 'travel.example',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+            snippet: 'unsafe',
+            title: 'unsafe',
+            url: 'javascript:alert(1)',
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyTravelSearch({
+      operation: 'travel_search',
+      query: '杭州博物馆',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+    })
+  })
+
   it('throws ProviderProxyClientError for normalized search errors', async () => {
     const fetcher = vi.fn(async () => {
       return new Response(JSON.stringify({
         code: 'provider_unavailable',
-        message: '搜索服务暂不可用。',
+        details: 'raw provider body with secret-search-key',
+        message: 'raw provider body with secret-search-key',
         ok: false,
         operation: 'travel_search',
       }), { status: 503 })
@@ -245,6 +308,8 @@ describe('provider proxy travel_search client', () => {
       maxResults: 5,
     }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
       code: 'provider_unavailable',
+      details: undefined,
+      message: '搜索服务暂不可用。',
       status: 503,
     })
   })

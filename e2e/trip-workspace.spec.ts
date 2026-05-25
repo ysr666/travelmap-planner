@@ -443,6 +443,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
             summary: '把西湖安排改得更明确。',
           },
           source: 'mock',
+          warnings: ['联网搜索暂未接入，未查询实时信息。'],
         }),
         contentType: 'application/json',
       })
@@ -530,6 +531,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   const panel = page.getByTestId('ai-trip-edit-panel')
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('AI 修改建议')
+  await expect(panel).toContainText('当前仍不会自动查询网页')
   await expect(panel.getByRole('button', { name: '生成修改方案' })).toBeDisabled()
   await expectNoHorizontalOverflow(page)
 
@@ -546,6 +548,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   await panel.getByRole('button', { name: '生成修改方案' }).click()
   await page.getByTestId('ai-trip-edit-send-confirm-dialog').getByRole('button', { name: '确认发送' }).click()
   await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖深度散步')
+  await expect(panel.getByTestId('ai-trip-edit-warnings')).toContainText('联网搜索暂未接入，未查询实时信息。')
   expect(editRequests).toBe(1)
   expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
   expect(await readAiEditBoundaryCounts(page)).toEqual(beforeCounts)

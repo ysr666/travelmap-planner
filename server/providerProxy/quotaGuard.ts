@@ -94,7 +94,7 @@ export function checkAndConsumeProviderProxyQuota({
         : isTravelSearch
           ? effectiveLimits.maxTravelSearchRequestsPerWindow
           : effectiveLimits.maxRouteRequestsPerWindow
-  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : isAiTripEdit ? 'ai_trip_edit|' : isTravelSearch ? 'travel_search|' : 'route|'
+  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : isAiTripEdit ? 'ai_trip_edit|' : isTravelSearch ? 'search|' : 'route|'
   const safeIdentity = `${identityPrefix}${identity.trim() || 'anonymous'}`
 
   const current = store.get(safeIdentity)

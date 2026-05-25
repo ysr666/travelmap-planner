@@ -160,6 +160,13 @@ describe('provider proxy quota guard', () => {
       operation: 'travel_search',
       store,
     }).allowed).toBe(true)
+    expect(Array.from(store.keys())).toEqual(expect.arrayContaining([
+      'route|session-a',
+      'ai_draft|session-a',
+      'ai_draft_repair|session-a',
+      'ai_trip_edit|session-a',
+      'search|session-a',
+    ]))
 
     expect(checkAndConsumeProviderProxyQuota({
       coordinateCount: 0,

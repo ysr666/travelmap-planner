@@ -18,6 +18,19 @@ describe('aiTripEditProvider', () => {
     }
   })
 
+  it('returns non-blocking mock realtime warning for English lookup intent', async () => {
+    const request = editRequest('Check whether Tower of London is open today and adjust the plan.')
+    const provider = createMockAiTripEditProvider(request)
+
+    const result = await provider.planEdit({ maxOutputTokens: 1000, prompt: 'prompt' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok && result.kind === 'patch') {
+      expect(result.patchPlan.operations.length).toBeGreaterThanOrEqual(1)
+      expect(result.patchPlan.warnings).toContain('联网搜索暂未接入，未查询实时信息。')
+    }
+  })
+
   it('sends OpenAI-compatible JSON request with disabled thinking by default and no key in body', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

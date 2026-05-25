@@ -695,6 +695,26 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('returns mock edit patch with warning for English realtime intent without search calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validEditRequest('Check whether Tower of London is open today and adjust the plan.')),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'ai_trip_edit_plan',
+      source: 'mock',
+    })
+    expect(body.patchPlan.operations.length).toBeGreaterThanOrEqual(1)
+    expect(body.patchPlan.warnings).toContain('联网搜索暂未接入，未查询实时信息。')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('returns provider_unavailable when edit provider is not configured', async () => {
     const response = await handleProviderProxyRequest({
       request: jsonRequest(validEditRequest()),
@@ -841,9 +861,9 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
   })
 })
 
-function validEditRequest() {
+function validEditRequest(command = '第二天太满了，帮我放松一点') {
   return {
-    command: '第二天太满了，帮我放松一点',
+    command,
     context: {
       days: [
         {

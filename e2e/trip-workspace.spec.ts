@@ -547,6 +547,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
 
   await panel.getByRole('button', { name: '应用修改' }).click()
   await expect(page.getByTestId('ai-trip-edit-apply-confirm-dialog')).toContainText('不会自动生成路线')
+  await expect(page.getByTestId('ai-trip-edit-apply-confirm-dialog')).toContainText('不会联网搜索或查询网页')
   await page.getByRole('button', { name: '确认应用' }).click()
   await expect.poll(() => readItemTitle(page, 'item_ai_edit_1')).toBe('西湖深度散步')
   const afterCounts = await readAiEditBoundaryCounts(page)

@@ -8,7 +8,7 @@ export type AiTripEditProviderInput = {
   reasoningMode?: AiBackendReasoningMode
 }
 
-const REALTIME_KEYWORDS = [
+const CHINESE_REALTIME_KEYWORDS = [
   '今天开放',
   '营业时间',
   '开放时间',
@@ -16,11 +16,37 @@ const REALTIME_KEYWORDS = [
   '票价',
   '门票',
   '最新',
+  '近期',
   '近期活动',
+  '停运',
   '交通中断',
   '实时',
   '查一下',
   '搜索',
+]
+
+const ENGLISH_REALTIME_PATTERNS = [
+  /\bopen\s+today\b/,
+  /\bhours\s+today\b/,
+  /\bopening\s+hours\b/,
+  /\bcurrently\s+open\b/,
+  /\bclosed\s+today\b/,
+  /\bopen\s+now\b/,
+  /\bcheck\s+whether\b.{0,80}\bopen\b/,
+  /\bcheck\s+if\b.{0,80}\bopen\b/,
+  /\bticket\s+prices?\b/,
+  /\btickets?\s+today\b/,
+  /\blatest\b/,
+  /\brecent\b/,
+  /\blook\s+up\b/,
+  /\bsearch\b/,
+  /\bweather\b/,
+  /\btransport\s+disruptions?\b/,
+  /\bclosures?\b/,
+  /\bevents?\b/,
+  /\breviews?\b/,
+  /\breal[-\s]?time\b/,
+  /\bcurrent\s+(?:opening\s+hours|status|ticket\s+price|tickets?|closures?|events?|reviews?|weather)\b/,
 ]
 
 export function buildAiTripEditProviderInput(
@@ -39,6 +65,7 @@ export function buildAiTripEditProviderInput(
       '不要输出 Markdown、解释文字或代码块。',
       '不要直接修改旅行；你只能返回 patch plan，用户会在本地预览并确认后才应用。',
       '不要联网搜索，不要声称查询了实时网页信息，不要编造开放时间、票价、闭馆、交通中断、近期评价或活动。',
+      'summary、operation reason 和 warnings 必须使用中文；不要不必要地翻译 Tower of London、British Museum 等专有名词。',
       realtimeWarning,
       '只允许以下 operation type：update_item、move_item、delete_item、add_item。',
       '不允许 update_trip、delete_day、delete_trip、bulk_replace_day、rewrite_all 或其他未知操作。',
@@ -59,7 +86,9 @@ export function buildAiTripEditProviderInput(
 }
 
 export function commandNeedsRealtimeSearch(command: string): boolean {
-  return REALTIME_KEYWORDS.some((keyword) => command.includes(keyword))
+  const normalizedCommand = command.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
+  return CHINESE_REALTIME_KEYWORDS.some((keyword) => command.includes(keyword))
+    || ENGLISH_REALTIME_PATTERNS.some((pattern) => pattern.test(normalizedCommand))
 }
 
 function compactContext(context: AiTripEditContext): AiTripEditContext {

@@ -233,7 +233,7 @@ export function AiTripEditPanel({
       />
 
       <ConfirmDialog
-        body="将把这些修改写入本地旅行。不会自动生成路线，不会上传云端，不会创建或删除票据。"
+        body="将把这些修改写入本地旅行。不会自动生成路线，不会上传云端，不会创建或删除票据，不会联网搜索或查询网页。"
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<Wand2 className="size-5" />}

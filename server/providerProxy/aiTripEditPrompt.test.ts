@@ -8,6 +8,8 @@ describe('aiTripEditPrompt', () => {
     expect(input.prompt).toContain('只输出 JSON')
     expect(input.prompt).toContain('只允许以下 operation type')
     expect(input.prompt).toContain('不要联网搜索')
+    expect(input.prompt).toContain('summary、operation reason 和 warnings 必须使用中文')
+    expect(input.prompt).toContain('不要不必要地翻译 Tower of London、British Museum 等专有名词')
     expect(input.prompt).not.toContain('我会搜索')
     expect(input.prompt).not.toContain('ticketBlobs')
     expect(input.prompt).not.toContain('routeCache')
@@ -17,10 +19,25 @@ describe('aiTripEditPrompt', () => {
 
   it('adds realtime warning instruction for realtime commands', () => {
     const input = buildAiTripEditProviderInput(editRequest('查一下最新票价，再帮我调整'), 'req-1')
+    const englishInput = buildAiTripEditProviderInput(
+      editRequest('Check whether Tower of London is open today and adjust the plan.'),
+      'req-2',
+    )
 
     expect(commandNeedsRealtimeSearch('查一下最新票价')).toBe(true)
+    expect(commandNeedsRealtimeSearch('Check whether Tower of London is open today and adjust the plan.')).toBe(true)
+    expect(commandNeedsRealtimeSearch('What is the ticket price for Tower of London?')).toBe(true)
     expect(input.prompt).toContain('联网搜索暂未接入，未查询实时信息。')
+    expect(englishInput.prompt).toContain('联网搜索暂未接入，未查询实时信息。')
     expect(input.prompt).toContain('不要编造事实')
+  })
+
+  it('does not treat ordinary schedule edits as realtime lookups', () => {
+    expect(commandNeedsRealtimeSearch('Day 2 feels too packed. Make it more relaxed.')).toBe(false)
+    expect(commandNeedsRealtimeSearch("move today's plan to the morning")).toBe(false)
+    expect(commandNeedsRealtimeSearch('move the current plan to Day 2')).toBe(false)
+    expect(commandNeedsRealtimeSearch('open now and adjust the plan')).toBe(true)
+    expect(commandNeedsRealtimeSearch('current ticket price for Tower of London')).toBe(true)
   })
 })
 

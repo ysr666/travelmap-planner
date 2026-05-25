@@ -153,6 +153,99 @@ function validRequest() {
   }
 }
 
+describe('provider proxy handler travel_search', () => {
+  it('returns deterministic mock travel_search results without provider calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+    }
+
+    const first = await handleProviderProxyRequest({ ...input, request: jsonRequest(validSearchRequest()) })
+    const second = await handleProviderProxyRequest({ ...input, request: jsonRequest(validSearchRequest()) })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstBody = await first.json()
+    const secondBody = await second.json()
+    expect(firstBody).toEqual(secondBody)
+    expect(firstBody).toMatchObject({
+      ok: true,
+      operation: 'travel_search',
+      query: '杭州博物馆',
+      source: 'mock',
+    })
+    expect(firstBody.warnings).toContain('当前为模拟搜索结果，不代表实时网页信息。')
+    expect(firstBody.results[0].sourceDomain).toBe('travel.example')
+    expect(firstBody.results[0].url).toMatch(/^https:\/\/travel\.example\//)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable when travel_search mock is disabled', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      fetcher,
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'travel_search',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid and forbidden travel_search requests', async () => {
+    const invalid = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({ ...validSearchRequest(), query: '' }),
+    })
+    const forbidden = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({ ...validSearchRequest(), apiKey: 'secret-search-key' }),
+    })
+
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ code: 'invalid_request', ok: false })
+    expect(forbidden.status).toBe(400)
+    expect(await forbidden.json()).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+
+  it('checks isolated travel_search quota before mock search', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      quotaLimits: { maxTravelSearchRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validSearchRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({
+      ...input,
+      request: jsonRequest({ ...validSearchRequest(), requestId: 'search-2' }),
+    })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'travel_search' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
+function validSearchRequest() {
+  return {
+    maxResults: 2,
+    operation: 'travel_search',
+    query: '杭州博物馆',
+    quotaSessionId: 'session-search-1',
+    requestId: 'search-1',
+    searchType: 'place',
+  }
+}
+
 describe('provider proxy handler ai_trip_draft', () => {
   it('returns mock draft in mock mode without calling fetcher', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch

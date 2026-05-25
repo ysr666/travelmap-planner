@@ -9,13 +9,15 @@ import { isTravelPace, isTravelTransportPreference } from './travelProfile'
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repair' as const
+export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
+export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyErrorCode =
@@ -167,6 +169,54 @@ export type ProviderProxyAiTripDraftRepairValidationResult =
   | { ok: true; request: ProviderProxyAiTripDraftRepairRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyTravelSearchLocale = 'zh-CN' | 'en-US'
+export type ProviderProxyTravelSearchType = 'general' | 'place' | 'opening_hours' | 'tickets' | 'transport' | 'reviews'
+export type ProviderProxyTravelSearchConfidence = 'low' | 'medium' | 'high'
+
+export type ProviderProxyTravelSearchRequest = {
+  operation: typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  query: string
+  locale?: ProviderProxyTravelSearchLocale
+  region?: string
+  searchType?: ProviderProxyTravelSearchType
+  maxResults?: number
+}
+
+export type ProviderProxyValidatedTravelSearchRequest = ProviderProxyTravelSearchRequest & {
+  searchType: ProviderProxyTravelSearchType
+  maxResults: number
+}
+
+export type ProviderProxyTravelSearchResult = {
+  id: string
+  title: string
+  url: string
+  sourceDomain: string
+  snippet: string
+  retrievedAt: string
+  confidence: ProviderProxyTravelSearchConfidence
+}
+
+export type ProviderProxyTravelSearchSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_search'
+  query: string
+  results: ProviderProxyTravelSearchResult[]
+  warnings?: string[]
+}
+
+export type ProviderProxyTravelSearchResponse =
+  | ProviderProxyTravelSearchSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyTravelSearchValidationResult =
+  | { ok: true; request: ProviderProxyValidatedTravelSearchRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -181,6 +231,24 @@ const VALID_MODES = new Set<RoutingMode>([
   'walk',
 ])
 const VALID_PROFILES = new Set<RoutingProfile>(['cycling-regular', 'driving-car', 'foot-walking'])
+const VALID_TRAVEL_SEARCH_LOCALES = new Set<ProviderProxyTravelSearchLocale>(['zh-CN', 'en-US'])
+const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['general', 'place', 'opening_hours', 'tickets', 'transport', 'reviews'])
+const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
+  'apiKey',
+  'providerKey',
+  'token',
+  'cloudToken',
+  'ticketBlobs',
+  'ticketMetas',
+  'routeCache',
+  'localDb',
+  'fullTrip',
+  'Authorization',
+  'headers',
+])
+const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
+const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
+const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -302,7 +370,7 @@ export function buildProviderProxyErrorResponse({
 }
 
 export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, operation?: ProviderProxyOperation) {
-  if (operation === 'ai_trip_draft') {
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
     if (code === 'quota_exceeded') return '今日 AI 草稿生成次数已达上限。'
     if (code === 'invalid_request') return 'AI 草稿请求无效。'
     if (code === 'provider_error') return 'AI 草稿服务请求失败。'
@@ -311,7 +379,7 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return 'AI 草稿服务返回的内容无法解析。'
     return 'AI 草稿服务暂不可用。'
   }
-  if (operation === 'ai_trip_draft_repair') {
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
     if (code === 'quota_exceeded') return '今日 AI 草稿修复次数已达上限。'
     if (code === 'invalid_request') return 'AI 草稿修复请求无效。'
     if (code === 'provider_error') return 'AI 草稿修复服务请求失败。'
@@ -319,6 +387,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前 AI 草稿修复请求暂不支持。'
     if (code === 'invalid_response') return 'AI 草稿修复服务返回的内容无法解析。'
     return 'AI 草稿修复服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
+    if (code === 'quota_exceeded') return '今日搜索请求次数已达上限。'
+    if (code === 'invalid_request') return '搜索请求无效。'
+    if (code === 'provider_error') return '搜索服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前搜索请求暂不支持。'
+    if (code === 'invalid_response') return '搜索服务返回的内容无法解析。'
+    return '搜索服务暂不可用。'
   }
   if (code === 'quota_exceeded') return '今日路线生成次数已达上限。'
   if (code === 'invalid_request') return '路线请求无效。'
@@ -543,6 +620,18 @@ function aiDraftRepairInvalidRequest(message: string, requestId?: string): Provi
   }
 }
 
+function travelSearchInvalidRequest(message: string, requestId?: string): ProviderProxyTravelSearchValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
 export function validateProviderProxyAiTripDraftRepairRequest(input: unknown): ProviderProxyAiTripDraftRepairValidationResult {
   const record = readRecord(input)
   const requestId = readOptionalString(record.requestId, 128)
@@ -610,4 +699,72 @@ export function validateProviderProxyAiTripDraftRepairRequest(input: unknown): P
       requestId: requestId ?? undefined,
     },
   }
+}
+
+export function validateProviderProxyTravelSearchRequest(input: unknown): ProviderProxyTravelSearchValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
+    return travelSearchInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  for (const key of FORBIDDEN_TRAVEL_SEARCH_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      return travelSearchInvalidRequest('搜索请求包含不允许的敏感字段。', requestId)
+    }
+  }
+
+  const query = typeof record.query === 'string' ? record.query.trim() : ''
+  if (!query) {
+    return travelSearchInvalidRequest('请输入搜索关键词。', requestId)
+  }
+  if (query.length > MAX_TRAVEL_SEARCH_QUERY_LENGTH) {
+    return travelSearchInvalidRequest(`搜索关键词不能超过 ${MAX_TRAVEL_SEARCH_QUERY_LENGTH} 个字符。`, requestId)
+  }
+
+  const locale = record.locale
+  if (locale !== undefined && !isTravelSearchLocale(locale)) {
+    return travelSearchInvalidRequest('搜索语言设置无效。', requestId)
+  }
+
+  const region = typeof record.region === 'string' ? record.region.trim() : undefined
+  if (record.region !== undefined && typeof record.region !== 'string') {
+    return travelSearchInvalidRequest('搜索地区必须是字符串。', requestId)
+  }
+  if (region && region.length > MAX_TRAVEL_SEARCH_REGION_LENGTH) {
+    return travelSearchInvalidRequest(`搜索地区不能超过 ${MAX_TRAVEL_SEARCH_REGION_LENGTH} 个字符。`, requestId)
+  }
+
+  const searchType = record.searchType ?? 'general'
+  if (!isTravelSearchType(searchType)) {
+    return travelSearchInvalidRequest('搜索类型无效。', requestId)
+  }
+
+  const maxResults = record.maxResults ?? DEFAULT_TRAVEL_SEARCH_MAX_RESULTS
+  if (typeof maxResults !== 'number' || !Number.isInteger(maxResults) || maxResults < 1 || maxResults > 10) {
+    return travelSearchInvalidRequest('搜索结果数量必须是 1 到 10 之间的整数。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      locale: isTravelSearchLocale(locale) ? locale : undefined,
+      maxResults,
+      operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+      query,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      region: region || undefined,
+      requestId,
+      searchType,
+    },
+  }
+}
+
+function isTravelSearchLocale(value: unknown): value is ProviderProxyTravelSearchLocale {
+  return typeof value === 'string' && VALID_TRAVEL_SEARCH_LOCALES.has(value as ProviderProxyTravelSearchLocale)
+}
+
+function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchType {
+  return typeof value === 'string' && VALID_TRAVEL_SEARCH_TYPES.has(value as ProviderProxyTravelSearchType)
 }

@@ -20,7 +20,7 @@
 
 当前明确限制：
 
-- 不接入 web search，不查询实时营业时间、票价、交通、天气或网页来源，也不会声称已查询实时来源。
+- 不接入真实 web search，不查询实时营业时间、票价、交通、天气或网页来源，也不会声称已查询实时来源。`travel_search` 当前只是 provider proxy foundation：mock/disabled only，没有真实 provider、没有 UI、没有 AI 自动调用。
 - 不提供 thinking / reasoning mode UI。推理模式由后端策略管理；默认保持 stable JSON mode，复杂任务才可由后端自动选择更高推理强度。
 - 不直接编辑已保存旅行，不输出自动写库 patch。
 - 不读取票据图片、PDF、OCR、Blob、完整本地数据库、云端 token、route cache 或 provider key。

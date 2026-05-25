@@ -113,7 +113,7 @@
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
-- Web search：当前未接入。未来应作为单独 provider proxy operation，实现 title、URL、snippet、retrievedAt、source/domain、confidence 和来源展示，而不是混入 repair。AI 不得在没有 future sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- Web search：当前未接入真实 provider。`travel_search` provider proxy foundation 只提供 mock/disabled 合同、结果结构和独立 quota；mock mode 使用 example 域名并标注模拟，默认无真实 provider 时返回 `provider_unavailable`。AI draft generation / repair 不会调用 search。未来真实搜索应实现 title、URL、snippet、retrievedAt、source/domain、confidence 和来源展示，而不是混入 repair。AI 不得在没有 future sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 
 ## 本地 QA 注意事项
 

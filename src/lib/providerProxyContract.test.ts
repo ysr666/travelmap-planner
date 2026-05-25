@@ -6,6 +6,7 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
 describe('provider proxy route preview contract', () => {
@@ -234,5 +235,82 @@ function validRepairRequest() {
     qualityFindings: [
       { ruleId: 'dense_day', severity: 'warning', title: '行程偏密', message: '当天行程偏密。', dayDate: '2025-04-01' },
     ],
+  }
+}
+
+describe('provider proxy travel_search contract', () => {
+  it('accepts a valid minimal travel_search request and applies defaults', () => {
+    const result = validateProviderProxyTravelSearchRequest({
+      operation: 'travel_search',
+      query: '杭州 西湖 营业时间',
+      requestId: 'search-1',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request).toMatchObject({
+        maxResults: 5,
+        operation: 'travel_search',
+        query: '杭州 西湖 营业时间',
+        requestId: 'search-1',
+        searchType: 'general',
+      })
+    }
+  })
+
+  it('accepts optional locale region searchType and maxResults', () => {
+    const result = validateProviderProxyTravelSearchRequest({
+      locale: 'zh-CN',
+      maxResults: 10,
+      operation: 'travel_search',
+      query: '杭州博物馆',
+      region: 'CN',
+      searchType: 'opening_hours',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.locale).toBe('zh-CN')
+      expect(result.request.region).toBe('CN')
+      expect(result.request.searchType).toBe('opening_hours')
+      expect(result.request.maxResults).toBe(10)
+    }
+  })
+
+  it('rejects invalid travel_search inputs', () => {
+    expect(validateProviderProxyTravelSearchRequest(null).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ operation: 'travel_search', query: '' }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ operation: 'travel_search', query: 'x'.repeat(301) }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), locale: 'fr-FR' }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), region: 'x'.repeat(81) }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), searchType: 'weather' }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 0 }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 11 }).ok).toBe(false)
+    expect(validateProviderProxyTravelSearchRequest({ ...validTravelSearchRequest(), maxResults: 2.5 }).ok).toBe(false)
+  })
+
+  it('rejects forbidden sensitive fields instead of ignoring them', () => {
+    for (const field of ['apiKey', 'providerKey', 'token', 'cloudToken', 'ticketBlobs', 'ticketMetas', 'routeCache', 'localDb', 'fullTrip', 'Authorization', 'headers']) {
+      const result = validateProviderProxyTravelSearchRequest({
+        ...validTravelSearchRequest(),
+        [field]: 'secret',
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_request')
+      }
+    }
+  })
+
+  it('returns non-empty error message for travel_search operation', () => {
+    const message = defaultProviderProxyErrorMessage('provider_unavailable', 'travel_search')
+    expect(message).toContain('搜索')
+  })
+})
+
+function validTravelSearchRequest() {
+  return {
+    operation: 'travel_search',
+    query: '杭州博物馆',
   }
 }

@@ -2,11 +2,13 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+  PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyConcreteProvider,
@@ -42,6 +44,12 @@ import {
 } from './aiDraftProvider'
 import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
 import { chooseAiReasoningMode } from './aiReasoningPolicy'
+import {
+  createMockTravelSearchProvider,
+  createUnavailableTravelSearchProvider,
+  type TravelSearchProvider,
+  type TravelSearchProviderErrorCode,
+} from './searchProvider'
 
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
@@ -131,6 +139,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
     return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+  }
+
+  if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
+    return handleTravelSearchRequest({ body, corsHeaders, env, quotaLimits, quotaStore, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
@@ -362,6 +374,77 @@ function countDraftItems(draft: AiTripDraft): number {
 
 function countCriticalFindings(findings: ProviderProxyAiTripDraftRepairRequest['qualityFindings']): number {
   return findings.filter((finding) => finding.severity === 'critical').length
+}
+
+async function handleTravelSearchRequest({
+  body,
+  corsHeaders,
+  env,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyTravelSearchRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const searchRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: 0,
+    identity: getQuotaIdentity(request, searchRequest.quotaSessionId),
+    limits: quotaLimits,
+    operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+        requestId: searchRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    const provider = selectTravelSearchProvider(env)
+    const result = await provider.search(searchRequest)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapTravelSearchErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse(result.response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION, searchRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectTravelSearchProvider(env: ProviderProxyHandlerEnv): TravelSearchProvider {
+  if (isMockMode(env)) {
+    return createMockTravelSearchProvider()
+  }
+  return createUnavailableTravelSearchProvider()
+}
+
+function mapTravelSearchErrorCodeToStatus(code: TravelSearchProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
 }
 
 async function handleRoutePreviewRequest({

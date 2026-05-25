@@ -111,6 +111,8 @@ The current quota guard is intentionally small:
 - In-memory/dev-only request windows.
 - Per-browser `quotaSessionId` plus server-observed IP placeholder.
 - Max route requests per window default: 60 requests per 60 seconds.
+- Max travel_search requests per window default: 20 requests per 60 seconds.
+- `travel_search|` quota is isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
 
 This is not real abuse protection. The browser session id is spoofable. Before public launch, replace the in-memory store with durable KV, Supabase, Redis, or equivalent, and combine account/session/IP/fingerprint-like server signals where legally and technically appropriate.
 
@@ -136,11 +138,71 @@ Now:
 - Trip Home map preview still reads cached route geometry or displays straight lines; it does not silently call providers.
 - AI draft generation can use the proxy after user confirmation.
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
+- `travel_search` foundation exists as a typed provider proxy operation, but current runtime is mock/disabled only and no UI calls it.
 
 Later:
 
 - Route order suggestion should become a separate proxy operation.
-- Web search and AI trip edit agents should become separate proxy operations with their own contracts, quota, source display, and write confirmation boundaries.
+- Real web search provider integration and AI trip edit agents should remain separate proxy operations with their own contracts, quota, source display, and write confirmation boundaries.
+
+## Travel Search Operation
+
+The `travel_search` operation reserves a source-bearing search contract for future travel/web search. It is not a real-time fact source yet.
+
+Current runtime behavior:
+
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock results only.
+- Mock results use `source: "mock"`, `travel.example` URLs, and warning `当前为模拟搜索结果，不代表实时网页信息。`
+- Without a real search provider, non-mock runtime returns `provider_unavailable`.
+- `future_search` is a reserved response source for future real providers and must not be returned by the current implementation.
+- No search API key/env exists, no external search API is called, and no frontend UI calls this operation.
+
+Request contract:
+
+```json
+{
+  "operation": "travel_search",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "query": "杭州博物馆 营业时间",
+  "locale": "zh-CN",
+  "region": "CN",
+  "searchType": "opening_hours",
+  "maxResults": 5
+}
+```
+
+Limits:
+
+- `query`: required, 1-300 characters after trimming.
+- `locale`: optional, `zh-CN` or `en-US`.
+- `region`: optional, max 80 characters.
+- `searchType`: optional, `general`, `place`, `opening_hours`, `tickets`, `transport`, or `reviews`; default `general`.
+- `maxResults`: optional integer 1-10; default 5.
+- Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketBlobs`, `cloudToken`, `routeCache`, and `fullTrip` are rejected as `invalid_request`.
+
+Success shape:
+
+```json
+{
+  "ok": true,
+  "operation": "travel_search",
+  "source": "mock",
+  "query": "杭州博物馆 营业时间",
+  "results": [
+    {
+      "id": "mock-example",
+      "title": "模拟搜索结果",
+      "url": "https://travel.example/search/mock-example",
+      "sourceDomain": "travel.example",
+      "snippet": "模拟搜索片段，不代表实时网页信息。",
+      "retrievedAt": "2026-01-01T00:00:00.000Z",
+      "confidence": "low"
+    }
+  ],
+  "warnings": ["当前为模拟搜索结果，不代表实时网页信息。"]
+}
+```
 
 ## AI Trip Draft Operation
 
@@ -321,11 +383,12 @@ This policy keeps the user experience simple: users describe the travel task, wh
 
 ### AI Search Readiness
 
-Search readiness is classification-only in this release. The server helper can mark that a future search operation might be relevant for opening hours, tickets, closures, transport disruption, recent reviews, or events, but runtime search remains disabled and no provider proxy search operation exists yet.
+Search readiness is classification-only for AI flows in this release. The server helper can mark that a future search operation might be relevant for opening hours, tickets, closures, transport disruption, recent reviews, or events, but AI draft generation and repair do not call search.
 
 - No search provider key or env var is defined.
 - No `webSearchEnabled` field is added to public AI request payloads.
 - No AI prompt should claim web search happened.
+- `travel_search` exists only as a provider proxy foundation: mock succeeds in mock mode, default runtime returns `provider_unavailable`, and no page uses it yet.
 - Future sourced search results should include title, URL, snippet, `retrievedAt`, source/domain, and confidence.
 
 ### Real Provider Smoke QA

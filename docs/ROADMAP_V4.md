@@ -93,7 +93,7 @@
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
 - 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary。
-- 当前限制：不接入 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。
+- 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不直接编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
 - AI 只生成 draft / 修复 draft preview；地点、坐标、路线、交通时间和票据绑定必须由用户确认后写入。
 
 ### 7. AI-first future work
@@ -108,7 +108,8 @@
 #### Search Provider Proxy Foundation
 
 - Web search 必须是独立 provider proxy operation，不混入 draft repair。
-- 返回内容需要 source title、URL、snippet、retrievedAt、source/domain、confidence 和摘要。
+- 当前 `travel_search` foundation 已保留合同和 quota，但默认无真实 provider 时返回 `provider_unavailable`；mock mode 仅返回 example 域名模拟结果。
+- 未来真实 provider 返回内容需要 source title、URL、snippet、retrievedAt、source/domain、confidence 和摘要。
 - UI 必须展示来源和时间，不能把实时营业时间、票价或交通状态伪装成模型常识。
 - 搜索请求和 AI 请求应有独立 quota、normalized errors 和 no-secret boundary。
 
@@ -138,6 +139,6 @@
 - 本地 zip 备份仍然重要。
 - OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
-- 当前 AI 不联网搜索。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- 当前 AI 不联网搜索。`travel_search` 只是未来真实搜索的结构槽位，当前成功 runtime source 仅限 mock。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
 - 390px 移动端宽度是基础验收线。

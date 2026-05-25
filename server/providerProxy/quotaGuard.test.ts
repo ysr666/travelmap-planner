@@ -108,4 +108,57 @@ describe('provider proxy quota guard', () => {
       store,
     }).allowed).toBe(true)
   })
+
+  it('travel_search quota is independent from route and AI quota buckets', () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const limits = {
+      maxAiDraftRepairRequestsPerWindow: 1,
+      maxAiDraftRequestsPerWindow: 1,
+      maxRouteRequestsPerWindow: 1,
+      maxTravelSearchRequestsPerWindow: 1,
+      windowMs: 1000,
+    }
+
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 2,
+      identity: 'session-a',
+      limits,
+      nowMs: 100,
+      operation: 'route_preview',
+      store,
+    }).allowed).toBe(true)
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 110,
+      operation: 'ai_trip_draft',
+      store,
+    }).allowed).toBe(true)
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 120,
+      operation: 'ai_trip_draft_repair',
+      store,
+    }).allowed).toBe(true)
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 130,
+      operation: 'travel_search',
+      store,
+    }).allowed).toBe(true)
+
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 140,
+      operation: 'travel_search',
+      store,
+    })).toMatchObject({ allowed: false, reason: 'rate_limit' })
+  })
 })

@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY,
   PROVIDER_PROXY_DEV_URL_STORAGE_KEY,
+  ProviderProxyClientError,
   fetchProviderProxyRoutePreview,
   fetchProviderProxyAiTripDraft,
+  fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
 } from './providerProxyClient'
 
@@ -160,6 +162,90 @@ describe('provider proxy ai_trip_draft client', () => {
     expect(result.ok).toBe(true)
     expect(result.draft.destination).toBe('巴黎')
     expect(result.draft.days).toHaveLength(3)
+  })
+})
+
+describe('provider proxy travel_search client', () => {
+  it('validates and sends a search payload without provider secrets', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        maxResults: 3,
+        operation: 'travel_search',
+        query: '杭州博物馆',
+        quotaSessionId: 'session-search-1',
+        searchType: 'place',
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-search-key')
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'travel_search',
+        query: '杭州博物馆',
+        source: 'mock',
+        results: [
+          {
+            confidence: 'medium',
+            id: 'mock-1',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+            snippet: '当前为模拟搜索结果。',
+            sourceDomain: 'travel.example',
+            title: '模拟搜索结果',
+            url: 'https://travel.example/search/mock-1',
+          },
+        ],
+        warnings: ['当前为模拟搜索结果，不代表实时网页信息。'],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyTravelSearch({
+      maxResults: 3,
+      operation: 'travel_search',
+      query: '杭州博物馆',
+      quotaSessionId: 'session-search-1',
+      searchType: 'place',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-search-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.source).toBe('mock')
+    expect(result.results[0].sourceDomain).toBe('travel.example')
+  })
+
+  it('rejects invalid search requests before POST', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+
+    await expect(fetchProviderProxyTravelSearch({
+      operation: 'travel_search',
+      query: '',
+      searchType: 'general',
+      maxResults: 5,
+    }, '/api/provider-proxy', { fetcher })).rejects.toBeInstanceOf(ProviderProxyClientError)
+
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('throws ProviderProxyClientError for normalized search errors', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        code: 'provider_unavailable',
+        message: '搜索服务暂不可用。',
+        ok: false,
+        operation: 'travel_search',
+      }), { status: 503 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyTravelSearch({
+      operation: 'travel_search',
+      query: '杭州博物馆',
+      searchType: 'general',
+      maxResults: 5,
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'provider_unavailable',
+      status: 503,
+    })
   })
 })
 

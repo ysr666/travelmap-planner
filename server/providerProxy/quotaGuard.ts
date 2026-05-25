@@ -5,6 +5,8 @@ import {
   PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_COORDINATES,
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
+  PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   type ProviderProxyOperation,
 } from '../../src/lib/providerProxyContract'
 
@@ -14,6 +16,7 @@ export type ProviderProxyQuotaLimits = {
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
   maxRouteRequestsPerWindow: number
+  maxTravelSearchRequestsPerWindow: number
   windowMs: number
 }
 
@@ -42,6 +45,7 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   maxRouteRequestsPerWindow: 60,
+  maxTravelSearchRequestsPerWindow: PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
   windowMs: 60_000,
 }
 
@@ -75,12 +79,15 @@ export function checkAndConsumeProviderProxyQuota({
 
   const isAiDraft = operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION
   const isAiDraftRepair = operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION
+  const isTravelSearch = operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
   const maxRequests = isAiDraftRepair
     ? effectiveLimits.maxAiDraftRepairRequestsPerWindow
     : isAiDraft
       ? effectiveLimits.maxAiDraftRequestsPerWindow
-      : effectiveLimits.maxRouteRequestsPerWindow
-  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : 'route|'
+      : isTravelSearch
+        ? effectiveLimits.maxTravelSearchRequestsPerWindow
+        : effectiveLimits.maxRouteRequestsPerWindow
+  const identityPrefix = isAiDraftRepair ? 'ai_draft_repair|' : isAiDraft ? 'ai_draft|' : isTravelSearch ? 'travel_search|' : 'route|'
   const safeIdentity = `${identityPrefix}${identity.trim() || 'anonymous'}`
 
   const current = store.get(safeIdentity)

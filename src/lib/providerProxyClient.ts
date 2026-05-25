@@ -17,6 +17,10 @@ import {
   type ProviderProxyRoutePreviewRequest,
   type ProviderProxyRoutePreviewResponse,
   type ProviderProxyRoutePreviewSuccessResponse,
+  validateProviderProxyTravelSearchRequest,
+  type ProviderProxyTravelSearchRequest,
+  type ProviderProxyTravelSearchResponse,
+  type ProviderProxyTravelSearchSuccessResponse,
 } from './providerProxyContract'
 
 export type ProviderProxyRuntimeConfig = {
@@ -190,6 +194,49 @@ export async function fetchProviderProxyAiTripDraftRepair(
   return parsed
 }
 
+export async function fetchProviderProxyTravelSearch(
+  request: ProviderProxyTravelSearchRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyTravelSearchSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyTravelSearchRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_search' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_search' }), response.status)
+  }
+
+  const parsed = parseProviderProxyTravelSearchResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -289,6 +336,80 @@ function parseProviderProxyAiTripDraftRepairResponse(input: unknown): ProviderPr
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' })
+}
+
+function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTravelSearchResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyTravelSearchSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'travel_search'),
+      operation: 'travel_search',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_search' })
+}
+
+function validateProviderProxyTravelSearchSuccessResponse(record: Record<string, unknown>): ProviderProxyTravelSearchSuccessResponse | null {
+  if (record.operation !== 'travel_search') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_search') {
+    return null
+  }
+  const query = typeof record.query === 'string' ? record.query : null
+  if (!query || !Array.isArray(record.results)) {
+    return null
+  }
+
+  const results: ProviderProxyTravelSearchSuccessResponse['results'] = []
+  for (const result of record.results) {
+    const item = readRecord(result)
+    const confidence = item.confidence
+    if (
+      typeof item.id !== 'string'
+      || typeof item.title !== 'string'
+      || typeof item.url !== 'string'
+      || typeof item.sourceDomain !== 'string'
+      || typeof item.snippet !== 'string'
+      || typeof item.retrievedAt !== 'string'
+      || (confidence !== 'low' && confidence !== 'medium' && confidence !== 'high')
+    ) {
+      return null
+    }
+    results.push({
+      confidence,
+      id: item.id,
+      retrievedAt: item.retrievedAt,
+      snippet: item.snippet,
+      sourceDomain: item.sourceDomain,
+      title: item.title,
+      url: item.url,
+    })
+  }
+
+  return {
+    ok: true,
+    operation: 'travel_search',
+    query,
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    results,
+    source: record.source,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((w): w is string => typeof w === 'string')
+      : undefined,
+  }
 }
 
 function validateProviderProxyAiTripDraftRepairSuccessResponse(record: Record<string, unknown>): ProviderProxyAiTripDraftRepairSuccessResponse | null {

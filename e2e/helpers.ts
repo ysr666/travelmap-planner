@@ -147,6 +147,7 @@ export async function forceRouteProxyFixture(page: Page, options: { provider?: '
 }
 
 export async function mockMapStyle(page: Page) {
+  await mockGoogleMapsUnavailable(page)
   await page.route('https://tiles.openfreemap.org/styles/**', (route) =>
     route.fulfill({
       body: JSON.stringify({
@@ -158,6 +159,10 @@ export async function mockMapStyle(page: Page) {
       contentType: 'application/json',
     }),
   )
+}
+
+export async function mockGoogleMapsUnavailable(page: Page) {
+  await page.route('https://maps.googleapis.com/maps/api/js**', (route) => route.abort())
 }
 
 export async function setRouteProxyConfig(page: Page) {

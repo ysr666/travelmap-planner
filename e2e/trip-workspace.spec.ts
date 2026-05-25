@@ -6,6 +6,7 @@ import {
   forceRouteProxyFixture,
   forceSupabaseUnconfigured,
   getHashParam,
+  mockGoogleMapsUnavailable,
   mockMapStyle,
   mockProviderProxyForOrsRoute,
   seedTravelRecords,
@@ -85,7 +86,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview).toContainText('5 个有坐标地点')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewMapCanvasInPlot(page)
+  await expectTripPreviewRenderedInPlot(page, 5)
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
@@ -231,7 +232,7 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
   const mapOverview = page.getByTestId('trip-map-overview')
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewMapCanvasInPlot(page)
+  await expectTripPreviewRenderedInPlot(page, 6)
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
@@ -348,6 +349,7 @@ test('Trip Home 路线生成可在确认后使用 mock provider proxy', async ({
 })
 
 test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', async ({ page }) => {
+  await mockGoogleMapsUnavailable(page)
   await page.route('https://*.basemaps.cartocdn.com/**', (route) => route.abort())
   await page.route('https://tiles.openfreemap.org/styles/**', (route) => route.abort())
   const tripId = await createDemoTripViaUi(page)
@@ -359,7 +361,7 @@ test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', 
 
   await expect(mapOverview).toContainText('行程地图预览')
   await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewMapCanvasInPlot(page)
+  await expectTripPreviewRenderedInPlot(page, 5, { requireMarkers: true })
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
   await expect(mapOverview.getByText('地图底图暂时无法加载')).toBeVisible()
@@ -658,26 +660,49 @@ async function readRouteCacheEntryCount(page: import('@playwright/test').Page) {
   })
 }
 
-async function expectTripPreviewMapCanvasInPlot(page: Page) {
+async function expectTripPreviewRenderedInPlot(
+  page: Page,
+  expectedMarkerCount: number,
+  options: { requireMarkers?: boolean } = {},
+) {
   await expect.poll(async () => {
-    return page.evaluate(() => {
-      const plot = document.querySelector('[data-testid="trip-map-overview-plot"]')
-      const map = document.querySelector('[data-testid="trip-map-preview-map"]')
-      const canvas = map?.querySelector('canvas')
-      if (!plot || !map || !canvas) return false
+    return page.evaluate(({ expectedMarkerCount: markerCount, requireMarkers }) => {
+      const plot = document.querySelector<HTMLElement>('[data-testid="trip-map-overview-plot"]')
+      const map = document.querySelector<HTMLElement>('[data-testid="trip-map-preview-map"]')
+      if (!plot || !map) return false
 
       const plotRect = plot.getBoundingClientRect()
       const mapRect = map.getBoundingClientRect()
-      const canvasRect = canvas.getBoundingClientRect()
-      return (
+      const hasVisiblePlot =
+        plotRect.width > 0 &&
+        plotRect.height > 0 &&
         mapRect.width > 0 &&
-        mapRect.height > 0 &&
-        canvasRect.width > 0 &&
-        canvasRect.height > 0 &&
-        Math.abs(mapRect.height - plotRect.height) <= 1 &&
-        Math.abs(canvasRect.height - plotRect.height) <= 1
-      )
-    })
+        mapRect.height > 0
+      if (!hasVisiblePlot) return false
+
+      const isCenteredInPlot = (rect: DOMRect) => {
+        const centerX = rect.left + rect.width / 2
+        const centerY = rect.top + rect.height / 2
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          centerX >= plotRect.left &&
+          centerX <= plotRect.right &&
+          centerY >= plotRect.top &&
+          centerY <= plotRect.bottom
+        )
+      }
+
+      const markers = Array.from(plot.querySelectorAll<HTMLElement>('[data-testid="trip-map-overview-marker"]'))
+      const markersAreReady =
+        markers.length === markerCount &&
+        markers.every((marker) => isCenteredInPlot(marker.getBoundingClientRect()))
+      if (markersAreReady) return true
+      if (requireMarkers) return false
+
+      const canvas = map.querySelector<HTMLCanvasElement>('canvas')
+      return Boolean(canvas && isCenteredInPlot(canvas.getBoundingClientRect()))
+    }, { expectedMarkerCount, requireMarkers: options.requireMarkers ?? false })
   }).toBe(true)
 }
 

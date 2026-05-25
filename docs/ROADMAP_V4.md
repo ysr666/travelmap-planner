@@ -117,7 +117,7 @@
 
 - Foundation 已实现：用户用自然语言说明如何修改已保存旅行，AI 输出 patch / diff，而不是直接写 IndexedDB。
 - Patch 必须经过 schema validation、冲突检查、预览和二次用户确认。
-- 当前只支持 `update_item` / `move_item` / `delete_item` / `add_item` 白名单操作。
+- 当前只支持 granular 白名单操作：item title/time/location/note/transport、add/remove/move/reorder、day title。
 - 默认不得读取 notes、坐标、票据图片/PDF/OCR、ticket filename/blob、cloud token/status、route cache、provider key、URL 或完整本地 DB。
 - 后续再评估 richer diff、undo/history、search-assisted edits 和多轮 chat；这些都不能绕过 preview/confirm write boundary。
 

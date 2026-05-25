@@ -2,12 +2,16 @@ import { sortItineraryItems } from './itinerary'
 import { defaultAiPrivacySettings, type AiPrivacySettings } from './aiPrivacy'
 import type { Day, ItineraryItem, TransportMode, Trip } from '../types'
 
+export type AiTripEditCoordinateState = 'missing' | 'present' | 'invalid'
+export type AiTripEditTicketBoundState = 'none' | 'item_bound'
+
 export const AI_TRIP_EDIT_MAX_DAYS = 30
 export const AI_TRIP_EDIT_MAX_ITEMS = 300
 export const AI_TRIP_EDIT_MAX_TITLE_LENGTH = 120
 export const AI_TRIP_EDIT_MAX_LOCATION_LENGTH = 120
 export const AI_TRIP_EDIT_MAX_ADDRESS_LENGTH = 200
 export const AI_TRIP_EDIT_MAX_NOTE_SUMMARY_LENGTH = 80
+export const AI_TRIP_EDIT_MAX_NOTE_TEXT_LENGTH = 500
 
 export type AiTripEditContextItem = {
   id: string
@@ -19,7 +23,11 @@ export type AiTripEditContextItem = {
   address?: string
   previousTransportMode?: TransportMode
   previousTransportDurationMinutes?: number
+  coordinateState?: AiTripEditCoordinateState
   noteSummary?: string
+  noteText?: string
+  ticketCount?: number
+  ticketBoundState?: AiTripEditTicketBoundState
   hasTicketBindings?: boolean
 }
 
@@ -229,13 +237,26 @@ function sanitizeItem(
   }
 
   const note = item.notes?.trim()
-  if (note && (privacy.allowFullNotes || privacy.allowNotesSummary)) {
+  if (note && privacy.allowFullNotes) {
+    sanitized.noteText = clampText(note, AI_TRIP_EDIT_MAX_NOTE_TEXT_LENGTH)
+    if (note.length > AI_TRIP_EDIT_MAX_NOTE_TEXT_LENGTH) {
+      warnings.push('部分备注已按 AI 隐私设置截断。')
+    }
+  } else if (note && privacy.allowNotesSummary) {
     sanitized.noteSummary = clampText(note, AI_TRIP_EDIT_MAX_NOTE_SUMMARY_LENGTH)
     if (note.length > AI_TRIP_EDIT_MAX_NOTE_SUMMARY_LENGTH) {
       sanitized.noteSummary = `${sanitized.noteSummary.slice(0, AI_TRIP_EDIT_MAX_NOTE_SUMMARY_LENGTH - 1)}…`
       warnings.push('部分备注已按 AI 隐私设置截断为摘要。')
     }
   }
+
+  if (privacy.allowCoordinateState) {
+    sanitized.coordinateState = getCoordinateState(item)
+  }
+
+  const ticketCount = item.ticketIds.length
+  sanitized.ticketCount = ticketCount
+  sanitized.ticketBoundState = ticketCount > 0 ? 'item_bound' : 'none'
 
   return sanitized
 }
@@ -250,6 +271,7 @@ function normalizeContextItem(
   const path = `days[${dayIndex}].items[${itemIndex}]`
   const transportMode = item.previousTransportMode
   const duration = item.previousTransportDurationMinutes
+  const ticketCount = item.ticketCount
 
   if (transportMode !== undefined && !VALID_TRANSPORT_MODES.has(transportMode as TransportMode)) {
     errors.push(`${path}.previousTransportMode 无效。`)
@@ -257,20 +279,68 @@ function normalizeContextItem(
   if (duration !== undefined && (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 0 || duration > 1440)) {
     errors.push(`${path}.previousTransportDurationMinutes 无效。`)
   }
+  if (
+    item.coordinateState !== undefined &&
+    item.coordinateState !== 'missing' &&
+    item.coordinateState !== 'present' &&
+    item.coordinateState !== 'invalid'
+  ) {
+    errors.push(`${path}.coordinateState 无效。`)
+  }
+  if (
+    item.ticketBoundState !== undefined &&
+    item.ticketBoundState !== 'none' &&
+    item.ticketBoundState !== 'item_bound'
+  ) {
+    errors.push(`${path}.ticketBoundState 无效。`)
+  }
+  if (
+    ticketCount !== undefined &&
+    (typeof ticketCount !== 'number' || !Number.isInteger(ticketCount) || ticketCount < 0 || ticketCount > 100)
+  ) {
+    errors.push(`${path}.ticketCount 无效。`)
+  }
 
   return {
     address: optionalText(item.address, AI_TRIP_EDIT_MAX_ADDRESS_LENGTH),
+    coordinateState: item.coordinateState as AiTripEditCoordinateState | undefined,
     dayId: readRequiredString(item.dayId, `${path}.dayId`, 128, errors),
     endTime: optionalText(item.endTime, 16),
     hasTicketBindings: typeof item.hasTicketBindings === 'boolean' ? item.hasTicketBindings : undefined,
     id: readRequiredString(item.id, `${path}.id`, 128, errors),
     locationName: optionalText(item.locationName, AI_TRIP_EDIT_MAX_LOCATION_LENGTH),
     noteSummary: optionalText(item.noteSummary, AI_TRIP_EDIT_MAX_NOTE_SUMMARY_LENGTH),
+    noteText: optionalText(item.noteText, AI_TRIP_EDIT_MAX_NOTE_TEXT_LENGTH),
     previousTransportDurationMinutes: typeof duration === 'number' && Number.isInteger(duration) ? duration : undefined,
     previousTransportMode: VALID_TRANSPORT_MODES.has(transportMode as TransportMode) ? transportMode as TransportMode : undefined,
     startTime: optionalText(item.startTime, 16),
+    ticketBoundState: item.ticketBoundState as AiTripEditTicketBoundState | undefined,
+    ticketCount: typeof ticketCount === 'number' && Number.isInteger(ticketCount) ? ticketCount : undefined,
     title: readRequiredString(item.title, `${path}.title`, AI_TRIP_EDIT_MAX_TITLE_LENGTH, errors),
   }
+}
+
+function getCoordinateState(item: Pick<ItineraryItem, 'lat' | 'lng'>): AiTripEditCoordinateState {
+  const hasLat = item.lat !== undefined
+  const hasLng = item.lng !== undefined
+  if (!hasLat && !hasLng) {
+    return 'missing'
+  }
+
+  if (
+    typeof item.lat === 'number' &&
+    typeof item.lng === 'number' &&
+    Number.isFinite(item.lat) &&
+    Number.isFinite(item.lng) &&
+    item.lat >= -90 &&
+    item.lat <= 90 &&
+    item.lng >= -180 &&
+    item.lng <= 180
+  ) {
+    return 'present'
+  }
+
+  return 'invalid'
 }
 
 function readRequiredString(value: unknown, path: string, maxLength: number, errors: string[]) {

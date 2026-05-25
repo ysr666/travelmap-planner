@@ -292,8 +292,17 @@ const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
   'lat',
   'lng',
   'coordinates',
+  'ticketId',
+  'ticketIds',
   'externalUrl',
   'url',
+  'fileName',
+  'fileNames',
+  'blob',
+  'blobs',
+  'route',
+  'cloud',
+  'cloudStatus',
 ])
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80

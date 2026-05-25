@@ -103,7 +103,7 @@
 - Server-only OpenRouteService / Google Routes / AI provider secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
-- AI trip edit plan 不直接写库；只允许 `update_item` / `move_item` / `delete_item` / `add_item`，预览后必须二次确认才写入 IndexedDB。删除 ticket-bound item 会被拒绝，不删除或解绑票据。
+- AI trip edit plan 不直接写库；只允许 granular 白名单 operations（item title/time/location/note/transport、add/remove/move/reorder、day title），预览后必须二次确认才写入 IndexedDB。应用前会重新读取本地状态并拒绝 stale preview；删除 ticket-bound item 会被拒绝，不删除或解绑票据。
 - AI provider 请求只通过 `/api/provider-proxy`；server-only AI key 不进入前端 bundle、用户设置页、IndexedDB、zip、Supabase、日志或报告。
 - AI repair 使用当前草稿、质量检查结果和隐私过滤后的数据；不读取票据图片/PDF/OCR，不搜索网页，不直接修改已保存旅行。
 - 不缓存商业地图瓦片，不通过 PWA service worker 做瓦片离线缓存。
@@ -113,7 +113,7 @@
 - Real AI draft generation：DeepSeek `deepseek-v4-flash` 通过 OpenAI-compatible provider proxy smoke passed。
 - Real AI draft repair：DeepSeek `deepseek-v4-flash` 通过 `/api/provider-proxy` smoke passed；用户确认后触发一次 repair 请求，修复草稿返回并更新 preview / JSON textarea。
 - Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
-- AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、坐标、票据文件/blob、cloud、route cache 或完整本地 DB；返回走 JSON extraction → `validateAiTripEditPatchPlan` → diff preview → final confirm → IndexedDB transaction apply。
+- AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、完整坐标、ticket IDs/文件/blob、cloud、route cache 或完整本地 DB；返回走 JSON extraction → `validateAiTripEditPatchPlan` → 本地推导 affected IDs/counts → diff preview → stale baseline check → final confirm → IndexedDB transaction apply。
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。

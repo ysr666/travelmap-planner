@@ -3,7 +3,7 @@ import { createMockAiTripEditProvider, createOpenAiCompatibleAiTripEditProvider 
 
 describe('aiTripEditProvider', () => {
   it('returns deterministic mock patch plans with realtime warning', async () => {
-    const request = editRequest('查一下今天开放吗，然后加一个散步')
+    const request = editRequest('查一下今天开放吗，然后加一个咖啡休息')
     const provider = createMockAiTripEditProvider(request)
 
     const first = await provider.planEdit({ maxOutputTokens: 1000, prompt: 'prompt' })
@@ -26,8 +26,23 @@ describe('aiTripEditProvider', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok && result.kind === 'patch') {
-      expect(result.patchPlan.operations.length).toBeGreaterThanOrEqual(1)
+      expect(result.patchPlan.operations).toHaveLength(0)
       expect(result.patchPlan.warnings).toContain('联网搜索暂未接入，未查询实时信息。')
+      expect(result.patchPlan.warnings?.join('\n')).toContain('暂未识别')
+    }
+  })
+
+  it('supports shopping avoidance and missing-address marking with valid plans', async () => {
+    const shopping = await createMockAiTripEditProvider(editRequest('第三天不要购物，改成轻松一点')).planEdit({ maxOutputTokens: 1000, prompt: 'prompt' })
+    expect(shopping.ok).toBe(true)
+    if (shopping.ok && shopping.kind === 'patch') {
+      expect(shopping.patchPlan.operations[0].type).toBe('remove_item')
+    }
+
+    const missingAddress = await createMockAiTripEditProvider(editRequest('把所有没有地址的地点标出来')).planEdit({ maxOutputTokens: 1000, prompt: 'prompt' })
+    expect(missingAddress.ok).toBe(true)
+    if (missingAddress.ok && missingAddress.kind === 'patch') {
+      expect(missingAddress.patchPlan.operations[0].type).toBe('update_item_note')
     }
   })
 
@@ -44,7 +59,7 @@ describe('aiTripEditProvider', () => {
       expect(JSON.stringify(body)).not.toContain('server-secret')
       expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer server-secret')
       return new Response(JSON.stringify({
-        choices: [{ message: { content: '{"summary":"ok","operations":[]}' } }],
+        choices: [{ message: { content: '{"summary":"ok","operations":[],"warnings":["无可写入修改。"]}' } }],
       }))
     }) as unknown as typeof fetch
 
@@ -69,7 +84,7 @@ describe('aiTripEditProvider', () => {
       })
       expect(body.temperature).toBeUndefined()
       return new Response(JSON.stringify({
-        choices: [{ message: { content: '{"summary":"ok","operations":[]}' } }],
+        choices: [{ message: { content: '{"summary":"ok","operations":[],"warnings":["无可写入修改。"]}' } }],
       }))
     }) as unknown as typeof fetch
 

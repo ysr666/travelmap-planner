@@ -256,10 +256,10 @@ Request contract:
 
 Context boundary:
 
-- Includes stable trip/day/item IDs, titles, dates, times, location text, transport mode/duration, and a boolean ticket-binding marker.
-- Default strips notes. When AI Privacy allows note summary, only a short truncated summary is sent.
-- Never sends coordinates, ticket filenames/content/blob, route cache, cloud token/status, provider keys, URLs, or full local DB.
-- Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketBlobs`, `ticketMetas`, `routeCache`, `localDb`, `fullTrip`, coordinates, and URLs are rejected as `invalid_request`.
+- Includes stable trip/day/item IDs, titles, dates, times, optional location text, optional coarse coordinate state, transport mode/duration, and ticket count/bound state only.
+- Default strips notes. When AI Privacy allows note summary/full notes, only the allowed summary or note text is sent.
+- Never sends ticket IDs, ticket filenames/content/blob, exact coordinates, route cache, cloud token/status, provider keys, URLs, or full local DB.
+- Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketIds`, `ticketBlobs`, `ticketMetas`, `fileName`, `routeCache`, `localDb`, `fullTrip`, coordinates, cloud fields, and URLs are rejected as `invalid_request`.
 
 Success shape:
 
@@ -272,11 +272,10 @@ Success shape:
     "summary": "把西湖安排改得更明确。",
     "operations": [
       {
-        "type": "update_item",
+        "type": "update_item_title",
         "itemId": "item-id",
-        "changes": {
-          "title": "西湖深度散步"
-        }
+        "title": "西湖深度散步",
+        "reason": "把标题改得更明确。"
       }
     ],
     "warnings": []
@@ -286,12 +285,18 @@ Success shape:
 
 Patch whitelist:
 
-- `update_item`
-- `move_item`
-- `delete_item`
+- `update_item_title`
+- `update_item_time`
+- `update_item_location_text`
+- `update_item_note`
+- `update_item_transport`
 - `add_item`
+- `remove_item`
+- `move_item`
+- `reorder_day_items`
+- `update_day_title`
 
-The UI must keep two confirmation gates: one before sending sanitized context, and one before applying the validated patch locally. Ticket-bound items are not AI-deleted; `ticketMetas` and `ticketBlobs` are not touched.
+Validation rejects unknown operation types, unknown fields, forbidden sensitive fields, invalid IDs, invalid times, unsafe reorder lists, and plans with more than 20 operations. No-op plans are valid only with a clear warning. The UI must keep two confirmation gates: one before sending sanitized context, and one before applying the validated patch locally. Before applying, Trip Home reloads fresh IndexedDB state and rejects stale previews. Ticket-bound items are not AI-deleted; `ticketMetas`, `ticketBlobs`, route cache, cloud data, and backups are not touched.
 
 ## AI Trip Draft Operation
 

@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/aiTripEditContext'
-import { applyAiTripEditPatchPlanToDb } from '../../lib/aiTripEditApply'
+import { applyAiTripEditPatchPlanToDb, buildAiTripEditLocalStateFingerprint } from '../../lib/aiTripEditApply'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/aiTripEditPatch'
 import { getStoredAiPrivacySettings } from '../../lib/aiPrivacy'
 import {
@@ -31,12 +31,14 @@ export function AiTripEditPanel({
   const providerConfig = useMemo(() => getProviderProxyConfig(), [])
   const [command, setCommand] = useState('')
   const [pendingContext, setPendingContext] = useState<AiTripEditContext | null>(null)
+  const [pendingBaselineFingerprint, setPendingBaselineFingerprint] = useState<string | null>(null)
   const [confirmSendOpen, setConfirmSendOpen] = useState(false)
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [patchPlan, setPatchPlan] = useState<AiTripEditPatchPlan | null>(null)
   const [preview, setPreview] = useState<AiTripEditPatchPreview | null>(null)
+  const [previewBaselineFingerprint, setPreviewBaselineFingerprint] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -63,6 +65,7 @@ export function AiTripEditPanel({
     }
 
     setPendingContext(contextResult.context)
+    setPendingBaselineFingerprint(buildAiTripEditLocalStateFingerprint({ days, items: allItems, trip }))
     setWarnings(contextResult.warnings)
     setConfirmSendOpen(true)
   }
@@ -86,6 +89,7 @@ export function AiTripEditPanel({
       }, providerConfig.proxyUrl)
       setPatchPlan(response.patchPlan)
       setPreview(buildAiTripEditPatchPreview(response.patchPlan, pendingContext))
+      setPreviewBaselineFingerprint(pendingBaselineFingerprint)
       setWarnings([...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])
       setConfirmSendOpen(false)
     } catch (caught) {
@@ -107,7 +111,9 @@ export function AiTripEditPanel({
     setIsApplying(true)
     setError(null)
     try {
-      const result = await applyAiTripEditPatchPlanToDb(trip.id, patchPlan)
+      const result = await applyAiTripEditPatchPlanToDb(trip.id, patchPlan, {
+        expectedBaselineFingerprint: previewBaselineFingerprint ?? undefined,
+      })
       if (!result.ok) {
         setError(result.errors.join(' '))
         setConfirmApplyOpen(false)
@@ -117,6 +123,7 @@ export function AiTripEditPanel({
       setCommand('')
       setPatchPlan(null)
       setPreview(null)
+      setPreviewBaselineFingerprint(null)
       setWarnings([])
       setConfirmApplyOpen(false)
     } catch {
@@ -183,7 +190,9 @@ export function AiTripEditPanel({
         <div className="space-y-3 rounded-xl bg-slate-50/80 p-3 dark:bg-slate-800/45" data-testid="ai-trip-edit-preview">
           <div>
             <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{patchPlan.summary}</p>
-            <p className="mt-1 text-[11px] leading-5 tm-muted">预览出现不代表已修改旅行。</p>
+            <p className="mt-1 text-[11px] leading-5 tm-muted">
+              预览出现不代表已修改旅行。影响 {preview.affectedDayCount} 天、{preview.affectedItemCount} 个行程项。
+            </p>
           </div>
           <ul className="space-y-1 text-xs leading-5 text-slate-700 dark:text-slate-200">
             {preview.lines.map((line) => (
@@ -201,6 +210,7 @@ export function AiTripEditPanel({
               onClick={() => {
                 setPatchPlan(null)
                 setPreview(null)
+                setPreviewBaselineFingerprint(null)
               }}
               variant="secondary"
             >
@@ -208,10 +218,11 @@ export function AiTripEditPanel({
             </Button>
             <Button
               className="min-h-10 px-3 text-xs"
+              disabled={!preview.hasWritePayload}
               loading={isApplying}
               onClick={() => setConfirmApplyOpen(true)}
             >
-              应用修改
+              {preview.hasWritePayload ? '应用修改' : '无可应用修改'}
             </Button>
           </div>
         </div>
@@ -233,7 +244,7 @@ export function AiTripEditPanel({
       />
 
       <ConfirmDialog
-        body="将把这些修改写入本地旅行。不会自动生成路线，不会上传云端，不会创建或删除票据，不会联网搜索或查询网页。"
+        body="将把这些修改写入当前本地旅行。不会联网搜索或查询网页，不会生成路线，不会创建票据，不会上传云端。"
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<Wand2 className="size-5" />}

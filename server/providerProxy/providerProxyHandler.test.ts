@@ -710,7 +710,7 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
       operation: 'ai_trip_edit_plan',
       source: 'mock',
     })
-    expect(body.patchPlan.operations.length).toBeGreaterThanOrEqual(1)
+    expect(body.patchPlan.operations).toHaveLength(0)
     expect(body.patchPlan.warnings).toContain('联网搜索暂未接入，未查询实时信息。')
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -778,7 +778,7 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              operations: [{ item: { title: '咖啡休息' }, targetDayId: 'day_1', type: 'add_item' }],
+              operations: [{ item: { title: '咖啡休息' }, reason: '增加休息。', targetDayId: 'day_1', type: 'add_item' }],
               summary: '新增休息',
             }),
           },
@@ -838,7 +838,7 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              operations: [{ changes: { title: '更新标题' }, itemId: 'item_1', type: 'update_item' }],
+              operations: [{ itemId: 'item_1', reason: '更新标题。', title: '更新标题', type: 'update_item_title' }],
               summary: '更新标题',
             }),
           },

@@ -438,7 +438,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
           operation: 'ai_trip_edit_plan',
           patchPlan: {
             operations: [
-              { changes: { title: '西湖深度散步' }, itemId: 'item_ai_edit_1', type: 'update_item' },
+              { itemId: 'item_ai_edit_1', reason: '把标题改得更明确。', title: '西湖深度散步', type: 'update_item_title' },
             ],
             summary: '把西湖安排改得更明确。',
           },
@@ -550,9 +550,23 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
   expect(await readAiEditBoundaryCounts(page)).toEqual(beforeCounts)
 
+  await writeItemTitle(page, 'item_ai_edit_1', '西湖手动调整')
+  await panel.getByRole('button', { name: '应用修改' }).click()
+  await page.getByTestId('ai-trip-edit-apply-confirm-dialog').getByRole('button', { name: '确认应用' }).click()
+  await expect(panel.getByTestId('ai-trip-edit-error')).toContainText('本地行程已变化，请重新生成 AI 修改方案。')
+  expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖手动调整')
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(panel).toBeVisible()
+  await panel.getByTestId('ai-trip-edit-command').fill('第二天太满了，帮我放松一点')
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  await page.getByTestId('ai-trip-edit-send-confirm-dialog').getByRole('button', { name: '确认发送' }).click()
+  await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖深度散步')
+  expect(editRequests).toBe(2)
+
   await panel.getByRole('button', { name: '应用修改' }).click()
   const applyDialog = page.getByTestId('ai-trip-edit-apply-confirm-dialog')
-  await expect(applyDialog).toContainText('不会自动生成路线')
+  await expect(applyDialog).toContainText('不会生成路线')
   await expect(applyDialog).toContainText('不会联网搜索或查询网页')
   await applyDialog.getByRole('button', { name: '确认应用' }).click()
   await expect.poll(() => readItemTitle(page, 'item_ai_edit_1')).toBe('西湖深度散步')
@@ -586,6 +600,28 @@ async function readItemTitle(page: import('@playwright/test').Page, itemId: stri
     db.close()
     return title
   }, itemId)
+}
+
+async function writeItemTitle(page: import('@playwright/test').Page, itemId: string, title: string) {
+  return page.evaluate(async ({ currentItemId, nextTitle }) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(['itineraryItems'], 'readwrite')
+      const store = tx.objectStore('itineraryItems')
+      const getRequest = store.get(currentItemId)
+      getRequest.onsuccess = () => {
+        store.put({ ...getRequest.result, title: nextTitle })
+      }
+      getRequest.onerror = () => reject(getRequest.error)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  }, { currentItemId: itemId, nextTitle: title })
 }
 
 async function readAiEditBoundaryCounts(page: import('@playwright/test').Page) {

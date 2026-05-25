@@ -265,7 +265,7 @@ describe('provider proxy ai_trip_edit_plan client', () => {
         ok: true,
         operation: 'ai_trip_edit_plan',
         patchPlan: {
-          operations: [{ item: { title: '咖啡休息' }, targetDayId: 'day_1', type: 'add_item' }],
+          operations: [{ item: { title: '咖啡休息' }, reason: '增加休息。', targetDayId: 'day_1', type: 'add_item' }],
           summary: '新增休息',
         },
         source: 'mock',

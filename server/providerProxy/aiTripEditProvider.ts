@@ -106,17 +106,77 @@ export function createOpenAiCompatibleAiTripEditProvider(
 }
 
 function buildMockPatchPlan(request: ProviderProxyAiTripEditPlanRequest): AiTripEditPatchPlan {
-  const firstDay = request.context.days[0]
+  const targetDay = selectRequestedDay(request) ?? request.context.days[0]
   const allItems = request.context.days.flatMap((day) => day.items)
   const command = request.command
   const warnings = commandNeedsRealtimeSearch(command) ? [REALTIME_WARNING] : []
 
+  if (mentionsMissingAddress(command)) {
+    const missingAddressItems = allItems.filter((item) => !item.address)
+    if (missingAddressItems.length > 0) {
+      return {
+        operations: missingAddressItems.slice(0, 3).map((item) => ({
+          itemId: item.id,
+          note: '缺少地址，请补充。',
+          reason: '按指令标记缺少地址的行程项。',
+          type: 'update_item_note',
+        })),
+        summary: '标记缺少地址的行程项。',
+        warnings,
+      }
+    }
+  }
+
+  if (mentionsShoppingAvoidance(command)) {
+    const shoppingItem = allItems.find((item) => isShoppingLike(item.title))
+    if (shoppingItem) {
+      if (isTicketBound(shoppingItem)) {
+        return {
+          operations: [{
+            itemId: shoppingItem.id,
+            reason: '购物项目绑定票据，不直接移除，改为更轻松的安排。',
+            title: '轻松散步',
+            type: 'update_item_title',
+          }],
+          summary: '将购物安排改为轻松活动。',
+          warnings,
+        }
+      }
+      return {
+        operations: [{
+          itemId: shoppingItem.id,
+          reason: '按指令移除购物类项目。',
+          type: 'remove_item',
+        }],
+        summary: '移除一个购物类项目。',
+        warnings,
+      }
+    }
+  }
+
+  if (mentionsCoffeeBreak(command)) {
+    return {
+      operations: [{
+        item: {
+          endTime: '16:00',
+          startTime: '15:30',
+          title: command.includes('咖啡') ? '咖啡休息' : '休息',
+        },
+        reason: '增加一个轻量休息节点。',
+        targetDayId: targetDay.id,
+        type: 'add_item',
+      }],
+      summary: '新增一个休息安排。',
+      warnings,
+    }
+  }
+
   if (command.includes('删除')) {
-    const matched = allItems.find((item) => command.includes(item.title) && !item.hasTicketBindings)
-      ?? allItems.find((item) => !item.hasTicketBindings)
+    const matched = allItems.find((item) => command.includes(item.title) && !isTicketBound(item))
+      ?? allItems.find((item) => !isTicketBound(item))
     if (matched) {
       return {
-        operations: [{ itemId: matched.id, reason: '根据指令移除一个可安全删除的项目。', type: 'delete_item' }],
+        operations: [{ itemId: matched.id, reason: '根据指令移除一个可安全删除的项目。', type: 'remove_item' }],
         summary: '生成一个删除项目的修改建议。',
         warnings,
       }
@@ -124,10 +184,11 @@ function buildMockPatchPlan(request: ProviderProxyAiTripEditPlanRequest): AiTrip
   }
 
   if (command.includes('放松') || command.includes('太满')) {
-    const lastFlexibleItem = [...allItems].reverse().find((item) => !item.hasTicketBindings)
+    const targetDayItems = targetDay.items.length > 0 ? targetDay.items : allItems
+    const lastFlexibleItem = [...targetDayItems].reverse().find((item) => !isTicketBound(item))
     if (lastFlexibleItem && allItems.length > 1) {
       return {
-        operations: [{ itemId: lastFlexibleItem.id, reason: '减少当天安排密度。', type: 'delete_item' }],
+        operations: [{ itemId: lastFlexibleItem.id, reason: '减少当天安排密度。', type: 'remove_item' }],
         summary: '删除一个非票据绑定项目，让行程更松弛。',
         warnings,
       }
@@ -135,19 +196,65 @@ function buildMockPatchPlan(request: ProviderProxyAiTripEditPlanRequest): AiTrip
   }
 
   return {
-    operations: [{
-      item: {
-        endTime: '16:00',
-        startTime: '15:30',
-        title: '咖啡休息',
-      },
-      reason: '增加一个轻量休息节点。',
-      targetDayId: firstDay.id,
-      type: 'add_item',
-    }],
-    summary: '新增一个休息安排，作为安全的示例修改。',
-    warnings,
+    operations: [],
+    summary: '未生成可写入修改。',
+    warnings: [...warnings, '暂未识别可安全自动转换的修改，请换一种更具体的说法。'],
   }
+}
+
+function selectRequestedDay(request: ProviderProxyAiTripEditPlanRequest) {
+  const command = request.command
+  const dayNumber = parseChineseDayNumber(command) ?? parseArabicDayNumber(command)
+  if (dayNumber !== null) {
+    return request.context.days[dayNumber - 1]
+  }
+  return undefined
+}
+
+function parseChineseDayNumber(command: string): number | null {
+  const match = command.match(/第([一二三四五六七八九十])天/)
+  if (!match) return null
+  const value = match[1]
+  const map: Record<string, number> = {
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  }
+  return map[value] ?? null
+}
+
+function parseArabicDayNumber(command: string): number | null {
+  const match = command.match(/\bday\s*(\d{1,2})\b/i) ?? command.match(/第(\d{1,2})天/)
+  if (!match) return null
+  const value = Number(match[1])
+  return Number.isInteger(value) && value > 0 ? value : null
+}
+
+function mentionsCoffeeBreak(command: string) {
+  return /咖啡|休息|coffee|break|rest/i.test(command)
+}
+
+function mentionsMissingAddress(command: string) {
+  return /没有地址|缺少地址|missing address|without address/i.test(command)
+}
+
+function mentionsShoppingAvoidance(command: string) {
+  return /不要购物|别购物|不购物|no shopping|avoid shopping/i.test(command)
+}
+
+function isShoppingLike(title: string) {
+  return /购物|商场|商城|shopping|mall|outlet|market/i.test(title)
+}
+
+function isTicketBound(item: { hasTicketBindings?: boolean; ticketBoundState?: string; ticketCount?: number }) {
+  return item.hasTicketBindings || item.ticketBoundState === 'item_bound' || (item.ticketCount ?? 0) > 0
 }
 
 async function requestOpenAiCompatibleTripEditPlan({

@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, MapPin } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
-import { MapLibreAdapter } from '../lib/maplibreAdapter'
-import type { EdgeInsets, MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
+import { loadMapLibreAdapter } from '../lib/maplibreAdapterLoader'
+import type { EdgeInsets, MapEngineAdapter, MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
 import { markMapStartup } from '../lib/mapStartupMetrics'
 import {
   DEFAULT_DAY_MAP_PADDING,
@@ -75,8 +75,6 @@ type PrewarmSession = {
 }
 
 const MAP_ERROR_MESSAGE = '地图底图暂时无法加载，但本地行程仍可查看。'
-
-const maplibreAdapter = new MapLibreAdapter()
 
 export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   items,
@@ -554,7 +552,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     let disposed = false
 
-    function createMap(styleUrl: string, isFallback: boolean) {
+    function createMap(maplibreAdapter: MapEngineAdapter, styleUrl: string, isFallback: boolean) {
       if (!containerRef.current || disposed) {
         return
       }
@@ -602,7 +600,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
         if (!isFallback && !fallbackTriedRef.current) {
           fallbackTriedRef.current = true
-          createMap(FALLBACK_MAP_STYLE, true)
+          createMap(maplibreAdapter, FALLBACK_MAP_STYLE, true)
           return
         }
 
@@ -614,7 +612,20 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     fallbackTriedRef.current = false
     setMapError(null)
-    createMap(DEFAULT_MAP_STYLE, false)
+    void loadMapLibreAdapter()
+      .then((maplibreAdapter) => {
+        if (!disposed) {
+          createMap(maplibreAdapter, DEFAULT_MAP_STYLE, false)
+        }
+      })
+      .catch(() => {
+        if (disposed) {
+          return
+        }
+        setMapError(MAP_ERROR_MESSAGE)
+        setIsMapReady(false)
+        onMapErrorRef.current?.(MAP_ERROR_MESSAGE)
+      })
 
     return () => {
       disposed = true

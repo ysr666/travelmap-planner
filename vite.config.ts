@@ -19,6 +19,28 @@ const appVersion = tripMapBuild === undefined ? packageVersion : `${packageVersi
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/')
+          if (normalizedId.includes('/node_modules/maplibre-gl/')) {
+            return 'maplibre'
+          }
+          if (normalizedId.includes('/node_modules/jszip/')) {
+            return 'jszip'
+          }
+          if (
+            normalizedId.includes('/node_modules/react/') ||
+            normalizedId.includes('/node_modules/react-dom/') ||
+            normalizedId.includes('/node_modules/scheduler/')
+          ) {
+            return 'react-vendor'
+          }
+        },
+      },
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },

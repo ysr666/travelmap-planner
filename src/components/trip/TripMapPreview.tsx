@@ -8,8 +8,8 @@ import {
   GOOGLE_MAPS_CONFIG_CHANGED_EVENT_EXPORT,
   waitForGoogleMaps,
 } from '../../lib/googleMaps'
-import type { LngLat, MapInstance, MarkerHandle } from '../../lib/mapEngine'
-import { MapLibreAdapter } from '../../lib/maplibreAdapter'
+import type { LngLat, MapEngineAdapter, MapInstance, MarkerHandle } from '../../lib/mapEngine'
+import { loadMapLibreAdapter } from '../../lib/maplibreAdapterLoader'
 import {
   fetchGoogleRouteOptimization,
   getRoutingConfig,
@@ -46,7 +46,6 @@ type OptimizationState =
   | { status: 'applied'; message: string }
   | { status: 'error'; message: string }
 
-const maplibreAdapter = new MapLibreAdapter()
 const googleMapsAdapter = new GoogleMapsEngineAdapter()
 const NATIVE_MARKER_OVERLAP_THRESHOLD_METERS = 18
 const NATIVE_MARKER_OVERLAP_OFFSET_PX = 11
@@ -202,7 +201,11 @@ export function TripMapPreview({
       })
     }
 
-    function createMap(style: string | Record<string, unknown>, fallbackLevel: 0 | 1 | 2 = 0) {
+    function createMap(
+      style: string | Record<string, unknown>,
+      fallbackLevel: 0 | 1 | 2 = 0,
+      maplibreAdapter?: MapEngineAdapter,
+    ) {
       if (!containerRef.current || disposed || !engine) {
         return
       }
@@ -210,15 +213,21 @@ export function TripMapPreview({
       cleanupMap()
       clearReadinessTimeout()
       const first = data.records[0]?.coordinate ?? [139.7671, 35.6812]
-      const map = engine === 'google'
-        ? googleMapsAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11 })
-        : maplibreAdapter.createMap(containerRef.current, {
+      let map: MapInstance
+      if (engine === 'google') {
+        map = googleMapsAdapter.createMap(containerRef.current, { center: first, interactive: false, zoom: 11 })
+      } else {
+        if (!maplibreAdapter) {
+          return
+        }
+        map = maplibreAdapter.createMap(containerRef.current, {
           attributionPosition: 'bottom-right',
           center: first,
           interactive: false,
           zoom: 11,
           style,
         })
+      }
       mapRef.current = map
       setMapInstanceVersion((version) => version + 1)
       map.resize()
@@ -243,12 +252,12 @@ export function TripMapPreview({
           return
         }
         if (fallbackLevel === 0) {
-          createMap(FALLBACK_MAP_STYLE, 1)
+          createMap(FALLBACK_MAP_STYLE, 1, maplibreAdapter)
           return
         }
         if (fallbackLevel === 1) {
           setMapNotice('地图底图暂时无法加载，已切换为轻量预览。')
-          createMap(EMPTY_MAP_STYLE, 2)
+          createMap(EMPTY_MAP_STYLE, 2, maplibreAdapter)
           return
         }
         clearReadinessTimeout()
@@ -257,7 +266,25 @@ export function TripMapPreview({
       })
     }
 
-    createMap(TRIP_PREVIEW_MAP_STYLE)
+    if (engine === 'google') {
+      createMap(TRIP_PREVIEW_MAP_STYLE)
+    } else {
+      void loadMapLibreAdapter()
+        .then((maplibreAdapter) => {
+          if (!disposed) {
+            createMap(TRIP_PREVIEW_MAP_STYLE, 0, maplibreAdapter)
+          }
+        })
+        .catch(() => {
+          if (disposed) {
+            return
+          }
+          clearReadinessTimeout()
+          setIsMapBaseSlow(true)
+          setIsMapReady(false)
+          setMapNotice('地图底图暂时无法加载，但行程地点仍可查看。')
+        })
+    }
 
     return () => {
       disposed = true

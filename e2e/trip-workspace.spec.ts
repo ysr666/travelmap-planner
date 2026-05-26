@@ -8,7 +8,6 @@ import {
   getHashParam,
   mockGoogleMapsUnavailable,
   mockMapStyle,
-  mockProviderProxyForOrsRoute,
   seedTravelRecords,
   setRouteProxyConfig,
 } from './helpers'
@@ -176,10 +175,81 @@ test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ p
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议', async ({ page }) => {
+test('Trip Home 地图预览缓存路线并通过 proxy 应用路线顺序建议', async ({ page }) => {
   await mockMapStyle(page)
-  await mockProviderProxyForOrsRoute(page)
+  let routePreviewRequests = 0
+  let routeOrderRequests = 0
+  let directGoogleRouteRequests = 0
+  let directOrsRequests = 0
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'route_preview') {
+      routePreviewRequests += 1
+      const coords = body.coordinates ?? [[139.1, 35.1], [139.2, 35.2]]
+      const segments = (body.segments ?? []).map((seg: Record<string, unknown>, i: number) => ({
+        coordinates: [coords[seg.fromCoordinateIndex as number] ?? coords[0], coords[seg.toCoordinateIndex as number] ?? coords[1]],
+        distanceMeters: 1200,
+        durationSeconds: 600,
+        fromItemId: seg.fromItemId,
+        segmentIndex: seg.segmentIndex ?? i,
+        toItemId: seg.toItemId,
+      }))
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_preview',
+          provider: 'openrouteservice',
+          route: {
+            lineStrings: segments.map((s: { coordinates: unknown }) => s.coordinates),
+            segments,
+            status: 'road',
+            warnings: [],
+          },
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_order_suggestion') {
+      routeOrderRequests += 1
+      expect(body.provider).toBe('auto')
+      expect(body.quotaSessionId).toBeTruthy()
+      expect(JSON.stringify(body)).not.toContain('GOOGLE_ROUTES_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('OPENROUTESERVICE_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('notes')
+      const requestItems = body.items as Array<{ coordinate?: unknown; id: string }>
+      const coordinateItems = requestItems.filter((item) => item.coordinate)
+      const suggestedItemIds = [
+        coordinateItems[0]?.id,
+        ...coordinateItems.slice(1, -1).reverse().map((item) => item.id),
+        coordinateItems[coordinateItems.length - 1]?.id,
+      ].filter(Boolean)
+      await route.fulfill({
+        body: JSON.stringify({
+          distanceMeters: 1800,
+          durationSeconds: 900,
+          ok: true,
+          operation: 'route_order_suggestion',
+          provider: 'mock',
+          retrievedAt: '2026-01-01T00:00:00.000Z',
+          suggestedItemIds,
+          summary: '模拟路线顺序建议',
+          unchangedItemIds: requestItems.filter((item) => !item.coordinate).map((item) => item.id),
+          warnings: [],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
   await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
+    directGoogleRouteRequests += 1
     await route.fulfill({
       body: JSON.stringify({
         routes: [
@@ -193,6 +263,10 @@ test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议'
       }),
       contentType: 'application/json',
     })
+  })
+  await page.route('https://api.openrouteservice.org/**', (route) => {
+    directOrsRequests += 1
+    return route.abort()
   })
   const tripId = await createDemoTripViaUi(page)
   const dayId = getHashParam(page.url(), 'dayId')
@@ -240,6 +314,7 @@ test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议'
   await expect(page.getByTestId('route-preparation-summary')).toContainText('可为 2 天生成路线预览')
   expect(await readRouteCacheEntryCount(page)).toBe(0)
   await expect(mapOverview.getByText(/加载地图预览/)).toHaveCount(0)
+  expect(routeOrderRequests).toBe(0)
 
   await page.getByTestId('route-preparation-panel').getByRole('button', { name: '生成路线预览' }).click()
   const routeDialog = page.getByTestId('route-generation-confirm-dialog')
@@ -251,9 +326,9 @@ test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议'
   await routeDialog.getByRole('button', { name: '确认生成' }).click()
   await expect(page.getByTestId('route-preparation-result')).toContainText('已生成 1 天路线预览')
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
+  expect(routePreviewRequests).toBeGreaterThan(0)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await mockProviderProxyForOrsRoute(page)
   const reloadedMapOverview = page.getByTestId('trip-map-overview')
   await expect(reloadedMapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
   await expect(reloadedMapOverview.getByText(/加载地图预览/)).toHaveCount(0)
@@ -263,8 +338,35 @@ test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议'
     window.dispatchEvent(new Event('tripmap:google-maps-config-changed'))
   })
   const originalOrder = await readDayItemOrder(page, dayId as string)
-  await expect(page.getByTestId('trip-map-optimization-panel')).toHaveCount(0)
+  const cacheCountBeforeSuggestion = await readRouteCacheEntryCount(page)
+  const routeOrderPanel = page.getByTestId('trip-map-route-order-panel')
+  await expect(routeOrderPanel).toBeVisible()
+  expect(routeOrderRequests).toBe(0)
+  await routeOrderPanel.getByRole('button', { name: '查看建议（仅建议）' }).click()
+  await expect(routeOrderPanel.getByTestId('trip-map-route-order-suggestion')).toContainText('建议顺序')
+  expect(routeOrderRequests).toBe(1)
   expect(await readDayItemOrder(page, dayId as string)).toEqual(originalOrder)
+
+  await routeOrderPanel.getByRole('button', { name: '应用建议' }).click()
+  const orderDialog = page.getByTestId('trip-map-route-order-confirm-dialog')
+  await expect(orderDialog).toContainText('只会更新')
+  await expect(orderDialog).toContainText('不会生成路线')
+  await expect(orderDialog).toContainText('不会写入云端')
+  await expect(orderDialog).toContainText('不会创建票据')
+  await orderDialog.getByRole('button', { name: '暂不应用' }).click()
+  expect(await readDayItemOrder(page, dayId as string)).toEqual(originalOrder)
+
+  await routeOrderPanel.getByRole('button', { name: '应用建议' }).click()
+  await page.getByTestId('trip-map-route-order-confirm-dialog').getByRole('button', { name: '确认应用' }).click()
+  const expectedOrder = [
+    originalOrder[0],
+    ...originalOrder.slice(1, -1).reverse(),
+    originalOrder[originalOrder.length - 1],
+  ]
+  await expect.poll(() => readDayItemOrder(page, dayId as string)).toEqual(expectedOrder)
+  expect(await readRouteCacheEntryCount(page)).toBe(cacheCountBeforeSuggestion)
+  expect(directGoogleRouteRequests).toBe(0)
+  expect(directOrsRequests).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
 

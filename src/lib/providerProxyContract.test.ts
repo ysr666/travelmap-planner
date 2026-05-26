@@ -3,6 +3,8 @@ import {
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   PROVIDER_PROXY_MAX_COORDINATES,
+  PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS,
+  validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
@@ -59,6 +61,65 @@ describe('provider proxy route preview contract', () => {
   })
 })
 
+describe('provider proxy route_order_suggestion contract', () => {
+  it('accepts a valid route_order_suggestion request', () => {
+    const result = validateProviderProxyRouteOrderSuggestionRequest(validRouteOrderRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.provider).toBe('auto')
+      expect(result.request.items.map((item) => item.id)).toEqual(['a', 'b', 'c'])
+      expect(result.request.items[0].coordinate).toEqual({ lat: 35.1, lng: 139.1 })
+    }
+  })
+
+  it('rejects duplicate ids invalid coordinates and too few routable items', () => {
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 } },
+        { id: 'a', title: 'B', coordinate: { lat: 35.2, lng: 139.2 } },
+      ],
+    }).ok).toBe(false)
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 91, lng: 139.1 } },
+        { id: 'b', title: 'B', coordinate: { lat: 35.2, lng: 139.2 } },
+      ],
+    }).ok).toBe(false)
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 } },
+        { id: 'b', title: 'B' },
+      ],
+    }).ok).toBe(false)
+  })
+
+  it('rejects oversized and sensitive route_order_suggestion fields', () => {
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      items: Array.from({ length: PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS + 1 }, (_, index) => ({
+        coordinate: { lat: 35 + index / 1000, lng: 139 },
+        id: `item-${index}`,
+        title: `Item ${index}`,
+      })),
+    }).ok).toBe(false)
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      notes: 'do not send notes',
+    }).ok).toBe(false)
+    expect(validateProviderProxyRouteOrderSuggestionRequest({
+      ...validRouteOrderRequest(),
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 }, ticketIds: ['ticket'] },
+        { id: 'b', title: 'B', coordinate: { lat: 35.2, lng: 139.2 } },
+      ],
+    }).ok).toBe(false)
+  })
+})
+
 function validRequest() {
   return {
     coordinates: [[139.1, 35.1], [139.2, 35.2]],
@@ -77,6 +138,21 @@ function validRequest() {
         toItemId: 'b',
       },
     ],
+    tripId: 'trip',
+  }
+}
+
+function validRouteOrderRequest() {
+  return {
+    dayId: 'day',
+    items: [
+      { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 } },
+      { id: 'b', title: 'B' },
+      { id: 'c', title: 'C', coordinate: { lat: 35.2, lng: 139.2 } },
+    ],
+    operation: 'route_order_suggestion',
+    provider: 'auto',
+    requestId: 'route-order-1',
     tripId: 'trip',
   }
 }

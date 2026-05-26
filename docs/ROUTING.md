@@ -28,11 +28,11 @@ Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRout
 
 不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 或 AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS/AI key 输入、保存、清除或展示控件。
 
-前端不再使用 `VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key，或 Google Maps JS key 直接调用 OpenRouteService / Google Routes。公开部署和本地 provider QA 都应通过 provider proxy。路线顺序建议暂时停用，直到它有独立的 server-side proxy operation。详见 [Provider Proxy](PROVIDER_PROXY.md)。
+前端不再使用 `VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key，或 Google Maps JS key 直接调用 OpenRouteService / Google Routes。公开部署和本地 provider QA 都应通过 provider proxy。路线顺序建议已恢复为 `route_order_suggestion` server-side proxy operation；浏览器只发送当前日行程点 ID、标题和坐标，用户确认后才更新当前日排序。详见 [Provider Proxy](PROVIDER_PROXY.md)。
 
 ## 隐私说明
 
-生成道路路线时，旅图会把相邻行程点的坐标发送给 TripMap 路线服务及其后端 provider。旅图不会发送地点标题、地址、备注、票据或用户账号信息。
+生成道路路线时，旅图会把相邻行程点的坐标发送给 TripMap 路线服务及其后端 provider。旅图不会发送地点标题、地址、备注、票据或用户账号信息。路线顺序建议只会把坐标发送给真实后端 provider；标题和 ID 仅用于 TripMap proxy 的本地归一化与前端确认展示。
 
 路线服务、地图底图和外部 Apple / Google Maps 链接都由第三方提供。出发前请以实际导航软件和官方交通信息为准。
 
@@ -53,6 +53,10 @@ Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRout
 设置页的“路线服务”区域可以查看缓存大小、设置上限和清理路线缓存。默认上限是 20 MB，可选 5 MB、20 MB、50 MB、100 MB。超过上限时会按最近使用时间清理旧缓存。
 
 路线缓存只用于加快显示，不保证路线长期有效。出发前仍应以实际导航软件为准。
+
+## 路线顺序建议
+
+Trip Home 的“路线顺序建议”只在用户点击“查看建议（仅建议）”后调用 `route_order_suggestion`。真实 v1 使用 server-side Google Routes key 和 waypoint optimization；ORS optimization 暂不接入，因为它是单独的 public VROOM-backed endpoint。应用建议前必须再次确认，确认后只更新当前日 itinerary item 的 `sortOrder`，不生成路线、不写 route cache、不写云端、不创建票据。
 
 ## 交通模式映射
 

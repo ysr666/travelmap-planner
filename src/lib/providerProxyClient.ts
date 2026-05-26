@@ -22,10 +22,14 @@ import {
   type ProviderProxyPlaceLookupRequest,
   type ProviderProxyPlaceLookupResponse,
   type ProviderProxyPlaceLookupSuccessResponse,
+  type ProviderProxyRouteOrderSuggestionRequest,
+  type ProviderProxyRouteOrderSuggestionResponse,
+  type ProviderProxyRouteOrderSuggestionSuccessResponse,
   type ProviderProxyRoutePreviewRequest,
   type ProviderProxyRoutePreviewResponse,
   type ProviderProxyRoutePreviewSuccessResponse,
   validateProviderProxyTravelSearchRequest,
+  validateProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchResponse,
   type ProviderProxyTravelSearchSourceType,
@@ -119,6 +123,49 @@ export async function fetchProviderProxyRoutePreview(
   }
 
   const parsed = parseProviderProxyResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
+export async function fetchProviderProxyRouteOrderSuggestion(
+  request: ProviderProxyRouteOrderSuggestionRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyRouteOrderSuggestionSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyRouteOrderSuggestionRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'route_order_suggestion' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'route_order_suggestion' }), response.status)
+  }
+
+  const parsed = parseProviderProxyRouteOrderSuggestionResponse(body, validation.request)
   if (!parsed.ok) {
     throw new ProviderProxyClientError(parsed, response.status)
   }
@@ -395,6 +442,33 @@ function parseProviderProxyResponse(input: unknown): ProviderProxyRoutePreviewRe
   return buildProviderProxyErrorResponse({ code: 'network_error' })
 }
 
+function parseProviderProxyRouteOrderSuggestionResponse(
+  input: unknown,
+  request: ProviderProxyRouteOrderSuggestionRequest,
+): ProviderProxyRouteOrderSuggestionResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyRouteOrderSuggestionSuccessResponse(record, request)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'route_order_suggestion' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'route_order_suggestion'),
+      operation: 'route_order_suggestion',
+      provider: isProviderProxyConcreteProvider(record.provider) ? record.provider : undefined,
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'route_order_suggestion' })
+}
+
 function parseProviderProxyAiTripDraftResponse(input: unknown): ProviderProxyAiTripDraftResponse {
   const record = readRecord(input)
   if (record.ok === true) {
@@ -540,6 +614,62 @@ function validateProviderProxyAiTripEditPlanSuccessResponse(
   }
 }
 
+function validateProviderProxyRouteOrderSuggestionSuccessResponse(
+  record: Record<string, unknown>,
+  request: ProviderProxyRouteOrderSuggestionRequest,
+): ProviderProxyRouteOrderSuggestionSuccessResponse | null {
+  if (record.operation !== 'route_order_suggestion') {
+    return null
+  }
+  if (record.provider !== 'mock' && !isProviderProxyConcreteProvider(record.provider)) {
+    return null
+  }
+  const retrievedAt = typeof record.retrievedAt === 'string' ? record.retrievedAt : null
+  const suggestedItemIds = Array.isArray(record.suggestedItemIds)
+    ? record.suggestedItemIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : null
+  const unchangedItemIds = Array.isArray(record.unchangedItemIds)
+    ? record.unchangedItemIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : null
+  const coordinateItemIds = request.items.filter((item) => item.coordinate).map((item) => item.id)
+  if (
+    !retrievedAt ||
+    !isValidIsoLikeDate(retrievedAt) ||
+    !suggestedItemIds ||
+    !unchangedItemIds ||
+    !hasSameStringSet(suggestedItemIds, coordinateItemIds) ||
+    hasDuplicateStrings(suggestedItemIds) ||
+    hasDuplicateStrings(unchangedItemIds)
+  ) {
+    return null
+  }
+
+  const distanceMeters = typeof record.distanceMeters === 'number' && Number.isFinite(record.distanceMeters)
+    ? record.distanceMeters
+    : undefined
+  const durationSeconds = typeof record.durationSeconds === 'number' && Number.isFinite(record.durationSeconds)
+    ? record.durationSeconds
+    : undefined
+
+  return {
+    distanceMeters,
+    durationSeconds,
+    ok: true,
+    operation: 'route_order_suggestion',
+    provider: record.provider,
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    retrievedAt,
+    suggestedItemIds,
+    summary: typeof record.summary === 'string' && record.summary.trim()
+      ? record.summary
+      : '已生成路线顺序建议。',
+    unchangedItemIds,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : [],
+  }
+}
+
 function validateProviderProxyPlaceLookupSuccessResponse(record: Record<string, unknown>): ProviderProxyPlaceLookupSuccessResponse | null {
   if (record.operation !== 'place_lookup') {
     return null
@@ -657,6 +787,18 @@ function validateProviderProxyTravelSearchSuccessResponse(record: Record<string,
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function hasDuplicateStrings(values: string[]) {
+  return new Set(values).size !== values.length
+}
+
+function hasSameStringSet(first: string[], second: string[]) {
+  if (first.length !== second.length) {
+    return false
+  }
+  const secondSet = new Set(second)
+  return first.every((value) => secondSet.has(value))
 }
 
 function isSafeHttpUrl(value: string): boolean {

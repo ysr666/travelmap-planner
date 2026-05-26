@@ -3,6 +3,7 @@ import {
   PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY,
   PROVIDER_PROXY_DEV_URL_STORAGE_KEY,
   ProviderProxyClientError,
+  fetchProviderProxyRouteOrderSuggestion,
   fetchProviderProxyRoutePreview,
   fetchProviderProxyAiTripDraft,
   fetchProviderProxyAiTripEditPlan,
@@ -95,6 +96,76 @@ describe('provider proxy client request', () => {
     expect(result.ok).toBe(true)
     const [, init] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+})
+
+describe('provider proxy route_order_suggestion client', () => {
+  it('validates and sends route order payloads without provider secrets', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        operation: 'route_order_suggestion',
+        provider: 'auto',
+        quotaSessionId: 'session-route-order-1',
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-route-key')
+      expect(JSON.stringify(body)).not.toContain('GOOGLE_ROUTES_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('OPENROUTESERVICE_API_KEY')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'route_order_suggestion',
+        provider: 'mock',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        suggestedItemIds: ['a', 'c'],
+        unchangedItemIds: ['b'],
+        summary: '模拟建议',
+        warnings: [],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyRouteOrderSuggestion({
+      dayId: 'day',
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 } },
+        { id: 'b', title: 'B' },
+        { id: 'c', title: 'C', coordinate: { lat: 35.2, lng: 139.2 } },
+      ],
+      operation: 'route_order_suggestion',
+      provider: 'auto',
+      quotaSessionId: 'session-route-order-1',
+      tripId: 'trip',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-route-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.provider).toBe('mock')
+    expect(result.suggestedItemIds).toEqual(['a', 'c'])
+  })
+
+  it('rejects malformed route order responses with extra or missing ids', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      operation: 'route_order_suggestion',
+      provider: 'mock',
+      retrievedAt: '2026-01-01T00:00:00.000Z',
+      suggestedItemIds: ['a', 'missing'],
+      unchangedItemIds: [],
+      summary: 'bad',
+      warnings: [],
+    }), { status: 200 })) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyRouteOrderSuggestion({
+      items: [
+        { id: 'a', title: 'A', coordinate: { lat: 35.1, lng: 139.1 } },
+        { id: 'b', title: 'B', coordinate: { lat: 35.2, lng: 139.2 } },
+      ],
+      operation: 'route_order_suggestion',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    })
   })
 })
 

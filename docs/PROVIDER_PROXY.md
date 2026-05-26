@@ -23,7 +23,7 @@ Local Cloudflare worker development can use uncommitted local files such as `.de
 
 ## Request Contract
 
-Current operation:
+Route preview operation:
 
 ```json
 {
@@ -56,6 +56,38 @@ Limits in this foundation:
 - Supported providers in the wire contract: `google`, `openrouteservice`, `auto`.
 - Frontend route cache identity must still use a concrete provider: `google` or `openrouteservice`, never `proxy`.
 
+Route order suggestion operation:
+
+```json
+{
+  "operation": "route_order_suggestion",
+  "provider": "auto",
+  "tripId": "trip-id",
+  "dayId": "day-id",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "items": [
+    {
+      "id": "item-a",
+      "title": "Museum",
+      "locationName": "Museum",
+      "address": "Address",
+      "coordinate": { "lat": 48.8606, "lng": 2.3376 }
+    }
+  ]
+}
+```
+
+Limits and boundaries:
+
+- Max 10 items per request.
+- At least 2 items must include valid coordinates.
+- The request whitelist rejects notes, tickets, cloud state, route cache, provider keys, headers, raw coordinates arrays, full trip DB, and other extra fields.
+- The frontend calls this operation only after the user clicks “查看建议（仅建议）”.
+- Real v1 supports Google Routes waypoint optimization only; `auto` prefers `GOOGLE_ROUTES_API_KEY`. ORS optimization is deferred because it is a separate public VROOM-backed endpoint rather than the existing route preview API.
+- Google route order requests use `optimizeWaypointOrder: true`, `TRAFFIC_UNAWARE`, `DRIVE`, and exact `X-Goog-FieldMask: routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex`.
+- The Google request body contains only origin/destination/intermediate coordinates; it does not include trip/day IDs, item IDs, titles, addresses, notes, route cache, tickets, cloud state, or provider secrets.
+
 ## Response Contract
 
 Success:
@@ -81,6 +113,25 @@ Success:
   }
 }
 ```
+
+Route order suggestion success:
+
+```json
+{
+  "ok": true,
+  "operation": "route_order_suggestion",
+  "provider": "google",
+  "suggestedItemIds": ["item-a", "item-c", "item-b"],
+  "unchangedItemIds": [],
+  "summary": "已根据路线服务生成当前日顺序建议。",
+  "warnings": [],
+  "distanceMeters": 1800,
+  "durationSeconds": 900,
+  "retrievedAt": "2026-05-26T00:00:00.000Z"
+}
+```
+
+`route_order_suggestion` responses must contain exactly the same coordinate-bearing item IDs that were eligible for reordering. The provider cannot create, delete, rename, or edit items. Browser apply keeps non-coordinate items in their original slots, then renumbers only the selected day’s `sortOrder` after a confirmation dialog. It does not generate route geometry, write route cache, write cloud data, create tickets, or call AI/search.
 
 Errors are normalized and must not pass raw provider bodies to the frontend:
 
@@ -116,6 +167,8 @@ Current bucket limits:
 - `ai_draft|`: 10 requests per 60 seconds.
 - `ai_draft_repair|`: 5 requests per 60 seconds.
 - `ai_trip_edit|`: 10 requests per 60 seconds.
+
+`route_preview` and `route_order_suggestion` both use the `route|` bucket. Quota is consumed before any mock or real provider call; over-limit and durable-storage-failure paths return normalized HTTP 429 `quota_exceeded`.
 
 Quota identity combines available server-side signals before hashing:
 

@@ -3,6 +3,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+  PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
@@ -12,6 +13,7 @@ import {
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
+  validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
@@ -19,6 +21,8 @@ import {
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
+  type ProviderProxyRouteOrderSuggestionRequest,
+  type ProviderProxyRouteOrderSuggestionSuccessResponse,
   type ProviderProxyRoutePreviewRequest,
   type ProviderProxyRoutePreviewSuccessResponse,
   type ProviderProxyRouteSegment,
@@ -108,6 +112,7 @@ export type ProviderProxyHandlerInput = {
 
 const OPENROUTESERVICE_ENDPOINT = 'https://api.openrouteservice.org/v2/directions'
 const GOOGLE_ROUTES_ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes'
+const GOOGLE_ROUTE_ORDER_FIELD_MASK = 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex'
 
 export async function handleProviderProxyRequest({
   env = {},
@@ -188,6 +193,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
     return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
+    return handleRouteOrderSuggestionRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
@@ -707,6 +716,69 @@ function mapPlaceLookupErrorCodeToStatus(code: PlaceLookupProviderErrorCode): nu
   }
 }
 
+async function handleRouteOrderSuggestionRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyRouteOrderSuggestionRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const suggestionRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: suggestionRequest.items.filter((item) => item.coordinate).length,
+    corsHeaders,
+    operation: PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: suggestionRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: suggestionRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    if (isMockMode(env)) {
+      return jsonResponse(buildMockRouteOrderSuggestionResponse(suggestionRequest), 200, corsHeaders)
+    }
+
+    const provider = selectRouteOrderSuggestionProvider(suggestionRequest, env)
+    const apiKey = getProviderSecret(provider, env)
+    if (!apiKey) {
+      throw new ProviderProxyServerError('provider_unavailable', 503, provider)
+    }
+    const response = await fetchRouteOrderSuggestionFromProvider({
+      apiKey,
+      fetcher,
+      provider,
+      request: suggestionRequest,
+    })
+    return jsonResponse(response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION, suggestionRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
 async function handleRoutePreviewRequest({
   body,
   corsHeaders,
@@ -787,6 +859,23 @@ async function fetchRoutePreviewFromProvider({
     : await fetchGoogleRouteSegments(request, apiKey, fetcher)
 
   return buildRoutePreviewSuccessResponse(request, provider, segments)
+}
+
+async function fetchRouteOrderSuggestionFromProvider({
+  apiKey,
+  fetcher,
+  provider,
+  request,
+}: {
+  apiKey: string
+  fetcher: typeof fetch
+  provider: ProviderProxyConcreteProvider
+  request: ProviderProxyRouteOrderSuggestionRequest
+}): Promise<ProviderProxyRouteOrderSuggestionSuccessResponse> {
+  if (provider !== 'google') {
+    throw new ProviderProxyServerError('provider_unavailable', 503, provider)
+  }
+  return fetchGoogleRouteOrderSuggestion(request, apiKey, fetcher)
 }
 
 async function fetchOpenRouteServiceSegments(
@@ -879,6 +968,89 @@ async function fetchGoogleRouteSegments(
   return segments
 }
 
+async function fetchGoogleRouteOrderSuggestion(
+  request: ProviderProxyRouteOrderSuggestionRequest,
+  apiKey: string,
+  fetcher: typeof fetch,
+): Promise<ProviderProxyRouteOrderSuggestionSuccessResponse> {
+  const coordinateItems = getRouteOrderCoordinateItems(request)
+  if (coordinateItems.length < 3) {
+    return buildRouteOrderSuggestionResponse({
+      provider: 'google',
+      request,
+      suggestedItemIds: coordinateItems.map((item) => item.id),
+      summary: '当前行程点较少，已保持原顺序。',
+      warnings: ['至少 3 个带坐标地点才可能产生顺序变化。'],
+    })
+  }
+
+  const origin = coordinateItems[0]
+  const destination = coordinateItems[coordinateItems.length - 1]
+  const intermediates = coordinateItems.slice(1, -1)
+  let response: Response
+  try {
+    response = await fetcher(GOOGLE_ROUTES_ENDPOINT, {
+      body: JSON.stringify({
+        destination: {
+          location: {
+            latLng: {
+              latitude: destination.coordinate.lat,
+              longitude: destination.coordinate.lng,
+            },
+          },
+        },
+        intermediates: intermediates.map((item) => ({
+          location: {
+            latLng: {
+              latitude: item.coordinate.lat,
+              longitude: item.coordinate.lng,
+            },
+          },
+        })),
+        optimizeWaypointOrder: true,
+        origin: {
+          location: {
+            latLng: {
+              latitude: origin.coordinate.lat,
+              longitude: origin.coordinate.lng,
+            },
+          },
+        },
+        routingPreference: 'TRAFFIC_UNAWARE',
+        travelMode: 'DRIVE',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': GOOGLE_ROUTE_ORDER_FIELD_MASK,
+      },
+      method: 'POST',
+    })
+  } catch {
+    throw new ProviderProxyServerError('network_error', 502, 'google')
+  }
+
+  if (!response.ok) {
+    throw mapProviderStatusToError(response.status, 'google')
+  }
+
+  const data = await readProviderJson(response, 'google')
+  const parsed = parseGoogleRouteOrderResponse(data, intermediates.length)
+  return buildRouteOrderSuggestionResponse({
+    distanceMeters: parsed.distanceMeters,
+    durationSeconds: parsed.durationSeconds,
+    provider: 'google',
+    request,
+    suggestedItemIds: [
+      origin.id,
+      ...parsed.optimizedIntermediateIndexes.map((index) => intermediates[index].id),
+      destination.id,
+    ],
+    summary: '已根据路线服务生成当前日顺序建议。',
+    warnings: [],
+  })
+}
+
 function buildRoutePreviewSuccessResponse(
   request: ProviderProxyRoutePreviewRequest,
   provider: ProviderProxyConcreteProvider,
@@ -897,6 +1069,42 @@ function buildRoutePreviewSuccessResponse(
       status: segments.length > 0 ? 'road' : 'failed',
       warnings: [],
     },
+  }
+}
+
+function buildRouteOrderSuggestionResponse({
+  distanceMeters,
+  durationSeconds,
+  provider,
+  request,
+  suggestedItemIds,
+  summary,
+  warnings,
+}: {
+  distanceMeters?: number
+  durationSeconds?: number
+  provider: ProviderProxyRouteOrderSuggestionSuccessResponse['provider']
+  request: ProviderProxyRouteOrderSuggestionRequest
+  suggestedItemIds: string[]
+  summary: string
+  warnings: string[]
+}): ProviderProxyRouteOrderSuggestionSuccessResponse {
+  const coordinateItemIds = getRouteOrderCoordinateItems(request).map((item) => item.id)
+  if (!hasSameStringSet(suggestedItemIds, coordinateItemIds)) {
+    throw new ProviderProxyServerError('provider_error', 502, provider === 'mock' ? undefined : provider)
+  }
+  return {
+    distanceMeters,
+    durationSeconds,
+    ok: true,
+    operation: PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
+    provider,
+    requestId: request.requestId,
+    retrievedAt: new Date().toISOString(),
+    suggestedItemIds,
+    summary,
+    unchangedItemIds: request.items.filter((item) => !item.coordinate).map((item) => item.id),
+    warnings,
   }
 }
 
@@ -920,6 +1128,26 @@ function buildMockRoutePreviewResponse(
   return buildRoutePreviewSuccessResponse(request, provider, segments)
 }
 
+function buildMockRouteOrderSuggestionResponse(
+  request: ProviderProxyRouteOrderSuggestionRequest,
+): ProviderProxyRouteOrderSuggestionSuccessResponse {
+  const coordinateItems = getRouteOrderCoordinateItems(request)
+  const suggestedItemIds = [
+    coordinateItems[0]?.id,
+    ...coordinateItems.slice(1, -1).reverse().map((item) => item.id),
+    coordinateItems[coordinateItems.length - 1]?.id,
+  ].filter((value): value is string => Boolean(value))
+  return buildRouteOrderSuggestionResponse({
+    distanceMeters: estimateRouteOrderDistanceMeters(coordinateItems.map((item) => [item.coordinate.lng, item.coordinate.lat])),
+    durationSeconds: estimateRouteOrderDurationSeconds(coordinateItems.map((item) => [item.coordinate.lng, item.coordinate.lat])),
+    provider: 'mock',
+    request,
+    suggestedItemIds,
+    summary: '已生成模拟路线顺序建议。',
+    warnings: ['当前为模拟路线顺序建议，不代表真实路线服务结果。'],
+  })
+}
+
 function selectProvider(
   request: ProviderProxyRoutePreviewRequest,
   env: ProviderProxyHandlerEnv,
@@ -931,6 +1159,22 @@ function selectProvider(
     return 'openrouteservice'
   }
   if (env.GOOGLE_ROUTES_API_KEY) {
+    return 'google'
+  }
+  throw new ProviderProxyServerError('provider_unavailable', 503)
+}
+
+function selectRouteOrderSuggestionProvider(
+  request: ProviderProxyRouteOrderSuggestionRequest,
+  env: ProviderProxyHandlerEnv,
+): ProviderProxyConcreteProvider {
+  if (request.provider === 'openrouteservice') {
+    throw new ProviderProxyServerError('provider_unavailable', 503, 'openrouteservice')
+  }
+  if (request.provider === 'google') {
+    return 'google'
+  }
+  if (env.GOOGLE_ROUTES_API_KEY?.trim()) {
     return 'google'
   }
   throw new ProviderProxyServerError('provider_unavailable', 503)
@@ -1042,6 +1286,35 @@ function parseGoogleRouteResponse(input: unknown): {
   }
 }
 
+function parseGoogleRouteOrderResponse(input: unknown, expectedIntermediateCount: number): {
+  distanceMeters?: number
+  durationSeconds?: number
+  optimizedIntermediateIndexes: number[]
+} {
+  const routes = readRecord(input).routes
+  const route = Array.isArray(routes) ? readRecord(routes[0]) : {}
+  const rawIndexes = route.optimizedIntermediateWaypointIndex
+  if (!Array.isArray(rawIndexes)) {
+    throw new ProviderProxyServerError('provider_error', 502, 'google')
+  }
+  const optimizedIntermediateIndexes = rawIndexes.map((value) => Number(value))
+  if (
+    optimizedIntermediateIndexes.length !== expectedIntermediateCount ||
+    optimizedIntermediateIndexes.some((value) => !Number.isInteger(value) || value < 0 || value >= expectedIntermediateCount) ||
+    new Set(optimizedIntermediateIndexes).size !== optimizedIntermediateIndexes.length
+  ) {
+    throw new ProviderProxyServerError('provider_error', 502, 'google')
+  }
+  const durationSeconds = typeof route.duration === 'string'
+    ? Number.parseFloat(route.duration.replace('s', ''))
+    : undefined
+  return {
+    distanceMeters: typeof route.distanceMeters === 'number' && Number.isFinite(route.distanceMeters) ? route.distanceMeters : undefined,
+    durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : undefined,
+    optimizedIntermediateIndexes,
+  }
+}
+
 function decodeGooglePolyline(encoded: string): LngLat[] {
   const coordinates: LngLat[] = []
   let lat = 0
@@ -1094,6 +1367,20 @@ function mapGoogleTravelMode(mode: string) {
   if (mode === 'bus' || mode === 'train' || mode === 'transit' || mode === 'subway') return 'TRANSIT'
   if (mode === 'cycling') return 'BICYCLE'
   return 'DRIVE'
+}
+
+function getRouteOrderCoordinateItems(request: ProviderProxyRouteOrderSuggestionRequest) {
+  return request.items.filter((item): item is ProviderProxyRouteOrderSuggestionRequest['items'][number] & {
+    coordinate: { lat: number; lng: number }
+  } => Boolean(item.coordinate))
+}
+
+function hasSameStringSet(first: string[], second: string[]) {
+  if (first.length !== second.length) {
+    return false
+  }
+  const secondSet = new Set(second)
+  return first.every((value) => secondSet.has(value))
 }
 
 async function consumeQuotaOrBuildErrorResponse({
@@ -1215,6 +1502,18 @@ function estimateDistanceMeters(first: LngLat, second: LngLat) {
   const latScale = 111_320
   const lngScale = 111_320 * Math.cos(((first[1] + second[1]) / 2) * Math.PI / 180)
   return Math.round(Math.hypot((first[0] - second[0]) * lngScale, (first[1] - second[1]) * latScale))
+}
+
+function estimateRouteOrderDistanceMeters(coordinates: LngLat[]) {
+  let distance = 0
+  for (let index = 1; index < coordinates.length; index += 1) {
+    distance += estimateDistanceMeters(coordinates[index - 1], coordinates[index])
+  }
+  return distance
+}
+
+function estimateRouteOrderDurationSeconds(coordinates: LngLat[]) {
+  return Math.max(60, Math.round(estimateRouteOrderDistanceMeters(coordinates) / 8))
 }
 
 function sumOptional(values: Array<number | undefined>) {

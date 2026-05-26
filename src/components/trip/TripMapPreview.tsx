@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Map as MapIcon, MapPinned } from 'lucide-react'
+import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles } from 'lucide-react'
+import { updateItineraryItem } from '../../db'
 import { EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE, TRIP_PREVIEW_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
 import {
@@ -9,6 +10,17 @@ import {
 } from '../../lib/googleMaps'
 import type { LngLat, MapEngineAdapter, MapInstance, MarkerHandle } from '../../lib/mapEngine'
 import { loadMapLibreAdapter } from '../../lib/maplibreAdapterLoader'
+import {
+  fetchProviderProxyRouteOrderSuggestion,
+  getProviderProxyConfig,
+  ProviderProxyClientError,
+} from '../../lib/providerProxyClient'
+import type { ProviderProxyRouteOrderSuggestionSuccessResponse } from '../../lib/providerProxyContract'
+import {
+  buildRouteOrderSuggestionRequestItems,
+  buildRouteOrderSuggestionSortPatches,
+  getRouteOrderSuggestionCandidateDay,
+} from '../../lib/routeOrderSuggestion'
 import { getRoutingConfig } from '../../lib/routing'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../../lib/routeCache'
 import {
@@ -22,15 +34,24 @@ import {
 } from '../../lib/tripMapPreview'
 import type { Day, ItineraryItem } from '../../types'
 import { Card } from '../ui/Card'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 
 type TripMapPreviewProps = {
   days: Day[]
   itemsByDay: Record<string, ItineraryItem[]>
+  onItemsReordered?: () => Promise<void> | void
   onOpenMap: (day: Day) => void
   routeDataReady?: boolean
   selectedDay: Day | null
   tripId: string
 }
+
+type RouteOrderSuggestionState =
+  | { status: 'idle' }
+  | { day: Day; status: 'loading' }
+  | { day: Day; result: ProviderProxyRouteOrderSuggestionSuccessResponse; status: 'ready' }
+  | { message: string; status: 'applied' }
+  | { message: string; status: 'error' }
 
 const googleMapsAdapter = new GoogleMapsEngineAdapter()
 const NATIVE_MARKER_OVERLAP_THRESHOLD_METERS = 18
@@ -39,6 +60,7 @@ const NATIVE_MARKER_OVERLAP_OFFSET_PX = 11
 export function TripMapPreview({
   days,
   itemsByDay,
+  onItemsReordered,
   onOpenMap,
   routeDataReady = true,
   selectedDay,
@@ -55,6 +77,8 @@ export function TripMapPreview({
   const [routeResult, setRouteResult] = useState<TripPreviewRouteResult | null>(null)
   const [routeLoading, setRouteLoading] = useState(false)
   const [configVersion, setConfigVersion] = useState(0)
+  const [routeOrderSuggestionState, setRouteOrderSuggestionState] = useState<RouteOrderSuggestionState>({ status: 'idle' })
+  const [routeOrderConfirmOpen, setRouteOrderConfirmOpen] = useState(false)
   const activeRouteRequestKeyRef = useRef<string | null>(null)
   const completedRouteRequestKeyRef = useRef<string | null>(null)
   const data = useMemo(
@@ -63,6 +87,10 @@ export function TripMapPreview({
   )
   const hasPoints = data.records.length > 0
   const googleMapsKey = getGoogleMapsApiKey()
+  const routeOrderSuggestionDay = useMemo(
+    () => getRouteOrderSuggestionCandidateDay({ days, itemsByDay, selectedDay }),
+    [days, itemsByDay, selectedDay],
+  )
   const dataKey = useMemo(() => buildPreviewDataKey(data), [data])
   const previewRouteLoading = routeLoading || (hasPoints && !routeDataReady)
   const routeKey = useMemo(
@@ -367,7 +395,56 @@ export function TripMapPreview({
     return clearMapMarkers
   }, [clearMapMarkers, data.records, dataKey, engine, hasPoints, mapInstanceVersion])
 
+  const handleCheckRouteOrderSuggestion = useCallback(async () => {
+    const day = routeOrderSuggestionDay
+    const proxyConfig = getProviderProxyConfig()
+    if (!day || !proxyConfig.proxyUrl) {
+      setRouteOrderSuggestionState({ message: '路线顺序建议服务暂不可用。', status: 'error' })
+      return
+    }
+
+    const dayItems = itemsByDay[day.id] ?? []
+    setRouteOrderSuggestionState({ day, status: 'loading' })
+    setRouteOrderConfirmOpen(false)
+    try {
+      const result = await fetchProviderProxyRouteOrderSuggestion({
+        dayId: day.id,
+        items: buildRouteOrderSuggestionRequestItems(dayItems),
+        operation: 'route_order_suggestion',
+        provider: 'auto',
+        requestId: createRouteOrderSuggestionRequestId(),
+        tripId,
+      }, proxyConfig.proxyUrl)
+      setRouteOrderSuggestionState({ day, result, status: 'ready' })
+    } catch (caught) {
+      const message = caught instanceof ProviderProxyClientError || caught instanceof Error
+        ? caught.message
+        : '路线顺序建议生成失败。'
+      setRouteOrderSuggestionState({ message, status: 'error' })
+    }
+  }, [itemsByDay, routeOrderSuggestionDay, tripId])
+
+  const handleConfirmRouteOrderSuggestion = useCallback(async () => {
+    if (routeOrderSuggestionState.status !== 'ready') {
+      return
+    }
+
+    const { day, result } = routeOrderSuggestionState
+    const dayItems = itemsByDay[day.id] ?? []
+    const patches = buildRouteOrderSuggestionSortPatches(dayItems, result.suggestedItemIds)
+    await Promise.all(patches.map((patch) => updateItineraryItem(patch.id, { sortOrder: patch.sortOrder })))
+    setRouteOrderConfirmOpen(false)
+    setRouteOrderSuggestionState({
+      message: patches.length > 0
+        ? `已按建议更新 ${day.title} 的行程顺序。`
+        : `${day.title} 当前顺序已经接近建议。`,
+      status: 'applied',
+    })
+    await onItemsReordered?.()
+  }, [itemsByDay, onItemsReordered, routeOrderSuggestionState])
+
   return (
+    <>
     <Card className="overflow-hidden" data-testid="trip-map-overview" padding="none" variant="grouped">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
         <div className="min-w-0">
@@ -439,10 +516,99 @@ export function TripMapPreview({
                 {mapNotice}
               </p>
             ) : null}
+            {routeOrderSuggestionDay ? (
+              <RouteOrderSuggestionPanel
+                day={routeOrderSuggestionDay}
+                items={itemsByDay[routeOrderSuggestionDay.id] ?? []}
+                onApply={() => setRouteOrderConfirmOpen(true)}
+                onCheck={() => void handleCheckRouteOrderSuggestion()}
+                state={routeOrderSuggestionState}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
     </Card>
+    <ConfirmDialog
+      body={routeOrderSuggestionState.status === 'ready'
+        ? `只会更新 ${routeOrderSuggestionState.day.title} 内行程点的排序。\n不会生成路线，不会写入云端，不会创建票据。`
+        : ''}
+      cancelLabel="暂不应用"
+      confirmLabel="确认应用"
+      icon={<Sparkles className="size-5" />}
+      onCancel={() => setRouteOrderConfirmOpen(false)}
+      onConfirm={() => void handleConfirmRouteOrderSuggestion()}
+      open={routeOrderConfirmOpen && routeOrderSuggestionState.status === 'ready'}
+      testId="trip-map-route-order-confirm-dialog"
+      title="应用路线顺序建议？"
+    />
+    </>
+  )
+}
+
+function RouteOrderSuggestionPanel({
+  day,
+  items,
+  onApply,
+  onCheck,
+  state,
+}: {
+  day: Day
+  items: ItineraryItem[]
+  onApply: () => void
+  onCheck: () => void
+  state: RouteOrderSuggestionState
+}) {
+  const titleById = new Map(items.map((item) => [item.id, item.title]))
+  return (
+    <div
+      className="space-y-2 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100/80 dark:bg-slate-900/45 dark:ring-slate-700/70"
+      data-testid="trip-map-route-order-panel"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">路线顺序建议</p>
+          <p className="mt-0.5 truncate text-[11px] tm-muted">{day.title} · 仅提供排序建议</p>
+        </div>
+        <button
+          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200 active:scale-[0.98] disabled:opacity-60 dark:bg-slate-950/60 dark:text-slate-200 dark:ring-slate-700 tm-focus"
+          data-testid="trip-map-route-order-check"
+          disabled={state.status === 'loading'}
+          onClick={onCheck}
+          type="button"
+        >
+          {state.status === 'loading' ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          查看建议（仅建议）
+        </button>
+      </div>
+      {state.status === 'ready' ? (
+        <div className="space-y-2" data-testid="trip-map-route-order-suggestion">
+          <p className="text-[11px] leading-5 tm-muted">
+            建议顺序：{state.result.suggestedItemIds.map((itemId) => titleById.get(itemId) ?? itemId).join(' → ')}
+          </p>
+          <p className="text-[11px] leading-5 tm-muted">
+            {state.result.summary} {formatDistance(state.result.distanceMeters)} · {formatDuration(state.result.durationSeconds)}
+          </p>
+          {state.result.warnings.length > 0 ? (
+            <p className="text-[11px] leading-5 text-amber-700 dark:text-amber-300">
+              {state.result.warnings.join(' ')}
+            </p>
+          ) : null}
+          <button
+            className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white active:scale-[0.98] dark:bg-sky-500 tm-focus"
+            data-testid="trip-map-route-order-apply"
+            onClick={onApply}
+            type="button"
+          >
+            <Check className="size-3.5" />
+            应用建议
+          </button>
+        </div>
+      ) : null}
+      {state.status === 'error' || state.status === 'applied' ? (
+        <p className="text-[11px] leading-5 tm-muted" data-testid="trip-map-route-order-message">{state.message}</p>
+      ) : null}
+    </div>
   )
 }
 
@@ -570,4 +736,33 @@ function buildPreviewDataKey(data: TripMapPreviewData) {
   return data.records
     .map((record) => [record.day.id, record.item.id, record.coordinate.join(','), record.item.sortOrder].join(':'))
     .join('|')
+}
+
+function formatDistance(value?: number) {
+  if (!value || !Number.isFinite(value)) {
+    return '距离待确认'
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)} km`
+  }
+  return `${Math.round(value)} m`
+}
+
+function formatDuration(value?: number) {
+  if (!value || !Number.isFinite(value)) {
+    return '时长待确认'
+  }
+  if (value >= 3600) {
+    const hours = Math.floor(value / 3600)
+    const minutes = Math.round((value % 3600) / 60)
+    return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
+  }
+  return `${Math.max(1, Math.round(value / 60))} 分钟`
+}
+
+function createRouteOrderSuggestionRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `route_order_${crypto.randomUUID()}`
+  }
+  return `route_order_${Date.now().toString(36)}`
 }

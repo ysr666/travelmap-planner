@@ -15,8 +15,10 @@ export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repa
 export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as const
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
+export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
+export const PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS = 10
 export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
@@ -24,9 +26,10 @@ export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
+export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
 export type ProviderProxyErrorCode =
   | 'provider_unavailable'
   | 'quota_exceeded'
@@ -104,6 +107,49 @@ export type ProviderProxyRoutePreviewResponse =
 
 export type ProviderProxyValidationResult =
   | { ok: true; request: ProviderProxyRoutePreviewRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyRouteOrderSuggestionItem = {
+  address?: string
+  coordinate?: {
+    lat: number
+    lng: number
+  }
+  id: string
+  locationName?: string
+  title: string
+}
+
+export type ProviderProxyRouteOrderSuggestionRequest = {
+  dayId?: string
+  items: ProviderProxyRouteOrderSuggestionItem[]
+  operation: typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION
+  provider?: ProviderProxyProvider
+  quotaSessionId?: string
+  requestId?: string
+  tripId?: string
+}
+
+export type ProviderProxyRouteOrderSuggestionSuccessResponse = {
+  distanceMeters?: number
+  durationSeconds?: number
+  ok: true
+  operation: typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION
+  provider: ProviderProxyRouteOrderSuggestionProvider
+  requestId?: string
+  retrievedAt: string
+  suggestedItemIds: string[]
+  summary: string
+  unchangedItemIds: string[]
+  warnings: string[]
+}
+
+export type ProviderProxyRouteOrderSuggestionResponse =
+  | ProviderProxyRouteOrderSuggestionSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyRouteOrderSuggestionValidationResult =
+  | { ok: true; request: ProviderProxyRouteOrderSuggestionRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyAiTripDraftRequest = {
@@ -343,6 +389,23 @@ const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['gener
 const VALID_TRAVEL_SEARCH_SOURCE_TYPES = new Set<ProviderProxyTravelSearchSourceType>(['official', 'map', 'ticketing', 'travel_site', 'unknown'])
 const VALID_TRAVEL_SEARCH_CONFIDENCES = new Set<ProviderProxyTravelSearchConfidence>(['low', 'medium', 'high'])
 const VALID_PLACE_LOOKUP_LOCALES = new Set<ProviderProxyPlaceLookupLocale>(['zh-CN', 'en-US'])
+const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
+  'dayId',
+  'items',
+  'operation',
+  'provider',
+  'quotaSessionId',
+  'requestId',
+  'tripId',
+])
+const ROUTE_ORDER_ALLOWED_ITEM_FIELDS = new Set([
+  'address',
+  'coordinate',
+  'id',
+  'locationName',
+  'title',
+])
+const ROUTE_ORDER_ALLOWED_COORDINATE_FIELDS = new Set(['lat', 'lng'])
 const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
   'apikey',
   'authorization',
@@ -530,6 +593,92 @@ export function validateProviderProxyRoutePreviewRequest(input: unknown): Provid
   }
 }
 
+export function validateProviderProxyRouteOrderSuggestionRequest(
+  input: unknown,
+): ProviderProxyRouteOrderSuggestionValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
+    return routeOrderSuggestionInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const topLevelViolation = findDisallowedObjectFieldPath(record, ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS)
+  if (topLevelViolation) {
+    return routeOrderSuggestionInvalidRequest('路线顺序建议请求包含不允许的字段。', requestId)
+  }
+
+  const provider = record.provider ?? 'auto'
+  if (!isProviderProxyProvider(provider)) {
+    return routeOrderSuggestionInvalidRequest('路线顺序建议 provider 无效。', requestId)
+  }
+
+  if (!Array.isArray(record.items)) {
+    return routeOrderSuggestionInvalidRequest('路线顺序建议缺少行程点。', requestId)
+  }
+  if (record.items.length > PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS) {
+    return routeOrderSuggestionInvalidRequest(`路线顺序建议最多支持 ${PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS} 个行程点。`, requestId)
+  }
+
+  const items: ProviderProxyRouteOrderSuggestionItem[] = []
+  const seenIds = new Set<string>()
+  let coordinateItemCount = 0
+  for (const [index, rawItem] of record.items.entries()) {
+    const itemRecord = readRecord(rawItem)
+    const itemViolation = findDisallowedObjectFieldPath(itemRecord, ROUTE_ORDER_ALLOWED_ITEM_FIELDS, `$.items[${index}]`)
+    if (itemViolation) {
+      return routeOrderSuggestionInvalidRequest('路线顺序建议行程点包含不允许的字段。', requestId)
+    }
+
+    const id = typeof itemRecord.id === 'string' ? itemRecord.id.trim() : ''
+    if (!id) {
+      return routeOrderSuggestionInvalidRequest('路线顺序建议行程点缺少 ID。', requestId)
+    }
+    if (seenIds.has(id)) {
+      return routeOrderSuggestionInvalidRequest('路线顺序建议行程点 ID 不能重复。', requestId)
+    }
+    seenIds.add(id)
+
+    const title = typeof itemRecord.title === 'string' ? itemRecord.title.trim() : ''
+    if (!title) {
+      return routeOrderSuggestionInvalidRequest('路线顺序建议行程点缺少标题。', requestId)
+    }
+
+    const coordinate = normalizeRouteOrderCoordinate(itemRecord.coordinate)
+    if (itemRecord.coordinate !== undefined && !coordinate) {
+      return routeOrderSuggestionInvalidRequest('路线顺序建议行程点坐标无效。', requestId)
+    }
+    if (coordinate) {
+      coordinateItemCount += 1
+    }
+
+    items.push({
+      address: readOptionalString(itemRecord.address, 240),
+      coordinate,
+      id,
+      locationName: readOptionalString(itemRecord.locationName, 160),
+      title,
+    })
+  }
+
+  if (coordinateItemCount < 2) {
+    return routeOrderSuggestionInvalidRequest('路线顺序建议至少需要 2 个带坐标的行程点。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      dayId: readOptionalString(record.dayId, 128),
+      items,
+      operation: PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
+      provider,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      tripId: readOptionalString(record.tripId, 128),
+    },
+  }
+}
+
 export function buildProviderProxyErrorResponse({
   code,
   details,
@@ -602,6 +751,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return '地点查询服务返回的内容无法解析。'
     return '地点查询服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
+    if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
+    if (code === 'invalid_request') return '路线顺序建议请求无效。'
+    if (code === 'provider_error') return '路线顺序建议服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前路线顺序建议暂不支持。'
+    if (code === 'invalid_response') return '路线顺序建议服务返回的内容无法解析。'
+    return '路线顺序建议服务暂不可用。'
+  }
   if (code === 'quota_exceeded') return '今日路线生成次数已达上限。'
   if (code === 'invalid_request') return '路线请求无效。'
   if (code === 'provider_error') return '路线服务请求失败。'
@@ -646,6 +804,26 @@ function normalizeLngLat(input: unknown): LngLat | null {
   return [lng, lat]
 }
 
+function normalizeRouteOrderCoordinate(input: unknown): ProviderProxyRouteOrderSuggestionItem['coordinate'] | undefined {
+  if (input === undefined) {
+    return undefined
+  }
+  const record = readRecord(input)
+  const disallowed = findDisallowedObjectFieldPath(record, ROUTE_ORDER_ALLOWED_COORDINATE_FIELDS)
+  if (disallowed) {
+    return undefined
+  }
+  const lat = Number(record.lat)
+  const lng = Number(record.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return undefined
+  }
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return undefined
+  }
+  return { lat, lng }
+}
+
 function normalizeCacheIdentity(input: unknown): ProviderProxyRoutePreviewRequest['cacheIdentity'] {
   const record = readRecord(input)
   const cacheIdentity = {
@@ -669,6 +847,18 @@ function readOptionalString(value: unknown, maxLength: number) {
 
 function readRecord(input: unknown): Record<string, unknown> {
   return input && typeof input === 'object' ? input as Record<string, unknown> : {}
+}
+
+function findDisallowedObjectFieldPath(input: unknown, allowedFields: Set<string>, path = '$'): string | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return `${path}`
+  }
+  for (const key of Object.keys(input as Record<string, unknown>)) {
+    if (!allowedFields.has(key)) {
+      return `${path}.${key}`
+    }
+  }
+  return null
 }
 
 function isSafeIndex(value: number, length: number) {
@@ -855,6 +1045,21 @@ function placeLookupInvalidRequest(message: string, requestId?: string): Provide
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function routeOrderSuggestionInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyRouteOrderSuggestionValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
       requestId,
     }),
     ok: false,

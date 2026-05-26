@@ -183,10 +183,29 @@ function validRequest() {
   }
 }
 
+function validRouteOrderRequest() {
+  return {
+    dayId: 'day',
+    items: [
+      { coordinate: { lat: 35.1, lng: 139.1 }, id: 'a', title: 'A' },
+      { coordinate: { lat: 35.2, lng: 139.2 }, id: 'b', title: 'B' },
+      { coordinate: { lat: 35.3, lng: 139.3 }, id: 'c', title: 'C' },
+      { coordinate: { lat: 35.4, lng: 139.4 }, id: 'd', title: 'D' },
+      { id: 'x', title: 'No coordinates' },
+    ],
+    operation: 'route_order_suggestion',
+    provider: 'auto',
+    quotaSessionId: 'session-a',
+    requestId: 'route-order-request-1',
+    tripId: 'trip',
+  }
+}
+
 describe('provider proxy handler quota routing', () => {
   it('uses the expected isolated quota bucket for every operation', async () => {
     const cases = [
       { bucket: 'route|', request: validRequest() },
+      { bucket: 'route|', request: validRouteOrderRequest() },
       { bucket: 'search|', request: validSearchRequest() },
       { bucket: 'place|', request: validPlaceLookupRequest() },
       { bucket: 'ai_draft|', request: validAiDraftRequest() },
@@ -228,6 +247,116 @@ describe('provider proxy handler quota routing', () => {
       code: 'quota_exceeded',
       ok: false,
       operation: 'route_preview',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
+describe('provider proxy handler route_order_suggestion', () => {
+  it('returns deterministic mock route order suggestions without provider calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validRouteOrderRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'route_order_suggestion',
+      provider: 'mock',
+      suggestedItemIds: ['a', 'c', 'b', 'd'],
+      unchangedItemIds: ['x'],
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable without Google Routes env and without leaking server details', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { OPENROUTESERVICE_API_KEY: 'server-ors-secret' },
+      fetcher,
+      request: jsonRequest(validRouteOrderRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const text = await response.text()
+    expect(text).not.toContain('server-ors-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'route_order_suggestion',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('calls Google Routes with exact FieldMask and only coordinate payload', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string>
+      const bodyText = init?.body as string
+      const body = JSON.parse(bodyText)
+      expect(headers['X-Goog-Api-Key']).toBe('server-google-routes-secret')
+      expect(headers['X-Goog-FieldMask']).toBe('routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex')
+      expect(body.optimizeWaypointOrder).toBe(true)
+      expect(body.routingPreference).toBe('TRAFFIC_UNAWARE')
+      expect(body.travelMode).toBe('DRIVE')
+      expect(bodyText).not.toContain('trip')
+      expect(bodyText).not.toContain('day')
+      expect(bodyText).not.toContain('"a"')
+      expect(bodyText).not.toContain('"title"')
+      expect(bodyText).not.toContain('server-google-routes-secret')
+      return new Response(JSON.stringify({
+        routes: [
+          {
+            distanceMeters: 1800,
+            duration: '900s',
+            optimizedIntermediateWaypointIndex: [1, 0],
+            polyline: { encodedPolyline: 'raw-polyline-should-not-return' },
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: { GOOGLE_ROUTES_API_KEY: 'server-google-routes-secret' },
+      fetcher,
+      request: jsonRequest(validRouteOrderRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-google-routes-secret')
+    expect(text).not.toContain('raw-polyline-should-not-return')
+    expect(JSON.parse(text)).toMatchObject({
+      distanceMeters: 1800,
+      durationSeconds: 900,
+      ok: true,
+      operation: 'route_order_suggestion',
+      provider: 'google',
+      suggestedItemIds: ['a', 'c', 'b', 'd'],
+    })
+  })
+
+  it('checks route_order_suggestion quota before provider calls', async () => {
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      quotaLimits: { maxRouteRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStorage,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validRouteOrderRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({ ...input, request: jsonRequest(validRouteOrderRequest()) })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({
+      code: 'quota_exceeded',
+      ok: false,
+      operation: 'route_order_suggestion',
     })
     expect(fetcher).not.toHaveBeenCalled()
   })

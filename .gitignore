@@ -21,6 +21,7 @@ test-results
 .dev.vars
 
 # Local agent/tool state
+AGENTS.md
 .claude/
 .deepflow/
 agentdb.rvf

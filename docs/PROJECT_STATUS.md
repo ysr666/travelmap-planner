@@ -79,9 +79,9 @@
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
 - 时区与日期语义审计待做。
-- AI web search 尚未实现：当前 AI 不查询实时营业时间、票价、交通、天气、近期评价、活动或网页来源。
+- 真实 AI web search provider 尚未实现：AI Trip Edit 只能在明确搜索意图且用户确认后尝试一次 mock/disabled `travel_search` proxy 调用；没有来源就不声明实时信息。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
-- AI trip edit 只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
+- AI trip edit 是 patch plan + explicit search tool foundation：不是多轮聊天助手，不自主浏览网页，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 云端与同步状态
 
@@ -113,11 +113,11 @@
 - Real AI draft generation：DeepSeek `deepseek-v4-flash` 通过 OpenAI-compatible provider proxy smoke passed。
 - Real AI draft repair：DeepSeek `deepseek-v4-flash` 通过 `/api/provider-proxy` smoke passed；用户确认后触发一次 repair 请求，修复草稿返回并更新 preview / JSON textarea。
 - Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
-- AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、完整坐标、ticket IDs/文件/blob、cloud、route cache 或完整本地 DB；返回走 JSON extraction → `validateAiTripEditPatchPlan` → 本地推导 affected IDs/counts → diff preview → stale baseline check → final confirm → IndexedDB transaction apply。
+- AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、完整坐标、ticket IDs/文件/blob、cloud、route cache 或完整本地 DB；明确搜索意图可在发送确认后先调用一次 `travel_search` 并附加最多 3 条来源摘要。返回走 JSON extraction → `validateAiTripEditPatchPlan` → 本地推导 affected IDs/counts → diff preview → stale baseline check → final confirm → IndexedDB transaction apply。
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
-- Web search：当前未接入真实 provider。`travel_search` provider proxy foundation 只提供 mock/disabled 合同、结果结构和独立 `search|` quota；mock mode 使用 example 域名并标注模拟，默认无真实 provider 时返回 `provider_unavailable`。AI draft generation / repair / trip edit 不会调用 search。未来真实搜索应实现 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence 和来源展示，而不是混入 repair 或 AI reasoning。AI 不得在没有 future sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- Web search：当前未接入真实 provider。`travel_search` provider proxy foundation 只提供 mock/disabled 合同、结果结构和独立 `search|` quota；mock mode 使用 example 域名并标注模拟，默认无真实 provider 时返回 `provider_unavailable`。AI Trip Edit 可在用户确认后单次调用 search；AI draft generation / repair 不会调用 search。未来真实搜索应实现 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence 和来源展示，而不是混入 repair 或 AI reasoning。AI 不得在没有 sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 
 ## 本地 QA 注意事项
 

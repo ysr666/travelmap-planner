@@ -181,7 +181,31 @@ export type ProviderProxyAiTripEditPlanRequest = {
   quotaSessionId?: string
   command: string
   context: AiTripEditContext
+  searchResults?: ProviderProxyAiTripEditSearchSummary
 }
+
+export type ProviderProxyAiTripEditSearchResultSummary = {
+  title: string
+  url: string
+  displayUrl: string
+  domain: string
+  snippet: string
+  retrievedAt: string
+  sourceType?: ProviderProxyTravelSearchSourceType
+  confidence?: ProviderProxyTravelSearchConfidence
+}
+
+export type ProviderProxyAiTripEditSearchSummary = {
+  query: string
+  source: 'mock' | 'future_search'
+  retrievedAt: string
+  results: ProviderProxyAiTripEditSearchResultSummary[]
+  warnings?: string[]
+}
+
+type ProviderProxyAiTripEditSearchSummaryValidationResult =
+  | { ok: true; searchResults?: ProviderProxyAiTripEditSearchSummary }
+  | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyAiTripEditPlanSuccessResponse = {
   ok: true
@@ -267,6 +291,8 @@ const VALID_MODES = new Set<RoutingMode>([
 const VALID_PROFILES = new Set<RoutingProfile>(['cycling-regular', 'driving-car', 'foot-walking'])
 const VALID_TRAVEL_SEARCH_LOCALES = new Set<ProviderProxyTravelSearchLocale>(['zh-CN', 'en-US'])
 const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['general', 'opening_hours', 'ticket_price', 'official_site', 'transport', 'nearby_food'])
+const VALID_TRAVEL_SEARCH_SOURCE_TYPES = new Set<ProviderProxyTravelSearchSourceType>(['official', 'map', 'ticketing', 'travel_site', 'unknown'])
+const VALID_TRAVEL_SEARCH_CONFIDENCES = new Set<ProviderProxyTravelSearchConfidence>(['low', 'medium', 'high'])
 const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
   'apikey',
   'authorization',
@@ -317,6 +343,10 @@ const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
+const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
+const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
+const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
+const AI_TRIP_EDIT_SEARCH_RESULT_ALLOWED_FIELDS = new Set(['title', 'url', 'displayUrl', 'domain', 'snippet', 'retrievedAt', 'sourceType', 'confidence'])
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -798,9 +828,14 @@ export function validateProviderProxyAiTripEditPlanRequest(input: unknown): Prov
     return aiTripEditPlanInvalidRequest('不支持的 provider proxy 操作。', requestId)
   }
 
-  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_AI_TRIP_EDIT_FIELDS)
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(withoutSearchResults(record), FORBIDDEN_AI_TRIP_EDIT_FIELDS)
   if (forbiddenFieldPath) {
     return aiTripEditPlanInvalidRequest('AI 修改建议请求包含不允许的敏感字段。', requestId)
+  }
+
+  const searchResultsValidation = validateAiTripEditSearchSummary(record.searchResults, requestId)
+  if (!searchResultsValidation.ok) {
+    return searchResultsValidation
   }
 
   const command = typeof record.command === 'string' ? record.command.trim() : ''
@@ -824,8 +859,112 @@ export function validateProviderProxyAiTripEditPlanRequest(input: unknown): Prov
       operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
       quotaSessionId: readOptionalString(record.quotaSessionId, 160),
       requestId,
+      searchResults: searchResultsValidation.searchResults,
     },
   }
+}
+
+function validateAiTripEditSearchSummary(
+  input: unknown,
+  requestId?: string,
+): ProviderProxyAiTripEditSearchSummaryValidationResult {
+  if (input === undefined) {
+    return { ok: true, searchResults: undefined }
+  }
+
+  const record = readRecord(input)
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return aiTripEditPlanInvalidRequest('AI 修改建议搜索来源无效。', requestId)
+  }
+  for (const key of Object.keys(record)) {
+    if (!AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS.has(key)) {
+      return aiTripEditPlanInvalidRequest('AI 修改建议搜索来源包含未知字段。', requestId)
+    }
+  }
+
+  const query = typeof record.query === 'string' ? record.query.trim() : ''
+  const retrievedAt = typeof record.retrievedAt === 'string' ? record.retrievedAt.trim() : ''
+  if (!query || query.length > MAX_TRAVEL_SEARCH_QUERY_LENGTH) {
+    return aiTripEditPlanInvalidRequest('AI 修改建议搜索关键词无效。', requestId)
+  }
+  if ((record.source !== 'mock' && record.source !== 'future_search') || !isValidIsoLikeDate(retrievedAt)) {
+    return aiTripEditPlanInvalidRequest('AI 修改建议搜索来源无效。', requestId)
+  }
+  if (!Array.isArray(record.results) || record.results.length < 1 || record.results.length > MAX_AI_TRIP_EDIT_SEARCH_RESULTS) {
+    return aiTripEditPlanInvalidRequest(`AI 修改建议搜索来源最多支持 ${MAX_AI_TRIP_EDIT_SEARCH_RESULTS} 条结果。`, requestId)
+  }
+
+  const results: ProviderProxyAiTripEditSearchResultSummary[] = []
+  for (const rawResult of record.results) {
+    const resultRecord = readRecord(rawResult)
+    if (!rawResult || typeof rawResult !== 'object' || Array.isArray(rawResult)) {
+      return aiTripEditPlanInvalidRequest('AI 修改建议搜索结果无效。', requestId)
+    }
+    for (const key of Object.keys(resultRecord)) {
+      if (!AI_TRIP_EDIT_SEARCH_RESULT_ALLOWED_FIELDS.has(key)) {
+        return aiTripEditPlanInvalidRequest('AI 修改建议搜索结果包含未知字段。', requestId)
+      }
+    }
+
+    const title = typeof resultRecord.title === 'string' ? resultRecord.title.trim() : ''
+    const url = typeof resultRecord.url === 'string' ? resultRecord.url.trim() : ''
+    const displayUrl = typeof resultRecord.displayUrl === 'string' ? resultRecord.displayUrl.trim() : ''
+    const domain = typeof resultRecord.domain === 'string' ? resultRecord.domain.trim() : ''
+    const snippet = typeof resultRecord.snippet === 'string' ? resultRecord.snippet.trim() : ''
+    const resultRetrievedAt = typeof resultRecord.retrievedAt === 'string' ? resultRecord.retrievedAt.trim() : ''
+    const sourceType = resultRecord.sourceType
+    const confidence = resultRecord.confidence
+
+    if (
+      !title ||
+      !isSafeHttpUrl(url) ||
+      !displayUrl ||
+      !domain ||
+      !snippet ||
+      snippet.length > MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH ||
+      !isValidIsoLikeDate(resultRetrievedAt) ||
+      (sourceType !== undefined && (typeof sourceType !== 'string' || !VALID_TRAVEL_SEARCH_SOURCE_TYPES.has(sourceType as ProviderProxyTravelSearchSourceType))) ||
+      (confidence !== undefined && (typeof confidence !== 'string' || !VALID_TRAVEL_SEARCH_CONFIDENCES.has(confidence as ProviderProxyTravelSearchConfidence)))
+    ) {
+      return aiTripEditPlanInvalidRequest('AI 修改建议搜索结果无效。', requestId)
+    }
+
+    results.push({
+      confidence: confidence as ProviderProxyTravelSearchConfidence | undefined,
+      displayUrl,
+      domain,
+      retrievedAt: resultRetrievedAt,
+      snippet,
+      sourceType: sourceType as ProviderProxyTravelSearchSourceType | undefined,
+      title,
+      url,
+    })
+  }
+
+  const warnings = Array.isArray(record.warnings)
+    ? record.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim().length > 0).slice(0, 3)
+    : undefined
+
+  return {
+    ok: true,
+    searchResults: {
+      query,
+      results,
+      retrievedAt,
+      source: record.source,
+      warnings,
+    },
+  }
+}
+
+function withoutSearchResults(record: Record<string, unknown>) {
+  const rest: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (key !== 'searchResults') {
+      rest[key] = value
+    }
+  }
+  return rest
 }
 
 export function validateProviderProxyTravelSearchRequest(input: unknown): ProviderProxyTravelSearchValidationResult {
@@ -897,6 +1036,19 @@ function isTravelSearchLocale(value: unknown): value is ProviderProxyTravelSearc
 
 function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchType {
   return typeof value === 'string' && VALID_TRAVEL_SEARCH_TYPES.has(value as ProviderProxyTravelSearchType)
+}
+
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function isValidIsoLikeDate(value: string): boolean {
+  return Number.isFinite(Date.parse(value))
 }
 
 function findForbiddenRequestFieldPath(

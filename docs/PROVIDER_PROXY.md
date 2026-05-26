@@ -140,7 +140,8 @@ Now:
 - AI draft generation can use the proxy after user confirmation.
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
-- `travel_search` foundation exists as a typed provider proxy operation, but current runtime is mock/disabled only and no UI calls it.
+- AI Trip Edit may call `travel_search` once after send confirmation when explicit search intent is detected, then attach compact source summaries to the edit-plan request.
+- `travel_search` foundation remains mock/disabled only; no real search provider or search env secret exists.
 
 Later:
 
@@ -157,7 +158,7 @@ Current runtime behavior:
 - Mock results use `source: "mock"`, `travel.example` URLs, and warning `当前为模拟搜索结果，不代表实时网页信息。`
 - Without a real search provider, non-mock runtime returns `provider_unavailable`.
 - `future_search` is a reserved response source for future real providers and must not be returned by the current implementation.
-- No search API key/env exists, no external search API is called, and no frontend UI calls this operation.
+- No search API key/env exists and no external search API is called. AI Trip Edit can call this operation only through the proxy after user confirmation.
 
 Request contract:
 
@@ -212,7 +213,7 @@ Clients must treat search success parsing as strict: each result needs a safe HT
 
 ## AI Trip Edit Plan Operation
 
-The `ai_trip_edit_plan` operation creates a safe patch plan for an already-saved local trip. It does not write IndexedDB, call route providers, create tickets, upload cloud snapshots, or call `travel_search`.
+The `ai_trip_edit_plan` operation creates a safe patch plan for an already-saved local trip. It does not write IndexedDB, call route providers, create tickets, upload cloud snapshots, or call `travel_search` internally. When the UI has already performed a confirmed `travel_search`, it may attach compact source summaries to this request.
 
 Runtime behavior:
 
@@ -231,6 +232,23 @@ Request contract:
   "requestId": "client-request-id",
   "quotaSessionId": "browser-session-id",
   "command": "第二天太满了，帮我放松一点",
+  "searchResults": {
+    "query": "杭州 西湖 开放时间",
+    "source": "mock",
+    "retrievedAt": "2026-01-01T00:00:00.000Z",
+    "results": [
+      {
+        "title": "西湖开放时间模拟来源",
+        "url": "https://travel.example/search/west-lake-hours",
+        "displayUrl": "travel.example/search/west-lake-hours",
+        "domain": "travel.example",
+        "snippet": "模拟来源片段，不代表实时信息。",
+        "retrievedAt": "2026-01-01T00:00:00.000Z",
+        "sourceType": "official",
+        "confidence": "medium"
+      }
+    ]
+  },
   "context": {
     "trip": {
       "id": "trip-id",
@@ -484,12 +502,12 @@ This policy keeps the user experience simple: users describe the travel task, wh
 
 ### AI Search Readiness
 
-Search readiness is classification-only for AI flows in this release. The server helper can mark that a future search operation might be relevant for opening hours, tickets, closures, transport disruption, recent reviews, or events, but AI draft generation and repair do not call search.
+Search readiness is explicit-tool only for AI Trip Edit in this release. The UI can detect clear search intent, ask for confirmation, call `travel_search` at most once, then call `ai_trip_edit_plan` at most once with compact source summaries. There is no autonomous browsing loop or provider-internal tool calling.
 
 - No search provider key or env var is defined.
 - No `webSearchEnabled` field is added to public AI request payloads.
-- No AI prompt should claim web search happened.
-- `travel_search` exists only as a provider proxy foundation: mock succeeds in mock mode, default runtime returns `provider_unavailable`, and no page uses it yet.
+- No AI prompt should claim web search happened unless source-bearing `searchResults` are present.
+- `travel_search` exists only as a provider proxy foundation: mock succeeds in mock mode and default runtime returns `provider_unavailable`.
 - Future sourced search results should include title, URL, display URL, domain, snippet, `retrievedAt`, source type, and confidence.
 - Production real search integration needs durable quota and provider policy review before any Google/Bing/SerpAPI/search-engine adapter is added.
 

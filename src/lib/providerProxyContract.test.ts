@@ -368,6 +368,44 @@ describe('provider proxy ai_trip_edit_plan contract', () => {
     }
   })
 
+  it('accepts safe source-bearing search results for edit plan requests', () => {
+    const result = validateProviderProxyAiTripEditPlanRequest({
+      ...validEditPlanRequest(),
+      searchResults: validEditSearchResults(),
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.searchResults?.results[0]).toMatchObject({
+        domain: 'travel.example',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        sourceType: 'official',
+        title: '西湖官网',
+      })
+    }
+  })
+
+  it('rejects malformed or unsafe edit search results', () => {
+    expect(validateProviderProxyAiTripEditPlanRequest({
+      ...validEditPlanRequest(),
+      searchResults: { ...validEditSearchResults(), rawProviderBody: { secret: true } },
+    }).ok).toBe(false)
+    expect(validateProviderProxyAiTripEditPlanRequest({
+      ...validEditPlanRequest(),
+      searchResults: {
+        ...validEditSearchResults(),
+        results: [{ ...validEditSearchResults().results[0], url: 'javascript:alert(1)' }],
+      },
+    }).ok).toBe(false)
+    expect(validateProviderProxyAiTripEditPlanRequest({
+      ...validEditPlanRequest(),
+      searchResults: {
+        ...validEditSearchResults(),
+        results: [{ ...validEditSearchResults().results[0], providerMetadata: 'raw' }],
+      },
+    }).ok).toBe(false)
+  })
+
   it('rejects invalid command and context', () => {
     expect(validateProviderProxyAiTripEditPlanRequest({ ...validEditPlanRequest(), command: '' }).ok).toBe(false)
     expect(validateProviderProxyAiTripEditPlanRequest({ ...validEditPlanRequest(), command: 'x'.repeat(1001) }).ok).toBe(false)
@@ -424,5 +462,25 @@ function validEditPlanRequest() {
     },
     operation: 'ai_trip_edit_plan',
     requestId: 'edit-1',
+  }
+}
+
+function validEditSearchResults() {
+  return {
+    query: '杭州 西湖 官网',
+    results: [
+      {
+        confidence: 'medium',
+        displayUrl: 'travel.example/search/west-lake',
+        domain: 'travel.example',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        snippet: '模拟来源片段，不代表实时信息。',
+        sourceType: 'official',
+        title: '西湖官网',
+        url: 'https://travel.example/search/west-lake',
+      },
+    ],
+    retrievedAt: '2026-01-01T00:00:00.000Z',
+    source: 'mock',
   }
 }

@@ -32,6 +32,38 @@ describe('aiTripEditPrompt', () => {
     expect(input.prompt).toContain('不要编造事实')
   })
 
+  it('includes compact source summaries when search results are provided', () => {
+    const input = buildAiTripEditProviderInput({
+      ...editRequest('查一下西湖今天开放吗，然后调整安排'),
+      searchResults: {
+        query: '杭州 西湖 开放时间',
+        results: [
+          {
+            confidence: 'medium' as const,
+            displayUrl: 'travel.example/search/west-lake',
+            domain: 'travel.example',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+            snippet: '模拟来源片段，不代表实时信息。',
+            sourceType: 'official' as const,
+            title: '西湖官网',
+            url: 'https://travel.example/search/west-lake',
+          },
+        ],
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock' as const,
+      },
+    }, 'req-search')
+
+    expect(input.prompt).toContain('travel_search 来源摘要')
+    expect(input.prompt).toContain('西湖官网')
+    expect(input.prompt).toContain('travel.example')
+    expect(input.prompt).toContain('2026-01-01T00:00:00.000Z')
+    expect(input.prompt).toContain('只能使用下方已提供的 travel_search 来源')
+    expect(input.prompt).not.toContain('联网搜索暂未接入，未查询实时信息。')
+    expect(input.prompt).not.toContain('rawProviderBody')
+    expect(input.prompt).not.toContain('Authorization')
+  })
+
   it('does not treat ordinary schedule edits as realtime lookups', () => {
     expect(commandNeedsRealtimeSearch('Day 2 feels too packed. Make it more relaxed.')).toBe(false)
     expect(commandNeedsRealtimeSearch("move today's plan to the morning")).toBe(false)

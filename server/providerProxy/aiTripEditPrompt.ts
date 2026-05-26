@@ -25,6 +25,11 @@ const CHINESE_REALTIME_KEYWORDS = [
   '实时',
   '查一下',
   '搜索',
+  '查询',
+  '官网',
+  '官方网站',
+  '附近吃饭',
+  '附近餐厅',
 ]
 
 const ENGLISH_REALTIME_PATTERNS = [
@@ -42,6 +47,8 @@ const ENGLISH_REALTIME_PATTERNS = [
   /\brecent\b/,
   /\blook\s+up\b/,
   /\bsearch\b/,
+  /\bofficial\s+(?:site|website)\b/,
+  /\bnearby\s+(?:food|restaurants?)\b/,
   /\bweather\b/,
   /\btransport\s+disruptions?\b/,
   /\bclosures?\b/,
@@ -55,8 +62,15 @@ export function buildAiTripEditProviderInput(
   request: ProviderProxyAiTripEditPlanRequest,
   requestId?: string,
 ): AiTripEditProviderInput {
-  const realtimeWarning = commandNeedsRealtimeSearch(request.command)
+  const hasSearchSources = Boolean(request.searchResults?.results.length)
+  const realtimeWarning = commandNeedsRealtimeSearch(request.command) && !hasSearchSources
     ? '\n用户请求可能需要实时网页信息；联网搜索暂未接入，必须在 warnings 中写入“联网搜索暂未接入，未查询实时信息。”，不要编造事实。'
+    : ''
+  const searchBoundary = hasSearchSources
+    ? '不要自行联网搜索；只能使用下方已提供的 travel_search 来源作为实时/网页信息依据。涉及开放时间、票价、官网、交通、附近餐厅、最新信息时必须基于这些来源，并在 reason 或 warnings 中简短说明来源依据。不要编造来源之外的实时事实。'
+    : '不要联网搜索，不要声称查询了实时网页信息，不要编造开放时间、票价、闭馆、交通中断、近期评价或活动。'
+  const searchSources = hasSearchSources
+    ? `travel_search 来源摘要：${JSON.stringify(compactSearchResults(request.searchResults!))}`
     : ''
 
   return {
@@ -66,7 +80,7 @@ export function buildAiTripEditProviderInput(
       '根据用户的一次性修改指令和已脱敏的本地旅行上下文，生成安全的 patch plan。',
       '不要输出 Markdown、解释文字或代码块。',
       '不要直接修改旅行；你只能返回 patch plan，用户会在本地预览并确认后才应用。',
-      '不要联网搜索，不要声称查询了实时网页信息，不要编造开放时间、票价、闭馆、交通中断、近期评价或活动。',
+      searchBoundary,
       'summary、operation reason 和 warnings 必须使用中文；不要不必要地翻译 Tower of London、British Museum 等专有名词。',
       realtimeWarning,
       '只允许以下 operation type：update_item_title、update_item_time、update_item_location_text、update_item_note、update_item_transport、add_item、remove_item、move_item、reorder_day_items、update_day_title。',
@@ -91,6 +105,7 @@ export function buildAiTripEditProviderInput(
       '{"type":"update_day_title","dayId":"day_y","title":"轻松第二天","reason":"..."}',
       `requestId: ${requestId ?? request.requestId ?? 'unknown'}`,
       `用户指令：${request.command}`,
+      searchSources,
       `已脱敏旅行上下文：${JSON.stringify(compactContext(request.context))}`,
     ].filter(Boolean).join('\n'),
   }
@@ -104,4 +119,21 @@ export function commandNeedsRealtimeSearch(command: string): boolean {
 
 function compactContext(context: AiTripEditContext): AiTripEditContext {
   return context
+}
+
+function compactSearchResults(searchResults: NonNullable<ProviderProxyAiTripEditPlanRequest['searchResults']>) {
+  return {
+    query: searchResults.query,
+    results: searchResults.results.slice(0, 3).map((result) => ({
+      confidence: result.confidence,
+      displayUrl: result.displayUrl,
+      domain: result.domain,
+      retrievedAt: result.retrievedAt,
+      snippet: result.snippet,
+      sourceType: result.sourceType,
+      title: result.title,
+    })),
+    retrievedAt: searchResults.retrievedAt,
+    source: searchResults.source,
+  }
 }

@@ -32,6 +32,37 @@ describe('aiTripEditProvider', () => {
     }
   })
 
+  it('returns valid source-aware mock patch plans without no-search warning', async () => {
+    const request = {
+      ...editRequest('查一下西湖今天开放吗，然后加一个咖啡休息'),
+      searchResults: {
+        query: '杭州 西湖 开放时间',
+        results: [
+          {
+            confidence: 'medium' as const,
+            displayUrl: 'travel.example/search/west-lake',
+            domain: 'travel.example',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+            snippet: '模拟来源片段，不代表实时信息。',
+            sourceType: 'official' as const,
+            title: '西湖官网',
+            url: 'https://travel.example/search/west-lake',
+          },
+        ],
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock' as const,
+      },
+    }
+    const provider = createMockAiTripEditProvider(request)
+    const result = await provider.planEdit({ maxOutputTokens: 1000, prompt: 'prompt with sources' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok && result.kind === 'patch') {
+      expect(result.patchPlan.operations[0].type).toBe('add_item')
+      expect(result.patchPlan.warnings ?? []).not.toContain('联网搜索暂未接入，未查询实时信息。')
+    }
+  })
+
   it('supports shopping avoidance and missing-address marking with valid plans', async () => {
     const shopping = await createMockAiTripEditProvider(editRequest('第三天不要购物，改成轻松一点')).planEdit({ maxOutputTokens: 1000, prompt: 'prompt' })
     expect(shopping.ok).toBe(true)

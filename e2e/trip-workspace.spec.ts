@@ -424,6 +424,7 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
     const body = route.request().postDataJSON()
     if (body.operation === 'ai_trip_edit_plan') {
       editRequests += 1
+      expect(body.searchResults).toBeUndefined()
       expect(JSON.stringify(body)).not.toContain('ticket_1')
       expect(JSON.stringify(body)).not.toContain('ticketMetas')
       expect(JSON.stringify(body)).not.toContain('ticketBlobs')
@@ -443,7 +444,6 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
             summary: '把西湖安排改得更明确。',
           },
           source: 'mock',
-          warnings: ['联网搜索暂未接入，未查询实时信息。'],
         }),
         contentType: 'application/json',
       })
@@ -548,8 +548,8 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   await panel.getByRole('button', { name: '生成修改方案' }).click()
   await page.getByTestId('ai-trip-edit-send-confirm-dialog').getByRole('button', { name: '确认发送' }).click()
   await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖深度散步')
-  await expect(panel.getByTestId('ai-trip-edit-warnings')).toContainText('联网搜索暂未接入，未查询实时信息。')
   expect(editRequests).toBe(1)
+  expect(travelSearchRequests).toBe(0)
   expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
   expect(await readAiEditBoundaryCounts(page)).toEqual(beforeCounts)
 
@@ -586,6 +586,247 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   expect(deepSeekRequests).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
+
+test('Trip Home AI 修改建议搜索意图先确认并显示来源', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let editRequests = 0
+  let travelSearchRequests = 0
+  let routePreviewRequests = 0
+  let cloudRequests = 0
+  let deepSeekRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(editRequests).toBe(0)
+      expect(body.searchType).toBe('opening_hours')
+      expect(JSON.stringify(body)).not.toContain('ticket_1')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('lat')
+      expect(JSON.stringify(body)).not.toContain('lng')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          retrievedAt: '2026-01-01T00:00:00.000Z',
+          source: 'mock',
+          results: [
+            {
+              confidence: 'medium',
+              displayUrl: 'travel.example/search/west-lake-hours',
+              domain: 'travel.example',
+              retrievedAt: '2026-01-01T00:00:00.000Z',
+              snippet: '模拟搜索片段：西湖开放时间。此结果仅用于测试。',
+              sourceType: 'official',
+              title: '西湖开放时间模拟来源',
+              url: 'https://travel.example/search/west-lake-hours',
+            },
+          ],
+          warnings: ['当前为模拟搜索结果，不代表实时网页信息。'],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'ai_trip_edit_plan') {
+      editRequests += 1
+      expect(travelSearchRequests).toBe(1)
+      expect(body.searchResults.results[0]).toMatchObject({
+        domain: 'travel.example',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        title: '西湖开放时间模拟来源',
+      })
+      expect(JSON.stringify(body)).not.toContain('rawProviderBody')
+      expect(JSON.stringify(body)).not.toContain('ticket_1')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_edit_plan',
+          patchPlan: {
+            operations: [
+              { itemId: 'item_ai_edit_1', reason: '参考搜索来源后，让标题更明确。', title: '西湖开放时间确认后散步', type: 'update_item_title' },
+            ],
+            summary: '根据搜索来源调整西湖安排标题。',
+          },
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_preview') routePreviewRequests += 1
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    deepSeekRequests += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:e2e:supabase-unconfigured', '1')
+  })
+  await seedAiEditSearchTrip(page)
+
+  await page.goto('/#/trip?tripId=trip-ai-edit-search&dayId=day_ai_edit_search_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('ai-trip-edit-panel')
+  await expect(panel).toBeVisible()
+  await panel.getByTestId('ai-trip-edit-command').fill('查一下西湖今天开门吗，然后把标题改清楚')
+  await expect(panel.getByTestId('ai-trip-edit-search-intent-note')).toContainText('此请求可能需要联网搜索')
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  const sendDialog = page.getByTestId('ai-trip-edit-send-confirm-dialog')
+  await expect(sendDialog).toContainText('会先通过旅图服务查询一次')
+  expect(travelSearchRequests).toBe(0)
+  expect(editRequests).toBe(0)
+  await sendDialog.getByRole('button', { name: '暂不发送' }).click()
+  expect(travelSearchRequests).toBe(0)
+  expect(editRequests).toBe(0)
+
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  await page.getByTestId('ai-trip-edit-send-confirm-dialog').getByRole('button', { name: '确认发送' }).click()
+  await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖开放时间确认后散步')
+  await expect(panel.getByTestId('ai-trip-edit-search-sources')).toContainText('搜索来源')
+  await expect(panel.getByTestId('ai-trip-edit-search-sources')).toContainText('西湖开放时间模拟来源')
+  await expect(panel.getByTestId('ai-trip-edit-search-sources')).toContainText('travel.example')
+  await expect(panel.getByTestId('ai-trip-edit-search-sources')).toContainText('2026-01-01T00:00:00.000Z')
+  expect(travelSearchRequests).toBe(1)
+  expect(editRequests).toBe(1)
+  expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
+
+  await panel.getByRole('button', { name: '应用修改' }).click()
+  await page.getByTestId('ai-trip-edit-apply-confirm-dialog').getByRole('button', { name: '暂不应用' }).click()
+  expect(await readItemTitle(page, 'item_ai_edit_1')).toBe('西湖')
+  expect(routePreviewRequests).toBe(0)
+  expect(cloudRequests).toBe(0)
+  expect(deepSeekRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Trip Home AI 修改建议搜索不可用时只显示未接入警告', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let editRequests = 0
+  let travelSearchRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          code: 'provider_unavailable',
+          message: '搜索服务暂不可用。',
+          ok: false,
+          operation: 'travel_search',
+        }),
+        contentType: 'application/json',
+        status: 503,
+      })
+      return
+    }
+    if (body.operation === 'ai_trip_edit_plan') {
+      editRequests += 1
+      expect(body.searchResults).toBeUndefined()
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_edit_plan',
+          patchPlan: {
+            operations: [
+              { itemId: 'item_ai_edit_1', reason: '未查询实时网页，仅按本地上下文调整标题。', title: '西湖本地散步', type: 'update_item_title' },
+            ],
+            summary: '按本地上下文生成修改建议。',
+            warnings: ['联网搜索暂未接入，未查询实时信息。'],
+          },
+          source: 'mock',
+          warnings: ['联网搜索暂未接入，未查询实时信息。'],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await seedAiEditSearchTrip(page)
+
+  await page.goto('/#/trip?tripId=trip-ai-edit-search&dayId=day_ai_edit_search_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('ai-trip-edit-panel')
+  await panel.getByTestId('ai-trip-edit-command').fill('查询西湖最新开放时间，并把标题改清楚')
+  await panel.getByRole('button', { name: '生成修改方案' }).click()
+  await page.getByTestId('ai-trip-edit-send-confirm-dialog').getByRole('button', { name: '确认发送' }).click()
+  await expect(panel.getByTestId('ai-trip-edit-preview')).toContainText('西湖本地散步')
+  await expect(panel.getByTestId('ai-trip-edit-warnings')).toContainText('联网搜索暂未接入，未查询实时信息。')
+  await expect(panel.getByTestId('ai-trip-edit-search-sources')).toHaveCount(0)
+  expect(travelSearchRequests).toBe(1)
+  expect(editRequests).toBe(1)
+  await expectNoHorizontalOverflow(page)
+})
+
+async function seedAiEditSearchTrip(page: Page) {
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-07-11',
+      id: 'trip-ai-edit-search',
+      notes: '搜索测试备注不应发送',
+      startDate: '2026-07-10',
+      title: '杭州搜索测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-07-10', id: 'day_ai_edit_search_1', sortOrder: 1, title: '第一天', tripId: 'trip-ai-edit-search' },
+    ],
+    itineraryItems: [
+      {
+        address: '杭州市西湖区',
+        createdAt: now,
+        dayId: 'day_ai_edit_search_1',
+        id: 'item_ai_edit_1',
+        lat: 30.244,
+        lng: 120.155,
+        locationName: '西湖风景名胜区',
+        notes: '默认不发送的备注',
+        sortOrder: 1,
+        ticketIds: ['ticket_1'],
+        title: '西湖',
+        tripId: 'trip-ai-edit-search',
+        updatedAt: now,
+      },
+    ],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket_1',
+      itemId: 'item_ai_edit_1',
+      mimeType: 'application/pdf',
+      size: 1,
+      tripId: 'trip-ai-edit-search',
+      updatedAt: now,
+    }],
+  })
+}
 
 async function readItemTitle(page: import('@playwright/test').Page, itemId: string) {
   return page.evaluate(async (currentItemId) => {

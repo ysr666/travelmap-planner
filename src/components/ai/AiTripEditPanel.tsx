@@ -6,13 +6,23 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/aiTripEditContext'
 import { applyAiTripEditPatchPlanToDb, buildAiTripEditLocalStateFingerprint } from '../../lib/aiTripEditApply'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/aiTripEditPatch'
+import {
+  buildAiTripEditSearchRequest,
+  detectAiTripEditSearchIntent,
+  summarizeTravelSearchResultsForPrompt,
+} from '../../lib/aiTripEditSearch'
 import { getStoredAiPrivacySettings } from '../../lib/aiPrivacy'
 import {
   fetchProviderProxyAiTripEditPlan,
+  fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
-import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION } from '../../lib/providerProxyContract'
+import {
+  PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+  type ProviderProxyAiTripEditSearchSummary,
+  type ProviderProxyTravelSearchRequest,
+} from '../../lib/providerProxyContract'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type AiTripEditPanelProps = {
@@ -21,6 +31,8 @@ type AiTripEditPanelProps = {
   onApplied: () => Promise<void>
   trip: Trip
 }
+
+const NO_SEARCH_WARNING = '联网搜索暂未接入，未查询实时信息。'
 
 export function AiTripEditPanel({
   allItems,
@@ -32,18 +44,24 @@ export function AiTripEditPanel({
   const [command, setCommand] = useState('')
   const [pendingContext, setPendingContext] = useState<AiTripEditContext | null>(null)
   const [pendingBaselineFingerprint, setPendingBaselineFingerprint] = useState<string | null>(null)
+  const [pendingSearchRequest, setPendingSearchRequest] = useState<ProviderProxyTravelSearchRequest | null>(null)
   const [confirmSendOpen, setConfirmSendOpen] = useState(false)
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [patchPlan, setPatchPlan] = useState<AiTripEditPatchPlan | null>(null)
   const [preview, setPreview] = useState<AiTripEditPatchPreview | null>(null)
+  const [previewSearchResults, setPreviewSearchResults] = useState<ProviderProxyAiTripEditSearchSummary | null>(null)
   const [previewBaselineFingerprint, setPreviewBaselineFingerprint] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const trimmedCommand = command.trim()
+  const searchIntent = useMemo(() => detectAiTripEditSearchIntent(trimmedCommand), [trimmedCommand])
   const canGenerate = Boolean(providerConfig.configured && trimmedCommand && !isGenerating)
+  const sendConfirmBody = pendingSearchRequest
+    ? '将把已脱敏的旅行、日期和行程项信息发送给 AI 服务，可能消耗服务额度。此请求可能需要联网搜索；确认后会先通过旅图服务查询一次，搜索不可用时不会声称已查询实时网页信息。AI 只会返回修改方案，不会直接修改旅行。'
+    : '将把已脱敏的旅行、日期和行程项信息发送给 AI 服务，可能消耗服务额度。AI 只会返回修改方案，不会直接修改旅行。当前不会联网搜索或查询实时网页信息。'
 
   function prepareSendConfirm() {
     setError(null)
@@ -66,6 +84,8 @@ export function AiTripEditPanel({
 
     setPendingContext(contextResult.context)
     setPendingBaselineFingerprint(buildAiTripEditLocalStateFingerprint({ days, items: allItems, trip }))
+    setPendingSearchRequest(buildAiTripEditSearchRequest(trimmedCommand, contextResult.context))
+    setPreviewSearchResults(null)
     setWarnings(contextResult.warnings)
     setConfirmSendOpen(true)
   }
@@ -81,16 +101,35 @@ export function AiTripEditPanel({
     setError(null)
     setPatchPlan(null)
     setPreview(null)
+    setPreviewSearchResults(null)
     try {
+      const nextWarnings: string[] = []
+      let searchResults: ProviderProxyAiTripEditSearchSummary | null = null
+      if (pendingSearchRequest) {
+        try {
+          const searchResponse = await fetchProviderProxyTravelSearch(pendingSearchRequest, providerConfig.proxyUrl)
+          searchResults = summarizeTravelSearchResultsForPrompt(searchResponse)
+          if (searchResults) {
+            nextWarnings.push(...(searchResults.warnings ?? []))
+          } else {
+            nextWarnings.push(NO_SEARCH_WARNING)
+          }
+        } catch {
+          nextWarnings.push(NO_SEARCH_WARNING)
+        }
+      }
+
       const response = await fetchProviderProxyAiTripEditPlan({
         command: trimmedCommand,
         context: pendingContext,
         operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+        searchResults: searchResults ?? undefined,
       }, providerConfig.proxyUrl)
       setPatchPlan(response.patchPlan)
       setPreview(buildAiTripEditPatchPreview(response.patchPlan, pendingContext))
+      setPreviewSearchResults(searchResults)
       setPreviewBaselineFingerprint(pendingBaselineFingerprint)
-      setWarnings([...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])
+      setWarnings([...nextWarnings, ...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])
       setConfirmSendOpen(false)
     } catch (caught) {
       const message = caught instanceof ProviderProxyClientError
@@ -123,7 +162,9 @@ export function AiTripEditPanel({
       setCommand('')
       setPatchPlan(null)
       setPreview(null)
+      setPreviewSearchResults(null)
       setPreviewBaselineFingerprint(null)
+      setPendingSearchRequest(null)
       setWarnings([])
       setConfirmApplyOpen(false)
     } catch {
@@ -156,6 +197,12 @@ export function AiTripEditPanel({
         placeholder="例如：第二天太满了，帮我放松一点"
         value={command}
       />
+
+      {searchIntent.needed ? (
+        <p className="rounded-xl bg-sky-50/80 px-3 py-2 text-xs leading-5 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200" data-testid="ai-trip-edit-search-intent-note">
+          此请求可能需要联网搜索。
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -204,12 +251,25 @@ export function AiTripEditPanel({
               {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
             </div>
           ) : null}
+          {previewSearchResults?.results.length ? (
+            <div className="space-y-2 rounded-lg bg-white/80 px-3 py-2 text-xs leading-5 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/45 dark:text-slate-200 dark:ring-slate-700" data-testid="ai-trip-edit-search-sources">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">搜索来源</p>
+              {previewSearchResults.results.slice(0, 3).map((source) => (
+                <div className="space-y-0.5 break-words [overflow-wrap:anywhere]" key={`${source.url}-${source.retrievedAt}`}>
+                  <p className="font-medium text-slate-800 dark:text-slate-100">{source.title}</p>
+                  <p className="text-[11px] tm-muted">{source.domain || source.displayUrl} · {source.retrievedAt}</p>
+                  <p>{source.snippet}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-2">
             <Button
               className="min-h-10 px-3 text-xs"
               onClick={() => {
                 setPatchPlan(null)
                 setPreview(null)
+                setPreviewSearchResults(null)
                 setPreviewBaselineFingerprint(null)
               }}
               variant="secondary"
@@ -229,7 +289,7 @@ export function AiTripEditPanel({
       ) : null}
 
       <ConfirmDialog
-        body="将把已脱敏的旅行、日期和行程项信息发送给 AI 服务，可能消耗服务额度。AI 只会返回修改方案，不会直接修改旅行。联网搜索暂未接入，不会查询实时网页信息。"
+        body={sendConfirmBody}
         cancelLabel="暂不发送"
         confirmLabel="确认发送"
         icon={<Sparkles className="size-5" />}

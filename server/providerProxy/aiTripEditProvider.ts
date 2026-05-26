@@ -109,7 +109,7 @@ function buildMockPatchPlan(request: ProviderProxyAiTripEditPlanRequest): AiTrip
   const targetDay = selectRequestedDay(request) ?? request.context.days[0]
   const allItems = request.context.days.flatMap((day) => day.items)
   const command = request.command
-  const warnings = commandNeedsRealtimeSearch(command) ? [REALTIME_WARNING] : []
+  const warnings = commandNeedsRealtimeSearch(command) && !request.searchResults?.results.length ? [REALTIME_WARNING] : []
 
   if (mentionsMissingAddress(command)) {
     const missingAddressItems = allItems.filter((item) => !item.address)

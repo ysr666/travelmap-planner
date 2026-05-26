@@ -8,7 +8,7 @@ let loadPromise: Promise<boolean> | null = null
 
 export function getGoogleMapsApiKey(options: { env?: Partial<ImportMetaEnv>; storage?: Storage | null } = {}): string {
   const storage = options.storage ?? getBrowserStorage()
-  const env = options.env ?? import.meta.env
+  const env = options.env ?? readGoogleMapsEnv()
   const localKey = storage?.getItem(GOOGLE_MAPS_STORAGE_KEY)?.trim() || ''
   const envKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || ''
   return localKey || envKey || ''
@@ -156,5 +156,11 @@ function getBrowserStorage(): Storage | null {
     return window.localStorage
   } catch {
     return null
+  }
+}
+
+function readGoogleMapsEnv(): Pick<ImportMetaEnv, 'VITE_GOOGLE_MAPS_API_KEY'> {
+  return {
+    VITE_GOOGLE_MAPS_API_KEY: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   }
 }

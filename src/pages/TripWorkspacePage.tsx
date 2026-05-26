@@ -372,9 +372,6 @@ export function TripWorkspacePage() {
             <TripMapPreview
               days={days}
               itemsByDay={itemsByDay}
-              onItemsReordered={async () => {
-                await refresh()
-              }}
               onOpenMap={(targetDay) => openDay(targetDay, 'map')}
               routeDataReady={loadedTripContextKey === tripContextKey}
               selectedDay={selectedDay}

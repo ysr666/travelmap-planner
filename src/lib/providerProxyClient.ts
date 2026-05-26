@@ -58,7 +58,7 @@ export function getProviderProxyConfig(
     storage?: Storage | null
   } = {},
 ): ProviderProxyRuntimeConfig {
-  const env = options.env ?? import.meta.env
+  const env = options.env ?? readProviderProxyEnv()
   const storage = options.storage ?? getBrowserStorage()
   const proxyUrl = normalizeProxyUrl(
     readStorageValue(storage, PROVIDER_PROXY_DEV_URL_STORAGE_KEY) ?? env.VITE_ROUTE_PROXY_URL,
@@ -72,6 +72,13 @@ export function getProviderProxyConfig(
     provider,
     proxyUrl,
     source: proxyUrl && provider ? 'proxy' : 'none',
+  }
+}
+
+function readProviderProxyEnv(): Pick<ImportMetaEnv, 'VITE_ROUTE_PROXY_PROVIDER' | 'VITE_ROUTE_PROXY_URL'> {
+  return {
+    VITE_ROUTE_PROXY_PROVIDER: import.meta.env.VITE_ROUTE_PROXY_PROVIDER,
+    VITE_ROUTE_PROXY_URL: import.meta.env.VITE_ROUTE_PROXY_URL,
   }
 }
 

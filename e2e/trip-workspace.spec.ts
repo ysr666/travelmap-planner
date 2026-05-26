@@ -176,7 +176,7 @@ test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ p
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', async ({ page }) => {
+test('Trip Home 地图预览缓存路线且不显示浏览器路线顺序建议', async ({ page }) => {
   await mockMapStyle(page)
   await mockProviderProxyForOrsRoute(page)
   await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
@@ -262,19 +262,9 @@ test('Trip Home 地图预览缓存路线且路线顺序建议需要确认', asyn
     window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')
     window.dispatchEvent(new Event('tripmap:google-maps-config-changed'))
   })
-  await expect(page.getByTestId('trip-map-optimization-panel')).toBeVisible()
-  await page.getByTestId('trip-map-optimization-check').click()
-  await expect(page.getByTestId('trip-map-optimization-suggestion')).toContainText('东京站补充点')
-
   const originalOrder = await readDayItemOrder(page, dayId as string)
-  await page.getByTestId('trip-map-optimization-apply').click()
-  await expect(page.getByTestId('trip-map-optimization-confirm')).toBeVisible()
-  await page.getByTestId('trip-map-optimization-cancel').click()
+  await expect(page.getByTestId('trip-map-optimization-panel')).toHaveCount(0)
   expect(await readDayItemOrder(page, dayId as string)).toEqual(originalOrder)
-
-  await page.getByTestId('trip-map-optimization-apply').click()
-  await page.getByTestId('trip-map-optimization-confirm-apply').click()
-  await expect.poll(() => readDayItemOrder(page, dayId as string)).not.toEqual(originalOrder)
   await expectNoHorizontalOverflow(page)
 })
 

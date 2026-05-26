@@ -8,10 +8,11 @@ import type { Day, ItineraryItem, TransportMode } from '../types'
 
 const orsConfig: RoutingConfig = {
   provider: 'openrouteservice',
-  apiKey: 'ors-key',
+  apiKey: null,
   googleMapsKey: null,
+  routeProxyUrl: '/api/provider-proxy',
   configured: true,
-  source: 'local',
+  source: 'proxy',
 }
 
 const unavailableConfig: RoutingConfig = {
@@ -30,7 +31,7 @@ describe('route preview generation', () => {
   it('generates day routes and updates the trip preview cache after explicit invocation', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string) as { coordinates: number[][] }
-      return new Response(JSON.stringify(orsFixture(body.coordinates)), { status: 200 })
+      return new Response(JSON.stringify(proxyRouteFixture(body)), { status: 200 })
     }) as unknown as typeof fetch
     const days = [day('day-1', 1)]
     const itemsByDay = {
@@ -83,7 +84,10 @@ describe('route preview generation', () => {
   it('preserves successful days when a later day fails', async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.2, 35.2]])), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(proxyRouteFixture({
+        coordinates: [[139.1, 35.1], [139.2, 35.2]],
+        segments: [{ fromCoordinateIndex: 0, segmentIndex: 0, toCoordinateIndex: 1 }],
+      })), { status: 200 }))
       .mockResolvedValueOnce(new Response('{}', { status: 429 })) as unknown as typeof fetch
     const days = [day('day-1', 1), day('day-2', 2)]
     const itemsByDay = {
@@ -146,15 +150,36 @@ function item(
   }
 }
 
-function orsFixture(coordinates: number[][]) {
+function proxyRouteFixture(body: {
+  coordinates: number[][]
+  segments?: Array<{
+    fromCoordinateIndex: number
+    segmentIndex: number
+    toCoordinateIndex: number
+  }>
+}) {
+  const segments = body.segments ?? [{ fromCoordinateIndex: 0, segmentIndex: 0, toCoordinateIndex: 1 }]
   return {
-    features: [
-      {
-        geometry: { coordinates, type: 'LineString' },
-        properties: { summary: { distance: 1000, duration: 600 } },
-        type: 'Feature',
-      },
-    ],
-    type: 'FeatureCollection',
+    ok: true,
+    operation: 'route_preview',
+    provider: 'openrouteservice',
+    route: {
+      lineStrings: segments.map((segment) => [
+        body.coordinates[segment.fromCoordinateIndex],
+        body.coordinates[segment.toCoordinateIndex],
+      ]),
+      segments: segments.map((segment) => ({
+        coordinates: [
+          body.coordinates[segment.fromCoordinateIndex],
+          body.coordinates[segment.toCoordinateIndex],
+        ],
+        distanceMeters: 1000,
+        durationSeconds: 600,
+        kind: 'road',
+        segmentIndex: segment.segmentIndex,
+      })),
+      status: 'road',
+      warnings: [],
+    },
   }
 }

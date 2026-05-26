@@ -4,7 +4,6 @@ import { clearRouteCache, saveRouteCache } from './routeCache'
 import {
   buildTripPreviewRouteCacheIdentity,
   fetchTripPreviewRoute,
-  getTripPreviewOptimizationDay,
   selectTripPreviewRoutingConfig,
 } from './tripMapPreview'
 import type { LngLat } from './routing'
@@ -80,41 +79,11 @@ describe('trip map preview cache identity', () => {
 })
 
 describe('trip map preview route provider selection', () => {
-  it('does not use Google route geometry on MapLibre preview', () => {
+  it('uses only provider proxy route geometry and keeps Google Maps key for rendering only', () => {
     expect(selectTripPreviewRoutingConfig('maplibre', googleConfig).provider).toBe('none')
-    expect(selectTripPreviewRoutingConfig('maplibre', orsConfig).provider).toBe('openrouteservice')
-    expect(selectTripPreviewRoutingConfig('google', { ...orsConfig, googleMapsKey: 'google-key' }).provider).toBe('google')
+    expect(selectTripPreviewRoutingConfig('maplibre', orsConfig).provider).toBe('none')
+    expect(selectTripPreviewRoutingConfig('google', { ...orsConfig, googleMapsKey: 'google-key' }).provider).toBe('none')
     expect(selectTripPreviewRoutingConfig('google', proxyConfig).provider).toBe('openrouteservice')
-  })
-})
-
-describe('trip map preview optimization eligibility', () => {
-  it('requires at least two intermediate waypoints before showing Google order suggestions', () => {
-    const days = [day('day-1', 1)]
-
-    expect(getTripPreviewOptimizationDay({
-      days,
-      itemsByDay: {
-        'day-1': [
-          item('a', 35.1, 139.1, 1),
-          item('b', 35.2, 139.2, 2),
-          item('c', 35.3, 139.3, 3),
-        ],
-      },
-      selectedDay: days[0],
-    })).toBeNull()
-    expect(getTripPreviewOptimizationDay({
-      days,
-      itemsByDay: {
-        'day-1': [
-          item('a', 35.1, 139.1, 1),
-          item('b', 35.2, 139.2, 2),
-          item('c', 35.3, 139.3, 3),
-          item('d', 35.4, 139.4, 4),
-        ],
-      },
-      selectedDay: days[0],
-    })?.id).toBe('day-1')
   })
 })
 

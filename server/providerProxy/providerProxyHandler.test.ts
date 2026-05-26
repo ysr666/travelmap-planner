@@ -157,7 +157,11 @@ describe('provider proxy handler travel_search', () => {
   it('returns deterministic mock travel_search results without provider calls', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch
     const input = {
-      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      env: {
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+        TRIPMAP_SEARCH_API_KEY: 'test-search-key',
+        TRIPMAP_SEARCH_PROVIDER: 'tavily',
+      },
       fetcher,
     }
 
@@ -201,6 +205,81 @@ describe('provider proxy handler travel_search', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('returns unsupported when travel_search is explicitly disabled', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_SEARCH_PROVIDER: 'disabled' },
+      fetcher,
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(501)
+    expect(await response.json()).toMatchObject({
+      code: 'unsupported',
+      ok: false,
+      operation: 'travel_search',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable when Tavily search is selected without a key', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_SEARCH_PROVIDER: 'tavily' },
+      fetcher,
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'travel_search',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('uses configured Tavily provider through injected fetch and normalizes response', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      results: [
+        {
+          content: 'Official opening hours source.',
+          score: 0.82,
+          title: 'Official hours',
+          url: 'https://official.example/hours',
+        },
+      ],
+    }), { headers: { 'Content-Type': 'application/json' }, status: 200 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_SEARCH_API_KEY: 'test-search-key',
+        TRIPMAP_SEARCH_PROVIDER: 'tavily',
+      },
+      fetcher,
+      request: jsonRequest({ ...validSearchRequest(), maxResults: 9, searchType: 'opening_hours' }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'travel_search',
+      query: '杭州博物馆',
+      source: 'future_search',
+    })
+    expect(body.results).toHaveLength(1)
+    expect(body.results[0]).toMatchObject({
+      confidence: 'high',
+      displayUrl: 'official.example/hours',
+      domain: 'official.example',
+      sourceType: 'official',
+      title: 'Official hours',
+      url: 'https://official.example/hours',
+    })
+    const [, init] = vi.mocked(fetcher).mock.calls[0]
+    expect(JSON.parse(String(init?.body)).max_results).toBe(5)
+  })
+
   it('does not leak raw search provider messages or secrets when unavailable', async () => {
     const response = await handleProviderProxyRequest({
       env: { TRIPMAP_AI_PROVIDER_KEY: 'secret-ai-key' },
@@ -213,6 +292,34 @@ describe('provider proxy handler travel_search', () => {
     expect(text).not.toContain('Travel search provider is not configured')
     expect(JSON.parse(text)).toMatchObject({
       code: 'provider_unavailable',
+      ok: false,
+      operation: 'travel_search',
+    })
+  })
+
+  it('does not leak Tavily provider body, headers, stack traces, or secrets', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      error: 'raw-tavily-provider-body',
+      message: 'Authorization Bearer test-search-key stack trace',
+    }), { headers: { 'Content-Type': 'application/json' }, status: 500 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_SEARCH_API_KEY: 'test-search-key',
+        TRIPMAP_SEARCH_PROVIDER: 'tavily',
+      },
+      fetcher,
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(502)
+    const text = await response.text()
+    expect(text).not.toContain('raw-tavily-provider-body')
+    expect(text).not.toContain('test-search-key')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    expect(text).not.toContain('stack trace')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'provider_error',
       ok: false,
       operation: 'travel_search',
     })
@@ -252,6 +359,26 @@ describe('provider proxy handler travel_search', () => {
 
     expect(blocked.status).toBe(429)
     expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'travel_search' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('checks isolated travel_search quota before Tavily fetch', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    store.set('search|session-search-1|no-ip', { count: 1, windowStartedAt: Date.now() })
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_SEARCH_API_KEY: 'test-search-key',
+        TRIPMAP_SEARCH_PROVIDER: 'tavily',
+      },
+      fetcher,
+      quotaLimits: { maxTravelSearchRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+      request: jsonRequest(validSearchRequest()),
+    })
+
+    expect(response.status).toBe(429)
+    expect(await response.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'travel_search' })
     expect(fetcher).not.toHaveBeenCalled()
   })
 })

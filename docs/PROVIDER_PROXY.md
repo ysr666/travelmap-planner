@@ -5,8 +5,8 @@ TripMap uses a provider proxy so production route and AI requests can use owner-
 ## Security Boundary
 
 - The browser calls a TripMap-owned endpoint, normally `/api/provider-proxy`.
-- The proxy calls Google Routes, OpenRouteService, and AI providers with server-side runtime secrets.
-- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY` and `GOOGLE_ROUTES_API_KEY`.
+- The proxy calls Google Routes, OpenRouteService, AI providers, and search providers with server-side runtime secrets.
+- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `TRIPMAP_AI_API_KEY`, and `TRIPMAP_SEARCH_API_KEY`.
 - Server-only secrets must never be exposed through `VITE_*` variables, IndexedDB, zip backups, Supabase backups, AI import/export, tests, or frontend bundles.
 - A browser-visible Google Maps JavaScript rendering key is different: it is inherently public and must be restricted by referrer in Google Cloud. It must not be reused as a server-only Google Routes secret.
 
@@ -141,7 +141,7 @@ Now:
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
 - AI Trip Edit may call `travel_search` once after send confirmation when explicit search intent is detected, then attach compact source summaries to the edit-plan request.
-- `travel_search` foundation remains mock/disabled only; no real search provider or search env secret exists.
+- `travel_search` can use mock/disabled mode or the server-side Tavily adapter when `TRIPMAP_SEARCH_PROVIDER=tavily` and `TRIPMAP_SEARCH_API_KEY` are configured.
 
 Later:
 
@@ -150,15 +150,18 @@ Later:
 
 ## Travel Search Operation
 
-The `travel_search` operation reserves a source-bearing search contract for future travel/web search. It is not a real-time fact source yet.
+The `travel_search` operation is the only source-bearing web search contract. AI Trip Edit can use it only after the send confirmation; no source-bearing result means no realtime claim.
 
 Current runtime behavior:
 
-- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock results only.
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock results and takes priority over real search env.
+- `TRIPMAP_SEARCH_PROVIDER=mock` returns deterministic mock results.
 - Mock results use `source: "mock"`, `travel.example` URLs, and warning `当前为模拟搜索结果，不代表实时网页信息。`
-- Without a real search provider, non-mock runtime returns `provider_unavailable`.
-- `future_search` is a reserved response source for future real providers and must not be returned by the current implementation.
-- No search API key/env exists and no external search API is called. AI Trip Edit can call this operation only through the proxy after user confirmation.
+- `TRIPMAP_SEARCH_PROVIDER=disabled` returns `unsupported`.
+- Missing search provider env returns `provider_unavailable`.
+- `TRIPMAP_SEARCH_PROVIDER=tavily` with `TRIPMAP_SEARCH_API_KEY` calls Tavily from the server proxy only and returns normalized `source: "future_search"` results.
+- Tavily keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
+- Tavily free/dev usage is credit and rate-limit constrained; real search still passes through the local `search|` quota bucket before any provider fetch.
 
 Request contract:
 
@@ -190,26 +193,32 @@ Success shape:
 {
   "ok": true,
   "operation": "travel_search",
-  "source": "mock",
+  "source": "future_search",
   "query": "杭州博物馆 营业时间",
-  "retrievedAt": "2026-01-01T00:00:00.000Z",
+  "retrievedAt": "2026-05-26T08:00:00.000Z",
   "results": [
     {
-      "title": "模拟搜索结果",
-      "url": "https://travel.example/search/mock-example",
-      "displayUrl": "travel.example/search/mock-example",
-      "domain": "travel.example",
-      "snippet": "模拟搜索片段，不代表实时网页信息。",
+      "title": "杭州博物馆开放信息",
+      "url": "https://example.org/visit",
+      "displayUrl": "example.org/visit",
+      "domain": "example.org",
+      "snippet": "来源摘要片段。",
       "sourceType": "official",
-      "retrievedAt": "2026-01-01T00:00:00.000Z",
-      "confidence": "low"
+      "retrievedAt": "2026-05-26T08:00:00.000Z",
+      "confidence": "high"
     }
-  ],
-  "warnings": ["当前为模拟搜索结果，不代表实时网页信息。"]
+  ]
 }
 ```
 
 Clients must treat search success parsing as strict: each result needs a safe HTTP(S) `url`, `displayUrl`, `domain`, `title`, `snippet`, and `retrievedAt`. Unsafe schemes such as `javascript:` or `data:` are rejected rather than displayed.
+
+Tavily request policy:
+
+- The proxy sends only a compact search request: `query`, capped `max_results`, `search_depth: "basic"`, and disabled answer/raw-content/image options.
+- The proxy does not send trip DB, days/items, coordinates, notes, tickets, blobs, cloud state, route cache, provider keys, client headers, locale, region, or `searchType` to Tavily.
+- Tavily response data is normalized into the existing contract. Raw provider body fields such as answer, raw content, images, usage, request IDs, headers, provider errors, stack traces, `Authorization`, `Bearer`, or the API key are never returned.
+- `sourceType` and `confidence` are best-effort derived fields. If Tavily returns no usable safe source URLs, the proxy returns an empty result set with a generic warning; AI Trip Edit must treat that as no source.
 
 ## AI Trip Edit Plan Operation
 
@@ -482,9 +491,9 @@ Current usable AI provider status:
 - Validation path for drafts: provider raw text → JSON extraction → `validateAiTripDraft` → preview update. Import still requires final user confirmation.
 - Validation path for edit plans: provider raw text → JSON extraction → `validateAiTripEditPatchPlan` → diff preview → final local apply confirmation.
 - Reasoning mode: backend-managed policy, not a user-facing feature. The default path remains fast/stable JSON mode with `thinking: { type: "disabled" }`; complex tasks may be classified server-side for higher reasoning.
-- Web search: not integrated. Current AI does not look up real-time opening hours, tickets, transportation, weather, reviews, events, or web sources, and must not claim it did.
+- Web search: available only through the explicit `travel_search` proxy operation when configured. Current AI must not claim real-time opening hours, tickets, transportation, weather, reviews, events, or web sources unless source-bearing search results were attached to the request.
 
-Future AI provider work should keep web search separate from repair and reasoning. Search should remain the `travel_search` provider proxy operation with sourced results shaped around title, URL, display URL, domain, snippet, `retrievedAt`, source type, confidence, quota, and source display in the UI. Future AI tool use must cite source URLs and `retrievedAt`; it must not mix unsourced realtime claims into normal AI reasoning.
+Future AI provider work should keep web search separate from repair and reasoning. Search must remain the `travel_search` provider proxy operation with sourced results shaped around title, URL, display URL, domain, snippet, `retrievedAt`, source type, confidence, quota, and source display in the UI. AI tool use must cite source URLs and `retrievedAt`; it must not mix unsourced realtime claims into normal AI reasoning.
 
 ### AI Backend Reasoning Policy
 
@@ -504,12 +513,12 @@ This policy keeps the user experience simple: users describe the travel task, wh
 
 Search readiness is explicit-tool only for AI Trip Edit in this release. The UI can detect clear search intent, ask for confirmation, call `travel_search` at most once, then call `ai_trip_edit_plan` at most once with compact source summaries. There is no autonomous browsing loop or provider-internal tool calling.
 
-- No search provider key or env var is defined.
+- Search provider env is server-only: `TRIPMAP_SEARCH_PROVIDER=disabled|mock|tavily` and `TRIPMAP_SEARCH_API_KEY`.
 - No `webSearchEnabled` field is added to public AI request payloads.
 - No AI prompt should claim web search happened unless source-bearing `searchResults` are present.
-- `travel_search` exists only as a provider proxy foundation: mock succeeds in mock mode and default runtime returns `provider_unavailable`.
-- Future sourced search results should include title, URL, display URL, domain, snippet, `retrievedAt`, source type, and confidence.
-- Production real search integration needs durable quota and provider policy review before any Google/Bing/SerpAPI/search-engine adapter is added.
+- `travel_search` mock succeeds in mock mode, default runtime returns `provider_unavailable`, disabled mode returns `unsupported`, and Tavily mode returns normalized `future_search` results when the server key is present.
+- Sourced search results include title, URL, display URL, domain, snippet, `retrievedAt`, source type, and confidence when derivable.
+- Real search remains local-quota-gated under `search|`; provider free/dev quotas and rate limits are separate operational constraints.
 
 ### Real Provider Smoke QA
 

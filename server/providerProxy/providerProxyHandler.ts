@@ -59,7 +59,9 @@ import {
   type AiTripEditProviderErrorCode,
 } from './aiTripEditProvider'
 import {
+  createDisabledTravelSearchProvider,
   createMockTravelSearchProvider,
+  createTavilyTravelSearchProvider,
   createUnavailableTravelSearchProvider,
   type TravelSearchProvider,
   type TravelSearchProviderErrorCode,
@@ -75,6 +77,8 @@ type ProviderProxyHandlerEnv = {
   TRIPMAP_AI_PROVIDER_KEY?: string
   TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
+  TRIPMAP_SEARCH_API_KEY?: string
+  TRIPMAP_SEARCH_PROVIDER?: string
 }
 
 export type ProviderProxyHandlerInput = {
@@ -160,7 +164,7 @@ export async function handleProviderProxyRequest({
   }
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
-    return handleTravelSearchRequest({ body, corsHeaders, env, quotaLimits, quotaStore, request })
+    return handleTravelSearchRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
@@ -520,6 +524,7 @@ async function handleTravelSearchRequest({
   body,
   corsHeaders,
   env,
+  fetcher,
   quotaLimits,
   quotaStore,
   request,
@@ -527,6 +532,7 @@ async function handleTravelSearchRequest({
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
   quotaStore?: ProviderProxyQuotaStore
   request: Request
@@ -558,7 +564,7 @@ async function handleTravelSearchRequest({
   }
 
   try {
-    const provider = selectTravelSearchProvider(env)
+    const provider = selectTravelSearchProvider(env, fetcher)
     const result = await provider.search(searchRequest)
     if (!result.ok) {
       throw new ProviderProxyServerError(result.errorCode, mapTravelSearchErrorCodeToStatus(result.errorCode))
@@ -570,9 +576,25 @@ async function handleTravelSearchRequest({
   }
 }
 
-function selectTravelSearchProvider(env: ProviderProxyHandlerEnv): TravelSearchProvider {
+function selectTravelSearchProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): TravelSearchProvider {
   if (isMockMode(env)) {
     return createMockTravelSearchProvider()
+  }
+  const provider = env.TRIPMAP_SEARCH_PROVIDER?.trim().toLowerCase()
+  if (provider === 'mock') {
+    return createMockTravelSearchProvider()
+  }
+  if (provider === 'disabled') {
+    return createDisabledTravelSearchProvider()
+  }
+  if (provider === 'tavily') {
+    if (!env.TRIPMAP_SEARCH_API_KEY?.trim()) {
+      return createUnavailableTravelSearchProvider()
+    }
+    return createTavilyTravelSearchProvider(env, fetcher)
+  }
+  if (provider) {
+    return createDisabledTravelSearchProvider()
   }
   return createUnavailableTravelSearchProvider()
 }

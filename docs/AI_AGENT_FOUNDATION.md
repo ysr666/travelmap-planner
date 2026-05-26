@@ -17,14 +17,14 @@
 - Quality checker：草稿 preview 后运行本地质量检查，提示过密、泛化标题、缺少饭点、时间冲突、短间隔等问题。
 - AI repair：质量检查出现 warnings / criticals 时，用户确认后可通过 provider proxy 请求 AI 修复当前草稿。DeepSeek `deepseek-v4-flash` repair smoke 已验证成功。
 - AI trip edit patch plan：Trip Home 提供轻量 “AI 修改建议” card；用户输入一次性修改指令后，确认发送脱敏上下文，provider proxy 返回 patch plan，本地校验后显示中文 diff preview，最终确认才应用到本地旅行。
-- AI trip edit search tool：当用户明确要求查询实时 / 网页信息时，Trip Home 可在发送确认后先调用一次 `travel_search`，再把最多 3 条来源摘要附加到 patch plan 请求；无来源时不得声称已搜索。
+- AI trip edit search tool：当用户明确要求查询实时 / 网页信息时，Trip Home 可在发送确认后先调用一次 `travel_search`，再把最多 3 条来源摘要附加到 patch plan 请求；无来源时不得声称已搜索或知道实时事实。
 - Privacy Guard：repair 请求发送前会按 AI 隐私设置移除或截断 item notes；默认关闭时备注不会发送。
 - ConfirmDialog write boundary：AI 生成和修复只更新草稿 preview 和 JSON textarea；只有用户点击最终“确认导入”后才写入 IndexedDB。
 - Patch apply boundary：AI 修改建议不会自动写库；白名单 patch plan 只在最终确认后通过本地事务应用，且不触发路线、票据或云端操作。
 
 当前明确限制：
 
-- 不接入真实 web search provider，不查询天气，也不会自主浏览网页。`travel_search` 当前仍是 mock/disabled foundation；只有 AI Trip Edit 在明确搜索意图且用户确认后可尝试一次 provider proxy search。没有来源就不得声称知道实时营业时间、票价、交通、官网或最新信息。
+- 不查询天气，也不会自主浏览网页。`travel_search` 可在 mock/disabled 模式运行，也可通过 server-side Tavily env 接入真实搜索；只有 AI Trip Edit 在明确搜索意图且用户确认后可尝试一次 provider proxy search。没有来源就不得声称知道实时营业时间、票价、交通、官网或最新信息。
 - 不提供 thinking / reasoning mode UI。推理模式由后端策略管理；默认保持 stable JSON mode，复杂任务才可由后端自动选择更高推理强度。
 - 不做多轮聊天助手、不保留自然语言记忆、不自动应用修改。
 - 不读取票据图片、PDF、OCR、Blob、完整本地数据库、云端 token、route cache 或 provider key。
@@ -124,9 +124,9 @@ Patch plan 白名单：
 - 模型输出未知 operation 或未知字段时自动猜测、修复或透传。
 - 删除已绑定票据的 item。AI 不删除 `ticketMetas` / `ticketBlobs`，也不自动解除票据绑定。
 - 写入 route cache、触发 route generation、上传 cloud、创建票据或由 AI provider 自行调用 `travel_search`。路线相关修改只显示“路线缓存可能过期”的 warning，不清理 route cache。
-- 多轮聊天、对话记忆、新的 `ai_trip_edit` operation、web search 或 tool-calling。
+- 多轮聊天、对话记忆、新的 `ai_trip_edit` operation、自主 web search 或 provider-internal tool-calling。
 
-如果用户要求“查一下今天开放吗 / 最新票价 / 最近活动”，当前只能在确认后执行一次 `travel_search` proxy 调用；如果没有 source-bearing 结果，必须返回 warning：`联网搜索暂未接入，未查询实时信息。` 不得编造实时事实。
+如果用户要求“查一下今天开放吗 / 最新票价 / 最近活动”，当前只能在确认后执行一次 `travel_search` proxy 调用；如果没有 source-bearing 结果，必须返回 warning：`联网搜索暂未接入，未查询实时信息。` 不得编造实时事实。真实 Tavily 搜索也必须保持来源展示和最终写入确认边界。
 
 ## 本地检查优先
 
@@ -318,6 +318,14 @@ Prompt 边界：
 - `TRIPMAP_AI_API_KEY` — server-only 密钥，前端不可见。
 - `TRIPMAP_AI_BASE_URL` — OpenAI-compatible endpoint，推荐 `https://.../v1`。
 - `TRIPMAP_AI_MODEL` — 模型标识。
+
+搜索 provider 也只能配置在 server-side env：
+
+- `TRIPMAP_SEARCH_PROVIDER=disabled|mock|tavily`。
+- `TRIPMAP_SEARCH_API_KEY` — Tavily server-only 密钥，前端不可见，不得写入 `VITE_*`。
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` 仍优先返回 mock search，不调用 Tavily。
+- Tavily 请求只发送 compact query 和结果数等搜索控制，不发送 trip DB、notes、coordinates、tickets、cloud、route cache 或 provider key。
+- Tavily 免费 / dev key 有 credits 和 rate limit 限制；TripMap 仍先按 `search|` quota gate 限流。
 
 默认行为：
 

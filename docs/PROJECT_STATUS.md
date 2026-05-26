@@ -3,6 +3,8 @@
 更新时间：2026-05-24
 基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、cloud save wording 和 E2E locator hardening 均已完成。
 
+Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
+
 ## 当前定位
 
 旅图是 local-first 出国旅行 PWA。核心数据保存在浏览器 IndexedDB；zip 和 Supabase 都是备份 / 恢复层，不替代本地数据源。

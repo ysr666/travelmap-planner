@@ -7,6 +7,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripEditPlanRequest,
+  validateProviderProxyPlaceLookupRequest,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -353,6 +354,103 @@ describe('provider proxy travel_search contract', () => {
 function validTravelSearchRequest() {
   return {
     operation: 'travel_search',
+    query: '杭州博物馆',
+  }
+}
+
+describe('provider proxy place_lookup contract', () => {
+  it('accepts a valid minimal place_lookup request and applies defaults', () => {
+    const result = validateProviderProxyPlaceLookupRequest({
+      operation: 'place_lookup',
+      query: '杭州博物馆',
+      requestId: 'place-1',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request).toMatchObject({
+        maxResults: 5,
+        operation: 'place_lookup',
+        query: '杭州博物馆',
+        requestId: 'place-1',
+      })
+    }
+  })
+
+  it('accepts optional locale region and maxResults', () => {
+    const result = validateProviderProxyPlaceLookupRequest({
+      locale: 'zh-CN',
+      maxResults: 3,
+      operation: 'place_lookup',
+      query: 'Louvre Museum',
+      region: 'fr',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.locale).toBe('zh-CN')
+      expect(result.request.region).toBe('FR')
+      expect(result.request.maxResults).toBe(3)
+    }
+  })
+
+  it('defaults and caps place_lookup maxResults explicitly', () => {
+    const missing = validateProviderProxyPlaceLookupRequest(validPlaceLookupRequest())
+    const accepted = validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: 5 })
+    const capped = validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: 99 })
+
+    expect(missing.ok).toBe(true)
+    expect(accepted.ok).toBe(true)
+    expect(capped.ok).toBe(true)
+    if (missing.ok) expect(missing.request.maxResults).toBe(5)
+    if (accepted.ok) expect(accepted.request.maxResults).toBe(5)
+    if (capped.ok) expect(capped.request.maxResults).toBe(5)
+  })
+
+  it('rejects invalid place_lookup inputs', () => {
+    expect(validateProviderProxyPlaceLookupRequest(null).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ operation: 'place_lookup', query: '' }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ operation: 'place_lookup', query: 'x'.repeat(201) }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), locale: 'fr-FR' }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), region: 'USA' }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), region: '1A' }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: 0 }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: -1 }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: 2.5 }).ok).toBe(false)
+    expect(validateProviderProxyPlaceLookupRequest({ ...validPlaceLookupRequest(), maxResults: '5' }).ok).toBe(false)
+  })
+
+  it('rejects forbidden sensitive fields recursively instead of ignoring them', () => {
+    for (const field of ['apiKey', 'providerKey', 'token', 'cloudToken', 'ticketBlobs', 'ticketFiles', 'ticketIds', 'routeCache', 'localDb', 'fullTrip', 'notes', 'authorization', 'headers', 'coordinates', 'lat', 'lng', 'items', 'itineraryItems', 'days', 'trip']) {
+      const result = validateProviderProxyPlaceLookupRequest({
+        ...validPlaceLookupRequest(),
+        nested: { [field]: 'secret' },
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_request')
+      }
+    }
+  })
+
+  it('does not reject sensitive words inside the query text', () => {
+    const result = validateProviderProxyPlaceLookupRequest({
+      ...validPlaceLookupRequest(),
+      query: 'apiKey coordinates ticket files 这些词只是地点查询文本',
+    })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('returns non-empty error message for place_lookup operation', () => {
+    const message = defaultProviderProxyErrorMessage('provider_unavailable', 'place_lookup')
+    expect(message).toContain('地点查询')
+  })
+})
+
+function validPlaceLookupRequest() {
+  return {
+    operation: 'place_lookup',
     query: '杭州博物馆',
   }
 }

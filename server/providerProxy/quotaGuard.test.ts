@@ -115,6 +115,7 @@ describe('provider proxy quota guard', () => {
       maxAiDraftRepairRequestsPerWindow: 1,
       maxAiDraftRequestsPerWindow: 1,
       maxAiTripEditRequestsPerWindow: 1,
+      maxPlaceLookupRequestsPerWindow: 1,
       maxRouteRequestsPerWindow: 1,
       maxTravelSearchRequestsPerWindow: 1,
       windowMs: 1000,
@@ -160,12 +161,21 @@ describe('provider proxy quota guard', () => {
       operation: 'travel_search',
       store,
     }).allowed).toBe(true)
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 135,
+      operation: 'place_lookup',
+      store,
+    }).allowed).toBe(true)
     expect(Array.from(store.keys())).toEqual(expect.arrayContaining([
       'route|session-a',
       'ai_draft|session-a',
       'ai_draft_repair|session-a',
       'ai_trip_edit|session-a',
       'search|session-a',
+      'place|session-a',
     ]))
 
     expect(checkAndConsumeProviderProxyQuota({
@@ -174,6 +184,14 @@ describe('provider proxy quota guard', () => {
       limits,
       nowMs: 140,
       operation: 'travel_search',
+      store,
+    })).toMatchObject({ allowed: false, reason: 'rate_limit' })
+    expect(checkAndConsumeProviderProxyQuota({
+      coordinateCount: 0,
+      identity: 'session-a',
+      limits,
+      nowMs: 150,
+      operation: 'place_lookup',
       store,
     })).toMatchObject({ allowed: false, reason: 'rate_limit' })
   })

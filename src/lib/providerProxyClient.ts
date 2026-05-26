@@ -6,6 +6,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripEditPlanRequest,
+  validateProviderProxyPlaceLookupRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
@@ -18,6 +19,9 @@ import {
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyErrorResponse,
+  type ProviderProxyPlaceLookupRequest,
+  type ProviderProxyPlaceLookupResponse,
+  type ProviderProxyPlaceLookupSuccessResponse,
   type ProviderProxyRoutePreviewRequest,
   type ProviderProxyRoutePreviewResponse,
   type ProviderProxyRoutePreviewSuccessResponse,
@@ -286,6 +290,49 @@ export async function fetchProviderProxyTravelSearch(
   return parsed
 }
 
+export async function fetchProviderProxyPlaceLookup(
+  request: ProviderProxyPlaceLookupRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyPlaceLookupSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyPlaceLookupRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_lookup' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_lookup' }), response.status)
+  }
+
+  const parsed = parseProviderProxyPlaceLookupResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -436,6 +483,29 @@ function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTr
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_search' })
 }
 
+function parseProviderProxyPlaceLookupResponse(input: unknown): ProviderProxyPlaceLookupResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyPlaceLookupSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'place_lookup' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'place_lookup'),
+      operation: 'place_lookup',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_lookup' })
+}
+
 function validateProviderProxyAiTripEditPlanSuccessResponse(
   record: Record<string, unknown>,
   request: ProviderProxyAiTripEditPlanRequest,
@@ -460,6 +530,63 @@ function validateProviderProxyAiTripEditPlanSuccessResponse(
     warnings: Array.isArray(record.warnings)
       ? record.warnings.filter((w): w is string => typeof w === 'string')
       : patchValidation.warnings,
+  }
+}
+
+function validateProviderProxyPlaceLookupSuccessResponse(record: Record<string, unknown>): ProviderProxyPlaceLookupSuccessResponse | null {
+  if (record.operation !== 'place_lookup') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'google_places') {
+    return null
+  }
+  const retrievedAt = typeof record.retrievedAt === 'string' ? record.retrievedAt : null
+  if (!retrievedAt || !isValidIsoLikeDate(retrievedAt) || !Array.isArray(record.results)) {
+    return null
+  }
+
+  const results: ProviderProxyPlaceLookupSuccessResponse['results'] = []
+  for (const result of record.results) {
+    const item = readRecord(result)
+    const location = readRecord(item.location)
+    const hasLocation = item.location !== undefined
+    const lat = Number(location.lat)
+    const lng = Number(location.lng)
+    const googleMapsUri = item.googleMapsUri
+    if (
+      !isNonEmptyString(item.placeId)
+      || !isNonEmptyString(item.displayName)
+      || !isNonEmptyString(item.formattedAddress)
+      || item.provider !== 'google_places'
+      || !isNonEmptyString(item.retrievedAt)
+      || !isValidIsoLikeDate(item.retrievedAt)
+      || (hasLocation && (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180))
+      || (googleMapsUri !== undefined && (!isNonEmptyString(googleMapsUri) || !isSafeHttpUrl(googleMapsUri)))
+    ) {
+      return null
+    }
+
+    results.push({
+      displayName: item.displayName,
+      formattedAddress: item.formattedAddress,
+      googleMapsUri: googleMapsUri as string | undefined,
+      location: hasLocation ? { lat, lng } : undefined,
+      placeId: item.placeId,
+      provider: 'google_places',
+      retrievedAt: item.retrievedAt,
+    })
+  }
+
+  return {
+    ok: true,
+    operation: 'place_lookup',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    results,
+    retrievedAt,
+    source: record.source,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((w): w is string => typeof w === 'string')
+      : undefined,
   }
 }
 

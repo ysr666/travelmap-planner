@@ -6,6 +6,7 @@ import {
   fetchProviderProxyRoutePreview,
   fetchProviderProxyAiTripDraft,
   fetchProviderProxyAiTripEditPlan,
+  fetchProviderProxyPlaceLookup,
   fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
 } from './providerProxyClient'
@@ -310,6 +311,153 @@ describe('provider proxy travel_search client', () => {
       code: 'provider_unavailable',
       details: undefined,
       message: '搜索服务暂不可用。',
+      status: 503,
+    })
+  })
+})
+
+describe('provider proxy place_lookup client', () => {
+  it('validates and sends a place lookup payload without provider secrets', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        locale: 'zh-CN',
+        maxResults: 3,
+        operation: 'place_lookup',
+        query: '杭州博物馆',
+        quotaSessionId: 'session-place-1',
+        region: 'CN',
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-place-key')
+      expect(JSON.stringify(body)).not.toContain('X-Goog-Api-Key')
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock',
+        results: [
+          {
+            displayName: '杭州博物馆',
+            formattedAddress: '浙江省杭州市上城区粮道山18号',
+            googleMapsUri: 'https://maps.google.com/?cid=123',
+            location: { lat: 30.245, lng: 120.17 },
+            placeId: 'places/mock-1',
+            provider: 'google_places',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyPlaceLookup({
+      locale: 'zh-CN',
+      maxResults: 3,
+      operation: 'place_lookup',
+      query: '杭州博物馆',
+      quotaSessionId: 'session-place-1',
+      region: 'cn',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-place-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.source).toBe('mock')
+    expect(result.results[0]).toMatchObject({
+      displayName: '杭州博物馆',
+      formattedAddress: '浙江省杭州市上城区粮道山18号',
+      location: { lat: 30.245, lng: 120.17 },
+      provider: 'google_places',
+    })
+  })
+
+  it('rejects invalid place lookup requests before POST', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '',
+      maxResults: 5,
+    }, '/api/provider-proxy', { fetcher })).rejects.toBeInstanceOf(ProviderProxyClientError)
+
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed place lookup success responses instead of accepting partial results', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'google_places',
+        results: [
+          {
+            formattedAddress: '缺少名称。',
+            placeId: 'places/bad',
+            provider: 'google_places',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '杭州博物馆',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    })
+  })
+
+  it('rejects unsafe Google Maps URIs in normalized place lookup responses', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'google_places',
+        results: [
+          {
+            displayName: 'Unsafe',
+            formattedAddress: 'Unsafe address',
+            googleMapsUri: 'javascript:alert(1)',
+            placeId: 'places/unsafe',
+            provider: 'google_places',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '杭州博物馆',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+    })
+  })
+
+  it('throws ProviderProxyClientError for normalized place lookup errors without raw body leak', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        code: 'provider_unavailable',
+        details: 'raw provider body with secret-place-key',
+        message: 'raw provider body with secret-place-key',
+        ok: false,
+        operation: 'place_lookup',
+      }), { status: 503 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '杭州博物馆',
+      maxResults: 5,
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'provider_unavailable',
+      details: undefined,
+      message: '地点查询服务暂不可用。',
       status: 503,
     })
   })

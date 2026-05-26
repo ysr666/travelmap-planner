@@ -3,6 +3,7 @@ import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
   mockMapStyle,
+  setRouteProxyConfig,
 } from './helpers'
 
 type DemoRecords = {
@@ -21,6 +22,15 @@ type SeedTicket = {
   size: number
   referenceLocation?: string
   externalUrl?: string
+}
+
+type ItemRecordSnapshot = {
+  address?: string
+  googleMapsUri?: string
+  lat?: number
+  lng?: number
+  locationName?: string
+  ticketIds?: string[]
 }
 
 async function getDemoRecords(page: Page, tripId: string): Promise<DemoRecords> {
@@ -90,6 +100,46 @@ async function removeItemCoordinates(page: Page, itemId: string) {
     })
     db.close()
   }, itemId)
+}
+
+async function getItemRecord(page: Page, itemId: string): Promise<ItemRecordSnapshot> {
+  return page.evaluate(async (targetItemId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    const tx = db.transaction(['itineraryItems'], 'readonly')
+    const store = tx.objectStore('itineraryItems')
+    const item = await new Promise<ItemRecordSnapshot>((resolve, reject) => {
+      const request = store.get(targetItemId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return item
+  }, itemId)
+}
+
+async function countTicketMetas(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    const tx = db.transaction(['ticketMetas'], 'readonly')
+    const store = tx.objectStore('ticketMetas')
+    const count = await new Promise<number>((resolve, reject) => {
+      const request = store.count()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return count
+  })
 }
 
 async function addItemTickets(page: Page, tripId: string, itemId: string, tickets: SeedTicket[]) {
@@ -325,6 +375,173 @@ test('无坐标行程点显示轻量导航不可用状态', async ({ page }) => 
   await expect(page.getByTestId('item-detail-core')).toContainText('暂无坐标')
   await expect(page.getByTestId('item-detail-navigation')).toContainText('无法从这里打开外部地图导航')
   await expect(page.getByTestId('item-detail-navigation').getByRole('link', { name: /Apple 地图|Google 地图/ })).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('行程点详情地点查询不可用时显示可读状态', async ({ page }) => {
+  let placeLookupRequests = 0
+  let googlePlacesCalls = 0
+  await page.route('https://places.googleapis.com/**', (route) => {
+    googlePlacesCalls += 1
+    return route.abort()
+  })
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation !== 'place_lookup') {
+      await route.fallback()
+      return
+    }
+    placeLookupRequests += 1
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('ticket')
+    expect(serialized).not.toContain('routeCache')
+    expect(serialized).not.toContain('cloud')
+    expect(serialized).not.toContain('coordinates')
+    expect(serialized).not.toContain('notes')
+    await route.fulfill({
+      contentType: 'application/json',
+      status: 503,
+      body: JSON.stringify({
+        code: 'provider_unavailable',
+        ok: false,
+        operation: 'place_lookup',
+      }),
+    })
+  })
+
+  const tripId = await createDemoTripViaUi(page)
+  await setRouteProxyConfig(page)
+  const { dayId, secondItemId } = await getDemoRecords(page, tripId)
+  await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${secondItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByTestId('item-place-lookup-toggle')).toBeVisible()
+  await page.getByTestId('item-place-lookup-toggle').click()
+  await expect(page.getByTestId('item-place-lookup-panel')).toBeVisible()
+  await expect(page.getByTestId('item-place-lookup-query')).toHaveValue(/明治神宫/)
+  await page.getByTestId('item-place-lookup-search').click()
+  await expect(page.getByTestId('item-place-lookup-error')).toContainText('地点查询服务暂不可用')
+  expect(placeLookupRequests).toBe(1)
+  expect(googlePlacesCalls).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('行程点详情地点查询候选需确认后才更新当前行程点', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  let placeLookupRequests = 0
+  let routePreviewRequests = 0
+  let otherProviderRequests = 0
+  let googlePlacesCalls = 0
+  let cloudCalls = 0
+
+  await page.route('https://places.googleapis.com/**', (route) => {
+    googlePlacesCalls += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudCalls += 1
+    return route.abort()
+  })
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'route_preview') {
+      routePreviewRequests += 1
+      await route.fulfill({
+        contentType: 'application/json',
+        status: 500,
+        body: JSON.stringify({ code: 'provider_error', ok: false, operation: 'route_preview' }),
+      })
+      return
+    }
+    if (body.operation !== 'place_lookup') {
+      otherProviderRequests += 1
+      await route.fallback()
+      return
+    }
+
+    placeLookupRequests += 1
+    expect(body).toMatchObject({
+      locale: 'zh-CN',
+      maxResults: 5,
+      operation: 'place_lookup',
+    })
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('ticket')
+    expect(serialized).not.toContain('routeCache')
+    expect(serialized).not.toContain('cloud')
+    expect(serialized).not.toContain('coordinates')
+    expect(serialized).not.toContain('notes')
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        source: 'mock',
+        results: [
+          {
+            displayName: '明治神宫',
+            formattedAddress: '1-1 Yoyogikamizonocho, Shibuya City, Tokyo',
+            googleMapsUri: 'https://maps.google.com/?cid=meiji',
+            location: { lat: 35.6764, lng: 139.6993 },
+            placeId: 'places/e2e-meiji',
+            provider: 'google_places',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            displayName: 'Meiji Jingu Museum',
+            formattedAddress: '1-1 Yoyogikamizonocho, Shibuya City, Tokyo Museum',
+            location: { lat: 35.6771, lng: 139.6998 },
+            placeId: 'places/e2e-meiji-museum',
+            provider: 'google_places',
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    })
+  })
+
+  const tripId = await createDemoTripViaUi(page)
+  await setRouteProxyConfig(page)
+  const { dayId, secondItemId } = await getDemoRecords(page, tripId)
+  await addItemTickets(page, tripId, secondItemId, makeTicketSeeds(1))
+  const beforeItem = await getItemRecord(page, secondItemId)
+  const beforeTicketCount = await countTicketMetas(page)
+
+  await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${secondItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('item-place-lookup-toggle').click()
+  await page.getByTestId('item-place-lookup-search').click()
+  await expect(page.getByTestId('item-place-lookup-result')).toHaveCount(2)
+  await page.getByTestId('item-place-lookup-result').first().click()
+  await expect(page.getByTestId('item-place-lookup-confirm-dialog')).toBeVisible()
+  await page.getByTestId('item-place-lookup-confirm-dialog').getByRole('button', { name: '取消' }).click()
+  await expect(page.getByTestId('item-place-lookup-confirm-dialog')).toHaveCount(0)
+
+  const afterCancelItem = await getItemRecord(page, secondItemId)
+  expect(afterCancelItem.locationName).toBe(beforeItem.locationName)
+  expect(afterCancelItem.address).toBe(beforeItem.address)
+  expect(afterCancelItem.lat).toBe(beforeItem.lat)
+  expect(afterCancelItem.lng).toBe(beforeItem.lng)
+
+  await page.getByTestId('item-place-lookup-result').first().click()
+  await expect(page.getByTestId('item-place-lookup-confirm-dialog')).toBeVisible()
+  await page.getByTestId('item-place-lookup-confirm-dialog').getByRole('button', { name: '更新地点' }).click()
+  await expect(page.getByTestId('item-place-lookup-confirm-dialog')).toHaveCount(0)
+  await expect(page.getByTestId('item-detail-core')).toContainText('明治神宫')
+  await expect(page.getByTestId('item-detail-core')).toContainText('1-1 Yoyogikamizonocho, Shibuya City, Tokyo')
+
+  const afterConfirmItem = await getItemRecord(page, secondItemId)
+  expect(afterConfirmItem.locationName).toBe('明治神宫')
+  expect(afterConfirmItem.address).toBe('1-1 Yoyogikamizonocho, Shibuya City, Tokyo')
+  expect(afterConfirmItem.lat).toBe(35.6764)
+  expect(afterConfirmItem.lng).toBe(139.6993)
+  expect(afterConfirmItem.googleMapsUri).toBeUndefined()
+  expect(afterConfirmItem.ticketIds).toEqual(beforeItem.ticketIds)
+  expect(await countTicketMetas(page)).toBe(beforeTicketCount)
+  expect(placeLookupRequests).toBe(1)
+  expect(routePreviewRequests).toBe(0)
+  expect(otherProviderRequests).toBe(0)
+  expect(googlePlacesCalls).toBe(0)
+  expect(cloudCalls).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
 

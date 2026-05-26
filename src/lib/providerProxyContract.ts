@@ -14,6 +14,7 @@ export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repair' as const
 export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as const
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
+export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
@@ -21,8 +22,9 @@ export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
+export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyErrorCode =
@@ -275,6 +277,53 @@ export type ProviderProxyTravelSearchValidationResult =
   | { ok: true; request: ProviderProxyValidatedTravelSearchRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyPlaceLookupLocale = 'zh-CN' | 'en-US'
+
+export type ProviderProxyPlaceLookupRequest = {
+  operation: typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  query: string
+  locale?: ProviderProxyPlaceLookupLocale
+  region?: string
+  maxResults?: number
+}
+
+export type ProviderProxyValidatedPlaceLookupRequest = ProviderProxyPlaceLookupRequest & {
+  maxResults: number
+}
+
+export type ProviderProxyPlaceLookupResult = {
+  placeId: string
+  displayName: string
+  formattedAddress: string
+  location?: {
+    lat: number
+    lng: number
+  }
+  googleMapsUri?: string
+  provider: 'google_places'
+  retrievedAt: string
+}
+
+export type ProviderProxyPlaceLookupSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+  requestId?: string
+  source: 'mock' | 'google_places'
+  retrievedAt: string
+  results: ProviderProxyPlaceLookupResult[]
+  warnings?: string[]
+}
+
+export type ProviderProxyPlaceLookupResponse =
+  | ProviderProxyPlaceLookupSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyPlaceLookupValidationResult =
+  | { ok: true; request: ProviderProxyValidatedPlaceLookupRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -293,6 +342,7 @@ const VALID_TRAVEL_SEARCH_LOCALES = new Set<ProviderProxyTravelSearchLocale>(['z
 const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['general', 'opening_hours', 'ticket_price', 'official_site', 'transport', 'nearby_food'])
 const VALID_TRAVEL_SEARCH_SOURCE_TYPES = new Set<ProviderProxyTravelSearchSourceType>(['official', 'map', 'ticketing', 'travel_site', 'unknown'])
 const VALID_TRAVEL_SEARCH_CONFIDENCES = new Set<ProviderProxyTravelSearchConfidence>(['low', 'medium', 'high'])
+const VALID_PLACE_LOOKUP_LOCALES = new Set<ProviderProxyPlaceLookupLocale>(['zh-CN', 'en-US'])
 const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
   'apikey',
   'authorization',
@@ -309,6 +359,43 @@ const FORBIDDEN_TRAVEL_SEARCH_FIELDS = new Set([
   'ticketid',
   'ticketids',
   'ticketblobs',
+  'ticketmetas',
+  'token',
+  'trip',
+])
+const FORBIDDEN_PLACE_LOOKUP_FIELDS = new Set([
+  'apikey',
+  'authorization',
+  'blob',
+  'blobs',
+  'cloud',
+  'cloudstate',
+  'cloudstatus',
+  'cloudtoken',
+  'coordinates',
+  'days',
+  'file',
+  'filename',
+  'filenames',
+  'files',
+  'fulldb',
+  'fulltrip',
+  'headers',
+  'itineraryitems',
+  'items',
+  'lat',
+  'lng',
+  'localdb',
+  'note',
+  'notes',
+  'ocr',
+  'providerkey',
+  'routecache',
+  'ticket',
+  'ticketid',
+  'ticketids',
+  'ticketblobs',
+  'ticketfiles',
   'ticketmetas',
   'token',
   'trip',
@@ -343,6 +430,8 @@ const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
+const MAX_PLACE_LOOKUP_QUERY_LENGTH = 200
+const DEFAULT_PLACE_LOOKUP_MAX_RESULTS = 5
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -503,6 +592,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前搜索请求暂不支持。'
     if (code === 'invalid_response') return '搜索服务返回的内容无法解析。'
     return '搜索服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
+    if (code === 'quota_exceeded') return '今日地点查询次数已达上限。'
+    if (code === 'invalid_request') return '地点查询请求无效。'
+    if (code === 'provider_error') return '地点查询服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前地点查询请求暂不支持。'
+    if (code === 'invalid_response') return '地点查询服务返回的内容无法解析。'
+    return '地点查询服务暂不可用。'
   }
   if (code === 'quota_exceeded') return '今日路线生成次数已达上限。'
   if (code === 'invalid_request') return '路线请求无效。'
@@ -745,6 +843,18 @@ function travelSearchInvalidRequest(message: string, requestId?: string): Provid
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function placeLookupInvalidRequest(message: string, requestId?: string): ProviderProxyPlaceLookupValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
       requestId,
     }),
     ok: false,
@@ -1030,12 +1140,73 @@ export function validateProviderProxyTravelSearchRequest(input: unknown): Provid
   }
 }
 
+export function validateProviderProxyPlaceLookupRequest(input: unknown): ProviderProxyPlaceLookupValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
+    return placeLookupInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_PLACE_LOOKUP_FIELDS)
+  if (forbiddenFieldPath) {
+    return placeLookupInvalidRequest('地点查询请求包含不允许的敏感字段。', requestId)
+  }
+
+  const query = typeof record.query === 'string' ? record.query.trim() : ''
+  if (!query) {
+    return placeLookupInvalidRequest('请输入地点查询关键词。', requestId)
+  }
+  if (query.length > MAX_PLACE_LOOKUP_QUERY_LENGTH) {
+    return placeLookupInvalidRequest(`地点查询关键词不能超过 ${MAX_PLACE_LOOKUP_QUERY_LENGTH} 个字符。`, requestId)
+  }
+
+  const locale = record.locale
+  if (locale !== undefined && !isPlaceLookupLocale(locale)) {
+    return placeLookupInvalidRequest('地点查询语言设置无效。', requestId)
+  }
+
+  const region = typeof record.region === 'string' ? record.region.trim().toUpperCase() : undefined
+  if (record.region !== undefined && typeof record.region !== 'string') {
+    return placeLookupInvalidRequest('地点查询地区必须是字符串。', requestId)
+  }
+  if (region && !/^[A-Z]{2}$/.test(region)) {
+    return placeLookupInvalidRequest('地点查询地区必须是 2 位国家或地区代码。', requestId)
+  }
+
+  const rawMaxResults = record.maxResults
+  let maxResults = DEFAULT_PLACE_LOOKUP_MAX_RESULTS
+  if (rawMaxResults !== undefined) {
+    if (typeof rawMaxResults !== 'number' || !Number.isInteger(rawMaxResults) || rawMaxResults < 1) {
+      return placeLookupInvalidRequest('地点查询结果数量必须是正整数。', requestId)
+    }
+    maxResults = Math.min(rawMaxResults, DEFAULT_PLACE_LOOKUP_MAX_RESULTS)
+  }
+
+  return {
+    ok: true,
+    request: {
+      locale: isPlaceLookupLocale(locale) ? locale : undefined,
+      maxResults,
+      operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+      query,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      region: region || undefined,
+      requestId,
+    },
+  }
+}
+
 function isTravelSearchLocale(value: unknown): value is ProviderProxyTravelSearchLocale {
   return typeof value === 'string' && VALID_TRAVEL_SEARCH_LOCALES.has(value as ProviderProxyTravelSearchLocale)
 }
 
 function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchType {
   return typeof value === 'string' && VALID_TRAVEL_SEARCH_TYPES.has(value as ProviderProxyTravelSearchType)
+}
+
+function isPlaceLookupLocale(value: unknown): value is ProviderProxyPlaceLookupLocale {
+  return typeof value === 'string' && VALID_PLACE_LOOKUP_LOCALES.has(value as ProviderProxyPlaceLookupLocale)
 }
 
 function isSafeHttpUrl(value: string): boolean {

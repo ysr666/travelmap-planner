@@ -5,8 +5,8 @@ TripMap uses a provider proxy so production route and AI requests can use owner-
 ## Security Boundary
 
 - The browser calls a TripMap-owned endpoint, normally `/api/provider-proxy`.
-- The proxy calls Google Routes, OpenRouteService, AI providers, and search providers with server-side runtime secrets.
-- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `TRIPMAP_AI_API_KEY`, and `TRIPMAP_SEARCH_API_KEY`.
+- The proxy calls Google Routes, OpenRouteService, AI providers, search providers, and Google Places with server-side runtime secrets.
+- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `TRIPMAP_AI_API_KEY`, `TRIPMAP_SEARCH_API_KEY`, and `TRIPMAP_GOOGLE_PLACES_API_KEY`.
 - Server-only secrets must never be exposed through `VITE_*` variables, IndexedDB, zip backups, Supabase backups, AI import/export, tests, or frontend bundles.
 - A browser-visible Google Maps JavaScript rendering key is different: it is inherently public and must be restricted by referrer in Google Cloud. It must not be reused as a server-only Google Routes secret.
 
@@ -113,7 +113,8 @@ The current quota guard is intentionally small:
 - Max route requests per window default: 60 requests per 60 seconds.
 - Max ai_trip_edit_plan requests per window default: 10 requests per 60 seconds.
 - Max travel_search requests per window default: 20 requests per 60 seconds.
-- `ai_trip_edit|` and `search|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
+- Max place_lookup requests per window default: 30 requests per 60 seconds.
+- `ai_trip_edit|`, `search|`, and `place|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
 
 This is not real abuse protection. The browser session id is spoofable. Before public launch, replace the in-memory store with durable KV, Supabase, Redis, or equivalent, and combine account/session/IP/fingerprint-like server signals where legally and technically appropriate.
 
@@ -142,11 +143,12 @@ Now:
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
 - AI Trip Edit may call `travel_search` once after send confirmation when explicit search intent is detected, then attach compact source summaries to the edit-plan request.
 - `travel_search` can use mock/disabled mode or the server-side Tavily adapter when `TRIPMAP_SEARCH_PROVIDER=tavily` and `TRIPMAP_SEARCH_API_KEY` are configured.
+- Item Detail can manually call `place_lookup` when the user opens the lookup panel and clicks search; selecting a candidate still requires a confirmation before updating that single item.
 
 Later:
 
 - Route order suggestion should become a separate proxy operation.
-- Real web search provider integration should remain a separate proxy operation with its own contract, quota, source display, and write confirmation boundary.
+- Opening hours, ratings, reviews, photos, phone, and website fields for places remain deferred because they may change cost, field tiers, privacy, and UI expectations.
 
 ## Travel Search Operation
 
@@ -219,6 +221,83 @@ Tavily request policy:
 - The proxy does not send trip DB, days/items, coordinates, notes, tickets, blobs, cloud state, route cache, provider keys, client headers, locale, region, or `searchType` to Tavily.
 - Tavily response data is normalized into the existing contract. Raw provider body fields such as answer, raw content, images, usage, request IDs, headers, provider errors, stack traces, `Authorization`, `Bearer`, or the API key are never returned.
 - `sourceType` and `confidence` are best-effort derived fields. If Tavily returns no usable safe source URLs, the proxy returns an empty result set with a generic warning; AI Trip Edit must treat that as no source.
+
+## Place Lookup Operation
+
+The `place_lookup` operation supports manual, per-item Google Places candidate lookup from Item Detail. It is not auto-enrichment and it is not batch update. Search results are transient until the user selects one and confirms the write.
+
+Runtime behavior:
+
+- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock candidates and takes priority over real place env.
+- `TRIPMAP_PLACE_PROVIDER=mock` returns deterministic mock candidates.
+- `TRIPMAP_PLACE_PROVIDER=disabled` returns `unsupported`.
+- Missing place provider env returns `provider_unavailable`.
+- `TRIPMAP_PLACE_PROVIDER=google_places` with `TRIPMAP_GOOGLE_PLACES_API_KEY` calls Google Places API New from the server proxy only.
+- Google Places keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
+- Real lookup remains local-quota-gated under `place|` before any provider fetch.
+
+Request contract:
+
+```json
+{
+  "operation": "place_lookup",
+  "requestId": "client-request-id",
+  "quotaSessionId": "browser-session-id",
+  "query": "明治神宫 1-1 Yoyogikamizonocho",
+  "locale": "zh-CN",
+  "region": "JP",
+  "maxResults": 5
+}
+```
+
+Limits:
+
+- `query`: required, 1-200 characters after trimming.
+- `locale`: optional, `zh-CN` or `en-US`.
+- `region`: optional Google `regionCode`, accepted only as a trimmed 2-letter alpha value and normalized to uppercase.
+- `maxResults`: optional integer; missing defaults to 5, integers 1-5 are accepted, and integers above 5 are clamped to 5. Zero, negative numbers, decimals, and strings are rejected.
+- Sensitive fields such as tickets, files, OCR, blobs, cloud state, route cache, full local DB, notes, provider keys, headers, coordinates, items, days, and trip objects are rejected recursively as `invalid_request`.
+
+Success shape:
+
+```json
+{
+  "ok": true,
+  "operation": "place_lookup",
+  "source": "google_places",
+  "retrievedAt": "2026-05-26T08:00:00.000Z",
+  "results": [
+    {
+      "placeId": "places/abc123",
+      "displayName": "明治神宫",
+      "formattedAddress": "1-1 Yoyogikamizonocho, Shibuya City, Tokyo",
+      "location": { "lat": 35.6764, "lng": 139.6993 },
+      "googleMapsUri": "https://maps.google.com/?cid=123",
+      "provider": "google_places",
+      "retrievedAt": "2026-05-26T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+Google Places request policy:
+
+- Endpoint: `POST https://places.googleapis.com/v1/places:searchText`.
+- Body contains only `textQuery`, capped `pageSize`, optional `languageCode`, and optional `regionCode`.
+- Header `X-Goog-FieldMask` is exactly `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`.
+- Wildcard field masks (`*`) are never used. Opening hours, ratings, reviews, photos, phone, and website are intentionally not requested in this foundation.
+- The proxy does not send trip DB, days/items, coordinates, notes, tickets, blobs, OCR, cloud state, route cache, provider keys, client headers, or AI context to Google Places.
+- Google Places response data is normalized into the contract. Malformed candidates are dropped; malformed top-level responses return a normalized provider error. Raw provider bodies, headers, stack traces, `Authorization`, `Bearer`, and the API key are never returned.
+- Google documents the Text Search New endpoint and recommends field masks for cost and latency control: https://developers.google.com/maps/documentation/places/web-service/text-search and https://developers.google.com/maps/documentation/places/web-service/choose-fields.
+
+Item Detail write boundary:
+
+- The lookup panel query is prefilled only from visible `locationName`, `address`, and `title`.
+- Opening the item does not call the provider. The user must open the panel and click search.
+- Selecting a candidate opens a confirmation dialog. Cancel makes no item change.
+- Confirm updates only the current item: `locationName`, `address`, and `lat`/`lng` when the candidate includes valid coordinates.
+- `googleMapsUri` is displayed only transiently and is not persisted because `ItineraryItem` has no existing safe field for it.
+- Lookup does not generate routes, clear route cache, create or alter tickets, upload cloud snapshots, or call AI.
 
 ## AI Trip Edit Plan Operation
 

@@ -81,7 +81,8 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
 - 时区与日期语义审计待做。
-- 真实 AI web search provider 尚未实现：AI Trip Edit 只能在明确搜索意图且用户确认后尝试一次 mock/disabled `travel_search` proxy 调用；没有来源就不声明实时信息。
+- Web search 虽已可通过 server-side Tavily env 接入，但仍只允许 AI Trip Edit 在明确搜索意图且用户确认后单次调用 `travel_search`；没有 source-bearing 结果就不声明实时信息。
+- Google Places item lookup 是手动、单行程点、确认后写入的 foundation；不是自动 enrich、批量更新、路线生成或地点详情全量同步。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
 - AI trip edit 是 patch plan + explicit search tool foundation：不是多轮聊天助手，不自主浏览网页，不自动应用修改，不联动 route/ticket/cloud。
 
@@ -102,7 +103,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
 - 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
-- Server-only OpenRouteService / Google Routes / AI provider secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
+- Server-only OpenRouteService / Google Routes / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
 - AI trip edit plan 不直接写库；只允许 granular 白名单 operations（item title/time/location/note/transport、add/remove/move/reorder、day title），预览后必须二次确认才写入 IndexedDB。应用前会重新读取本地状态并拒绝 stale preview；删除 ticket-bound item 会被拒绝，不删除或解绑票据。
@@ -119,7 +120,8 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
-- Web search：当前未接入真实 provider。`travel_search` provider proxy foundation 只提供 mock/disabled 合同、结果结构和独立 `search|` quota；mock mode 使用 example 域名并标注模拟，默认无真实 provider 时返回 `provider_unavailable`。AI Trip Edit 可在用户确认后单次调用 search；AI draft generation / repair 不会调用 search。未来真实搜索应实现 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence 和来源展示，而不是混入 repair 或 AI reasoning。AI 不得在没有 sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- Web search：`travel_search` provider proxy 支持 mock/disabled/Tavily，真实 Tavily key 只在服务端 env 中使用，结果归一化为 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence，并受独立 `search|` quota 约束。AI Trip Edit 可在用户确认后单次调用 search；AI draft generation / repair 不会调用 search。AI 不得在没有 sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- Google Places lookup：`place_lookup` provider proxy 支持 mock/disabled/google_places，使用 server-only `TRIPMAP_GOOGLE_PLACES_API_KEY` 和严格 FieldMask `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`。Item Detail 的“查找地点信息”只发送 visible item title/location/address 组成的 query，候选结果临时展示，确认后只更新当前 item 的 `locationName`、`address` 和有效 `lat/lng`；`googleMapsUri` 持久化、opening hours、ratings、reviews、photos、phone、website deferred。
 
 ## 本地 QA 注意事项
 

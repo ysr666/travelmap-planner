@@ -2,6 +2,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+  PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
@@ -10,6 +11,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripEditPlanRequest,
+  validateProviderProxyPlaceLookupRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
@@ -66,6 +68,14 @@ import {
   type TravelSearchProvider,
   type TravelSearchProviderErrorCode,
 } from './searchProvider'
+import {
+  createDisabledPlaceLookupProvider,
+  createGooglePlacesLookupProvider,
+  createMockPlaceLookupProvider,
+  createUnavailablePlaceLookupProvider,
+  type PlaceLookupProvider,
+  type PlaceLookupProviderErrorCode,
+} from './placeLookupProvider'
 
 type ProviderProxyHandlerEnv = {
   GOOGLE_ROUTES_API_KEY?: string
@@ -77,6 +87,8 @@ type ProviderProxyHandlerEnv = {
   TRIPMAP_AI_PROVIDER_KEY?: string
   TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
+  TRIPMAP_GOOGLE_PLACES_API_KEY?: string
+  TRIPMAP_PLACE_PROVIDER?: string
   TRIPMAP_SEARCH_API_KEY?: string
   TRIPMAP_SEARCH_PROVIDER?: string
 }
@@ -165,6 +177,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
     return handleTravelSearchRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+  }
+
+  if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
+    return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
@@ -602,6 +618,96 @@ function selectTravelSearchProvider(env: ProviderProxyHandlerEnv, fetcher: typeo
 function mapTravelSearchErrorCodeToStatus(code: TravelSearchProviderErrorCode): number {
   switch (code) {
     case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handlePlaceLookupRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaLimits,
+  quotaStore,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStore?: ProviderProxyQuotaStore
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyPlaceLookupRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const lookupRequest = validation.request
+  const quota = checkAndConsumeProviderProxyQuota({
+    coordinateCount: 0,
+    identity: getQuotaIdentity(request, lookupRequest.quotaSessionId),
+    limits: quotaLimits,
+    operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+    store: quotaStore,
+  })
+  if (!quota.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
+        operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+        requestId: lookupRequest.requestId,
+      }),
+      quota.reason === 'rate_limit' ? 429 : 400,
+      corsHeaders,
+      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
+    )
+  }
+
+  try {
+    const provider = selectPlaceLookupProvider(env, fetcher)
+    const result = await provider.lookup(lookupRequest)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapPlaceLookupErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse(result.response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_PLACE_LOOKUP_OPERATION, lookupRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectPlaceLookupProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): PlaceLookupProvider {
+  if (isMockMode(env)) {
+    return createMockPlaceLookupProvider()
+  }
+  const provider = env.TRIPMAP_PLACE_PROVIDER?.trim().toLowerCase()
+  if (provider === 'mock') {
+    return createMockPlaceLookupProvider()
+  }
+  if (provider === 'disabled') {
+    return createDisabledPlaceLookupProvider()
+  }
+  if (provider === 'google_places') {
+    if (!env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim()) {
+      return createUnavailablePlaceLookupProvider()
+    }
+    return createGooglePlacesLookupProvider(env, fetcher)
+  }
+  if (provider) {
+    return createDisabledPlaceLookupProvider()
+  }
+  return createUnavailablePlaceLookupProvider()
+}
+
+function mapPlaceLookupErrorCodeToStatus(code: PlaceLookupProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
     case 'unsupported': return 501
     case 'network_error': return 502
     case 'provider_error': return 502

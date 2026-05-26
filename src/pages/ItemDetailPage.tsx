@@ -11,7 +11,9 @@ import {
   FileText,
   Link2,
   MapPin,
+  MapPinned,
   Navigation,
+  Search,
   Ticket,
   Trash2,
 } from 'lucide-react'
@@ -22,6 +24,7 @@ import {
   getTrip,
   listItemsByDay,
   listTicketsByItem,
+  updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
 import {
@@ -47,12 +50,22 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { getRouteParams } from '../lib/routes'
+import {
+  ProviderProxyClientError,
+  fetchProviderProxyPlaceLookup,
+  getProviderProxyConfig,
+} from '../lib/providerProxyClient'
+import {
+  PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+  type ProviderProxyPlaceLookupResult,
+} from '../lib/providerProxyContract'
 
 type ItemDetailContentProps = {
   trip: Trip
   day: Day
   item: ItineraryItem
   onItemDeleted: () => void
+  onItemUpdated: (item: ItineraryItem) => void
   sourceView: 'schedule' | 'map'
 }
 
@@ -185,7 +198,9 @@ export function ItemDetailPage() {
           <ItemDetailContent
             day={day}
             item={item}
+            key={item.id}
             onItemDeleted={goBackToDay}
+            onItemUpdated={setItem}
             sourceView={sourceView}
             trip={trip}
           />
@@ -195,7 +210,7 @@ export function ItemDetailPage() {
   )
 }
 
-export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }: ItemDetailContentProps) {
+export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdated, sourceView }: ItemDetailContentProps) {
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
@@ -203,6 +218,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isPlaceLookupOpen, setIsPlaceLookupOpen] = useState(false)
+  const [placeLookupQuery, setPlaceLookupQuery] = useState(() => buildPlaceLookupQuery(item))
+  const [placeLookupResults, setPlaceLookupResults] = useState<ProviderProxyPlaceLookupResult[]>([])
+  const [placeLookupError, setPlaceLookupError] = useState<string | null>(null)
+  const [isPlaceLookupLoading, setIsPlaceLookupLoading] = useState(false)
+  const [pendingPlaceCandidate, setPendingPlaceCandidate] = useState<ProviderProxyPlaceLookupResult | null>(null)
+  const [isApplyingPlaceLookup, setIsApplyingPlaceLookup] = useState(false)
 
   const loadRelations = useCallback(async () => {
     setIsLoadingRelations(true)
@@ -249,6 +271,74 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
     }
   }
 
+  async function searchPlaceCandidates() {
+    const query = placeLookupQuery.trim()
+    if (!query) {
+      setPlaceLookupError('请输入地点名称或地址。')
+      setPlaceLookupResults([])
+      return
+    }
+
+    const config = getProviderProxyConfig()
+    if (!config.proxyUrl) {
+      setPlaceLookupError('当前未配置地点查询服务。')
+      setPlaceLookupResults([])
+      return
+    }
+
+    setIsPlaceLookupLoading(true)
+    setPlaceLookupError(null)
+    try {
+      const response = await fetchProviderProxyPlaceLookup({
+        locale: 'zh-CN',
+        maxResults: 5,
+        operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+        query,
+      }, config.proxyUrl)
+      setPlaceLookupResults(response.results)
+      if (response.results.length === 0) {
+        setPlaceLookupError('没有找到可用候选地点。')
+      }
+    } catch (caught) {
+      setPlaceLookupResults([])
+      setPlaceLookupError(caught instanceof ProviderProxyClientError ? caught.message : '地点查询失败，请稍后再试。')
+    } finally {
+      setIsPlaceLookupLoading(false)
+    }
+  }
+
+  async function confirmApplyPlaceLookup() {
+    if (!pendingPlaceCandidate) {
+      return
+    }
+
+    setIsApplyingPlaceLookup(true)
+    setActionError(null)
+    try {
+      const patch: Partial<ItineraryItem> = {
+        address: pendingPlaceCandidate.formattedAddress,
+        locationName: pendingPlaceCandidate.displayName,
+      }
+      if (isValidPlaceLocation(pendingPlaceCandidate.location)) {
+        patch.lat = pendingPlaceCandidate.location.lat
+        patch.lng = pendingPlaceCandidate.location.lng
+      }
+      const updated = await updateItineraryItem(item.id, patch)
+      if (!updated) {
+        throw new Error('未找到该行程点。')
+      }
+      onItemUpdated(updated)
+      setPendingPlaceCandidate(null)
+      setPlaceLookupResults([])
+      setPlaceLookupError(null)
+      setIsPlaceLookupOpen(false)
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '更新地点信息失败')
+    } finally {
+      setIsApplyingPlaceLookup(false)
+    }
+  }
+
   return (
     <div className="space-y-5 pb-2">
       <Card variant="grouped" className="space-y-4" data-testid="item-detail-core">
@@ -287,6 +377,110 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
               label="从上一站到此处"
               value={transportDescription}
             />
+          ) : null}
+        </div>
+
+        <div className="space-y-3">
+          <Button
+            className="min-h-10 px-3"
+            data-testid="item-place-lookup-toggle"
+            icon={<Search className="size-4" />}
+            onClick={() => {
+              setIsPlaceLookupOpen((open) => {
+                const next = !open
+                if (next && !placeLookupQuery.trim()) {
+                  setPlaceLookupQuery(buildPlaceLookupQuery(item))
+                }
+                return next
+              })
+            }}
+            variant="secondary"
+          >
+            查找地点信息
+          </Button>
+
+          {isPlaceLookupOpen ? (
+            <section
+              className="space-y-3 rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70"
+              data-testid="item-place-lookup-panel"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">地点查询关键词</span>
+                  <input
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-sky-700 dark:focus:ring-sky-900/40"
+                    data-testid="item-place-lookup-query"
+                    maxLength={200}
+                    onChange={(event) => setPlaceLookupQuery(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void searchPlaceCandidates()
+                      }
+                    }}
+                    placeholder="地点名称或地址"
+                    value={placeLookupQuery}
+                  />
+                </label>
+                <Button
+                  className="shrink-0 px-3"
+                  data-testid="item-place-lookup-search"
+                  disabled={!placeLookupQuery.trim()}
+                  icon={<Search className="size-4" />}
+                  loading={isPlaceLookupLoading}
+                  onClick={() => void searchPlaceCandidates()}
+                  variant="primary"
+                >
+                  搜索
+                </Button>
+              </div>
+
+              {placeLookupError ? (
+                <div
+                  className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm font-medium leading-5 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                  data-testid="item-place-lookup-error"
+                >
+                  {placeLookupError}
+                </div>
+              ) : null}
+
+              {placeLookupResults.length > 0 ? (
+                <div className="space-y-2" data-testid="item-place-lookup-results">
+                  {placeLookupResults.map((candidate) => (
+                    <button
+                      className="flex w-full min-w-0 items-start gap-3 rounded-xl bg-white px-3 py-3 text-left ring-1 ring-slate-200/80 transition hover:ring-sky-200 active:scale-[0.99] tm-focus dark:bg-slate-950/70 dark:ring-slate-700/80 dark:hover:ring-sky-800"
+                      data-testid="item-place-lookup-result"
+                      key={candidate.placeId}
+                      onClick={() => setPendingPlaceCandidate(candidate)}
+                      type="button"
+                    >
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+                        <MapPinned className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
+                          {candidate.displayName}
+                        </span>
+                        <span className="mt-1 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+                          {candidate.formattedAddress}
+                        </span>
+                        {isValidPlaceLocation(candidate.location) ? (
+                          <span className="mt-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            {candidate.location.lat.toFixed(5)}, {candidate.location.lng.toFixed(5)}
+                          </span>
+                        ) : null}
+                        {candidate.googleMapsUri ? (
+                          <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-sky-600 dark:text-sky-300">
+                            <ExternalLink className="size-3" />
+                            Google Maps
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           ) : null}
         </div>
 
@@ -425,6 +619,24 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, sourceView }
         onConfirm={() => void confirmDeleteItem()}
         open={isDeleteConfirmOpen}
         title={`确认删除「${item.title}」吗？`}
+      />
+
+      <ConfirmDialog
+        body={pendingPlaceCandidate
+          ? `将当前行程点更新为：\n${pendingPlaceCandidate.displayName}\n${pendingPlaceCandidate.formattedAddress}${isValidPlaceLocation(pendingPlaceCandidate.location) ? `\n坐标：${pendingPlaceCandidate.location.lat.toFixed(5)}, ${pendingPlaceCandidate.location.lng.toFixed(5)}` : ''}`
+          : ''}
+        confirmLabel="更新地点"
+        icon={<MapPinned className="size-5" />}
+        loading={isApplyingPlaceLookup}
+        onCancel={() => {
+          if (!isApplyingPlaceLookup) {
+            setPendingPlaceCandidate(null)
+          }
+        }}
+        onConfirm={() => void confirmApplyPlaceLookup()}
+        open={Boolean(pendingPlaceCandidate)}
+        testId="item-place-lookup-confirm-dialog"
+        title="确认使用这个地点吗？"
       />
     </div>
   )
@@ -572,6 +784,25 @@ function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
   if (iconKind === 'image') return <FileImage className="size-4" />
   if (iconKind === 'pdf') return <FileText className="size-4" />
   return <FileArchive className="size-4" />
+}
+
+function buildPlaceLookupQuery(item: ItineraryItem) {
+  const parts = [item.locationName, item.address, item.title]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+  return Array.from(new Set(parts)).join(' ')
+}
+
+function isValidPlaceLocation(location: ProviderProxyPlaceLookupResult['location'] | undefined): location is { lat: number; lng: number } {
+  return Boolean(
+    location
+    && Number.isFinite(location.lat)
+    && Number.isFinite(location.lng)
+    && location.lat >= -90
+    && location.lat <= 90
+    && location.lng >= -180
+    && location.lng <= 180,
+  )
 }
 
 function normalizeSourceView(value: string | null): 'schedule' | 'map' {

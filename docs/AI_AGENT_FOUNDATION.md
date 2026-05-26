@@ -18,6 +18,7 @@
 - AI repair：质量检查出现 warnings / criticals 时，用户确认后可通过 provider proxy 请求 AI 修复当前草稿。DeepSeek `deepseek-v4-flash` repair smoke 已验证成功。
 - AI trip edit patch plan：Trip Home 提供轻量 “AI 修改建议” card；用户输入一次性修改指令后，确认发送脱敏上下文，provider proxy 返回 patch plan，本地校验后显示中文 diff preview，最终确认才应用到本地旅行。
 - AI trip edit search tool：当用户明确要求查询实时 / 网页信息时，Trip Home 可在发送确认后先调用一次 `travel_search`，再把最多 3 条来源摘要附加到 patch plan 请求；无来源时不得声称已搜索或知道实时事实。
+- Item Detail place lookup：这是非 AI、手动触发的 `place_lookup` provider proxy 流程；AI 不会自动调用它，也不会把地点候选写入已保存旅行。
 - Privacy Guard：repair 请求发送前会按 AI 隐私设置移除或截断 item notes；默认关闭时备注不会发送。
 - ConfirmDialog write boundary：AI 生成和修复只更新草稿 preview 和 JSON textarea；只有用户点击最终“确认导入”后才写入 IndexedDB。
 - Patch apply boundary：AI 修改建议不会自动写库；白名单 patch plan 只在最终确认后通过本地事务应用，且不触发路线、票据或云端操作。
@@ -29,6 +30,7 @@
 - 不做多轮聊天助手、不保留自然语言记忆、不自动应用修改。
 - 不读取票据图片、PDF、OCR、Blob、完整本地数据库、云端 token、route cache 或 provider key。
 - 不自动生成路线、不优化行程顺序、不创建票据、不上传云端。
+- 不自动查找或 enrich Google Places；Item Detail 的地点查询必须由用户打开、搜索、选择并确认后才写入当前行程点。
 
 ## Travel Profile
 

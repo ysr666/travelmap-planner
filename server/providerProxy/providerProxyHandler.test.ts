@@ -394,6 +394,231 @@ function validSearchRequest() {
   }
 }
 
+describe('provider proxy handler place_lookup', () => {
+  it('returns deterministic mock place_lookup results without provider calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: {
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'test-place-key',
+        TRIPMAP_PLACE_PROVIDER: 'google_places',
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+      },
+      fetcher,
+    }
+
+    const first = await handleProviderProxyRequest({ ...input, request: jsonRequest(validPlaceLookupRequest()) })
+    const second = await handleProviderProxyRequest({ ...input, request: jsonRequest(validPlaceLookupRequest()) })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstBody = await first.json()
+    const secondBody = await second.json()
+    expect(firstBody).toEqual(secondBody)
+    expect(firstBody).toMatchObject({
+      ok: true,
+      operation: 'place_lookup',
+      source: 'mock',
+    })
+    expect(firstBody.warnings).toContain('当前为模拟地点结果，不代表真实 Google Places 数据。')
+    expect(firstBody.retrievedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(firstBody.results[0]).toMatchObject({
+      provider: 'google_places',
+      retrievedAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable when place_lookup provider is missing', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'place_lookup',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns unsupported when place_lookup is explicitly disabled', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PLACE_PROVIDER: 'disabled' },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(501)
+    expect(await response.json()).toMatchObject({
+      code: 'unsupported',
+      ok: false,
+      operation: 'place_lookup',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('returns provider_unavailable when Google Places is selected without a key', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PLACE_PROVIDER: 'google_places' },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'place_lookup',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('uses configured Google Places provider through injected fetch and normalizes response', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      places: [
+        {
+          displayName: { text: '杭州博物馆' },
+          formattedAddress: '浙江省杭州市上城区粮道山18号',
+          googleMapsUri: 'https://maps.google.com/?cid=123',
+          id: 'places/mock-google-1',
+          location: { latitude: 30.245, longitude: 120.17 },
+        },
+      ],
+    }), { headers: { 'Content-Type': 'application/json' }, status: 200 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'test-place-key',
+        TRIPMAP_PLACE_PROVIDER: 'google_places',
+      },
+      fetcher,
+      request: jsonRequest({ ...validPlaceLookupRequest(), maxResults: 9 }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'place_lookup',
+      source: 'google_places',
+    })
+    expect(body.results).toHaveLength(1)
+    expect(body.results[0]).toMatchObject({
+      displayName: '杭州博物馆',
+      formattedAddress: '浙江省杭州市上城区粮道山18号',
+      googleMapsUri: 'https://maps.google.com/?cid=123',
+      location: { lat: 30.245, lng: 120.17 },
+      placeId: 'places/mock-google-1',
+      provider: 'google_places',
+    })
+    const [, init] = vi.mocked(fetcher).mock.calls[0]
+    expect(JSON.parse(String(init?.body)).pageSize).toBe(5)
+    expect((init?.headers as Record<string, string>)['X-Goog-FieldMask']).toBe('places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri')
+    expect((init?.headers as Record<string, string>)['X-Goog-FieldMask']).not.toContain('*')
+  })
+
+  it('does not leak Google provider body, headers, stack traces, or secrets', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      error: 'raw-google-provider-body',
+      message: 'Authorization Bearer test-place-key stack trace',
+    }), { headers: { 'Content-Type': 'application/json' }, status: 500 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'test-place-key',
+        TRIPMAP_PLACE_PROVIDER: 'google_places',
+      },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(502)
+    const text = await response.text()
+    expect(text).not.toContain('raw-google-provider-body')
+    expect(text).not.toContain('test-place-key')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    expect(text).not.toContain('stack trace')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'provider_error',
+      ok: false,
+      operation: 'place_lookup',
+    })
+  })
+
+  it('rejects invalid and forbidden place_lookup requests', async () => {
+    const invalid = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({ ...validPlaceLookupRequest(), query: '' }),
+    })
+    const forbidden = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({ ...validPlaceLookupRequest(), notes: 'private note' }),
+    })
+
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ code: 'invalid_request', ok: false })
+    expect(forbidden.status).toBe(400)
+    expect(await forbidden.json()).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+
+  it('checks isolated place_lookup quota before mock lookup', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      quotaLimits: { maxPlaceLookupRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validPlaceLookupRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({
+      ...input,
+      request: jsonRequest({ ...validPlaceLookupRequest(), requestId: 'place-2' }),
+    })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'place_lookup' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('checks isolated place_lookup quota before Google Places fetch', async () => {
+    const store = createProviderProxyMemoryQuotaStore()
+    store.set('place|session-place-1|no-ip', { count: 1, windowStartedAt: Date.now() })
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'test-place-key',
+        TRIPMAP_PLACE_PROVIDER: 'google_places',
+      },
+      fetcher,
+      quotaLimits: { maxPlaceLookupRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStore: store,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(429)
+    expect(await response.json()).toMatchObject({ code: 'quota_exceeded', ok: false, operation: 'place_lookup' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
+function validPlaceLookupRequest() {
+  return {
+    locale: 'zh-CN',
+    maxResults: 2,
+    operation: 'place_lookup',
+    query: '杭州博物馆',
+    quotaSessionId: 'session-place-1',
+    region: 'CN',
+    requestId: 'place-1',
+  }
+}
+
 describe('provider proxy handler ai_trip_draft', () => {
   it('returns mock draft in mock mode without calling fetcher', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch

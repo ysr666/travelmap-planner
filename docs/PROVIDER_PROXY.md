@@ -106,17 +106,43 @@ Production should define an explicit origin allowlist. Same-origin deployment us
 
 ## Quota Guard
 
-The current quota guard is intentionally small:
+The provider proxy uses an internal async quota layer before any provider call. Cloudflare D1 is used only when an explicit `TRIPMAP_PROVIDER_QUOTA_D1` binding exists; otherwise local/dev runs use a deterministic in-memory fallback.
 
-- In-memory/dev-only request windows.
-- Per-browser `quotaSessionId` plus server-observed IP placeholder.
-- Max route requests per window default: 60 requests per 60 seconds.
-- Max ai_trip_edit_plan requests per window default: 10 requests per 60 seconds.
-- Max travel_search requests per window default: 20 requests per 60 seconds.
-- Max place_lookup requests per window default: 30 requests per 60 seconds.
-- `ai_trip_edit|`, `search|`, and `place|` quota buckets are isolated from `route|`, `ai_draft|`, and `ai_draft_repair|`.
+Current bucket limits:
 
-This is not real abuse protection. The browser session id is spoofable. Before public launch, replace the in-memory store with durable KV, Supabase, Redis, or equivalent, and combine account/session/IP/fingerprint-like server signals where legally and technically appropriate.
+- `route|`: 60 requests per 60 seconds.
+- `search|`: 20 requests per 60 seconds.
+- `place|`: 30 requests per 60 seconds.
+- `ai_draft|`: 10 requests per 60 seconds.
+- `ai_draft_repair|`: 5 requests per 60 seconds.
+- `ai_trip_edit|`: 10 requests per 60 seconds.
+
+Quota identity combines available server-side signals before hashing:
+
+- `quotaSessionId` from the client request when present.
+- `CF-Connecting-IP`, or the first `X-Forwarded-For` value when present.
+- Reserved `account:*` slot for a future authenticated user/account id.
+- Stable anonymous fallback only when both session and IP are missing.
+
+Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request headers, provider keys, SQL errors, stack traces, and internal row ids are never returned to the frontend. Production deployments should provide reliable IP/session signals. The anonymous fallback is only a last-resort local/dev path and is not sufficient abuse protection for public traffic.
+
+When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Deployment setup must run this SQL explicitly:
+
+```sql
+CREATE TABLE IF NOT EXISTS provider_quota (
+  id TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  window_started_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS provider_quota_expires_at_idx
+ON provider_quota (expires_at);
+```
+
+If the binding is absent, the proxy falls back to in-memory storage for local/dev. If the binding exists but prepare/query fails or the table is missing, the proxy fails closed with HTTP 429 and normalized `quota_exceeded`; the provider is not called. `Retry-After` may be returned only when a reset time is safely known.
+
+Expired-row cleanup is deferred. The schema includes `expires_at` and an index so a future scheduled cleanup job can delete old rows without changing provider contracts.
 
 ## Frontend Behavior
 
@@ -163,7 +189,7 @@ Current runtime behavior:
 - Missing search provider env returns `provider_unavailable`.
 - `TRIPMAP_SEARCH_PROVIDER=tavily` with `TRIPMAP_SEARCH_API_KEY` calls Tavily from the server proxy only and returns normalized `source: "future_search"` results.
 - Tavily keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
-- Tavily free/dev usage is credit and rate-limit constrained; real search still passes through the local `search|` quota bucket before any provider fetch.
+- Tavily free/dev usage is credit and rate-limit constrained; real search still passes through the proxy `search|` quota bucket before any provider fetch.
 
 Request contract:
 
@@ -234,7 +260,7 @@ Runtime behavior:
 - Missing place provider env returns `provider_unavailable`.
 - `TRIPMAP_PLACE_PROVIDER=google_places` with `TRIPMAP_GOOGLE_PLACES_API_KEY` calls Google Places API New from the server proxy only.
 - Google Places keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
-- Real lookup remains local-quota-gated under `place|` before any provider fetch.
+- Real lookup remains proxy-quota-gated under `place|` before any provider fetch.
 
 Request contract:
 
@@ -529,7 +555,7 @@ Current phase includes server-side infrastructure for real AI provider integrati
 
 **Production requirements:**
 
-- Durable quota store (KV / Supabase / Redis) to replace in-memory Map.
+- Configure and migrate the `TRIPMAP_PROVIDER_QUOTA_D1` binding for durable provider quota.
 - Origin allowlist and account/session/IP controls.
 - Billing and abuse protection.
 
@@ -597,7 +623,7 @@ Search readiness is explicit-tool only for AI Trip Edit in this release. The UI 
 - No AI prompt should claim web search happened unless source-bearing `searchResults` are present.
 - `travel_search` mock succeeds in mock mode, default runtime returns `provider_unavailable`, disabled mode returns `unsupported`, and Tavily mode returns normalized `future_search` results when the server key is present.
 - Sourced search results include title, URL, display URL, domain, snippet, `retrievedAt`, source type, and confidence when derivable.
-- Real search remains local-quota-gated under `search|`; provider free/dev quotas and rate limits are separate operational constraints.
+- Real search remains proxy-quota-gated under `search|`; provider free/dev quotas and rate limits are separate operational constraints.
 
 ### Real Provider Smoke QA
 

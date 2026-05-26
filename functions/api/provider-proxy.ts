@@ -1,7 +1,8 @@
 import { handleProviderProxyRequest } from '../../server/providerProxy/providerProxyHandler'
+import type { ProviderProxyHandlerEnv } from '../../server/providerProxy/providerProxyHandler'
 
 type ProviderProxyPagesContext = {
-  env: Record<string, string | undefined>
+  env: ProviderProxyHandlerEnv
   request: Request
 }
 

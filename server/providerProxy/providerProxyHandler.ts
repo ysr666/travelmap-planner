@@ -29,9 +29,11 @@ import type { LngLat } from '../../src/lib/routing'
 import type { AiTripDraft } from '../../src/lib/aiTripDraft'
 import { listPlainDateRangeInclusive } from '../../src/lib/plainDate'
 import {
-  checkAndConsumeProviderProxyQuota,
+  consumeProviderProxyQuota,
+  selectProviderProxyQuotaStorage,
+  type ProviderProxyQuotaHasher,
   type ProviderProxyQuotaLimits,
-  type ProviderProxyQuotaStore,
+  type ProviderProxyQuotaStorage,
 } from './quotaGuard'
 import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
 import { buildAiTripDraftRepairProviderInput } from './aiDraftRepairPrompt'
@@ -77,7 +79,8 @@ import {
   type PlaceLookupProviderErrorCode,
 } from './placeLookupProvider'
 
-type ProviderProxyHandlerEnv = {
+export type ProviderProxyHandlerEnv = {
+  [key: string]: unknown
   GOOGLE_ROUTES_API_KEY?: string
   OPENROUTESERVICE_API_KEY?: string
   TRIPMAP_AI_PROVIDER?: string
@@ -89,6 +92,7 @@ type ProviderProxyHandlerEnv = {
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
   TRIPMAP_GOOGLE_PLACES_API_KEY?: string
   TRIPMAP_PLACE_PROVIDER?: string
+  TRIPMAP_PROVIDER_QUOTA_D1?: unknown
   TRIPMAP_SEARCH_API_KEY?: string
   TRIPMAP_SEARCH_PROVIDER?: string
 }
@@ -96,8 +100,9 @@ type ProviderProxyHandlerEnv = {
 export type ProviderProxyHandlerInput = {
   env?: ProviderProxyHandlerEnv
   fetcher?: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage?: ProviderProxyQuotaStorage
   request: Request
 }
 
@@ -107,11 +112,13 @@ const GOOGLE_ROUTES_ENDPOINT = 'https://routes.googleapis.com/directions/v2:comp
 export async function handleProviderProxyRequest({
   env = {},
   fetcher = fetch,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: ProviderProxyHandlerInput): Promise<Response> {
   const corsHeaders = getCorsHeaders(request, env)
+  const selectedQuotaStorage = quotaStorage ?? selectProviderProxyQuotaStorage(env)
 
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -164,26 +171,26 @@ export async function handleProviderProxyRequest({
   const operation = bodyRecord.operation
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
-    return handleAiTripDraftRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+    return handleAiTripDraftRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
-    return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+    return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
-    return handleAiTripEditPlanRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+    return handleAiTripEditPlanRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
-    return handleTravelSearchRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+    return handleTravelSearchRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
-    return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+    return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
-  return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaLimits, quotaStore, request })
+  return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
 }
 
 async function handleAiTripDraftRequest({
@@ -191,16 +198,18 @@ async function handleAiTripDraftRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyAiTripDraftRequest(body)
@@ -209,24 +218,19 @@ async function handleAiTripDraftRequest({
   }
 
   const draftRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: 0,
-    identity: getQuotaIdentity(request, draftRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: draftRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: draftRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
-        requestId: draftRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -305,16 +309,18 @@ async function handleAiTripDraftRepairRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyAiTripDraftRepairRequest(body)
@@ -323,24 +329,19 @@ async function handleAiTripDraftRepairRequest({
   }
 
   const repairRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: 0,
-    identity: getQuotaIdentity(request, repairRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: repairRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: repairRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
-        requestId: repairRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -419,16 +420,18 @@ async function handleAiTripEditPlanRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyAiTripEditPlanRequest(body)
@@ -437,24 +440,19 @@ async function handleAiTripEditPlanRequest({
   }
 
   const editRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: 0,
-    identity: getQuotaIdentity(request, editRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: editRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: editRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
-        requestId: editRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -541,16 +539,18 @@ async function handleTravelSearchRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyTravelSearchRequest(body)
@@ -559,24 +559,19 @@ async function handleTravelSearchRequest({
   }
 
   const searchRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: 0,
-    identity: getQuotaIdentity(request, searchRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: searchRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: searchRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
-        requestId: searchRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -630,16 +625,18 @@ async function handlePlaceLookupRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyPlaceLookupRequest(body)
@@ -648,24 +645,19 @@ async function handlePlaceLookupRequest({
   }
 
   const lookupRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: 0,
-    identity: getQuotaIdentity(request, lookupRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: lookupRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: lookupRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
-        requestId: lookupRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -720,16 +712,18 @@ async function handleRoutePreviewRequest({
   corsHeaders,
   env,
   fetcher,
+  quotaHasher,
   quotaLimits,
-  quotaStore,
+  quotaStorage,
   request,
 }: {
   body: unknown
   corsHeaders: Record<string, string>
   env: ProviderProxyHandlerEnv
   fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
-  quotaStore?: ProviderProxyQuotaStore
+  quotaStorage: ProviderProxyQuotaStorage
   request: Request
 }): Promise<Response> {
   const validation = validateProviderProxyRoutePreviewRequest(body)
@@ -738,24 +732,19 @@ async function handleRoutePreviewRequest({
   }
 
   const routeRequest = validation.request
-  const quota = checkAndConsumeProviderProxyQuota({
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
     coordinateCount: routeRequest.coordinates.length,
-    identity: getQuotaIdentity(request, routeRequest.quotaSessionId),
-    limits: quotaLimits,
+    corsHeaders,
     operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
-    store: quotaStore,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: routeRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: routeRequest.requestId,
   })
-  if (!quota.allowed) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: quota.reason === 'rate_limit' ? 'quota_exceeded' : 'invalid_request',
-        operation: PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
-        requestId: routeRequest.requestId,
-      }),
-      quota.reason === 'rate_limit' ? 429 : 400,
-      corsHeaders,
-      quota.resetAt ? { 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) } : undefined,
-    )
+  if (quotaResponse) {
+    return quotaResponse
   }
 
   try {
@@ -1107,12 +1096,74 @@ function mapGoogleTravelMode(mode: string) {
   return 'DRIVE'
 }
 
+async function consumeQuotaOrBuildErrorResponse({
+  coordinateCount,
+  corsHeaders,
+  dayCount,
+  operation,
+  quotaHasher,
+  quotaLimits,
+  quotaSessionId,
+  quotaStorage,
+  request,
+  requestId,
+}: {
+  coordinateCount: number
+  corsHeaders: Record<string, string>
+  dayCount?: number
+  operation: ProviderProxyOperation
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaSessionId?: string
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+  requestId?: string
+}): Promise<Response | null> {
+  const quota = await consumeProviderProxyQuota({
+    coordinateCount,
+    dayCount,
+    hasher: quotaHasher,
+    identity: getQuotaIdentity(request, quotaSessionId),
+    limits: quotaLimits,
+    operation,
+    storage: quotaStorage,
+  })
+
+  if (quota.allowed) {
+    return null
+  }
+
+  const quotaFailure = quota.reason === 'rate_limit' || quota.reason === 'storage_error'
+  const code: ProviderProxyErrorCode = quotaFailure ? 'quota_exceeded' : 'invalid_request'
+  return jsonResponse(
+    buildProviderProxyErrorResponse({
+      code,
+      operation,
+      requestId,
+    }),
+    quotaFailure ? 429 : 400,
+    corsHeaders,
+    quotaFailure && quota.resetAt ? { 'Retry-After': String(getRetryAfterSeconds(quota.resetAt)) } : {},
+  )
+}
+
 function getQuotaIdentity(request: Request, quotaSessionId?: string) {
-  const ip = request.headers.get('CF-Connecting-IP') ?? request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
-  return [
-    quotaSessionId ?? 'no-session',
-    ip ?? 'no-ip',
-  ].join('|')
+  return {
+    ip: getQuotaRequestIp(request),
+    quotaSessionId,
+  }
+}
+
+function getQuotaRequestIp(request: Request) {
+  const cfIp = request.headers.get('CF-Connecting-IP')?.trim()
+  if (cfIp) {
+    return cfIp
+  }
+  return request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
+}
+
+function getRetryAfterSeconds(resetAt: number) {
+  return Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
 }
 
 function getCorsHeaders(request: Request, env: ProviderProxyHandlerEnv): Record<string, string> {

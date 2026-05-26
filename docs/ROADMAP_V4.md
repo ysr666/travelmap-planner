@@ -123,10 +123,10 @@
 
 #### Durable Quota And Abuse Controls
 
-- 用 KV / Supabase / Redis 等 durable store 替代当前内存 quota。
-- 结合 account、session、IP 和 server-observed signals。
-- 保持 route、AI generation、AI repair、AI trip edit 和 future search 的 quota namespace 隔离。
-- Public beta 前需要 origin allowlist、billing / abuse protection 和近生产 Cloudflare smoke。
+- D1-backed provider quota foundation 已实现：生产绑定 `TRIPMAP_PROVIDER_QUOTA_D1` 后使用 durable quota，本地/dev 无 binding 时使用内存 fallback。
+- 结合 session、IP 和 server-observed signals；account slot 保留给后续登录态配额。
+- 保持 route、travel search、place lookup、AI generation、AI repair 和 AI trip edit 的 quota namespace 隔离。
+- Public beta 前仍需要 D1 migration/binding smoke、origin allowlist、billing / abuse protection、expired-row cleanup job 和近生产 Cloudflare smoke。
 
 ## 长期边界
 

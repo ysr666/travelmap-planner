@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
 更新时间：2026-05-24
-基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、cloud save wording 和 E2E locator hardening 均已完成。
+基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、Google Places item lookup foundation、durable provider quota foundation、cloud save wording 和 E2E locator hardening 均已完成。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 
@@ -51,6 +51,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - Trip Home AI 修改建议：一次性用户指令 → 脱敏 saved-trip context → provider proxy patch plan → 本地校验 → diff preview → 二次确认后本地事务 apply。
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
+- Provider proxy quota foundation：生产可绑定 Cloudflare D1 `TRIPMAP_PROVIDER_QUOTA_D1`，本地/dev 无 binding 时使用内存 fallback；route/search/place/AI buckets 保持隔离。
 - Supabase 手动云端保存 / 原地恢复。
 - 自动云端保存基础。
 - PWA 启动云端保存检查。
@@ -104,6 +105,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
 - Server-only OpenRouteService / Google Routes / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
+- Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。D1 binding 缺失时仅本地/dev 内存 fallback；binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
 - AI trip edit plan 不直接写库；只允许 granular 白名单 operations（item title/time/location/note/transport、add/remove/move/reorder、day title），预览后必须二次确认才写入 IndexedDB。应用前会重新读取本地状态并拒绝 stale preview；删除 ticket-bound item 会被拒绝，不删除或解绑票据。
@@ -136,6 +138,6 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 1. 时区与日期语义审计（Phase 12F）。
 2. Trip Home 地图概览与入口优化（Phase 13A）。
 3. Day View marker-card interaction（Phase 13B）。
-4. AI durable quota、backend reasoning policy evolution、search provider proxy 和 AI trip edit agent。
+4. Provider quota 生产 D1 smoke、backend reasoning policy evolution、search provider proxy 和 AI trip edit agent。
 
-在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应先补 durable quota，并继续保持 provider proxy / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。
+在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。

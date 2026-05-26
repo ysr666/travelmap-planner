@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validateAiTripDraft } from '../../src/lib/aiTripDraft'
-import { createProviderProxyMemoryQuotaStore } from './quotaGuard'
+import { createProviderProxyMemoryQuotaStorage, type ProviderProxyQuotaMemoryEntry } from './quotaGuard'
 import { handleProviderProxyRequest } from './providerProxyHandler'
 
 describe('provider proxy handler HTTP safety', () => {
@@ -104,13 +104,13 @@ describe('provider proxy handler route preview', () => {
   })
 
   it('checks quota before provider calls', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       fetcher,
       quotaLimits: { maxRouteRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validRequest()) })).status).toBe(200)
@@ -118,6 +118,36 @@ describe('provider proxy handler route preview', () => {
 
     expect(blocked.status).toBe(429)
     expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('normalizes durable quota storage failures and does not call providers', async () => {
+    const fetcher = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        OPENROUTESERVICE_API_KEY: 'server-secret-value',
+        TRIPMAP_PROVIDER_QUOTA_D1: {
+          prepare() {
+            throw new Error('D1 raw SQL failure with session and stack')
+          },
+        },
+      },
+      fetcher,
+      request: jsonRequest(validRequest()),
+    })
+
+    expect(response.status).toBe(429)
+    const text = await response.text()
+    expect(text).not.toContain('D1 raw SQL failure')
+    expect(text).not.toContain('server-secret-value')
+    expect(text).not.toContain('session-a')
+    expect(text).not.toContain('stack')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'quota_exceeded',
+      ok: false,
+      operation: 'route_preview',
+      requestId: 'request-1',
+    })
     expect(fetcher).not.toHaveBeenCalled()
   })
 })
@@ -152,6 +182,56 @@ function validRequest() {
     tripId: 'trip',
   }
 }
+
+describe('provider proxy handler quota routing', () => {
+  it('uses the expected isolated quota bucket for every operation', async () => {
+    const cases = [
+      { bucket: 'route|', request: validRequest() },
+      { bucket: 'search|', request: validSearchRequest() },
+      { bucket: 'place|', request: validPlaceLookupRequest() },
+      { bucket: 'ai_draft|', request: validAiDraftRequest() },
+      { bucket: 'ai_draft_repair|', request: validRepairRequest() },
+      { bucket: 'ai_trip_edit|', request: validEditRequest() },
+    ]
+
+    for (const testCase of cases) {
+      const consume = vi.fn(async () => ({ allowed: true as const, remaining: 1, resetAt: Date.now() + 60_000 }))
+      const response = await handleProviderProxyRequest({
+        env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+        quotaHasher: () => 'identity-hash',
+        quotaStorage: { consume },
+        request: jsonRequest(testCase.request),
+      })
+
+      expect(response.status).toBe(200)
+      expect(consume).toHaveBeenCalledWith(expect.objectContaining({
+        key: `${testCase.bucket}identity-hash`,
+      }))
+    }
+  })
+
+  it('returns normalized quota_exceeded before provider fetch on over-limit storage result', async () => {
+    const fetcher = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { OPENROUTESERVICE_API_KEY: 'server-secret-value' },
+      fetcher,
+      quotaStorage: {
+        consume: vi.fn(async () => ({ allowed: false as const, reason: 'rate_limit' as const, resetAt: Date.now() + 60_000 })),
+      },
+      request: jsonRequest(validRequest()),
+    })
+
+    expect(response.status).toBe(429)
+    const text = await response.text()
+    expect(text).not.toContain('server-secret-value')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'quota_exceeded',
+      ok: false,
+      operation: 'route_preview',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
 
 describe('provider proxy handler travel_search', () => {
   it('returns deterministic mock travel_search results without provider calls', async () => {
@@ -342,13 +422,13 @@ describe('provider proxy handler travel_search', () => {
   })
 
   it('checks isolated travel_search quota before mock search', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const fetcher = vi.fn() as unknown as typeof fetch
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       fetcher,
       quotaLimits: { maxTravelSearchRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validSearchRequest()) })).status).toBe(200)
@@ -363,8 +443,13 @@ describe('provider proxy handler travel_search', () => {
   })
 
   it('checks isolated travel_search quota before Tavily fetch', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
-    store.set('search|session-search-1|no-ip', { count: 1, windowStartedAt: Date.now() })
+    const store = new Map<string, ProviderProxyQuotaMemoryEntry>()
+    store.set('search|blocked-search-hash', {
+      count: 1,
+      expiresAt: Date.now() + 60_000,
+      windowStartedAt: Date.now(),
+    })
+    const quotaStorage = createProviderProxyMemoryQuotaStorage(store)
     const fetcher = vi.fn() as unknown as typeof fetch
     const response = await handleProviderProxyRequest({
       env: {
@@ -372,8 +457,9 @@ describe('provider proxy handler travel_search', () => {
         TRIPMAP_SEARCH_PROVIDER: 'tavily',
       },
       fetcher,
+      quotaHasher: () => 'blocked-search-hash',
       quotaLimits: { maxTravelSearchRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
       request: jsonRequest(validSearchRequest()),
     })
 
@@ -566,13 +652,13 @@ describe('provider proxy handler place_lookup', () => {
   })
 
   it('checks isolated place_lookup quota before mock lookup', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const fetcher = vi.fn() as unknown as typeof fetch
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       fetcher,
       quotaLimits: { maxPlaceLookupRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validPlaceLookupRequest()) })).status).toBe(200)
@@ -587,8 +673,13 @@ describe('provider proxy handler place_lookup', () => {
   })
 
   it('checks isolated place_lookup quota before Google Places fetch', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
-    store.set('place|session-place-1|no-ip', { count: 1, windowStartedAt: Date.now() })
+    const store = new Map<string, ProviderProxyQuotaMemoryEntry>()
+    store.set('place|blocked-place-hash', {
+      count: 1,
+      expiresAt: Date.now() + 60_000,
+      windowStartedAt: Date.now(),
+    })
+    const quotaStorage = createProviderProxyMemoryQuotaStorage(store)
     const fetcher = vi.fn() as unknown as typeof fetch
     const response = await handleProviderProxyRequest({
       env: {
@@ -596,8 +687,9 @@ describe('provider proxy handler place_lookup', () => {
         TRIPMAP_PLACE_PROVIDER: 'google_places',
       },
       fetcher,
+      quotaHasher: () => 'blocked-place-hash',
       quotaLimits: { maxPlaceLookupRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
       request: jsonRequest(validPlaceLookupRequest()),
     })
 
@@ -663,11 +755,11 @@ describe('provider proxy handler ai_trip_draft', () => {
   })
 
   it('checks quota for ai_trip_draft requests', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       quotaLimits: { maxAiDraftRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validAiDraftRequest()) })).status).toBe(200)
@@ -848,11 +940,11 @@ describe('provider proxy handler ai_trip_draft_repair', () => {
   })
 
   it('checks quota for repair requests', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       quotaLimits: { maxAiDraftRepairRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validRepairRequest()) })).status).toBe(200)
@@ -1121,11 +1213,11 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
   })
 
   it('checks isolated ai_trip_edit quota before mock provider', async () => {
-    const store = createProviderProxyMemoryQuotaStore()
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const input = {
       env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
       quotaLimits: { maxAiTripEditRequestsPerWindow: 1, windowMs: 60_000 },
-      quotaStore: store,
+      quotaStorage,
     }
 
     expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validEditRequest()) })).status).toBe(200)

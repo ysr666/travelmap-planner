@@ -5,8 +5,8 @@
  * quota controls request count per window; these control per-request
  * prompt size, output size, and embedded user text length.
  *
- * Production deployment needs durable quota (KV / Supabase / Redis)
- * to replace the in-memory Map in quotaGuard.ts.
+ * Production deployment should configure the D1-backed provider quota
+ * binding; local/dev falls back to in-memory quota storage.
  */
 
 export const AI_DRAFT_MAX_PROMPT_CHARS = 4000

@@ -306,8 +306,8 @@ Prompt 边界：
 
 生产部署前：
 
-- 需要 durable quota（KV / Supabase / Redis）替代内存 Map。
-- 需要 origin allowlist 和 account/session/IP 控制。
+- 需要配置 `TRIPMAP_PROVIDER_QUOTA_D1` D1 binding 并运行 provider quota SQL；未配置 binding 的本地/dev 环境仍使用内存 fallback。
+- 需要 origin allowlist、可靠 session/IP 信号和后续 account 级控制。
 - 需要计费和滥用防护。
 
 ### Real AI Provider Adapter
@@ -327,7 +327,7 @@ Prompt 边界：
 - `TRIPMAP_SEARCH_API_KEY` — Tavily server-only 密钥，前端不可见，不得写入 `VITE_*`。
 - `TRIPMAP_PROVIDER_PROXY_MOCK=1` 仍优先返回 mock search，不调用 Tavily。
 - Tavily 请求只发送 compact query 和结果数等搜索控制，不发送 trip DB、notes、coordinates、tickets、cloud、route cache 或 provider key。
-- Tavily 免费 / dev key 有 credits 和 rate limit 限制；TripMap 仍先按 `search|` quota gate 限流。
+- Tavily 免费 / dev key 有 credits 和 rate limit 限制；TripMap 仍先按 `search|` quota gate 限流。生产环境应使用 D1 quota binding，本地/dev 无 binding 时使用内存 fallback。
 
 默认行为：
 

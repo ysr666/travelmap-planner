@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   BUS_APPROXIMATION_WARNING,
+  ROUTING_API_KEY_STORAGE_KEY,
+  ROUTING_PROVIDER_STORAGE_KEY,
   buildFallbackStraightRoute,
   fetchDayRoute,
-  fetchGoogleRouteOptimization,
-  fetchRouteSegment,
+  getRoutingConfig,
+  isRoutingConfigured,
   mapTransportModeToRoutingProfile,
   parseOpenRouteServiceGeoJson,
   type RoutingConfig,
@@ -70,7 +72,7 @@ describe('fallback straight route', () => {
   })
 })
 
-describe('OpenRouteService requests', () => {
+describe('routing provider boundary', () => {
   it('does not call fetch when provider is unconfigured', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch
     const result = await fetchDayRoute([
@@ -82,46 +84,41 @@ describe('OpenRouteService requests', () => {
     expect(result.status).toBe('straight')
   })
 
-  it('posts [lng, lat] coordinates and keeps key out of the URL', async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.15, 35.15], [139.2, 35.2]])), {
-        status: 200,
-      })
-    }) as unknown as typeof fetch
+  it('ignores legacy frontend route keys and keeps Google Maps key for map rendering only', () => {
+    const storage = memoryStorage({
+      [ROUTING_PROVIDER_STORAGE_KEY]: 'openrouteservice',
+      [ROUTING_API_KEY_STORAGE_KEY]: 'legacy-local-ors-secret',
+      'tripmap:google-maps-api-key': 'browser-google-maps-key',
+    })
+    const env = {
+      VITE_GOOGLE_MAPS_API_KEY: 'browser-env-google-maps-key',
+      VITE_OPENROUTESERVICE_API_KEY: 'legacy-env-ors-secret',
+      VITE_ROUTING_PROVIDER: 'openrouteservice',
+    } as Partial<ImportMetaEnv> & Record<string, string>
 
-    const result = await fetchRouteSegment({
-      from: [139.1, 35.1],
-      to: [139.2, 35.2],
-      mode: 'car',
-      profile: 'driving-car',
-      segmentIndex: 0,
-      fromItemId: 'a',
-      toItemId: 'b',
-    }, configured, { fetcher })
+    const config = getRoutingConfig({ env, storage })
 
-    expect(result.coordinates).toHaveLength(3)
-    const [url, init] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
-    expect(url).toBe('https://api.openrouteservice.org/v2/directions/driving-car/geojson')
-    expect(url).not.toContain('test-key')
-    expect((init.headers as Record<string, string>).Authorization).toBe('test-key')
-    expect(JSON.parse(init.body as string).coordinates).toEqual([[139.1, 35.1], [139.2, 35.2]])
+    expect(config).toMatchObject({
+      apiKey: null,
+      configured: false,
+      googleMapsKey: 'browser-google-maps-key',
+      provider: 'none',
+      source: 'none',
+    })
+    expect(isRoutingConfigured(config)).toBe(false)
   })
 
-  it('falls back per segment when a route request fails', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.2, 35.2]])), { status: 200 }))
-      .mockResolvedValueOnce(new Response('{}', { status: 429 })) as unknown as typeof fetch
+  it('does not call direct route providers even when a legacy config carries an API key', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
 
     const result = await fetchDayRoute([
       item('a', 35.1, 139.1, 1),
-      item('b', 35.2, 139.2, 2, 'car'),
-      item('c', 35.3, 139.3, 3, 'car'),
+      item('b', 35.2, 139.2, 2),
     ], configured, { fetcher, forceRefresh: true })
 
-    expect(result.status).toBe('mixed')
-    expect(result.segments.map((segment) => segment.kind)).toEqual(['road', 'straight'])
-    expect(result.warnings.join(' ')).toContain('请求过于频繁')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(result.status).toBe('straight')
+    expect(result.warnings.join(' ')).toContain('路线服务未配置')
   })
 
   it('does not call provider for flight segments', async () => {
@@ -130,29 +127,47 @@ describe('OpenRouteService requests', () => {
       const result = await fetchDayRoute([
         item('a', 35.1, 139.1, 1),
         item('b', 35.2, 139.2, 2, mode),
-      ], configured, { fetcher, forceRefresh: true })
+      ], proxyConfigured, { fetcher, forceRefresh: true })
 
       expect(result.status).toBe('straight')
     }
     expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('uses driving route for bus segments with an approximation warning', async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(JSON.stringify(orsFixture([[139.1, 35.1], [139.2, 35.2]])), {
-        status: 200,
-      })
+  it('uses driving profile for bus segments through the provider proxy', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body.segments[0].profile).toBe('driving-car')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: [[[139.1, 35.1], [139.2, 35.2]]],
+          segments: [
+            {
+              coordinates: [[139.1, 35.1], [139.2, 35.2]],
+              distanceMeters: 1200,
+              durationSeconds: 600,
+              fromItemId: 'a',
+              kind: 'road',
+              segmentIndex: 0,
+              toItemId: 'b',
+            },
+          ],
+          status: 'road',
+          warnings: [],
+        },
+      }), { status: 200 })
     }) as unknown as typeof fetch
 
     const result = await fetchDayRoute([
       item('a', 35.1, 139.1, 1),
       item('b', 35.2, 139.2, 2, 'bus'),
-    ], configured, { fetcher, forceRefresh: true })
+    ], proxyConfigured, { fetcher, forceRefresh: true })
 
     expect(result.status).toBe('road')
     expect(result.warnings).toContain(BUS_APPROXIMATION_WARNING)
-    const [url] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
-    expect(url).toContain('/driving-car/')
   })
 
   it('can generate a day route through the provider proxy without sending secrets', async () => {
@@ -204,70 +219,6 @@ describe('OpenRouteService response parser', () => {
   })
 })
 
-describe('Google route optimization', () => {
-  it('does not request optimization when there is only one intermediate waypoint', async () => {
-    const fetcher = vi.fn() as unknown as typeof fetch
-    await expect(fetchGoogleRouteOptimization([
-      item('a', 35.1, 139.1, 1),
-      item('b', 35.2, 139.2, 2),
-      item('c', 35.3, 139.3, 3),
-    ], 'google-key', { fetcher })).rejects.toThrow('至少需要 4 个带坐标地点')
-    expect(fetcher).not.toHaveBeenCalled()
-  })
-
-  it('returns suggested waypoint order without mutating itinerary items', async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(JSON.stringify({
-        routes: [
-          {
-            distanceMeters: 4200,
-            duration: '900s',
-            optimizedIntermediateWaypointIndex: [1, 0],
-            polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
-          },
-        ],
-      }), { status: 200 })
-    }) as unknown as typeof fetch
-    const items = [
-      item('a', 35.1, 139.1, 1),
-      item('b', 35.2, 139.2, 2),
-      item('c', 35.3, 139.3, 3),
-      item('d', 35.4, 139.4, 4),
-    ]
-
-    const result = await fetchGoogleRouteOptimization(items, 'google-key', { fetcher })
-
-    expect(result.suggestedItems.map((nextItem) => nextItem.id)).toEqual(['a', 'c', 'b', 'd'])
-    expect(items.map((nextItem) => nextItem.id)).toEqual(['a', 'b', 'c', 'd'])
-    expect(result.distanceMeters).toBe(4200)
-    expect(result.durationSeconds).toBe(900)
-    const [, init] = (fetcher as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
-    const body = JSON.parse(init.body as string)
-    expect(body.optimizeWaypointOrder).toBe(true)
-    expect((init.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('google-key')
-  })
-
-  it('accepts the plural optimized waypoint field used by the Maps JavaScript routes library', async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(JSON.stringify({
-        routes: [
-          {
-            optimizedIntermediateWaypointIndices: [1, 0],
-          },
-        ],
-      }), { status: 200 })
-    }) as unknown as typeof fetch
-    const result = await fetchGoogleRouteOptimization([
-      item('a', 35.1, 139.1, 1),
-      item('b', 35.2, 139.2, 2),
-      item('c', 35.3, 139.3, 3),
-      item('d', 35.4, 139.4, 4),
-    ], 'google-key', { fetcher })
-
-    expect(result.suggestedItems.map((nextItem) => nextItem.id)).toEqual(['a', 'c', 'b', 'd'])
-  })
-})
-
 function item(
   id: string,
   lat: number,
@@ -308,5 +259,29 @@ function orsFixture(coordinates: number[][]) {
         },
       },
     ],
+  }
+}
+
+function memoryStorage(initial: Record<string, string> = {}): Storage {
+  const values = new Map(Object.entries(initial))
+  return {
+    get length() {
+      return values.size
+    },
+    clear() {
+      values.clear()
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null
+    },
+    removeItem(key: string) {
+      values.delete(key)
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value)
+    },
   }
 }

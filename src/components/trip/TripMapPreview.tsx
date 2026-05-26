@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles, X } from 'lucide-react'
-import { updateItineraryItem } from '../../db'
+import { Loader2, Map as MapIcon, MapPinned } from 'lucide-react'
 import { EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE, TRIP_PREVIEW_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
 import {
@@ -10,16 +9,11 @@ import {
 } from '../../lib/googleMaps'
 import type { LngLat, MapEngineAdapter, MapInstance, MarkerHandle } from '../../lib/mapEngine'
 import { loadMapLibreAdapter } from '../../lib/maplibreAdapterLoader'
-import {
-  fetchGoogleRouteOptimization,
-  getRoutingConfig,
-  type GoogleRouteOptimizationResult,
-} from '../../lib/routing'
+import { getRoutingConfig } from '../../lib/routing'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../../lib/routeCache'
 import {
   buildTripMapPreviewData,
   fetchTripPreviewRoute,
-  getTripPreviewOptimizationDay,
   selectTripPreviewRoutingConfig,
   type TripMapPreviewData,
   type TripMapPreviewEngine,
@@ -32,19 +26,11 @@ import { Card } from '../ui/Card'
 type TripMapPreviewProps = {
   days: Day[]
   itemsByDay: Record<string, ItineraryItem[]>
-  onItemsReordered?: () => Promise<void> | void
   onOpenMap: (day: Day) => void
   routeDataReady?: boolean
   selectedDay: Day | null
   tripId: string
 }
-
-type OptimizationState =
-  | { status: 'idle' }
-  | { status: 'loading'; day: Day }
-  | { status: 'ready'; day: Day; result: GoogleRouteOptimizationResult }
-  | { status: 'applied'; message: string }
-  | { status: 'error'; message: string }
 
 const googleMapsAdapter = new GoogleMapsEngineAdapter()
 const NATIVE_MARKER_OVERLAP_THRESHOLD_METERS = 18
@@ -53,7 +39,6 @@ const NATIVE_MARKER_OVERLAP_OFFSET_PX = 11
 export function TripMapPreview({
   days,
   itemsByDay,
-  onItemsReordered,
   onOpenMap,
   routeDataReady = true,
   selectedDay,
@@ -70,8 +55,6 @@ export function TripMapPreview({
   const [routeResult, setRouteResult] = useState<TripPreviewRouteResult | null>(null)
   const [routeLoading, setRouteLoading] = useState(false)
   const [configVersion, setConfigVersion] = useState(0)
-  const [optimizationState, setOptimizationState] = useState<OptimizationState>({ status: 'idle' })
-  const [confirmOptimization, setConfirmOptimization] = useState(false)
   const activeRouteRequestKeyRef = useRef<string | null>(null)
   const completedRouteRequestKeyRef = useRef<string | null>(null)
   const data = useMemo(
@@ -80,10 +63,6 @@ export function TripMapPreview({
   )
   const hasPoints = data.records.length > 0
   const googleMapsKey = getGoogleMapsApiKey()
-  const optimizationDay = useMemo(
-    () => getTripPreviewOptimizationDay({ days, itemsByDay, selectedDay }),
-    [days, itemsByDay, selectedDay],
-  )
   const dataKey = useMemo(() => buildPreviewDataKey(data), [data])
   const previewRouteLoading = routeLoading || (hasPoints && !routeDataReady)
   const routeKey = useMemo(
@@ -388,46 +367,6 @@ export function TripMapPreview({
     return clearMapMarkers
   }, [clearMapMarkers, data.records, dataKey, engine, hasPoints, mapInstanceVersion])
 
-  const handleCheckOptimization = useCallback(async () => {
-    const day = optimizationDay
-    const apiKey = getGoogleMapsApiKey()
-    if (!day || !apiKey) {
-      setOptimizationState({ status: 'error', message: '需要配置 Google Maps API key，且当天至少有 4 个带坐标地点。' })
-      return
-    }
-
-    setOptimizationState({ status: 'loading', day })
-    try {
-      const result = await fetchGoogleRouteOptimization(itemsByDay[day.id] ?? [], apiKey)
-      if (sameItemOrder(result.originalItems, result.suggestedItems)) {
-        setOptimizationState({ status: 'applied', message: `${day.title} 当前顺序已经接近推荐。` })
-        return
-      }
-      setOptimizationState({ status: 'ready', day, result })
-    } catch (caught) {
-      setOptimizationState({
-        status: 'error',
-        message: caught instanceof Error ? caught.message : '路线顺序建议生成失败。',
-      })
-    }
-  }, [itemsByDay, optimizationDay])
-
-  const handleApplyOptimization = useCallback(async () => {
-    if (optimizationState.status !== 'ready') {
-      return
-    }
-
-    const { day, result } = optimizationState
-    await Promise.all(
-      result.suggestedItems.map((item, index) =>
-        updateItineraryItem(item.id, { sortOrder: index + 1 }),
-      ),
-    )
-    setConfirmOptimization(false)
-    setOptimizationState({ status: 'applied', message: `已按建议更新 ${day.title} 的行程顺序。` })
-    await onItemsReordered?.()
-  }, [onItemsReordered, optimizationState])
-
   return (
     <Card className="overflow-hidden" data-testid="trip-map-overview" padding="none" variant="grouped">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
@@ -500,122 +439,10 @@ export function TripMapPreview({
                 {mapNotice}
               </p>
             ) : null}
-            {googleMapsKey && optimizationDay ? (
-              <RouteOptimizationPanel
-                confirmOpen={confirmOptimization}
-                day={optimizationDay}
-                onApply={() => setConfirmOptimization(true)}
-                onCancelConfirm={() => setConfirmOptimization(false)}
-                onCheck={() => void handleCheckOptimization()}
-                onConfirm={() => void handleApplyOptimization()}
-                state={optimizationState}
-              />
-            ) : null}
           </div>
         ) : null}
       </div>
     </Card>
-  )
-}
-
-function RouteOptimizationPanel({
-  confirmOpen,
-  day,
-  onApply,
-  onCancelConfirm,
-  onCheck,
-  onConfirm,
-  state,
-}: {
-  confirmOpen: boolean
-  day: Day
-  onApply: () => void
-  onCancelConfirm: () => void
-  onCheck: () => void
-  onConfirm: () => void
-  state: OptimizationState
-}) {
-  return (
-    <div className="space-y-2 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100/80 dark:bg-slate-900/45 dark:ring-slate-700/70" data-testid="trip-map-optimization-panel">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">路线顺序建议</p>
-          <p className="mt-0.5 truncate text-[11px] tm-muted">{day.title} · Google Routes API</p>
-        </div>
-        <button
-          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200 active:scale-[0.98] disabled:opacity-60 dark:bg-slate-950/60 dark:text-slate-200 dark:ring-slate-700 tm-focus"
-          data-testid="trip-map-optimization-check"
-          disabled={state.status === 'loading'}
-          onClick={onCheck}
-          type="button"
-        >
-          {state.status === 'loading' ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-          查看建议
-        </button>
-      </div>
-      {state.status === 'ready' ? (
-        <div className="space-y-2" data-testid="trip-map-optimization-suggestion">
-          <p className="text-[11px] leading-5 tm-muted">
-            建议顺序：{state.result.suggestedItems.map((item) => item.title).join(' → ')}
-          </p>
-          <p className="text-[11px] leading-5 tm-muted">
-            预计 {formatDistance(state.result.distanceMeters)} · {formatDuration(state.result.durationSeconds)}，可能产生 Google Routes API 费用。
-          </p>
-          <button
-            className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white active:scale-[0.98] dark:bg-sky-500 tm-focus"
-            data-testid="trip-map-optimization-apply"
-            onClick={onApply}
-            type="button"
-          >
-            <Check className="size-3.5" />
-            应用建议
-          </button>
-        </div>
-      ) : null}
-      {state.status === 'error' || state.status === 'applied' ? (
-        <p className="text-[11px] leading-5 tm-muted" data-testid="trip-map-optimization-message">{state.message}</p>
-      ) : null}
-      {confirmOpen && state.status === 'ready' ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/35 p-4 sm:items-center sm:justify-center" data-testid="trip-map-optimization-confirm">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl dark:bg-slate-900">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">应用路线顺序建议？</h4>
-                <p className="mt-1 text-xs leading-5 tm-muted">
-                  只会更新 {state.day.title} 内行程点的排序，不会修改地点、时间、票据或云端保存。
-                </p>
-              </div>
-              <button
-                aria-label="关闭"
-                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300 tm-focus"
-                onClick={onCancelConfirm}
-                type="button"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                className="min-h-10 rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200 tm-focus"
-                data-testid="trip-map-optimization-cancel"
-                onClick={onCancelConfirm}
-                type="button"
-              >
-                取消
-              </button>
-              <button
-                className="min-h-10 rounded-xl bg-sky-600 px-3 text-sm font-semibold text-white dark:bg-sky-500 tm-focus"
-                data-testid="trip-map-optimization-confirm-apply"
-                onClick={onConfirm}
-                type="button"
-              >
-                确认应用
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
   )
 }
 
@@ -743,29 +570,4 @@ function buildPreviewDataKey(data: TripMapPreviewData) {
   return data.records
     .map((record) => [record.day.id, record.item.id, record.coordinate.join(','), record.item.sortOrder].join(':'))
     .join('|')
-}
-
-function sameItemOrder(first: ItineraryItem[], second: ItineraryItem[]) {
-  return first.map((item) => item.id).join('|') === second.map((item) => item.id).join('|')
-}
-
-function formatDistance(value?: number) {
-  if (!value || !Number.isFinite(value)) {
-    return '距离待确认'
-  }
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)} km`
-  }
-  return `${Math.round(value)} m`
-}
-
-function formatDuration(value?: number) {
-  if (!value || !Number.isFinite(value)) {
-    return '时间待确认'
-  }
-  const minutes = Math.max(1, Math.round(value / 60))
-  if (minutes >= 60) {
-    return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`
-  }
-  return `${minutes} 分钟`
 }

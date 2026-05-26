@@ -70,24 +70,10 @@ export function buildTripMapPreviewData({
 }
 
 export function selectTripPreviewRoutingConfig(
-  engine: TripMapPreviewEngine,
+  _engine: TripMapPreviewEngine,
   config: RoutingConfig,
 ): RoutingConfig {
   if (config.source === 'proxy' && config.configured) {
-    return config
-  }
-
-  if (engine === 'google' && config.googleMapsKey) {
-    return {
-      provider: 'google',
-      apiKey: null,
-      googleMapsKey: config.googleMapsKey,
-      configured: true,
-      source: config.source,
-    }
-  }
-
-  if (engine === 'maplibre' && config.provider === 'openrouteservice' && config.configured && config.apiKey) {
     return config
   }
 
@@ -191,28 +177,6 @@ export async function fetchTripPreviewRoute({
         : '路线服务未配置，地图预览已按每天行程顺序显示直线连接。',
     ],
   }
-}
-
-export function getTripPreviewOptimizationDay({
-  days,
-  itemsByDay,
-  selectedDay,
-}: {
-  days: Day[]
-  itemsByDay: Record<string, ItineraryItem[]>
-  selectedDay: Day | null
-}) {
-  const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
-  const candidates = orderedDays.filter((day) => {
-    const count = getOrderedMappableItems(itemsByDay[day.id] ?? []).length
-    return count >= 4 && count <= 10
-  })
-
-  if (selectedDay && candidates.some((day) => day.id === selectedDay.id)) {
-    return selectedDay
-  }
-
-  return candidates[0] ?? null
 }
 
 function getTripPreviewRecords(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): TripMapPreviewRecord[] {

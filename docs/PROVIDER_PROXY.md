@@ -155,7 +155,7 @@ VITE_ROUTE_PROXY_PROVIDER=openrouteservice
 
 `VITE_ROUTE_PROXY_PROVIDER` must be concrete so local route cache identity remains stable. The frontend may have `source: "proxy"` at runtime, but persisted route cache entries remain provider-specific.
 
-If the proxy URL is absent, legacy direct local/dev route behavior remains so existing local QA and direct-provider tests keep working. Normal users should not be asked to enter provider keys, and Settings must not expose Google/ORS key fields.
+If the proxy URL is absent, route generation is unavailable and the UI falls back to straight-line previews or existing route cache entries. The frontend must not read OpenRouteService, Google Routes, or Google Places provider secrets from `VITE_*`, localStorage, IndexedDB, or the browser-visible Google Maps JavaScript key. Normal users should not be asked to enter provider keys, and Settings must not expose Google/ORS/Places key fields.
 
 ## What Moves Behind The Proxy
 
@@ -164,6 +164,7 @@ Now:
 - Manual day route generation can use the proxy when configured.
 - Trip Home route generation can use the proxy after user confirmation.
 - Trip Home map preview still reads cached route geometry or displays straight lines; it does not silently call providers.
+- Browser-side Google Routes order optimization is disabled; it must become a separate server proxy operation before returning.
 - AI draft generation can use the proxy after user confirmation.
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.

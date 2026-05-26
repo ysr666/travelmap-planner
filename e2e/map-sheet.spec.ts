@@ -251,7 +251,7 @@ test('地图路线服务未配置时保留直线连接提示', async ({ page }) 
   await expectNoHorizontalOverflow(page)
 })
 
-test('配置本机路线 key 后可以用 mock provider 生成道路路线', async ({ page }) => {
+test('配置 provider proxy 后可以用 mock provider 生成道路路线', async ({ page }) => {
   await mockProviderProxyForOrsRoute(page)
   await createDemoTripViaUi(page)
   await setRouteProxyConfig(page)

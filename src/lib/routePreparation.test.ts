@@ -147,7 +147,7 @@ describe('route preparation readiness', () => {
       tripId: 'trip',
     })
 
-    expect(getPersistentRouteProvider(orsConfig)).toBe('openrouteservice')
+    expect(getPersistentRouteProvider(orsConfig)).toBeNull()
     expect(getPersistentRouteProvider(proxyConfig)).toBe('openrouteservice')
     expect(result.providerConfigured).toBe(false)
     expect(result.canGenerate).toBe(false)

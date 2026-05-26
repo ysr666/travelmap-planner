@@ -22,7 +22,7 @@ export type SupabaseConfigStatus =
 let cachedClient: SupabaseClient | null = null
 let cachedKey = ''
 
-export function getSupabaseConfigStatus(env: SupabaseEnv = import.meta.env): SupabaseConfigStatus {
+export function getSupabaseConfigStatus(env: SupabaseEnv = readSupabaseEnv()): SupabaseConfigStatus {
   if (shouldForceSupabaseUnconfigured()) {
     return {
       configured: false,
@@ -55,6 +55,13 @@ export function getSupabaseConfigStatus(env: SupabaseEnv = import.meta.env): Sup
     ...(anonKey ? { anonKey } : {}),
     configured: false,
     missing,
+  }
+}
+
+function readSupabaseEnv(): SupabaseEnv {
+  return {
+    VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
   }
 }
 

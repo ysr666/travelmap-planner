@@ -16,6 +16,7 @@ import {
 } from '../lib/dayMapViewport'
 import { sortItineraryItems } from '../lib/itinerary'
 import { getItemLngLat, type LngLat } from '../lib/routing'
+import { getMarkerEmoji } from '../lib/markerEmoji'
 import type { DayPrewarmTarget } from '../lib/mapPrewarm'
 import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
@@ -405,8 +406,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       element.setAttribute('data-testid', 'day-map-marker')
 
       const content = document.createElement('span')
-      content.className = markerContentClassName(item.id === selectedItemIdRef.current)
-      content.textContent = getMarkerDisplayLabel(item, index)
+      const { label, isEmoji } = getMarkerDisplayLabel(item, index)
+      content.className = markerContentClassName(item.id === selectedItemIdRef.current, isEmoji)
+      content.textContent = label
       element.append(content)
 
       element.addEventListener('click', () => {
@@ -751,7 +753,7 @@ function markerRootClassName() {
   ].join(' ')
 }
 
-function markerContentClassName(isSelected: boolean) {
+function markerContentClassName(isSelected: boolean, isEmoji = false) {
   return [
     'flex',
     'size-11',
@@ -759,7 +761,7 @@ function markerContentClassName(isSelected: boolean) {
     'justify-center',
     'rounded-full',
     'border-4',
-    'text-base',
+    isEmoji ? 'text-lg' : 'text-base',
     'font-bold',
     'transition-[transform,box-shadow,background-color]',
     'duration-200',
@@ -782,8 +784,9 @@ function userLocationMarkerClassName() {
   ].join(' ')
 }
 
-function getMarkerDisplayLabel(_item: ItineraryItem, index: number) {
-  return String(index + 1)
+function getMarkerDisplayLabel(item: ItineraryItem, index: number): { label: string; isEmoji: boolean } {
+  const emoji = getMarkerEmoji(item)
+  return emoji ? { label: emoji, isEmoji: true } : { label: String(index + 1), isEmoji: false }
 }
 
 function getMarkerScaleForZoom(zoom: number) {

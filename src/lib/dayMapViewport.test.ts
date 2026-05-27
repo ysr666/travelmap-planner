@@ -100,7 +100,7 @@ describe('day map viewport helpers', () => {
     expect(plan.bounds?.[0][0]).toBeGreaterThan(139)
   })
 
-  it('uses the documented 40 km threshold boundary', () => {
+  it('uses the documented 80 km threshold boundary', () => {
     const tokyo: LngLat = [139.7671, 35.6812]
     const nearbyTokyo: LngLat = [139.97, 35.79]
     const distance = getDistanceMeters(tokyo, nearbyTokyo)
@@ -113,7 +113,45 @@ describe('day map viewport helpers', () => {
 
     expect(buildDayMapViewportPlan({
       itineraryCoordinates: [tokyo],
-      userLocation: [140.45, 35.89],
+      userLocation: [140.4749, 36.3414],
+    }).excludedUserLocationForDistance).toBe(true)
+  })
+
+  it('includes user location within 40 km (inside 80 km threshold)', () => {
+    const tokyo: LngLat = [139.7671, 35.6812]
+    const hachioji: LngLat = [139.3261, 35.6558]
+    const distance = getDistanceMeters(tokyo, hachioji)
+
+    expect(distance).toBeGreaterThan(30_000)
+    expect(distance).toBeLessThan(80_000)
+    expect(buildDayMapViewportPlan({
+      itineraryCoordinates: [tokyo],
+      userLocation: hachioji,
+    }).includedUserLocation).toBe(true)
+  })
+
+  it('includes user location between 40 km and 80 km', () => {
+    const tokyo: LngLat = [139.7671, 35.6812]
+    const odawara: LngLat = [139.1967, 35.2561]
+    const distance = getDistanceMeters(tokyo, odawara)
+
+    expect(distance).toBeGreaterThan(40_000)
+    expect(distance).toBeLessThan(80_000)
+    expect(buildDayMapViewportPlan({
+      itineraryCoordinates: [tokyo],
+      userLocation: odawara,
+    }).includedUserLocation).toBe(true)
+  })
+
+  it('excludes user location beyond 80 km', () => {
+    const tokyo: LngLat = [139.7671, 35.6812]
+    const mito: LngLat = [140.4749, 36.3414]
+    const distance = getDistanceMeters(tokyo, mito)
+
+    expect(distance).toBeGreaterThan(80_000)
+    expect(buildDayMapViewportPlan({
+      itineraryCoordinates: [tokyo],
+      userLocation: mito,
     }).excludedUserLocationForDistance).toBe(true)
   })
 

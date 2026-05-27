@@ -1,7 +1,7 @@
 import type { EdgeInsets, LngLatBounds, MapPadding } from './mapEngine'
 import type { LngLat } from './routing'
 
-export const USER_LOCATION_DISTANCE_THRESHOLD_METERS = 40_000
+export const USER_LOCATION_DISTANCE_THRESHOLD_METERS = 80_000
 export const DEFAULT_DAY_MAP_PADDING: EdgeInsets = {
   top: 72,
   right: 72,

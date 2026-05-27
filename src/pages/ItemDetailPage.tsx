@@ -6,10 +6,6 @@ import {
   Clock3,
   Edit3,
   ExternalLink,
-  FileArchive,
-  FileImage,
-  FileText,
-  Link2,
   MapPin,
   MapPinned,
   Navigation,
@@ -27,6 +23,7 @@ import {
   updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
+import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import {
   buildAppleMapsUrl,
   buildGoogleMapsUrl,
@@ -38,11 +35,6 @@ import { navigateTo } from '../lib/routes'
 import {
   getTicketDisplayTitle,
 } from '../lib/tickets'
-import {
-  getTicketDisplayMeta,
-  type TicketDisplayIconKind,
-  type TicketDisplayToneKey,
-} from '../lib/ticketDisplay'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -534,17 +526,29 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {ticketPreviewItems.map((ticket) => (
-              <TicketCompactRow
-                key={ticket.id}
-                onClick={() => setPreviewTicket(ticket)}
-                ticket={ticket}
-              />
-            ))}
+          <div>
+            <div className={`grid gap-2 ${ticketPreviewItems.length === 1 ? 'grid-cols-1' : ticketPreviewItems.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {ticketPreviewItems.map((ticket) => (
+                <button
+                  key={ticket.id}
+                  className="group flex flex-col overflow-hidden rounded-2xl text-left transition active:scale-[0.98]"
+                  data-testid="item-ticket-entry"
+                  onClick={() => setPreviewTicket(ticket)}
+                  type="button"
+                >
+                  <TicketThumbnail
+                    className="aspect-[3/2] w-full"
+                    ticket={ticket}
+                  />
+                  <span className="mt-1.5 truncate px-1 text-xs font-semibold text-slate-950 dark:text-slate-100">
+                    {getTicketDisplayTitle(ticket)}
+                  </span>
+                </button>
+              ))}
+            </div>
             {hiddenTicketCount > 0 ? (
               <button
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3.5 py-2.5 text-left text-sm font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300 dark:active:bg-sky-950/50"
+                className="mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3.5 py-2.5 text-left text-sm font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300 dark:active:bg-sky-950/50"
                 data-testid="item-ticket-view-all"
                 onClick={() => navigateTo('tickets', { tripId: trip.id })}
                 type="button"
@@ -733,57 +737,6 @@ function DetailRow({
       </span>
     </div>
   )
-}
-
-function TicketCompactRow({
-  ticket,
-  onClick,
-}: {
-  ticket: TicketMeta
-  onClick: () => void
-}) {
-  const visual = getTicketDisplayMeta(ticket)
-  const secondary = visual.secondaryLine
-
-  return (
-    <button
-      className="flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition active:scale-[0.99] active:bg-slate-50 tm-group tm-focus dark:active:bg-slate-800/70"
-      data-testid="item-ticket-entry"
-      onClick={onClick}
-      type="button"
-    >
-      <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${ticketToneClasses[visual.toneKey]}`}>
-        {renderTicketDisplayIcon(visual.iconKind)}
-        <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{getTicketDisplayTitle(ticket)}</span>
-        <span className="mt-0.5 block truncate text-xs font-semibold tm-muted">{visual.storageLabel}</span>
-        {secondary ? (
-          <span className="mt-0.5 block break-words text-xs leading-4 tm-muted [overflow-wrap:anywhere]">
-            {secondary}
-          </span>
-        ) : null}
-      </span>
-      <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-950/35 dark:text-sky-300">查看</span>
-    </button>
-  )
-}
-
-const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
-  rose: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/35 dark:text-rose-300 dark:ring-rose-900/50',
-  sky: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50',
-  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800',
-  violet: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50',
-}
-
-function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
-  if (iconKind === 'external') return <Link2 className="size-4" />
-  if (iconKind === 'reference') return <MapPin className="size-4" />
-  if (iconKind === 'image') return <FileImage className="size-4" />
-  if (iconKind === 'pdf') return <FileText className="size-4" />
-  return <FileArchive className="size-4" />
 }
 
 function buildPlaceLookupQuery(item: ItineraryItem) {

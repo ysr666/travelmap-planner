@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileArchive, FileImage, FileText, HardDrive, Link2, MapPinned, Trash2, Upload } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, Trash2, Upload } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -13,6 +13,7 @@ import {
   updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
+import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import { TripNav } from '../components/AppShell'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -39,8 +40,6 @@ import {
 } from '../lib/tickets'
 import {
   getTicketDisplayMeta,
-  type TicketDisplayIconKind,
-  type TicketDisplayToneKey,
 } from '../lib/ticketDisplay'
 import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
@@ -582,33 +581,33 @@ function TicketCard({
   const visual = getTicketDisplayMeta(ticket)
 
   return (
-    <Card variant="grouped" className="flex min-h-[12.25rem] flex-col p-2.5" data-testid="ticket-card">
+    <Card variant="grouped" className="flex flex-col overflow-hidden p-2.5" data-testid="ticket-card">
       <button
         aria-label={`查看${displayTitle}`}
-        className="flex min-h-0 flex-1 flex-col rounded-xl px-0.5 py-0.5 text-left transition active:scale-[0.99]"
+        className="flex min-h-0 flex-1 flex-col text-left transition active:scale-[0.99]"
         onClick={onPreview}
         type="button"
       >
-        <span className="flex items-start justify-between gap-2">
-          <span className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl ring-1 ${ticketToneClasses[visual.toneKey]}`}>
-            {renderTicketDisplayIcon(visual.iconKind)}
-            <span className="mt-0.5 text-[10px] font-bold leading-none">{visual.typeLabel}</span>
-          </span>
-          <span className="tm-chip text-[11px]">
-            {visual.storageLabel}
-          </span>
-        </span>
+        <TicketThumbnail
+          className="aspect-[4/3] w-full"
+          ticket={ticket}
+        />
 
-        <span className="mt-3 min-w-0">
-          <span className="block break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
-            {displayTitle}
+        <span className="mt-2 min-w-0 px-0.5">
+          <span className="flex items-center gap-1.5">
+            <span className="block min-w-0 truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
+              {displayTitle}
+            </span>
+            <span className="tm-chip shrink-0 text-[10px]">
+              {visual.storageLabel}
+            </span>
           </span>
-          <span className="mt-1 block break-words text-[11px] leading-4 tm-muted [overflow-wrap:anywhere]">
+          <span className="mt-0.5 block truncate text-[11px] leading-4 tm-muted">
             {visual.secondaryLine}
           </span>
         </span>
 
-        <span className="mt-auto pt-3">
+        <span className="mt-auto pt-2 px-0.5">
           <span className="block truncate text-[11px] font-semibold tm-muted">
             {bindingLabel}
           </span>
@@ -638,22 +637,6 @@ function TicketCard({
       </div>
     </Card>
   )
-}
-
-const ticketToneClasses: Record<TicketDisplayToneKey, string> = {
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
-  rose: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/35 dark:text-rose-300 dark:ring-rose-900/50',
-  sky: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50',
-  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800',
-  violet: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50',
-}
-
-function renderTicketDisplayIcon(iconKind: TicketDisplayIconKind) {
-  if (iconKind === 'external') return <Link2 className="size-4" />
-  if (iconKind === 'reference') return <MapPinned className="size-4" />
-  if (iconKind === 'image') return <FileImage className="size-4" />
-  if (iconKind === 'pdf') return <FileText className="size-4" />
-  return <FileArchive className="size-4" />
 }
 
 function CopyTicketFields({

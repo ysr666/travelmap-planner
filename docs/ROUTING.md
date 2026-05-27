@@ -20,13 +20,13 @@ VITE_ROUTE_PROXY_URL=/api/provider-proxy
 VITE_ROUTE_PROXY_PROVIDER=openrouteservice
 ```
 
-Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRouteService、Google Routes 和 AI provider secrets 只应来自后端运行时 env binding，例如 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 和 `TRIPMAP_AI_API_KEY`。
+Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRouteService、Google Routes 和 AI provider secrets 只应来自后端运行时 env binding，例如 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY`、`GOOGLE_MAPS_PLATFORM_API_KEY` 和 `TRIPMAP_AI_API_KEY`。
 
-浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应在 Google Cloud Console 通过 referrer 限制。它只用于地图渲染和浏览器端 Google Maps JS 能力，不能替代 server-only Google Routes 或 Google Places key。
+浏览器可见的 Google Maps JavaScript 渲染 key 是另一类公开受限 key，应在 Google Cloud Console 通过 referrer 限制。若 Maps JS、Google Routes 和 Google Places 使用同一个实际 Google Maps Platform key 值，后端仍应通过 `GOOGLE_MAPS_PLATFORM_API_KEY` 读取同一个值，而不是读取 `VITE_GOOGLE_MAPS_API_KEY`。
 
 ## 前端 Key 风险
 
-不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY` 或 AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS/AI key 输入、保存、清除或展示控件。
+不要把 `OPENROUTESERVICE_API_KEY`、`GOOGLE_ROUTES_API_KEY`、`GOOGLE_MAPS_PLATFORM_API_KEY` 或 AI provider secrets 放进任何 `VITE_*` 变量。`VITE_*` 会进入前端 bundle。Settings 不提供 Google/ORS/AI key 输入、保存、清除或展示控件。
 
 前端不再使用 `VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key，或 Google Maps JS key 直接调用 OpenRouteService / Google Routes。公开部署和本地 provider QA 都应通过 provider proxy。路线顺序建议已恢复为 `route_order_suggestion` server-side proxy operation；浏览器只发送当前日行程点 ID、标题和坐标，用户确认后才更新当前日排序。详见 [Provider Proxy](PROVIDER_PROXY.md)。
 

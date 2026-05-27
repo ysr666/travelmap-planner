@@ -6,9 +6,9 @@ TripMap uses a provider proxy so production route and AI requests can use owner-
 
 - The browser calls a TripMap-owned endpoint, normally `/api/provider-proxy`.
 - The proxy calls Google Routes, OpenRouteService, AI providers, search providers, and Google Places with server-side runtime secrets.
-- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `TRIPMAP_AI_API_KEY`, `TRIPMAP_SEARCH_API_KEY`, and `TRIPMAP_GOOGLE_PLACES_API_KEY`.
+- Server-only secrets must be runtime bindings such as `OPENROUTESERVICE_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `GOOGLE_MAPS_PLATFORM_API_KEY`, `TRIPMAP_AI_API_KEY`, `TRIPMAP_SEARCH_API_KEY`, and `TRIPMAP_GOOGLE_PLACES_API_KEY`.
 - Server-only secrets must never be exposed through `VITE_*` variables, IndexedDB, zip backups, Supabase backups, AI import/export, tests, or frontend bundles.
-- A browser-visible Google Maps JavaScript rendering key is different: it is inherently public and must be restricted by referrer in Google Cloud. It must not be reused as a server-only Google Routes secret.
+- A browser-visible Google Maps JavaScript rendering key is different: it is inherently public and must be restricted by referrer in Google Cloud. If TripMap uses the same actual Google Maps Platform key value for browser maps, Routes, and Places, mirror that value into the server runtime as `GOOGLE_MAPS_PLATFORM_API_KEY`; the proxy must not read it from `VITE_*`.
 
 ## Cloudflare Pages Function
 
@@ -19,7 +19,9 @@ The first backend target is a Cloudflare Pages Function:
 - Runtime env is read from the Pages Function context/env binding.
 - The handler does not read provider secrets from `import.meta.env`.
 
-Local Cloudflare worker development can use uncommitted local files such as `.dev.vars` or `.env` for worker runtime secrets. Do not commit those files, and do not mirror provider secrets into `VITE_*` variables.
+Cloudflare Pages production and preview deployments must configure real provider env through Pages environment variables/secrets so they are exposed to the Function as `context.env`. For Tavily travel search, set `TRIPMAP_SEARCH_PROVIDER=tavily` and `TRIPMAP_SEARCH_API_KEY` as a server-side Pages secret/env value.
+
+Local Cloudflare worker development can use uncommitted local files such as `.dev.vars` or `.env` for worker runtime secrets where the runtime supports them. However, `wrangler pages dev` should be treated like Pages Functions: real provider values must be injected as Pages-compatible bindings/secrets, and local QA must not assume `.env.local` or `--env-file` values are present in `context.env`. Do not commit local env files, and do not mirror provider secrets into `VITE_*` variables.
 
 ## Request Contract
 
@@ -84,7 +86,7 @@ Limits and boundaries:
 - At least 2 items must include valid coordinates.
 - The request whitelist rejects notes, tickets, cloud state, route cache, provider keys, headers, raw coordinates arrays, full trip DB, and other extra fields.
 - The frontend calls this operation only after the user clicks “查看建议（仅建议）”.
-- Real v1 supports Google Routes waypoint optimization only; `auto` prefers `GOOGLE_ROUTES_API_KEY`. ORS optimization is deferred because it is a separate public VROOM-backed endpoint rather than the existing route preview API.
+- Real v1 supports Google Routes waypoint optimization only; `auto` prefers `GOOGLE_ROUTES_API_KEY`, then falls back to the shared server-side `GOOGLE_MAPS_PLATFORM_API_KEY`. ORS optimization is deferred because it is a separate public VROOM-backed endpoint rather than the existing route preview API.
 - Google route order requests use `optimizeWaypointOrder: true`, `TRAFFIC_UNAWARE`, `DRIVE`, and exact `X-Goog-FieldMask: routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex`.
 - The Google request body contains only origin/destination/intermediate coordinates; it does not include trip/day IDs, item IDs, titles, addresses, notes, route cache, tickets, cloud state, or provider secrets.
 
@@ -242,7 +244,7 @@ Current runtime behavior:
 - `TRIPMAP_SEARCH_PROVIDER=disabled` returns `unsupported`.
 - Missing search provider env returns `provider_unavailable`.
 - `TRIPMAP_SEARCH_PROVIDER=tavily` with `TRIPMAP_SEARCH_API_KEY` calls Tavily from the server proxy only and returns normalized `source: "future_search"` results.
-- Tavily keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
+- Tavily keys stay server-only in Pages environment variables/secrets or local Pages-compatible bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, command-line arguments, or user-facing settings.
 - Tavily free/dev usage is credit and rate-limit constrained; real search still passes through the proxy `search|` quota bucket before any provider fetch.
 
 Request contract:
@@ -312,8 +314,8 @@ Runtime behavior:
 - `TRIPMAP_PLACE_PROVIDER=mock` returns deterministic mock candidates.
 - `TRIPMAP_PLACE_PROVIDER=disabled` returns `unsupported`.
 - Missing place provider env returns `provider_unavailable`.
-- `TRIPMAP_PLACE_PROVIDER=google_places` with `TRIPMAP_GOOGLE_PLACES_API_KEY` calls Google Places API New from the server proxy only.
-- Google Places keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never put them in `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
+- `TRIPMAP_PLACE_PROVIDER=google_places` with `TRIPMAP_GOOGLE_PLACES_API_KEY`, or shared fallback `GOOGLE_MAPS_PLATFORM_API_KEY`, calls Google Places API New from the server proxy only.
+- Google Places / Maps Platform server keys stay server-only in `.env.local`, `.dev.vars`, or deployment runtime bindings. Never read them from `VITE_*`, IndexedDB, backups, screenshots, logs, reports, or user-facing settings.
 - Real lookup remains proxy-quota-gated under `place|` before any provider fetch.
 
 Request contract:
@@ -728,6 +730,17 @@ When doing real-provider smoke QA with `wrangler pages dev`, local shell proxy v
 If a real provider smoke fails only through local `wrangler pages dev`, restart the wrangler process with those proxy env vars unset before diagnosing credentials, model access, DNS, or TLS.
 
 This is a local dev/QA workflow issue. Keep AI provider keys server-side in `.dev.vars`, `.env.local`, or deployment runtime bindings; do not add `VITE_` AI secrets or user-facing API key settings.
+
+### Pages Binding Env - Local QA Note
+
+`wrangler pages dev` must see real provider configuration through the Pages Function `context.env` binding path. Do not assume `.env.local`, `.dev.vars`, or `--env-file` values are automatically available to `context.env` for every local Pages run. A symptom is a real provider that works in a direct masked API check but returns normalized `provider_unavailable` through `/api/provider-proxy`.
+
+For production and preview, configure provider values in Cloudflare Pages environment variables/secrets. For Tavily travel search:
+
+- `TRIPMAP_SEARCH_PROVIDER=tavily`
+- `TRIPMAP_SEARCH_API_KEY=<server-side secret>`
+
+For local real-provider smoke, prefer a temporary Wrangler config or another safe Pages-compatible binding/secret injection path. Do not pass real API keys directly as command-line arguments, because process listings and shell history can expose them. If a local smoke needs to prove binding behavior without secrets, use a non-secret value such as `TRIPMAP_SEARCH_PROVIDER=mock` first.
 
 ### AI Trip Draft Repair Operation
 

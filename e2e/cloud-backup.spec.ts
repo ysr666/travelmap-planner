@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
   clearTravelDatabase,
   createDemoTripViaUi,
@@ -166,6 +166,46 @@ test('Trip Home 本地版本较新时上传本地数据需要二次确认', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('云端恢复确认会原地覆盖本地旅行并在刷新后保留云端版本', async ({ page }) => {
+  const tripId = await createDemoTripViaUi(page)
+  await forceSupabaseFixture(page, {
+    backups: [],
+    user: { email: 'qa@example.com', id: 'user_restore_e2e' },
+  })
+  await attachTinyImageTicket(page, tripId)
+
+  const titleV1 = '云端恢复 QA V1'
+  const titleV2 = '云端恢复 QA V2'
+  const titleV3 = '云端恢复 QA V3 本地修改'
+  await updateLocalTripVersion(page, tripId, titleV1, '云端恢复票据 V1')
+  await expectUploadCurrentTrip(page, tripId, titleV1)
+  await updateLocalTripVersion(page, tripId, titleV2, '云端恢复票据 V2')
+  await expectUploadCurrentTrip(page, tripId, titleV2)
+  await expect(page.getByTestId('cloud-backup-group').filter({ hasText: '云端恢复 QA' })).toHaveCount(1)
+
+  await updateLocalTripVersion(page, tripId, titleV3, '云端恢复票据 V3')
+  await expectLocalTripTitle(page, tripId, titleV3)
+  await restoreCloudBackupFromPanel(page, tripId, titleV2, false)
+  await expectLocalTripTitle(page, tripId, titleV3)
+
+  await restoreCloudBackupFromPanel(page, tripId, titleV2, true)
+  await expectLocalTripTitle(page, tripId, titleV2)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expectLocalTripTitle(page, tripId, titleV2)
+
+  const restoredState = await readLocalTripState(page, tripId)
+  expect(restoredState.tripCount).toBe(1)
+  expect(restoredState.ticketTitle).toBe('Cloud restore tiny ticket')
+  expect(restoredState.ticketBlobSize).toBe(68)
+
+  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  const ticketCard = page.getByTestId('ticket-card').filter({ hasText: 'Cloud restore tiny ticket' }).first()
+  await expect(ticketCard).toBeVisible()
+  await ticketCard.getByRole('button', { name: /查看/ }).first().click()
+  await expect(page.getByTestId('ticket-preview')).toBeVisible()
+  await expect(page.getByTestId('ticket-preview-image')).toBeVisible()
+})
+
 test('设置页云端列表展示历史遗留的同一旅行多条云端保存', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await clearTravelDatabase(page)
@@ -266,4 +306,204 @@ function createCloudBackup(patch: Record<string, unknown> = {}) {
     warnings: [],
     ...patch,
   }
+}
+
+async function openCloudBackupPanel(page: Page, tripId: string) {
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const details = page.locator('details').filter({ hasText: '备份与恢复' }).first()
+  await details.evaluate((element) => {
+    element.open = true
+  })
+  await expect(page.getByTestId('cloud-backup-section')).toBeVisible()
+}
+
+async function expectUploadCurrentTrip(page: Page, tripId: string, expectedTitle: string) {
+  await openCloudBackupPanel(page, tripId)
+  await page.getByTestId('cloud-upload-current-trip').click()
+  const dialog = page.getByTestId('cloud-save-confirm-dialog')
+  await expect(dialog).toContainText('云端原有版本会被覆盖')
+  await expect(dialog).toContainText('不会创建新的云端快照列表')
+  await expect(dialog).toContainText('不会自动合并')
+  await dialog.getByRole('button', { name: '更新云端保存' }).click()
+  await expect(page.locator('body')).toContainText('云端保存已覆盖更新')
+  await expect(page.getByTestId('cloud-backup-group').filter({ hasText: expectedTitle })).toBeVisible()
+}
+
+async function restoreCloudBackupFromPanel(
+  page: Page,
+  tripId: string,
+  expectedCloudTitle: string,
+  confirm: boolean,
+) {
+  await openCloudBackupPanel(page, tripId)
+  const group = page.getByTestId('cloud-backup-group').filter({ hasText: expectedCloudTitle }).first()
+  await expect(group).toBeVisible()
+  await group.getByTestId('cloud-restore-backup').click()
+  const dialog = page.getByTestId('cloud-save-confirm-dialog')
+  await expect(dialog).toContainText('将用云端版本覆盖当前本地旅行')
+  await expect(dialog).toContainText('不会创建新的本地旅行副本')
+  await expect(dialog).toContainText('不会自动合并')
+  if (confirm) {
+    await dialog.getByRole('button', { name: '用云端覆盖本地' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.locator('header h1').first()).toHaveText(expectedCloudTitle)
+  } else {
+    await dialog.getByRole('button', { name: '取消' }).click()
+    await expect(dialog).toHaveCount(0)
+  }
+}
+
+async function expectLocalTripTitle(page: Page, tripId: string, expectedTitle: string) {
+  await expect.poll(async () => (await readLocalTripState(page, tripId)).title).toBe(expectedTitle)
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('header h1').first()).toHaveText(expectedTitle)
+}
+
+async function updateLocalTripVersion(
+  page: Page,
+  tripId: string,
+  title: string,
+  itemTitle: string,
+) {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async ({ itemTitle, title, tripId }) => {
+    function openTravelConsoleDb() {
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('TravelConsoleDB')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+      })
+    }
+
+    const db = await openTravelConsoleDb()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['trips', 'itineraryItems'], 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('更新测试旅行失败'))
+      const now = Date.now()
+      const tripRequest = transaction.objectStore('trips').get(tripId)
+      tripRequest.onsuccess = () => {
+        const trip = tripRequest.result
+        if (trip) {
+          transaction.objectStore('trips').put({ ...trip, title, updatedAt: now })
+        }
+      }
+      const itemIndex = transaction.objectStore('itineraryItems').index('tripId')
+      const itemsRequest = itemIndex.getAll(tripId)
+      itemsRequest.onsuccess = () => {
+        const [item] = itemsRequest.result
+        if (item) {
+          transaction.objectStore('itineraryItems').put({ ...item, title: itemTitle, updatedAt: now })
+        }
+      }
+    })
+  }, { itemTitle, title, tripId })
+}
+
+async function attachTinyImageTicket(page: Page, tripId: string) {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async (targetTripId) => {
+    function openTravelConsoleDb() {
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('TravelConsoleDB')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+      })
+    }
+
+    const db = await openTravelConsoleDb()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['trips', 'itineraryItems', 'ticketMetas', 'ticketBlobs'], 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入测试票据失败'))
+      const now = Date.now()
+      const itemIndex = transaction.objectStore('itineraryItems').index('tripId')
+      const itemsRequest = itemIndex.getAll(targetTripId)
+      itemsRequest.onsuccess = () => {
+        const [item] = itemsRequest.result
+        if (!item) return
+        const ticketId = `${targetTripId}_cloud_restore_ticket`
+        const imageBytes = Uint8Array.from(
+          window.atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='),
+          (char) => char.charCodeAt(0),
+        )
+        transaction.objectStore('itineraryItems').put({
+          ...item,
+          ticketIds: [...new Set([...(item.ticketIds ?? []), ticketId])],
+          updatedAt: now,
+        })
+        transaction.objectStore('ticketMetas').put({
+          createdAt: now,
+          fileName: 'cloud-restore-ticket.png',
+          fileType: 'image',
+          id: ticketId,
+          itemId: item.id,
+          mimeType: 'image/png',
+          scope: 'item',
+          size: imageBytes.length,
+          storageMode: 'copy',
+          title: 'Cloud restore tiny ticket',
+          tripId: targetTripId,
+          updatedAt: now,
+        })
+        transaction.objectStore('ticketBlobs').put({
+          blob: new Blob([imageBytes], { type: 'image/png' }),
+          ticketId,
+        })
+        const tripRequest = transaction.objectStore('trips').get(targetTripId)
+        tripRequest.onsuccess = () => {
+          const trip = tripRequest.result
+          if (trip) transaction.objectStore('trips').put({ ...trip, updatedAt: now })
+        }
+      }
+    })
+  }, tripId)
+}
+
+async function readLocalTripState(page: Page, tripId: string) {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  return page.evaluate(async (targetTripId) => {
+    function openTravelConsoleDb() {
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('TravelConsoleDB')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+      })
+    }
+
+    function isRecordForE2e(value: unknown): value is Record<string, unknown> {
+      return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+    }
+
+    const db = await openTravelConsoleDb()
+    const getAll = (storeName: string) => new Promise<unknown[]>((resolve, reject) => {
+      const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const [trips, ticketMetas, ticketBlobs] = await Promise.all([
+      getAll('trips'),
+      getAll('ticketMetas'),
+      getAll('ticketBlobs'),
+    ])
+    db.close()
+    const trip = trips.find((entry) => isRecordForE2e(entry) && entry.id === targetTripId)
+    const ticket = ticketMetas.find((entry) => isRecordForE2e(entry) && entry.tripId === targetTripId)
+    const ticketBlob = ticket && isRecordForE2e(ticket)
+      ? ticketBlobs.find((entry) => isRecordForE2e(entry) && entry.ticketId === ticket.id)
+      : null
+    return {
+      ticketBlobSize: isRecordForE2e(ticketBlob) && ticketBlob.blob instanceof Blob ? ticketBlob.blob.size : 0,
+      ticketTitle: isRecordForE2e(ticket) && typeof ticket.title === 'string' ? ticket.title : null,
+      title: isRecordForE2e(trip) && typeof trip.title === 'string' ? trip.title : null,
+      tripCount: trips.length,
+    }
+  }, tripId)
 }

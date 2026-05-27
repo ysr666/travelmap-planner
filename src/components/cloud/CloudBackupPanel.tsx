@@ -256,12 +256,16 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       const exportedAt = Date.parse(result.exportedAt)
       markTripAutoSnapshotSynced(result.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       setRestoreTarget(null)
+      setWarnings(result.warnings)
       if (result.warnings.length > 0) {
         setRestoreResult(result)
         setMessage('云端版本已覆盖当前本地旅行。请先检查下列提醒。')
       } else {
-        navigateTo('trip', { tripId: result.tripId })
+        setMessage('云端版本已覆盖当前本地旅行。')
+        setRestoreResult(null)
       }
+      await refreshCloudBackups()
+      navigateTo('trip', { tripId: result.tripId })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '使用云端版本覆盖本地失败。')
     } finally {

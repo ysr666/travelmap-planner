@@ -20,6 +20,7 @@ const CLOUD_BACKUP_TABLE = 'cloud_trip_backups'
 const CLOUD_BACKUP_SCHEMA_VERSION = 1
 const CLOUD_BACKUP_TYPE = 'cloud-trip-backup'
 const CLOUD_APP_NAME = '旅图'
+const E2E_CLOUD_FIXTURE_KEY = 'tripmap:e2e:cloud-fixture'
 
 export type CloudFileRef = {
   ticketId: string
@@ -104,10 +105,18 @@ export type BuildCloudSnapshotResult = {
 
 type E2eCloudFixture = {
   backups?: CloudBackupSummary[]
+  files?: Record<string, E2eCloudStoredFile>
+  snapshots?: Record<string, CloudTripSnapshot>
   user?: {
     email?: string
     id: string
   }
+}
+
+type E2eCloudStoredFile = {
+  dataBase64: string
+  mimeType: string
+  size: number
 }
 
 type CloudStorageListEntry = {
@@ -205,7 +214,7 @@ export async function signOut() {
 export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
   const fixture = readE2eCloudFixture()
   if (fixture?.user) {
-    return fixture.backups ?? []
+    return sortCloudBackupSummaries(fixture.backups ?? [])
   }
 
   const client = requireSupabaseClient()
@@ -224,6 +233,11 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
 }
 
 export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackupResult> {
+  const fixture = readE2eCloudFixture()
+  if (fixture?.user) {
+    return uploadTripCloudBackupToE2eFixture(fixture, tripId, fixture.user.id)
+  }
+
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const backupId = await buildStableCloudBackupId(user.id, tripId)
@@ -274,6 +288,11 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
 }
 
 export async function restoreCloudBackup(backupId: string): Promise<RestoreCloudBackupResult> {
+  const fixture = readE2eCloudFixture()
+  if (fixture?.user) {
+    return restoreCloudBackupFromE2eFixture(fixture, backupId, fixture.user.id)
+  }
+
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const metadata = await getCloudBackupRow(backupId, user.id)
@@ -305,6 +324,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
 
   const records = buildCloudRestoreRecords(snapshot, ticketBlobs)
   const result = await replaceTripPlanRecords(records, { markDirty: false })
+  await verifyRestoredCloudRecords(records)
   emitTravelDataChanged()
   return {
     exportedAt: snapshot.exportedAt,
@@ -315,6 +335,11 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
 }
 
 export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBackupResult> {
+  const fixture = readE2eCloudFixture()
+  if (fixture?.user) {
+    return deleteCloudBackupFromE2eFixture(fixture, backupId, fixture.user.id)
+  }
+
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const metadata = await getCloudBackupRow(backupId, user.id)
@@ -365,6 +390,143 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
   }
 
   return { warnings }
+}
+
+async function uploadTripCloudBackupToE2eFixture(
+  fixture: E2eCloudFixture,
+  tripId: string,
+  userId: string,
+): Promise<CloudBackupResult> {
+  const backupId = await buildStableCloudBackupId(userId, tripId)
+  const snapshotResult = await buildCloudSnapshotForTrip(tripId, userId, backupId)
+  const exportedAt = snapshotResult.snapshot.exportedAt
+  const previousBackup = fixture.backups?.find((backup) => backup.id === backupId)
+  const nextFiles: Record<string, E2eCloudStoredFile> = { ...(fixture.files ?? {}) }
+  const keepPaths = new Set(snapshotResult.snapshot.fileRefs.map((fileRef) => fileRef.path))
+  const backupPrefix = `${buildCloudBackupPrefix(userId, backupId)}/`
+
+  for (const path of Object.keys(nextFiles)) {
+    if (path.startsWith(backupPrefix) && !keepPaths.has(path)) {
+      delete nextFiles[path]
+    }
+  }
+
+  for (const file of snapshotResult.fileUploads) {
+    nextFiles[file.path] = {
+      dataBase64: await blobToBase64(file.blob),
+      mimeType: file.mimeType,
+      size: file.blob.size,
+    }
+  }
+
+  const nextBackup: CloudBackupSummary = {
+    appVersion: snapshotResult.metadata.app_version,
+    createdAt: previousBackup?.createdAt ?? exportedAt,
+    destination: snapshotResult.metadata.destination ?? undefined,
+    exportedAt,
+    filesCount: snapshotResult.metadata.files_count,
+    id: backupId,
+    notes: snapshotResult.metadata.notes ?? undefined,
+    originalTripId: snapshotResult.metadata.original_trip_id,
+    schemaVersion: snapshotResult.metadata.schema_version,
+    snapshotPath: snapshotResult.metadata.snapshot_path,
+    title: snapshotResult.metadata.title,
+    totalSizeBytes: snapshotResult.metadata.total_size_bytes,
+    updatedAt: exportedAt,
+    userId,
+    warnings: snapshotResult.metadata.warnings,
+  }
+  const nextBackups = sortCloudBackupSummaries([
+    ...(fixture.backups ?? []).filter((backup) => backup.id !== backupId),
+    nextBackup,
+  ])
+
+  writeE2eCloudFixture({
+    ...fixture,
+    backups: nextBackups,
+    files: nextFiles,
+    snapshots: {
+      ...(fixture.snapshots ?? {}),
+      [backupId]: snapshotResult.snapshot,
+    },
+  })
+
+  return { backupId, exportedAt, warnings: snapshotResult.warnings }
+}
+
+async function restoreCloudBackupFromE2eFixture(
+  fixture: E2eCloudFixture,
+  backupId: string,
+  userId: string,
+): Promise<RestoreCloudBackupResult> {
+  const metadata = fixture.backups?.find((backup) => backup.id === backupId && backup.userId === userId)
+  if (!metadata) {
+    throw new Error('没有找到该云端保存。')
+  }
+
+  validateCloudBackupSnapshotPath(userId, backupId, metadata.snapshotPath)
+  const snapshot = fixture.snapshots?.[backupId]
+  if (!snapshot) {
+    throw new Error('云端保存 snapshot.json 下载失败。')
+  }
+  validateCloudSnapshotForRestore(snapshot, userId, backupId)
+  const ticketBlobs: TicketBlob[] = []
+  const warnings = [...snapshot.warnings, ...buildMissingCloudFileRefWarnings(snapshot)]
+
+  for (const fileRef of snapshot.fileRefs) {
+    const storedFile = fixture.files?.[fileRef.path]
+    if (!storedFile) {
+      warnings.push(`票据「${fileRef.fileName}」文件下载失败，已仅恢复元数据。`)
+      continue
+    }
+
+    ticketBlobs.push({
+      blob: base64ToBlob(storedFile.dataBase64, storedFile.mimeType),
+      ticketId: fileRef.ticketId,
+    })
+  }
+
+  const records = buildCloudRestoreRecords(snapshot, ticketBlobs)
+  const result = await replaceTripPlanRecords(records, { markDirty: false })
+  await verifyRestoredCloudRecords(records)
+  emitTravelDataChanged()
+  return {
+    exportedAt: snapshot.exportedAt,
+    title: result.title,
+    tripId: result.tripId,
+    warnings,
+  }
+}
+
+function deleteCloudBackupFromE2eFixture(
+  fixture: E2eCloudFixture,
+  backupId: string,
+  userId: string,
+): DeleteCloudBackupResult {
+  const metadata = fixture.backups?.find((backup) => backup.id === backupId && backup.userId === userId)
+  if (!metadata) {
+    throw new Error('没有找到该云端保存。')
+  }
+
+  validateCloudBackupSnapshotPath(userId, backupId, metadata.snapshotPath)
+  const nextFiles = { ...(fixture.files ?? {}) }
+  const backupPrefix = `${buildCloudBackupPrefix(userId, backupId)}/`
+  for (const path of Object.keys(nextFiles)) {
+    if (path.startsWith(backupPrefix)) {
+      delete nextFiles[path]
+    }
+  }
+
+  const nextSnapshots = { ...(fixture.snapshots ?? {}) }
+  delete nextSnapshots[backupId]
+  writeE2eCloudFixture({
+    ...fixture,
+    backups: (fixture.backups ?? []).filter((backup) => backup.id !== backupId),
+    files: nextFiles,
+    snapshots: nextSnapshots,
+  })
+
+  return { warnings: [] }
 }
 
 export function buildCloudSnapshotFromRecords({
@@ -493,6 +655,39 @@ export function buildCloudRestoreRecords(
     ticketMetas,
     trip,
   }
+}
+
+type CloudRestoreRecords = ReturnType<typeof buildCloudRestoreRecords>
+
+export async function verifyRestoredCloudRecords(records: CloudRestoreRecords) {
+  const [restoredTrip, restoredDays, restoredItems, restoredTickets] = await Promise.all([
+    getTrip(records.trip.id),
+    listDaysByTrip(records.trip.id),
+    listItemsByTrip(records.trip.id),
+    listTicketsByTrip(records.trip.id),
+  ])
+
+  if (!restoredTrip || restoredTrip.id !== records.trip.id || restoredTrip.title !== records.trip.title) {
+    throwCloudRestoreWriteVerificationError('旅行')
+  }
+
+  assertSameIdsForCloudRestore('每日行程', restoredDays, records.days)
+  assertSameIdsForCloudRestore('行程点', restoredItems, records.itineraryItems)
+  assertSameIdsForCloudRestore('票据', restoredTickets, records.ticketMetas)
+
+  await Promise.all(
+    records.ticketBlobs.map(async (expectedBlob) => {
+      const restoredBlob = await getTicketBlob(expectedBlob.ticketId)
+      if (
+        !restoredBlob
+        || restoredBlob.ticketId !== expectedBlob.ticketId
+        || restoredBlob.blob.size !== expectedBlob.blob.size
+        || restoredBlob.blob.type !== expectedBlob.blob.type
+      ) {
+        throwCloudRestoreWriteVerificationError('票据文件')
+      }
+    }),
+  )
 }
 
 export function buildCloudSnapshotPath(userId: string, backupId: string) {
@@ -689,6 +884,10 @@ function mapCloudBackupRow(row: CloudBackupRow): CloudBackupSummary {
   }
 }
 
+function sortCloudBackupSummaries(backups: CloudBackupSummary[]) {
+  return [...backups].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+}
+
 function readE2eCloudFixture(): E2eCloudFixture | null {
   if (typeof window === 'undefined') {
     return null
@@ -701,7 +900,7 @@ function readE2eCloudFixture(): E2eCloudFixture | null {
       return null
     }
 
-    const raw = window.localStorage.getItem('tripmap:e2e:cloud-fixture')
+    const raw = window.localStorage.getItem(E2E_CLOUD_FIXTURE_KEY)
     if (!raw) {
       return null
     }
@@ -715,6 +914,15 @@ function readE2eCloudFixture(): E2eCloudFixture | null {
   } catch {
     return null
   }
+}
+
+function writeE2eCloudFixture(fixture: E2eCloudFixture) {
+  const currentFixture = readE2eCloudFixture()
+  if (!currentFixture?.user) {
+    throw new Error('测试云端保存 fixture 不可用。')
+  }
+
+  window.localStorage.setItem(E2E_CLOUD_FIXTURE_KEY, JSON.stringify(fixture))
 }
 
 function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
@@ -925,6 +1133,41 @@ function safeCloudPathSegment(value: string) {
   }
 
   return clean
+}
+
+function assertSameIdsForCloudRestore(
+  label: string,
+  actualRecords: Array<{ id: string }>,
+  expectedRecords: Array<{ id: string }>,
+) {
+  const actualIds = actualRecords.map((record) => record.id).sort()
+  const expectedIds = expectedRecords.map((record) => record.id).sort()
+  if (actualIds.length !== expectedIds.length || actualIds.some((id, index) => id !== expectedIds[index])) {
+    throwCloudRestoreWriteVerificationError(label)
+  }
+}
+
+function throwCloudRestoreWriteVerificationError(label: string): never {
+  throw new Error(`云端版本写入本地后校验失败：${label} 未与云端保存一致。请重试恢复，或先导出 zip 备份后再继续。`)
+}
+
+async function blobToBase64(blob: Blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize))
+  }
+  return window.btoa(binary)
+}
+
+function base64ToBlob(dataBase64: string, mimeType: string) {
+  const binary = window.atob(dataBase64)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new Blob([bytes], { type: mimeType })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

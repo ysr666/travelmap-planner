@@ -1,9 +1,10 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-05-24
-基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、Google Places item lookup foundation、durable provider quota foundation、cloud save wording 和 E2E locator hardening 均已完成。
+更新时间：2026-05-27
+基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、Tavily search adapter、Google Places item lookup foundation、durable provider quota foundation、route order suggestion proxy、server provider key separation、cloud save wording 和 E2E locator hardening 均已完成。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
+Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
 
 ## 当前定位
 

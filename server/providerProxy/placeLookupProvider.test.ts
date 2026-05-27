@@ -113,6 +113,34 @@ describe('place lookup provider foundation', () => {
     }
   })
 
+  it('uses shared Google Maps Platform key when a dedicated Places key is absent', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      places: [
+        {
+          displayName: { languageCode: 'zh', text: '杭州博物馆' },
+          formattedAddress: '浙江省杭州市上城区粮道山18号',
+          id: 'places/mock-google-1',
+          location: { latitude: 30.245, longitude: 120.17 },
+        },
+      ],
+    }), { headers: { 'Content-Type': 'application/json' }, status: 200 })) as unknown as typeof fetch
+    const provider = createGooglePlacesLookupProvider(
+      { GOOGLE_MAPS_PLATFORM_API_KEY: 'shared-google-platform-secret' },
+      fetcher,
+      { now: '2026-02-03T04:05:06.000Z' },
+    )
+
+    const result = await provider.lookup(validPlaceLookupRequest())
+
+    expect(result.ok).toBe(true)
+    const [, init] = vi.mocked(fetcher).mock.calls[0]
+    expect(init?.headers).toMatchObject({
+      'X-Goog-Api-Key': 'shared-google-platform-secret',
+      'X-Goog-FieldMask': GOOGLE_PLACES_FIELD_MASK,
+    })
+    expect(JSON.stringify(result)).not.toContain('shared-google-platform-secret')
+  })
+
   it('drops malformed candidates and omits unsafe Google Maps URIs', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       places: [

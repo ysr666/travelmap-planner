@@ -79,12 +79,14 @@ import {
   createGooglePlacesLookupProvider,
   createMockPlaceLookupProvider,
   createUnavailablePlaceLookupProvider,
+  getGooglePlacesApiKey,
   type PlaceLookupProvider,
   type PlaceLookupProviderErrorCode,
 } from './placeLookupProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
+  GOOGLE_MAPS_PLATFORM_API_KEY?: string
   GOOGLE_ROUTES_API_KEY?: string
   OPENROUTESERVICE_API_KEY?: string
   TRIPMAP_AI_PROVIDER?: string
@@ -694,7 +696,7 @@ function selectPlaceLookupProvider(env: ProviderProxyHandlerEnv, fetcher: typeof
     return createDisabledPlaceLookupProvider()
   }
   if (provider === 'google_places') {
-    if (!env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim()) {
+    if (!getGooglePlacesApiKey(env)) {
       return createUnavailablePlaceLookupProvider()
     }
     return createGooglePlacesLookupProvider(env, fetcher)
@@ -1158,7 +1160,7 @@ function selectProvider(
   if (env.OPENROUTESERVICE_API_KEY || isMockMode(env)) {
     return 'openrouteservice'
   }
-  if (env.GOOGLE_ROUTES_API_KEY) {
+  if (getGoogleRoutesApiKey(env)) {
     return 'google'
   }
   throw new ProviderProxyServerError('provider_unavailable', 503)
@@ -1174,14 +1176,18 @@ function selectRouteOrderSuggestionProvider(
   if (request.provider === 'google') {
     return 'google'
   }
-  if (env.GOOGLE_ROUTES_API_KEY?.trim()) {
+  if (getGoogleRoutesApiKey(env)) {
     return 'google'
   }
   throw new ProviderProxyServerError('provider_unavailable', 503)
 }
 
 function getProviderSecret(provider: ProviderProxyConcreteProvider, env: ProviderProxyHandlerEnv) {
-  return provider === 'google' ? env.GOOGLE_ROUTES_API_KEY?.trim() : env.OPENROUTESERVICE_API_KEY?.trim()
+  return provider === 'google' ? getGoogleRoutesApiKey(env) : env.OPENROUTESERVICE_API_KEY?.trim()
+}
+
+function getGoogleRoutesApiKey(env: ProviderProxyHandlerEnv) {
+  return env.GOOGLE_ROUTES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim()
 }
 
 function normalizeProviderProxyHandlerError(

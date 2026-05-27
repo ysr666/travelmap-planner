@@ -104,7 +104,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
 - 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
-- Server-only OpenRouteService / Google Routes / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。
+- Server-only OpenRouteService / Google Routes / Google Maps Platform shared server key / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。若 Maps JS、Google Routes 和 Google Places 使用同一个实际 key 值，后端仍通过 `GOOGLE_MAPS_PLATFORM_API_KEY` 读取。
 - Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。D1 binding 缺失时仅本地/dev 内存 fallback；binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
@@ -123,13 +123,14 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
 - Web search：`travel_search` provider proxy 支持 mock/disabled/Tavily，真实 Tavily key 只在服务端 env 中使用，结果归一化为 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence，并受独立 `search|` quota 约束。AI Trip Edit 可在用户确认后单次调用 search；AI draft generation / repair 不会调用 search。AI 不得在没有 sourced search results 时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
-- Google Places lookup：`place_lookup` provider proxy 支持 mock/disabled/google_places，使用 server-only `TRIPMAP_GOOGLE_PLACES_API_KEY` 和严格 FieldMask `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`。Item Detail 的“查找地点信息”只发送 visible item title/location/address 组成的 query，候选结果临时展示，确认后只更新当前 item 的 `locationName`、`address` 和有效 `lat/lng`；`googleMapsUri` 持久化、opening hours、ratings、reviews、photos、phone、website deferred。
-- Route / key separation：前端路线生成只通过 `VITE_ROUTE_PROXY_URL` + `VITE_ROUTE_PROXY_PROVIDER` 调用 provider proxy；`VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key、以及 `VITE_GOOGLE_MAPS_API_KEY` 都不会配置 OpenRouteService / Google Routes provider。Google Maps JS key 只作为浏览器可见、referrer-restricted 的地图渲染 key。Trip Home 路线顺序建议已恢复为 `route_order_suggestion` server proxy operation：点击“查看建议（仅建议）”后才请求，真实 v1 只用 server-side Google Routes waypoint optimization，应用前二次确认，确认后只更新当前日 `sortOrder`。
+- Google Places lookup：`place_lookup` provider proxy 支持 mock/disabled/google_places，优先使用 server-only `TRIPMAP_GOOGLE_PLACES_API_KEY`，缺省时回退到 server-only `GOOGLE_MAPS_PLATFORM_API_KEY`，并使用严格 FieldMask `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`。Item Detail 的“查找地点信息”只发送 visible item title/location/address 组成的 query，候选结果临时展示，确认后只更新当前 item 的 `locationName`、`address` 和有效 `lat/lng`；`googleMapsUri` 持久化、opening hours、ratings、reviews、photos、phone、website deferred。
+- Route / key separation：前端路线生成只通过 `VITE_ROUTE_PROXY_URL` + `VITE_ROUTE_PROXY_PROVIDER` 调用 provider proxy；`VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key、以及 `VITE_GOOGLE_MAPS_API_KEY` 都不会配置 OpenRouteService / Google Routes provider。Google Routes 优先使用 `GOOGLE_ROUTES_API_KEY`，缺省时回退到 server-only `GOOGLE_MAPS_PLATFORM_API_KEY`。Google Maps JS key 只作为浏览器可见、referrer-restricted 的地图渲染 key。Trip Home 路线顺序建议已恢复为 `route_order_suggestion` server proxy operation：点击“查看建议（仅建议）”后才请求，真实 v1 只用 server-side Google Routes waypoint optimization，应用前二次确认，确认后只更新当前日 `sortOrder`。
 
 ## 本地 QA 注意事项
 
 - `wrangler pages dev` / Workerd 可能受 shell `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 影响。若 direct DeepSeek 检查健康但本地 provider proxy repair 间歇性 `network_error` / timeout，先用 unset proxy env 的 wrangler 进程重测。
 - PWA service worker 可能在本地 QA 时提供旧 bundle。若页面行为和最新 build 不一致，先 unregister service worker、clear site data、hard refresh。
+- `wrangler pages dev` 的真实 provider env 必须通过 Pages Function `context.env` binding / secret 路径验证；不要假设 `.env.local` 或 `--env-file` 一定进入 `context.env`。Tavily 生产/预览用 Cloudflare Pages env/secrets 配 `TRIPMAP_SEARCH_PROVIDER=tavily` 和 `TRIPMAP_SEARCH_API_KEY`，本地真实 smoke 不要把真实 key 写进命令行参数。
 - `.env.local` 和 `.dev.vars` 必须保持 gitignored，不得提交。报告不得包含真实 key、key prefix、raw provider body、full prompt 或 raw model output；如任何 key prefix 曾被复制进聊天或日志，应 rotate key。
 
 ## 下一步建议

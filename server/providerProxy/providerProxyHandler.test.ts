@@ -339,6 +339,38 @@ describe('provider proxy handler route_order_suggestion', () => {
     })
   })
 
+  it('uses shared Google Maps Platform key for route_order_suggestion when dedicated Routes key is absent', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string>
+      expect(headers['X-Goog-Api-Key']).toBe('shared-google-platform-secret')
+      return new Response(JSON.stringify({
+        routes: [
+          {
+            distanceMeters: 1800,
+            duration: '900s',
+            optimizedIntermediateWaypointIndex: [1, 0],
+            polyline: { encodedPolyline: 'raw-polyline-should-not-return' },
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: { GOOGLE_MAPS_PLATFORM_API_KEY: 'shared-google-platform-secret' },
+      fetcher,
+      request: jsonRequest(validRouteOrderRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('shared-google-platform-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      ok: true,
+      operation: 'route_order_suggestion',
+      provider: 'google',
+    })
+  })
+
   it('checks route_order_suggestion quota before provider calls', async () => {
     const quotaStorage = createProviderProxyMemoryQuotaStorage()
     const fetcher = vi.fn() as unknown as typeof fetch
@@ -734,6 +766,39 @@ describe('provider proxy handler place_lookup', () => {
     expect(JSON.parse(String(init?.body)).pageSize).toBe(5)
     expect((init?.headers as Record<string, string>)['X-Goog-FieldMask']).toBe('places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri')
     expect((init?.headers as Record<string, string>)['X-Goog-FieldMask']).not.toContain('*')
+  })
+
+  it('uses shared Google Maps Platform key for place_lookup when dedicated Places key is absent', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('shared-google-platform-secret')
+      return new Response(JSON.stringify({
+        places: [
+          {
+            displayName: { text: '杭州博物馆' },
+            formattedAddress: '浙江省杭州市上城区粮道山18号',
+            id: 'places/mock-google-1',
+            location: { latitude: 30.245, longitude: 120.17 },
+          },
+        ],
+      }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+    }) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        GOOGLE_MAPS_PLATFORM_API_KEY: 'shared-google-platform-secret',
+        TRIPMAP_PLACE_PROVIDER: 'google_places',
+      },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('shared-google-platform-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      ok: true,
+      operation: 'place_lookup',
+      source: 'google_places',
+    })
   })
 
   it('does not leak Google provider body, headers, stack traces, or secrets', async () => {

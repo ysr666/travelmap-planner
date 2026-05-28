@@ -337,13 +337,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   return (
     <div className="space-y-5 pb-2">
       {/* Hero area */}
-      <div className={`relative -mx-4 -mt-4 overflow-hidden bg-gradient-to-br ${heroVisual.gradientClass} h-36 sm:h-44`} data-testid="item-detail-hero">
+      <div className={`relative -mx-4 -mt-4 overflow-hidden bg-gradient-to-br ${heroVisual.gradientClass} h-80`} data-testid="item-detail-hero">
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         <div className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm">
           <span className="text-lg">{heroVisual.emoji}</span>
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h2 className="text-xl font-bold text-white drop-shadow-sm leading-tight">{item.title}</h2>
+          <h2 className="text-[26px] font-bold text-white drop-shadow-sm leading-tight">{item.title}</h2>
           {item.locationName ? (
             <p className="mt-0.5 text-xs text-white/80">{item.locationName}</p>
           ) : null}
@@ -610,15 +610,17 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         )}
       </section>
 
-      <Button
-        className="w-full"
-        disabled={isDeleting}
-        icon={<Trash2 className="size-4" />}
-        onClick={() => setIsDeleteConfirmOpen(true)}
-        variant="destructive"
-      >
-        删除行程点
-      </Button>
+      <div className="sticky bottom-0 -mx-4 -mb-2 border-t tm-row bg-white/90 px-4 py-3 backdrop-blur-xl dark:bg-slate-950/90">
+        <Button
+          className="w-full"
+          disabled={isDeleting}
+          icon={<Trash2 className="size-4" />}
+          onClick={() => setIsDeleteConfirmOpen(true)}
+          variant="destructive"
+        >
+          删除行程点
+        </Button>
+      </div>
 
       {previewTicket ? (
         <TicketPreview

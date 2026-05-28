@@ -1,4 +1,4 @@
-import type { TripContext, TripContextDay, TripContextItem } from './aiTripContext'
+import type { TripContext, TripContextDay, TripContextItem } from './ai/aiTripContext'
 import { getDenseDayItemLimit } from './travelProfile'
 
 export type TripCheckSeverity = 'info' | 'warning' | 'critical'

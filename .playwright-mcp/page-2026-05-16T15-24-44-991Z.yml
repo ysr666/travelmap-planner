@@ -1,0 +1,80 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - button "返回首页" [ref=e49]:
+        - img [ref=e50]
+      - heading "设置" [level=1] [ref=e53]
+  - main [ref=e20]:
+    - generic [ref=e60]:
+      - generic [ref=e61]:
+        - heading "PWA 和离线使用" [level=2] [ref=e64]
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - img [ref=e68]
+            - generic [ref=e70]:
+              - heading "可添加到 iPhone 主屏幕" [level=3] [ref=e71]
+              - paragraph [ref=e72]: 在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - img [ref=e76]
+              - generic [ref=e80]: 当前在线
+            - generic [ref=e81]:
+              - img [ref=e83]
+              - generic [ref=e87]: 已保存的旅行、时间轴、交通段、票据和备份功能依赖本机 IndexedDB。
+            - generic [ref=e88]:
+              - img [ref=e90]
+              - generic [ref=e92]: 地图底图和外部 Apple/Google Maps 路线需要网络；本应用不会缓存外部地图资源。
+      - generic [ref=e93]:
+        - heading "导入备份" [level=2] [ref=e96]
+        - generic [ref=e97]:
+          - generic [ref=e98]:
+            - img [ref=e100]
+            - generic [ref=e103]:
+              - heading "导入备份" [level=3] [ref=e104]
+              - paragraph [ref=e105]: 选择之前导出的 travelmap zip 文件。
+          - generic [ref=e106]:
+            - text: 备份文件
+            - button "备份文件" [ref=e107]
+          - button "导入 zip 备份" [disabled] [ref=e108]:
+            - img [ref=e109]
+            - generic [ref=e112]: 导入 zip 备份
+      - group [ref=e113]:
+        - generic "云端备份 Supabase 快照备份与恢复" [active] [ref=e114] [cursor=pointer]:
+          - img [ref=e115]
+          - generic [ref=e117]:
+            - paragraph [ref=e118]: 云端备份
+            - paragraph [ref=e119]: Supabase 快照备份与恢复
+      - group [ref=e286]:
+        - generic "AI 行程导入 用 AI 生成行程后导入" [ref=e287] [cursor=pointer]:
+          - img [ref=e288]
+          - generic [ref=e290]:
+            - paragraph [ref=e291]: AI 行程导入
+            - paragraph [ref=e292]: 用 AI 生成行程后导入
+      - group [ref=e293]:
+        - generic "Google Maps 配置 底图、地点搜索与公交路线" [ref=e294] [cursor=pointer]:
+          - img [ref=e295]
+          - generic [ref=e297]:
+            - paragraph [ref=e298]: Google Maps 配置
+            - paragraph [ref=e299]: 底图、地点搜索与公交路线
+      - group [ref=e300]:
+        - generic "路线服务配置 步行/驾车路线与缓存管理" [ref=e301] [cursor=pointer]:
+          - img [ref=e302]
+          - generic [ref=e304]:
+            - paragraph [ref=e305]: 路线服务配置
+            - paragraph [ref=e306]: 步行/驾车路线与缓存管理
+        - option "5.0 MB"
+        - option "20.0 MB" [selected]
+        - option "50.0 MB"
+        - option "100.0 MB"
+      - group [ref=e307]:
+        - generic "设备存储 IndexedDB 用量与持久化状态" [ref=e308] [cursor=pointer]:
+          - img [ref=e309]
+          - generic [ref=e311]:
+            - paragraph [ref=e312]: 设备存储
+            - paragraph [ref=e313]: IndexedDB 用量与持久化状态
+      - group [ref=e314]:
+        - generic "关于 版本信息与备份提醒" [ref=e315] [cursor=pointer]:
+          - img [ref=e316]
+          - generic [ref=e318]:
+            - paragraph [ref=e319]: 关于
+            - paragraph [ref=e320]: 版本信息与备份提醒

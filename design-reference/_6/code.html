@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>旅图 / TripMap - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                            "secondary": "#4c4aca",
+                            "on-error-container": "#93000a",
+                            "outline-variant": "#c1c6d7",
+                            "on-primary-container": "#fefcff",
+                            "surface-container-lowest": "#ffffff",
+                            "surface": "#f8f9fb",
+                            "on-secondary": "#ffffff",
+                            "on-secondary-container": "#fffbff",
+                            "secondary-container": "#6664e4",
+                            "primary-container": "#0070eb",
+                            "on-tertiary": "#ffffff",
+                            "inverse-primary": "#adc6ff",
+                            "surface-tint": "#005bc1",
+                            "inverse-surface": "#2e3132",
+                            "tertiary-container": "#c64f00",
+                            "error": "#ba1a1a",
+                            "surface-container-low": "#f3f4f6",
+                            "outline": "#717786",
+                            "on-tertiary-container": "#fffbff",
+                            "inverse-on-surface": "#f0f1f3",
+                            "surface-bright": "#f8f9fb",
+                            "surface-variant": "#e1e2e4",
+                            "surface-container-high": "#e7e8ea",
+                            "on-error": "#ffffff",
+                            "on-tertiary-fixed": "#351000",
+                            "secondary-fixed": "#e2dfff",
+                            "tertiary-fixed": "#ffdbcc",
+                            "on-background": "#191c1e",
+                            "on-primary-fixed": "#001a41",
+                            "on-secondary-fixed": "#0c006a",
+                            "on-secondary-fixed-variant": "#3631b4",
+                            "on-tertiary-fixed-variant": "#7c2e00",
+                            "on-primary": "#ffffff",
+                            "secondary-fixed-dim": "#c2c1ff",
+                            "surface-container-highest": "#e1e2e4",
+                            "primary-fixed-dim": "#adc6ff",
+                            "primary": "#0058bc",
+                            "surface-container": "#edeef0",
+                            "primary-fixed": "#d8e2ff",
+                            "error-container": "#ffdad6",
+                            "on-primary-fixed-variant": "#004493",
+                            "tertiary": "#9e3d00",
+                            "tertiary-fixed-dim": "#ffb595",
+                            "surface-dim": "#d9dadc",
+                            "on-surface": "#191c1e",
+                            "on-surface-variant": "#414755",
+                            "background": "#f8f9fb"
+                    },
+                    "borderRadius": {
+                            "DEFAULT": "0.25rem",
+                            "lg": "0.5rem",
+                            "xl": "0.75rem",
+                            "full": "9999px"
+                    },
+                    "spacing": {
+                            "stack-gap-sm": "8px",
+                            "row-height-large": "72px",
+                            "section-margin-bottom": "24px",
+                            "card-padding": "16px",
+                            "row-height-default": "56px",
+                            "safe-area-inset": "16px",
+                            "stack-gap-md": "12px"
+                    },
+                    "fontFamily": {
+                            "footnote": ["Plus Jakarta Sans"],
+                            "headline-sm": ["Plus Jakarta Sans"],
+                            "body-lg": ["Plus Jakarta Sans"],
+                            "body-md": ["Plus Jakarta Sans"],
+                            "nav-title": ["Plus Jakarta Sans"],
+                            "label-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                            "footnote": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                            "headline-sm": ["20px", {"lineHeight": "25px", "letterSpacing": "-0.2px", "fontWeight": "600"}],
+                            "body-lg": ["17px", {"lineHeight": "22px", "fontWeight": "400"}],
+                            "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+                            "nav-title": ["34px", {"lineHeight": "41px", "letterSpacing": "-0.4px", "fontWeight": "700"}],
+                            "label-md": ["13px", {"lineHeight": "18px", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface w-full h-full min-h-screen">
+<div class="max-w-[600px] mx-auto pb-row-height-large">
+<!-- Header Section -->
+<header class="px-4 pt-12 pb-4 flex justify-between items-start">
+<div class="flex flex-col gap-1">
+<h1 class="font-nav-title text-nav-title text-on-surface">旅图</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface active:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<!-- Current Trip Card -->
+<section class="px-4 mb-section-margin-bottom">
+<div class="bg-surface-container-lowest rounded-[24px] overflow-hidden shadow-sm border border-outline-variant/30">
+<div class="h-40 w-full relative">
+<img alt="London Big Ben" class="w-full h-full object-cover" data-alt="A bright, high-resolution photograph of the London skyline featuring Big Ben and the Houses of Parliament against a clear, sunny sky. The lighting is natural and vibrant, creating a clean, modern aesthetic suitable for a travel app's featured card. The color palette emphasizes the crisp blue sky and the warm, golden hues of the historic architecture. The overall mood is inspiring and organized, perfectly complementing a premium user interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJA1LcLXO7vV2R9sbxna0164r53AwP7B3otjZT-RS2rpnaTtXwfMkskaWJmKfTbyioXd26WmZ74Mz11pRGLRi430lyyls_ivk81T5GGoo1NVvIZgKrx_Vp-E-XHESxPHGgcRj4vnCxad-70A5pipPWo2cG-Hf_WETdvFKfUE-LYZ3cNmKO7iAjmLGjg2GoolbgBLvrryjvRBBjSxFmWRZZUYmmtvcjhsEp_ON9Mv4RP4PaQvEwjkrC3Qgg4mhscmR0GapIgC_slVk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="absolute bottom-4 left-4 right-4 text-white">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-[16px] text-green-400" style="font-variation-settings: 'FILL' 1;">sync</span>
+<span class="font-footnote text-footnote opacity-90">已同步 · 3 人同行</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-white mb-0.5">伦敦 12 日旅行</h2>
+<p class="font-footnote text-footnote text-white/80">7月10日–7月21日</p>
+</div>
+</div>
+<div class="p-4 bg-surface-container-lowest flex justify-between divide-x divide-outline-variant/30">
+<div class="flex-1 flex flex-col items-center justify-center">
+<span class="font-headline-sm text-headline-sm text-on-surface">12</span>
+<span class="font-footnote text-footnote text-on-surface-variant mt-1">天</span>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center">
+<span class="font-headline-sm text-headline-sm text-on-surface">38</span>
+<span class="font-footnote text-footnote text-on-surface-variant mt-1">个行程点</span>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center">
+<span class="font-headline-sm text-headline-sm text-on-surface">6</span>
+<span class="font-footnote text-footnote text-on-surface-variant mt-1">张票据</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Trips Section -->
+<section class="px-4 mb-section-margin-bottom">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-3 px-2">最近行程</h3>
+<div class="bg-surface-container-lowest rounded-[20px] overflow-hidden border border-outline-variant/30">
+<!-- Row 1 -->
+<div class="flex items-center p-3 h-row-height-default active:bg-surface-variant transition-colors cursor-pointer relative">
+<div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 mr-3">
+<span class="material-symbols-outlined text-blue-600">flight_takeoff</span>
+</div>
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<span class="font-body-lg text-body-lg text-on-surface truncate">伦敦 12 日旅行</span>
+<span class="font-footnote text-footnote text-on-surface-variant truncate mt-0.5">7月10日–7月21日 · 进行中</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant ml-2 shrink-0">chevron_right</span>
+<div class="absolute bottom-0 left-[60px] right-0 h-[0.5px] bg-outline-variant/30"></div>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center p-3 h-row-height-default active:bg-surface-variant transition-colors cursor-pointer relative">
+<div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0 mr-3">
+<span class="material-symbols-outlined text-green-600">train</span>
+</div>
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<span class="font-body-lg text-body-lg text-on-surface truncate">北海道 8 日自由行</span>
+<span class="font-footnote text-footnote text-on-surface-variant truncate mt-0.5">6月1日–6月8日 · 已完成</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant ml-2 shrink-0">chevron_right</span>
+<div class="absolute bottom-0 left-[60px] right-0 h-[0.5px] bg-outline-variant/30"></div>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center p-3 h-row-height-default active:bg-surface-variant transition-colors cursor-pointer relative">
+<div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0 mr-3">
+<span class="material-symbols-outlined text-orange-600">temple_buddhist</span>
+</div>
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<span class="font-body-lg text-body-lg text-on-surface truncate">京都奈良 5 日游</span>
+<span class="font-footnote text-footnote text-on-surface-variant truncate mt-0.5">4月12日–4月16日 · 已完成</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant ml-2 shrink-0">chevron_right</span>
+<div class="absolute bottom-0 left-[60px] right-0 h-[0.5px] bg-outline-variant/30"></div>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center p-3 h-row-height-default active:bg-surface-variant transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mr-3">
+<span class="material-symbols-outlined text-purple-600">directions_walk</span>
+</div>
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<span class="font-body-lg text-body-lg text-on-surface truncate">上海周末 Citywalk</span>
+<span class="font-footnote text-footnote text-on-surface-variant truncate mt-0.5">3月22日–3月24日 · 已完成</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant ml-2 shrink-0">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- Bottom Actions -->
+<section class="px-4 flex flex-col gap-3 mb-8">
+<button class="w-full h-14 bg-primary text-on-primary rounded-xl font-headline-sm text-headline-sm flex items-center justify-center gap-2 active:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">add</span>
+                新建行程
+            </button>
+<button class="w-full h-14 bg-surface-container-lowest text-primary border border-outline-variant/30 rounded-xl font-headline-sm text-headline-sm flex items-center justify-center gap-2 active:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">download</span>
+                导入行程
+            </button>
+</section>
+<!-- Bottom Navigation Bar (Shared Component logic applied) -->
+<nav class="fixed bottom-0 w-full z-50 border-t border-outline-variant dark:border-outline bg-surface/90 dark:bg-surface-dim/90 backdrop-blur-md pb-safe-area-inset flex justify-around items-center h-row-height-large px-4 max-w-[600px] left-1/2 -translate-x-1/2 md:hidden">
+<!-- Active Tab -->
+<button class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim flex-1 h-full active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-md text-label-md">首页</span>
+</button>
+<!-- Inactive Tabs -->
+<button class="flex flex-col items-center justify-center text-outline dark:text-outline-variant flex-1 h-full active:bg-surface-variant/50 active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined mb-1">travel_explore</span>
+<span class="font-label-md text-label-md">行程</span>
+</button>
+<button class="flex flex-col items-center justify-center text-outline dark:text-outline-variant flex-1 h-full active:bg-surface-variant/50 active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined mb-1">search</span>
+<span class="font-label-md text-label-md">搜索</span>
+</button>
+<button class="flex flex-col items-center justify-center text-outline dark:text-outline-variant flex-1 h-full active:bg-surface-variant/50 active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-label-md text-label-md">设置</span>
+</button>
+</nav>
+</div>
+</body></html>

@@ -1,6 +1,6 @@
-import type { TravelPace, TravelTransportPreference } from './travelProfile'
-import { isTravelPace, isTravelTransportPreference } from './travelProfile'
-import { isValidPlainDate, listPlainDateRangeInclusive } from './plainDate'
+import type { TravelPace, TravelTransportPreference } from '../travelProfile'
+import { isTravelPace, isTravelTransportPreference } from '../travelProfile'
+import { isValidPlainDate, listPlainDateRangeInclusive } from '../plainDate'
 
 export type AiTripDraftRequest = {
   destination: string

@@ -1,0 +1,20 @@
+{
+  "attempts": [
+    {
+      "timeoutMs": 10000,
+      "result": {
+        "elapsedMs": 10001,
+        "errorName": "Error",
+        "errorMessage": "timeout"
+      }
+    },
+    {
+      "timeoutMs": 30000,
+      "result": {
+        "elapsedMs": 30003,
+        "errorName": "Error",
+        "errorMessage": "timeout"
+      }
+    }
+  ]
+}

@@ -12,7 +12,7 @@ import {
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   type ProviderProxyOperation,
-} from '../../src/lib/providerProxyContract'
+} from '../../src/lib/ai/providerProxyContract'
 
 export type ProviderProxyQuotaBucket =
   | 'route|'

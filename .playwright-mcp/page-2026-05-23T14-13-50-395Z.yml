@@ -1,0 +1,75 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "返回首页" [ref=e6]:
+          - img [ref=e7]
+        - heading "AI 行程草稿" [level=1] [ref=e10]
+        - button "设置" [ref=e11]:
+          - img [ref=e12]
+    - main [ref=e23]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - heading "AI 行程草稿" [level=1] [ref=e27]
+          - paragraph [ref=e28]: 先生成或粘贴草稿，检查无误后再导入为本地旅行
+          - paragraph [ref=e29]: 当前为本地示例流程，不会调用外部 AI
+        - generic [ref=e30]:
+          - paragraph [ref=e31]: 填写行程信息
+          - paragraph [ref=e32]: 根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
+          - generic [ref=e33]:
+            - generic [ref=e34]: 目的地 *
+            - textbox "目的地 *" [ref=e35]:
+              - /placeholder: 例如：东京、巴黎、曼谷
+              - text: 杭州
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: 开始日期 *
+              - textbox "开始日期 *" [ref=e39]: 2026-07-10
+            - generic [ref=e40]:
+              - generic [ref=e41]: 结束日期 *
+              - textbox "结束日期 *" [ref=e42]: 2026-07-11
+          - generic [ref=e43]:
+            - text: 旅行节奏
+            - combobox "旅行节奏" [ref=e44]:
+              - option "轻松"
+              - option "适中" [selected]
+              - option "紧凑"
+          - generic [ref=e45]:
+            - text: 交通偏好
+            - combobox "交通偏好" [ref=e46]:
+              - option "公共交通"
+              - option "步行"
+              - option "打车"
+              - option "综合" [selected]
+          - group [ref=e47]:
+            - generic "更多偏好（可选） 想去的地方、不想要的安排、补充要求" [ref=e48] [cursor=pointer]:
+              - img [ref=e49]
+              - generic [ref=e51]:
+                - paragraph [ref=e52]: 更多偏好（可选）
+                - paragraph [ref=e53]: 想去的地方、不想要的安排、补充要求
+          - paragraph [ref=e55]:
+            - text: 当前为本地示例草稿，不会调用外部 AI，不会上传数据。
+            - text: 生成后仍需预览和确认，确认导入后才会创建本地旅行。
+            - text: 如通过旅图服务生成，请求将包含目的地和日期等基本信息，不会包含票据内容。
+          - button "根据表单生成示例草稿" [ref=e56]:
+            - generic [ref=e57]: 根据表单生成示例草稿
+          - button "通过旅图服务生成草稿" [active] [ref=e58]:
+            - generic [ref=e59]: 通过旅图服务生成草稿
+        - group [ref=e60]:
+          - generic "粘贴 JSON 草稿 如果你已经有符合格式的草稿 JSON，可以在这里粘贴。" [ref=e61] [cursor=pointer]:
+            - img [ref=e62]
+            - generic [ref=e64]:
+              - paragraph [ref=e65]: 粘贴 JSON 草稿
+              - paragraph [ref=e66]: 如果你已经有符合格式的草稿 JSON，可以在这里粘贴。
+  - dialog [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e70]:
+        - img [ref=e72]
+        - generic [ref=e74]:
+          - heading "通过旅图服务生成草稿" [level=2] [ref=e75]
+          - paragraph [ref=e76]: 将通过旅图服务生成行程草稿 可能消耗服务额度 不会自动创建旅行 生成后仍需预览和确认 当前不会读取票据图片/PDF
+      - generic [ref=e77]:
+        - button "取消" [ref=e78]:
+          - generic [ref=e79]: 取消
+        - button "确认生成" [ref=e80]:
+          - generic [ref=e81]: 确认生成

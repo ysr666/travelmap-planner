@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>旅图 - 首页</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Plus+Jakarta+Sans:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#ffb691",
+                        "tertiary-container": "#eb6a12",
+                        "on-tertiary": "#552000",
+                        "inverse-surface": "#e4e2e4",
+                        "surface-bright": "#39393b",
+                        "surface-variant": "#353437",
+                        "primary": "#aac7ff",
+                        "outline-variant": "#414754",
+                        "outline": "#8b91a0",
+                        "on-primary-fixed-variant": "#00468d",
+                        "inverse-on-surface": "#303032",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#353437",
+                        "on-secondary": "#003910",
+                        "primary-fixed": "#d6e3ff",
+                        "error": "#ffb4ab",
+                        "on-surface-variant": "#c0c6d6",
+                        "on-secondary-fixed-variant": "#00531a",
+                        "secondary-fixed": "#6cff82",
+                        "surface-container-lowest": "#0e0e10",
+                        "surface-container-high": "#2a2a2c",
+                        "secondary-container": "#09bf49",
+                        "on-primary-fixed": "#001b3e",
+                        "primary-container": "#3e90ff",
+                        "on-tertiary-container": "#4a1b00",
+                        "on-tertiary-fixed": "#341100",
+                        "surface-dim": "#131315",
+                        "on-surface": "#e4e2e4",
+                        "primary-fixed-dim": "#aac7ff",
+                        "secondary-fixed-dim": "#47e266",
+                        "on-background": "#e4e2e4",
+                        "surface-tint": "#aac7ff",
+                        "tertiary-fixed": "#ffdbcb",
+                        "on-error-container": "#ffdad6",
+                        "surface-container": "#1f1f21",
+                        "on-secondary-fixed": "#002106",
+                        "on-primary-container": "#002957",
+                        "error-container": "#93000a",
+                        "tertiary": "#ffb691",
+                        "background": "#131315",
+                        "on-tertiary-fixed-variant": "#793100",
+                        "secondary": "#47e266",
+                        "on-primary": "#003064",
+                        "surface-container-low": "#1b1b1d",
+                        "on-secondary-container": "#004615",
+                        "surface": "#131315",
+                        "inverse-primary": "#005db8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "margin-desktop": "32px",
+                        "stack-gap": "12px",
+                        "section-gap": "24px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "label-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["26px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-lg": ["17px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["13px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col antialiased selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/70 dark:bg-surface/70 backdrop-blur-xl border-b-[0.5px] border-outline-variant/30 flat no shadows flex justify-between items-center px-4 h-16">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 text-on-surface-variant dark:text-on-surface-variant">
+<span class="material-symbols-outlined">map</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface dark:text-on-surface">旅图</h1>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 bg-surface-container overflow-hidden border border-outline-variant/30">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="A close-up portrait of a professional traveler against a dark grey background. The lighting is soft and studio-quality, highlighting natural skin tones. The aesthetic is clean, modern, and high-contrast, fitting perfectly within a premium dark-mode application interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDJJbxqyu8j48KEdasJhWhRwETUyCIuAPSQHkKrZzQ5tbzy8dxPSX34liaeK5Gb6tDQHrBEk1PrgZx8q4p754xw0Rmk58xVJAmVmmrKWS04L99ZR_hbQMelkx4vAq4zeMWXMQgEGmAhLzannJySRlJNK2QzIK6jZ_c3HL1XaDG2d3VXSve-QFWggtYw2dM1wYBqpD0-dBuEYfuYBN9oIv-Pz_fdGKA2u9UV5eO2EMsA0wA1qacnwctmNBVRS_P1oWAOHlA85S-5Vo"/>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-2xl mx-auto pt-24 pb-32 px-4 flex flex-col gap-section-gap">
+<!-- Hero Section -->
+<section class="flex justify-between items-end">
+<div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-background mb-1">旅图</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</section>
+<!-- Current Trip Card (Travel Pass) -->
+<section class="relative bg-surface-container rounded-xl overflow-hidden border border-outline-variant/30 group">
+<div class="absolute inset-0 z-0">
+<img alt="London" class="w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity duration-500" data-alt="A moody, high-contrast evening shot of the London skyline featuring Big Ben and the Thames. The sky is dark, deep blue, blending into black shadows. Golden city lights reflect subtly on the water. The overall aesthetic is cinematic, premium, and designed to sit seamlessly behind dark-mode UI components." data-location="London" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4FHp0aAme9BGSW4-HYAsrRRZaCEO8iItHYxkz9mUvxGGnfVNQFbQnufZxIAj74m4s6poD7LVlRPNa6ptw2Ky2x6VS3MhVIr_743BwJVFGCBKCQThuxicb-00jeT9rC4Hnv9JmOIL-q0buqYog6iftvkKEn9qdHYlWx6RK6wjjDYlv1vokYL-qIm48qS8WhoVDTwZLqfUDVs6qz5BsNotYyuytMDk3A7txF0sZZ8IhVhd87kJHcdDW_3Yri0yA8fxq26KYJnmd5qk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container via-surface-container/80 to-transparent"></div>
+</div>
+<div class="relative z-10 p-6 flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">伦敦 12 日旅行</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">7月10日–7月21日</p>
+</div>
+<div class="bg-primary/20 text-primary px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1">
+<span class="material-symbols-outlined !text-[14px]">sync</span>
+<span class="font-label-sm text-label-sm">已同步 · 3 人同行</span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 pt-4 border-t border-outline-variant/30">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface">12</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">天</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface">38</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">个行程点</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface">6</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">张票据</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Trips Section -->
+<section class="flex flex-col gap-stack-gap">
+<h3 class="font-headline-md text-headline-md text-on-surface">最近行程</h3>
+<div class="bg-surface-container rounded-xl border border-outline-variant/30 flex flex-col">
+<!-- Row 1 -->
+<button class="flex items-center gap-4 p-4 hover:bg-surface-container-high/50 transition-colors w-full text-left">
+<div class="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant/30 flex-shrink-0 overflow-hidden">
+<img alt="London" class="w-full h-full object-cover" data-alt="A small, square thumbnail of the London eye at night. Deep blue and black tones dominate, with sharp, bright white lights detailing the structure. The mood is sleek and urban, perfectly suited for a dark-mode list item thumbnail." data-location="London" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGpbxHlZiiBhxiaxfFw0z70aK2NKA6VkRTHHARiM6bxIUyUl0-sGZn0ZLXd9DPD2VvfsCq5rp7ddPhFFn_L7usyta5-mPTKuozZoNGOrdZvQGESdQcOw0w90BkIv5_PzNKgPpSnkmgMtLaViigT8X3Y05PmMgn8SvdJ_bOEyyqCJTgtl6GYMWkfipOEq67VpGT6C0BALlIJXH09t-yPD-M87DkuS4rE9nGpawn1pR4ZkMy-1M25bmIkz7lVgndooOqYiWybJ4v1CE"/>
+</div>
+<div class="flex-1 flex flex-col border-b border-outline-variant/30 pb-4 h-full justify-center">
+<span class="font-body-lg text-body-lg text-on-surface">伦敦</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">计划中 · 7月10日出发</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant border-b border-outline-variant/30 pb-4 h-full flex items-center">chevron_right</span>
+</button>
+<!-- Row 2 -->
+<button class="flex items-center gap-4 p-4 hover:bg-surface-container-high/50 transition-colors w-full text-left">
+<div class="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant/30 flex-shrink-0 overflow-hidden">
+<img alt="Hokkaido" class="w-full h-full object-cover" data-alt="A snowy landscape in Hokkaido during twilight. The scene features deep indigo skies contrasting with bright, cold white snow. A single dark tree stands in silhouette. The image conveys a serene, minimalist winter aesthetic ideal for a premium travel app." data-location="Hokkaido" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrawgRKxtJSPi0zFQWxVuMSK3LyiepTtuBXsEseiqJ5RLSqcVpWDFHQfxCxqW700PUWBz_Ur6Ofr9kUvS92k_BQ9X9e2r-uqAJ5NMMW_wNkaZ-De11kXSPDKNYc16a68UBZUWHNatSgYPz7bykiOmeAbDDEYoTs9JtlLrnhRxxKC8RACK2X8vbNlu02wuttJ1jHIb46rEG1hpC2_NQgoDNqL9u2Y-Ki1_-kvVNin5X_3rzdUGn741BprCHzWQ7QLTzV0v23uer2Qo"/>
+</div>
+<div class="flex-1 flex flex-col border-b border-outline-variant/30 pb-4 h-full justify-center">
+<span class="font-body-lg text-body-lg text-on-surface">北海道</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">已完成 · 2023年12月</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant border-b border-outline-variant/30 pb-4 h-full flex items-center">chevron_right</span>
+</button>
+<!-- Row 3 -->
+<button class="flex items-center gap-4 p-4 hover:bg-surface-container-high/50 transition-colors w-full text-left">
+<div class="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant/30 flex-shrink-0 overflow-hidden">
+<img alt="Kyoto" class="w-full h-full object-cover" data-alt="A traditional Kyoto street at dusk. Lanterns emit a warm, dim orange glow against the deep shadows of wooden machiya houses. The overall tone is dark, atmospheric, and nostalgic, providing excellent contrast for white UI text." data-location="Kyoto" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2ypzPS81obNg1lUUTwXnMMq_K-JLbRbBY3668D7A7l8XEQytIsO9BpQEi0goUM1vHAsrJcgSRYW7Oap2IINeuc4Dg0OLE1u2cxBHBAGajLxCJ0g6djfS2hh4aOXVZY5zKl3pBtWYN3YBHIce8-GAXrFgfrLBnBwyDvYLg_JtKt12r1bT_BFSGuRBk0RC2CkW1O41Juav9T7gjYwaT73skL3fZQBJzJNp7tvkZ0Jr1pNYfvkFGd8PNxeEQCOlPGZi4BITERYDW3aw"/>
+</div>
+<div class="flex-1 flex flex-col border-b border-outline-variant/30 pb-4 h-full justify-center">
+<span class="font-body-lg text-body-lg text-on-surface">京都</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">已完成 · 2023年4月</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant border-b border-outline-variant/30 pb-4 h-full flex items-center">chevron_right</span>
+</button>
+<!-- Row 4 -->
+<button class="flex items-center gap-4 p-4 hover:bg-surface-container-high/50 transition-colors w-full text-left">
+<div class="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant/30 flex-shrink-0 overflow-hidden">
+<img alt="Shanghai" class="w-full h-full object-cover" data-alt="The Shanghai skyline illuminated at night. Dark skies frame the bright neon and architectural lighting of the futuristic towers. The image emphasizes high contrast and a modern cyberpunk-adjacent corporate aesthetic suited for a premium tech interface." data-location="Shanghai" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCz1r4P2uAnM0RmA-rLEnNuq6aFTjePU1XEyzuc43qOUHjYNvybFZPTlx6r7WA2Mwb8RHmURsDM8ugP1WTVwf12F_F3bu5whMhjx4CwvIIyk7CDwDJEDlC0sQtnWz4iDStZg8ozdZC2lfWTUBDS4sIUtBcT4v45_reVD7mAlvwClTrdYO_F_w3Xxkws3imwUndJpQ8iLCftuuU_FLsUFJlFqb2u7e1xfQnjJ75LofMrHYTmPyXwfQJCqMRp6QfCVpIskRQzgSGDmH8"/>
+</div>
+<div class="flex-1 flex flex-col pb-4 h-full justify-center">
+<span class="font-body-lg text-body-lg text-on-surface">上海</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">已完成 · 2022年10月</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant pb-4 h-full flex items-center">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Action Buttons -->
+<section class="flex flex-col gap-3 mt-4">
+<button class="w-full py-4 rounded-xl bg-[#0A84FF] text-white font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#0A84FF]/90 transition-colors active:scale-[0.98]">
+<span class="material-symbols-outlined fill-icon">add_circle</span>
+                新建行程
+            </button>
+<button class="w-full py-4 rounded-xl bg-[#2C2C2E] text-[#0A84FF] font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#2C2C2E]/80 transition-colors active:scale-[0.98]">
+<span class="material-symbols-outlined">download</span>
+                导入行程
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 pb-safe border-t-[0.5px] border-outline-variant/30 flat no shadows flex justify-around items-center h-16 px-2 bg-surface-dim/80 dark:bg-surface-dim/80 backdrop-blur-xl md:hidden">
+<!-- Active Nav Item -->
+<button class="flex flex-col items-center justify-center text-primary dark:text-primary bg-primary-container/10 rounded-xl px-3 py-1 active:scale-90 duration-150">
+<span class="material-symbols-outlined fill-icon mb-1">home</span>
+<span class="font-label-sm text-label-sm">首页</span>
+</button>
+<!-- Inactive Nav Items -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-3 py-1 hover:text-on-surface transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">explore</span>
+<span class="font-label-sm text-label-sm">行程</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-3 py-1 hover:text-on-surface transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">search</span>
+<span class="font-label-sm text-label-sm">搜索</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-3 py-1 hover:text-on-surface transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-label-sm text-label-sm">设置</span>
+</button>
+</nav>
+</body></html>

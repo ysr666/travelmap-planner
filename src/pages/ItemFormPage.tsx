@@ -128,7 +128,7 @@ export function ItemFormPage() {
     return (
       <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
         <Card variant="grouped" className="space-y-3">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
           <Button onClick={handleCancel} variant="secondary">{tripId ? '返回旅行工作台' : '返回首页'}</Button>
         </Card>
       </div>

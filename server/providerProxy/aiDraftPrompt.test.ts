@@ -5,7 +5,7 @@ import {
   summarizeAiDraftPromptInput,
 } from './aiDraftPrompt'
 import { AI_DRAFT_MAX_FREE_TEXT_EMBED_CHARS, AI_DRAFT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
-import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'
+import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
 
 function validRequest(overrides?: Partial<ProviderProxyAiTripDraftRequest>): ProviderProxyAiTripDraftRequest {
   return {

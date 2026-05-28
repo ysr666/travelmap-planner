@@ -1,0 +1,122 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - button "返回首页" [ref=e6]:
+        - img [ref=e7]
+      - heading "设置" [level=1] [ref=e10]
+  - main [ref=e12]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - heading "PWA 和离线使用" [level=2] [ref=e23]
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - img [ref=e27]
+            - generic [ref=e29]:
+              - heading "可添加到 iPhone 主屏幕" [level=3] [ref=e30]
+              - paragraph [ref=e31]: 在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
+          - generic [ref=e32]:
+            - generic [ref=e33]:
+              - img [ref=e35]
+              - generic [ref=e39]: 当前在线
+            - generic [ref=e40]:
+              - img [ref=e42]
+              - generic [ref=e46]: 已保存的旅行、时间轴、交通段、票据和备份功能依赖本机 IndexedDB。
+            - generic [ref=e47]:
+              - img [ref=e49]
+              - generic [ref=e51]: 地图底图和外部 Apple/Google Maps 路线需要网络；本应用不会缓存外部地图资源。
+      - generic [ref=e52]:
+        - heading "导入备份" [level=2] [ref=e55]
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - img [ref=e59]
+            - generic [ref=e62]:
+              - heading "导入备份" [level=3] [ref=e63]
+              - paragraph [ref=e64]: 选择之前导出的 travelmap zip 文件。
+          - generic [ref=e65]:
+            - text: 备份文件
+            - button "备份文件" [ref=e66]
+          - button "导入 zip 备份" [disabled] [ref=e67]:
+            - img [ref=e68]
+            - generic [ref=e71]: 导入 zip 备份
+      - group [ref=e72]:
+        - generic "云端备份 Supabase 快照备份与恢复" [ref=e73] [cursor=pointer]:
+          - img [ref=e74]
+          - generic [ref=e76]:
+            - paragraph [ref=e77]: 云端备份
+            - paragraph [ref=e78]: Supabase 快照备份与恢复
+        - generic [ref=e80]:
+          - heading "云端备份" [level=2] [ref=e83]
+          - generic [ref=e84]:
+            - generic [ref=e85]:
+              - img [ref=e87]
+              - generic [ref=e89]:
+                - heading "Supabase 云端快照" [level=3] [ref=e90]
+                - paragraph [ref=e91]: 云端备份适合跨设备恢复。IndexedDB 仍是主数据源，不会实时同步，也不会自动合并多设备修改。
+            - generic [ref=e92]:
+              - generic [ref=e93]:
+                - img [ref=e95]
+                - generic [ref=e98]: 云端备份会上传旅行数据和 copy 票据附件到 Supabase。
+              - generic [ref=e99]:
+                - img [ref=e101]
+                - generic [ref=e103]: 第一版未做端到端加密。护照、签证、银行卡等高度敏感文件请谨慎上传。
+              - generic [ref=e104]:
+                - img [ref=e106]
+                - generic [ref=e108]: 真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。
+            - generic [ref=e110]:
+              - generic [ref=e111]:
+                - paragraph [ref=e112]: 自动云端备份
+                - paragraph [ref=e113]: 可以先保存设置；登录云端备份账号后才会开始自动上传。
+              - switch "自动云端备份" [ref=e114]
+            - generic [ref=e116]:
+              - generic [ref=e172]:
+                - img [ref=e174]
+                - generic [ref=e177]: 登录链接/验证码已发送，请检查邮箱。
+              - generic [ref=e123]:
+                - text: 邮箱
+                - textbox "Supabase 登录邮箱" [ref=e124]:
+                  - /placeholder: you@example.com
+                  - text: ysr182@qq.com
+              - button "发送登录链接/验证码" [ref=e125]:
+                - img [ref=e178]
+                - generic [ref=e129]: 发送登录链接/验证码
+              - generic [ref=e130]:
+                - text: 验证码
+                - textbox "Supabase 登录验证码" [ref=e131]:
+                  - /placeholder: 邮箱中的验证码
+              - button "验证登录" [ref=e132]:
+                - img [ref=e133]
+                - generic [ref=e136]: 验证登录
+      - group [ref=e137]:
+        - generic "AI 行程导入 用 AI 生成行程后导入" [ref=e138] [cursor=pointer]:
+          - img [ref=e139]
+          - generic [ref=e141]:
+            - paragraph [ref=e142]: AI 行程导入
+            - paragraph [ref=e143]: 用 AI 生成行程后导入
+      - group [ref=e144]:
+        - generic "Google Maps 配置 底图、地点搜索与公交路线" [ref=e145] [cursor=pointer]:
+          - img [ref=e146]
+          - generic [ref=e148]:
+            - paragraph [ref=e149]: Google Maps 配置
+            - paragraph [ref=e150]: 底图、地点搜索与公交路线
+      - group [ref=e151]:
+        - generic "路线服务配置 步行/驾车路线与缓存管理" [ref=e152] [cursor=pointer]:
+          - img [ref=e153]
+          - generic [ref=e155]:
+            - paragraph [ref=e156]: 路线服务配置
+            - paragraph [ref=e157]: 步行/驾车路线与缓存管理
+        - option "5.0 MB"
+        - option "20.0 MB" [selected]
+        - option "50.0 MB"
+        - option "100.0 MB"
+      - group [ref=e158]:
+        - generic "设备存储 IndexedDB 用量与持久化状态" [ref=e159] [cursor=pointer]:
+          - img [ref=e160]
+          - generic [ref=e162]:
+            - paragraph [ref=e163]: 设备存储
+            - paragraph [ref=e164]: IndexedDB 用量与持久化状态
+      - group [ref=e165]:
+        - generic "关于 版本信息与备份提醒" [ref=e166] [cursor=pointer]:
+          - img [ref=e167]
+          - generic [ref=e169]:
+            - paragraph [ref=e170]: 关于
+            - paragraph [ref=e171]: 版本信息与备份提醒

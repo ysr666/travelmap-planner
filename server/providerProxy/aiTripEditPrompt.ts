@@ -1,5 +1,5 @@
-import type { AiTripEditContext } from '../../src/lib/aiTripEditContext'
-import type { ProviderProxyAiTripEditPlanRequest } from '../../src/lib/providerProxyContract'
+import type { AiTripEditContext } from '../../src/lib/ai/aiTripEditContext'
+import type { ProviderProxyAiTripEditPlanRequest } from '../../src/lib/ai/providerProxyContract'
 import type { AiBackendReasoningMode } from './aiReasoningPolicy'
 
 export type AiTripEditProviderInput = {

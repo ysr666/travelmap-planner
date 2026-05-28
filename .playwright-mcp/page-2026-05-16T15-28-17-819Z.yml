@@ -1,0 +1,214 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "返回首页" [ref=e49]:
+          - img [ref=e50]
+        - heading "设置" [level=1] [ref=e53]
+    - main [ref=e20]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - heading "PWA 和离线使用" [level=2] [ref=e64]
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - img [ref=e68]
+              - generic [ref=e70]:
+                - heading "可添加到 iPhone 主屏幕" [level=3] [ref=e71]
+                - paragraph [ref=e72]: 在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
+            - generic [ref=e73]:
+              - generic [ref=e74]:
+                - img [ref=e76]
+                - generic [ref=e80]: 当前在线
+              - generic [ref=e81]:
+                - img [ref=e83]
+                - generic [ref=e87]: 已保存的旅行、时间轴、交通段、票据和备份功能依赖本机 IndexedDB。
+              - generic [ref=e88]:
+                - img [ref=e90]
+                - generic [ref=e92]: 地图底图和外部 Apple/Google Maps 路线需要网络；本应用不会缓存外部地图资源。
+        - generic [ref=e93]:
+          - heading "导入备份" [level=2] [ref=e96]
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img [ref=e100]
+              - generic [ref=e103]:
+                - heading "导入备份" [level=3] [ref=e104]
+                - paragraph [ref=e105]: 选择之前导出的 travelmap zip 文件。
+            - generic [ref=e106]:
+              - text: 备份文件
+              - button "备份文件" [ref=e107]
+            - button "导入 zip 备份" [disabled] [ref=e108]:
+              - img [ref=e109]
+              - generic [ref=e112]: 导入 zip 备份
+        - group [ref=e113]:
+          - generic "云端备份 Supabase 快照备份与恢复" [ref=e114] [cursor=pointer]:
+            - img [ref=e115]
+            - generic [ref=e117]:
+              - paragraph [ref=e118]: 云端备份
+              - paragraph [ref=e119]: Supabase 快照备份与恢复
+          - generic [ref=e121]:
+            - heading "云端备份" [level=2] [ref=e124]
+            - generic [ref=e125]:
+              - generic [ref=e126]:
+                - img [ref=e128]
+                - generic [ref=e130]:
+                  - heading "Supabase 云端快照" [level=3] [ref=e131]
+                  - paragraph [ref=e132]: 云端备份适合跨设备恢复。IndexedDB 仍是主数据源，不会实时同步，也不会自动合并多设备修改。
+              - generic [ref=e133]:
+                - generic [ref=e134]:
+                  - img [ref=e136]
+                  - generic [ref=e139]: 云端备份会上传旅行数据和 copy 票据附件到 Supabase。
+                - generic [ref=e140]:
+                  - img [ref=e142]
+                  - generic [ref=e144]: 第一版未做端到端加密。护照、签证、银行卡等高度敏感文件请谨慎上传。
+                - generic [ref=e145]:
+                  - img [ref=e147]
+                  - generic [ref=e149]: 真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。
+              - generic [ref=e151]:
+                - generic [ref=e152]:
+                  - paragraph [ref=e153]: 自动云端备份
+                  - paragraph [ref=e154]: 开启后，本机数据变化会延迟上传旅行云端快照。不会自动恢复或合并冲突。
+                - switch "自动云端备份" [ref=e155]
+              - generic [ref=e157]:
+                - generic [ref=e158]:
+                  - paragraph [ref=e159]: 当前账号
+                  - paragraph [ref=e160]: ysr182@qq.com
+                - generic [ref=e161]:
+                  - button "上传当前旅行到云端" [disabled] [ref=e162]:
+                    - img [ref=e163]
+                    - generic [ref=e166]: 上传当前旅行到云端
+                  - paragraph [ref=e167]: 请先进入某个旅行，再上传云端备份。
+                  - button "退出登录" [ref=e168]:
+                    - img [ref=e169]
+                    - generic [ref=e172]: 退出登录
+                - generic [ref=e173]:
+                  - article [ref=e174]:
+                    - generic [ref=e175]:
+                      - heading "自动备份 QA 20260516-200325 retry-ok (本地已修改)" [level=4] [ref=e176]
+                      - paragraph [ref=e177]: QA 自动备份目的地 · 5/16 22:08
+                      - paragraph [ref=e178]: 1 个文件 · 1 KB
+                    - generic [ref=e179]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e180]:
+                        - img [ref=e181]
+                        - generic [ref=e184]: 恢复
+                      - button "删除" [ref=e185]:
+                        - img [ref=e186]
+                        - generic [ref=e189]: 删除
+                  - article [ref=e190]:
+                    - generic [ref=e191]:
+                      - heading "自动备份 QA 20260516-200325 retry-ok" [level=4] [ref=e192]
+                      - paragraph [ref=e193]: QA 自动备份目的地 · 5/16 20:05
+                      - paragraph [ref=e194]: 1 个文件 · 1 KB
+                    - generic [ref=e195]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e196]:
+                        - img [ref=e197]
+                        - generic [ref=e200]: 恢复
+                      - button "删除" [ref=e201]:
+                        - img [ref=e202]
+                        - generic [ref=e205]: 删除
+                  - article [ref=e206]:
+                    - generic [ref=e207]:
+                      - heading "自动备份 QA 20260516-200325 retry-ok" [level=4] [ref=e208]
+                      - paragraph [ref=e209]: QA 自动备份目的地 · 5/16 20:04
+                      - paragraph [ref=e210]: 0 个文件 · 0 KB
+                    - generic [ref=e211]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e212]:
+                        - img [ref=e213]
+                        - generic [ref=e216]: 恢复
+                      - button "删除" [ref=e217]:
+                        - img [ref=e218]
+                        - generic [ref=e221]: 删除
+                  - article [ref=e222]:
+                    - generic [ref=e223]:
+                      - heading "自动备份 QA 20260516-200325 rapid 3" [level=4] [ref=e224]
+                      - paragraph [ref=e225]: QA 自动备份目的地 · 5/16 20:04
+                      - paragraph [ref=e226]: 0 个文件 · 0 KB
+                    - generic [ref=e227]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e228]:
+                        - img [ref=e229]
+                        - generic [ref=e232]: 恢复
+                      - button "删除" [ref=e233]:
+                        - img [ref=e234]
+                        - generic [ref=e237]: 删除
+                  - article [ref=e238]:
+                    - generic [ref=e239]:
+                      - heading "自动备份 QA 20260516-200325 v2" [level=4] [ref=e240]
+                      - paragraph [ref=e241]: QA 自动备份目的地 · 5/16 20:04
+                      - paragraph [ref=e242]: 0 个文件 · 0 KB
+                    - generic [ref=e243]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e244]:
+                        - img [ref=e245]
+                        - generic [ref=e248]: 恢复
+                      - button "删除" [ref=e249]:
+                        - img [ref=e250]
+                        - generic [ref=e253]: 删除
+                  - article [ref=e254]:
+                    - generic [ref=e255]:
+                      - heading "自动备份 QA 20260516-200325 v2" [level=4] [ref=e256]
+                      - paragraph [ref=e257]: QA 自动备份目的地 · 5/16 20:03
+                      - paragraph [ref=e258]: 0 个文件 · 0 KB
+                    - generic [ref=e259]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e260]:
+                        - img [ref=e261]
+                        - generic [ref=e264]: 恢复
+                      - button "删除" [ref=e265]:
+                        - img [ref=e266]
+                        - generic [ref=e269]: 删除
+                  - article [ref=e270]:
+                    - generic [ref=e271]:
+                      - heading "自动备份 QA 20260516-200325" [level=4] [ref=e272]
+                      - paragraph [ref=e273]: QA 自动备份目的地 · 5/16 20:03
+                      - paragraph [ref=e274]: 0 个文件 · 0 KB
+                    - generic [ref=e275]:
+                      - button "恢复这个云端备份为新的本地旅行" [ref=e276]:
+                        - img [ref=e277]
+                        - generic [ref=e280]: 恢复
+                      - button "删除" [ref=e281]:
+                        - img [ref=e282]
+                        - generic [ref=e285]: 删除
+        - group [ref=e286]:
+          - generic "AI 行程导入 用 AI 生成行程后导入" [ref=e287] [cursor=pointer]:
+            - img [ref=e288]
+            - generic [ref=e290]:
+              - paragraph [ref=e291]: AI 行程导入
+              - paragraph [ref=e292]: 用 AI 生成行程后导入
+        - group [ref=e293]:
+          - generic "Google Maps 配置 底图、地点搜索与公交路线" [ref=e294] [cursor=pointer]:
+            - img [ref=e295]
+            - generic [ref=e297]:
+              - paragraph [ref=e298]: Google Maps 配置
+              - paragraph [ref=e299]: 底图、地点搜索与公交路线
+        - group [ref=e300]:
+          - generic "路线服务配置 步行/驾车路线与缓存管理" [ref=e301] [cursor=pointer]:
+            - img [ref=e302]
+            - generic [ref=e304]:
+              - paragraph [ref=e305]: 路线服务配置
+              - paragraph [ref=e306]: 步行/驾车路线与缓存管理
+          - option "5.0 MB"
+          - option "20.0 MB" [selected]
+          - option "50.0 MB"
+          - option "100.0 MB"
+        - group [ref=e307]:
+          - generic "设备存储 IndexedDB 用量与持久化状态" [ref=e308] [cursor=pointer]:
+            - img [ref=e309]
+            - generic [ref=e311]:
+              - paragraph [ref=e312]: 设备存储
+              - paragraph [ref=e313]: IndexedDB 用量与持久化状态
+        - group [ref=e314]:
+          - generic "关于 版本信息与备份提醒" [ref=e315] [cursor=pointer]:
+            - img [ref=e316]
+            - generic [ref=e318]:
+              - paragraph [ref=e319]: 关于
+              - paragraph [ref=e320]: 版本信息与备份提醒
+  - dialog [ref=e321]:
+    - generic [ref=e322]:
+      - generic [ref=e324]:
+        - img [ref=e326]
+        - generic [ref=e329]:
+          - heading "恢复云端备份？" [level=2] [ref=e330]
+          - paragraph [ref=e331]: 恢复会创建一个新的本地旅行，不会覆盖当前本地数据。
+      - generic [ref=e332]:
+        - button "取消" [disabled] [ref=e333]:
+          - generic [ref=e334]: 取消
+        - button "确认恢复" [disabled] [ref=e335]:
+          - img [ref=e337]
+          - generic [ref=e336]: 确认恢复

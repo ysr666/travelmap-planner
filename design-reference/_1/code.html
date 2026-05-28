@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TripMap - 大英博物馆</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#ffb691",
+                    "tertiary-container": "#eb6a12",
+                    "on-tertiary": "#552000",
+                    "inverse-surface": "#e4e2e4",
+                    "surface-bright": "#39393b",
+                    "surface-variant": "#353437",
+                    "primary": "#aac7ff",
+                    "outline-variant": "#414754",
+                    "outline": "#8b91a0",
+                    "on-primary-fixed-variant": "#00468d",
+                    "inverse-on-surface": "#303032",
+                    "on-error": "#690005",
+                    "surface-container-highest": "#353437",
+                    "on-secondary": "#003910",
+                    "primary-fixed": "#d6e3ff",
+                    "error": "#ffb4ab",
+                    "on-surface-variant": "#c0c6d6",
+                    "on-secondary-fixed-variant": "#00531a",
+                    "secondary-fixed": "#6cff82",
+                    "surface-container-lowest": "#0e0e10",
+                    "surface-container-high": "#2a2a2c",
+                    "secondary-container": "#09bf49",
+                    "on-primary-fixed": "#001b3e",
+                    "primary-container": "#3e90ff",
+                    "on-tertiary-container": "#4a1b00",
+                    "on-tertiary-fixed": "#341100",
+                    "surface-dim": "#131315",
+                    "on-surface": "#e4e2e4",
+                    "primary-fixed-dim": "#aac7ff",
+                    "secondary-fixed-dim": "#47e266",
+                    "on-background": "#e4e2e4",
+                    "surface-tint": "#aac7ff",
+                    "tertiary-fixed": "#ffdbcb",
+                    "on-error-container": "#ffdad6",
+                    "surface-container": "#1f1f21",
+                    "on-secondary-fixed": "#002106",
+                    "on-primary-container": "#002957",
+                    "error-container": "#93000a",
+                    "tertiary": "#ffb691",
+                    "background": "#131315",
+                    "on-tertiary-fixed-variant": "#793100",
+                    "secondary": "#47e266",
+                    "on-primary": "#003064",
+                    "surface-container-low": "#1b1b1d",
+                    "on-secondary-container": "#004615",
+                    "surface": "#131315",
+                    "inverse-primary": "#005db8"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "16px",
+                    "margin-desktop": "32px",
+                    "stack-gap": "12px",
+                    "section-gap": "24px",
+                    "margin-mobile": "16px"
+            },
+            "fontFamily": {
+                    "headline-md": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "headline-lg-mobile": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "headline-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "label-sm": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "headline-md": [
+                            "22px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-md": [
+                            "15px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "26px",
+                            {
+                                    "lineHeight": "32px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-lg": [
+                            "17px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-sm": [
+                            "13px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "500"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        /* Safe area padding for mobile devices */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+        .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+        
+        /* Hide scrollbar for horizontal scrolling elements */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Ticket cutout effect */
+        .ticket-cutout {
+            mask-image: radial-gradient(circle at top left, transparent 6px, black 7px),
+                        radial-gradient(circle at top right, transparent 6px, black 7px),
+                        radial-gradient(circle at bottom left, transparent 6px, black 7px),
+                        radial-gradient(circle at bottom right, transparent 6px, black 7px),
+                        linear-gradient(black, black);
+            mask-composite: intersect;
+            -webkit-mask-image: radial-gradient(circle at 0% 50%, transparent 8px, black 9px),
+                                radial-gradient(circle at 100% 50%, transparent 8px, black 9px),
+                                linear-gradient(black, black);
+            -webkit-mask-composite: destination-in;
+            mask-composite: intersect;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md antialiased pt-safe pb-24">
+<!-- TopAppBar (Adapted for Detail View) -->
+<header class="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b-[0.5px] border-outline-variant/30 flex justify-between items-center px-4 h-16 pt-safe">
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-primary active:scale-95 duration-200 hover:bg-surface-container-high/50 transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<div class="font-headline-md text-headline-md font-bold text-on-surface">详情</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-primary active:scale-95 duration-200 hover:bg-surface-container-high/50 transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">bookmark_border</span>
+</button>
+</header>
+<!-- Hero Header -->
+<section class="relative w-full h-[320px] md:h-[400px] mt-16">
+<!-- High-quality image background -->
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A breathtaking night view of the British Museum's Grand Court in London. The spectacular glass and steel roof is illuminated, creating a striking contrast against the dark sky. Soft, premium architectural lighting highlights the classic stone columns and modern structure. The overall aesthetic is sophisticated, dark, and highly detailed, perfectly suiting a premium travel application's dark mode theme." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDcIYhINGKMN0l5iSSf7QaTRhUwmiG-y3eIRECeKk2MqKBouxMb_U_KOXTOFdDWUKYEPSFtUTCA1C8Rm5bNWaWEGwq9xmTkFMYzzZ71mdT21zO7ahPEe99nNtuv9CalV2JUASGDf7A2nal0R48PXf92d1W7dHd40Oez91nJx847B3uOneRB-qX_aZHiHNp_3tSC5rHI3KpKUXVuaHjPNs42mCDaFy_jffS182rWv1MIpv4M3m7q5jyMKcaEdhCkzfHCqTXCT2UPYB4');">
+</div>
+<!-- Gradient overlay to transition into charcoal background -->
+<div class="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent"></div>
+<!-- Title and Subtitle positioned at the bottom of the hero -->
+<div class="absolute bottom-6 left-gutter right-gutter">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-2">大英博物馆</h1>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-md text-body-md bg-surface/50 backdrop-blur-md inline-flex px-3 py-1.5 rounded-full border border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>10:00–16:30 · Great Russell St</span>
+</div>
+</div>
+</section>
+<!-- Main Content Canvas -->
+<main class="px-gutter md:px-margin-desktop py-section-gap space-y-8 max-w-3xl mx-auto">
+<!-- 基础信息 (Basic Info) Group -->
+<section>
+<h2 class="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">基础信息</h2>
+<div class="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
+<!-- Location -->
+<div class="flex items-center p-4 border-b border-outline-variant/30 hover:bg-surface-container-high transition-colors cursor-pointer group active:scale-[0.99]">
+<div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary mr-4 group-hover:bg-primary-container/30 transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div class="flex-1">
+<div class="font-body-lg text-body-lg text-on-surface">Great Russell St, London WC1B 3DG</div>
+<div class="font-body-md text-body-md text-on-surface-variant mt-0.5">距离您当前位置 2.4 公里</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+<!-- Time -->
+<div class="flex items-center p-4 border-b border-outline-variant/30 hover:bg-surface-container-high transition-colors group active:scale-[0.99]">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4">
+<span class="material-symbols-outlined">schedule</span>
+</div>
+<div class="flex-1">
+<div class="font-body-lg text-body-lg text-on-surface flex items-center gap-2">
+                            今日开放 <span class="w-2 h-2 rounded-full bg-secondary-fixed-dim"></span>
+</div>
+<div class="font-body-md text-body-md text-on-surface-variant mt-0.5">10:00–16:30 (最晚入场 15:30)</div>
+</div>
+</div>
+<!-- Notes -->
+<div class="flex items-start p-4 hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4 shrink-0">
+<span class="material-symbols-outlined">info</span>
+</div>
+<div class="flex-1 pt-2">
+<div class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                            建议提前在线预约免费门票。馆内安检可能需要排队，请预留充足时间。大型背包需寄存。
+                        </div>
+</div>
+</div>
+</div>
+</section>
+<!-- 交通 (Transportation) Group -->
+<section>
+<h2 class="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">交通</h2>
+<div class="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
+<!-- Subway -->
+<div class="flex items-center p-4 border-b border-outline-variant/30 hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 rounded-lg bg-[#E32017]/20 flex items-center justify-center text-[#E32017] mr-4 shrink-0 border border-[#E32017]/30">
+<span class="material-symbols-outlined">subway</span>
+</div>
+<div class="flex-1">
+<div class="font-body-lg text-body-lg text-on-surface">Tottenham Court Road</div>
+<div class="flex gap-2 mt-1.5">
+<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#E32017] text-white">Central</span>
+<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#000000] text-white border border-outline-variant">Northern</span>
+<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#7156A5] text-white">Elizabeth</span>
+</div>
+</div>
+<div class="text-right">
+<div class="font-body-md text-body-md text-on-surface">步行 5 分钟</div>
+</div>
+</div>
+<!-- Walking -->
+<div class="flex items-center p-4 hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4 shrink-0">
+<span class="material-symbols-outlined">directions_walk</span>
+</div>
+<div class="flex-1">
+<div class="font-body-lg text-body-lg text-on-surface">从当前酒店出发</div>
+<div class="font-body-md text-body-md text-on-surface-variant mt-0.5">沿 Oxford St 向东步行</div>
+</div>
+<div class="text-right">
+<div class="font-body-md text-body-md text-on-surface text-primary">导航</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 票据 (Tickets) Section - Visual Cards -->
+<section>
+<div class="flex justify-between items-end mb-3 pl-1">
+<h2 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">票据</h2>
+<button class="text-primary font-label-sm text-label-sm flex items-center gap-1 active:opacity-70 transition-opacity">
+                    查看全部 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<!-- Horizontal Scroll Container for Cards -->
+<div class="flex overflow-x-auto no-scrollbar gap-4 pb-2 -mx-gutter px-gutter md:mx-0 md:px-0">
+<!-- Card 1: 门票确认单 -->
+<div class="ticket-cutout relative min-w-[260px] flex-shrink-0 bg-surface-container-high border border-outline-variant/30 rounded-xl overflow-hidden shadow-lg active:scale-[0.98] transition-transform duration-200 cursor-pointer">
+<!-- Top color strip -->
+<div class="h-2 w-full bg-primary-container"></div>
+<div class="p-4">
+<div class="flex justify-between items-start mb-6">
+<div class="w-10 h-10 rounded bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">qr_code_scanner</span>
+</div>
+<span class="px-2 py-1 rounded bg-secondary-container/20 text-secondary-fixed-dim font-label-sm text-[11px] border border-secondary-container/30">已生效</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">门票确认单</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-4">入场凭证 · 2人</p>
+<!-- Dashed separation line -->
+<div class="border-t border-dashed border-outline-variant/50 w-full my-3"></div>
+<div class="flex justify-between items-center pt-1">
+<span class="font-body-md text-body-md text-on-surface-variant">今日 10:30</span>
+<span class="material-symbols-outlined text-outline-variant">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Card 2: 预约邮件 PDF -->
+<div class="ticket-cutout relative min-w-[260px] flex-shrink-0 bg-surface-container border border-outline-variant/30 rounded-xl overflow-hidden shadow-lg active:scale-[0.98] transition-transform duration-200 cursor-pointer">
+<!-- Top color strip -->
+<div class="h-2 w-full bg-surface-variant"></div>
+<div class="p-4">
+<div class="flex justify-between items-start mb-6">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">picture_as_pdf</span>
+</div>
+<span class="text-on-surface-variant font-label-sm text-[11px]">72 KB</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">预约邮件 PDF</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-4">备份文件</p>
+<!-- Dashed separation line -->
+<div class="border-t border-dashed border-outline-variant/50 w-full my-3"></div>
+<div class="flex justify-between items-center pt-1">
+<span class="font-body-md text-body-md text-on-surface-variant">点击预览</span>
+<span class="material-symbols-outlined text-outline-variant">open_in_new</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Action Area (Custom for Detail Screen) -->
+<div class="fixed bottom-0 w-full z-50 bg-surface-dim/90 backdrop-blur-xl border-t-[0.5px] border-outline-variant/30 p-4 pb-safe flex justify-between items-center gap-3">
+<!-- 上一项 (Previous) -->
+<button class="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface">
+<span class="material-symbols-outlined">keyboard_arrow_left</span>
+</button>
+<!-- 返回地图 (Primary - Return to Map) -->
+<button class="flex-1 h-12 bg-primary-container text-on-primary-container font-headline-md text-[16px] rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(62,144,255,0.2)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
+            返回地图
+        </button>
+<!-- 下一项 (Next) -->
+<button class="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface">
+<span class="material-symbols-outlined">keyboard_arrow_right</span>
+</button>
+</div>
+</body></html>

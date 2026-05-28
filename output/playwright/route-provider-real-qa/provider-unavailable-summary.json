@@ -1,0 +1,14 @@
+{
+  "counts": {
+    "googleRoutes": 0,
+    "orsRoutes": 0
+  },
+  "requestEvents": [],
+  "screenshots": {
+    "provider-unavailable-state.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/provider-unavailable-state.png"
+  },
+  "checks": {
+    "providerUnavailableShown": true,
+    "noProviderRequest": true
+  }
+}

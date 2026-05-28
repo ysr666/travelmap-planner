@@ -1,0 +1,70 @@
+{
+  "providerConfig": {
+    "googleConfigured": true,
+    "orsConfigured": true
+  },
+  "requestEvents": [
+    {
+      "phase": "ors_generation_confirmed",
+      "provider": "openrouteservice",
+      "method": "POST"
+    }
+  ],
+  "counts": {
+    "googleRoutes": 0,
+    "orsRoutes": 1
+  },
+  "checks": {
+    "noSilentRequest": true,
+    "noCacheBeforeConfirm": true,
+    "noRequestAtDialog": true,
+    "orsGenerationRequestCount": 1,
+    "orsCacheWritten": true,
+    "orsTripPreviewCacheWritten": true,
+    "sortOrderUnchangedAfterGeneration": true,
+    "cacheReuseNoRepeatRequest": true,
+    "dayViewNoExtraProviderRequest": true,
+    "googleDoesNotReuseOrsCache": true
+  },
+  "screenshots": {
+    "route-generation-confirm-dialog.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/route-generation-confirm-dialog.png",
+    "trip-home-route-cached-after-generate.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/trip-home-route-cached-after-generate.png",
+    "trip-home-route-cache-reuse-after-refresh.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/trip-home-route-cache-reuse-after-refresh.png",
+    "day-view-route-cache-display.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/day-view-route-cache-display.png",
+    "provider-separation-google-ready-after-ors-cache.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/provider-separation-google-ready-after-ors-cache.png"
+  },
+  "cacheSnapshots": {
+    "beforeConfirm": [],
+    "afterGeneration": [
+      {
+        "dayId": "qa-real-provider-ors-day",
+        "distanceMeters": 1754.8,
+        "durationSeconds": 135.4,
+        "lineStringCount": 1,
+        "provider": "openrouteservice",
+        "scope": "day-map",
+        "status": "road"
+      },
+      {
+        "dayId": "__trip_preview__",
+        "distanceMeters": 1754.8,
+        "durationSeconds": 135.4,
+        "lineStringCount": 1,
+        "provider": "openrouteservice",
+        "scope": "trip-preview",
+        "status": "road"
+      }
+    ]
+  },
+  "sortOrders": {
+    "beforeGeneration": [
+      "ors-item-tokyo-station:1",
+      "ors-item-hibiya:2"
+    ],
+    "afterGeneration": [
+      "ors-item-tokyo-station:1",
+      "ors-item-hibiya:2"
+    ]
+  },
+  "error": "expect(locator).toContainText(expected) failed\n\nLocator: getByTestId('route-preparation-panel')\nExpected substring: \"当前路线服务不可用\"\nReceived string:    \"路线准备路线预览已准备已有 1 天路线缓存生成路线预览\"\nTimeout: 15000ms\n\nCall log:\n  - Expect \"to.have.text\" with timeout 15000ms\n  - waiting for getByTestId('route-preparation-panel')\n    19 × locator resolved to <div data-testid=\"route-preparation-panel\" class=\"rounded-2xl tm-group p-4 space-y-3\">…</div>\n       - unexpected value \"路线准备路线预览已准备已有 1 天路线缓存生成路线预览\"\n"
+}

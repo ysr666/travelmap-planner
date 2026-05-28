@@ -1,0 +1,89 @@
+{
+  "counts": {
+    "googleRoutes": 1,
+    "orsRoutes": 0
+  },
+  "networkResponses": [
+    {
+      "phase": "confirm_generation",
+      "status": 200,
+      "ok": true,
+      "contentType": "application/json; charset=UTF-8"
+    }
+  ],
+  "console": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "warning",
+      "text": "Google Maps JavaScript API has been loaded directly without loading=async. This can result in suboptimal performance. For best-practice loading patterns please see https://goo.gle/js-api-loading"
+    }
+  ],
+  "pageErrors": [],
+  "fetchEvents": [
+    {
+      "type": "response",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 1081,
+      "bodySummary": {
+        "routeCount": 1,
+        "hasPolyline": true,
+        "polylineLength": 292,
+        "distanceMeters": 6225,
+        "duration": "1284s"
+      }
+    }
+  ],
+  "ui": {
+    "beforeSummary": "可为 1 天生成路线预览",
+    "preConfirmCounts": {
+      "googleRoutes": 0,
+      "orsRoutes": 0
+    },
+    "dialogCounts": {
+      "googleRoutes": 0,
+      "orsRoutes": 0
+    },
+    "resultText": "已生成 1 天路线预览。",
+    "errorText": "",
+    "afterSummary": "路线预览已准备"
+  },
+  "cacheEntries": [
+    {
+      "dayId": "qa-google-debug-day",
+      "provider": "google",
+      "scope": "day-map",
+      "status": "road",
+      "lineStringCount": 1,
+      "firstLineLength": 89,
+      "warnings": [],
+      "distanceMeters": 6225,
+      "durationSeconds": 1284
+    },
+    {
+      "dayId": "__trip_preview__",
+      "provider": "google",
+      "scope": "trip-preview",
+      "status": "road",
+      "lineStringCount": 1,
+      "firstLineLength": 89,
+      "warnings": [],
+      "distanceMeters": 6225,
+      "durationSeconds": 1284
+    }
+  ],
+  "sortOrder": {
+    "before": [
+      "google-debug-a:1",
+      "google-debug-b:2"
+    ],
+    "after": [
+      "google-debug-a:1",
+      "google-debug-b:2"
+    ]
+  },
+  "browserErrors": []
+}

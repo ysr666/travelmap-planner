@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db } from '../db/database'
+import { db } from '../../db/database'
 import {
   createDay,
   createItineraryItem,
@@ -14,7 +14,7 @@ import {
   listItemsByDay,
   listItemsByTrip,
   updateItineraryItem,
-} from '../db/repositories'
+} from '../../db/repositories'
 import {
   applyAiTripEditPatchPlanToDb,
   buildAiTripEditApplyPayload,

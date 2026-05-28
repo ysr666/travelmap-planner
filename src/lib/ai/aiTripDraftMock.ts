@@ -1,6 +1,6 @@
 import type { AiTripDraft, AiTripDraftDay, AiTripDraftItem } from './aiTripDraft'
 import type { AiTripDraftRequest } from './aiTripDraftRequest'
-import { listPlainDateRangeInclusive } from './plainDate'
+import { listPlainDateRangeInclusive } from '../plainDate'
 
 const MORNING_ITEMS: Array<Pick<AiTripDraftItem, 'title' | 'startTime' | 'endTime'>> = [
   { title: '上午游览', startTime: '09:00', endTime: '11:00' },

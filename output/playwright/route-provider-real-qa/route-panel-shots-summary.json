@@ -1,0 +1,13 @@
+{
+  "counts": {
+    "googleRoutes": 0,
+    "orsRoutes": 0
+  },
+  "screenshots": {
+    "trip-home-route-ready-before-confirm.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/trip-home-route-ready-before-confirm.png",
+    "provider-unavailable-state.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/provider-unavailable-state.png"
+  },
+  "checks": {
+    "noProviderRequests": true
+  }
+}

@@ -731,7 +731,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       {mapError ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/88 p-5 text-center backdrop-blur">
           <div>
-            <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+            <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:text-amber-300">
               <AlertTriangle className="size-6" />
             </div>
             <h3 className="text-base font-bold text-slate-950">地图底图无法加载</h3>

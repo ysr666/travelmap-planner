@@ -6,7 +6,7 @@ import {
   type ProviderProxyTravelSearchResult,
   type ProviderProxyTravelSearchSourceType,
   type ProviderProxyTravelSearchSuccessResponse,
-} from '../../src/lib/providerProxyContract'
+} from '../../src/lib/ai/providerProxyContract'
 
 export type TravelSearchProviderErrorCode = Extract<ProviderProxyErrorCode, 'provider_unavailable' | 'provider_error' | 'network_error' | 'unsupported'>
 

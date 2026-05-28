@@ -1,0 +1,153 @@
+- main [ref=e21]:
+  - generic [ref=e928]:
+    - generic [ref=e930]:
+      - button "返回首页" [ref=e931]:
+        - img [ref=e932]
+      - generic [ref=e934]:
+        - paragraph [ref=e935]: QA Smoke Tokyo
+        - heading "QA Smoke V2" [level=1] [ref=e936]
+        - paragraph [ref=e937]: 6月1日 - 6月3日
+      - button "更多" [ref=e938]:
+        - img [ref=e939]
+    - generic [ref=e944]:
+      - generic [ref=e945]:
+        - generic [ref=e946]:
+          - generic [ref=e947]:
+            - img [ref=e954]
+            - generic [ref=e958]:
+              - generic [ref=e959]:
+                - paragraph [ref=e960]: Tokyo
+                - paragraph [ref=e961]: QA Smoke Tokyo
+              - generic [ref=e962]:
+                - img [ref=e963]
+                - generic [ref=e967]: 🌸
+          - generic [ref=e968]:
+            - paragraph [ref=e969]: QA Smoke Tokyo
+            - heading "QA Smoke V2" [level=2] [ref=e970]
+            - paragraph [ref=e971]: 6月1日 - 6月3日
+            - paragraph [ref=e973]:
+              - img [ref=e974]
+              - generic [ref=e976]: 已自动保存到本地
+        - generic [ref=e977]:
+          - generic [ref=e978]: 3 天
+          - generic [ref=e979]: 0 个行程点
+        - generic [ref=e980]:
+          - button "票据库" [ref=e981]:
+            - img [ref=e982]
+            - generic [ref=e984]: 票据库
+          - button "备份" [ref=e985]:
+            - img [ref=e986]
+            - generic [ref=e989]: 备份
+      - generic [ref=e990]:
+        - generic [ref=e991]:
+          - generic [ref=e992]:
+            - img [ref=e994]
+            - generic [ref=e998]:
+              - paragraph [ref=e999]: 行程体检
+              - heading "本地检查" [level=3] [ref=e1000]
+          - generic [ref=e1001]: 注意
+        - generic [ref=e1002]:
+          - generic [ref=e1003]: 3 天 · 天数
+          - generic [ref=e1004]: 0 个 · 行程点
+          - generic [ref=e1005]: 0 张 · 票据
+          - generic [ref=e1006]: 计划中
+        - paragraph [ref=e1007]: 基于当前本地行程信息，发现 3 项本地提醒。
+        - generic [ref=e1009]:
+          - paragraph [ref=e1010]: 3 项
+          - paragraph [ref=e1011]: 空白日期
+        - generic [ref=e1012]:
+          - generic [ref=e1013]:
+            - generic [ref=e1014]:
+              - heading "当天暂无行程点" [level=4] [ref=e1015]
+              - generic [ref=e1016]: 提醒
+            - paragraph [ref=e1017]: 这一天还没有行程点，可以在出发前确认是否是留白日。
+          - generic [ref=e1018]:
+            - generic [ref=e1019]:
+              - heading "当天暂无行程点" [level=4] [ref=e1020]
+              - generic [ref=e1021]: 提醒
+            - paragraph [ref=e1022]: 这一天还没有行程点，可以在出发前确认是否是留白日。
+          - generic [ref=e1023]:
+            - generic [ref=e1024]:
+              - heading "当天暂无行程点" [level=4] [ref=e1025]
+              - generic [ref=e1026]: 提醒
+            - paragraph [ref=e1027]: 这一天还没有行程点，可以在出发前确认是否是留白日。
+        - generic [ref=e1028]:
+          - paragraph [ref=e1029]: 准备提醒
+          - paragraph [ref=e1031]: 根据已填写内容，这趟行程有 3 个日期还没有行程点，可确认是否为留白安排。
+        - generic [ref=e1032]:
+          - paragraph [ref=e1033]: 仅基于本地行程信息，不读取票据文件、完整备注或坐标明细。
+          - paragraph [ref=e1034]: 后续可接入天气、开放时间和路线信息；当前仅根据已填写内容提示。
+      - generic [ref=e1035]:
+        - generic [ref=e1036]:
+          - img [ref=e1038]
+          - generic [ref=e1041]:
+            - heading "AI 修改建议" [level=3] [ref=e1042]
+            - paragraph [ref=e1043]: AI 只会生成修改方案，确认前不会改动行程。联网搜索能力将通过旅图服务提供，当前仍不会自动查询网页或实时票价。
+        - textbox "例如：第二天太满了，帮我放松一点" [ref=e1044]
+        - button "生成修改方案" [disabled] [ref=e1046]:
+          - img [ref=e1047]
+          - generic [ref=e1050]: 生成修改方案
+      - generic [ref=e1051]:
+        - generic [ref=e1052]:
+          - generic [ref=e1053]:
+            - heading "行程地图预览" [level=3] [ref=e1054]
+            - paragraph [ref=e1055]: 还没有可显示的坐标
+          - button "查看地图" [ref=e1056]:
+            - img [ref=e1057]
+            - text: 查看地图
+        - generic [ref=e1061]:
+          - img [ref=e1063]
+          - generic [ref=e1067]:
+            - paragraph [ref=e1068]: 还没有可显示的坐标
+            - paragraph [ref=e1069]: 给行程点补充坐标后，这里会显示地图预览。
+      - generic [ref=e1071]:
+        - generic [ref=e1072]:
+          - generic [ref=e1073]:
+            - img [ref=e1074]
+            - heading "路线准备" [level=3] [ref=e1078]
+          - paragraph [ref=e1079]: 补充至少两个有坐标的行程点后，可生成路线预览。
+        - button "生成路线预览" [disabled] [ref=e1080]:
+          - img [ref=e1081]
+          - generic [ref=e1085]: 生成路线预览
+      - generic [ref=e1086]:
+        - heading "每日行程" [level=3] [ref=e1087]
+        - generic [ref=e1088]:
+          - button "第一天 2026年6月1日 第 1 天 0 个行程点" [ref=e1089] [cursor=pointer]:
+            - generic [ref=e1090]: 第一天
+            - generic [ref=e1091]:
+              - generic [ref=e1092]: 2026年6月1日
+              - generic [ref=e1093]: 第 1 天
+              - generic [ref=e1094]: 0 个行程点
+            - img [ref=e1095]
+          - button "第二天 2026年6月2日 第 2 天 0 个行程点" [ref=e1097] [cursor=pointer]:
+            - generic [ref=e1098]: 第二天
+            - generic [ref=e1099]:
+              - generic [ref=e1100]: 2026年6月2日
+              - generic [ref=e1101]: 第 2 天
+              - generic [ref=e1102]: 0 个行程点
+            - img [ref=e1103]
+          - button "第三天 2026年6月3日 第 3 天 0 个行程点" [ref=e1105] [cursor=pointer]:
+            - generic [ref=e1106]: 第三天
+            - generic [ref=e1107]:
+              - generic [ref=e1108]: 2026年6月3日
+              - generic [ref=e1109]: 第 3 天
+              - generic [ref=e1110]: 0 个行程点
+            - img [ref=e1111]
+      - group [ref=e1113]:
+        - generic "备份与恢复" [ref=e1114] [cursor=pointer]:
+          - img [ref=e1115]
+          - paragraph [ref=e1118]: 备份与恢复
+    - navigation [ref=e1120]:
+      - generic [ref=e1121]:
+        - button "总览" [ref=e1122]:
+          - img [ref=e1123]
+          - generic [ref=e1126]: 总览
+        - button "日程" [ref=e1127]:
+          - img [ref=e1128]
+          - generic [ref=e1132]: 日程
+        - button "地图" [ref=e1133]:
+          - img [ref=e1134]
+          - generic [ref=e1136]: 地图
+        - button "票据" [ref=e1137]:
+          - img [ref=e1138]
+          - generic [ref=e1140]: 票据

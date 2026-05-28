@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { validateAiTripDraft } from '../../src/lib/aiTripDraft'
+import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import {
   createDisabledAiDraftProvider,
   createMockAiDraftProvider,
   createUnavailableAiDraftProvider,
 } from './aiDraftProvider'
-import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'
+import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
 
 function validRequest(overrides?: Partial<ProviderProxyAiTripDraftRequest>): ProviderProxyAiTripDraftRequest {
   return {

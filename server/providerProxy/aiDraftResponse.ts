@@ -1,4 +1,4 @@
-import { validateAiTripDraft, type AiTripDraft } from '../../src/lib/aiTripDraft'
+import { validateAiTripDraft, type AiTripDraft } from '../../src/lib/ai/aiTripDraft'
 
 export type AiDraftExtractionResult =
   | { ok: true; draft: AiTripDraft }

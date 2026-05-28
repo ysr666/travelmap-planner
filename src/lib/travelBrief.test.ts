@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTripContext } from './aiTripContext'
+import { buildTripContext } from './ai/aiTripContext'
 import { analyzeTripContext } from './tripCheck'
 import {
   buildDayBrief,

@@ -15,7 +15,7 @@ import {
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
-import type { ProviderProxyRouteOrderSuggestionSuccessResponse } from '../../lib/providerProxyContract'
+import type { ProviderProxyRouteOrderSuggestionSuccessResponse } from '../../lib/ai/providerProxyContract'
 import {
   buildRouteOrderSuggestionRequestItems,
   buildRouteOrderSuggestionSortPatches,

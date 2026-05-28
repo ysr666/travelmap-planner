@@ -1,7 +1,7 @@
 import { AI_DRAFT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
 import type { AiDraftProvider, AiDraftProviderResult, AiDraftRepairProvider } from './aiDraftProvider'
 import type { AiBackendReasoningMode } from './aiReasoningPolicy'
-import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'
+import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
 
 const REQUEST_TIMEOUT_MS = 60_000
 const CHAT_COMPLETIONS_PATH = '/chat/completions'

@@ -5,7 +5,7 @@ import {
   getProviderProxyConfig,
   type ProviderProxyClientOptions,
 } from './providerProxyClient'
-import type { ProviderProxyRoutePreviewRequest } from './providerProxyContract'
+import type { ProviderProxyRoutePreviewRequest } from './ai/providerProxyContract'
 import type { ItineraryItem, TransportMode } from '../types'
 
 export type RoutingProvider = 'none' | 'openrouteservice' | 'google'

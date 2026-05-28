@@ -1,5 +1,5 @@
-import type { TransportMode } from '../types'
-import { isValidPlainDate } from './plainDate'
+import type { TransportMode } from '../../types'
+import { isValidPlainDate } from '../plainDate'
 
 export type AiTripDraftInput = {
   title?: unknown

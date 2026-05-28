@@ -1,0 +1,20 @@
+- generic [ref=e3]:
+  - banner [ref=e1075]:
+    - generic [ref=e1076]:
+      - heading "旅图" [level=1] [ref=e1078]
+      - button "设置" [ref=e1079]:
+        - img [ref=e1080]
+  - main [ref=e12]:
+    - generic [ref=e1091]:
+      - generic [ref=e1093]:
+        - generic [ref=e1094]:
+          - heading "旅图" [level=2] [ref=e1095]
+          - paragraph [ref=e1096]: 让每一段旅程，井然有序
+        - generic [ref=e1097]: 0 次旅行
+      - heading "我的旅行" [level=2] [ref=e1101]
+      - generic [ref=e1107]:
+        - button "新建旅行" [ref=e1108]:
+          - img [ref=e1109]
+          - generic [ref=e1110]: 新建旅行
+        - button "导入备份" [ref=e1111]
+        - paragraph [ref=e1112]: 旅图 v0.3.0.2 · 本地优先

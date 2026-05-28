@@ -81,7 +81,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            className="text-red-600 ring-red-100"
+            className="text-red-600 dark:text-red-300 ring-red-100"
             loading={loading}
             onClick={onConfirm}
             variant="secondary"

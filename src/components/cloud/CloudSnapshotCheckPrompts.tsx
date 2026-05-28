@@ -124,10 +124,10 @@ export function CloudSnapshotCheckPrompts({
   return (
     <section className="space-y-2" data-testid="cloud-snapshot-check-prompts">
       {message ? (
-        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700">{message}</p>
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700 dark:text-emerald-300">{message}</p>
       ) : null}
       {error ? (
-        <p className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 [overflow-wrap:anywhere]">
+        <p className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:text-amber-300 [overflow-wrap:anywhere]">
           {error}
         </p>
       ) : null}
@@ -255,7 +255,7 @@ function CloudSnapshotPromptCard({
     >
       <div className="flex items-start gap-2">
         <div
-          className={`mt-0.5 flex shrink-0 items-center justify-center rounded-lg text-sky-600 ${
+          className={`mt-0.5 flex shrink-0 items-center justify-center rounded-lg text-sky-600 dark:text-sky-300 ${
             isTripVariant ? 'size-6 bg-sky-50' : 'size-7 bg-white/80'
           }`}
         >

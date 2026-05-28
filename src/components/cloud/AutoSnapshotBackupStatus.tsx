@@ -51,7 +51,7 @@ export function AutoSnapshotBackupStatus({
 function getStatusView(status: string | undefined, enabled: boolean) {
   if (status === 'uploading') {
     return {
-      className: 'bg-sky-50 text-sky-700',
+      className: 'bg-sky-50 text-sky-700 dark:text-sky-300',
       icon: <LoaderCircle className="size-3.5 animate-spin" />,
       text: '正在更新云端保存',
       weight: 'active',
@@ -60,7 +60,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
 
   if (status === 'error') {
     return {
-      className: 'bg-amber-50 text-amber-800',
+      className: 'bg-amber-50 text-amber-800 dark:text-amber-300',
       icon: <CloudOff className="size-3.5" />,
       text: '云端保存失败，可稍后重试',
       weight: 'active',
@@ -69,7 +69,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
 
   if (enabled && status === 'synced') {
     return {
-      className: 'bg-emerald-50 text-emerald-700',
+      className: 'bg-emerald-50 text-emerald-700 dark:text-emerald-300',
       icon: <Cloud className="size-3.5" />,
       text: '已更新云端保存',
       weight: 'quiet',

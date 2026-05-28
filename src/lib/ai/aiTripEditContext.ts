@@ -1,6 +1,6 @@
-import { sortItineraryItems } from './itinerary'
+import { sortItineraryItems } from '../itinerary'
 import { defaultAiPrivacySettings, type AiPrivacySettings } from './aiPrivacy'
-import type { Day, ItineraryItem, TransportMode, Trip } from '../types'
+import type { Day, ItineraryItem, TransportMode, Trip } from '../../types'
 
 export type AiTripEditCoordinateState = 'missing' | 'present' | 'invalid'
 export type AiTripEditTicketBoundState = 'none' | 'item_bound'

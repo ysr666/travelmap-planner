@@ -815,7 +815,7 @@ function MarkerPreviewCard({
             <MapPin className="size-5" />
           </span>
           <span className="pointer-events-none min-w-0 flex-1">
-            <span className="pointer-events-none text-xs font-semibold text-sky-600">{describeItemTime(item)}</span>
+            <span className="pointer-events-none text-xs font-semibold text-sky-600 dark:text-sky-300">{describeItemTime(item)}</span>
             <span className="pointer-events-none mt-0.5 block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</span>
             <span className="pointer-events-none mt-0.5 block truncate text-xs tm-muted">{location}</span>
             {transportDescription ? (
@@ -825,7 +825,7 @@ function MarkerPreviewCard({
             ) : null}
           </span>
           <button
-            className="pointer-events-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-sky-600 transition active:scale-[0.98] tm-focus dark:text-sky-300"
+            className="pointer-events-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-sky-600 dark:text-sky-300 transition active:scale-[0.98] tm-focus dark:text-sky-300"
             data-testid="map-marker-card-open"
             onClick={() => onOpenItem(item)}
             type="button"
@@ -872,7 +872,7 @@ function MapHeader({
           <ArrowLeft className="size-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-sky-600">{trip.title}</p>
+          <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
           <h2 className="truncate text-base font-semibold leading-tight text-slate-950 dark:text-slate-100">
             {day.title}
           </h2>
@@ -1082,7 +1082,7 @@ function MapBottomSheet({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="mb-2 flex shrink-0 items-start justify-between gap-3 px-4">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-sky-600">
+            <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
               {formatDate(day.date)}
             </p>
             <h2 className="truncate text-base font-semibold text-slate-950 dark:text-slate-100">{day.title}</h2>
@@ -1280,7 +1280,7 @@ function MapFloatingControls({
         title={locationLoading ? '正在获取当前位置' : '显示当前位置'}
         type="button"
       >
-        <Locate className={`size-5 ${locationLoading ? 'animate-pulse text-sky-600' : locationStatus === 'ready' ? 'text-sky-600' : ''}`} />
+        <Locate className={`size-5 ${locationLoading ? 'animate-pulse text-sky-600 dark:text-sky-300' : locationStatus === 'ready' ? 'text-sky-600 dark:text-sky-300' : ''}`} />
       </button>
     </div>
   )
@@ -1436,7 +1436,7 @@ function RouteControlsSection({
           </span>
           {hasDetails ? (
             <button
-              className="shrink-0 font-semibold text-sky-600 active:scale-[0.98]"
+              className="shrink-0 font-semibold text-sky-600 dark:text-sky-300 active:scale-[0.98]"
               data-testid="route-details-toggle"
               onClick={() => setDetailsOpen((current) => !current)}
               type="button"
@@ -1460,7 +1460,7 @@ function RouteControlsSection({
           {warnings.length > 0 ? (
             <div className="space-y-1 [overflow-wrap:anywhere]" data-testid="route-warning-details">
               {warnings.map((warning) => (
-                <p className="break-words text-amber-600 dark:text-amber-300" key={warning}>
+                <p className="break-words text-amber-600 dark:text-amber-300 dark:text-amber-300 dark:text-amber-300" key={warning}>
                   {warning}
                 </p>
               ))}
@@ -1542,17 +1542,17 @@ function getRouteChipStatus(
   if (displayMode === 'road' && (activeRoadMode === 'bus' || hasBusWarning(warnings))) {
     return {
       label: state === 'cached' ? '公交近似 · 缓存' : '公交近似',
-      className: 'text-amber-600',
+      className: 'text-amber-600 dark:text-amber-300 dark:text-amber-300',
     }
   }
   if (warnings.some((warning) => warning.includes('交通方式已更新'))) {
-    return { label: '路线需更新', className: 'text-amber-600' }
+    return { label: '路线需更新', className: 'text-amber-600 dark:text-amber-300 dark:text-amber-300' }
   }
   if (warnings.some((warning) => warning.includes('路线已过期'))) {
-    return { label: '路线已过期', className: 'text-amber-600' }
+    return { label: '路线已过期', className: 'text-amber-600 dark:text-amber-300 dark:text-amber-300' }
   }
   if (state === 'loading') {
-    return { label: '正在生成路线', className: 'text-sky-600' }
+    return { label: '正在生成路线', className: 'text-sky-600 dark:text-sky-300' }
   }
   if (state === 'cached') {
     return { label: '道路路线 · 本地缓存', className: 'text-slate-700' }
@@ -1561,10 +1561,10 @@ function getRouteChipStatus(
     return { label: '道路路线', className: 'text-slate-700' }
   }
   if (state === 'mixed') {
-    return { label: `部分失败${warningCount > 0 ? ` · ${warningCount} 条提示` : ''}`, className: 'text-amber-600' }
+    return { label: `部分失败${warningCount > 0 ? ` · ${warningCount} 条提示` : ''}`, className: 'text-amber-600 dark:text-amber-300 dark:text-amber-300' }
   }
   if (state === 'failed') {
-    return { label: '无法生成路线', className: 'text-amber-600' }
+    return { label: '无法生成路线', className: 'text-amber-600 dark:text-amber-300 dark:text-amber-300' }
   }
   if (displayMode === 'road' && !configured) {
     return { label: '无法生成路线', className: 'text-slate-500' }
@@ -1862,7 +1862,7 @@ function SelectedItemCard({
     <div className="rounded-xl bg-slate-50/60 px-3 py-2.5 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:ring-slate-800/70">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-sky-600">{describeItemTime(item)}</p>
+          <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{describeItemTime(item)}</p>
           <h3 className="mt-0.5 truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</h3>
           <p className="mt-0.5 truncate text-xs tm-muted">{item.locationName || '地点未填写'}</p>
         </div>

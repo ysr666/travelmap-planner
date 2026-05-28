@@ -1,6 +1,6 @@
 import { sortItineraryItems } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
-import type { ProviderProxyRouteOrderSuggestionItem } from './providerProxyContract'
+import type { ProviderProxyRouteOrderSuggestionItem } from './ai/providerProxyContract'
 import type { Day, ItineraryItem } from '../types'
 
 export type RouteOrderSuggestionSortPatch = {

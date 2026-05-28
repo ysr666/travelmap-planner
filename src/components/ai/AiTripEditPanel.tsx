@@ -3,15 +3,15 @@ import { Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
-import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/aiTripEditContext'
-import { applyAiTripEditPatchPlanToDb, buildAiTripEditLocalStateFingerprint } from '../../lib/aiTripEditApply'
-import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/aiTripEditPatch'
+import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/ai/aiTripEditContext'
+import { applyAiTripEditPatchPlanToDb, buildAiTripEditLocalStateFingerprint } from '../../lib/ai/aiTripEditApply'
+import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/ai/aiTripEditPatch'
 import {
   buildAiTripEditSearchRequest,
   detectAiTripEditSearchIntent,
   summarizeTravelSearchResultsForPrompt,
-} from '../../lib/aiTripEditSearch'
-import { getStoredAiPrivacySettings } from '../../lib/aiPrivacy'
+} from '../../lib/ai/aiTripEditSearch'
+import { getStoredAiPrivacySettings } from '../../lib/ai/aiPrivacy'
 import {
   fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyTravelSearch,
@@ -22,7 +22,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   type ProviderProxyAiTripEditSearchSummary,
   type ProviderProxyTravelSearchRequest,
-} from '../../lib/providerProxyContract'
+} from '../../lib/ai/providerProxyContract'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type AiTripEditPanelProps = {

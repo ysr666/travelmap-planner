@@ -1,5 +1,5 @@
 import type { AiTripDraft, AiTripDraftDay } from './aiTripDraft'
-import type { TravelPace } from './travelProfile'
+import type { TravelPace } from '../travelProfile'
 
 const DENSE_DAY_LIMITS: Record<TravelPace, number> = {
   relaxed: 5,

@@ -301,7 +301,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       <SectionHeader title="云端保存" />
       <Card className="space-y-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
             <Cloud className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -339,7 +339,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
         {!configStatus.configured ? (
           <div
-            className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800"
+            className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800 dark:text-amber-300"
             data-testid="supabase-unconfigured-message"
           >
             <p className="font-semibold">云端保存未配置</p>
@@ -494,12 +494,12 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult }) {
   return (
     <div
-      className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-emerald-900"
+      className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-emerald-900 dark:text-emerald-300"
       data-testid="cloud-restore-success"
     >
       <div>
         <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
-        <p className="mt-1 text-xs leading-5 text-emerald-800">
+        <p className="mt-1 text-xs leading-5 text-emerald-800 dark:text-emerald-300">
           云端版本已覆盖当前本地旅行，不会创建新的旅行副本。
         </p>
       </div>
@@ -619,7 +619,7 @@ function CloudBackupList({
               <article className="space-y-3 px-3 py-3" data-testid="cloud-backup-card" key={backup.id}>
                 <div className="grid gap-2 text-xs">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300">云端保存</span>
+                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300 dark:text-sky-300">云端保存</span>
                     <span className="min-w-0 text-right font-medium text-slate-800 dark:text-slate-100">
                       {group.isGrouped ? `旧版备份 ${group.backups.length - index}` : '当前旅行的云端保存'}
                     </span>
@@ -639,7 +639,7 @@ function CloudBackupList({
                 </div>
                 {backup.warnings.length > 0 ? (
                   <div
-                    className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 [overflow-wrap:anywhere]"
+                    className="break-words rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:text-amber-300 [overflow-wrap:anywhere]"
                     data-testid="cloud-backup-warning-list"
                   >
                     {backup.warnings[0]}
@@ -657,7 +657,7 @@ function CloudBackupList({
                     用云端覆盖本地
                   </Button>
                   <Button
-                    className="px-2 text-xs text-red-600"
+                    className="px-2 text-xs text-red-600 dark:text-red-300"
                     data-testid="cloud-delete-backup"
                     icon={<Trash2 className="size-4" />}
                     onClick={() => onDelete(backup)}
@@ -721,7 +721,7 @@ function CloudInfoPill({
   text: string
   tone?: 'neutral' | 'warning'
 }) {
-  const styles = tone === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-600'
+  const styles = tone === 'warning' ? 'bg-amber-50 text-amber-800 dark:text-amber-300' : 'bg-slate-50 text-slate-600'
   return (
     <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-6 ${styles}`}>
       <span className="mt-1 shrink-0">{icon}</span>
@@ -740,9 +740,9 @@ function CloudNotice({
   tone: 'error' | 'success' | 'warning'
 }) {
   const styles = {
-    error: 'border-red-100 bg-red-50 text-red-600',
-    success: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    warning: 'border-amber-100 bg-amber-50 text-amber-800',
+    error: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
+    success: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:text-emerald-300',
+    warning: 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300',
   }[tone]
 
   return (

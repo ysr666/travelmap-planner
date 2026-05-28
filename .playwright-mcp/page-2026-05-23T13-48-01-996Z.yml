@@ -1,0 +1,60 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - button "返回首页" [ref=e6]:
+        - img [ref=e7]
+      - heading "AI 行程草稿" [level=1] [ref=e10]
+      - button "设置" [ref=e11]:
+        - img [ref=e12]
+  - main [ref=e23]:
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "AI 行程草稿" [level=1] [ref=e32]
+        - paragraph [ref=e33]: 先生成或粘贴草稿，检查无误后再导入为本地旅行
+        - paragraph [ref=e34]: 当前为本地示例流程，不会调用外部 AI
+      - generic [ref=e35]:
+        - paragraph [ref=e36]: 填写行程信息
+        - paragraph [ref=e37]: 根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
+        - generic [ref=e38]:
+          - generic [ref=e39]: 目的地 *
+          - textbox "目的地 *" [ref=e40]:
+            - /placeholder: 例如：东京、巴黎、曼谷
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]: 开始日期 *
+            - textbox "开始日期 *" [ref=e44]
+          - generic [ref=e45]:
+            - generic [ref=e46]: 结束日期 *
+            - textbox "结束日期 *" [ref=e47]
+        - generic [ref=e48]:
+          - text: 旅行节奏
+          - combobox "旅行节奏" [ref=e49]:
+            - option "轻松"
+            - option "适中" [selected]
+            - option "紧凑"
+        - generic [ref=e50]:
+          - text: 交通偏好
+          - combobox "交通偏好" [ref=e51]:
+            - option "公共交通"
+            - option "步行"
+            - option "打车"
+            - option "综合" [selected]
+        - group [ref=e52]:
+          - generic "更多偏好（可选） 想去的地方、不想要的安排、补充要求" [ref=e53] [cursor=pointer]:
+            - img [ref=e54]
+            - generic [ref=e56]:
+              - paragraph [ref=e57]: 更多偏好（可选）
+              - paragraph [ref=e58]: 想去的地方、不想要的安排、补充要求
+        - paragraph [ref=e60]:
+          - text: 当前为本地示例草稿，不会调用外部 AI，不会上传数据。
+          - text: 生成后仍需预览和确认，确认导入后才会创建本地旅行。
+        - button "根据表单生成示例草稿" [ref=e61]:
+          - generic [ref=e62]: 根据表单生成示例草稿
+        - button "当前未配置 AI 生成服务" [disabled] [ref=e63]:
+          - generic [ref=e64]: 当前未配置 AI 生成服务
+      - group [ref=e65]:
+        - generic "粘贴 JSON 草稿 如果你已经有符合格式的草稿 JSON，可以在这里粘贴。" [ref=e66] [cursor=pointer]:
+          - img [ref=e67]
+          - generic [ref=e69]:
+            - paragraph [ref=e70]: 粘贴 JSON 草稿
+            - paragraph [ref=e71]: 如果你已经有符合格式的草稿 JSON，可以在这里粘贴。

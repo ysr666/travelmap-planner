@@ -34,7 +34,7 @@ import {
   getStoredAiPrivacySettings,
   saveAiPrivacySettings,
   type AiPrivacySettings,
-} from '../lib/aiPrivacy'
+} from '../lib/ai/aiPrivacy'
 import {
   importTripBackup,
 } from '../lib/backup'
@@ -473,7 +473,7 @@ export function SettingsPage() {
           {error ? <StatusMessage tone="error" message={error} /> : null}
           {success ? <StatusMessage tone="success" message={success} /> : null}
           {warnings.length > 0 ? (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800 dark:text-amber-300">
               <p className="font-semibold">导入/导出提醒</p>
               <ul className="mt-1 list-inside list-disc">
                 {warnings.map((warning) => (
@@ -779,13 +779,13 @@ export function SettingsPage() {
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">
           <div>
             <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">备份提醒</h3>
-            <p className="mt-2 text-sm leading-6 text-amber-800 dark:text-amber-300">
+            <p className="mt-2 text-sm leading-6 text-amber-800 dark:text-amber-300 dark:text-amber-300">
               重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
               在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
             </p>
           </div>
           <div className="rounded-xl bg-white/60 px-3 py-2 dark:bg-slate-950/35">
-            <AppVersion className="text-left text-amber-800/70" label="当前版本" />
+            <AppVersion className="text-left text-amber-800 dark:text-amber-300/70" label="当前版本" />
           </div>
         </Card>
       </Collapsible>
@@ -1412,7 +1412,7 @@ function TripPlanValidationStatus({
       }
     : hasWarnings
       ? {
-          className: 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-300',
+          className: 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-300',
           text: '有建议检查，可导入',
         }
       : {
@@ -1456,7 +1456,7 @@ function ValidationList({
   const styles =
     tone === 'error'
       ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300'
-      : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-300'
+      : 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-300'
 
   return (
     <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${styles}`} data-testid={testId}>

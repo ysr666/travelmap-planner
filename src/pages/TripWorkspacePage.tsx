@@ -20,7 +20,7 @@ import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { ensureDaysForTrip, formatDate, formatDateKey, formatDateRange } from '../lib/dates'
 import { formatChineseDayOrdinal } from '../lib/dayOrdinal'
-import { buildTripContext } from '../lib/aiTripContext'
+import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
@@ -280,7 +280,7 @@ export function TripWorkspacePage() {
             <ArrowLeft className="size-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-sky-600">
+            <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
               {trip.destination || '目的地未定'}
             </p>
             <h1 className="truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
@@ -325,7 +325,7 @@ export function TripWorkspacePage() {
               <div className="flex items-start gap-3">
                 <TripCover className="h-20 w-24 shrink-0 rounded-xl" trip={trip} variant="compact" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-sky-600">{trip.destination || '目的地未定'}</p>
+                  <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.destination || '目的地未定'}</p>
                   <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-slate-950 dark:text-slate-100">
                     {trip.title}
                   </h2>
@@ -405,7 +405,7 @@ export function TripWorkspacePage() {
                       role="button"
                       tabIndex={0}
                     >
-                      <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">
+                      <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:text-sky-300 dark:bg-sky-500/10 dark:text-sky-300">
                         {formatChineseDayOrdinal(index + 1)}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -500,7 +500,7 @@ function RoutePreparationPanel({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <RouteIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-300" />
+            <RouteIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-300 dark:text-sky-300" />
             <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线准备</h3>
           </div>
           <p className="mt-1 text-xs leading-5 tm-muted" data-testid="route-preparation-summary">

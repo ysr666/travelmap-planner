@@ -1,4 +1,4 @@
-import type { TripContext, TripContextDay } from './aiTripContext'
+import type { TripContext, TripContextDay } from './ai/aiTripContext'
 import {
   getTopTripCheckFindings,
   isTicketLikeItem,

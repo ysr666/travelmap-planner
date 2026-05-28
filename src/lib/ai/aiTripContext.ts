@@ -1,7 +1,7 @@
-import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, TransportMode, Trip } from '../types'
-import { sortItineraryItems } from './itinerary'
-import { getTicketScope, getTicketStorageMode } from './tickets'
-import { normalizeTravelProfile, type TravelProfile } from './travelProfile'
+import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, TransportMode, Trip } from '../../types'
+import { sortItineraryItems } from '../itinerary'
+import { getTicketScope, getTicketStorageMode } from '../tickets'
+import { normalizeTravelProfile, type TravelProfile } from '../travelProfile'
 
 export type TripContextCoordinateState = 'missing' | 'present' | 'invalid'
 export type TripContextNoteLength = 'none' | 'short' | 'medium' | 'long'

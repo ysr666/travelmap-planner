@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTripContext } from './aiTripContext'
+import { buildTripContext } from './ai/aiTripContext'
 import { analyzeTripContext, isTicketLikeItem } from './tripCheck'
 import { defaultTravelProfile, type TravelProfile } from './travelProfile'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'

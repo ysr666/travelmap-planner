@@ -34,8 +34,8 @@ import {
   type ProviderProxyTravelSearchResponse,
   type ProviderProxyTravelSearchSourceType,
   type ProviderProxyTravelSearchSuccessResponse,
-} from './providerProxyContract'
-import { validateAiTripEditPatchPlan } from './aiTripEditPatch'
+} from './ai/providerProxyContract'
+import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 
 export type ProviderProxyRuntimeConfig = {
   configured: boolean

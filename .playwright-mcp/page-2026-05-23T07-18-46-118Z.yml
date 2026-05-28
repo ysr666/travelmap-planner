@@ -1,0 +1,74 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "返回首页" [ref=e6]:
+          - img [ref=e7]
+        - heading "AI 行程草稿" [level=1] [ref=e10]
+        - button "设置" [ref=e11]:
+          - img [ref=e12]
+    - main [ref=e23]:
+      - generic [ref=e30]:
+        - heading "AI 行程草稿" [level=1] [ref=e31]
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - generic [ref=e34]: 粘贴 JSON 草稿
+            - 'textbox "{\"title\": \"...\", \"startDate\": \"YYYY-MM-DD\", ...}" [ref=e35]': "{ \"title\": \"东京五日游\", \"destination\": \"东京\", \"startDate\": \"2025-04-01\", \"endDate\": \"2025-04-05\", \"days\": [ { \"date\": \"2025-04-01\", \"title\": \"抵达与浅草\", \"items\": [ { \"title\": \"浅草寺\", \"locationName\": \"浅草寺\", \"address\": \"东京都台东区浅草2-3-1\", \"lat\": 35.7148, \"lng\": 139.7967, \"startTime\": \"10:00\", \"endTime\": \"12:00\", \"note\": \"参观雷门和仲见世通\" }, { \"title\": \"东京晴空塔\", \"locationName\": \"东京晴空塔\", \"startTime\": \"14:00\", \"endTime\": \"16:00\", \"previousTransportMode\": \"transit\" } ] }, { \"date\": \"2025-04-02\", \"title\": \"涩谷与原宿\", \"items\": [ { \"title\": \"明治神宫\", \"locationName\": \"明治神宫\", \"lat\": 35.6764, \"lng\": 139.6993, \"startTime\": \"09:00\" }, { \"title\": \"涩谷十字路口\", \"startTime\": \"14:00\", \"previousTransportMode\": \"transit\" } ] } ] }"
+          - generic [ref=e36]:
+            - button "加载示例草稿" [ref=e37]:
+              - generic [ref=e38]: 加载示例草稿
+            - button "解析草稿" [ref=e39]:
+              - generic [ref=e40]: 解析草稿
+        - generic [ref=e41]:
+          - heading "草稿摘要" [level=3] [ref=e42]
+          - generic [ref=e43]:
+            - term [ref=e44]: 旅行标题
+            - definition [ref=e45]: 东京五日游
+            - term [ref=e46]: 目的地
+            - definition [ref=e47]: 东京
+            - term [ref=e48]: 日期范围
+            - definition [ref=e49]: 2025-04-01 至 2025-04-05
+            - term [ref=e50]: 天数
+            - definition [ref=e51]: 2 天
+            - term [ref=e52]: 行程点
+            - definition [ref=e53]: 4 个
+        - generic [ref=e54]:
+          - heading "行程预览" [level=3] [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - generic [ref=e59]: 2025-04-01
+                - generic [ref=e60]: 抵达与浅草
+              - list [ref=e61]:
+                - listitem [ref=e62]:
+                  - text: 浅草寺10:00
+                  - generic [ref=e63]: "@ 浅草寺"
+                - listitem [ref=e64]:
+                  - text: 东京晴空塔14:00
+                  - generic [ref=e65]: "@ 东京晴空塔"
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - generic [ref=e68]: 2025-04-02
+                - generic [ref=e69]: 涩谷与原宿
+              - list [ref=e70]:
+                - listitem [ref=e71]:
+                  - text: 明治神宫09:00
+                  - generic [ref=e72]: "@ 明治神宫"
+                - listitem [ref=e73]: 涩谷十字路口14:00
+        - paragraph [ref=e75]:
+          - text: 当前仅在本机解析草稿，不会调用外部 AI。
+          - text: 确认导入后才会写入本地旅行。
+        - button "确认导入" [active] [ref=e76]:
+          - generic [ref=e77]: 确认导入
+  - dialog [ref=e78]:
+    - generic [ref=e79]:
+      - generic [ref=e81]:
+        - img [ref=e83]
+        - generic [ref=e85]:
+          - heading "导入行程草稿" [level=2] [ref=e86]
+          - paragraph [ref=e87]: 将创建新的本地旅行 不会自动生成路线 不会创建票据 不会上传云端 可在创建后继续编辑
+      - generic [ref=e88]:
+        - button "取消" [ref=e89]:
+          - generic [ref=e90]: 取消
+        - button "确认导入" [ref=e91]:
+          - generic [ref=e92]: 确认导入

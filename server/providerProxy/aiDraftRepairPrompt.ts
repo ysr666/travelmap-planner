@@ -1,4 +1,4 @@
-import type { ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/providerProxyContract'
+import type { ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/ai/providerProxyContract'
 import { AI_DRAFT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
 import type { AiDraftProviderInput } from './aiDraftPrompt'
 

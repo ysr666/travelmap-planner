@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>旅图 / TripMap - 大英博物馆详情</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary": "#4c4aca",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#c1c6d7",
+                        "on-primary-container": "#fefcff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f8f9fb",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#fffbff",
+                        "secondary-container": "#6664e4",
+                        "primary-container": "#0070eb",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#adc6ff",
+                        "surface-tint": "#005bc1",
+                        "inverse-surface": "#2e3132",
+                        "tertiary-container": "#c64f00",
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#f3f4f6",
+                        "outline": "#717786",
+                        "on-tertiary-container": "#fffbff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "surface-bright": "#f8f9fb",
+                        "surface-variant": "#e1e2e4",
+                        "surface-container-high": "#e7e8ea",
+                        "on-error": "#ffffff",
+                        "on-tertiary-fixed": "#351000",
+                        "secondary-fixed": "#e2dfff",
+                        "tertiary-fixed": "#ffdbcc",
+                        "on-background": "#191c1e",
+                        "on-primary-fixed": "#001a41",
+                        "on-secondary-fixed": "#0c006a",
+                        "on-secondary-fixed-variant": "#3631b4",
+                        "on-tertiary-fixed-variant": "#7c2e00",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#c2c1ff",
+                        "surface-container-highest": "#e1e2e4",
+                        "primary-fixed-dim": "#adc6ff",
+                        "primary": "#0058bc",
+                        "surface-container": "#edeef0",
+                        "primary-fixed": "#d8e2ff",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed-variant": "#004493",
+                        "tertiary": "#9e3d00",
+                        "tertiary-fixed-dim": "#ffb595",
+                        "surface-dim": "#d9dadc",
+                        "on-surface": "#191c1e",
+                        "on-surface-variant": "#414755",
+                        "background": "#f8f9fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-gap-sm": "8px",
+                        "row-height-large": "72px",
+                        "section-margin-bottom": "24px",
+                        "card-padding": "16px",
+                        "row-height-default": "56px",
+                        "safe-area-inset": "16px",
+                        "stack-gap-md": "12px"
+                    },
+                    "fontFamily": {
+                        "footnote": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "nav-title": ["Plus Jakarta Sans"],
+                        "label-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "footnote": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "headline-sm": ["20px", { "lineHeight": "25px", "letterSpacing": "-0.2px", "fontWeight": "600" }],
+                        "body-lg": ["17px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "body-md": ["15px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "nav-title": ["34px", { "lineHeight": "41px", "letterSpacing": "-0.4px", "fontWeight": "700" }],
+                        "label-md": ["13px", { "lineHeight": "18px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #f5f6f8; -webkit-tap-highlight-color: transparent; }
+        .ios-inset-group { background: #ffffff; border-radius: 12px; overflow: hidden; margin: 0 16px; }
+        .ios-row { display: flex; align-items: center; min-height: 56px; padding: 12px 16px; position: relative; }
+        .ios-separator::after { content: ''; position: absolute; bottom: 0; left: 56px; right: 0; height: 1px; background-color: #E5E5E7; transform: scaleY(0.5); }
+        .ios-row:active { background-color: #E5E5E7; }
+        .icon-container { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 12px; }
+        .bg-blue-tint { background-color: #E5F0FF; color: #007AFF; }
+        .bg-orange-tint { background-color: #FFF0E5; color: #FF9500; }
+        .bg-green-tint { background-color: #E5F9E5; color: #34C759; }
+        .bg-gray-tint { background-color: #F2F2F7; color: #8E8E93; }
+        
+        /* Custom Scrollbar for horizontal lists */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-surface pb-24 max-w-[600px] mx-auto min-h-screen relative">
+<!-- Top Area (Header) -->
+<header class="sticky top-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-b border-outline-variant/30 pb-4 pt-12 px-4 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<button class="flex items-center justify-center w-10 h-10 -ml-2 text-primary active:opacity-70 transition-opacity">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'wght' 300;">arrow_back_ios_new</span>
+</button>
+<button class="flex items-center justify-center w-10 h-10 -mr-2 text-primary active:opacity-70 transition-opacity">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'wght' 300;">bookmark_border</span>
+</button>
+</div>
+<div class="px-2">
+<h1 class="font-nav-title text-nav-title text-on-surface mb-1">大英博物馆</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">10:00–16:30 · Great Russell St</p>
+</div>
+</header>
+<main class="pt-6 space-y-section-margin-bottom">
+<!-- 基础信息 Grouped Section -->
+<section>
+<h2 class="px-8 mb-2 font-footnote text-footnote text-on-surface-variant uppercase tracking-wide">基础信息</h2>
+<div class="ios-inset-group">
+<!-- Row: 地点 -->
+<div class="ios-row ios-separator cursor-pointer">
+<div class="icon-container bg-blue-tint">
+<span class="material-symbols-outlined text-[18px]">location_on</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<p class="font-body-lg text-body-lg text-on-surface truncate">Great Russell St, London WC1B 3DG</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">chevron_right</span>
+</div>
+<!-- Row: 时间 -->
+<div class="ios-row ios-separator">
+<div class="icon-container bg-orange-tint">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-body-lg text-body-lg text-on-surface">10:00–16:30 (周一闭馆)</p>
+</div>
+</div>
+<!-- Row: 备注 -->
+<div class="ios-row">
+<div class="icon-container bg-gray-tint">
+<span class="material-symbols-outlined text-[18px]">notes</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-body-md text-body-md text-on-surface-variant whitespace-normal">建议提前 30 分钟到达安检入口</p>
+</div>
+</div>
+</div>
+</section>
+<!-- 交通 Grouped Section -->
+<section>
+<h2 class="px-8 mb-2 font-footnote text-footnote text-on-surface-variant uppercase tracking-wide">交通</h2>
+<div class="ios-inset-group">
+<!-- Row: 地铁 -->
+<div class="ios-row ios-separator cursor-pointer">
+<div class="icon-container bg-blue-tint">
+<span class="material-symbols-outlined text-[18px]">subway</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex flex-col">
+<span class="font-body-lg text-body-lg text-on-surface">Tottenham Court Road</span>
+<span class="font-footnote text-footnote text-on-surface-variant">中央/北线</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">chevron_right</span>
+</div>
+<!-- Row: 步行 -->
+<div class="ios-row cursor-pointer">
+<div class="icon-container bg-green-tint">
+<span class="material-symbols-outlined text-[18px]">directions_walk</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<p class="font-body-lg text-body-lg text-on-surface truncate">从酒店步行约 12 分钟 (900 米)</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- 票据 Section -->
+<section>
+<div class="px-8 mb-2 flex justify-between items-end">
+<h2 class="font-footnote text-footnote text-on-surface-variant uppercase tracking-wide">票据</h2>
+<button class="font-footnote text-footnote text-primary font-medium">添加</button>
+</div>
+<div class="flex gap-4 overflow-x-auto hide-scrollbar px-4 pb-2 snap-x">
+<!-- Ticket Card 1 -->
+<div class="snap-start flex-none w-[160px] bg-surface-container-lowest rounded-xl p-3 shadow-sm border border-outline-variant/20 active:bg-surface-variant/50 transition-colors">
+<div class="aspect-square bg-surface-container-low rounded-lg mb-3 flex items-center justify-center relative overflow-hidden">
+<span class="material-symbols-outlined text-outline text-[48px] opacity-20">qr_code_2</span>
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent"></div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">门票确认单</p>
+<p class="font-footnote text-footnote text-on-surface-variant truncate">大英博物馆</p>
+</div>
+<!-- Ticket Card 2 -->
+<div class="snap-start flex-none w-[160px] bg-surface-container-lowest rounded-xl p-3 shadow-sm border border-outline-variant/20 active:bg-surface-variant/50 transition-colors">
+<div class="aspect-square bg-surface-container-low rounded-lg mb-3 flex flex-col items-center justify-center relative overflow-hidden bg-red-50">
+<span class="material-symbols-outlined text-red-400 text-[40px] mb-1">picture_as_pdf</span>
+<span class="font-footnote text-footnote text-red-500 font-medium">PDF</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">预约邮件</p>
+<p class="font-footnote text-footnote text-on-surface-variant truncate">5.2 MB</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Action Area -->
+<div class="fixed bottom-0 left-0 right-0 bg-surface-container-lowest/90 backdrop-blur-xl border-t border-outline-variant/30 pb-safe-area-inset px-4 pt-3 flex items-center justify-between z-50 max-w-[600px] mx-auto">
+<button class="flex flex-col items-center justify-center text-primary active:opacity-70 transition-opacity w-16">
+<span class="material-symbols-outlined text-[24px] mb-1">skip_previous</span>
+<span class="font-footnote text-footnote text-[10px]">上一项</span>
+</button>
+<button class="flex-1 mx-4 bg-primary text-on-primary rounded-full h-[48px] font-body-lg text-body-lg font-semibold shadow-sm active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">map</span>
+            返回地图
+        </button>
+<button class="flex flex-col items-center justify-center text-primary active:opacity-70 transition-opacity w-16">
+<span class="material-symbols-outlined text-[24px] mb-1">skip_next</span>
+<span class="font-footnote text-footnote text-[10px]">下一项</span>
+</button>
+</div>
+</body></html>

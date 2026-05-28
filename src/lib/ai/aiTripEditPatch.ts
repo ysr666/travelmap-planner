@@ -1,6 +1,6 @@
-import { transportModeLabels } from './itinerary'
+import { transportModeLabels } from '../itinerary'
 import type { AiTripEditContext, AiTripEditContextDay, AiTripEditContextItem } from './aiTripEditContext'
-import type { TransportMode } from '../types'
+import type { TransportMode } from '../../types'
 
 export const AI_TRIP_EDIT_MAX_OPERATIONS = 20
 export const AI_TRIP_EDIT_MAX_SUMMARY_LENGTH = 300

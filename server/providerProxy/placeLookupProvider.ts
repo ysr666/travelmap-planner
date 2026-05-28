@@ -4,7 +4,7 @@ import {
   type ProviderProxyPlaceLookupResult,
   type ProviderProxyPlaceLookupSuccessResponse,
   type ProviderProxyValidatedPlaceLookupRequest,
-} from '../../src/lib/providerProxyContract'
+} from '../../src/lib/ai/providerProxyContract'
 
 export const GOOGLE_PLACES_TEXT_SEARCH_ENDPOINT = 'https://places.googleapis.com/v1/places:searchText'
 export const GOOGLE_PLACES_FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri'

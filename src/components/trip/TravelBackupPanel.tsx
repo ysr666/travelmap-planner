@@ -46,7 +46,7 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
           备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据，以及可用的 copy 模式票据文件。
         </p>
         <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
             <HardDriveDownload className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -77,10 +77,10 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
         )}
 
         {error ? (
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">{error}</p>
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300">{error}</p>
         ) : null}
         {success ? (
-          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{success}</p>
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">{success}</p>
         ) : null}
       </Card>
 

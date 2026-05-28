@@ -13,7 +13,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { formatDateKey, formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
-import { buildTripContext } from '../lib/aiTripContext'
+import { buildTripContext } from '../lib/ai/aiTripContext'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -306,7 +306,7 @@ export function DayViewPage() {
             <ArrowLeft className={isMapView ? 'size-4' : 'size-5'} />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-sky-600">
+            <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
               {isMapView ? formatShortWorkspaceDate(selectedDay.date) : trip.destination || '目的地未定'}
             </p>
             <h1 className={`truncate font-semibold leading-tight text-slate-950 dark:text-slate-100 ${isMapView ? 'text-base' : 'text-xl'}`}>
@@ -468,7 +468,7 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
       </div>
       <div className="mt-auto max-h-[54%] min-h-0 rounded-t-3xl tm-surface p-4">
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300/70 dark:bg-slate-600/70" />
-        <p className="text-xs font-semibold text-sky-600">{formatShortWorkspaceDate(day.date)}</p>
+        <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{formatShortWorkspaceDate(day.date)}</p>
         <h2 className="mt-1 truncate text-base font-semibold text-slate-950 dark:text-slate-100">{day.title}</h2>
         <p className="mt-1 text-xs tm-muted">{items.length} 个行程点，本地列表可先查看。</p>
         <div className="mt-3 min-h-0 overflow-y-auto app-scrollbar">

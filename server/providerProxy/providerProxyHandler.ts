@@ -27,10 +27,10 @@ import {
   type ProviderProxyRoutePreviewSuccessResponse,
   type ProviderProxyRouteSegment,
   validateProviderProxyRoutePreviewRequest,
-} from '../../src/lib/providerProxyContract'
-import { validateAiTripEditPatchPlan } from '../../src/lib/aiTripEditPatch'
+} from '../../src/lib/ai/providerProxyContract'
+import { validateAiTripEditPatchPlan } from '../../src/lib/ai/aiTripEditPatch'
 import type { LngLat } from '../../src/lib/routing'
-import type { AiTripDraft } from '../../src/lib/aiTripDraft'
+import type { AiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import { listPlainDateRangeInclusive } from '../../src/lib/plainDate'
 import {
   consumeProviderProxyQuota,

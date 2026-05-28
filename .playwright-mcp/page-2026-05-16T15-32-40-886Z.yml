@@ -1,0 +1,86 @@
+- main [ref=e20]:
+  - generic [ref=e994]:
+    - generic [ref=e996]:
+      - button "返回旅行总览" [ref=e997]:
+        - img [ref=e998]
+      - generic [ref=e1000]:
+        - paragraph [ref=e1001]: QA 自动备份目的地
+        - heading "QA 12C 测试旅行" [level=1] [ref=e1002]
+        - paragraph [ref=e1003]: 6月1日 - 6月2日
+      - button "更多" [ref=e1004]:
+        - img [ref=e1005]
+    - generic [ref=e1009]:
+      - generic [ref=e1011]:
+        - button "Day 1 6/1 周一" [ref=e1012]:
+          - generic [ref=e1013]: Day 1
+          - generic [ref=e1014]: 6/1 周一
+        - button "Day 2 6/2 周二" [ref=e1015]:
+          - generic [ref=e1016]: Day 2
+          - generic [ref=e1017]: 6/2 周二
+      - generic [ref=e1018]:
+        - button "日程" [ref=e1019]:
+          - img [ref=e1020]
+          - text: 日程
+        - button "地图" [ref=e1024]:
+          - img [ref=e1025]
+          - text: 地图
+    - generic [ref=e1027]:
+      - generic [ref=e1029]:
+        - generic [ref=e1030]:
+          - generic [ref=e1031]:
+            - heading "当天日程" [level=3] [ref=e1032]
+            - paragraph [ref=e1033]: 1 个行程点
+          - generic [ref=e1034]:
+            - button "地图" [ref=e1035]:
+              - generic [ref=e1036]: 地图
+            - button "新增" [ref=e1037]:
+              - img [ref=e1038]
+              - generic [ref=e1039]: 新增
+        - generic [ref=e1043]:
+          - generic [ref=e1045]: "1"
+          - generic [ref=e1046]:
+            - button "10:00 · 其他 QA 自动备份行程点 QA 测试地点" [ref=e1047]:
+              - paragraph [ref=e1048]:
+                - img [ref=e1049]
+                - text: 10:00 · 其他
+              - heading "QA 自动备份行程点" [level=3] [ref=e1052]
+              - paragraph [ref=e1053]:
+                - img [ref=e1054]
+                - generic [ref=e1057]: QA 测试地点
+            - generic [ref=e1058]:
+              - generic [ref=e1059]:
+                - img [ref=e1060]
+                - text: "0"
+              - generic [ref=e1062]:
+                - button "编辑" [ref=e1063]:
+                  - generic [ref=e1064]: 编辑
+                - button "删除" [ref=e1065]:
+                  - img [ref=e1066]
+                  - generic [ref=e1069]: 删除
+      - group [ref=e1070]:
+        - generic [ref=e1072]:
+          - link [ref=e1073] [cursor=pointer]:
+            - /url: https://openfreemap.org
+            - text: OpenFreeMap
+          - link [ref=e1074] [cursor=pointer]:
+            - /url: https://www.openmaptiles.org/
+            - text: © OpenMapTiles
+          - text: Data from
+          - link [ref=e1075] [cursor=pointer]:
+            - /url: https://www.openstreetmap.org/copyright
+            - text: OpenStreetMap
+    - paragraph [ref=e1076]: 当前第 1 天
+    - navigation [ref=e1078]:
+      - generic [ref=e1079]:
+        - button "总览" [ref=e1080]:
+          - img [ref=e1081]
+          - generic [ref=e1084]: 总览
+        - button "日程" [ref=e1085]:
+          - img [ref=e1086]
+          - generic [ref=e1090]: 日程
+        - button "地图" [ref=e1091]:
+          - img [ref=e1092]
+          - generic [ref=e1094]: 地图
+        - button "票据" [ref=e1095]:
+          - img [ref=e1096]
+          - generic [ref=e1098]: 票据

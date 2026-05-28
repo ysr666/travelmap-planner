@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TripMap - Day View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary": "#003064",
+                        "secondary": "#47e266",
+                        "secondary-fixed": "#6cff82",
+                        "on-error-container": "#ffdad6",
+                        "inverse-surface": "#e4e2e4",
+                        "on-tertiary-fixed": "#341100",
+                        "background": "#131315",
+                        "on-tertiary": "#552000",
+                        "on-surface-variant": "#c0c6d6",
+                        "surface-dim": "#131315",
+                        "secondary-container": "#09bf49",
+                        "surface-container-highest": "#353437",
+                        "on-surface": "#e4e2e4",
+                        "surface-container-high": "#2a2a2c",
+                        "surface-bright": "#39393b",
+                        "inverse-primary": "#005db8",
+                        "primary-container": "#3e90ff",
+                        "outline-variant": "#414754",
+                        "on-tertiary-fixed-variant": "#793100",
+                        "primary": "#aac7ff",
+                        "tertiary": "#ffb691",
+                        "on-secondary-fixed-variant": "#00531a",
+                        "on-primary-fixed": "#001b3e",
+                        "surface-container": "#1f1f21",
+                        "on-secondary-container": "#004615",
+                        "tertiary-fixed-dim": "#ffb691",
+                        "surface-container-lowest": "#0e0e10",
+                        "on-primary-fixed-variant": "#00468d",
+                        "surface": "#131315",
+                        "surface-variant": "#353437",
+                        "primary-fixed-dim": "#aac7ff",
+                        "primary-fixed": "#d6e3ff",
+                        "tertiary-fixed": "#ffdbcb",
+                        "secondary-fixed-dim": "#47e266",
+                        "tertiary-container": "#eb6a12",
+                        "surface-tint": "#aac7ff",
+                        "on-secondary": "#003910",
+                        "outline": "#8b91a0",
+                        "surface-container-low": "#1b1b1d",
+                        "on-primary-container": "#002957",
+                        "on-secondary-fixed": "#002106",
+                        "error": "#ffb4ab",
+                        "on-tertiary-container": "#4a1b00",
+                        "inverse-on-surface": "#303032",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "on-background": "#e4e2e4"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "section-gap": "24px",
+                        "margin-desktop": "32px",
+                        "gutter": "16px",
+                        "margin-mobile": "16px",
+                        "stack-gap": "12px",
+                        "row-height-default": "56px",
+                        "row-height-large": "80px",
+                        "safe-area-inset": "env(safe-area-inset-bottom, 20px)"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["Inter"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "nav-title": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Plus Jakarta Sans"],
+                        "label-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["13px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-md": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["26px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["17px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "nav-title": ["20px", {"lineHeight": "24px", "fontWeight": "800", "letterSpacing": "-0.02em"}],
+                        "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+        }
+        .map-bg {
+            background-color: #1a1a1c;
+            background-image: radial-gradient(circle at 50% 50%, rgba(170, 199, 255, 0.05) 0%, transparent 60%);
+        }
+        .sheet-shadow {
+            box-shadow: 0 -4px 24px -4px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md overflow-hidden antialiased">
+<!-- TopAppBar -->
+<header class="bg-surface/80 dark:bg-surface-dim/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30 flex items-center justify-between px-4 h-row-height-default">
+<button class="text-primary dark:text-primary-fixed hover:bg-surface-variant/50 dark:hover:bg-surface-container-highest/50 active:opacity-70 transition-opacity duration-200 p-2 -ml-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed">第 3 天 · 7月12日</h1>
+<button class="text-primary dark:text-primary-fixed hover:bg-surface-variant/50 dark:hover:bg-surface-container-highest/50 active:opacity-70 transition-opacity duration-200 p-2 -mr-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+</button>
+</header>
+<!-- Main Content Area -->
+<main class="flex-grow relative h-screen w-full">
+<!-- Map Canvas (Top 60%) -->
+<div class="absolute top-0 left-0 w-full map-bg bg-cover bg-center z-0 h-full" data-alt="A stylized, highly detailed dark mode map of central London at night. The map features deep black backgrounds with muted dark gray roads and building footprints. A vibrant, glowing electric blue route winds through the streets, illuminated against the dark urban grid. The overall aesthetic is sleek, modern corporate, and highly precise, resembling a premium automotive navigation interface." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD4Wr3RMaI34ULE2nYG4VrPtsDUl-3p1q6zM6jsXaOD78zJyJQR0h07cuhLq38cfm7htKjiqemMJTGUlozhYLWIClmprZPSXL3e785pjTd_gdf-bMgmnBisMeNs1dh4zwStYw3yij7zg7-hMFaexBI3p5uqQbYalSn-K1aLHJhmCxBFXxXFSHGduLCM619qjCwCfeyKfZF-Y2NYgBH3VJadqTe6f-BvmIMLKoJsgfRfQVOWwyB8XMQICmXFb9oo2kTjoGPZ5eZdQMg');">
+<!-- Map Overlay to darken -->
+<div class="absolute inset-0 bg-surface-dim/60"></div>
+<!-- Route Line (SVG Simulation) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" preserveaspectratio="none" viewbox="0 0 100 100">
+<path class="drop-shadow-[0_0_8px_rgba(170,199,255,0.8)]" d="M20,60 Q40,40 50,50 T80,30" fill="none" stroke="#aac7ff" stroke-linecap="round" stroke-linejoin="round" stroke-width="0.8"></path>
+</svg>
+<!-- Map Markers -->
+<!-- Marker 1 -->
+<div class="absolute top-[58%] left-[18%] transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center border-2 border-surface-container-lowest shadow-[0_0_12px_rgba(170,199,255,0.6)]">
+<span class="font-label-sm text-label-sm text-on-primary-container font-bold">1</span>
+</div>
+<div class="mt-1 px-2 py-0.5 rounded-full bg-surface-container-high/90 backdrop-blur-sm border border-outline-variant/50">
+<span class="text-[10px] font-medium text-on-surface">大英博物馆</span>
+</div>
+</div>
+<!-- Marker 2 -->
+<div class="absolute top-[48%] left-[48%] transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center border-2 border-surface-container-lowest shadow-lg">
+<span class="font-label-sm text-label-sm text-on-surface font-bold">2</span>
+</div>
+<div class="mt-1 px-2 py-0.5 rounded-full bg-surface-container-high/90 backdrop-blur-sm border border-outline-variant/50">
+<span class="text-[10px] font-medium text-on-surface">Dishoom</span>
+</div>
+</div>
+<!-- Marker 3 -->
+<div class="absolute top-[28%] left-[78%] transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center border-2 border-surface-container-lowest shadow-lg">
+<span class="font-label-sm text-label-sm text-on-surface font-bold">3</span>
+</div>
+<div class="mt-1 px-2 py-0.5 rounded-full bg-surface-container-high/90 backdrop-blur-sm border border-outline-variant/50">
+<span class="text-[10px] font-medium text-on-surface">悲惨世界</span>
+</div>
+</div>
+</div>
+<!-- Floating Sheet / Itinerary List (Bottom 40%) -->
+</main>
+<!-- BottomNavBar (Hidden on desktop, visible on mobile) -->
+<div class="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-gutter right-gutter z-30">
+<div class="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-primary" data-icon="museum">museum</span>
+</div>
+<div class="flex-grow min-w-0">
+<div class="flex justify-between items-start">
+<h3 class="font-headline-sm text-[16px] text-on-surface truncate">大英博物馆</h3>
+<div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-bold">进行中</span>
+</div>
+</div>
+<p class="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="schedule">schedule</span>
+        10:00 - 16:30
+      </p>
+</div>
+<button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="directions">directions</span>
+</button>
+</div>
+</div><nav class="md:hidden bg-surface/90 dark:bg-surface-dim/90 backdrop-blur-lg fixed bottom-0 w-full z-50 pb-safe-area-inset border-t border-outline-variant/20 flex justify-around items-center h-row-height-large w-full">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-variant/30 active:scale-95 transition-transform duration-150 w-full h-full" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="explore">explore</span>
+<span class="font-label-md text-label-md">Explore</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed font-semibold hover:bg-surface-variant/30 active:scale-95 transition-transform duration-150 w-full h-full relative" href="#">
+<div class="absolute top-1 w-12 h-8 bg-primary-container/20 rounded-full z-0"></div>
+<span class="material-symbols-outlined mb-1 z-10" data-icon="map" data-weight="fill" style="font-variation-settings: 'FILL' 1;">map</span>
+<span class="font-label-md text-label-md z-10">Trips</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-variant/30 active:scale-95 transition-transform duration-150 w-full h-full" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="bookmark">bookmark</span>
+<span class="font-label-md text-label-md">Saved</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-variant/30 active:scale-95 transition-transform duration-150 w-full h-full" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span class="font-label-md text-label-md">Profile</span>
+</a>
+</nav>
+</body></html>

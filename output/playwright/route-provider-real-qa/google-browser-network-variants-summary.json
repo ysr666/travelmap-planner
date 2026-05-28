@@ -1,0 +1,67 @@
+[
+  {
+    "args": [],
+    "result": {
+      "elapsedMs": 15001,
+      "errorName": "Error",
+      "errorMessage": "timeout"
+    },
+    "events": [
+      {
+        "event": "request",
+        "method": "POST",
+        "resourceType": "fetch"
+      },
+      {
+        "event": "requestfailed",
+        "method": "POST",
+        "failure": "net::ERR_ABORTED"
+      }
+    ]
+  },
+  {
+    "args": [
+      "--disable-quic"
+    ],
+    "result": {
+      "elapsedMs": 15001,
+      "errorName": "Error",
+      "errorMessage": "timeout"
+    },
+    "events": [
+      {
+        "event": "request",
+        "method": "POST",
+        "resourceType": "fetch"
+      },
+      {
+        "event": "requestfailed",
+        "method": "POST",
+        "failure": "net::ERR_ABORTED"
+      }
+    ]
+  },
+  {
+    "args": [
+      "--disable-http2",
+      "--disable-quic"
+    ],
+    "result": {
+      "elapsedMs": 15001,
+      "errorName": "Error",
+      "errorMessage": "timeout"
+    },
+    "events": [
+      {
+        "event": "request",
+        "method": "POST",
+        "resourceType": "fetch"
+      },
+      {
+        "event": "requestfailed",
+        "method": "POST",
+        "failure": "net::ERR_ABORTED"
+      }
+    ]
+  }
+]

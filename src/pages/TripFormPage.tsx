@@ -66,7 +66,7 @@ export function TripFormPage() {
     return (
       <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
         <Card variant="grouped" className="space-y-3">
-          <p className="text-sm text-red-600">缺少旅行 ID。</p>
+          <p className="text-sm text-red-600 dark:text-red-300">缺少旅行 ID。</p>
           <Button onClick={() => navigateTo('home')} variant="secondary">返回首页</Button>
         </Card>
       </div>
@@ -77,7 +77,7 @@ export function TripFormPage() {
     return (
       <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
         <Card variant="grouped" className="space-y-3">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
           <Button onClick={() => navigateTo('home')} variant="secondary">返回首页</Button>
         </Card>
       </div>
@@ -184,7 +184,7 @@ export function TripFormPage() {
           <Card variant="grouped">
             <form className="space-y-3" onSubmit={(e) => void handleSubmit(e)}>
               {error ? (
-                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{error}</p>
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{error}</p>
               ) : null}
               <FormField
                 label="旅行标题"
@@ -227,7 +227,7 @@ export function TripFormPage() {
                 />
               </label>
               {formError ? (
-                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{formError}</p>
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{formError}</p>
               ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <Button

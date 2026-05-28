@@ -59,7 +59,7 @@ export function getTripStatus(trip: Trip, now = new Date()): { label: string; st
   const today = formatDateKey(now)
   if (today >= trip.startDate && today <= trip.endDate) {
     return {
-      className: 'bg-emerald-50 text-emerald-700',
+      className: 'bg-emerald-50 text-emerald-700 dark:text-emerald-300',
       label: '进行中',
       status: 'active',
     }
@@ -67,7 +67,7 @@ export function getTripStatus(trip: Trip, now = new Date()): { label: string; st
 
   if (today < trip.startDate) {
     return {
-      className: 'bg-sky-50 text-sky-700',
+      className: 'bg-sky-50 text-sky-700 dark:text-sky-300',
       label: '计划中',
       status: 'planned',
     }

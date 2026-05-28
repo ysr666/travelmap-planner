@@ -3,7 +3,7 @@ import {
   createOpenAiCompatibleAiDraftProvider,
   createOpenAiCompatibleAiDraftRepairProvider,
 } from './aiDraftRealProvider'
-import type { ProviderProxyAiTripDraftRepairRequest, ProviderProxyAiTripDraftRequest } from '../../src/lib/providerProxyContract'
+import type { ProviderProxyAiTripDraftRepairRequest, ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
 
 function validRequest(): ProviderProxyAiTripDraftRequest {
   return {

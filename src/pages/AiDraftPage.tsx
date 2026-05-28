@@ -11,21 +11,21 @@ import {
   summarizeAiTripDraft,
   type AiTripDraft,
   type AiDraftValidationError,
-} from '../lib/aiTripDraft'
+} from '../lib/ai/aiTripDraft'
 import {
   buildAiTripDraftRequest,
   validateAiTripDraftRequest,
   type AiTripDraftRequestValidationError,
-} from '../lib/aiTripDraftRequest'
-import { generateMockAiTripDraft } from '../lib/aiTripDraftMock'
+} from '../lib/ai/aiTripDraftRequest'
+import { generateMockAiTripDraft } from '../lib/ai/aiTripDraftMock'
 import { getStoredTravelProfile } from '../lib/travelProfile'
-import { getStoredAiPrivacySettings } from '../lib/aiPrivacy'
+import { getStoredAiPrivacySettings } from '../lib/ai/aiPrivacy'
 import {
   sanitizeAiDraftRepairDraftForProxy,
   sanitizeAiDraftRepairFindingsForProxy,
   summarizeAiPrivacyForAiRequest,
-} from '../lib/aiPrivacyGuard'
-import { analyzeAiTripDraftQuality } from '../lib/aiTripDraftQuality'
+} from '../lib/ai/aiPrivacyGuard'
+import { analyzeAiTripDraftQuality } from '../lib/ai/aiTripDraftQuality'
 import { fetchProviderProxyAiTripDraft, fetchProviderProxyAiTripDraftRepair, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
 import { importTripPlanRecords } from '../db'
 import type { Trip, Day, ItineraryItem } from '../types'

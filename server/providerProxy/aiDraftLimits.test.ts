@@ -4,7 +4,7 @@ import {
   AI_DRAFT_MAX_OUTPUT_TOKENS_HINT,
   AI_DRAFT_MAX_PROMPT_CHARS,
 } from './aiDraftLimits'
-import { MAX_AI_FREE_TEXT_LENGTH } from '../../src/lib/providerProxyContract'
+import { MAX_AI_FREE_TEXT_LENGTH } from '../../src/lib/ai/providerProxyContract'
 
 describe('ai draft limits', () => {
   it('constants are positive integers', () => {

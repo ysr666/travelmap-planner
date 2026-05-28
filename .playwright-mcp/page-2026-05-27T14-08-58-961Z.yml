@@ -1,0 +1,34 @@
+- main [ref=e21]:
+  - generic [ref=e1193]:
+    - generic [ref=e1195]:
+      - button "返回旅行工作台" [ref=e1196]:
+        - img [ref=e1197]
+      - heading "编辑旅行" [level=1] [ref=e1199]
+    - main [ref=e1201]:
+      - generic [ref=e1204]:
+        - generic [ref=e1205]:
+          - generic [ref=e1206]: 旅行标题 *
+          - textbox "旅行标题 *" [ref=e1207]:
+            - /placeholder: 例如：东京春日旅行
+            - text: QA Smoke V2
+        - generic [ref=e1208]:
+          - text: 目的地
+          - textbox "目的地" [ref=e1209]:
+            - /placeholder: 例如：日本东京
+            - text: QA Smoke Tokyo
+        - generic [ref=e1210]:
+          - generic [ref=e1211]:
+            - generic [ref=e1212]: 开始日期 *
+            - textbox "开始日期 *" [ref=e1213]: 2026-06-01
+          - generic [ref=e1214]:
+            - generic [ref=e1215]: 结束日期 *
+            - textbox "结束日期 *" [ref=e1216]: 2026-06-03
+        - generic [ref=e1217]:
+          - text: 备注
+          - textbox "备注" [ref=e1218]:
+            - /placeholder: 可选：酒店、航班或旅行说明
+        - generic [ref=e1219]:
+          - button "取消" [ref=e1220]:
+            - generic [ref=e1221]: 取消
+          - button "保存修改" [ref=e1222]:
+            - generic [ref=e1223]: 保存修改

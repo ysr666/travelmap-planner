@@ -1,6 +1,6 @@
-import { createId } from '../db/ids'
-import { db } from '../db/database'
-import { emitTravelDataChanged } from './dataEvents'
+import { createId } from '../../db/ids'
+import { db } from '../../db/database'
+import { emitTravelDataChanged } from '../dataEvents'
 import { buildAiTripEditContext, type AiTripEditContext } from './aiTripEditContext'
 import {
   buildAiTripEditPatchPreview,
@@ -8,7 +8,7 @@ import {
   type AiTripEditPatchPlan,
   type AiTripEditPatchPreview,
 } from './aiTripEditPatch'
-import type { Day, ItineraryItem, Trip } from '../types'
+import type { Day, ItineraryItem, Trip } from '../../types'
 
 export type AiTripEditLocalStateFingerprintInput = {
   trip: Trip

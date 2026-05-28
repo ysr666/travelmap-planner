@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildTripContext, getCoordinateState } from './aiTripContext'
-import { defaultTravelProfile } from './travelProfile'
-import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+import { defaultTravelProfile } from '../travelProfile'
+import type { Day, ItineraryItem, TicketMeta, Trip } from '../../types'
 
 const now = 1000
 

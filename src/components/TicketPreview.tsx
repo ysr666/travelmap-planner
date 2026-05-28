@@ -378,7 +378,7 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
                   打开外部链接
                 </a>
               ) : (
-                <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm font-medium text-red-600">
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm font-medium text-red-600 dark:text-red-300">
                   外部链接无效，只支持 http:// 或 https://。
                 </p>
               )
@@ -426,7 +426,7 @@ function ExternalPreview({ ticket }: { ticket: TicketMeta }) {
         {url || '未填写外部链接'}
       </p>
       {canOpen ? null : (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300">
           外部链接无效，只支持 http:// 或 https://。
         </p>
       )}

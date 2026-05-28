@@ -51,7 +51,7 @@ import {
 import {
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   type ProviderProxyPlaceLookupResult,
-} from '../lib/providerProxyContract'
+} from '../lib/ai/providerProxyContract'
 
 type ItemDetailContentProps = {
   trip: Trip

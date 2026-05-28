@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultAiPrivacySettings } from './aiPrivacy'
 import { buildAiTripEditContext } from './aiTripEditContext'
-import type { Day, ItineraryItem, Trip } from '../types'
+import type { Day, ItineraryItem, Trip } from '../../types'
 
 describe('aiTripEditContext', () => {
   it('builds sanitized context without mutating inputs', () => {

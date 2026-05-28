@@ -3,10 +3,10 @@ export {
   createOpenAiCompatibleAiDraftRepairProvider,
 } from './aiDraftRealProvider'
 
-import type { AiTripDraft, AiTripDraftDay } from '../../src/lib/aiTripDraft'
-import { validateAiTripDraft } from '../../src/lib/aiTripDraft'
-import { generateMockAiTripDraft } from '../../src/lib/aiTripDraftMock'
-import type { ProviderProxyAiTripDraftRequest, ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/providerProxyContract'
+import type { AiTripDraft, AiTripDraftDay } from '../../src/lib/ai/aiTripDraft'
+import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
+import { generateMockAiTripDraft } from '../../src/lib/ai/aiTripDraftMock'
+import type { ProviderProxyAiTripDraftRequest, ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/ai/providerProxyContract'
 import type { AiDraftProviderInput } from './aiDraftPrompt'
 
 export type AiDraftProviderErrorCode =

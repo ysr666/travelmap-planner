@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { validateAiTripDraft } from '../../src/lib/aiTripDraft'
+import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import { createProviderProxyMemoryQuotaStorage, type ProviderProxyQuotaMemoryEntry } from './quotaGuard'
 import { handleProviderProxyRequest } from './providerProxyHandler'
 

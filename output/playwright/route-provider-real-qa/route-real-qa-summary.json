@@ -1,0 +1,49 @@
+{
+  "branch": "",
+  "providerConfig": {
+    "googleConfigured": true,
+    "orsConfigured": true
+  },
+  "requestEvents": [
+    {
+      "phase": "google_generation_confirmed",
+      "provider": "google",
+      "method": "POST"
+    }
+  ],
+  "counts": {
+    "googleRoutes": 1,
+    "orsRoutes": 0
+  },
+  "checks": {
+    "noSilentRequest": true,
+    "noCacheBeforeConfirm": true,
+    "noRequestAtDialog": true,
+    "noCacheAtDialog": true,
+    "googleGenerationRequestCount": 1,
+    "googleCacheWritten": false,
+    "googleTripPreviewCacheWritten": false,
+    "sortOrderUnchangedAfterGeneration": true
+  },
+  "screenshots": {
+    "trip-home-route-ready-before-confirm.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/trip-home-route-ready-before-confirm.png",
+    "route-generation-confirm-dialog.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/route-generation-confirm-dialog.png",
+    "google-route-generation-failed-after-confirm.png": "/Users/ysradmin/Documents/New project/output/playwright/route-provider-real-qa/google-route-generation-failed-after-confirm.png"
+  },
+  "cacheSnapshots": {
+    "beforeConfirm": [],
+    "atDialog": [],
+    "afterGoogleGeneration": []
+  },
+  "sortOrders": {
+    "beforeGoogleGeneration": [
+      "qa-item-tokyo-station:1",
+      "qa-item-shinjuku:2"
+    ],
+    "afterGoogleGeneration": [
+      "qa-item-tokyo-station:1",
+      "qa-item-shinjuku:2"
+    ]
+  },
+  "error": "expect(locator).toContainText(expected) failed\n\nLocator: getByTestId('route-preparation-summary')\nExpected substring: \"路线预览已准备\"\nReceived string:    \"可为 1 天生成路线预览\"\nTimeout: 15000ms\n\nCall log:\n  - Expect \"to.have.text\" with timeout 15000ms\n  - waiting for getByTestId('route-preparation-summary')\n    19 × locator resolved to <p class=\"mt-1 text-xs leading-5 tm-muted\" data-testid=\"route-preparation-summary\">可为 1 天生成路线预览</p>\n       - unexpected value \"可为 1 天生成路线预览\"\n"
+}

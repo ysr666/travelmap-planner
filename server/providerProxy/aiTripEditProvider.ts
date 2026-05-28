@@ -1,6 +1,6 @@
-import type { AiTripEditPatchPlan } from '../../src/lib/aiTripEditPatch'
-import { validateAiTripEditPatchPlan } from '../../src/lib/aiTripEditPatch'
-import type { ProviderProxyAiTripEditPlanRequest } from '../../src/lib/providerProxyContract'
+import type { AiTripEditPatchPlan } from '../../src/lib/ai/aiTripEditPatch'
+import { validateAiTripEditPatchPlan } from '../../src/lib/ai/aiTripEditPatch'
+import type { ProviderProxyAiTripEditPlanRequest } from '../../src/lib/ai/providerProxyContract'
 import type { AiBackendReasoningMode } from './aiReasoningPolicy'
 import { commandNeedsRealtimeSearch, type AiTripEditProviderInput } from './aiTripEditPrompt'
 

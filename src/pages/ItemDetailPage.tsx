@@ -333,13 +333,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
 
   return (
     <div className="space-y-5 pb-2">
-      <Card variant="grouped" className="space-y-4" data-testid="item-detail-core">
+      <Card variant="grouped" padding="none" data-testid="item-detail-core">
         {actionError ? (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-300">
+          <div className="m-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-300">
             {actionError}
           </div>
         ) : null}
-        <div className="space-y-2">
+        <div className="px-4 pt-4 pb-2 space-y-2">
           <p className="inline-flex items-center gap-1.5 rounded-full bg-sky-50/80 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
             <Clock3 className="size-3.5" />
             {formatDate(day.date)} · {describeItemTime(item)}
@@ -352,7 +352,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           ) : null}
         </div>
 
-        <div className="space-y-2">
+        <div className="divide-y tm-separator">
           <DetailRow
             icon={<MapPin className="size-4" />}
             label={item.locationName || '地点未填写'}
@@ -372,7 +372,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           ) : null}
         </div>
 
-        <div className="space-y-3">
+        <div className="px-4 pb-4 space-y-3">
           <Button
             className="min-h-10 px-3"
             data-testid="item-place-lookup-toggle"
@@ -727,13 +727,13 @@ function DetailRow({
   value?: string
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-white/90 text-slate-500 ring-1 ring-slate-100 dark:bg-slate-950/60 dark:text-slate-400 dark:ring-slate-800">
+    <div className="flex items-start gap-3 px-4 py-3">
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-sm font-semibold text-slate-950 dark:text-slate-100">{label}</span>
-        {value ? <span className="mt-0.5 block break-words text-sm leading-5 tm-muted">{value}</span> : null}
+        <span className="block break-words text-[15px] font-semibold text-slate-950 dark:text-slate-100">{label}</span>
+        {value ? <span className="mt-0.5 block break-words text-[13px] leading-5 tm-muted">{value}</span> : null}
       </span>
     </div>
   )

@@ -1473,15 +1473,15 @@ function InfoPill({
   text: string
   tone?: 'neutral' | 'success' | 'warning'
 }) {
-  const styles = {
-    neutral: 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:text-slate-300 dark:ring-slate-800/70',
-    success: 'bg-emerald-50/80 text-emerald-700 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50',
-    warning: 'bg-amber-50/80 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
-  }[tone]
+  const toneClass = tone === 'success'
+    ? ' !bg-emerald-50/60 !text-emerald-600 !ring-emerald-100/50 dark:!bg-emerald-950/25 dark:!text-emerald-400 dark:!ring-emerald-900/40'
+    : tone === 'warning'
+      ? ' !bg-amber-50/60 !text-amber-700 !ring-amber-100/50 dark:!bg-amber-950/25 dark:!text-amber-400 dark:!ring-amber-900/40'
+      : ''
 
   return (
-    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-6 ${styles}`}>
-      <span className="mt-1 shrink-0">{icon}</span>
+    <div className={`tm-info-row${toneClass}`}>
+      <span className="shrink-0">{icon}</span>
       <span>{text}</span>
     </div>
   )

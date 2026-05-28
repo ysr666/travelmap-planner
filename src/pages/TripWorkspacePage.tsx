@@ -390,37 +390,39 @@ export function TripWorkspacePage() {
               submitting={routeGenerationLoading}
             />
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">每日行程</h3>
-              <Card className="divide-y tm-row" padding="none" variant="grouped">
-                {days.map((day, index) => (
-                  <div
-                    className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-50/70 active:bg-slate-100/80 dark:hover:bg-slate-800/40 dark:active:bg-slate-800/70"
-                    key={day.id}
-                    onClick={() => openDay(day, 'schedule')}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') openDay(day, 'schedule')
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">
-                      {formatChineseDayOrdinal(index + 1)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
-                        {formatDate(day.date)}
+            <section className="space-y-2">
+              <h3 className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">每日行程</h3>
+              <Card padding="none" variant="grouped">
+                <div className="divide-y tm-separator">
+                  {days.map((day, index) => (
+                    <div
+                      className="flex cursor-pointer items-center gap-3 px-4 py-3 transition active:bg-black/[0.03] dark:active:bg-white/[0.06]"
+                      key={day.id}
+                      onClick={() => openDay(day, 'schedule')}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') openDay(day, 'schedule')
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">
+                        {formatChineseDayOrdinal(index + 1)}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs tm-muted">
-                        {day.title}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-semibold text-slate-950 dark:text-slate-100">
+                          {formatDate(day.date)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[13px] tm-muted">
+                          {day.title}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs tm-muted">
+                          {itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0} 个行程点
+                        </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-xs tm-muted">
-                        {itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0} 个行程点
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-300" />
-                  </div>
-                ))}
+                      <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                    </div>
+                  ))}
+                </div>
               </Card>
             </section>
 

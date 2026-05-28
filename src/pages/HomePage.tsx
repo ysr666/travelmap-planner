@@ -182,11 +182,12 @@ export function HomePage() {
 
           {!isLoading && hasTrips ? (
             <GroupedSection title="最近行程">
-              {trips.map((trip) => (
+              {trips.map((trip, index) => (
                 <TripCard
                   key={trip.id}
                   onDelete={() => setPendingDeleteTrip(trip)}
                   onOpen={() => navigateTo('trip', { tripId: trip.id })}
+                  separator={index > 0}
                   stats={tripStatsById[trip.id]}
                   trip={trip}
                   isDeleting={deletingTripId === trip.id}
@@ -238,18 +239,21 @@ function TripCard({
   onDelete,
   stats,
   isDeleting,
+  separator,
 }: {
   trip: Trip
   onOpen: () => void
   onDelete: () => void
   stats?: TripCardStats
   isDeleting: boolean
+  separator?: boolean
 }) {
   const status = getTripStatus(trip)
 
   return (
     <div className="relative" data-testid="trip-card">
-      <button className="grid w-full grid-cols-[5rem_1fr] gap-3 p-3 pr-11 text-left transition active:bg-black/[0.03] dark:active:bg-white/[0.06] tm-focus" onClick={onOpen} type="button">
+      {separator ? <div className="absolute left-[60px] right-0 top-0 h-[0.5px] bg-outline-variant/30" /> : null}
+      <button className="grid w-full min-h-[56px] grid-cols-[5rem_1fr] gap-3 p-3 pr-11 text-left transition active:bg-black/[0.03] dark:active:bg-white/[0.06] tm-focus" onClick={onOpen} type="button">
         <TripCover trip={trip} variant="thumbnail" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">

@@ -16,7 +16,7 @@ export function GroupedSection({ title, children, className = '' }: GroupedSecti
         </h3>
       ) : null}
       <Card variant="grouped" padding="none">
-        <div className="divide-y tm-separator">
+        <div className="relative">
           {children}
         </div>
       </Card>

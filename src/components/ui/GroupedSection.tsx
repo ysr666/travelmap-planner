@@ -11,7 +11,7 @@ export function GroupedSection({ title, children, className = '' }: GroupedSecti
   return (
     <section className={`space-y-2 ${className}`}>
       {title ? (
-        <h3 className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+        <h3 className="px-1 text-[12px] text-outline uppercase tracking-wider">
           {title}
         </h3>
       ) : null}

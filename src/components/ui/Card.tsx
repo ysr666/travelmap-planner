@@ -11,8 +11,8 @@ type CardProps = HTMLAttributes<HTMLDivElement> & {
 
 const variantClasses: Record<CardVariant, string> = {
   default: 'rounded-2xl tm-surface',
-  grouped: 'rounded-2xl tm-group',
-  flat: 'rounded-2xl tm-group shadow-none border-transparent',
+  grouped: 'rounded-xl tm-group',
+  flat: 'rounded-xl tm-group shadow-none border-transparent',
 }
 
 const paddingClasses: Record<CardPadding, string> = {

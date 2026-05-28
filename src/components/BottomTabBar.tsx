@@ -16,7 +16,7 @@ const tabs = [
 export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
   return (
     <nav className="shrink-0 border-t tm-row bg-white/90 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl dark:bg-slate-950/90">
-      <div className="flex items-center justify-around">
+      <div className="mx-auto flex max-w-[600px] items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeRoute === tab.id
@@ -24,7 +24,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
             <button
               aria-disabled={tab.disabled}
               aria-label={tab.label}
-              className={`flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-xl px-3 text-[10px] font-medium transition active:scale-95 tm-focus ${
+              className={`flex min-h-[72px] min-w-12 flex-col items-center justify-center gap-0.5 rounded-xl px-3 text-[13px] font-medium transition active:scale-95 tm-focus ${
                 tab.disabled
                   ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
                   : isActive

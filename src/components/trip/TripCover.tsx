@@ -7,9 +7,10 @@ type TripCoverProps = {
   variant?: 'thumbnail' | 'hero' | 'compact'
   className?: string
   heroStats?: { days: number; spots: number; tickets: number }
+  photo?: string
 }
 
-export function TripCover({ trip, variant = 'thumbnail', className = '', heroStats }: TripCoverProps) {
+export function TripCover({ trip, variant = 'thumbnail', className = '', heroStats, photo }: TripCoverProps) {
   const visual = getTripVisual(trip)
   const sizeClass =
     variant === 'hero'
@@ -20,8 +21,15 @@ export function TripCover({ trip, variant = 'thumbnail', className = '', heroSta
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${visual.gradientClass} ${sizeClass} ${className}`}
+      className={`relative overflow-hidden rounded-[24px] bg-gradient-to-br ${visual.gradientClass} ${sizeClass} ${className}`}
     >
+      {photo ? (
+        <img
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+          src={photo}
+        />
+      ) : null}
       {/* Decorative elements */}
       <div className="absolute inset-0 opacity-30">
         <div className="absolute left-4 top-5 h-px w-24 rotate-12 bg-white" />

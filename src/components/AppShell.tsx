@@ -8,6 +8,9 @@ import {
 } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
+import { BottomTabBar } from './BottomTabBar'
+
+const BOTTOM_TAB_BAR_ROUTES: RouteId[] = ['home', 'trip', 'settings', 'tickets']
 
 type AppShellProps = {
   activeRoute: RouteId
@@ -33,6 +36,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   const isTrip = activeRoute === 'trip' || activeRoute === 'day' || activeRoute === 'item'
     || activeRoute === 'trip/new' || activeRoute === 'trip/edit'
     || activeRoute === 'item/new' || activeRoute === 'item/edit'
+  const showTabBar = BOTTOM_TAB_BAR_ROUTES.includes(activeRoute)
   const pageTitle = routeTitles[activeRoute]
 
   return (
@@ -64,7 +68,9 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
                 {pageTitle}
               </h1>
             ) : null}
-            {activeRoute === 'settings' ? (
+            {showTabBar ? (
+              <div className="size-10" />
+            ) : activeRoute === 'settings' ? (
               <div className="size-10" />
             ) : (
               <button
@@ -83,14 +89,16 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
       <main
         className={
           isHome || isTrip
-            ? 'flex min-h-0 flex-1 px-4 pt-4'
-            : 'min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar'
+            ? `flex min-h-0 flex-1 px-4 pt-4${showTabBar ? ' pb-2' : ''}`
+            : `min-h-0 flex-1 overflow-y-auto px-4 pt-4 app-scrollbar${showTabBar ? ' pb-2' : ' pb-[max(2rem,env(safe-area-inset-bottom))]'}`
         }
       >
         <div className={isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
           {children}
         </div>
       </main>
+
+      {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
     </div>
   )
 }

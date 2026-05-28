@@ -396,7 +396,6 @@ test.describe('AI Draft Quality Check', () => {
 test.describe('Settings AI draft entry', () => {
   test('settings page links to ai-draft page', async ({ page }) => {
     await page.goto('/#/settings')
-    await page.locator('summary').filter({ hasText: 'AI 行程导入' }).click()
     await page.getByRole('button', { name: '或者，试试本地草稿生成 →' }).click()
     await page.waitForURL(/#\/ai-draft/)
     await expect(page.getByRole('heading', { name: 'AI 行程草稿' })).toBeVisible()

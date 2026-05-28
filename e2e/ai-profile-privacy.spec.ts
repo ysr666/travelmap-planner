@@ -10,7 +10,6 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
   await page.reload({ waitUntil: 'domcontentloaded' })
 
-  await page.locator('summary').filter({ hasText: '旅行偏好' }).click()
   const profileSection = page.getByTestId('travel-profile-section')
   await expect(profileSection).toBeVisible()
   await expect(profileSection).toContainText('设备内运行')
@@ -32,7 +31,6 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
     reminderLevel: 'detailed',
   })
 
-  await page.locator('summary').filter({ hasText: 'AI 与隐私' }).click()
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
   await expect(privacySection).toContainText('AI 草稿生成和修复')
@@ -52,7 +50,6 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.locator('summary').filter({ hasText: '旅行偏好' }).click()
   await expect(page.getByTestId('travel-profile-pace-relaxed')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-transport-walking')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-meal-protection')).toHaveAttribute('aria-checked', 'false')
@@ -60,7 +57,6 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   await expect(page.getByTestId('travel-profile-night-return')).toHaveValue('22:00')
   await expect(page.getByTestId('travel-profile-reminder-detailed')).toHaveAttribute('aria-pressed', 'true')
 
-  await page.locator('summary').filter({ hasText: 'AI 与隐私' }).click()
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileNames')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileContent')).toBeDisabled()
@@ -90,7 +86,6 @@ test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async (
   await expectNoHorizontalOverflow(page)
 
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-  await page.locator('summary').filter({ hasText: 'AI 与隐私' }).click()
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByTestId('ai-privacy-allowFullNotes')).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByTestId('ai-privacy-allowTicketFileContent')).toBeDisabled()

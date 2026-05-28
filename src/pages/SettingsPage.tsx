@@ -38,7 +38,7 @@ import {
 import {
   importTripBackup,
 } from '../lib/backup'
-import { getRouteParams, navigateTo } from '../lib/routes'
+import { navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
 import {
   buildTripPlanPreviewSummary,
@@ -196,8 +196,6 @@ const aiPrivacyGroups: Array<{
 
 export function SettingsPage() {
   const { mode: appearanceMode, resolvedMode, setMode: setAppearanceMode } = useAppearance()
-  const routeParams = getRouteParams()
-  const shouldOpenCloudBackup = routeParams.get('section') === 'cloud'
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
   const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
@@ -527,19 +525,25 @@ export function SettingsPage() {
         </Card>
       </section>
 
-      <Collapsible subtitle="未来 AI 简报会参考的本机偏好" title="旅行偏好">
-        <TravelProfileSettings
-          onChange={updateTravelProfile}
-          profile={travelProfile}
-        />
-      </Collapsible>
+      <section className="space-y-3">
+        <SectionHeader title="旅行偏好" />
+        <Card variant="grouped">
+          <TravelProfileSettings
+            onChange={updateTravelProfile}
+            profile={travelProfile}
+          />
+        </Card>
+      </section>
 
-      <Collapsible subtitle="控制 AI 草稿生成和修复时可发送的数据范围" title="AI 与隐私">
-        <AiPrivacySettingsPanel
-          onChange={updateAiPrivacySetting}
-          settings={aiPrivacySettings}
-        />
-      </Collapsible>
+      <section className="space-y-3">
+        <SectionHeader title="AI 与隐私" />
+        <Card variant="grouped">
+          <AiPrivacySettingsPanel
+            onChange={updateAiPrivacySetting}
+            settings={aiPrivacySettings}
+          />
+        </Card>
+      </section>
 
       <section className="space-y-3">
         <SectionHeader title="PWA 和离线使用" />
@@ -551,7 +555,7 @@ export function SettingsPage() {
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">可添加到 iPhone 主屏幕</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
-                在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
+                在 iPhone Safari 打开本页面，点分享按钮，再选择"添加到主屏幕"。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
               </p>
             </div>
           </div>
@@ -619,16 +623,15 @@ export function SettingsPage() {
       </Card>
       </section>
 
-      <Collapsible
-        defaultOpen={shouldOpenCloudBackup}
-        key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
-        subtitle="Supabase 云端保存与恢复"
-        title="云端保存"
-      >
-        <CloudBackupPanel trip={null} />
-      </Collapsible>
+      <section className="space-y-3">
+        <SectionHeader title="云端保存" />
+        <Card variant="grouped">
+          <CloudBackupPanel trip={null} />
+        </Card>
+      </section>
 
-      <Collapsible subtitle="用 AI 生成行程后导入" title="AI 行程导入">
+      <section className="space-y-3">
+        <SectionHeader title="AI 行程导入" />
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
@@ -646,7 +649,7 @@ export function SettingsPage() {
           <div className="grid gap-2">
             <InfoPill
               icon={<FileJson className="size-4" />}
-              text="AI 行程包用于新建旅行；完整备份 zip 仍请使用上方“导入备份”入口。"
+              text={'AI 行程包用于新建旅行；完整备份 zip 仍请使用上方「导入备份」入口。'}
             />
             <InfoPill
               icon={<AlertTriangle className="size-4" />}
@@ -709,21 +712,25 @@ export function SettingsPage() {
             </button>
           </p>
         </Card>
-      </Collapsible>
+      </section>
 
-      <Collapsible subtitle="旅图路线服务与缓存管理" title="路线服务">
-        <RouteServiceSettings
-        config={routingConfig}
-        cacheError={routeCacheError}
-        cacheStats={routeCacheStats}
-        isClearingCache={isClearingRouteCache}
-        isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
-        onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
-        onClearCache={() => void handleClearRouteCache()}
-      />
-      </Collapsible>
+      <section className="space-y-3">
+        <SectionHeader title="路线服务" />
+        <Card variant="grouped">
+          <RouteServiceSettings
+            config={routingConfig}
+            cacheError={routeCacheError}
+            cacheStats={routeCacheStats}
+            isClearingCache={isClearingRouteCache}
+            isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
+            onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
+            onClearCache={() => void handleClearRouteCache()}
+          />
+        </Card>
+      </section>
 
-      <Collapsible subtitle="IndexedDB 用量与持久化状态" title="设备存储">
+      <section className="space-y-3">
+        <SectionHeader title="设备存储" />
         <Card variant="grouped" className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -766,7 +773,7 @@ export function SettingsPage() {
             </p>
           ) : null}
         </Card>
-      </Collapsible>
+      </section>
 
       <Collapsible subtitle="版本信息与备份提醒" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">
@@ -894,7 +901,7 @@ function TravelProfileSettings({
         </div>
 
         <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          当前只会把“旅行节奏”用于保守的安排密度阈值；不会新增路线、用餐或时间推断。
+          当前只会把"旅行节奏"用于保守的安排密度阈值；不会新增路线、用餐或时间推断。
         </p>
       </Card>
     </section>

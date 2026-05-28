@@ -5,7 +5,6 @@ import { clearTravelDatabase, expectNoHorizontalOverflow, forceSupabaseUnconfigu
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 async function openAiTripImportSection(page: Page) {
-  await page.locator('summary').filter({ hasText: 'AI 行程导入' }).click()
   await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
 }
 

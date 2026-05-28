@@ -29,21 +29,21 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
   const content = (
     <>
       {icon ? (
-        <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${iconClasses}`}>
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-full ${iconClasses}`}>
           {icon}
         </div>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+        <span className="block truncate text-[17px] font-semibold text-on-surface">
           {title}
         </span>
         {detail ? (
-          <span className="block truncate text-[13px] tm-muted">{detail}</span>
+          <span className="block truncate text-[12px] tm-muted">{detail}</span>
         ) : null}
       </span>
       {meta ? <span className="text-xs font-medium tm-muted">{meta}</span> : null}
       {onClick ? (
-        <ChevronRight className="size-4 shrink-0 text-slate-300 dark:text-slate-600" />
+        <ChevronRight className="size-4 shrink-0 text-outline-variant" />
       ) : null}
     </>
   )
@@ -51,18 +51,20 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
   if (onClick) {
     return (
       <button
-        className={`flex w-full items-center gap-3 px-2 py-3 text-left transition active:bg-black/[0.03] dark:active:bg-white/[0.06] tm-focus ${separator ? 'border-b tm-separator' : ''}`}
+        className={`relative flex min-h-[56px] w-full items-center gap-3 px-2 py-3 text-left transition active:bg-surface-variant/50 tm-focus ${separator ? '' : ''}`}
         onClick={onClick}
         type="button"
       >
         {content}
+        {separator ? <div className="absolute bottom-0 left-[52px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
       </button>
     )
   }
 
   return (
-    <div className={`flex w-full items-center gap-3 px-2 py-3 ${separator ? 'border-b tm-separator' : ''}`}>
+    <div className={`relative flex min-h-[56px] w-full items-center gap-3 px-2 py-3`}>
       {content}
+      {separator ? <div className="absolute bottom-0 left-[52px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
     </div>
   )
 }

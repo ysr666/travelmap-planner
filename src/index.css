@@ -8,6 +8,8 @@
   --color-primary-shadow-lg: rgba(0, 88, 188, 0.22);
   --color-map-bg: #eaf2f9;
   --color-surface: #f5f6f8;
+  --font-headline: "Plus Jakarta Sans";
+  --font-body: "Plus Jakarta Sans";
 }
 
 :root {
@@ -15,8 +17,8 @@
   background: #eef3f8;
   color-scheme: light;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

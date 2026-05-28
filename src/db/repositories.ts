@@ -282,21 +282,22 @@ export async function deleteTicket(ticketId: string) {
 
       await Promise.all([db.ticketMetas.delete(ticketId), db.ticketBlobs.delete(ticketId)])
 
-      const itemUpdates = await db.itineraryItems
-        .filter((item) => item.ticketIds.includes(ticketId))
-        .toArray()
-
-      await Promise.all(
-        itemUpdates.map((item) =>
-          db.itineraryItems.update(item.id, {
-            ticketIds: item.ticketIds.filter((id) => id !== ticketId),
-            updatedAt: now,
-          }),
-        ),
-      )
-
       if (ticket) {
-        await db.trips.update(ticket.tripId, { updatedAt: now })
+        const tripItems = await db.itineraryItems
+          .where('tripId')
+          .equals(ticket.tripId)
+          .toArray()
+        const itemUpdates = tripItems.filter((item) => item.ticketIds.includes(ticketId))
+
+        await Promise.all([
+          ...itemUpdates.map((item) =>
+            db.itineraryItems.update(item.id, {
+              ticketIds: item.ticketIds.filter((id) => id !== ticketId),
+              updatedAt: now,
+            }),
+          ),
+          db.trips.update(ticket.tripId, { updatedAt: now }),
+        ])
       }
     },
   )

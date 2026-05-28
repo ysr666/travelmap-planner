@@ -6,6 +6,7 @@ import {
   Database,
   FileJson,
   Import,
+  LogOut,
   Monitor,
   Moon,
   RefreshCw,
@@ -38,6 +39,7 @@ import {
 import {
   importTripBackup,
 } from '../lib/backup'
+import { getCurrentSession, signOut } from '../lib/cloudBackup'
 import { navigateTo } from '../lib/routes'
 import { formatFileSize } from '../lib/tickets'
 import {
@@ -223,6 +225,7 @@ export function SettingsPage() {
   const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
   const [travelProfile, setTravelProfile] = useState<TravelProfile>(() => getStoredTravelProfile())
   const [aiPrivacySettings, setAiPrivacySettings] = useState<AiPrivacySettings>(() => getStoredAiPrivacySettings())
+  const [isLoggedIntoCloud, setIsLoggedIntoCloud] = useState(false)
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -309,6 +312,15 @@ export function SettingsPage() {
       window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, handleRouteCacheChanged)
     }
   }, [refreshRouteCacheStats])
+
+  useEffect(() => {
+    void getCurrentSession().then((session) => setIsLoggedIntoCloud(!!session))
+  }, [])
+
+  async function handleLogout() {
+    await signOut()
+    setIsLoggedIntoCloud(false)
+  }
 
   async function handleRequestPersistence() {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -774,6 +786,19 @@ export function SettingsPage() {
           ) : null}
         </Card>
       </section>
+
+      {isLoggedIntoCloud ? (
+        <section className="space-y-3">
+          <ListRow
+            icon={<LogOut className="size-4" />}
+            iconTone="rose"
+            onClick={handleLogout}
+            separator={false}
+            title="退出登录"
+            detail="退出云备份账号"
+          />
+        </section>
+      ) : null}
 
       <Collapsible subtitle="版本信息与备份提醒" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">

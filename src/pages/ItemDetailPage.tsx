@@ -355,17 +355,20 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         <div className="divide-y tm-separator">
           <DetailRow
             icon={<MapPin className="size-4" />}
+            iconTone="sky"
             label={item.locationName || '地点未填写'}
             value={item.address}
           />
           <DetailRow
             icon={<Navigation className="size-4" />}
+            iconTone="emerald"
             label={hasCoordinates ? '已保存坐标' : '暂无坐标'}
             value={hasCoordinates ? '可使用外部地图导航' : '外部地图导航暂不可用'}
           />
           {transportDescription ? (
             <DetailRow
               icon={<ChevronRight className="size-4" />}
+              iconTone="violet"
               label="从上一站到此处"
               value={transportDescription}
             />
@@ -721,14 +724,26 @@ function DetailRow({
   icon,
   label,
   value,
+  iconTone,
 }: {
   icon: ReactNode
   label: string
   value?: string
+  iconTone?: 'sky' | 'emerald' | 'amber' | 'violet' | 'rose'
 }) {
+  const toneClasses = iconTone
+    ? {
+        sky: 'bg-sky-100/80 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
+        emerald: 'bg-emerald-100/80 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
+        amber: 'bg-amber-100/80 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
+        violet: 'bg-violet-100/80 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
+        rose: 'bg-rose-100/80 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
+      }[iconTone]
+    : 'bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400'
+
   return (
     <div className="flex items-start gap-3 px-4 py-3">
-      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+      <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl ${toneClasses}`}>
         {icon}
       </span>
       <span className="min-w-0 flex-1">

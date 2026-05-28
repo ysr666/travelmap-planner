@@ -1,6 +1,16 @@
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 
+export type IconTone = 'sky' | 'emerald' | 'amber' | 'violet' | 'rose'
+
+const iconToneClasses: Record<IconTone, string> = {
+  sky: 'bg-sky-100/80 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
+  emerald: 'bg-emerald-100/80 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
+  amber: 'bg-amber-100/80 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
+  violet: 'bg-violet-100/80 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
+  rose: 'bg-rose-100/80 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
+}
+
 type ListRowProps = {
   icon?: ReactNode
   title: string
@@ -8,13 +18,18 @@ type ListRowProps = {
   meta?: string
   onClick?: () => void
   separator?: boolean
+  iconTone?: IconTone
 }
 
-export function ListRow({ icon, title, detail, meta, onClick, separator = false }: ListRowProps) {
+export function ListRow({ icon, title, detail, meta, onClick, separator = false, iconTone }: ListRowProps) {
+  const iconClasses = iconTone
+    ? iconToneClasses[iconTone]
+    : 'bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400'
+
   const content = (
     <>
       {icon ? (
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+        <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${iconClasses}`}>
           {icon}
         </div>
       ) : null}

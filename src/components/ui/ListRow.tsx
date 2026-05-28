@@ -56,7 +56,7 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
         type="button"
       >
         {content}
-        {separator ? <div className="absolute bottom-0 left-[52px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
+        {separator ? <div className="absolute bottom-0 left-[60px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
       </button>
     )
   }
@@ -64,7 +64,7 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
   return (
     <div className={`relative flex min-h-[56px] w-full items-center gap-3 px-2 py-3`}>
       {content}
-      {separator ? <div className="absolute bottom-0 left-[52px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
+      {separator ? <div className="absolute bottom-0 left-[60px] right-0 h-[0.5px] bg-outline-variant/30" /> : null}
     </div>
   )
 }

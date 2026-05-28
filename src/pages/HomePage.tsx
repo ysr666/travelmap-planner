@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarDays, Plus, Settings, Trash2 } from 'lucide-react'
 import {
   createDemoTrip,
@@ -15,7 +15,6 @@ import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
 import { GroupedSection } from '../components/ui/GroupedSection'
-import { Badge } from '../components/ui/Badge'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
@@ -38,13 +37,6 @@ export function HomePage() {
   const [tripStatsById, setTripStatsById] = useState<Record<string, TripCardStats>>({})
 
   const hasTrips = trips.length > 0
-
-  const tripStats = useMemo(() => {
-    return {
-      count: trips.length,
-      latest: trips[0]?.updatedAt,
-    }
-  }, [trips])
 
   async function refreshTrips() {
     setError(null)
@@ -135,15 +127,23 @@ export function HomePage() {
         </button>
       </header>
 
-      {/* Current trip summary — only show when trips exist */}
+      {/* Hero card for first trip */}
       {hasTrips ? (
-        <div className="shrink-0 flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3 ring-1 ring-slate-100/60 dark:bg-slate-900/40 dark:ring-slate-800/50">
-          <div>
-            <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">{trips[0].title}</p>
-            <p className="text-xs tm-muted">{formatDateRange(trips[0].startDate, trips[0].endDate)}</p>
-          </div>
-          <Badge>{tripStats.count} 次旅行</Badge>
-        </div>
+        <button
+          className="shrink-0 text-left tm-focus rounded-2xl active:scale-[0.98] transition"
+          onClick={() => navigateTo('trip', { tripId: trips[0].id })}
+          type="button"
+        >
+          <TripCover
+            heroStats={tripStatsById[trips[0].id] ? {
+              days: tripStatsById[trips[0].id].dayCount,
+              spots: tripStatsById[trips[0].id].itemCount,
+              tickets: tripStatsById[trips[0].id].ticketCount,
+            } : undefined}
+            trip={trips[0]}
+            variant="hero"
+          />
+        </button>
       ) : null}
 
       {error ? (

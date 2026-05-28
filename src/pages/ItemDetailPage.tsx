@@ -37,6 +37,7 @@ import {
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
+import { getPlaceHeroVisual } from '../lib/placeHeroVisual'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -331,20 +332,35 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     }
   }
 
+  const heroVisual = getPlaceHeroVisual(item)
+
   return (
     <div className="space-y-5 pb-2">
+      {/* Hero area */}
+      <div className={`relative -mx-4 -mt-4 overflow-hidden bg-gradient-to-br ${heroVisual.gradientClass} h-36 sm:h-44`} data-testid="item-detail-hero">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <div className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm">
+          <span className="text-lg">{heroVisual.emoji}</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-4">
+          <h2 className="text-xl font-bold text-white drop-shadow-sm leading-tight">{item.title}</h2>
+          {item.locationName ? (
+            <p className="mt-0.5 text-xs text-white/80">{item.locationName}</p>
+          ) : null}
+        </div>
+      </div>
+
       <Card variant="grouped" padding="none" data-testid="item-detail-core">
         {actionError ? (
           <div className="m-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-300">
             {actionError}
           </div>
         ) : null}
-        <div className="px-4 pt-4 pb-2 space-y-2">
+        <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
           <p className="inline-flex items-center gap-1.5 rounded-full bg-sky-50/80 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
             <Clock3 className="size-3.5" />
             {formatDate(day.date)} · {describeItemTime(item)}
           </p>
-          <h2 className="text-2xl font-semibold leading-tight text-slate-950 dark:text-slate-100">{item.title}</h2>
           {item.transportMode ? (
             <span className="tm-chip text-xs">
               {transportModeLabels[item.transportMode]}

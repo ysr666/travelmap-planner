@@ -3,11 +3,11 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #1677ff;
-  --color-primary-shadow: rgba(22, 119, 255, 0.18);
-  --color-primary-shadow-lg: rgba(22, 119, 255, 0.20);
+  --color-primary: #0058bc;
+  --color-primary-shadow: rgba(0, 88, 188, 0.18);
+  --color-primary-shadow-lg: rgba(0, 88, 188, 0.22);
   --color-map-bg: #eaf2f9;
-  --color-surface: #f8fbff;
+  --color-surface: #f5f6f8;
 }
 
 :root {
@@ -44,8 +44,8 @@ body {
   color: #e7edf6;
   background: #07111f;
   color-scheme: dark;
-  --color-primary-shadow: rgba(56, 149, 255, 0.24);
-  --color-primary-shadow-lg: rgba(56, 149, 255, 0.30);
+  --color-primary-shadow: rgba(170, 199, 255, 0.20);
+  --color-primary-shadow-lg: rgba(170, 199, 255, 0.28);
   --color-map-bg: #152333;
   --color-surface: #101827;
 }
@@ -236,8 +236,8 @@ html.dark {
 }
 
 .tm-surface {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.80);
+  background: #ffffff;
+  border: 1px solid rgba(241, 245, 249, 0.90);
   box-shadow: 0 1px 3px rgba(47, 65, 88, 0.04);
 }
 
@@ -248,7 +248,7 @@ html.dark {
 }
 
 .tm-group {
-  background: rgba(255, 255, 255, 0.78);
+  background: #ffffff;
   border: 1px solid rgba(241, 245, 249, 0.90);
   box-shadow: none;
 }

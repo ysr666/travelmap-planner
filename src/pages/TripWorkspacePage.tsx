@@ -268,7 +268,7 @@ export function TripWorkspacePage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div className="flex h-full min-h-0 flex-col gap-section-gap overflow-hidden pb-32">
       <header className="shrink-0 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <button

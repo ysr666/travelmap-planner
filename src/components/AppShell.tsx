@@ -82,7 +82,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
       <main
         className={
           isHome || isTrip
-            ? `flex min-h-0 flex-1 flex-col px-4 pt-24 pb-32 gap-section-gap`
+            ? `flex min-h-0 flex-1 flex-col px-4 pb-32 gap-section-gap`
             : `min-h-0 flex-1 overflow-y-auto px-4 pt-24 pb-32 app-scrollbar`
         }
       >

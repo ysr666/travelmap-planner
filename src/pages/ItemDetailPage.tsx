@@ -760,13 +760,13 @@ function DetailRow({
     : 'bg-surface-container/80 text-on-surface-variant dark:bg-surface-container-highest/60 dark:text-outline'
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl ${toneClasses}`}>
+    <div className="flex items-start gap-3 p-4">
+      <span className={`mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full ${toneClasses}`}>
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-[15px] font-semibold text-on-surface dark:text-on-surface">{label}</span>
-        {value ? <span className="mt-0.5 block break-words text-[13px] leading-5 tm-muted">{value}</span> : null}
+        <span className="block break-words font-body-lg text-body-lg text-on-surface">{label}</span>
+        {value ? <span className="mt-0.5 block break-words font-body-md text-body-md text-on-surface-variant">{value}</span> : null}
       </span>
     </div>
   )

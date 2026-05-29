@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, HardDriveDownload, Loader2, NotebookText, RotateCw, Route as RouteIcon, Ticket } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -8,11 +8,9 @@ import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { TripNav } from '../components/AppShell'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { TripBriefCard } from '../components/ai/TripBriefCard'
-import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Badge } from '../components/ui/Badge'
 import { Collapsible } from '../components/ui/Collapsible'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -319,111 +317,95 @@ export function TripWorkspacePage() {
           </Card>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
-          <div className="space-y-4 pb-4">
-            <Card className="space-y-3" variant="grouped">
-              <div className="flex items-start gap-3">
-                <TripCover className="h-20 w-24 shrink-0 rounded-xl" trip={trip} variant="compact" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.destination || '目的地未定'}</p>
-                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-on-surface dark:text-on-surface">
-                    {trip.title}
-                  </h2>
-                  <p className="mt-1 text-sm tm-muted">
-                    {formatDateRange(trip.startDate, trip.endDate)}
-                  </p>
-                  <div className="mt-2">
-                    <AutoSnapshotBackupStatus tripId={trip.id} />
-                  </div>
-                </div>
+        <div className="min-h-0 flex-1 overflow-y-auto app-scrollbar">
+          <div className="space-y-section-gap pb-4">
+            {/* Overview Section - matches reference 12_1/code.html */}
+            <section className="flex flex-col gap-stack-gap">
+              <div className="flex items-baseline justify-between">
+                <h3 className="font-headline-md text-headline-md text-on-surface">今日概览</h3>
+                {selectedDay ? (
+                  <span className="font-label-sm text-label-sm text-primary uppercase tracking-wider">
+                    第 {days.findIndex(d => d.id === selectedDay.id) + 1} 天
+                  </span>
+                ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <OverviewStatChip label={`${days.length} 天`} />
-                <OverviewStatChip label={`${allItems.length} 个行程点`} />
-              </div>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <OverviewAction
-                  icon={<Ticket className="size-4" />}
+              {selectedDay ? (
+                <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay.title}</p>
+              ) : null}
+              {/* Map Preview Card */}
+              <TripMapPreview
+                days={days}
+                itemsByDay={itemsByDay}
+                onItemsReordered={async () => { await refresh() }}
+                onOpenMap={(targetDay) => openDay(targetDay, 'map')}
+                routeDataReady={loadedTripContextKey === tripContextKey}
+                selectedDay={selectedDay}
+                tripId={trip.id}
+              />
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-2">
+                <button
+                  className="flex-1 bg-primary text-on-primary py-3.5 px-4 rounded-xl font-label-sm text-label-sm flex items-center justify-center gap-2 active:scale-95 transition shadow-md"
+                  onClick={() => selectedDay && openDay(selectedDay, 'schedule')}
+                  type="button"
+                >
+                  <Route className="size-4" />
+                  进入日视图
+                </button>
+                <button
+                  className="flex-1 bg-surface-container-high text-primary py-3.5 px-4 rounded-xl border border-outline-variant/50 font-label-sm text-label-sm flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95"
                   onClick={() => navigateTo('tickets', { tripId: trip.id })}
+                  type="button"
                 >
+                  <Ticket className="size-4" />
                   票据库
-                </OverviewAction>
-                <OverviewAction
-                  icon={<HardDriveDownload className="size-4" />}
-                  onClick={() => document.getElementById('travel-backup-panel')?.scrollIntoView({ behavior: 'smooth' })}
-                >
-                  备份
-                </OverviewAction>
+                </button>
               </div>
-            </Card>
+            </section>
+
             <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
-
             {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
+            <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+            <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
 
-            <AiTripEditPanel
-              allItems={allItems}
-              days={days}
-              onApplied={async () => {
-                await refresh()
-              }}
-              trip={trip}
-            />
-
-            <TripMapPreview
-              days={days}
-              itemsByDay={itemsByDay}
-              onItemsReordered={async () => {
-                await refresh()
-              }}
-              onOpenMap={(targetDay) => openDay(targetDay, 'map')}
-              routeDataReady={loadedTripContextKey === tripContextKey}
-              selectedDay={selectedDay}
-              tripId={trip.id}
-            />
-
-            <RoutePreparationPanel
-              error={routeGenerationError}
-              loading={routePreparationLoading}
-              onGenerate={() => setRouteGenerationConfirmOpen(true)}
-              preparation={routePreparation}
-              result={routeGenerationResult}
-              submitting={routeGenerationLoading}
-            />
-
-            <section className="space-y-2">
-              <h3 className="px-1 text-[13px] font-semibold text-on-surface-variant dark:text-outline">每日行程</h3>
-              <Card padding="none" variant="grouped">
-                <div className="divide-y tm-separator">
-                  {days.map((day, index) => (
+            {/* Schedule Section - timeline with vertical line */}
+            <section className="flex flex-col gap-stack-gap">
+              <h3 className="font-headline-md text-headline-md text-on-surface">每日行程</h3>
+              <div className="bg-surface-container rounded-xl border-[0.5px] border-outline-variant/30 overflow-hidden flex flex-col relative">
+                {/* Timeline vertical line */}
+                <div className="absolute left-[39px] top-6 bottom-6 w-[1px] bg-outline-variant/40 z-0" />
+                {days.map((day, index) => {
+                  const dayItemCount = itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0
+                  const isLast = index === days.length - 1
+                  return (
                     <div
-                      className="flex cursor-pointer items-center gap-3 px-4 py-3 transition active:bg-black/[0.03] dark:active:bg-white/[0.06]"
+                      className="flex items-stretch p-4 relative z-10 group hover:bg-surface-container-high/50 transition-colors cursor-pointer"
                       key={day.id}
                       onClick={() => openDay(day, 'schedule')}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') openDay(day, 'schedule')
-                      }}
+                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openDay(day, 'schedule') }}
                       role="button"
                       tabIndex={0}
                     >
-                      <span className="flex min-h-8 w-14 shrink-0 items-center justify-center rounded-lg bg-sky-50/80 px-2 text-xs font-bold text-sky-600 dark:text-sky-300 dark:bg-sky-500/10 dark:text-sky-300">
-                        {formatChineseDayOrdinal(index + 1)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-semibold text-on-surface dark:text-on-surface">
-                          {formatDate(day.date)}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[13px] tm-muted">
+                      <div className="flex flex-col items-center mr-4 w-12 pt-1">
+                        <div className="w-3 h-3 rounded-full bg-primary ring-4 ring-surface-container group-hover:ring-surface-container-high z-10 shadow-[0_0_8px_rgba(170,199,255,0.6)]" />
+                      </div>
+                      <div className={`flex-1 ${isLast ? '' : 'pb-4 border-b border-outline-variant/20'}`}>
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-body-lg text-body-lg text-on-surface font-medium">
+                            {formatChineseDayOrdinal(index + 1)} · {formatDate(day.date)}
+                          </h4>
+                          <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">
+                            {dayItemCount} 个行程点
+                          </span>
+                        </div>
+                        <p className="font-body-md text-body-md text-on-surface-variant">
                           {day.title}
-                        </span>
-                        <span className="mt-0.5 block truncate text-xs tm-muted">
-                          {itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0} 个行程点
-                        </span>
-                      </span>
-                      <ChevronRight className="size-4 shrink-0 text-outline-variant" />
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </Card>
+                  )
+                })}
+              </div>
             </section>
 
             {trip.notes ? (
@@ -458,7 +440,7 @@ export function TripWorkspacePage() {
         body={buildRouteGenerationConfirmBody(routePreparation)}
         cancelLabel="暂不生成"
         confirmLabel="确认生成"
-        icon={<RouteIcon className="size-5" />}
+        icon={<Route className="size-5" />}
         loading={routeGenerationLoading}
         onCancel={() => {
           if (!routeGenerationLoading) {
@@ -500,7 +482,7 @@ function RoutePreparationPanel({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <RouteIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-300 dark:text-sky-300" />
+            <Route className="size-4 shrink-0 text-sky-600 dark:text-sky-300 dark:text-sky-300" />
             <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">路线准备</h3>
           </div>
           <p className="mt-1 text-xs leading-5 tm-muted" data-testid="route-preparation-summary">
@@ -518,7 +500,7 @@ function RoutePreparationPanel({
         <Button
           className="min-h-9 shrink-0 px-3 text-xs"
           disabled={!canGenerate}
-          icon={submitting ? <Loader2 className="size-3.5 animate-spin" /> : <RouteIcon className="size-3.5" />}
+          icon={submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Route className="size-3.5" />}
           loading={submitting}
           onClick={onGenerate}
           variant="secondary"
@@ -574,29 +556,4 @@ function describeRouteGenerationResult(result: RouteGenerationBatchResult) {
 function buildRouteGenerationConfirmBody(preparation: TripRoutePreparation | null) {
   const count = preparation?.targetDayIds.length ?? 0
   return `将调用路线服务生成路线预览，可能消耗 API 次数。只为有足够坐标的日期生成（共 ${count} 天），不会自动调整行程顺序，不会生成公交/地铁线路号。`
-}
-
-function OverviewStatChip({ label }: { label: string }) {
-  return <Badge>{label}</Badge>
-}
-
-function OverviewAction({
-  children,
-  icon,
-  onClick,
-}: {
-  children: string
-  icon: ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-container-low/80 px-2 text-xs font-semibold text-on-surface-variant ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] dark:bg-surface-container-highest/50 dark:text-outline-variant dark:ring-outline-variant/30/70 tm-focus"
-      onClick={onClick}
-      type="button"
-    >
-      {icon}
-      <span className="truncate">{children}</span>
-    </button>
-  )
 }

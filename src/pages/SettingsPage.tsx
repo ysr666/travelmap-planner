@@ -480,6 +480,10 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-5">
+      <header className="shrink-0">
+        <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">设置</h1>
+      </header>
+
       {error || success || warnings.length > 0 ? (
         <Card variant="grouped" className="space-y-3">
           {error ? <StatusMessage tone="error" message={error} /> : null}

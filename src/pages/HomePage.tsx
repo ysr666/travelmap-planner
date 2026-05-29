@@ -198,7 +198,7 @@ export function HomePage() {
 
       <div className="shrink-0 flex flex-col gap-3">
         <button
-          className="w-full py-4 rounded-xl bg-primary-container text-on-primary-container font-headline-md text-headline-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
+          className="w-full py-4 rounded-xl bg-[#0A84FF] text-white font-headline-md text-headline-md flex items-center justify-center gap-2 transition hover:bg-[#0A84FF]/90 active:scale-[0.98]"
           onClick={() => navigateTo('trip/new')}
           type="button"
         >
@@ -206,7 +206,7 @@ export function HomePage() {
           新建行程
         </button>
         <button
-          className="w-full py-4 rounded-xl bg-surface-container-high text-primary font-headline-md text-headline-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
+          className="w-full py-4 rounded-xl bg-[#2C2C2E] text-[#0A84FF] font-headline-md text-headline-md flex items-center justify-center gap-2 transition hover:bg-[#2C2C2E]/80 active:scale-[0.98]"
           onClick={() => navigateTo('settings')}
           type="button"
         >

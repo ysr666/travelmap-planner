@@ -216,6 +216,20 @@ body {
   --font-label-sm: "Inter";
 }
 
+/* ── Ticket cutout effect ─────────────────────────────────────── */
+.ticket-cutout {
+  -webkit-mask-image: radial-gradient(circle at 0% 50%, transparent 8px, black 9px),
+                      radial-gradient(circle at 100% 50%, transparent 8px, black 9px),
+                      linear-gradient(black, black);
+  -webkit-mask-composite: destination-in;
+  mask-image: radial-gradient(circle at top left, transparent 6px, black 7px),
+              radial-gradient(circle at top right, transparent 6px, black 7px),
+              radial-gradient(circle at bottom left, transparent 6px, black 7px),
+              radial-gradient(circle at bottom right, transparent 6px, black 7px),
+              linear-gradient(black, black);
+  mask-composite: intersect;
+}
+
 /* ── TripMap grouped UI tokens ─────────────────────────────────── */
 
 .tm-app-bg {

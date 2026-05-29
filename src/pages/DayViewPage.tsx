@@ -6,13 +6,12 @@ import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripNav } from '../components/AppShell'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
-import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { formatDateKey, formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
+import { formatDateKey, formatShortDateWithWeekday } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
@@ -295,30 +294,20 @@ export function DayViewPage() {
         isMapView ? 'gap-2 pb-0' : 'gap-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
       }`}
     >
-      <header className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>
-        <div className="flex items-center justify-between gap-3">
-          <button
-            aria-label="返回旅行总览"
-            className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
-            onClick={() => navigateTo('trip', { tripId: trip.id })}
-            type="button"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-label-sm text-label-sm text-on-surface-variant">
-              {isMapView ? formatShortWorkspaceDate(selectedDay.date) : trip.destination || '目的地未定'}
-            </p>
-            <h1 className="truncate font-headline-sm text-headline-sm text-on-surface">
-              {trip.title}
-            </h1>
-            <p className="truncate text-xs text-on-surface-variant">
-              {isMapView ? selectedDay.title : formatDateRange(trip.startDate, trip.endDate)}
-            </p>
-            <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
-          </div>
-          <TripMoreMenu tripId={trip.id} />
-        </div>
+      {/* Header - matches reference 12_2/code.html */}
+      <header className="shrink-0 bg-surface/80 backdrop-blur-md border-b border-outline-variant/30 flex items-center justify-between px-4 h-14">
+        <button
+          aria-label="返回旅行总览"
+          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity p-2 -ml-2 rounded-full flex items-center justify-center"
+          onClick={() => navigateTo('trip', { tripId: trip.id })}
+          type="button"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <h1 className="font-headline-sm text-headline-sm text-primary">
+          第 {days.findIndex(d => d.id === selectedDay.id) + 1} 天 · {formatShortWorkspaceDate(selectedDay.date)}
+        </h1>
+        <TripMoreMenu tripId={trip.id} />
       </header>
 
       <div className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>

@@ -91,7 +91,7 @@
 
 :root {
   color: var(--color-on-surface);
-  background: #eef3f8;
+  background: #f8f9fb;
   color-scheme: light;
   --tm-surface-bg: #ffffff;
   --tm-surface-border: rgba(241, 245, 249, 0.90);
@@ -106,8 +106,8 @@
   --tm-separator-border: rgba(241, 245, 249, 0.90);
   --tm-info-bg: rgba(241, 245, 249, 0.60);
   --tm-info-border: rgba(241, 245, 249, 0.50);
-  --tm-html-bg: #dce6ee;
-  --tm-body-gradient: linear-gradient(180deg, var(--color-surface) 0%, #eaf1f7 100%);
+  --tm-html-bg: #e1e2e4;
+  --tm-body-gradient: linear-gradient(180deg, var(--color-surface) 0%, #f0f2f5 100%);
   --tm-scrollbar: rgba(108, 123, 146, 0.35);
   font-family:
     "Inter", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,

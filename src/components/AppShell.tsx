@@ -44,11 +44,17 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
     <div className="app-viewport bg-background mx-auto flex w-full max-w-[600px] flex-col overflow-hidden">
       {/* Fixed TopAppBar */}
       {!isTrip ? (
-        <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl pt-[max(0rem,env(safe-area-inset-top))]">
+        <header className="fixed top-0 z-50 flex h-16 w-full max-w-[600px] items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl pt-[max(0rem,env(safe-area-inset-top))]">
           {isHome ? (
             <>
               <div className="flex items-center gap-3">
-                <Map className="size-5 text-primary" />
+                <button
+                  className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high/50 transition-colors active:scale-95"
+                  onClick={() => navigateTo('home')}
+                  type="button"
+                >
+                  <Map className="size-5" />
+                </button>
                 <h1 className="font-headline-md text-headline-md font-bold text-on-surface">旅图</h1>
               </div>
               <button

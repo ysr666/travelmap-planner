@@ -505,7 +505,7 @@ export function SettingsPage() {
               <Monitor className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">外观</h3>
+              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">外观</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
                 当前显示为{resolvedMode === 'dark' ? '黑夜模式' : '白天模式'}。
               </p>
@@ -521,7 +521,7 @@ export function SettingsPage() {
                   className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
                     active
                       ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
-                      : 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70'
+                      : 'bg-surface-container-low/75 text-on-surface-variant ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/45 dark:text-outline-variant dark:ring-outline-variant/30/70'
                   }`}
                   data-testid={`appearance-mode-${option.value}`}
                   key={option.value}
@@ -565,7 +565,7 @@ export function SettingsPage() {
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">可添加到 iPhone 主屏幕</h3>
+              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">可添加到 iPhone 主屏幕</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
                 在 iPhone Safari 打开本页面，点分享按钮，再选择"添加到主屏幕"。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
               </p>
@@ -600,7 +600,7 @@ export function SettingsPage() {
             <Import className="size-4" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入备份</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">导入备份</h3>
             <p className="text-sm tm-muted">选择之前导出的 travelmap zip 文件。</p>
           </div>
         </div>
@@ -609,7 +609,7 @@ export function SettingsPage() {
           <span className={FIELD_LABEL_CLASS}>备份文件</span>
           <input
             accept=".zip,application/zip,application/x-zip-compressed"
-            className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
+            className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-outline-variant dark:file:bg-sky-950/45 dark:file:text-sky-300"
             key={fileInputKey}
             onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
             type="file"
@@ -617,7 +617,7 @@ export function SettingsPage() {
         </label>
 
         {selectedFile ? (
-          <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+          <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
             已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
           </p>
         ) : null}
@@ -650,7 +650,7 @@ export function SettingsPage() {
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入 AI 行程包</h3>
+              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">导入 AI 行程包</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
                 旅图不会调用 AI。你可以使用 ChatGPT、Claude、Gemini、DeepSeek
                 或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip，然后在本地导入。
@@ -675,7 +675,7 @@ export function SettingsPage() {
             <input
               aria-label="选择 AI 行程包文件"
               accept=".json,.zip,application/json,application/zip,application/x-zip-compressed"
-              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700 dark:text-slate-200 dark:file:bg-violet-950/45 dark:file:text-violet-300"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700 dark:text-outline-variant dark:file:bg-violet-950/45 dark:file:text-violet-300"
               data-testid="ai-trip-plan-file-input"
               key={tripPlanFileInputKey}
               onChange={(event) => void handleTripPlanFileChange(event.target.files?.[0] ?? null)}
@@ -684,7 +684,7 @@ export function SettingsPage() {
           </label>
 
           {selectedTripPlanFile ? (
-            <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 [overflow-wrap:anywhere] dark:bg-slate-900/40 dark:ring-slate-800/70">
+            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 [overflow-wrap:anywhere] dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
               已选择：{selectedTripPlanFile.name} · {formatFileSize(selectedTripPlanFile.size)}
             </p>
           ) : null}
@@ -780,7 +780,7 @@ export function SettingsPage() {
           </Button>
 
           {persistenceMessage ? (
-            <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
               {persistenceMessage}
             </p>
           ) : null}
@@ -809,7 +809,7 @@ export function SettingsPage() {
               在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
             </p>
           </div>
-          <div className="rounded-xl bg-white/60 px-3 py-2 dark:bg-slate-950/35">
+          <div className="rounded-xl bg-white/60 px-3 py-2 dark:bg-surface-dim/35">
             <AppVersion className="text-left text-amber-800 dark:text-amber-300/70" label="当前版本" />
           </div>
         </Card>
@@ -833,7 +833,7 @@ function TravelProfileSettings({
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">旅行偏好</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">旅行偏好</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
               这些偏好只保存在当前浏览器，用于后续 AI 简报、建议和本地节奏判断。
             </p>
@@ -849,7 +849,7 @@ function TravelProfileSettings({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行节奏</p>
+          <p className="text-sm font-semibold text-on-surface dark:text-outline-variant">旅行节奏</p>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="旅行节奏">
             {paceOptions.map((option) => (
               <OptionButton
@@ -865,7 +865,7 @@ function TravelProfileSettings({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">交通偏好</p>
+          <p className="text-sm font-semibold text-on-surface dark:text-outline-variant">交通偏好</p>
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="交通偏好">
             {transportOptions.map((option) => (
               <OptionButton
@@ -911,7 +911,7 @@ function TravelProfileSettings({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">提醒强度</p>
+          <p className="text-sm font-semibold text-on-surface dark:text-outline-variant">提醒强度</p>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="提醒强度">
             {reminderLevelOptions.map((option) => (
               <OptionButton
@@ -925,7 +925,7 @@ function TravelProfileSettings({
           </div>
         </div>
 
-        <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+        <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
           当前只会把"旅行节奏"用于保守的安排密度阈值；不会新增路线、用餐或时间推断。
         </p>
       </Card>
@@ -948,7 +948,7 @@ function AiPrivacySettingsPanel({
             <ShieldCheck className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 与隐私</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">AI 与隐私</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
               这些开关控制 AI 草稿生成和修复时通过旅图服务发送的数据范围；本地检查不会上传数据，也不会调用外部 AI。
             </p>
@@ -970,7 +970,7 @@ function AiPrivacySettingsPanel({
 
         {aiPrivacyGroups.map((group) => (
           <div className="space-y-2" key={group.title}>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{group.title}</p>
+            <p className="text-sm font-semibold text-on-surface dark:text-outline-variant">{group.title}</p>
             <div className="grid gap-2">
               {group.items.map((item) => (
                 <ToggleRow
@@ -987,7 +987,7 @@ function AiPrivacySettingsPanel({
           </div>
         ))}
 
-        <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+        <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
           这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 备份或 Supabase 云端保存。
         </p>
       </Card>
@@ -1014,7 +1014,7 @@ function OptionButton({
       className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
         active
           ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
-          : 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70'
+          : 'bg-surface-container-low/75 text-on-surface-variant ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/45 dark:text-outline-variant dark:ring-outline-variant/30/70'
       }`}
       data-testid={testId}
       onClick={onClick}
@@ -1044,7 +1044,7 @@ function ToggleRow({
   return (
     <button
       aria-checked={checked}
-      className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-100/80 bg-slate-50/75 px-3 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 tm-focus dark:border-slate-800/70 dark:bg-slate-900/45"
+      className="flex w-full items-start justify-between gap-3 rounded-xl border border-outline-variant/30/80 bg-surface-container-low/75 px-3 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 tm-focus dark:border-outline-variant/30/70 dark:bg-surface-container-highest/45"
       data-testid={testId}
       disabled={disabled}
       onClick={() => onChange(!checked)}
@@ -1052,16 +1052,16 @@ function ToggleRow({
       type="button"
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+        <span className="block text-sm font-semibold text-on-surface dark:text-on-surface">{title}</span>
         <span className="mt-1 block text-xs leading-5 tm-muted">{description}</span>
       </span>
       <span
         className={`mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
-          checked ? 'justify-end bg-primary' : 'justify-start bg-slate-200 dark:bg-slate-700'
+          checked ? 'justify-end bg-primary' : 'justify-start bg-surface-container-high dark:bg-surface-container-high'
         }`}
         aria-hidden="true"
       >
-        <span className="size-5 rounded-full bg-white shadow-sm dark:bg-slate-100" />
+        <span className="size-5 rounded-full bg-white shadow-sm dark:bg-surface-container" />
       </span>
     </button>
   )
@@ -1095,7 +1095,7 @@ function RouteServiceSettings({
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">路线服务</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">路线服务</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
               地图默认使用直线连接。路线服务可用时，可以在地图页手动生成道路路线。
             </p>
@@ -1110,24 +1110,24 @@ function RouteServiceSettings({
           />
         </div>
 
-        <div className="rounded-xl bg-slate-50/75 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:text-slate-300 dark:ring-slate-800/70">
-          当前状态：<span className="font-semibold text-slate-800 dark:text-slate-100">{configLabel}</span>
+        <div className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-sm text-on-surface-variant ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:text-outline-variant dark:ring-outline-variant/30/70">
+          当前状态：<span className="font-semibold text-on-surface dark:text-on-surface">{configLabel}</span>
         </div>
 
         <p className="text-xs leading-5 tm-muted">
           旅图不会要求你填写 Google、OpenRouteService 或 AI provider key。
         </p>
 
-        <div className="space-y-3 rounded-2xl border border-slate-100/80 bg-slate-50/75 p-3 dark:border-slate-800/70 dark:bg-slate-900/40">
+        <div className="space-y-3 rounded-2xl border border-outline-variant/30/80 bg-surface-container-low/75 p-3 dark:border-outline-variant/30/70 dark:bg-surface-container-highest/40">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线缓存</h4>
+              <h4 className="text-sm font-semibold text-on-surface dark:text-on-surface">路线缓存</h4>
               <p className="mt-1 text-xs leading-5 tm-muted">
                 只缓存道路路线 polyline，不缓存地图瓦片，也不会进入备份或云端。
               </p>
             </div>
             <span
-              className="shrink-0 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-950/60 dark:text-slate-300 dark:ring-slate-800"
+              className="shrink-0 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-on-surface-variant ring-1 ring-outline-variant/30 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30"
               data-testid="route-cache-count"
             >
               {cacheStats ? `${cacheStats.count} 条` : '读取中'}
@@ -1135,14 +1135,14 @@ function RouteServiceSettings({
           </div>
 
           <div
-            className="rounded-xl bg-white/90 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100 dark:bg-slate-950/55 dark:text-slate-300 dark:ring-slate-800"
+            className="rounded-xl bg-white/90 px-3 py-2 text-sm text-on-surface-variant ring-1 ring-outline-variant/30 dark:bg-surface-dim/55 dark:text-outline-variant dark:ring-outline-variant/30"
             data-testid="route-cache-stats"
           >
             {cacheStats ? (
               <>
-                当前缓存：<span className="font-semibold text-slate-900 dark:text-slate-100">{formatFileSize(cacheStats.totalSizeBytes)}</span>
-                <span className="text-slate-400 dark:text-slate-500"> / </span>
-                上限 <span className="font-semibold text-slate-900 dark:text-slate-100">{formatFileSize(cacheStats.maxBytes)}</span>
+                当前缓存：<span className="font-semibold text-on-surface dark:text-on-surface">{formatFileSize(cacheStats.totalSizeBytes)}</span>
+                <span className="text-outline dark:text-on-surface-variant"> / </span>
+                上限 <span className="font-semibold text-on-surface dark:text-on-surface">{formatFileSize(cacheStats.maxBytes)}</span>
               </>
             ) : (
               '正在读取路线缓存统计…'
@@ -1233,25 +1233,25 @@ function TripPlanGuide({
       data-testid="ai-trip-plan-guide"
     >
       <div>
-        <h4 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 行程包使用说明</h4>
+        <h4 className="text-base font-semibold text-on-surface dark:text-on-surface">AI 行程包使用说明</h4>
         <p className="mt-1 text-sm leading-6 tm-muted">
           旅图不会调用 AI，只导入你上传的 JSON / zip。AI 生成的地点、坐标和交通时间都需要人工核对。
         </p>
       </div>
 
-      <div className="space-y-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+      <div className="space-y-2 text-sm leading-6 text-on-surface-variant dark:text-outline-variant">
         <p>
-          <span className="font-semibold text-slate-800 dark:text-slate-100">JSON 单文件</span>
+          <span className="font-semibold text-on-surface dark:text-on-surface">JSON 单文件</span>
           ：适合导入行程、地图坐标、交通段，以及 reference / external 票据。
         </p>
         <p>
-          <span className="font-semibold text-slate-800 dark:text-slate-100">zip 行程包</span>
+          <span className="font-semibold text-on-surface dark:text-on-surface">zip 行程包</span>
           ：适合导入行程和 copy 附件。copy 模式必须使用 zip，并通过 filePath 指向 files/ 内附件。
         </p>
       </div>
 
-      <div className="max-w-full overflow-x-auto rounded-xl bg-white/80 p-3 dark:bg-slate-950/50">
-        <pre className="min-w-max text-xs leading-5 text-slate-600 dark:text-slate-300">{`trip-plan.zip
+      <div className="max-w-full overflow-x-auto rounded-xl bg-white/80 p-3 dark:bg-surface-dim/50">
+        <pre className="min-w-max text-xs leading-5 text-on-surface-variant dark:text-outline-variant">{`trip-plan.zip
 ├── trip-plan.json
 └── files/
     ├── hotel-confirmation.pdf
@@ -1259,7 +1259,7 @@ function TripPlanGuide({
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">可复制给外部 AI 的简化提示词</p>
+        <p className="text-sm font-semibold text-on-surface dark:text-on-surface">可复制给外部 AI 的简化提示词</p>
         <textarea
           className={`${FIELD_TEXTAREA_CLASS} min-h-40 resize-y border-violet-100 font-mono text-xs leading-5 dark:border-violet-900/50`}
           data-testid="ai-trip-plan-prompt-text"
@@ -1276,7 +1276,7 @@ function TripPlanGuide({
           复制给 AI 的提示词
         </Button>
         {copyMessage ? (
-          <p className="rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold leading-5 text-violet-700 dark:bg-slate-950/50 dark:text-violet-300">
+          <p className="rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold leading-5 text-violet-700 dark:bg-surface-dim/50 dark:text-violet-300">
             {copyMessage}
           </p>
         ) : null}
@@ -1301,14 +1301,14 @@ function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
       data-testid="ai-trip-plan-preview"
     >
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-violet-600 ring-1 ring-violet-100/80 dark:bg-slate-950/55 dark:text-violet-300 dark:ring-violet-900/50">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-violet-600 ring-1 ring-violet-100/80 dark:bg-surface-dim/55 dark:text-violet-300 dark:ring-violet-900/50">
           <FileJson className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-violet-600 dark:text-violet-300">
             {parsed.sourceKind === 'zip' ? 'zip 行程包' : 'JSON 行程包'}
           </p>
-          <h4 className="mt-1 truncate text-base font-semibold text-slate-950 dark:text-slate-100">
+          <h4 className="mt-1 truncate text-base font-semibold text-on-surface dark:text-on-surface">
             {trip?.title || '未命名旅行'}
           </h4>
           <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
@@ -1369,18 +1369,18 @@ function TripPlanSuccessCard({ result }: { result: ImportTripPlanResult }) {
       data-testid="ai-trip-plan-success-checklist"
     >
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-slate-950/55 dark:text-emerald-300 dark:ring-emerald-900/50">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-surface-dim/55 dark:text-emerald-300 dark:ring-emerald-900/50">
           <CheckCircle2 className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">已导入</p>
-          <h4 className="mt-1 break-words text-base font-semibold text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
+          <h4 className="mt-1 break-words text-base font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
             {result.title}
           </h4>
         </div>
       </div>
 
-      <div className="rounded-xl bg-white/80 px-3 py-3 text-sm leading-6 text-emerald-900 dark:bg-slate-950/45 dark:text-emerald-200">
+      <div className="rounded-xl bg-white/80 px-3 py-3 text-sm leading-6 text-emerald-900 dark:bg-surface-dim/45 dark:text-emerald-200">
         <p className="font-semibold">建议检查</p>
         <ol className="mt-1 list-decimal space-y-1 pl-5">
           <li>地图坐标是否准确</li>
@@ -1458,8 +1458,8 @@ function TripPlanValidationStatus({
 
 function PreviewMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-white/70 dark:bg-slate-950/45 dark:ring-slate-800/70">
-      <p className="text-lg font-semibold text-slate-950 dark:text-slate-100">{value}</p>
+    <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-white/70 dark:bg-surface-dim/45 dark:ring-outline-variant/30/70">
+      <p className="text-lg font-semibold text-on-surface dark:text-on-surface">{value}</p>
       <p className="text-xs tm-muted">{label}</p>
     </div>
   )
@@ -1544,5 +1544,5 @@ function formatStorageSize(size?: number) {
 }
 
 function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800 ${className}`} />
+  return <div className={`h-4 animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest ${className}`} />
 }

@@ -52,7 +52,7 @@ export function BottomSheet({
   return createPortal(
     <div
       aria-modal="true"
-      className="fixed inset-0 flex items-end justify-center bg-slate-950/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm dark:bg-slate-950/60"
+      className="fixed inset-0 flex items-end justify-center bg-surface-dim/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm dark:bg-surface-dim/60"
       role="dialog"
       style={{ zIndex }}
       onClick={(event) => {
@@ -73,12 +73,12 @@ export function BottomSheet({
 
         {title ? (
           <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3">
-            <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-on-surface dark:text-on-surface">
               {title}
             </h3>
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 transition hover:bg-slate-200/60 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700/50 tm-focus"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
               type="button"
             >
@@ -89,7 +89,7 @@ export function BottomSheet({
           <div className="shrink-0 px-4 pb-2 text-right">
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100/80 text-slate-500 transition hover:bg-slate-200/60 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700/50 tm-focus"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
               type="button"
             >

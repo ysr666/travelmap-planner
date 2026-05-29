@@ -27,7 +27,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
               className={`${isCompact ? 'min-h-8 rounded-xl px-2.5' : 'min-h-12 rounded-2xl px-3'} text-left transition active:scale-[0.98] ${
                 active
                   ? 'bg-primary text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
-                  : 'tm-surface text-slate-600 dark:text-slate-300'
+                  : 'tm-surface text-on-surface-variant dark:text-outline-variant'
               }`}
               key={day.id}
               onClick={() => onSelectDay(day)}
@@ -35,7 +35,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', onSelect
               type="button"
             >
               <span className={`block font-semibold ${isCompact ? 'text-[11px]' : 'text-sm'}`}>Day {index + 1}</span>
-              <span className={`block ${isCompact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-white/80' : 'text-slate-400'}`}>
+              <span className={`block ${isCompact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-white/80' : 'text-outline'}`}>
                 {formatShortDay(day.date)}
               </span>
             </button>

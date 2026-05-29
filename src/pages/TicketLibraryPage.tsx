@@ -363,7 +363,7 @@ export function TicketLibraryPage() {
       <Card variant="grouped" className="space-y-3">
         <div>
           <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-slate-100">票据和订单</h2>
+          <h2 className="mt-1 text-xl font-semibold text-on-surface dark:text-on-surface">票据和订单</h2>
           <p className="mt-2 text-sm leading-6 tm-muted">
             可保存文件副本，也可只记录文件位置或外部链接。
           </p>
@@ -374,8 +374,8 @@ export function TicketLibraryPage() {
         </div>
 
         {storageEstimate ? (
-          <div className="flex items-center gap-2 rounded-xl bg-slate-50/75 px-3 py-2 text-xs font-semibold tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-            <HardDrive className="size-4 text-slate-400 dark:text-slate-500" />
+          <div className="flex items-center gap-2 rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs font-semibold tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
+            <HardDrive className="size-4 text-outline dark:text-on-surface-variant" />
             <span>
               已用 {formatStorageSize(storageEstimate.usage)} / 可用 {formatStorageSize(storageEstimate.quota)}
             </span>
@@ -391,7 +391,7 @@ export function TicketLibraryPage() {
             <Upload className="size-4" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">添加票据</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">添加票据</h3>
             <p className="text-xs tm-muted">文件副本单个建议不超过 20MB。</p>
           </div>
         </div>
@@ -402,7 +402,7 @@ export function TicketLibraryPage() {
               className={`rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
                 storageMode === option.value
                   ? 'border-sky-200 bg-sky-50/85 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/35 dark:text-sky-200'
-                  : 'border-slate-100 bg-white/80 text-slate-600 dark:border-slate-800/70 dark:bg-slate-900/45 dark:text-slate-300'
+                  : 'border-outline-variant/30 bg-white/80 text-on-surface-variant dark:border-outline-variant/30/70 dark:bg-surface-container-highest/45 dark:text-outline-variant'
               }`}
               key={option.value}
               onClick={() => {
@@ -595,7 +595,7 @@ function TicketCard({
 
         <span className="mt-2 min-w-0 px-0.5">
           <span className="flex items-center gap-1.5">
-            <span className="block min-w-0 truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
+            <span className="block min-w-0 truncate text-sm font-semibold text-on-surface dark:text-on-surface">
               {displayTitle}
             </span>
             <span className="tm-chip shrink-0 text-[10px]">
@@ -627,7 +627,7 @@ function TicketCard({
         </button>
         <button
           aria-label={`删除${displayTitle}`}
-          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-slate-400 transition active:bg-red-50 active:text-red-600 tm-focus dark:text-slate-500 dark:active:bg-red-950/35 dark:active:text-red-300"
+          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-red-50 active:text-red-600 tm-focus dark:text-on-surface-variant dark:active:bg-red-950/35 dark:active:text-red-300"
           onClick={onDelete}
           type="button"
         >
@@ -652,13 +652,13 @@ function CopyTicketFields({
     <label className="block">
       <span className={FIELD_LABEL_CLASS}>文件 *</span>
       <input
-        className="mt-2 block w-full min-w-0 tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
+        className="mt-2 block w-full min-w-0 tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-outline-variant dark:file:bg-sky-950/45 dark:file:text-sky-300"
         key={fileInputKey}
         onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
         type="file"
       />
       {selectedFile ? (
-        <span className="mt-2 block rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+        <span className="mt-2 block rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
           已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
         </span>
       ) : null}
@@ -810,5 +810,5 @@ function formatStorageSize(size?: number) {
 }
 
 function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800 ${className}`} />
+  return <div className={`h-4 animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest ${className}`} />
 }

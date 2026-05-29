@@ -273,7 +273,7 @@ export function TripWorkspacePage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回首页"
-            className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
+            className="flex size-10 items-center justify-center rounded-xl tm-surface text-on-surface active:scale-[0.98] dark:text-outline-variant tm-focus"
             onClick={() => navigateTo('home')}
             type="button"
           >
@@ -283,10 +283,10 @@ export function TripWorkspacePage() {
             <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
               {trip.destination || '目的地未定'}
             </p>
-            <h1 className="truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
+            <h1 className="truncate text-xl font-semibold leading-tight text-on-surface dark:text-on-surface">
               {trip.title}
             </h1>
-            <p className="truncate text-xs text-slate-500">
+            <p className="truncate text-xs text-on-surface-variant">
               {formatDateRange(trip.startDate, trip.endDate)}
             </p>
           </div>
@@ -326,7 +326,7 @@ export function TripWorkspacePage() {
                 <TripCover className="h-20 w-24 shrink-0 rounded-xl" trip={trip} variant="compact" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.destination || '目的地未定'}</p>
-                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-slate-950 dark:text-slate-100">
+                  <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-on-surface dark:text-on-surface">
                     {trip.title}
                   </h2>
                   <p className="mt-1 text-sm tm-muted">
@@ -391,7 +391,7 @@ export function TripWorkspacePage() {
             />
 
             <section className="space-y-2">
-              <h3 className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">每日行程</h3>
+              <h3 className="px-1 text-[13px] font-semibold text-on-surface-variant dark:text-outline">每日行程</h3>
               <Card padding="none" variant="grouped">
                 <div className="divide-y tm-separator">
                   {days.map((day, index) => (
@@ -409,7 +409,7 @@ export function TripWorkspacePage() {
                         {formatChineseDayOrdinal(index + 1)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-semibold text-slate-950 dark:text-slate-100">
+                        <span className="block truncate text-[15px] font-semibold text-on-surface dark:text-on-surface">
                           {formatDate(day.date)}
                         </span>
                         <span className="mt-0.5 block truncate text-[13px] tm-muted">
@@ -419,7 +419,7 @@ export function TripWorkspacePage() {
                           {itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0} 个行程点
                         </span>
                       </span>
-                      <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                      <ChevronRight className="size-4 shrink-0 text-outline-variant" />
                     </div>
                   ))}
                 </div>
@@ -432,7 +432,7 @@ export function TripWorkspacePage() {
                   <NotebookText className="size-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">旅行备注</h3>
+                  <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">旅行备注</h3>
                   <p className="mt-1 text-sm leading-6 tm-muted">{trip.notes}</p>
                 </div>
               </Card>
@@ -501,7 +501,7 @@ function RoutePreparationPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <RouteIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-300 dark:text-sky-300" />
-            <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线准备</h3>
+            <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">路线准备</h3>
           </div>
           <p className="mt-1 text-xs leading-5 tm-muted" data-testid="route-preparation-summary">
             {describeRoutePreparation(preparation, loading)}
@@ -591,7 +591,7 @@ function OverviewAction({
 }) {
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-slate-50/80 px-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-100/80 transition active:scale-[0.98] dark:bg-slate-800/50 dark:text-slate-300 dark:ring-slate-700/70 tm-focus"
+      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-container-low/80 px-2 text-xs font-semibold text-on-surface-variant ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] dark:bg-surface-container-highest/50 dark:text-outline-variant dark:ring-outline-variant/30/70 tm-focus"
       onClick={onClick}
       type="button"
     >

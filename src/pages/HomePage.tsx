@@ -114,12 +114,12 @@ export function HomePage() {
       {/* Page header */}
       <header className="shrink-0 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 dark:text-slate-100">旅图</h1>
+          <h1 className="text-2xl font-bold text-on-surface dark:text-on-surface">旅图</h1>
           <p className="text-[13px] tm-muted">你的旅行现场控制台</p>
         </div>
         <button
           aria-label="设置"
-          className="flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 active:bg-slate-200 dark:hover:bg-slate-800 dark:active:bg-slate-700 tm-focus"
+          className="flex size-10 items-center justify-center rounded-xl text-on-surface-variant transition hover:bg-surface-container active:bg-surface-container-high dark:hover:bg-surface-container-highest dark:active:bg-surface-container-high tm-focus"
           onClick={() => navigateTo('settings')}
           type="button"
         >
@@ -207,7 +207,7 @@ export function HomePage() {
           新建旅行
         </Button>
         <button
-          className="mt-2 w-full text-center text-sm font-medium text-slate-400 transition hover:text-slate-600"
+          className="mt-2 w-full text-center text-sm font-medium text-outline transition hover:text-on-surface-variant"
           onClick={() => navigateTo('settings')}
           type="button"
         >
@@ -260,9 +260,9 @@ function TripCard({
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${status.className}`}>
               {status.label}
             </span>
-            <p className="truncate text-xs text-slate-400">{formatDateRange(trip.startDate, trip.endDate)}</p>
+            <p className="truncate text-xs text-outline">{formatDateRange(trip.startDate, trip.endDate)}</p>
           </div>
-          <h3 className="mt-1.5 truncate text-base font-semibold text-slate-950 dark:text-slate-100">{trip.title}</h3>
+          <h3 className="mt-1.5 truncate text-base font-semibold text-on-surface dark:text-on-surface">{trip.title}</h3>
           <p className="mt-0.5 truncate text-sm tm-muted">{trip.destination}</p>
           {stats ? (
             <p className="mt-1 truncate text-xs font-medium tm-muted">
@@ -273,7 +273,7 @@ function TripCard({
       </button>
       <button
         aria-label={`删除 ${trip.title}`}
-        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/80 text-slate-400 ring-1 ring-slate-200/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98] dark:bg-slate-900/80 dark:ring-slate-700/70 dark:hover:bg-red-500/10 tm-focus"
+        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/80 text-outline ring-1 ring-outline-variant/30/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98] dark:bg-surface-container-highest/80 dark:ring-outline-variant/30/70 dark:hover:bg-red-500/10 tm-focus"
         disabled={isDeleting}
         onClick={onDelete}
         type="button"

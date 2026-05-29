@@ -374,7 +374,7 @@ export function AiDraftPage() {
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
       <div className="space-y-1" data-testid="ai-draft-page-header">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI 行程草稿</h1>
+        <h1 className="text-xl font-bold text-on-surface dark:text-on-surface">AI 行程草稿</h1>
         <p className="text-sm leading-6 tm-muted">
           先生成或粘贴草稿，检查无误后再导入为本地旅行
         </p>
@@ -384,7 +384,7 @@ export function AiDraftPage() {
       </div>
 
       <div className="space-y-3" data-testid="ai-draft-request-form">
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">填写行程信息</p>
+        <p className="text-sm font-semibold text-on-surface dark:text-on-surface">填写行程信息</p>
         <p className="text-xs tm-muted">
           根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
         </p>
@@ -526,7 +526,7 @@ export function AiDraftPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <textarea
-                className="h-48 w-full rounded-xl border border-slate-200 p-3 font-mono text-sm tm-surface dark:border-slate-700"
+                className="h-48 w-full rounded-xl border border-outline-variant/30 p-3 font-mono text-sm tm-surface dark:border-outline-variant/30"
                 placeholder='{"title": "...", "startDate": "YYYY-MM-DD", ...}'
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
@@ -561,7 +561,7 @@ export function AiDraftPage() {
       {summary && (
         <>
           <Card className="space-y-3" data-testid="ai-draft-summary">
-            <h3 className="font-medium text-slate-900 dark:text-slate-100">草稿摘要</h3>
+            <h3 className="font-medium text-on-surface dark:text-on-surface">草稿摘要</h3>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <dt className="tm-muted">旅行标题</dt>
               <dd className="font-medium">{summary.title}</dd>
@@ -577,7 +577,7 @@ export function AiDraftPage() {
           </Card>
 
           <Card className="space-y-3" data-testid="ai-draft-quality-card">
-            <h3 className="font-medium text-slate-900 dark:text-slate-100">草稿检查</h3>
+            <h3 className="font-medium text-on-surface dark:text-on-surface">草稿检查</h3>
             {qualityResult && qualityResult.status === 'clean' && (
               <p className="text-sm text-green-700 dark:text-green-300">未发现明显问题。</p>
             )}
@@ -588,7 +588,7 @@ export function AiDraftPage() {
                     <span className={f.severity === 'critical' ? 'text-red-500' : 'text-amber-500'}>
                       {f.severity === 'critical' ? '!' : '!'}
                     </span>
-                    <span className="text-slate-700 dark:text-slate-300">
+                    <span className="text-on-surface dark:text-outline-variant">
                       <span className="font-medium">{f.title}</span>
                       {f.dayDate && <span className="tm-muted ml-1">({f.dayDate})</span>}
                       <span className="tm-muted ml-1">{f.message}</span>
@@ -600,7 +600,7 @@ export function AiDraftPage() {
                     还有 {(qualityResult.criticals.length + qualityResult.warnings.length) - 5} 条提醒未显示。
                   </p>
                 )}
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-on-surface-variant dark:text-outline">
                   这些提示不会阻止导入，请在确认前检查。
                 </p>
               </div>
@@ -640,16 +640,16 @@ export function AiDraftPage() {
           )}
 
           <Card className="space-y-3" data-testid="ai-draft-preview">
-            <h3 className="font-medium text-slate-900 dark:text-slate-100">行程预览</h3>
+            <h3 className="font-medium text-on-surface dark:text-on-surface">行程预览</h3>
             <div className="space-y-4">
               {draft!.days.map((day, dayIndex) => (
                 <div key={dayIndex} className="space-y-2">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                    <span className="text-sm font-medium text-on-surface-variant dark:text-outline">
                       {day.date}
                     </span>
                     {day.title && (
-                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <span className="text-sm font-medium text-on-surface dark:text-on-surface">
                         {day.title}
                       </span>
                     )}

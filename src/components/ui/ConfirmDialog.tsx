@@ -56,7 +56,7 @@ export function ConfirmDialog({
   return createPortal(
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-slate-950/60"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-surface-dim/60"
       data-testid={testId}
       role="dialog"
     >
@@ -67,7 +67,7 @@ export function ConfirmDialog({
               {icon || <AlertTriangle className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
+              <h2 className="break-words text-base font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
                 {title}
               </h2>
               <p className="mt-1 break-words whitespace-pre-line text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
@@ -76,7 +76,7 @@ export function ConfirmDialog({
             </div>
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-3 border-t tm-row bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-slate-900/95">
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t tm-row bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-surface-container-highest/95">
           <Button disabled={loading} onClick={onCancel} variant="secondary">
             {cancelLabel}
           </Button>

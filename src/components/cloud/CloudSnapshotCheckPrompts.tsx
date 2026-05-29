@@ -143,7 +143,7 @@ export function CloudSnapshotCheckPrompts({
         />
       ))}
       {hiddenCount > 0 ? (
-        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+        <p className="rounded-xl bg-surface-container-low px-3 py-2 text-xs leading-5 text-on-surface-variant">
           还有 {hiddenCount} 个云端保存提醒，请在云端保存列表中查看。
         </p>
       ) : null}
@@ -189,18 +189,18 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
 
   return (
     <details className="group text-xs">
-      <summary className="flex cursor-pointer items-center gap-1 text-slate-400 transition hover:text-slate-600 select-none marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer items-center gap-1 text-outline transition hover:text-on-surface-variant select-none marker:hidden [&::-webkit-details-marker]:hidden">
         <Info className="size-3" />
         <span>为什么会出现此提醒？</span>
         <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
       </summary>
       <div className="mt-2 space-y-1 pl-4">
         {rows.map((row) => (
-          <p key={row.label} className="leading-5 text-slate-500">
+          <p key={row.label} className="leading-5 text-on-surface-variant">
             {row.label}：{row.value}（{row.description}）
           </p>
         ))}
-        <p className="pt-1 leading-5 text-slate-400">
+        <p className="pt-1 leading-5 text-outline">
           系统不会做字段级合并或云端删除；若本地或云端版本变化，提醒可能再次出现。
         </p>
       </div>
@@ -215,11 +215,11 @@ function VersionContextSummary({ result }: { result: CloudSnapshotCheckResult })
   }
 
   return (
-    <div className="grid gap-1.5 rounded-xl bg-white/75 p-2 text-xs ring-1 ring-slate-100 dark:bg-slate-900/60 dark:ring-slate-700/70">
+    <div className="grid gap-1.5 rounded-xl bg-white/75 p-2 text-xs ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/60 dark:ring-outline-variant/30/70">
       {rows.map((row) => (
         <div className="flex min-w-0 items-start justify-between gap-2" key={row.label}>
-          <span className="shrink-0 font-semibold text-slate-500 dark:text-slate-400">{row.label}</span>
-          <span className="min-w-0 text-right font-medium text-slate-800 dark:text-slate-100">{row.value}</span>
+          <span className="shrink-0 font-semibold text-on-surface-variant dark:text-outline">{row.label}</span>
+          <span className="min-w-0 text-right font-medium text-on-surface dark:text-on-surface">{row.value}</span>
         </div>
       ))}
     </div>
@@ -248,7 +248,7 @@ function CloudSnapshotPromptCard({
     <article
       className={
         isTripVariant
-          ? 'space-y-2 rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2.5 shadow-[0_6px_18px_rgba(47,65,88,0.04)]'
+          ? 'space-y-2 rounded-2xl border border-outline-variant/30/70 bg-white/90 px-3 py-2.5 shadow-[0_6px_18px_rgba(47,65,88,0.04)]'
           : 'space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 px-3 py-3'
       }
       data-testid={isTripVariant ? 'trip-home-cloud-save-card' : 'cloud-snapshot-check-card'}
@@ -262,8 +262,8 @@ function CloudSnapshotPromptCard({
           {view.icon}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere]">{view.title}</p>
-          <p className="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
+          <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{view.title}</p>
+          <p className="mt-1 break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
             {variant === 'settings' ? `${result.tripTitle} · ` : ''}
             {view.detail}
           </p>
@@ -304,7 +304,7 @@ function CloudSnapshotPromptCard({
         </Button>
       </div>
       <button
-        className="text-xs font-semibold text-slate-400 transition hover:text-slate-600"
+        className="text-xs font-semibold text-outline transition hover:text-on-surface-variant"
         data-testid="cloud-snapshot-dismiss"
         onClick={onDismiss}
         type="button"

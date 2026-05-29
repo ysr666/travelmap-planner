@@ -164,7 +164,7 @@ export function ItemDetailPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label={backLabel}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
             onClick={goBackToDay}
             type="button"
           >
@@ -176,7 +176,7 @@ export function ItemDetailPage() {
           </h1>
           <button
             aria-label="编辑行程点"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
             onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
             type="button"
           >
@@ -412,14 +412,14 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
 
           {isPlaceLookupOpen ? (
             <section
-              className="space-y-3 rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70"
+              className="space-y-3 rounded-2xl bg-surface-container-low/75 px-3 py-3 ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70"
               data-testid="item-place-lookup-panel"
             >
               <div className="flex flex-col gap-2 sm:flex-row">
                 <label className="min-w-0 flex-1">
                   <span className="sr-only">地点查询关键词</span>
                   <input
-                    className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-sky-700 dark:focus:ring-sky-900/40"
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm font-medium text-on-surface outline-none transition placeholder:text-outline focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-outline-variant/30 dark:bg-surface-dim dark:text-on-surface dark:focus:border-sky-700 dark:focus:ring-sky-900/40"
                     data-testid="item-place-lookup-query"
                     maxLength={200}
                     onChange={(event) => setPlaceLookupQuery(event.currentTarget.value)}
@@ -459,7 +459,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 <div className="space-y-2" data-testid="item-place-lookup-results">
                   {placeLookupResults.map((candidate) => (
                     <button
-                      className="flex w-full min-w-0 items-start gap-3 rounded-xl bg-white px-3 py-3 text-left ring-1 ring-slate-200/80 transition hover:ring-sky-200 active:scale-[0.99] tm-focus dark:bg-slate-950/70 dark:ring-slate-700/80 dark:hover:ring-sky-800"
+                      className="flex w-full min-w-0 items-start gap-3 rounded-xl bg-white px-3 py-3 text-left ring-1 ring-outline-variant/30/80 transition hover:ring-sky-200 active:scale-[0.99] tm-focus dark:bg-surface-dim/70 dark:ring-outline-variant/30/80 dark:hover:ring-sky-800"
                       data-testid="item-place-lookup-result"
                       key={candidate.placeId}
                       onClick={() => setPendingPlaceCandidate(candidate)}
@@ -469,14 +469,14 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                         <MapPinned className="size-4" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] dark:text-slate-100">
+                        <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
                           {candidate.displayName}
                         </span>
                         <span className="mt-1 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
                           {candidate.formattedAddress}
                         </span>
                         {isValidPlaceLocation(candidate.location) ? (
-                          <span className="mt-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          <span className="mt-1 block text-xs font-semibold text-on-surface-variant dark:text-outline">
                             {candidate.location.lat.toFixed(5)}, {candidate.location.lng.toFixed(5)}
                           </span>
                         ) : null}
@@ -496,9 +496,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         </div>
 
         {item.notes ? (
-          <section className="rounded-2xl bg-slate-50/75 px-3 py-3 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+          <section className="rounded-2xl bg-surface-container-low/75 px-3 py-3 ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
             <p className="text-xs font-semibold tm-muted">备注</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{item.notes}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-on-surface-variant dark:text-outline-variant">{item.notes}</p>
           </section>
         ) : null}
       </Card>
@@ -516,7 +516,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       <section className="space-y-3" data-testid="item-detail-tickets">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">现场票据</h3>
+            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">现场票据</h3>
             <p className="mt-0.5 text-xs tm-muted">{tickets.length} 张已绑定</p>
           </div>
           <Button
@@ -529,8 +529,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         </div>
         {isLoadingRelations ? (
           <div className="space-y-2">
-            <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-            <div className="h-10 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+            <div className="h-10 animate-pulse rounded-xl bg-surface-container dark:bg-surface-container-highest" />
+            <div className="h-10 animate-pulse rounded-xl bg-surface-container dark:bg-surface-container-highest" />
           </div>
         ) : tickets.length === 0 ? (
           <div className="rounded-2xl px-4 py-4 text-sm leading-6 tm-muted tm-group">
@@ -539,7 +539,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 <Ticket className="size-5" />
               </span>
               <span>
-                <span className="block font-semibold text-slate-950 dark:text-slate-100">暂无绑定票据</span>
+                <span className="block font-semibold text-on-surface dark:text-on-surface">暂无绑定票据</span>
                 可在票据库添加二维码截图、门票、车票或订单 PDF。
               </span>
             </div>
@@ -559,7 +559,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                     className="aspect-[3/2] w-full"
                     ticket={ticket}
                   />
-                  <span className="mt-1.5 truncate px-1 text-xs font-semibold text-slate-950 dark:text-slate-100">
+                  <span className="mt-1.5 truncate px-1 text-xs font-semibold text-on-surface dark:text-on-surface">
                     {getTicketDisplayTitle(ticket)}
                   </span>
                 </button>
@@ -573,7 +573,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 type="button"
               >
                 <span>查看全部票据</span>
-                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs dark:bg-slate-950/70">+{hiddenTicketCount}</span>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs dark:bg-surface-dim/70">+{hiddenTicketCount}</span>
               </button>
             ) : null}
           </div>
@@ -581,11 +581,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       </section>
 
       <section className="space-y-3" data-testid="item-detail-navigation">
-        <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">外部导航</h3>
+        <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">外部导航</h3>
         {hasCoordinates ? (
           <div className="grid grid-cols-2 gap-2">
             <a
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-100 dark:ring-slate-700/80"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-on-surface dark:ring-outline-variant/30/80"
               href={buildAppleMapsUrl(item)}
               rel="noreferrer"
               target="_blank"
@@ -594,7 +594,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
               Apple 地图
             </a>
             <a
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-900 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-100 dark:ring-slate-700/80"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-on-surface dark:ring-outline-variant/30/80"
               href={buildGoogleMapsUrl(item)}
               rel="noreferrer"
               target="_blank"
@@ -610,7 +610,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         )}
       </section>
 
-      <div className="sticky bottom-0 -mx-4 -mb-2 border-t tm-row bg-white/90 px-4 py-3 backdrop-blur-xl dark:bg-slate-950/90">
+      <div className="sticky bottom-0 -mx-4 -mb-2 border-t tm-row bg-white/90 px-4 py-3 backdrop-blur-xl dark:bg-surface-dim/90">
         <Button
           className="w-full"
           disabled={isDeleting}
@@ -723,7 +723,7 @@ function NeighborButton({
     <button
       aria-disabled={disabled}
       className={`min-h-16 rounded-2xl px-3 py-2 text-left transition active:scale-[0.99] tm-group tm-focus ${
-        disabled ? 'cursor-not-allowed opacity-45' : 'active:bg-slate-50 dark:active:bg-slate-800/70'
+        disabled ? 'cursor-not-allowed opacity-45' : 'active:bg-surface-container-low dark:active:bg-surface-container-highest/70'
       }`}
       data-testid={`item-${direction}-button`}
       disabled={disabled}
@@ -731,7 +731,7 @@ function NeighborButton({
       type="button"
     >
       <span className="block text-xs font-semibold text-sky-600 dark:text-sky-300">{label}</span>
-      <span className="mt-1 block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
+      <span className="mt-1 block truncate text-sm font-semibold text-on-surface dark:text-on-surface">
         {item ? item.title : direction === 'previous' ? '已经是第一项' : '已经是最后一项'}
       </span>
     </button>
@@ -757,7 +757,7 @@ function DetailRow({
         violet: 'bg-violet-100/80 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
         rose: 'bg-rose-100/80 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
       }[iconTone]
-    : 'bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400'
+    : 'bg-surface-container/80 text-on-surface-variant dark:bg-surface-container-highest/60 dark:text-outline'
 
   return (
     <div className="flex items-start gap-3 px-4 py-3">
@@ -765,7 +765,7 @@ function DetailRow({
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-[15px] font-semibold text-slate-950 dark:text-slate-100">{label}</span>
+        <span className="block break-words text-[15px] font-semibold text-on-surface dark:text-on-surface">{label}</span>
         {value ? <span className="mt-0.5 block break-words text-[13px] leading-5 tm-muted">{value}</span> : null}
       </span>
     </div>

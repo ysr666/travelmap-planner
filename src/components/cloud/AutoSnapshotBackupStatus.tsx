@@ -77,7 +77,7 @@ function getStatusView(status: string | undefined, enabled: boolean) {
   }
 
   return {
-    className: 'bg-slate-50 text-slate-500',
+    className: 'bg-surface-container-low text-on-surface-variant',
     icon: <Cloud className="size-3.5" />,
     text: '已自动保存到本地',
     weight: 'quiet',

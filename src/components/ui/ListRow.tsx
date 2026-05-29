@@ -24,7 +24,7 @@ type ListRowProps = {
 export function ListRow({ icon, title, detail, meta, onClick, separator = false, iconTone }: ListRowProps) {
   const iconClasses = iconTone
     ? iconToneClasses[iconTone]
-    : 'bg-slate-100/80 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400'
+    : 'bg-surface-container/80 text-on-surface-variant dark:bg-surface-container-highest/60 dark:text-outline'
 
   const content = (
     <>

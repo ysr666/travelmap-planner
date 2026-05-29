@@ -139,9 +139,9 @@ export function ItemFormPage() {
     return (
       <div className="space-y-4 px-4 pt-[max(0.9rem,env(safe-area-inset-top))]">
         <Card variant="grouped" className="space-y-3">
-          <div className="h-4 w-28 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" />
-          <div className="h-5 w-2/3 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" />
-          <div className="h-4 w-full animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" />
+          <div className="h-4 w-28 animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest" />
+          <div className="h-5 w-2/3 animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest" />
+          <div className="h-4 w-full animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest" />
         </Card>
       </div>
     )
@@ -156,13 +156,13 @@ export function ItemFormPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回"
-            className="flex size-10 items-center justify-center rounded-xl text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-slate-200 dark:ring-slate-700/80"
+            className="flex size-10 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
             onClick={handleCancel}
             type="button"
           >
             <ArrowLeft className="size-5" />
           </button>
-          <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
+          <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-on-surface dark:text-on-surface">
             {isEdit ? '编辑行程点' : '新增行程点'}
           </h1>
           <div className="size-10" />

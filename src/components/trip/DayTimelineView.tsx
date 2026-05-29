@@ -59,7 +59,7 @@ export function DayTimelineView({
     <div className={compact ? 'space-y-4' : 'space-y-5'}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">当天日程</h3>
+          <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">当天日程</h3>
           <p className="mt-0.5 text-xs tm-muted">{items.length} 个行程点</p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -109,7 +109,7 @@ export function DayTimelineView({
                         {index + 1}
                       </div>
                       {index !== items.length - 1 ? (
-                        <div className="absolute top-9 h-[calc(100%+0.75rem)] w-px bg-slate-200 dark:bg-slate-700" />
+                        <div className="absolute top-9 h-[calc(100%+0.75rem)] w-px bg-surface-container-high dark:bg-surface-container-high" />
                       ) : null}
                     </div>
                     <Card variant="grouped">
@@ -119,7 +119,7 @@ export function DayTimelineView({
                           {describeItemTime(item)} ·{' '}
                           {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
                         </p>
-                        <h3 className="mt-1 truncate text-lg font-semibold text-slate-950 dark:text-slate-100">{item.title}</h3>
+                        <h3 className="mt-1 truncate text-lg font-semibold text-on-surface dark:text-on-surface">{item.title}</h3>
                         <p className="mt-1 flex items-start gap-1.5 text-sm leading-5 tm-muted">
                           <MapPin className="mt-0.5 size-4 shrink-0" />
                           <span className="line-clamp-2">
@@ -182,8 +182,8 @@ export function DayTimelineView({
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-slate-50/80 px-3 py-2 text-xs font-medium leading-5 tm-muted dark:bg-slate-800/45">
-      <ArrowDown className="size-3.5 shrink-0 text-slate-400" />
+    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-surface-container-low/80 px-3 py-2 text-xs font-medium leading-5 tm-muted dark:bg-surface-container-highest/45">
+      <ArrowDown className="size-3.5 shrink-0 text-outline" />
       <span className="min-w-0 truncate">{description}</span>
     </div>
   )
@@ -195,7 +195,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
 
   if (!appleUrl || !googleUrl) {
     return (
-      <p className="mt-3 rounded-xl bg-slate-50/80 px-3 py-2 text-xs font-medium tm-muted dark:bg-slate-800/45">
+      <p className="mt-3 rounded-xl bg-surface-container-low/80 px-3 py-2 text-xs font-medium tm-muted dark:bg-surface-container-highest/45">
         上一站或当前地点信息不足
       </p>
     )
@@ -213,7 +213,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
         Apple 路线
       </a>
       <a
-        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-on-surface dark:text-outline-variant"
         href={googleUrl}
         rel="noreferrer"
         target="_blank"

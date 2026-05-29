@@ -299,7 +299,7 @@ export function DayViewPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回旅行总览"
-            className={`${isMapView ? 'size-9' : 'size-10'} flex items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus`}
+            className={`${isMapView ? 'size-9' : 'size-10'} flex items-center justify-center rounded-xl tm-surface text-on-surface active:scale-[0.98] dark:text-outline-variant tm-focus`}
             onClick={() => navigateTo('trip', { tripId: trip.id })}
             type="button"
           >
@@ -309,10 +309,10 @@ export function DayViewPage() {
             <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
               {isMapView ? formatShortWorkspaceDate(selectedDay.date) : trip.destination || '目的地未定'}
             </p>
-            <h1 className={`truncate font-semibold leading-tight text-slate-950 dark:text-slate-100 ${isMapView ? 'text-base' : 'text-xl'}`}>
+            <h1 className={`truncate font-semibold leading-tight text-on-surface dark:text-on-surface ${isMapView ? 'text-base' : 'text-xl'}`}>
               {trip.title}
             </h1>
-            <p className="truncate text-xs text-slate-500">
+            <p className="truncate text-xs text-on-surface-variant">
               {isMapView ? selectedDay.title : formatDateRange(trip.startDate, trip.endDate)}
             </p>
             <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
@@ -437,7 +437,7 @@ function ViewButton({
       className={`flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[0.98] ${
         compact ? 'min-h-8 text-xs' : 'min-h-10 text-sm'
       } ${
-        active ? 'bg-primary text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'
+        active ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant dark:text-outline'
       }`}
       data-testid={testId}
       onClick={onClick}
@@ -462,24 +462,24 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-map-bg p-4" data-testid="map-loading-fallback">
       <div className="rounded-2xl tm-surface p-4">
         <SkeletonLine className="w-1/2" />
-        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+        <p className="mt-3 text-sm font-medium text-on-surface-variant dark:text-outline-variant">
           地图加载中，本地行程仍可查看。
         </p>
       </div>
       <div className="mt-auto max-h-[54%] min-h-0 rounded-t-3xl tm-surface p-4">
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300/70 dark:bg-slate-600/70" />
         <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{formatShortWorkspaceDate(day.date)}</p>
-        <h2 className="mt-1 truncate text-base font-semibold text-slate-950 dark:text-slate-100">{day.title}</h2>
+        <h2 className="mt-1 truncate text-base font-semibold text-on-surface dark:text-on-surface">{day.title}</h2>
         <p className="mt-1 text-xs tm-muted">{items.length} 个行程点，本地列表可先查看。</p>
         <div className="mt-3 min-h-0 overflow-y-auto app-scrollbar">
           <div className="space-y-2 pb-3">
             {items.slice(0, 4).map((item, index) => (
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50/80 px-3 py-2 dark:bg-slate-800/50" key={item.id}>
+              <div className="flex items-center gap-3 rounded-xl bg-surface-container-low/80 px-3 py-2 dark:bg-surface-container-highest/50" key={item.id}>
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100/80 text-xs font-bold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
                   {index + 1}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</span>
+                  <span className="block truncate text-sm font-semibold text-on-surface dark:text-on-surface">{item.title}</span>
                   <span className="flex items-center gap-1 truncate text-xs tm-muted">
                     <MapPin className="size-3.5 shrink-0" />
                     {item.locationName || item.address || '地点未填写'}

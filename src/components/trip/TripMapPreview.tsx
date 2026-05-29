@@ -448,13 +448,13 @@ export function TripMapPreview({
     <Card className="overflow-hidden" data-testid="trip-map-overview" padding="none" variant="grouped">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">行程地图预览</h3>
+          <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">行程地图预览</h3>
           <p className="mt-0.5 truncate text-xs tm-muted">
             {hasPoints ? `${data.coordinateCount} 个有坐标地点 · ${data.dayCount} 天` : '还没有可显示的坐标'}
           </p>
         </div>
         <button
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-slate-700 ring-1 ring-slate-200/80 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900/55 dark:text-slate-200 dark:ring-slate-700/80 tm-focus"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-surface-container-highest/55 dark:text-outline-variant dark:ring-outline-variant/30/80 tm-focus"
           disabled={!data.targetDay}
           onClick={() => {
             if (data.targetDay) {
@@ -469,7 +469,7 @@ export function TripMapPreview({
       </div>
       <div className="space-y-2 px-4 pb-4">
         <div
-          className="relative h-40 overflow-hidden rounded-2xl bg-slate-50/70 ring-1 ring-slate-100/80 dark:bg-slate-900/35 dark:ring-slate-700/60"
+          className="relative h-40 overflow-hidden rounded-2xl bg-surface-container-low/70 ring-1 ring-outline-variant/30/80 dark:bg-surface-container-highest/35 dark:ring-outline-variant/30/60"
           data-testid="trip-map-overview-plot"
         >
           {hasPoints ? (
@@ -486,7 +486,7 @@ export function TripMapPreview({
                 />
               </div>
               {(!engine || (!isMapReady && !isMapBaseSlow) || previewRouteLoading) ? (
-                <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-950/80 dark:text-slate-300 dark:ring-slate-700">
+                <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-on-surface-variant shadow-sm ring-1 ring-outline-variant/30 dark:bg-surface-dim/80 dark:text-outline-variant dark:ring-outline-variant/30">
                   <Loader2 className="size-3.5 animate-spin" />
                   {engine ? '加载地图预览...' : '准备地图预览...'}
                 </div>
@@ -494,11 +494,11 @@ export function TripMapPreview({
             </>
           ) : (
             <div className="absolute inset-0 flex items-center gap-3 px-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-slate-400 ring-1 ring-slate-100 dark:bg-slate-900/75 dark:ring-slate-700">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-outline ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/75 dark:ring-outline-variant/30">
                 <MapPinned className="size-5" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">还没有可显示的坐标</p>
+                <p className="text-sm font-semibold text-on-surface dark:text-outline-variant">还没有可显示的坐标</p>
                 <p className="mt-1 text-xs leading-5 tm-muted">
                   给行程点补充坐标后，这里会显示地图预览。
                 </p>
@@ -562,16 +562,16 @@ function RouteOrderSuggestionPanel({
   const titleById = new Map(items.map((item) => [item.id, item.title]))
   return (
     <div
-      className="space-y-2 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100/80 dark:bg-slate-900/45 dark:ring-slate-700/70"
+      className="space-y-2 rounded-2xl bg-surface-container-low/80 p-3 ring-1 ring-outline-variant/30/80 dark:bg-surface-container-highest/45 dark:ring-outline-variant/30/70"
       data-testid="trip-map-route-order-panel"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">路线顺序建议</p>
+          <p className="text-xs font-semibold text-on-surface dark:text-on-surface">路线顺序建议</p>
           <p className="mt-0.5 truncate text-[11px] tm-muted">{day.title} · 仅提供排序建议</p>
         </div>
         <button
-          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200 active:scale-[0.98] disabled:opacity-60 dark:bg-slate-950/60 dark:text-slate-200 dark:ring-slate-700 tm-focus"
+          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-on-surface ring-1 ring-outline-variant/30 active:scale-[0.98] disabled:opacity-60 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"
           data-testid="trip-map-route-order-check"
           disabled={state.status === 'loading'}
           onClick={onCheck}
@@ -636,7 +636,7 @@ function createPreviewMarkerElement(marker: NativePreviewMarker) {
   inner.className = [
     'absolute flex size-7 items-center justify-center rounded-full border-[3px] border-white',
     'bg-sky-600 text-[13px] font-bold leading-none text-white shadow-[0_4px_12px_rgba(2,6,23,0.35)]',
-    'dark:border-slate-950 dark:bg-sky-300 dark:text-slate-950',
+    'dark:border-slate-950 dark:bg-sky-300 dark:text-on-surface',
   ].join(' ')
   inner.dataset.testid = 'trip-map-overview-marker'
   inner.setAttribute('aria-label', `${marker.index + 1}. ${marker.record.item.title}`)

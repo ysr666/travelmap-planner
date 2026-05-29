@@ -42,7 +42,7 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
     <section className="space-y-3" id="travel-backup-panel">
       <SectionHeader title="备份与恢复" />
       <Card className="space-y-3">
-        <p className="text-sm leading-6 text-slate-500">
+        <p className="text-sm leading-6 text-on-surface-variant">
           备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据，以及可用的 copy 模式票据文件。
         </p>
         <div className="flex items-center gap-3">
@@ -50,15 +50,15 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
             <HardDriveDownload className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950">导出当前旅行</h3>
-            <p className="truncate text-sm text-slate-500">
+            <h3 className="text-base font-semibold text-on-surface">导出当前旅行</h3>
+            <p className="truncate text-sm text-on-surface-variant">
               {trip ? trip.title : '请先进入某个旅行，再导出该旅行备份。'}
             </p>
           </div>
         </div>
 
         {isLoadingTrip ? (
-          <div className="h-11 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-11 animate-pulse rounded-xl bg-surface-container" />
         ) : trip ? (
           <Button
             className="w-full"

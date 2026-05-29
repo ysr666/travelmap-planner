@@ -13,8 +13,6 @@ import { formatDateRange } from '../lib/dates'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import type { Trip } from '../types'
 import { Button } from '../components/ui/Button'
-import { AppVersion } from '../components/AppVersion'
-import { GroupedSection } from '../components/ui/GroupedSection'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
@@ -114,7 +112,7 @@ export function HomePage() {
       {/* Hero card for first trip */}
       {hasTrips ? (
         <button
-          className="shrink-0 text-left tm-focus rounded-2xl active:scale-[0.98] transition"
+          className="shrink-0 text-left tm-focus active:scale-[0.98] transition w-full"
           onClick={() => navigateTo('trip', { tripId: trips[0].id })}
           type="button"
         >
@@ -165,36 +163,39 @@ export function HomePage() {
           ) : null}
 
           {!isLoading && hasTrips ? (
-            <GroupedSection title="最近行程">
-              {trips.map((trip, index) => (
-                <TripCard
-                  key={trip.id}
-                  onOpen={() => navigateTo('trip', { tripId: trip.id })}
-                  separator={index > 0}
-                  trip={trip}
-                />
-              ))}
-            </GroupedSection>
+            <section className="flex flex-col gap-3">
+              <h3 className="font-headline-md text-headline-md text-on-surface">最近行程</h3>
+              <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden">
+                {trips.map((trip, index) => (
+                  <TripCard
+                    key={trip.id}
+                    onOpen={() => navigateTo('trip', { tripId: trip.id })}
+                    separator={index > 0}
+                    trip={trip}
+                  />
+                ))}
+              </div>
+            </section>
           ) : null}
         </div>
       </section>
 
-      <div className="shrink-0">
-        <Button
-          className="w-full"
-          icon={<Plus className="size-4" />}
-          onClick={() => navigateTo('trip/new')}
-        >
-          新建旅行
-        </Button>
+      <div className="shrink-0 flex flex-col gap-3">
         <button
-          className="mt-2 w-full text-center text-sm font-medium text-outline transition hover:text-on-surface-variant"
+          className="w-full py-4 rounded-xl bg-primary-container text-on-primary-container font-headline-md text-headline-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
+          onClick={() => navigateTo('trip/new')}
+          type="button"
+        >
+          <Plus className="size-5" />
+          新建行程
+        </button>
+        <button
+          className="w-full py-4 rounded-xl bg-surface-container-high text-primary font-headline-md text-headline-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
           onClick={() => navigateTo('settings')}
           type="button"
         >
-          导入备份
+          导入行程
         </button>
-        <AppVersion className="mt-3" suffix="本地优先" />
       </div>
 
       <ConfirmDialog
@@ -227,11 +228,9 @@ function TripCard({
 
   return (
     <div className="relative" data-testid="trip-card">
-      <button className="flex w-full min-h-[72px] items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus" onClick={onOpen} type="button">
-        <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-surface-variant border border-outline-variant/30">
-          <TripCover trip={trip} variant="thumbnail" />
-        </div>
-        <div className="min-w-0 flex-1">
+      <button className={`flex w-full min-h-[72px] items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus ${separator ? 'border-t border-outline-variant/30' : ''}`} onClick={onOpen} type="button">
+        <TripCover trip={trip} variant="thumbnail" />
+        <div className="min-w-0 flex-1 flex flex-col justify-center">
           <span className="font-body-lg text-body-lg text-on-surface block truncate">{trip.title}</span>
           <span className="font-label-sm text-label-sm text-on-surface-variant block truncate mt-0.5">
             {status.label} · {formatDateRange(trip.startDate, trip.endDate)}
@@ -239,7 +238,6 @@ function TripCard({
         </div>
         <ChevronRight className="size-4 shrink-0 text-outline-variant" />
       </button>
-      {separator ? <div className="ml-16 mr-4 h-[0.5px] bg-outline-variant/30" /> : null}
     </div>
   )
 }

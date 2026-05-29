@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import {
-  Cog,
+  ChevronLeft,
   Home,
   Map,
   Route,
+  Settings,
   Ticket,
 } from 'lucide-react'
 import type { RouteId } from '../types'
@@ -40,57 +41,49 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
   const pageTitle = routeTitles[activeRoute]
 
   return (
-    <div className="app-viewport tm-app-bg mx-auto flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_18px_60px_rgba(55,70,92,0.10)] dark:shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+    <div className="app-viewport bg-background mx-auto flex w-full max-w-[600px] flex-col overflow-hidden">
+      {/* Fixed TopAppBar */}
       {!isTrip ? (
-        <header className="z-30 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            {isHome ? (
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl tm-surface">
-                  <img alt="" className="size-7 rounded-lg" src="/favicon.svg" />
-                </span>
-                <h1 className="min-w-0 truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
-                  {pageTitle}
-                </h1>
+        <header className="fixed top-0 z-50 flex h-16 w-full max-w-[600px] items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl pt-[max(0rem,env(safe-area-inset-top))]">
+          {isHome ? (
+            <>
+              <div className="flex items-center gap-3">
+                <Map className="size-5 text-primary" />
+                <h1 className="font-headline-md text-headline-md text-on-surface">旅图</h1>
               </div>
-            ) : (
-              <button
-                aria-label="返回首页"
-                className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
-                onClick={() => navigateTo('home')}
-                type="button"
-              >
-                <Home className="size-5" />
-              </button>
-            )}
-            {!isHome ? (
-              <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100">
-                {pageTitle}
-              </h1>
-            ) : null}
-            {showTabBar ? (
-              <div className="size-10" />
-            ) : activeRoute === 'settings' ? (
-              <div className="size-10" />
-            ) : (
               <button
                 aria-label="设置"
-                className="flex size-10 items-center justify-center rounded-xl tm-surface text-slate-700 active:scale-[0.98] dark:text-slate-200 tm-focus"
+                className="flex size-10 items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant transition hover:text-primary active:scale-95"
                 onClick={() => navigateTo('settings')}
                 type="button"
               >
-                <Cog className="size-5" />
+                <Settings className="size-5" />
               </button>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <button
+                aria-label="返回"
+                className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
+                onClick={() => navigateTo('home')}
+                type="button"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <h1 className="font-headline-md text-headline-md text-on-surface">
+                {pageTitle}
+              </h1>
+              <div className="size-10" />
+            </>
+          )}
         </header>
       ) : null}
 
       <main
         className={
           isHome || isTrip
-            ? `flex min-h-0 flex-1 px-4 pt-4${showTabBar ? ' pb-2' : ''}`
-            : `min-h-0 flex-1 overflow-y-auto px-4 pt-4 app-scrollbar${showTabBar ? ' pb-2' : ' pb-[max(2rem,env(safe-area-inset-bottom))]'}`
+            ? `flex min-h-0 flex-1 flex-col px-4 pt-20${showTabBar ? ' pb-2' : ' pb-4'}`
+            : `min-h-0 flex-1 overflow-y-auto px-4 pt-20 app-scrollbar${showTabBar ? ' pb-2' : ' pb-[max(2rem,env(safe-area-inset-bottom))]'}`
         }
       >
         <div className={isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
@@ -158,14 +151,16 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
   ]
 
   return (
-    <nav className={`rounded-2xl tm-surface p-1.5 ${className}`}>
+    <nav className={`rounded-xl bg-surface-container border border-outline-variant/30 p-1.5 ${className}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (
             <button
               className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] ${
-                item.active ? 'bg-primary text-white shadow-sm' : 'text-slate-500 active:bg-slate-50/80 dark:text-slate-400 dark:active:bg-slate-800/60'
+                item.active
+                  ? 'bg-primary-container text-on-primary-container shadow-sm'
+                  : 'text-on-surface-variant active:bg-surface-container-high/50'
               }`}
               key={item.id}
               onClick={item.onClick}

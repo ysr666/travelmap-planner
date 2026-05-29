@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Plus, Settings } from 'lucide-react'
+import { CalendarDays, ChevronRight, Plus } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -111,22 +111,6 @@ export function HomePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-      {/* Page header */}
-      <header className="shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">旅图</h1>
-          <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
-        </div>
-        <button
-          aria-label="设置"
-          className="flex size-10 items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant transition hover:text-primary active:scale-95"
-          onClick={() => navigateTo('settings')}
-          type="button"
-        >
-          <Settings className="size-5" />
-        </button>
-      </header>
-
       {/* Hero card for first trip */}
       {hasTrips ? (
         <button

@@ -479,7 +479,9 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-section-gap">
+      <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">设置</h2>
+
       {error || success || warnings.length > 0 ? (
         <Card variant="grouped" className="space-y-3">
           {error ? <StatusMessage tone="error" message={error} /> : null}
@@ -501,7 +503,7 @@ export function SettingsPage() {
         <SectionHeader title="外观" />
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
               <Monitor className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -561,7 +563,7 @@ export function SettingsPage() {
         <SectionHeader title="PWA 和离线使用" />
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -596,7 +598,7 @@ export function SettingsPage() {
 
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+          <div className="flex size-8 items-center justify-center rounded-full bg-secondary/20 text-secondary">
             <Import className="size-4" />
           </div>
           <div>
@@ -646,7 +648,7 @@ export function SettingsPage() {
         <SectionHeader title="AI 行程导入" />
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tertiary/20 text-tertiary">
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -829,7 +831,7 @@ function TravelProfileSettings({
     <section className="space-y-3" data-testid="travel-profile-section">
       <Card variant="grouped" className="space-y-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -944,7 +946,7 @@ function AiPrivacySettingsPanel({
     <section className="space-y-3" data-testid="ai-privacy-section">
       <Card variant="grouped" className="space-y-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tertiary/20 text-tertiary">
             <ShieldCheck className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -1091,7 +1093,7 @@ function RouteServiceSettings({
     <section className="space-y-3" data-testid="routing-settings-section">
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -1301,7 +1303,7 @@ function TripPlanPreview({ parsed }: { parsed: ParsedTripPlanFile }) {
       data-testid="ai-trip-plan-preview"
     >
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-violet-600 ring-1 ring-violet-100/80 dark:bg-surface-dim/55 dark:text-violet-300 dark:ring-violet-900/50">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tertiary/20 text-tertiary">
           <FileJson className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -1369,7 +1371,7 @@ function TripPlanSuccessCard({ result }: { result: ImportTripPlanResult }) {
       data-testid="ai-trip-plan-success-checklist"
     >
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/90 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-surface-dim/55 dark:text-emerald-300 dark:ring-emerald-900/50">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary/20 text-secondary">
           <CheckCircle2 className="size-4" />
         </div>
         <div className="min-w-0 flex-1">

@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, CalendarDays, Map, MapPin, Route } from 'lucide-react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -310,25 +310,42 @@ export function DayViewPage() {
         <TripMoreMenu tripId={trip.id} />
       </header>
 
-      <div className={`shrink-0 ${isMapView ? 'space-y-1.5' : 'space-y-3'}`}>
-        <DaySelector
-          days={days}
-          density={isMapView ? 'compact' : 'regular'}
-          onSelectDay={handleSelectDay}
-          selectedDayId={selectedDay.id}
-        />
-        <div className={`grid grid-cols-2 tm-surface ${
-          isMapView ? 'rounded-xl p-1' : 'rounded-2xl p-1.5'
-        }`}>
-          <ViewButton active={view === 'schedule'} compact={isMapView} icon={<Route className="size-4" />} label="日程" onClick={() => handleSwitchView('schedule')} testId="view-switch-schedule" />
-          <ViewButton active={view === 'map'} compact={isMapView} icon={<Map className="size-4" />} label="地图" onClick={() => handleSwitchView('map')} testId="view-switch-map" />
-        </div>
-      </div>
-
+      {/* Full-screen map area with floating controls */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* Floating DaySelector - top of map */}
+        <div className="absolute top-2 left-0 right-0 z-20 px-4">
+          <DaySelector
+            days={days}
+            density="compact"
+            onSelectDay={handleSelectDay}
+            selectedDayId={selectedDay.id}
+          />
+        </div>
+
+        {/* Floating view toggle - left side */}
+        <div className="absolute top-14 left-4 z-20">
+          <div className="flex bg-surface-container-lowest/90 backdrop-blur p-1 rounded-full shadow-sm border border-outline-variant/20">
+            <button
+              className={`px-4 py-1.5 rounded-full font-label-sm text-label-sm transition ${view === 'schedule' ? 'bg-surface-variant text-on-surface' : 'text-on-surface-variant'}`}
+              onClick={() => handleSwitchView('schedule')}
+              type="button"
+            >
+              日程
+            </button>
+            <button
+              className={`px-4 py-1.5 rounded-full font-label-sm text-label-sm transition ${view === 'map' ? 'bg-surface-variant text-on-surface' : 'text-on-surface-variant'}`}
+              onClick={() => handleSwitchView('map')}
+              type="button"
+            >
+              地图
+            </button>
+          </div>
+        </div>
+
+        {/* Schedule view */}
         <div
           aria-hidden={isMapView}
-          className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none ${
+          className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none pt-20 ${
             isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
           }`}
         >
@@ -349,6 +366,7 @@ export function DayViewPage() {
           </div>
         </div>
 
+        {/* Map view */}
         {hasOpenedMap ? (
           <div
             aria-hidden={!isMapView}
@@ -403,38 +421,6 @@ export function DayViewPage() {
         </div>
       ) : null}
     </div>
-  )
-}
-
-function ViewButton({
-  active,
-  compact = false,
-  icon,
-  label,
-  onClick,
-  testId,
-}: {
-  active: boolean
-  compact?: boolean
-  icon: ReactNode
-  label: string
-  onClick: () => void
-  testId?: string
-}) {
-  return (
-    <button
-      className={`flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[0.98] ${
-        compact ? 'min-h-8 text-xs' : 'min-h-10 text-sm'
-      } ${
-        active ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant dark:text-outline'
-      }`}
-      data-testid={testId}
-      onClick={onClick}
-      type="button"
-    >
-      {icon}
-      {label}
-    </button>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, Plus, Settings, Trash2 } from 'lucide-react'
+import { CalendarDays, ChevronRight, Plus, Settings } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -114,12 +114,12 @@ export function HomePage() {
       {/* Page header */}
       <header className="shrink-0 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-on-surface dark:text-on-surface">旅图</h1>
-          <p className="text-[13px] tm-muted">你的旅行现场控制台</p>
+          <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">旅图</h1>
+          <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
         </div>
         <button
           aria-label="设置"
-          className="flex size-10 items-center justify-center rounded-xl text-on-surface-variant transition hover:bg-surface-container active:bg-surface-container-high dark:hover:bg-surface-container-highest dark:active:bg-surface-container-high tm-focus"
+          className="flex size-10 items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant transition hover:text-primary active:scale-95"
           onClick={() => navigateTo('settings')}
           type="button"
         >
@@ -185,12 +185,9 @@ export function HomePage() {
               {trips.map((trip, index) => (
                 <TripCard
                   key={trip.id}
-                  onDelete={() => setPendingDeleteTrip(trip)}
                   onOpen={() => navigateTo('trip', { tripId: trip.id })}
                   separator={index > 0}
-                  stats={tripStatsById[trip.id]}
                   trip={trip}
-                  isDeleting={deletingTripId === trip.id}
                 />
               ))}
             </GroupedSection>
@@ -236,50 +233,29 @@ export function HomePage() {
 function TripCard({
   trip,
   onOpen,
-  onDelete,
-  stats,
-  isDeleting,
   separator,
 }: {
   trip: Trip
   onOpen: () => void
-  onDelete: () => void
-  stats?: TripCardStats
-  isDeleting: boolean
   separator?: boolean
 }) {
   const status = getTripStatus(trip)
 
   return (
     <div className="relative" data-testid="trip-card">
-      {separator ? <div className="absolute left-[60px] right-0 top-0 h-[0.5px] bg-outline-variant/30" /> : null}
-      <button className="grid w-full min-h-[56px] grid-cols-[5rem_1fr] gap-3 p-3 pr-11 text-left transition active:bg-black/[0.03] dark:active:bg-white/[0.06] tm-focus" onClick={onOpen} type="button">
-        <TripCover trip={trip} variant="thumbnail" />
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${status.className}`}>
-              {status.label}
-            </span>
-            <p className="truncate text-xs text-outline">{formatDateRange(trip.startDate, trip.endDate)}</p>
-          </div>
-          <h3 className="mt-1.5 truncate text-base font-semibold text-on-surface dark:text-on-surface">{trip.title}</h3>
-          <p className="mt-0.5 truncate text-sm tm-muted">{trip.destination}</p>
-          {stats ? (
-            <p className="mt-1 truncate text-xs font-medium tm-muted">
-              {stats.dayCount} 天 · {stats.itemCount} 个行程点 · {stats.ticketCount} 张票据
-            </p>
-          ) : null}
+      <button className="flex w-full min-h-[72px] items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus" onClick={onOpen} type="button">
+        <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-surface-variant border border-outline-variant/30">
+          <TripCover trip={trip} variant="thumbnail" />
         </div>
+        <div className="min-w-0 flex-1">
+          <span className="font-body-lg text-body-lg text-on-surface block truncate">{trip.title}</span>
+          <span className="font-label-sm text-label-sm text-on-surface-variant block truncate mt-0.5">
+            {status.label} · {formatDateRange(trip.startDate, trip.endDate)}
+          </span>
+        </div>
+        <ChevronRight className="size-4 shrink-0 text-outline-variant" />
       </button>
-      <button
-        aria-label={`删除 ${trip.title}`}
-        className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-white/80 text-outline ring-1 ring-outline-variant/30/70 backdrop-blur transition hover:bg-red-50 hover:text-red-500 active:scale-[0.98] dark:bg-surface-container-highest/80 dark:ring-outline-variant/30/70 dark:hover:bg-red-500/10 tm-focus"
-        disabled={isDeleting}
-        onClick={onDelete}
-        type="button"
-      >
-        <Trash2 className="size-4" />
-      </button>
+      {separator ? <div className="ml-16 mr-4 h-[0.5px] bg-outline-variant/30" /> : null}
     </div>
   )
 }

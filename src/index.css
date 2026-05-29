@@ -61,6 +61,27 @@
   --font-body-lg: "Inter";
   --font-headline-lg: "Plus Jakarta Sans";
   --font-label-sm: "Inter";
+  --text-headline-md--size: 22px;
+  --text-headline-md--line-height: 28px;
+  --text-headline-md--font-weight: 600;
+  --text-body-md--size: 15px;
+  --text-body-md--line-height: 20px;
+  --text-body-md--font-weight: 400;
+  --text-headline-lg-mobile--size: 26px;
+  --text-headline-lg-mobile--line-height: 32px;
+  --text-headline-lg-mobile--letter-spacing: -0.01em;
+  --text-headline-lg-mobile--font-weight: 700;
+  --text-body-lg--size: 17px;
+  --text-body-lg--line-height: 24px;
+  --text-body-lg--font-weight: 400;
+  --text-headline-lg--size: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-lg--font-weight: 700;
+  --text-label-sm--size: 13px;
+  --text-label-sm--line-height: 16px;
+  --text-label-sm--letter-spacing: 0.05em;
+  --text-label-sm--font-weight: 500;
 }
 
 :root {

@@ -160,28 +160,26 @@ export function ItemDetailPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      <header className="z-30 shrink-0 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
+      <header className="z-30 shrink-0 border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label={backLabel}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+            className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
             onClick={goBackToDay}
             type="button"
           >
-            <ArrowLeft className="size-4" />
-            <span>{backLabel}</span>
+            <ArrowLeft className="size-5" />
           </button>
-          <h1 className="sr-only">
+          <h1 className="font-headline-md text-headline-md text-on-surface">
             行程点详情
           </h1>
           <button
             aria-label="编辑行程点"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+            className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
             onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
             type="button"
           >
-            <Edit3 className="size-4" />
-            <span>编辑</span>
+            <Edit3 className="size-5" />
           </button>
         </div>
       </header>
@@ -338,14 +336,16 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     <div className="space-y-5 pb-2">
       {/* Hero area */}
       <div className={`relative -mx-4 -mt-4 overflow-hidden bg-gradient-to-br ${heroVisual.gradientClass} h-80`} data-testid="item-detail-hero">
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm">
           <span className="text-lg">{heroVisual.emoji}</span>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h2 className="text-[26px] font-bold text-white drop-shadow-sm leading-tight">{item.title}</h2>
+        <div className="absolute bottom-6 left-4 right-4">
+          <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">{item.title}</h2>
           {item.locationName ? (
-            <p className="mt-0.5 text-xs text-white/80">{item.locationName}</p>
+            <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface/50 px-3 py-1.5 font-body-md text-body-md text-on-surface-variant backdrop-blur-md">
+              <span>{item.locationName}</span>
+            </div>
           ) : null}
         </div>
       </div>
@@ -610,7 +610,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         )}
       </section>
 
-      <div className="sticky bottom-0 -mx-4 -mb-2 border-t tm-row bg-white/90 px-4 py-3 backdrop-blur-xl dark:bg-surface-dim/90">
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t-[0.5px] border-outline-variant/30 bg-surface-dim/90 px-4 py-3 pb-safe backdrop-blur-xl">
         <Button
           className="w-full"
           disabled={isDeleting}

@@ -30,7 +30,7 @@ import {
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
 import { ListRow } from '../components/ui/ListRow'
-import { SectionHeader } from '../components/ui/SectionHeader'
+import { SettingsSection } from '../components/ui/SettingsSection'
 import {
   getStoredAiPrivacySettings,
   saveAiPrivacySettings,
@@ -499,81 +499,71 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <section className="space-y-3" data-testid="appearance-settings">
-        <SectionHeader title="外观" />
-        <Card variant="grouped" className="space-y-3">
+      <SettingsSection title="外观" data-testid="appearance-settings">
+        <div className="p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
               <Monitor className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">外观</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
+              <h3 className="text-base font-semibold text-on-surface">外观</h3>
+              <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 当前显示为{resolvedMode === 'dark' ? '黑夜模式' : '白天模式'}。
               </p>
             </div>
           </div>
+        </div>
+        <div className="px-4 pb-4 grid grid-cols-3 gap-2" role="group" aria-label="外观模式">
+          {appearanceOptions.map((option) => {
+            const active = appearanceMode === option.value
+            return (
+              <button
+                aria-pressed={active}
+                className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
+                  active
+                    ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
+                    : 'bg-surface-container-low/75 text-on-surface-variant ring-1 ring-outline-variant/30/70'
+                }`}
+                data-testid={`appearance-mode-${option.value}`}
+                key={option.value}
+                onClick={() => setAppearanceMode(option.value)}
+                type="button"
+              >
+                {option.icon}
+                <span>{option.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </SettingsSection>
 
-          <div className="grid grid-cols-3 gap-2" role="group" aria-label="外观模式">
-            {appearanceOptions.map((option) => {
-              const active = appearanceMode === option.value
-              return (
-                <button
-                  aria-pressed={active}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
-                    active
-                      ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
-                      : 'bg-surface-container-low/75 text-on-surface-variant ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/45 dark:text-outline-variant dark:ring-outline-variant/30/70'
-                  }`}
-                  data-testid={`appearance-mode-${option.value}`}
-                  key={option.value}
-                  onClick={() => setAppearanceMode(option.value)}
-                  type="button"
-                >
-                  {option.icon}
-                  <span>{option.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </Card>
-      </section>
+      <SettingsSection title="旅行偏好">
+        <TravelProfileSettings
+          onChange={updateTravelProfile}
+          profile={travelProfile}
+        />
+      </SettingsSection>
 
-      <section className="space-y-3">
-        <SectionHeader title="旅行偏好" />
-        <Card variant="grouped">
-          <TravelProfileSettings
-            onChange={updateTravelProfile}
-            profile={travelProfile}
-          />
-        </Card>
-      </section>
+      <SettingsSection title="AI 与隐私">
+        <AiPrivacySettingsPanel
+          onChange={updateAiPrivacySetting}
+          settings={aiPrivacySettings}
+        />
+      </SettingsSection>
 
-      <section className="space-y-3">
-        <SectionHeader title="AI 与隐私" />
-        <Card variant="grouped">
-          <AiPrivacySettingsPanel
-            onChange={updateAiPrivacySetting}
-            settings={aiPrivacySettings}
-          />
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <SectionHeader title="PWA 和离线使用" />
-        <Card variant="grouped" className="space-y-3">
+      <SettingsSection title="PWA 和离线使用">
+        <div className="p-4 space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">可添加到 iPhone 主屏幕</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
+              <h3 className="text-base font-semibold text-on-surface">可添加到 iPhone 主屏幕</h3>
+              <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 在 iPhone Safari 打开本页面，点分享按钮，再选择"添加到主屏幕"。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
               </p>
             </div>
           </div>
-
           <div className="grid gap-2">
             <InfoPill
               icon={isOnline ? <Wifi className="size-4" /> : <WifiOff className="size-4" />}
@@ -590,76 +580,66 @@ export function SettingsPage() {
               tone="warning"
             />
           </div>
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <SectionHeader title="导入备份" />
-
-      <Card variant="grouped" className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-full bg-secondary/20 text-secondary">
-            <Import className="size-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">导入备份</h3>
-            <p className="text-sm tm-muted">选择之前导出的 travelmap zip 文件。</p>
-          </div>
         </div>
+      </SettingsSection>
 
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>备份文件</span>
-          <input
-            accept=".zip,application/zip,application/x-zip-compressed"
-            className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-outline-variant dark:file:bg-sky-950/45 dark:file:text-sky-300"
-            key={fileInputKey}
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            type="file"
-          />
-        </label>
+      <SettingsSection title="导入备份">
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-full bg-secondary/20 text-secondary">
+              <Import className="size-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-on-surface">导入备份</h3>
+              <p className="text-sm text-on-surface-variant">选择之前导出的 travelmap zip 文件。</p>
+            </div>
+          </div>
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>备份文件</span>
+            <input
+              accept=".zip,application/zip,application/x-zip-compressed"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"
+              key={fileInputKey}
+              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+          </label>
+          {selectedFile ? (
+            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs text-on-surface-variant ring-1 ring-outline-variant/30/70">
+              已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
+            </p>
+          ) : null}
+          <Button
+            className="w-full"
+            disabled={!selectedFile}
+            icon={<Import className="size-4" />}
+            loading={isImporting}
+            onClick={() => void handleImport()}
+            variant="secondary"
+          >
+            导入 zip 备份
+          </Button>
+        </div>
+      </SettingsSection>
 
-        {selectedFile ? (
-          <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
-            已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
-          </p>
-        ) : null}
+      <SettingsSection title="云端保存">
+        <CloudBackupPanel trip={null} />
+      </SettingsSection>
 
-        <Button
-          className="w-full"
-          disabled={!selectedFile}
-          icon={<Import className="size-4" />}
-          loading={isImporting}
-          onClick={() => void handleImport()}
-          variant="secondary"
-        >
-          导入 zip 备份
-        </Button>
-      </Card>
-      </section>
-
-      <section className="space-y-3">
-        <SectionHeader title="云端保存" />
-        <Card variant="grouped">
-          <CloudBackupPanel trip={null} />
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <SectionHeader title="AI 行程导入" />
-        <Card variant="grouped" className="space-y-3">
+      <SettingsSection title="AI 行程导入">
+        <div className="p-4 space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tertiary/20 text-tertiary">
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">导入 AI 行程包</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
+              <h3 className="text-base font-semibold text-on-surface">导入 AI 行程包</h3>
+              <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 旅图不会调用 AI。你可以使用 ChatGPT、Claude、Gemini、DeepSeek
                 或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip，然后在本地导入。
               </p>
             </div>
           </div>
-
           <div className="grid gap-2">
             <InfoPill
               icon={<FileJson className="size-4" />}
@@ -671,32 +651,26 @@ export function SettingsPage() {
               tone="warning"
             />
           </div>
-
           <label className="block">
             <span className={FIELD_LABEL_CLASS}>AI 行程包文件</span>
             <input
               aria-label="选择 AI 行程包文件"
               accept=".json,.zip,application/json,application/zip,application/x-zip-compressed"
-              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700 dark:text-outline-variant dark:file:bg-violet-950/45 dark:file:text-violet-300"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-on-surface file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700"
               data-testid="ai-trip-plan-file-input"
               key={tripPlanFileInputKey}
               onChange={(event) => void handleTripPlanFileChange(event.target.files?.[0] ?? null)}
               type="file"
             />
           </label>
-
           {selectedTripPlanFile ? (
-            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 [overflow-wrap:anywhere] dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
+            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs text-on-surface-variant ring-1 ring-outline-variant/30/70 [overflow-wrap:anywhere]">
               已选择：{selectedTripPlanFile.name} · {formatFileSize(selectedTripPlanFile.size)}
             </p>
           ) : null}
-
           {isParsingTripPlan ? <SkeletonLine className="w-full" /> : null}
-
           {tripPlanError ? <StatusMessage tone="error" message={tripPlanError} /> : null}
-
           {parsedTripPlan ? <TripPlanPreview parsed={parsedTripPlan} /> : null}
-
           <Button
             className="w-full"
             data-testid="ai-trip-plan-import-button"
@@ -708,45 +682,37 @@ export function SettingsPage() {
           >
             {getTripPlanImportButtonLabel(parsedTripPlan)}
           </Button>
-
           {tripPlanSuccess ? <TripPlanSuccessCard result={tripPlanSuccess} /> : null}
-
           <TripPlanGuide
             copyMessage={copyPromptMessage}
             onCopyPrompt={() => void handleCopyAiPrompt()}
           />
-
           <p className="pt-1 text-center text-sm">
             <button
               type="button"
-              className="text-sky-600 underline underline-offset-2 dark:text-sky-400"
+              className="text-primary underline underline-offset-2"
               onClick={() => navigateTo('ai-draft')}
             >
               或者，试试本地草稿生成 →
             </button>
           </p>
-        </Card>
-      </section>
+        </div>
+      </SettingsSection>
 
-      <section className="space-y-3">
-        <SectionHeader title="路线服务" />
-        <Card variant="grouped">
-          <RouteServiceSettings
-            config={routingConfig}
-            cacheError={routeCacheError}
-            cacheStats={routeCacheStats}
-            isClearingCache={isClearingRouteCache}
-            isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
-            onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
-            onClearCache={() => void handleClearRouteCache()}
-          />
-        </Card>
-      </section>
+      <SettingsSection title="路线服务">
+        <RouteServiceSettings
+          config={routingConfig}
+          cacheError={routeCacheError}
+          cacheStats={routeCacheStats}
+          isClearingCache={isClearingRouteCache}
+          isUpdatingCacheLimit={isUpdatingRouteCacheLimit}
+          onCacheMaxBytesChange={(bytes) => void handleRouteCacheMaxBytesChange(bytes)}
+          onClearCache={() => void handleClearRouteCache()}
+        />
+      </SettingsSection>
 
-      <section className="space-y-3">
-        <SectionHeader title="设备存储" />
-        <Card variant="grouped" className="space-y-3">
-          <div className="divide-y divide-slate-100 py-1">
+      <SettingsSection title="设备存储">
+          <div className="py-1">
             <ListRow
               detail={
                 storageEstimate
@@ -782,12 +748,11 @@ export function SettingsPage() {
           </Button>
 
           {persistenceMessage ? (
-            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
+            <p className="rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs leading-5 text-on-surface-variant ring-1 ring-outline-variant/30/70">
               {persistenceMessage}
             </p>
           ) : null}
-        </Card>
-      </section>
+      </SettingsSection>
 
       {isLoggedIntoCloud ? (
         <section className="space-y-3">

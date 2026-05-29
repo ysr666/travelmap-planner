@@ -51,7 +51,7 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
   if (onClick) {
     return (
       <button
-        className={`relative flex min-h-[56px] w-full items-center gap-3 px-2 py-3 text-left transition active:bg-surface-variant/50 tm-focus ${separator ? '' : ''}`}
+        className={`relative flex min-h-[56px] w-full items-center gap-3 px-2 py-3 text-left transition active:scale-[0.99] active:bg-surface-variant/50 tm-focus ${separator ? '' : ''}`}
         onClick={onClick}
         type="button"
       >

@@ -1,6 +1,5 @@
 import type { Trip } from '../../types'
 import { formatDateRange } from '../../lib/dates'
-import { getTripStatus } from '../../lib/tripVisuals'
 
 type TripCoverProps = {
   trip: Trip
@@ -11,15 +10,13 @@ type TripCoverProps = {
 }
 
 export function TripCover({ trip, variant = 'thumbnail', className = '', heroStats, photo }: TripCoverProps) {
-  const status = getTripStatus(trip)
-
   if (variant === 'hero') {
     return (
-      <div className={`relative overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container ${className}`}>
+      <div className={`group relative overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container ${className}`}>
         {/* Photo background */}
         <div className="absolute inset-0 z-0">
           {photo ? (
-            <img alt="" className="size-full object-cover opacity-40" src={photo} />
+            <img alt="" className="size-full object-cover opacity-40 group-hover:opacity-50 transition-opacity duration-500" src={photo} />
           ) : (
             <div className="size-full bg-surface-variant" />
           )}
@@ -30,14 +27,12 @@ export function TripCover({ trip, variant = 'thumbnail', className = '', heroSta
           <div className="flex justify-between items-start">
             <div>
               <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{trip.title}</h3>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                {trip.destination && trip.destination !== trip.title ? trip.destination : ''}
-                {trip.destination && trip.destination !== trip.title ? ' · ' : ''}
-                {formatDateRange(trip.startDate, trip.endDate)}
-              </p>
+              {trip.destination && trip.destination !== trip.title ? (
+                <p className="font-body-md text-body-md text-on-surface-variant">{trip.destination}</p>
+              ) : null}
             </div>
             <div className="bg-primary/20 text-primary px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1">
-              <span className="font-label-sm text-label-sm">{status.label}</span>
+              <span className="font-label-sm text-label-sm">{formatDateRange(trip.startDate, trip.endDate)}</span>
             </div>
           </div>
           {heroStats ? (

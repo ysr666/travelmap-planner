@@ -87,6 +87,9 @@
   --spacing-stack-gap: 12px;
   --spacing-section-gap: 24px;
   --spacing-margin-mobile: 16px;
+  --blur-glass: 20px;
+  --blur-glass-lg: 40px;
+  --border-glass: 0.5px;
 }
 
 :root {
@@ -204,6 +207,7 @@ body {
   --tm-html-bg: #07111f;
   --tm-body-gradient: linear-gradient(180deg, #101827 0%, #0b1220 100%);
   --tm-scrollbar: rgba(148, 163, 184, 0.45);
+  --border-glass-color: #38383a;
   --font-headline-md: "Plus Jakarta Sans";
   --font-body-md: "Inter";
   --font-headline-lg-mobile: "Plus Jakarta Sans";

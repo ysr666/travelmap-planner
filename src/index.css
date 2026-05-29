@@ -82,6 +82,11 @@
   --text-label-sm--line-height: 16px;
   --text-label-sm--letter-spacing: 0.05em;
   --text-label-sm--font-weight: 500;
+  --spacing-gutter: 16px;
+  --spacing-margin-desktop: 32px;
+  --spacing-stack-gap: 12px;
+  --spacing-section-gap: 24px;
+  --spacing-margin-mobile: 16px;
 }
 
 :root {

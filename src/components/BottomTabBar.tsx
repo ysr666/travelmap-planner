@@ -14,7 +14,7 @@ const tabs = [
 
 export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
   return (
-    <nav className="shrink-0 border-t tm-row bg-white/90 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl dark:bg-slate-950/90">
+    <nav className="shrink-0 border-t border-outline-variant/30 bg-surface-dim/90 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[600px] items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon
@@ -25,7 +25,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
               className={`flex min-h-[72px] min-w-12 flex-col items-center justify-center gap-0.5 rounded-xl px-3 text-[13px] font-medium transition active:scale-95 tm-focus ${
                 isActive
                   ? 'text-primary'
-                  : 'text-slate-500 active:bg-slate-100/60 dark:text-slate-400 dark:active:bg-slate-800/40'
+                  : 'text-on-surface-variant active:bg-surface-container/60'
               }`}
               onClick={() => navigateTo(tab.id)}
               type="button"

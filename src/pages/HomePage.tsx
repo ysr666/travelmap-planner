@@ -244,15 +244,15 @@ function TripCard({
 
   return (
     <div className="relative" data-testid="trip-card">
-      <button className={`flex w-full min-h-[72px] items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus ${separator ? 'border-t border-outline-variant/30' : ''}`} onClick={onOpen} type="button">
+      <button className="flex w-full min-h-[72px] items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus" onClick={onOpen} type="button">
         <TripCover trip={trip} variant="thumbnail" />
-        <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <div className={`min-w-0 flex-1 flex flex-col justify-center ${separator ? 'border-b border-outline-variant/30 pb-4' : ''}`}>
           <span className="font-body-lg text-body-lg text-on-surface block truncate">{trip.title}</span>
           <span className="font-label-sm text-label-sm text-on-surface-variant block truncate mt-0.5">
             {status.label} · {formatDateRange(trip.startDate, trip.endDate)}
           </span>
         </div>
-        <ChevronRight className="size-4 shrink-0 text-outline-variant" />
+        <ChevronRight className={`size-4 shrink-0 text-on-surface-variant ${separator ? 'border-b border-outline-variant/30 pb-4' : ''}`} />
       </button>
     </div>
   )

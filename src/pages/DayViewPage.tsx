@@ -299,17 +299,17 @@ export function DayViewPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回旅行总览"
-            className={`${isMapView ? 'size-9' : 'size-10'} flex items-center justify-center rounded-xl tm-surface text-on-surface active:scale-[0.98] dark:text-outline-variant tm-focus`}
+            className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
             onClick={() => navigateTo('trip', { tripId: trip.id })}
             type="button"
           >
-            <ArrowLeft className={isMapView ? 'size-4' : 'size-5'} />
+            <ArrowLeft className="size-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-sky-600 dark:text-sky-300">
+            <p className="truncate font-label-sm text-label-sm text-on-surface-variant">
               {isMapView ? formatShortWorkspaceDate(selectedDay.date) : trip.destination || '目的地未定'}
             </p>
-            <h1 className={`truncate font-semibold leading-tight text-on-surface dark:text-on-surface ${isMapView ? 'text-base' : 'text-xl'}`}>
+            <h1 className="truncate font-headline-sm text-headline-sm text-on-surface">
               {trip.title}
             </h1>
             <p className="truncate text-xs text-on-surface-variant">

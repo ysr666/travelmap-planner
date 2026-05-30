@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react'
+import { ArrowLeft, CalendarDays, MapPin, Navigation as NavigationIcon } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
@@ -357,6 +357,7 @@ export function DayViewPage() {
                 </div>
               </div>
               <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
+                <span className="text-[14px]">🕐</span>
                 {firstItem.startTime || '10:00'}{firstItem.endTime ? ` - ${firstItem.endTime}` : ''}
               </p>
             </div>
@@ -365,7 +366,7 @@ export function DayViewPage() {
               onClick={() => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: firstItem.id, view: 'map' })}
               type="button"
             >
-              <ArrowLeft className="size-5 rotate-180" />
+              <NavigationIcon className="size-5" />
             </button>
           </div>
         </div>
@@ -391,17 +392,6 @@ export function DayViewPage() {
         </div>
       ) : null}
 
-      {/* Map/Day toggle button - floating on map */}
-      <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px+80px)] right-4 z-30">
-        <button
-          className="w-11 h-11 bg-surface-container-lowest rounded-full shadow-sm flex items-center justify-center text-on-surface hover:bg-surface-variant/50 transition-colors border border-outline-variant/20"
-          onClick={() => handleSwitchView(isMapView ? 'schedule' : 'map')}
-          type="button"
-        >
-          {isMapView ? <CalendarDays className="size-5" /> : <MapPin className="size-5" />}
-        </button>
-      </div>
-
       {selectedDay ? (
         <p className="sr-only">
           当前第 {selectedDayIndex + 1} 天
@@ -409,7 +399,7 @@ export function DayViewPage() {
       ) : null}
 
       {/* ── BottomNavBar ── 参考: 200-218 行 */}
-      <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-outline-variant/20 flex justify-around items-center h-16 w-full">
+      <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-outline-variant/20 flex justify-around items-center h-20 w-full">
         <TripNav
           activeRoute="day"
           activeView={view}

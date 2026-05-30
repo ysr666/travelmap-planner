@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   CalendarDays,
   ChevronRight,
+  Info,
+  Map,
   Clock3,
   Edit3,
   ExternalLink,
@@ -324,7 +326,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   return (
     <>
       {/* Hero Header - matches reference _1/code.html */}
-      <section className="relative w-full h-[320px] -mx-4 -mt-4" data-testid="item-detail-hero">
+      <section className="relative w-full h-[320px] md:h-[400px] -mx-4 -mt-4" data-testid="item-detail-hero">
         <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute bottom-6 left-gutter right-gutter">
@@ -367,7 +369,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           {item.notes ? (
             <div className="flex items-start p-4 hover:bg-surface-container-high transition-colors">
               <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4 shrink-0">
-                <span className="text-sm">📝</span>
+                <Info className="size-5" />
               </div>
               <div className="flex-1 pt-2">
                 <div className="font-body-md text-body-md text-on-surface-variant leading-relaxed whitespace-pre-wrap break-words">
@@ -492,7 +494,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                     </div>
                   </div>
                   <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{getTicketDisplayTitle(ticket)}</h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-4">{ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">{ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
                   <div className="border-t border-dashed border-outline-variant/50 w-full my-3" />
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-body-md text-body-md text-on-surface-variant">点击预览</span>
@@ -521,6 +523,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           onClick={onBack}
           type="button"
         >
+          <Map className="size-5" />
           {sourceView === 'map' ? '返回地图' : '返回日程'}
         </button>
         <button

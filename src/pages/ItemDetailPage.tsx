@@ -104,7 +104,7 @@ export function ItemDetailPage() {
         setItem(foundItem)
       }).catch((caught) => {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : '加载行程点失败')
+          setError(caught instanceof Error ? (caught as Error).message : '加载行程点失败')
         }
       }).finally(() => {
         if (!cancelled) {
@@ -200,7 +200,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       ])
       setDayItems(foundDayItems)
       setTickets(foundTickets)
-    } catch {
+    } catch { // silently ignore
       // silently ignore
     } finally {
       setIsLoadingRelations(false)
@@ -226,7 +226,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       await deleteItineraryItemCascade(item.id)
       setIsDeleteConfirmOpen(false)
       onItemDeleted()
-    } catch (caught) {
+    } catch {
+      // silently ignore
     } finally {
       setIsDeleting(false)
     }
@@ -292,7 +293,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       setPlaceLookupResults([])
       setPlaceLookupError(null)
       setIsPlaceLookupOpen(false)
-    } catch (caught) {
+    } catch {
+      // silently ignore
     } finally {
       setIsApplyingPlaceLookup(false)
     }

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
-import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
@@ -265,31 +264,14 @@ export function TripWorkspacePage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-section-gap overflow-hidden pb-32">
-      <header className="shrink-0 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            aria-label="返回首页"
-            className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
-            onClick={() => navigateTo('home')}
-            type="button"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-label-sm text-label-sm text-on-surface-variant">
-              {trip.destination || '目的地未定'}
-            </p>
-            <h1 className="truncate font-headline-lg text-headline-lg text-primary tracking-tight">
-              {trip.title}
-            </h1>
-            <p className="truncate font-body-md text-body-md text-on-surface-variant">
-              {formatDateRange(trip.startDate, trip.endDate)}
-            </p>
-          </div>
-          <TripMoreMenu tripId={trip.id} />
-        </div>
-      </header>
+    <>
+      {/* Trip title in main content area - matches reference 12_1/code.html */}
+      <section>
+        <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{trip.title}</h2>
+        <p className="font-body-md text-body-md text-on-surface-variant mt-2">
+          {formatDateRange(trip.startDate, trip.endDate)}
+        </p>
+      </section>
 
       {days.length === 0 ? (
         <div className="min-h-0 flex-1 overflow-y-auto app-scrollbar">
@@ -449,7 +431,7 @@ export function TripWorkspacePage() {
         testId="route-generation-confirm-dialog"
         title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
       />
-    </div>
+    </>
   )
 }
 

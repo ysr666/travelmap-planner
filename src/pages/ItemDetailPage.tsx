@@ -6,7 +6,6 @@ import {
   Info,
   Map,
   Clock3,
-  Edit3,
   ExternalLink,
   MapPin,
   MapPinned,
@@ -129,7 +128,6 @@ export function ItemDetailPage() {
       navigateTo('home')
     }
   }
-  const backLabel = sourceView === 'map' ? '返回地图' : '返回日程'
 
   if (isLoading) {
     return (
@@ -160,28 +158,7 @@ export function ItemDetailPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      {/* TopAppBar - matches reference _1/code.html */}
-      <header className="fixed top-0 z-50 flex h-16 w-full max-w-[600px] items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl pt-[max(0rem,env(safe-area-inset-top))]">
-        <button
-          aria-label={backLabel}
-          className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
-          onClick={goBackToDay}
-          type="button"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <h1 className="font-headline-md text-headline-md font-bold text-on-surface">详情</h1>
-        <button
-          aria-label="编辑行程点"
-          className="flex size-10 items-center justify-center rounded-full text-primary transition hover:bg-surface-container-high/50 active:scale-95"
-          onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
-          type="button"
-        >
-          <Edit3 className="size-5" />
-        </button>
-      </header>
-
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-24 pb-32 app-scrollbar">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-32 app-scrollbar">
         <div className="page-transition max-w-3xl mx-auto space-y-8">
           <ItemDetailContent
             day={day}

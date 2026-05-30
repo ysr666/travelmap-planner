@@ -1,9 +1,8 @@
+import { CalendarDays, MapPin, Navigation as NavigationIcon } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CalendarDays, MapPin, Navigation as NavigationIcon } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
-import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -286,25 +285,10 @@ export function DayViewPage() {
   }
 
   const isMapView = view === 'map'
-  const dayIndex = days.findIndex(d => d.id === selectedDay.id) + 1
-  const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
   const firstItem = items[0]
 
   return (
-    <>{/* ── TopAppBar ── 参考 12_2/code.html: 127-135 行 */}
-      <header className="bg-surface/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30 flex items-center justify-between px-4 h-14">
-        <button
-          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity duration-200 p-2 -ml-2 rounded-full flex items-center justify-center"
-          onClick={() => navigateTo('trip', { tripId: trip.id })}
-          type="button"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <h1 className="font-headline-sm text-headline-sm text-primary">第 {dayIndex} 天 · {dayDateStr}</h1>
-        <TripMoreMenu tripId={trip.id} />
-      </header>
-
-      {/* ── Main Content Area ── 参考: 137 行 */}
+    <>{/* ── Main Content Area ── 参考: 137 行 (TopAppBar 由 AppShell 管理) */}
       <main className="flex-grow relative h-screen w-full">
 
         {/* ── Map Canvas ── 参考: 139-174 行 */}

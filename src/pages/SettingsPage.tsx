@@ -755,7 +755,7 @@ export function SettingsPage() {
 
       {isLoggedIntoCloud ? (
         <button
-          className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98]"
+          className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg rounded-xl text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98]"
           onClick={handleLogout}
           type="button"
         >

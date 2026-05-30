@@ -306,6 +306,14 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       <section className="relative w-full h-[320px] md:h-[400px] -mx-4 -mt-4" data-testid="item-detail-hero">
         <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+        {/* Back button overlay */}
+        <button
+          className="absolute top-4 left-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-surface/50 backdrop-blur-md text-on-surface active:scale-95 transition-transform"
+          onClick={onBack}
+          type="button"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
         <div className="absolute bottom-6 left-gutter right-gutter">
           <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">{item.title}</h1>
           {item.locationName ? (

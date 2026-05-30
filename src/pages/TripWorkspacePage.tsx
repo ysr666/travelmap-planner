@@ -267,7 +267,7 @@ export function TripWorkspacePage() {
     <>
       {/* Trip title in main content area - matches reference 12_1/code.html */}
       <section>
-        <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{trip.title}</h2>
+        <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">{trip.title}</h2>
         <p className="font-body-md text-body-md text-on-surface-variant mt-2">
           {formatDateRange(trip.startDate, trip.endDate)}
         </p>

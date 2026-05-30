@@ -370,7 +370,7 @@ export function TripWorkspacePage() {
 
             {/* Schedule Section - timeline with vertical line */}
             <section className="flex flex-col gap-stack-gap">
-              <h3 className="font-headline-md text-headline-md text-on-surface">每日行程</h3>
+              <h3 className="font-headline-md text-headline-md text-on-surface">今天的安排</h3>
               <div className="bg-surface-container rounded-xl border-[0.5px] border-outline-variant/30 overflow-hidden flex flex-col relative">
                 {/* Timeline vertical line */}
                 <div className="absolute left-[39px] top-6 bottom-6 w-[1px] bg-outline-variant/40 z-0" />
@@ -387,16 +387,22 @@ export function TripWorkspacePage() {
                       tabIndex={0}
                     >
                       <div className="flex flex-col items-center mr-4 w-12 pt-1">
-                        <div className="w-3 h-3 rounded-full bg-primary ring-4 ring-surface-container group-hover:ring-surface-container-high z-10 shadow-[0_0_8px_rgba(170,199,255,0.6)]" />
+                        {index === 0 ? (
+                          <div className="w-3 h-3 rounded-full bg-primary ring-4 ring-surface-container group-hover:ring-surface-container-high z-10 shadow-[0_0_8px_rgba(170,199,255,0.6)]" />
+                        ) : (
+                          <div className="w-3 h-3 rounded-full bg-surface-variant border-[1.5px] border-outline ring-4 ring-surface-container group-hover:ring-surface-container-high z-10" />
+                        )}
                       </div>
                       <div className={`flex-1 ${isLast ? '' : 'pb-4 border-b border-outline-variant/20'}`}>
                         <div className="flex justify-between items-start mb-1">
                           <h4 className="font-body-lg text-body-lg text-on-surface font-medium">
                             {formatChineseDayOrdinal(index + 1)} · {formatDate(day.date)}
                           </h4>
-                          <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">
-                            {dayItemCount} 个行程点
-                          </span>
+                          {index === 0 ? (
+                            <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">进行中</span>
+                          ) : (
+                            <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-outline-variant/50">{dayItemCount} 个行程点</span>
+                          )}
                         </div>
                         <p className="font-body-md text-body-md text-on-surface-variant">
                           {day.title}

@@ -5,7 +5,6 @@ import { TripCover } from '../components/trip/TripCover'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
-import { TripNav } from '../components/AppShell'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { TripBriefCard } from '../components/ai/TripBriefCard'
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
@@ -433,15 +432,6 @@ export function TripWorkspacePage() {
           </div>
         </div>
       )}
-
-      <div className="shrink-0">
-        <TripNav
-          activeRoute="trip"
-          dayId={selectedDay?.id}
-          firstDayId={days[0]?.id}
-          tripId={trip.id}
-        />
-      </div>
 
       <ConfirmDialog
         body={buildRouteGenerationConfirmBody(routePreparation)}

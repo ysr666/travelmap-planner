@@ -4,7 +4,6 @@ import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
-import { TripNav } from '../components/AppShell'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -397,17 +396,6 @@ export function DayViewPage() {
           当前第 {selectedDayIndex + 1} 天
         </p>
       ) : null}
-
-      {/* ── BottomNavBar ── 参考: 200-218 行 */}
-      <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-outline-variant/20 flex justify-around items-center h-20 w-full">
-        <TripNav
-          activeRoute="day"
-          activeView={view}
-          dayId={selectedDay.id}
-          firstDayId={days[0]?.id}
-          tripId={trip.id}
-        />
-      </nav>
     </>
   )
 }

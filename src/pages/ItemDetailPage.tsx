@@ -19,6 +19,7 @@ import {
   getDay,
   getItineraryItem,
   getTrip,
+  listItemsByDay,
   listTicketsByItem,
   updateItineraryItem,
 } from '../db'
@@ -199,6 +200,7 @@ export function ItemDetailPage() {
 }
 
 export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdated, onBack, sourceView }: ItemDetailContentProps) {
+  const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [isLoadingRelations, setIsLoadingRelations] = useState(true)
@@ -215,7 +217,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   const loadRelations = useCallback(async () => {
     setIsLoadingRelations(true)
     try {
-      const foundTickets = await listTicketsByItem(item.id)
+      const [foundDayItems, foundTickets] = await Promise.all([
+        listItemsByDay(day.id),
+        listTicketsByItem(item.id),
+      ])
+      setDayItems(foundDayItems)
       setTickets(foundTickets)
     } catch {
       // silently ignore
@@ -231,6 +237,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     return () => window.clearTimeout(timeout)
   }, [loadRelations])
 
+  const itemIndex = dayItems.findIndex((dayItem) => dayItem.id === item.id)
+  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
+  const nextItem = itemIndex >= 0 && itemIndex < dayItems.length - 1 ? dayItems[itemIndex + 1] : null
   const transportDescription = describePreviousTransport(item)
   const hasCoordinates = hasValidCoordinates(item)
 
@@ -498,15 +507,33 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         )}
       </section>
 
-      {/* Bottom Action Area - matches reference: single button */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dim/90 backdrop-blur-xl border-t-[0.5px] border-outline-variant/30 p-4 pb-safe flex justify-center items-center">
+      {/* Bottom Action Area - matches reference: 3 buttons */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dim/90 backdrop-blur-xl border-t-[0.5px] border-outline-variant/30 p-4 pb-safe flex justify-between items-center gap-3">
         <button
-          className="flex-1 max-w-md h-12 bg-primary-container text-on-primary-container font-headline-md text-[16px] rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(62,144,255,0.2)]"
+          aria-label="上一项"
+          className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
+          disabled={!previousItem}
+          onClick={() => previousItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: previousItem.id, view: sourceView })}
+          type="button"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <button
+          className="flex-1 h-12 bg-primary-container text-on-primary-container font-headline-md text-[16px] rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(62,144,255,0.2)]"
           onClick={onBack}
           type="button"
         >
           <Map className="size-5" />
           {sourceView === 'map' ? '返回地图' : '返回日程'}
+        </button>
+        <button
+          aria-label="下一项"
+          className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
+          disabled={!nextItem}
+          onClick={() => nextItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: nextItem.id, view: sourceView })}
+          type="button"
+        >
+          <ArrowLeft className="size-5 rotate-180" />
         </button>
       </div>
 

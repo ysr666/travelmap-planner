@@ -9,7 +9,7 @@ type BottomTabBarProps = {
 const tabs = [
   { id: 'home' as RouteId, label: '首页', icon: Home },
   { id: 'trip' as RouteId, label: '行程', icon: Map },
-  { id: 'search' as RouteId, label: '搜索', icon: Search, disabled: true },
+  { id: 'search' as RouteId, label: '搜索', icon: Search },
   { id: 'settings' as RouteId, label: '设置', icon: Settings },
 ]
 
@@ -22,19 +22,13 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
         return (
           <button
             key={tab.id}
-            aria-disabled={tab.disabled}
             aria-label={tab.label}
             className={`flex flex-col items-center justify-center rounded-xl px-3 py-1 transition active:scale-90 ${
-              tab.disabled
-                ? 'cursor-not-allowed text-outline-variant'
-                : isActive
-                  ? 'text-primary bg-primary-container/10'
-                  : 'text-on-surface-variant hover:text-on-surface'
+              isActive
+                ? 'text-primary bg-primary-container/10'
+                : 'text-on-surface-variant hover:text-on-surface'
             }`}
-            disabled={tab.disabled}
-            onClick={() => {
-              if (!tab.disabled) navigateTo(tab.id)
-            }}
+            onClick={() => navigateTo(tab.id)}
             type="button"
           >
             <Icon className="size-5 mb-1" />

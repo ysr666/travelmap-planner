@@ -6,7 +6,6 @@ import {
   Database,
   FileJson,
   Import,
-  LogOut,
   Monitor,
   Moon,
   RefreshCw,
@@ -755,16 +754,13 @@ export function SettingsPage() {
       </SettingsSection>
 
       {isLoggedIntoCloud ? (
-        <section className="space-y-3">
-          <ListRow
-            icon={<LogOut className="size-4" />}
-            iconTone="rose"
-            onClick={handleLogout}
-            separator={false}
-            title="退出登录"
-            detail="退出云备份账号"
-          />
-        </section>
+        <button
+          className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98]"
+          onClick={handleLogout}
+          type="button"
+        >
+          退出登录
+        </button>
       ) : null}
 
       <Collapsible subtitle="版本信息与备份提醒" title="关于">

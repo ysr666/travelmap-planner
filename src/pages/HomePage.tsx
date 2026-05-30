@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Download, Map, Plus, Settings } from 'lucide-react'
+import { CalendarDays, ChevronRight, Download, Plus, Settings } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -84,26 +84,7 @@ export function HomePage() {
   }
 
   return (
-    <>{/* ── TopAppBar ── 参考: 114-122 行 */}
-      <header className="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b-[0.5px] border-outline-variant/30 flex justify-between items-center px-4 h-16">
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 text-on-surface-variant"
-          onClick={() => navigateTo('home')}
-          type="button"
-        >
-          <Map className="size-5" />
-        </button>
-        <h1 className="font-headline-md text-headline-md font-bold text-on-surface">旅图</h1>
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 bg-surface-container overflow-hidden border border-outline-variant/30"
-          onClick={() => navigateTo('settings')}
-          type="button"
-        >
-          <Settings className="size-5" />
-        </button>
-      </header>
-
-      {/* ── Main Content Canvas ── 参考: 124 行 */}
+    <>{/* ── Main Content Canvas ── 参考: 124 行 (TopAppBar 由 AppShell 管理) */}
       <main className="flex-1 w-full max-w-2xl mx-auto pt-24 pb-32 px-4 flex flex-col gap-section-gap">
 
         {/* ── Hero Section ── 参考: 126-134 行 */}

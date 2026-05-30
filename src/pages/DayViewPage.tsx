@@ -329,7 +329,7 @@ export function DayViewPage() {
         <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30">
           <div className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-primary text-lg">📍</span>
+              <MapPin className="size-5 text-primary" />
             </div>
             <div className="flex-grow min-w-0">
               <div className="flex justify-between items-start">

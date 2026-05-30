@@ -469,6 +469,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                     <div className="w-10 h-10 rounded bg-primary-container/20 flex items-center justify-center text-primary">
                       <Ticket className="size-5" />
                     </div>
+                    <span className="px-2 py-1 rounded bg-secondary-container/20 text-secondary-fixed-dim font-label-sm text-[11px] border border-secondary-container/30">已生效</span>
                   </div>
                   <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{getTicketDisplayTitle(ticket)}</h3>
                   <p className="font-body-md text-body-md text-on-surface-variant mb-6">{ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>

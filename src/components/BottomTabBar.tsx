@@ -1,4 +1,4 @@
-import { Home, Map, Search, Settings } from 'lucide-react'
+import { Compass, Home, Search, Settings } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 
@@ -8,7 +8,7 @@ type BottomTabBarProps = {
 
 const tabs = [
   { id: 'home' as RouteId, label: '首页', icon: Home },
-  { id: 'trip' as RouteId, label: '行程', icon: Map },
+  { id: 'trip' as RouteId, label: '行程', icon: Compass },
   { id: 'search' as RouteId, label: '搜索', icon: Search },
   { id: 'settings' as RouteId, label: '设置', icon: Settings },
 ]

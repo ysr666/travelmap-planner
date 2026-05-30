@@ -287,120 +287,119 @@ export function DayViewPage() {
   }
 
   const isMapView = view === 'map'
+  const dayIndex = days.findIndex(d => d.id === selectedDay.id) + 1
+  const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
+  const firstItem = items[0]
 
   return (
-    <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden ${
-        isMapView ? 'gap-2 pb-0' : 'gap-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
-      }`}
-    >
-      {/* Header - matches reference 12_2/code.html */}
-      <header className="shrink-0 bg-surface/80 backdrop-blur-md border-b border-outline-variant/30 flex items-center justify-between px-4 h-14">
+    <>{/* ── TopAppBar ── 参考 12_2/code.html: 127-135 行 */}
+      <header className="bg-surface/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30 flex items-center justify-between px-4 h-14">
         <button
-          aria-label="返回旅行总览"
-          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity p-2 -ml-2 rounded-full flex items-center justify-center"
+          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity duration-200 p-2 -ml-2 rounded-full flex items-center justify-center"
           onClick={() => navigateTo('trip', { tripId: trip.id })}
           type="button"
         >
           <ArrowLeft className="size-5" />
         </button>
-        <h1 className="font-headline-sm text-headline-sm text-primary">
-          第 {days.findIndex(d => d.id === selectedDay.id) + 1} 天 · {formatShortWorkspaceDate(selectedDay.date)}
-        </h1>
+        <h1 className="font-headline-sm text-headline-sm text-primary">第 {dayIndex} 天 · {dayDateStr}</h1>
         <TripMoreMenu tripId={trip.id} />
       </header>
 
-      {/* Full-screen map area with floating controls */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* Floating DaySelector - top of map */}
-        <div className="absolute top-2 left-0 right-0 z-20 px-4">
-          <DaySelector
-            days={days}
-            density="compact"
-            onSelectDay={handleSelectDay}
-            selectedDayId={selectedDay.id}
-          />
+      {/* ── Main Content Area ── 参考: 137 行 */}
+      <main className="flex-grow relative h-screen w-full">
+
+        {/* ── Map Canvas ── 参考: 139-174 行 */}
+        <div className="absolute top-0 left-0 w-full bg-map-bg bg-cover bg-center z-0 h-full">
+          {/* Map Overlay */}
+          <div className="absolute inset-0 bg-surface-dim/60" />
+
+          {/* Real MapLibre Map */}
+          {hasOpenedMap ? (
+            <div className="absolute inset-0">
+              <Suspense fallback={<MapLoadingFallback day={selectedDay} items={items} />}>
+                <LazyDayMapView
+                  allDays={days}
+                  day={selectedDay}
+                  dayItemsByDayId={itemsByDay}
+                  embedded
+                  isVisible={true}
+                  items={items}
+                  onBackToSchedule={() => handleSwitchView('schedule')}
+                  onEditItem={() => handleSwitchView('schedule')}
+                  onItemsChange={refreshItems}
+                  onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'map' })}
+                  resizeSignal={mapResizeToken}
+                  prewarmEnabled={false}
+                  showFloatingHeader={false}
+                  trip={trip}
+                />
+              </Suspense>
+            </div>
+          ) : null}
         </div>
 
-        {/* Floating view toggle - left side */}
-        <div className="absolute top-14 left-4 z-20">
-          <div className="flex bg-surface-container-lowest/90 backdrop-blur p-1 rounded-full shadow-sm border border-outline-variant/20">
+        {/* ── Floating Sheet / Itinerary List ── 参考: 175 行 */}
+      </main>
+
+      {/* ── Floating Info Card ── 参考: 178-199 行 */}
+      {firstItem ? (
+        <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30">
+          <div className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <MapPin className="size-5 text-primary" />
+            </div>
+            <div className="flex-grow min-w-0">
+              <div className="flex justify-between items-start">
+                <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{firstItem.title}</h3>
+                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  <span className="text-[10px] font-bold">进行中</span>
+                </div>
+              </div>
+              <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
+                {firstItem.startTime || '10:00'}{firstItem.endTime ? ` - ${firstItem.endTime}` : ''}
+              </p>
+            </div>
             <button
-              className={`px-4 py-1.5 rounded-full font-label-sm text-label-sm transition ${view === 'schedule' ? 'bg-surface-variant text-on-surface' : 'text-on-surface-variant'}`}
-              onClick={() => handleSwitchView('schedule')}
+              className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+              onClick={() => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: firstItem.id, view: 'map' })}
               type="button"
             >
-              日程
-            </button>
-            <button
-              className={`px-4 py-1.5 rounded-full font-label-sm text-label-sm transition ${view === 'map' ? 'bg-surface-variant text-on-surface' : 'text-on-surface-variant'}`}
-              onClick={() => handleSwitchView('map')}
-              type="button"
-            >
-              地图
+              <ArrowLeft className="size-5 rotate-180" />
             </button>
           </div>
         </div>
+      ) : null}
 
-        {/* Schedule view */}
-        <div
-          aria-hidden={isMapView}
-          className={`absolute inset-0 min-h-0 overflow-y-auto pr-1 app-scrollbar transition-opacity duration-200 motion-reduce:transition-none pt-20 ${
-            isMapView ? 'invisible pointer-events-none opacity-0' : 'visible opacity-100'
-          }`}
-        >
-          <div className="space-y-4 pb-4">
+      {/* Schedule view overlay (hidden by default, shown when toggled) */}
+      {!isMapView ? (
+        <div className="fixed inset-0 z-40 bg-background overflow-y-auto pt-16 pb-20">
+          <div className="max-w-2xl mx-auto px-4 space-y-4">
+            <DaySelector days={days} density="regular" onSelectDay={handleSelectDay} selectedDayId={selectedDay.id} />
             {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
             <DayTimelineView
               compact
               day={selectedDay}
               items={items}
               onItemsChange={refreshItems}
-              onOpenItem={(item) =>
-                navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view })
-              }
+              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
               onSwitchToMap={() => handleSwitchView('map')}
-              sourceView={view}
+              sourceView="schedule"
               trip={trip}
             />
           </div>
         </div>
+      ) : null}
 
-        {/* Map view */}
-        {hasOpenedMap ? (
-          <div
-            aria-hidden={!isMapView}
-            className={`absolute inset-y-0 -left-4 -right-4 min-h-0 overflow-hidden transition-opacity duration-200 motion-reduce:transition-none ${
-              isMapView ? 'visible opacity-100' : 'invisible pointer-events-none opacity-0'
-            }`}
-          >
-            <Suspense fallback={isMapView ? <MapLoadingFallback day={selectedDay} items={items} /> : <HiddenMapLoadingFallback />}>
-              <LazyDayMapView
-                allDays={days}
-                day={selectedDay}
-                dayItemsByDayId={itemsByDay}
-                embedded
-                isVisible={isMapView}
-                items={items}
-                onBackToSchedule={() => handleSwitchView('schedule')}
-                onEditItem={() => handleSwitchView('schedule')}
-                onItemsChange={refreshItems}
-                onOpenItem={(item) =>
-                  navigateTo('item', {
-                    tripId: trip.id,
-                    dayId: selectedDay.id,
-                    itemId: item.id,
-                    view,
-                  })
-                }
-                resizeSignal={mapResizeToken}
-                prewarmEnabled={!isMapView}
-                showFloatingHeader={false}
-                trip={trip}
-              />
-            </Suspense>
-          </div>
-        ) : null}
+      {/* Map/Day toggle button - floating on map */}
+      <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px+80px)] right-4 z-30">
+        <button
+          className="w-11 h-11 bg-surface-container-lowest rounded-full shadow-sm flex items-center justify-center text-on-surface hover:bg-surface-variant/50 transition-colors border border-outline-variant/20"
+          onClick={() => handleSwitchView(isMapView ? 'schedule' : 'map')}
+          type="button"
+        >
+          {isMapView ? <CalendarDays className="size-5" /> : <MapPin className="size-5" />}
+        </button>
       </div>
 
       {selectedDay ? (
@@ -409,18 +408,17 @@ export function DayViewPage() {
         </p>
       ) : null}
 
-      {!isMapView ? (
-        <div className="shrink-0">
-          <TripNav
-            activeRoute="day"
-            activeView={view}
-            dayId={selectedDay.id}
-            firstDayId={days[0]?.id}
-            tripId={trip.id}
-          />
-        </div>
-      ) : null}
-    </div>
+      {/* ── BottomNavBar ── 参考: 200-218 行 */}
+      <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-outline-variant/20 flex justify-around items-center h-16 w-full">
+        <TripNav
+          activeRoute="day"
+          activeView={view}
+          dayId={selectedDay.id}
+          firstDayId={days[0]?.id}
+          tripId={trip.id}
+        />
+      </nav>
+    </>
   )
 }
 
@@ -467,10 +465,6 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
       </div>
     </div>
   )
-}
-
-function HiddenMapLoadingFallback() {
-  return <div className="h-full min-h-0 bg-map-bg" data-testid="map-loading-fallback" />
 }
 
 function scheduleIdleTask(task: () => void) {

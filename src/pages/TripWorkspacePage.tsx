@@ -329,6 +329,7 @@ export function TripWorkspacePage() {
                   </span>
                 ) : null}
               </div>
+              <p className="font-body-md text-body-md text-on-surface-variant">即将开始您的精彩旅程</p>
               {selectedDay ? (
                 <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay.title}</p>
               ) : null}

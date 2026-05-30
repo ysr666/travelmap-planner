@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Download, Plus, Settings } from 'lucide-react'
+import { CalendarDays, ChevronRight, Download, Map, Plus, Settings } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -16,13 +16,14 @@ import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
-import { getTripStatus } from '../lib/tripVisuals'
 
 type TripCardStats = {
   dayCount: number
   itemCount: number
   ticketCount: number
 }
+
+// ── 直接基于 design-reference/_3/code.html 转换 ──
 
 export function HomePage() {
   const [trips, setTrips] = useState<Trip[]>([])
@@ -83,11 +84,29 @@ export function HomePage() {
   }
 
   return (
-    <>
-      {/* Main Content Canvas - matches reference: max-w-2xl mx-auto pt-24 pb-32 px-4 gap-section-gap */}
+    <>{/* ── TopAppBar ── 参考: 114-122 行 */}
+      <header className="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b-[0.5px] border-outline-variant/30 flex justify-between items-center px-4 h-16">
+        <button
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 text-on-surface-variant"
+          onClick={() => navigateTo('home')}
+          type="button"
+        >
+          <Map className="size-5" />
+        </button>
+        <h1 className="font-headline-md text-headline-md font-bold text-on-surface">旅图</h1>
+        <button
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200 bg-surface-container overflow-hidden border border-outline-variant/30"
+          onClick={() => navigateTo('settings')}
+          type="button"
+        >
+          <Settings className="size-5" />
+        </button>
+      </header>
+
+      {/* ── Main Content Canvas ── 参考: 124 行 */}
       <main className="flex-1 w-full max-w-2xl mx-auto pt-24 pb-32 px-4 flex flex-col gap-section-gap">
 
-        {/* Hero Section - matches reference exactly */}
+        {/* ── Hero Section ── 参考: 126-134 行 */}
         <section className="flex justify-between items-end">
           <div>
             <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">旅图</h2>
@@ -102,42 +121,25 @@ export function HomePage() {
           </button>
         </section>
 
-        {/* Loading state */}
+        {/* Loading */}
         {isLoading ? (
-          <div className="space-y-3">
-            <SkeletonLine className="w-2/3" />
-            <SkeletonLine className="w-full" />
-            <SkeletonLine className="w-1/2" />
-          </div>
+          <div className="space-y-3"><SkeletonLine className="w-2/3" /><SkeletonLine className="w-full" /><SkeletonLine className="w-1/2" /></div>
         ) : null}
 
-        {/* Error state */}
+        {/* Error */}
         {error ? (
-          <div className="rounded-xl border border-error/30 bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
-            {error}
-          </div>
+          <div className="rounded-xl border border-error/30 bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">{error}</div>
         ) : null}
 
-        {/* Empty state */}
+        {/* Empty */}
         {!isLoading && !hasTrips ? (
           <div className="space-y-3">
-            <EmptyState
-              body="新用户不会自动生成示例数据。你可以新建旅行，也可以手动创建一个东京示例用于体验地图和时间轴。"
-              icon={<CalendarDays className="size-6" />}
-              title="还没有旅行"
-            />
-            <Button
-              className="w-full"
-              loading={isCreatingDemo}
-              onClick={() => void handleCreateDemoTrip()}
-              variant="secondary"
-            >
-              创建示例旅行
-            </Button>
+            <EmptyState body="新用户不会自动生成示例数据。你可以新建旅行，也可以手动创建一个东京示例用于体验地图和时间轴。" icon={<CalendarDays className="size-6" />} title="还没有旅行" />
+            <Button className="w-full" loading={isCreatingDemo} onClick={() => void handleCreateDemoTrip()} variant="secondary">创建示例旅行</Button>
           </div>
         ) : null}
 
-        {/* Current Trip Card - matches reference exactly */}
+        {/* ── Current Trip Card (Travel Pass) ── 参考: 136-167 行 */}
         {firstTrip ? (
           <section className="relative bg-surface-container rounded-xl overflow-hidden border border-outline-variant/30 group">
             <div className="absolute inset-0 z-0">
@@ -151,7 +153,7 @@ export function HomePage() {
                   <p className="font-body-md text-body-md text-on-surface-variant">{formatDateRange(firstTrip.startDate, firstTrip.endDate)}</p>
                 </div>
                 <div className="bg-primary/20 text-primary px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1">
-                  <span className="font-label-sm text-label-sm">{getTripStatus(firstTrip).label}</span>
+                  <span className="font-label-sm text-label-sm">{getTripEmoji(firstTrip)}</span>
                 </div>
               </div>
               {firstStats ? (
@@ -174,7 +176,7 @@ export function HomePage() {
           </section>
         ) : null}
 
-        {/* Recent Trips Section - matches reference exactly */}
+        {/* ── Recent Trips Section ── 参考: 169-217 行 */}
         {trips.length > 0 ? (
           <section className="flex flex-col gap-stack-gap">
             <h3 className="font-headline-md text-headline-md text-on-surface">最近行程</h3>
@@ -204,7 +206,7 @@ export function HomePage() {
           </section>
         ) : null}
 
-        {/* Action Buttons - matches reference exactly */}
+        {/* ── Action Buttons ── 参考: 219-228 行 */}
         <section className="flex flex-col gap-3 mt-4">
           <button
             className="w-full py-4 rounded-xl bg-[#0A84FF] text-white font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#0A84FF]/90 transition-colors active:scale-[0.98]"
@@ -251,6 +253,15 @@ function getTripEmoji(trip: Trip): string {
   if (dest.includes('罗马') || dest.includes('rome') || dest.includes('意大利')) return '🏛️'
   if (dest.includes('巴塞罗那') || dest.includes('barcelona') || dest.includes('西班牙')) return '🇪🇸'
   return '✈️'
+}
+
+function getTripStatus(trip: Trip): { label: string; className: string } {
+  const now = new Date()
+  const start = new Date(trip.startDate)
+  const end = new Date(trip.endDate)
+  if (now > end) return { label: '已完成', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' }
+  if (now >= start) return { label: '进行中', className: 'bg-primary/20 text-primary' }
+  return { label: '计划中', className: 'bg-surface-container-high text-on-surface-variant' }
 }
 
 async function loadTripsWithStats() {

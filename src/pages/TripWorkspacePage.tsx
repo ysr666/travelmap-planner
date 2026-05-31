@@ -304,9 +304,6 @@ export function TripWorkspacePage() {
                 ) : null}
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay?.title || "选择一天开始探索"}</p>
-              {selectedDay ? (
-                <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay.title}</p>
-              ) : null}
               {/* Map Preview Card */}
               <TripMapPreview
                 days={days}
@@ -337,11 +334,6 @@ export function TripWorkspacePage() {
                 </button>
               </div>
             </section>
-
-            <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
-            {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
-            <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
-            <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
 
             {/* Schedule Section - timeline with vertical line */}
             {selectedDay ? (
@@ -388,6 +380,12 @@ export function TripWorkspacePage() {
               </div>
             </section>
             ) : null}
+
+            {/* Extra panels (not in reference design, but useful functionality) */}
+            <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
+            {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
+            <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+            <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
 
             {trip.notes ? (
               <Card className="flex items-start gap-3" variant="grouped">

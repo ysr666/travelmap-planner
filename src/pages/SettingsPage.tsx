@@ -8,7 +8,6 @@ import {
   Map,
   Car,
   Moon,
-  LogOut,
 } from 'lucide-react'
 import { useAppearance } from '../lib/appearanceContext'
 import type { AppearanceMode } from '../lib/appearance'
@@ -112,14 +111,15 @@ export function SettingsPage() {
       </SettingsSection>
 
       {/* 退出登录 */}
-      <button
-        className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98] flex items-center justify-center gap-2"
-        onClick={handleLogout}
-        type="button"
-      >
-        <LogOut className="size-5" />
-        退出登录
-      </button>
+      <div className="text-center pt-4">
+        <button
+          className="text-error font-body-lg text-body-lg hover:underline transition-colors active:scale-[0.98]"
+          onClick={handleLogout}
+          type="button"
+        >
+          退出登录
+        </button>
+      </div>
     </main>
   )
 }

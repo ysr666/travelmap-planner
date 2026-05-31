@@ -1,0 +1,32 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]:
+    - main [ref=e93]:
+      - generic [ref=e94]:
+        - heading "旅图" [level=2] [ref=e95]
+        - paragraph [ref=e96]: 你的旅行现场控制台
+      - generic [ref=e101]:
+        - button "新建行程" [ref=e102]:
+          - img [ref=e103]
+          - text: 新建行程
+        - button "导入行程" [ref=e104]:
+          - img [ref=e105]
+          - text: 导入行程
+  - navigation [ref=e58]:
+    - button "首页" [ref=e59]:
+      - img [ref=e60]
+      - generic [ref=e63]: 首页
+    - button "行程" [ref=e64]:
+      - img [ref=e65]
+      - generic [ref=e68]: 行程
+    - button "搜索" [ref=e69]:
+      - img [ref=e70]
+      - generic [ref=e73]: 搜索
+    - button "设置" [ref=e74]:
+      - img [ref=e75]
+      - generic [ref=e78]: 设置

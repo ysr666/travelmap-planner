@@ -3,8 +3,8 @@ import {
   Home,
   Map,
   Route,
-  Settings,
   Ticket,
+  User,
 } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
@@ -42,7 +42,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
           onClick={() => navigateTo('settings')}
           type="button"
         >
-          <Settings className="size-5" />
+          <User className="size-5" />
         </button>
       </header>
 

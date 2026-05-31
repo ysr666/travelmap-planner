@@ -1,0 +1,168 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e140]:
+        - heading "东京春日旅行" [level=2] [ref=e141]
+        - paragraph [ref=e142]: 4月12日 - 4月17日
+      - generic [ref=e144]:
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - heading "今日概览" [level=3] [ref=e147]
+            - generic [ref=e148]: 第 1 天
+          - paragraph [ref=e149]: 即将开始您的精彩旅程
+          - paragraph [ref=e150]: 抵达与涩谷
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - heading "行程地图预览" [level=3] [ref=e154]
+                - paragraph [ref=e155]: 5 个有坐标地点 · 2 天
+              - button "查看地图" [ref=e156]:
+                - img [ref=e157]
+                - text: 查看地图
+            - generic [ref=e159]:
+              - generic [ref=e163]:
+                - region "地图" [ref=e164]
+                - generic [ref=e165]:
+                  - generic [ref=e193]:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic "1. Hotel Metropolitan Tokyo 入住": "1"
+                        - generic:
+                          - generic "2. 明治神宫散步": "2"
+                        - generic:
+                          - generic "3. Shibuya Sky 夜景": "3"
+                        - generic:
+                          - generic "4. 浅草寺": "4"
+                        - generic:
+                          - generic "5. 东京站周边": "5"
+                  - iframe [ref=e195]:
+                    
+                  - link "在 Google 地图中打开此区域（会打开一个新窗口）" [ref=e197] [cursor=pointer]:
+                    - /url: https://maps.google.com/maps?ll=35.678272,139.747995&z=10&t=m&hl=zh-CN&gl=US&mapclient=apiv3
+                    - img "Google" [ref=e199]
+                  - generic [ref=e200]:
+                    - generic [ref=e205]: 地图数据 ©2026 GS(2011)6020
+                    - link "条款（在新标签页中打开）" [ref=e210] [cursor=pointer]:
+                      - /url: https://www.google.com/intl/zh-CN_US/help/terms_maps.html
+                      - text: 条款
+                    - link "报告地图错误（在新标签页中打开）" [ref=e215] [cursor=pointer]:
+                      - /url: https://www.google.com/maps/@35.6782719,139.747995,10z/data=!10m1!1e1!12b1?source=apiv3&rapsrc=apiv3
+                      - text: 报告地图错误
+              - generic [ref=e216]:
+                - paragraph [ref=e217]: 尚未生成路线预览，直线仅按每天行程顺序连接；路线仅供预览，不会自动改行程顺序。
+                - generic [ref=e219]:
+                  - generic [ref=e220]:
+                    - paragraph [ref=e221]: 路线顺序建议
+                    - paragraph [ref=e222]: 抵达与涩谷 · 仅提供排序建议
+                  - button "查看建议（仅建议）" [ref=e223]:
+                    - img [ref=e224]
+                    - text: 查看建议（仅建议）
+          - generic [ref=e227]:
+            - button "进入日视图" [ref=e228]:
+              - img [ref=e229]
+              - text: 进入日视图
+            - button "票据库" [ref=e233]:
+              - img [ref=e234]
+              - text: 票据库
+        - generic [ref=e236]:
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - img [ref=e240]
+              - generic [ref=e244]:
+                - paragraph [ref=e245]: 行程体检
+                - heading "本地检查" [level=3] [ref=e246]
+            - generic [ref=e247]: 注意
+          - generic [ref=e248]:
+            - generic [ref=e249]: 2 天 · 天数
+            - generic [ref=e250]: 5 个 · 行程点
+            - generic [ref=e251]: 0 张 · 票据
+            - generic [ref=e252]: 已结束
+          - paragraph [ref=e253]: 基于当前本地行程信息，发现 3 项本地提醒。
+          - generic [ref=e255]:
+            - paragraph [ref=e256]: 3 项
+            - paragraph [ref=e257]: 交通耗时待补
+          - generic [ref=e258]:
+            - generic [ref=e259]:
+              - generic [ref=e260]:
+                - heading "缺少交通耗时" [level=4] [ref=e261]
+                - generic [ref=e262]: 注意
+              - paragraph [ref=e263]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+            - generic [ref=e264]:
+              - generic [ref=e265]:
+                - heading "缺少交通耗时" [level=4] [ref=e266]
+                - generic [ref=e267]: 注意
+              - paragraph [ref=e268]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+            - generic [ref=e269]:
+              - generic [ref=e270]:
+                - heading "缺少交通耗时" [level=4] [ref=e271]
+                - generic [ref=e272]: 注意
+              - paragraph [ref=e273]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+          - generic [ref=e274]:
+            - paragraph [ref=e275]: 准备提醒
+            - paragraph [ref=e277]: 根据已填写内容，这趟行程还有 3 段上一站交通耗时待补。
+          - generic [ref=e278]:
+            - paragraph [ref=e279]: 仅基于本地行程信息，不读取票据文件、完整备注或坐标明细。
+            - paragraph [ref=e280]: 后续可接入天气、开放时间和路线信息；当前仅根据已填写内容提示。
+        - generic [ref=e281]:
+          - generic [ref=e282]:
+            - img [ref=e284]
+            - generic [ref=e287]:
+              - heading "AI 修改建议" [level=3] [ref=e288]
+              - paragraph [ref=e289]: AI 只会生成修改方案，确认前不会改动行程。联网搜索能力将通过旅图服务提供，当前仍不会自动查询网页或实时票价。
+          - textbox "例如：第二天太满了，帮我放松一点" [ref=e290]
+          - button "生成修改方案" [disabled] [ref=e292]:
+            - img [ref=e293]
+            - generic [ref=e296]: 生成修改方案
+        - generic [ref=e298]:
+          - generic [ref=e299]:
+            - generic [ref=e300]:
+              - img [ref=e301]
+              - heading "路线准备" [level=3] [ref=e305]
+            - paragraph [ref=e306]: 可为 2 天生成路线预览
+          - button "生成路线预览" [ref=e307]:
+            - img [ref=e308]
+            - generic [ref=e312]: 生成路线预览
+        - generic [ref=e313]:
+          - heading "今天的安排" [level=3] [ref=e314]
+          - generic [ref=e315]:
+            - button "第一天 · 2026年4月12日 进行中 抵达与涩谷" [ref=e317] [cursor=pointer]:
+              - generic [ref=e320]:
+                - generic [ref=e321]:
+                  - heading "第一天 · 2026年4月12日" [level=4] [ref=e322]
+                  - generic [ref=e323]: 进行中
+                - paragraph [ref=e324]: 抵达与涩谷
+            - button "第二天 · 2026年4月13日 2 个行程点 浅草与东京站" [ref=e325] [cursor=pointer]:
+              - generic [ref=e328]:
+                - generic [ref=e329]:
+                  - heading "第二天 · 2026年4月13日" [level=4] [ref=e330]
+                  - generic [ref=e331]: 2 个行程点
+                - paragraph [ref=e332]: 浅草与东京站
+        - generic [ref=e333]:
+          - img [ref=e335]
+          - generic [ref=e337]:
+            - heading "旅行备注" [level=3] [ref=e338]
+            - paragraph [ref=e339]: 示例数据只保存在本机 IndexedDB，可用于后续地图和时间轴测试。
+        - group [ref=e340]:
+          - generic "备份与恢复" [ref=e341] [cursor=pointer]:
+            - img [ref=e342]
+            - paragraph [ref=e345]: 备份与恢复
+  - navigation [ref=e58]:
+    - button "首页" [ref=e59]:
+      - img [ref=e60]
+      - generic [ref=e63]: 首页
+    - button "行程" [ref=e64]:
+      - img [ref=e65]
+      - generic [ref=e68]: 行程
+    - button "搜索" [ref=e69]:
+      - img [ref=e70]
+      - generic [ref=e73]: 搜索
+    - button "设置" [ref=e74]:
+      - img [ref=e75]
+      - generic [ref=e78]: 设置

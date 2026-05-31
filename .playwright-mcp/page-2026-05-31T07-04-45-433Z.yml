@@ -1,0 +1,211 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - main [ref=e1655]:
+        - generic [ref=e1659]:
+          - generic [ref=e1662]:
+            - generic:
+              - region "Map" [ref=e1663]
+              - button "选择 Hotel Metropolitan Tokyo 入住" [ref=e1664]:
+                - generic [ref=e1665]: 🏨
+              - button "选择 明治神宫散步" [ref=e1666]:
+                - generic [ref=e1667]: ⛩️
+              - button "选择 Shibuya Sky 夜景" [ref=e1668]:
+                - generic [ref=e1669]: "3"
+            - group [ref=e1670]:
+              - generic "Toggle attribution" [ref=e1671] [cursor=pointer]
+              - generic [ref=e1672]:
+                - link "OpenFreeMap" [ref=e1673] [cursor=pointer]:
+                  - /url: https://openfreemap.org
+                - link "© OpenMapTiles" [ref=e1674] [cursor=pointer]:
+                  - /url: https://www.openmaptiles.org/
+                - text: Data from
+                - link "OpenStreetMap" [ref=e1675] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+          - button "打开路线设置" [ref=e1676]:
+            - generic [ref=e1678]: 直线连接
+            - img [ref=e1679]
+          - generic:
+            - button "回到当天行程范围" [ref=e1681]:
+              - img [ref=e1682]
+            - button "显示当前位置" [ref=e1684]:
+              - img [ref=e1685]
+          - generic [ref=e1687]:
+            - button "拖动行程抽屉" [ref=e1688]
+            - generic [ref=e1690]:
+              - generic [ref=e1691]:
+                - generic [ref=e1692]:
+                  - paragraph [ref=e1693]: 2026年4月12日
+                  - heading "抵达与涩谷" [level=2] [ref=e1694]
+                  - paragraph [ref=e1695]: 3 个行程点 · 3 个坐标 · 查看顺序
+                - button "日程" [ref=e1696]:
+                  - img [ref=e1697]
+                  - generic [ref=e1699]: 日程
+              - button "路线 查看顺序" [ref=e1701]:
+                - generic [ref=e1702]: 路线
+                - generic [ref=e1703]: 查看顺序
+                - img [ref=e1704]
+      - generic [ref=e1707]:
+        - img [ref=e1709]
+        - generic [ref=e1712]:
+          - generic [ref=e1713]:
+            - heading "Hotel Metropolitan Tokyo 入住" [level=3] [ref=e1714]
+            - generic [ref=e1717]: 进行中
+          - paragraph [ref=e1718]:
+            - generic [ref=e1719]: 🕐
+            - text: 15:00
+        - button [ref=e1720]:
+          - img [ref=e1721]
+      - generic [ref=e1724]:
+        - generic [ref=e1726]:
+          - button "Day 1 4月12日 周日" [ref=e1727]:
+            - generic [ref=e1728]: Day 1
+            - generic [ref=e1729]: 4月12日 周日
+          - button "Day 2 4月13日 周一" [ref=e1730]:
+            - generic [ref=e1731]: Day 2
+            - generic [ref=e1732]: 4月13日 周一
+        - generic [ref=e1733]:
+          - generic [ref=e1734]:
+            - generic [ref=e1735]:
+              - img [ref=e1737]
+              - generic [ref=e1740]:
+                - paragraph [ref=e1741]: 当日简报
+                - heading "本地检查" [level=3] [ref=e1742]
+            - generic [ref=e1743]: 注意
+          - generic [ref=e1744]:
+            - generic [ref=e1745]: 3 个 · 行程点
+            - generic [ref=e1746]: 0 项 · 缺少坐标
+            - generic [ref=e1747]: 2 项待补 · 交通耗时
+          - paragraph [ref=e1748]: 根据已填写内容，这一天有 2 项本地提醒。
+          - generic [ref=e1750]:
+            - paragraph [ref=e1751]: 2 项
+            - paragraph [ref=e1752]: 交通耗时待补
+          - generic [ref=e1753]:
+            - generic [ref=e1754]:
+              - generic [ref=e1755]:
+                - heading "缺少交通耗时" [level=4] [ref=e1756]
+                - generic [ref=e1757]: 注意
+              - paragraph [ref=e1758]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+            - generic [ref=e1759]:
+              - generic [ref=e1760]:
+                - heading "缺少交通耗时" [level=4] [ref=e1761]
+                - generic [ref=e1762]: 注意
+              - paragraph [ref=e1763]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+          - generic [ref=e1764]:
+            - paragraph [ref=e1765]: 准备提醒
+            - paragraph [ref=e1767]: 根据已填写内容，这一天还有 2 段上一站交通耗时待补。
+          - generic [ref=e1768]:
+            - paragraph [ref=e1769]: 仅基于本地行程信息，不读取票据文件、完整备注或坐标明细。
+            - paragraph [ref=e1770]: 后续可接入天气、开放时间和路线信息；当前仅根据已填写内容提示。
+        - generic [ref=e1771]:
+          - generic [ref=e1772]:
+            - generic [ref=e1773]:
+              - heading "当天日程" [level=3] [ref=e1774]
+              - paragraph [ref=e1775]: 3 个行程点
+            - generic [ref=e1776]:
+              - button "地图" [ref=e1777]:
+                - generic [ref=e1778]: 地图
+              - button "新增" [ref=e1779]:
+                - img [ref=e1780]
+                - generic [ref=e1781]: 新增
+          - generic [ref=e1783]:
+            - generic [ref=e1785]:
+              - generic [ref=e1787]: "1"
+              - generic [ref=e1789]:
+                - button "15:00 · 火车 Hotel Metropolitan Tokyo 入住 Hotel Metropolitan Tokyo" [ref=e1790]:
+                  - paragraph [ref=e1791]:
+                    - img [ref=e1792]
+                    - text: 15:00 · 火车
+                  - heading "Hotel Metropolitan Tokyo 入住" [level=3] [ref=e1795]
+                  - paragraph [ref=e1796]:
+                    - img [ref=e1797]
+                    - generic [ref=e1800]: Hotel Metropolitan Tokyo
+                - generic [ref=e1801]:
+                  - generic [ref=e1802]:
+                    - img [ref=e1803]
+                    - text: "0"
+                  - generic [ref=e1805]:
+                    - button "编辑" [ref=e1806]:
+                      - generic [ref=e1807]: 编辑
+                    - button "删除" [ref=e1808]:
+                      - img [ref=e1809]
+                      - generic [ref=e1812]: 删除
+            - generic [ref=e1814]:
+              - generic [ref=e1816]: "2"
+              - generic [ref=e1818]:
+                - button "16:30 · 公共交通 明治神宫散步 Meiji Shrine" [ref=e1819]:
+                  - paragraph [ref=e1820]:
+                    - img [ref=e1821]
+                    - text: 16:30 · 公共交通
+                  - heading "明治神宫散步" [level=3] [ref=e1824]
+                  - paragraph [ref=e1825]:
+                    - img [ref=e1826]
+                    - generic [ref=e1829]: Meiji Shrine
+                - generic [ref=e1830]:
+                  - link "Apple 路线" [ref=e1831] [cursor=pointer]:
+                    - /url: https://maps.apple.com/?saddr=35.72918,139.71092&daddr=35.6764,139.69933
+                    - img [ref=e1832]
+                    - text: Apple 路线
+                  - link "Google 路线" [ref=e1834] [cursor=pointer]:
+                    - /url: https://www.google.com/maps/dir/?api=1&origin=35.72918,139.71092&destination=35.6764,139.69933
+                    - img [ref=e1835]
+                    - text: Google 路线
+                - generic [ref=e1839]:
+                  - generic [ref=e1840]:
+                    - img [ref=e1841]
+                    - text: "0"
+                  - generic [ref=e1843]:
+                    - button "编辑" [ref=e1844]:
+                      - generic [ref=e1845]: 编辑
+                    - button "删除" [ref=e1846]:
+                      - img [ref=e1847]
+                      - generic [ref=e1850]: 删除
+            - generic [ref=e1852]:
+              - generic [ref=e1854]: "3"
+              - generic [ref=e1855]:
+                - button "18:30 · 步行 Shibuya Sky 夜景 Shibuya Sky" [ref=e1856]:
+                  - paragraph [ref=e1857]:
+                    - img [ref=e1858]
+                    - text: 18:30 · 步行
+                  - heading "Shibuya Sky 夜景" [level=3] [ref=e1861]
+                  - paragraph [ref=e1862]:
+                    - img [ref=e1863]
+                    - generic [ref=e1866]: Shibuya Sky
+                - generic [ref=e1867]:
+                  - link "Apple 路线" [ref=e1868] [cursor=pointer]:
+                    - /url: https://maps.apple.com/?saddr=35.6764,139.69933&daddr=35.65858,139.70204
+                    - img [ref=e1869]
+                    - text: Apple 路线
+                  - link "Google 路线" [ref=e1871] [cursor=pointer]:
+                    - /url: https://www.google.com/maps/dir/?api=1&origin=35.6764,139.69933&destination=35.65858,139.70204
+                    - img [ref=e1872]
+                    - text: Google 路线
+                - generic [ref=e1876]:
+                  - generic [ref=e1877]:
+                    - img [ref=e1878]
+                    - text: "0"
+                  - generic [ref=e1880]:
+                    - button "编辑" [ref=e1881]:
+                      - generic [ref=e1882]: 编辑
+                    - button "删除" [ref=e1883]:
+                      - img [ref=e1884]
+                      - generic [ref=e1887]: 删除
+  - navigation [ref=e58]:
+    - button "首页" [ref=e59]:
+      - img [ref=e60]
+      - generic [ref=e63]: 首页
+    - button "行程" [ref=e64]:
+      - img [ref=e65]
+      - generic [ref=e68]: 行程
+    - button "搜索" [ref=e69]:
+      - img [ref=e70]
+      - generic [ref=e73]: 搜索
+    - button "设置" [ref=e74]:
+      - img [ref=e75]
+      - generic [ref=e78]: 设置

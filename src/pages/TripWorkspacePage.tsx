@@ -14,8 +14,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { ensureDaysForTrip, formatDate, formatDateKey, formatDateRange } from '../lib/dates'
-import { formatChineseDayOrdinal } from '../lib/dayOrdinal'
+import { ensureDaysForTrip, formatDateKey, formatDateRange } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
@@ -161,12 +160,6 @@ export function TripWorkspacePage() {
     }
   }, [days, itemsByDay, loadedTripContextKey, routePreparationVersion, trip, tripContextKey])
 
-  const itemsByDayCount = useMemo(() => {
-    return allItems.reduce<Record<string, number>>((acc, item) => {
-      acc[item.dayId] = (acc[item.dayId] ?? 0) + 1
-      return acc
-    }, {})
-  }, [allItems])
 
   const tripBrief = useMemo(() => {
     if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
@@ -351,20 +344,20 @@ export function TripWorkspacePage() {
             <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
 
             {/* Schedule Section - timeline with vertical line */}
+            {selectedDay ? (
             <section className="flex flex-col gap-stack-gap">
               <h3 className="font-headline-md text-headline-md text-on-surface">今天的安排</h3>
               <div className="bg-surface-container rounded-xl border-[0.5px] border-outline-variant/30 overflow-hidden flex flex-col relative">
                 {/* Timeline vertical line */}
                 <div className="absolute left-[39px] top-6 bottom-6 w-[1px] bg-outline-variant/40 z-0" />
-                {days.map((day, index) => {
-                  const dayItemCount = itemsByDayCount[day.id] ?? itemsByDay[day.id]?.length ?? 0
-                  const isLast = index === days.length - 1
+                {(itemsByDay[selectedDay.id] || []).map((item, index) => {
+                  const isLast = index === (itemsByDay[selectedDay.id]?.length ?? 0) - 1
                   return (
                     <div
                       className="flex items-stretch p-4 relative z-10 group hover:bg-surface-container-high/50 transition-colors cursor-pointer"
-                      key={day.id}
-                      onClick={() => openDay(day, 'schedule')}
-                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openDay(day, 'schedule') }}
+                      key={item.id}
+                      onClick={() => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id })}
+                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id }) }}
                       role="button"
                       tabIndex={0}
                     >
@@ -378,16 +371,15 @@ export function TripWorkspacePage() {
                       <div className={`flex-1 ${isLast ? '' : 'pb-4 border-b border-outline-variant/20'}`}>
                         <div className="flex justify-between items-start mb-1">
                           <h4 className="font-body-lg text-body-lg text-on-surface font-medium">
-                            {formatChineseDayOrdinal(index + 1)} · {formatDate(day.date)}
+                            {item.title}
                           </h4>
                           {index === 0 ? (
                             <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">进行中</span>
-                          ) : (
-                            <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-outline-variant/50">{dayItemCount} 个行程点</span>
-                          )}
+                          ) : null}
                         </div>
-                        <p className="font-body-md text-body-md text-on-surface-variant">
-                          {day.title}
+                        <p className="font-body-md text-body-md text-on-surface-variant flex items-center gap-1">
+                          {item.startTime || '10:00'}{item.endTime ? ` - ${item.endTime}` : ''}
+                          {item.locationName ? ` · ${item.locationName}` : ''}
                         </p>
                       </div>
                     </div>
@@ -395,6 +387,7 @@ export function TripWorkspacePage() {
                 })}
               </div>
             </section>
+            ) : null}
 
             {trip.notes ? (
               <Card className="flex items-start gap-3" variant="grouped">

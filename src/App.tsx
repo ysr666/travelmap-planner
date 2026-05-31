@@ -32,6 +32,15 @@ const ItemFormPage = lazy(() =>
 const AiDraftPage = lazy(() =>
   import('./pages/AiDraftPage').then((module) => ({ default: module.AiDraftPage })),
 )
+const SettingsPrivacyPage = lazy(() =>
+  import('./pages/SettingsPrivacyPage').then((module) => ({ default: module.SettingsPrivacyPage })),
+)
+const SettingsMapsPage = lazy(() =>
+  import('./pages/SettingsMapsPage').then((module) => ({ default: module.SettingsMapsPage })),
+)
+const SettingsRoutePage = lazy(() =>
+  import('./pages/SettingsRoutePage').then((module) => ({ default: module.SettingsRoutePage })),
+)
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
@@ -72,6 +81,9 @@ function App() {
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
+            {activeRoute === 'settings/privacy' ? <SettingsPrivacyPage /> : null}
+            {activeRoute === 'settings/maps' ? <SettingsMapsPage /> : null}
+            {activeRoute === 'settings/route' ? <SettingsRoutePage /> : null}
             {activeRoute === 'ai-draft' ? <AiDraftPage /> : null}
           </Suspense>
         </ErrorBoundary>

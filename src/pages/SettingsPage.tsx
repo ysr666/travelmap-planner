@@ -13,6 +13,7 @@ import {
 import { useAppearance } from '../lib/appearanceContext'
 import type { AppearanceMode } from '../lib/appearance'
 import { getCurrentSession, signOut } from '../lib/cloudBackup'
+import { navigateTo } from '../lib/routes'
 
 // ── 主设置页面：完全对齐 design-reference/_2/code.html ──
 
@@ -75,7 +76,7 @@ export function SettingsPage() {
           icon={<Shield className="size-4" />}
           iconBg="bg-error/20 text-error"
           title="隐私设置"
-          onClick={() => {}}
+          onClick={() => navigateTo('settings/privacy')}
           separator={false}
         />
       </SettingsSection>
@@ -86,14 +87,14 @@ export function SettingsPage() {
           icon={<Map className="size-4" />}
           iconBg="bg-primary/20 text-primary"
           title="离线地图下载"
-          onClick={() => {}}
+          onClick={() => navigateTo('settings/maps')}
         />
         <SettingsRow
           icon={<Car className="size-4" />}
           iconBg="bg-secondary/20 text-secondary"
           title="路线偏好"
           detail="避开收费站"
-          onClick={() => {}}
+          onClick={() => navigateTo('settings/route')}
           separator={false}
         />
       </SettingsSection>

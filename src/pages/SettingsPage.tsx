@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   ChevronRight,
   Cloud,
@@ -8,13 +8,32 @@ import {
   Map,
   Car,
   Moon,
+  LogOut,
 } from 'lucide-react'
 import { useAppearance } from '../lib/appearanceContext'
+import type { AppearanceMode } from '../lib/appearance'
+import { getCurrentSession, signOut } from '../lib/cloudBackup'
 
 // ── 主设置页面：完全对齐 design-reference/_2/code.html ──
 
 export function SettingsPage() {
-  const { mode: appearanceMode } = useAppearance()
+  const { mode: appearanceMode, setMode: setAppearanceMode } = useAppearance()
+  const [isLoggedIntoCloud, setIsLoggedIntoCloud] = useState(false)
+  const [aiRecommendations, setAiRecommendations] = useState(false)
+
+  useEffect(() => {
+    void getCurrentSession().then((session) => setIsLoggedIntoCloud(!!session))
+  }, [])
+
+  async function handleLogout() {
+    await signOut()
+    setIsLoggedIntoCloud(false)
+  }
+
+  function handleToggleAppearance() {
+    const next: AppearanceMode = appearanceMode === 'dark' ? 'light' : appearanceMode === 'light' ? 'system' : 'dark'
+    setAppearanceMode(next)
+  }
 
   return (
     <main className="pt-24 px-4 max-w-3xl mx-auto space-y-section-gap pb-32">
@@ -29,12 +48,14 @@ export function SettingsPage() {
           icon={<Cloud className="size-4" />}
           iconBg="bg-primary/20 text-primary"
           title="同步行程数据"
+          detail={isLoggedIntoCloud ? '已连接' : '未连接'}
           onClick={() => {}}
         />
         <SettingsRow
           icon={<User className="size-4" />}
           iconBg="bg-secondary/20 text-secondary"
           title="管理账户"
+          detail={isLoggedIntoCloud ? '已登录' : '未登录'}
           onClick={() => {}}
           separator={false}
         />
@@ -47,8 +68,8 @@ export function SettingsPage() {
           iconBg="bg-tertiary/20 text-tertiary"
           title="个性化推荐"
           detail="允许 AI 分析您的偏好"
-          checked={false}
-          onChange={() => {}}
+          checked={aiRecommendations}
+          onChange={setAiRecommendations}
         />
         <SettingsRow
           icon={<Shield className="size-4" />}
@@ -84,19 +105,22 @@ export function SettingsPage() {
           iconBg="bg-surface-variant text-on-surface"
           title="深色模式"
           detail={appearanceMode === 'dark' ? '开启' : appearanceMode === 'light' ? '关闭' : '跟随系统'}
-          onClick={() => {}}
+          onClick={handleToggleAppearance}
           separator={false}
         />
       </SettingsSection>
 
       {/* 退出登录 */}
-      <button
-        className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98]"
-        onClick={() => {}}
-        type="button"
-      >
-        退出登录
-      </button>
+      {isLoggedIntoCloud ? (
+        <button
+          className="w-full bg-surface-container border-[0.5px] border-outline-variant/30 rounded-xl p-4 text-center text-error font-body-lg text-body-lg hover:bg-error/10 transition-colors active:scale-[0.98] flex items-center justify-center gap-2"
+          onClick={handleLogout}
+          type="button"
+        >
+          <LogOut className="size-5" />
+          退出登录
+        </button>
+      ) : null}
     </main>
   )
 }

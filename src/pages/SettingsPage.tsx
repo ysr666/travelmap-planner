@@ -146,12 +146,12 @@ function SettingsRow({
               {icon}
             </div>
           ) : null}
-          <div className="flex flex-col">
-            <span className="font-body-lg text-body-lg text-on-surface">{title}</span>
-            {detail ? <span className="font-label-sm text-label-sm text-on-surface-variant">{detail}</span> : null}
-          </div>
+          <span className="font-body-lg text-body-lg text-on-surface">{title}</span>
         </div>
-        <ChevronRight className="size-5 text-on-surface-variant" />
+        <div className="flex items-center gap-2">
+          {detail ? <span className="font-label-sm text-label-sm text-on-surface-variant">{detail}</span> : null}
+          <ChevronRight className="size-5 text-on-surface-variant" />
+        </div>
       </div>
       {separator ? <div className="h-[1px] bg-outline-variant/30 ml-[60px]" /> : null}
     </>

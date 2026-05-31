@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Navigation as NavigationIcon } from 'lucide-react'
+import { ArrowLeft, CalendarDays, MapPin, MoreHorizontal, Navigation as NavigationIcon } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { DaySelector } from '../components/trip/DaySelector'
@@ -283,8 +283,29 @@ export function DayViewPage() {
   const isMapView = view === 'map'
   const firstItem = items[0]
 
+  const dayIndex = days.findIndex(d => d.id === selectedDay.id) + 1
+  const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
+
   return (
-    <>{/* ── Main Content Area ── 参考: 137 行 (TopAppBar 由 AppShell 管理) */}
+    <>{/* ── TopAppBar ── 参考 12_2/code.html: 127-135 行 */}
+      <header className="bg-surface/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30 flex items-center justify-between px-4 h-14">
+        <button
+          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity p-2 -ml-2 rounded-full flex items-center justify-center"
+          onClick={() => navigateTo('trip', { tripId: trip.id })}
+          type="button"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <h1 className="font-headline-sm text-headline-sm text-primary">第 {dayIndex} 天 · {dayDateStr}</h1>
+        <button
+          className="text-primary hover:bg-surface-variant/50 active:opacity-70 transition-opacity p-2 -mr-2 rounded-full flex items-center justify-center"
+          type="button"
+        >
+          <MoreHorizontal className="size-5" />
+        </button>
+      </header>
+
+      {/* ── Main Content Area ── */}
       <main className="flex-grow relative h-screen w-full">
 
         {/* ── Map Canvas ── 参考: 139-174 行 */}
@@ -376,7 +397,7 @@ export function DayViewPage() {
 }
 
 function normalizeDayView(value: string | null): DayWorkspaceView {
-  return value === 'map' ? 'map' : 'schedule'
+  return value === 'schedule' ? 'schedule' : 'map'
 }
 
 function formatShortWorkspaceDate(date: string) {

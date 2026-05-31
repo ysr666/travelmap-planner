@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, CalendarDays, Clock3, MoreHorizontal, Navigation as NavigationIcon } from 'lucide-react'
+import { ArrowLeft, CalendarDays, MoreHorizontal } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { listItemsByDay } from '../db'
 import { Button } from '../components/ui/Button'
@@ -231,7 +231,6 @@ export function DayViewPage() {
     )
   }
 
-  const firstItem = items[0]
 
   const dayIndex = days.findIndex(d => d.id === selectedDay.id) + 1
   const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
@@ -289,38 +288,8 @@ export function DayViewPage() {
         </div>
 
         {/* ── Floating Sheet / Itinerary List ── 参考: 175 行 */}
+        {/* Marker card is handled by DayMapView component */}
       </main>
-
-      {/* ── Floating Info Card ── 参考: 178-199 行 */}
-      {firstItem ? (
-        <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30">
-          <div className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <Building2 className="size-5 text-primary" />
-            </div>
-            <div className="flex-grow min-w-0">
-              <div className="flex justify-between items-start">
-                <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{firstItem.title}</h3>
-                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  <span className="text-[10px] font-bold">进行中</span>
-                </div>
-              </div>
-              <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
-                <Clock3 className="size-3.5" />
-                {firstItem.startTime || '10:00'}{firstItem.endTime ? ` - ${firstItem.endTime}` : ''}
-              </p>
-            </div>
-            <button
-              className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-              onClick={() => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: firstItem.id, view: 'map' })}
-              type="button"
-            >
-              <NavigationIcon className="size-5" />
-            </button>
-          </div>
-        </div>
-      ) : null}
 
     </>
   )
@@ -358,8 +327,7 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-on-surface dark:text-on-surface">{item.title}</span>
                   <span className="flex items-center gap-1 truncate text-xs tm-muted">
-                    <Building2 className="size-3.5 shrink-0" />
-                    {item.locationName || item.address || '地点未填写'}
+                    📍 {item.locationName || item.address || '地点未填写'}
                   </span>
                 </span>
               </div>

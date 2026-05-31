@@ -267,7 +267,7 @@ export function TripWorkspacePage() {
     <>
       {/* Trip title in main content area - matches reference 12_1/code.html */}
       <section>
-        <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight flex items-center gap-2">
+        <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight flex items-center gap-2">
           <CalendarDays className="size-6 text-on-surface-variant" />
           {trip.title}</h2>
         <p className="font-body-md text-body-md text-on-surface-variant mt-2">

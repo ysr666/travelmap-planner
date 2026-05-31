@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, Building2, ChevronDown, Clock3, Crosshair, ExternalLink, Locate, LocateFixed, Navigation, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, Building2, ChevronDown, Clock3, Crosshair, ExternalLink, Locate, LocateFixed, Navigation } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -697,7 +697,6 @@ export function DayMapView({
             item={markerCardItem}
             onClose={() => setMarkerCardSelection(null)}
             onOpenItem={onOpenItem}
-            showBelowHeader={showFloatingHeader}
           />
         ) : null}
       </div>
@@ -709,7 +708,6 @@ export function DayMapView({
           displayMode={routeDisplayMode}
           onClick={handleOpenRouteControls}
           containerRef={routeChipRef}
-          showBelowHeader={showFloatingHeader}
           state={routeUiState}
           warnings={routeWarnings}
         />
@@ -721,7 +719,6 @@ export function DayMapView({
           locationStatus={userLocationStatus}
           onRecenter={handleRecenterMap}
           onRequestUserLocation={handleRequestUserLocation}
-          showBelowHeader={showFloatingHeader}
         />
       ) : null}
 
@@ -729,7 +726,6 @@ export function DayMapView({
         <MapControlNotice
           containerRef={mapControlNoticeRef}
           message={mapControlNoticeMessage}
-          showBelowHeader={showFloatingHeader}
         />
       ) : null}
 
@@ -785,24 +781,21 @@ export function DayMapView({
 function MarkerPreviewCard({
   containerRef,
   item,
-  onClose,
   onOpenItem,
-  showBelowHeader,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
   item: ItineraryItem
   onClose: () => void
   onOpenItem: (item: ItineraryItem) => void
-  showBelowHeader: boolean
 }) {
 
   return (
     <div
-      className={`pointer-events-none absolute left-4 right-4 z-[60] ${showBelowHeader ? 'bottom-[calc(10.75rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(10.25rem+env(safe-area-inset-bottom))]'}`}
+      className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30"
       ref={containerRef}
     >
       <div
-        className="relative mx-auto max-w-sm bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4"
+        className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4"
         data-testid="map-marker-card"
       >
         <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
@@ -828,15 +821,6 @@ function MarkerPreviewCard({
           type="button"
         >
           <Navigation className="size-5" />
-        </button>
-        <button
-          aria-label="关闭地点卡片"
-          className="pointer-events-auto absolute right-2.5 top-2.5 flex size-8 items-center justify-center rounded-full bg-surface-container-low text-outline ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-focus dark:bg-surface-container-highest/70 dark:text-outline dark:ring-outline-variant/30"
-          data-testid="map-marker-card-close"
-          onClick={onClose}
-          type="button"
-        >
-          <X className="size-4" />
         </button>
       </div>
     </div>
@@ -1209,7 +1193,6 @@ function RouteStatusChip({
   displayMode,
   warnings,
   activeRoadMode,
-  showBelowHeader,
   onClick,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
@@ -1218,13 +1201,12 @@ function RouteStatusChip({
   displayMode: RouteDisplayMode
   warnings: string[]
   activeRoadMode: RoadTransportMode | null
-  showBelowHeader: boolean
   onClick: () => void
 }) {
   const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
 
   return (
-    <div className={`pointer-events-none absolute left-8 z-40 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
+    <div ref={containerRef}>
       <button
         aria-label="打开路线设置"
         className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-4rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
@@ -1243,20 +1225,18 @@ function RouteStatusChip({
 function MapFloatingControls({
   containerRef,
   locationStatus,
-  showBelowHeader,
   onRecenter,
   onRequestUserLocation,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
   locationStatus: UserLocationStatus
-  showBelowHeader: boolean
   onRecenter: () => void
   onRequestUserLocation: () => void
 }) {
   const locationLoading = locationStatus === 'loading'
 
   return (
-    <div className={`pointer-events-none absolute right-4 z-40 flex flex-col gap-2 ${showBelowHeader ? 'top-24' : 'top-4'}`} ref={containerRef}>
+    <div ref={containerRef} className="absolute top-[calc(56px+16px)] right-4 flex flex-col gap-3 z-20">
       <button
         aria-label="回到当天行程范围"
         className="pointer-events-auto flex size-11 items-center justify-center rounded-full text-on-surface backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant"
@@ -1285,14 +1265,11 @@ function MapFloatingControls({
 function MapControlNotice({
   containerRef,
   message,
-  showBelowHeader,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
   message: string
-  showBelowHeader: boolean
 }) {
   return (
-    <div className={`pointer-events-none absolute left-4 right-[4.75rem] z-30 ${showBelowHeader ? 'top-[9.25rem]' : 'top-[4.25rem]'}`}>
       <div
         className="ml-auto flex min-h-11 w-fit max-w-full items-center rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-on-surface-variant backdrop-blur-xl tm-surface dark:text-outline-variant"
         data-testid="map-location-notice"
@@ -1300,7 +1277,6 @@ function MapControlNotice({
       >
         <span className="min-w-0 [overflow-wrap:anywhere]">{message}</span>
       </div>
-    </div>
   )
 }
 

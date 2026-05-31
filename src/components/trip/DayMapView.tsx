@@ -795,7 +795,6 @@ function MarkerPreviewCard({
   onOpenItem: (item: ItineraryItem) => void
   showBelowHeader: boolean
 }) {
-  const transportDescription = describePreviousTransport(item)
   const location = item.locationName || item.address || '地点未填写'
 
   return (
@@ -804,35 +803,32 @@ function MarkerPreviewCard({
       ref={containerRef}
     >
       <div
-        className="relative mx-auto max-w-sm rounded-2xl p-2 backdrop-blur-xl tm-surface tm-pass-through"
+        className="relative mx-auto max-w-sm bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4"
         data-testid="map-marker-card"
       >
-        <div
-          aria-label={`打开 ${item.title} 详情`}
-          className="pointer-events-none flex min-h-20 w-full items-center gap-3 rounded-xl px-2.5 py-2 pr-10 text-left"
-        >
-          <span className="pointer-events-none flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50/80 text-sky-700 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
-            <MapPin className="size-5" />
-          </span>
-          <span className="pointer-events-none min-w-0 flex-1">
-            <span className="pointer-events-none text-xs font-semibold text-sky-600 dark:text-sky-300">{describeItemTime(item)}</span>
-            <span className="pointer-events-none mt-0.5 block truncate text-sm font-semibold text-on-surface dark:text-on-surface">{item.title}</span>
-            <span className="pointer-events-none mt-0.5 block truncate text-xs tm-muted">{location}</span>
-            {transportDescription ? (
-              <span className="pointer-events-none mt-1 inline-flex max-w-full items-center tm-chip text-[11px]">
-                <span className="pointer-events-none truncate">{transportDescription}</span>
-              </span>
-            ) : null}
-          </span>
-          <button
-            className="pointer-events-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-sky-600 dark:text-sky-300 transition active:scale-[0.98] tm-focus dark:text-sky-300"
-            data-testid="map-marker-card-open"
-            onClick={() => onOpenItem(item)}
-            type="button"
-          >
-            详情
-          </button>
+        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+          <MapPin className="size-5 text-primary" />
         </div>
+        <div className="flex-grow min-w-0 pointer-events-none">
+          <div className="flex justify-between items-start">
+            <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{item.title}</h3>
+            <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="text-[10px] font-bold">进行中</span>
+            </div>
+          </div>
+          <p className="text-on-surface-variant text-[13px] mt-0.5">
+            {describeItemTime(item)}{location ? ` · ${location}` : ''}
+          </p>
+        </div>
+        <button
+          className="pointer-events-auto w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform shrink-0"
+          data-testid="map-marker-card-open"
+          onClick={() => onOpenItem(item)}
+          type="button"
+        >
+          <Navigation className="size-5" />
+        </button>
         <button
           aria-label="关闭地点卡片"
           className="pointer-events-auto absolute right-2.5 top-2.5 flex size-8 items-center justify-center rounded-full bg-surface-container-low text-outline ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-focus dark:bg-surface-container-highest/70 dark:text-outline dark:ring-outline-variant/30"

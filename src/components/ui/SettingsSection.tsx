@@ -1,30 +1,18 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 type SettingsSectionProps = {
   title: string
   children: ReactNode
-  defaultOpen?: boolean
 }
 
-export function SettingsSection({ title, children, defaultOpen = false }: SettingsSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-
+export function SettingsSection({ title, children }: SettingsSectionProps) {
   return (
     <section>
-      <button
-        className="w-full flex items-center justify-between px-4 py-3 bg-surface-container rounded-xl border-[0.5px] border-outline-variant/30 transition-colors hover:bg-surface-container-high/50 active:scale-[0.99]"
-        onClick={() => setIsOpen(!isOpen)}
-        type="button"
-      >
-        <h3 className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">{title}</h3>
-        <ChevronRight className={`size-4 text-on-surface-variant transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
-      </button>
-      {isOpen ? (
-        <div className="mt-2 bg-surface-container rounded-xl overflow-hidden border-[0.5px] border-outline-variant/30 flex flex-col">
-          {children}
-        </div>
-      ) : null}
+      <h3 className="font-label-sm text-label-sm text-on-surface-variant mb-stack-gap uppercase tracking-wider px-4">{title}</h3>
+      <div className="bg-surface-container rounded-xl overflow-hidden border-[0.5px] border-outline-variant/30 flex flex-col">
+        {children}
+      </div>
     </section>
   )
 }

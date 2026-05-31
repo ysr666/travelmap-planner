@@ -267,7 +267,9 @@ export function TripWorkspacePage() {
     <>
       {/* Trip title in main content area - matches reference 12_1/code.html */}
       <section>
-        <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">{trip.title}</h2>
+        <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight flex items-center gap-2">
+          <CalendarDays className="size-6 text-on-surface-variant" />
+          {trip.title}</h2>
         <p className="font-body-md text-body-md text-on-surface-variant mt-2">
           {formatDateRange(trip.startDate, trip.endDate)}
         </p>
@@ -310,7 +312,7 @@ export function TripWorkspacePage() {
                   </span>
                 ) : null}
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">即将开始您的精彩旅程</p>
+              <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay?.title || "选择一天开始探索"}</p>
               {selectedDay ? (
                 <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay.title}</p>
               ) : null}
@@ -331,7 +333,7 @@ export function TripWorkspacePage() {
                   onClick={() => selectedDay && openDay(selectedDay, 'schedule')}
                   type="button"
                 >
-                  <Route className="size-4" />
+                  <CalendarDays className="size-4" />
                   进入日视图
                 </button>
                 <button

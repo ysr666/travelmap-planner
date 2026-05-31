@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CheckCircle2, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
@@ -261,7 +261,8 @@ export function TripWorkspacePage() {
       {/* Trip title in main content area - matches reference 12_1/code.html */}
       <section>
         <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{trip.title}</h2>
-        <p className="font-body-md text-body-md text-on-surface-variant mt-2">
+        <p className="font-body-md text-body-md text-on-surface-variant mt-2 flex items-center gap-2">
+          <CalendarDays className="size-4" />
           {formatDateRange(trip.startDate, trip.endDate)}
         </p>
       </section>
@@ -367,11 +368,13 @@ export function TripWorkspacePage() {
                           </h4>
                           {index === 0 ? (
                             <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">进行中</span>
-                          ) : null}
+                          ) : (
+                            <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-outline-variant/50">已预订</span>
+                          )}
                         </div>
                         <p className="font-body-md text-body-md text-on-surface-variant flex items-center gap-1">
-                          {item.startTime || '10:00'}{item.endTime ? ` - ${item.endTime}` : ''}
-                          {item.locationName ? ` · ${item.locationName}` : ''}
+                          <Clock3 className="size-3.5" />
+                          {item.startTime || '10:00'}{item.endTime ? ` – ${item.endTime}` : ''}
                         </p>
                       </div>
                     </div>

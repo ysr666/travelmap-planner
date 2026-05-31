@@ -14,46 +14,61 @@ import { BottomTabBar } from './BottomTabBar'
 type AppShellProps = {
   activeRoute: RouteId
   children: ReactNode
+  title: string
 }
 
 
-export function AppShell({ activeRoute, children }: AppShellProps) {
-  const isHome = activeRoute === 'home'
-  const isTrip = activeRoute === 'trip' || activeRoute === 'day' || activeRoute === 'item'
+export function AppShell({ activeRoute, children, title }: AppShellProps) {
+  const ownsCanvas = activeRoute === 'home'
+    || activeRoute === 'settings'
+    || activeRoute === 'settings/privacy'
+    || activeRoute === 'settings/maps'
+    || activeRoute === 'settings/route'
+    || activeRoute === 'search'
+  const fullScreen = activeRoute === 'day' || activeRoute === 'item'
     || activeRoute === 'trip/new' || activeRoute === 'trip/edit'
     || activeRoute === 'item/new' || activeRoute === 'item/edit'
-  const showTabBar = true
+  const showTopAppBar = !fullScreen
+  const showTabBar = activeRoute === 'home'
+    || activeRoute === 'trip'
+    || activeRoute === 'day'
+    || activeRoute === 'tickets'
+    || activeRoute === 'search'
+    || activeRoute === 'settings'
+    || activeRoute === 'settings/privacy'
+    || activeRoute === 'settings/maps'
+    || activeRoute === 'settings/route'
 
   return (
-    <div className="app-viewport bg-background mx-auto flex w-full max-w-[600px] flex-col overflow-hidden">
-      {/* Fixed TopAppBar - all pages */}
-      <header className="fixed top-0 z-50 flex h-16 w-full max-w-[600px] items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl pt-[max(0rem,env(safe-area-inset-top))]">
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high/50 transition-colors active:scale-95"
-          onClick={() => navigateTo('home')}
-          type="button"
-        >
-          <Map className="size-5" />
-        </button>
-        <h1 className="font-headline-md text-headline-md font-bold text-on-surface">旅图</h1>
-        <button
-          aria-label="设置"
-          className="size-10 rounded-full overflow-hidden bg-surface-container border border-outline-variant/30 flex items-center justify-center text-on-surface-variant transition hover:text-primary active:scale-95"
-          onClick={() => navigateTo('settings')}
-          type="button"
-        >
-          <User className="size-5" />
-        </button>
-      </header>
+    <div className="app-viewport relative mx-auto flex w-full max-w-[600px] flex-col overflow-hidden bg-background">
+      {showTopAppBar ? (
+        <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center gap-3 border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl">
+          <button
+            aria-label="返回首页"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high/50 active:scale-95"
+            onClick={() => navigateTo('home')}
+            type="button"
+          >
+            <Map className="size-5" />
+          </button>
+          <h1 className="min-w-0 flex-1 truncate text-center font-headline-md text-headline-md font-bold text-on-surface">
+            {title || '旅图'}
+          </h1>
+          <button
+            aria-label="设置"
+            className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-outline-variant/30 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95"
+            onClick={() => navigateTo('settings')}
+            type="button"
+          >
+            <User className="size-5" />
+          </button>
+        </header>
+      ) : null}
 
       <main
-        className={
-          isHome || isTrip
-            ? `flex min-h-0 flex-1 flex-col px-4 pt-24 pb-32 gap-section-gap`
-            : `min-h-0 flex-1 overflow-y-auto px-4 pt-24 pb-32 app-scrollbar`
-        }
+        className={getMainClassName({ fullScreen, ownsCanvas, showTabBar, showTopAppBar })}
       >
-        <div className={isHome || isTrip ? 'page-transition h-full min-h-0 w-full' : 'page-transition'}>
+        <div className={fullScreen ? 'h-full min-h-0 w-full' : 'page-transition min-h-full w-full'}>
           {children}
         </div>
       </main>
@@ -61,6 +76,30 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
       {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
     </div>
   )
+}
+
+function getMainClassName({
+  fullScreen,
+  ownsCanvas,
+  showTabBar,
+  showTopAppBar,
+}: {
+  fullScreen: boolean
+  ownsCanvas: boolean
+  showTabBar: boolean
+  showTopAppBar: boolean
+}) {
+  if (fullScreen) {
+    return 'relative min-h-0 flex-1 overflow-hidden'
+  }
+
+  if (ownsCanvas) {
+    return 'relative min-h-0 flex-1 overflow-y-auto app-scrollbar'
+  }
+
+  const topPadding = showTopAppBar ? 'pt-24' : 'pt-4'
+  const bottomPadding = showTabBar ? 'pb-28' : 'pb-6'
+  return `relative min-h-0 flex-1 overflow-y-auto px-4 ${topPadding} ${bottomPadding} app-scrollbar`
 }
 
 type TripNavProps = {

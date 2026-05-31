@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
+import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
@@ -14,7 +15,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { ensureDaysForTrip, formatDateKey, formatDateRange } from '../lib/dates'
+import { ensureDaysForTrip, formatDate, formatDateKey, formatDateRange } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
@@ -259,12 +260,15 @@ export function TripWorkspacePage() {
   return (
     <>
       {/* Trip title in main content area - matches reference 12_1/code.html */}
-      <section>
-        <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{trip.title}</h2>
-        <p className="font-body-md text-body-md text-on-surface-variant mt-2 flex items-center gap-2">
-          <CalendarDays className="size-4" />
-          {formatDateRange(trip.startDate, trip.endDate)}
-        </p>
+      <section className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{trip.title}</h2>
+          <p className="font-body-md text-body-md text-on-surface-variant mt-2 flex items-center gap-2">
+            <CalendarDays className="size-4" />
+            {formatDateRange(trip.startDate, trip.endDate)}
+          </p>
+        </div>
+        <TripMoreMenu tripId={trip.id} />
       </section>
 
       {days.length === 0 ? (
@@ -335,6 +339,13 @@ export function TripWorkspacePage() {
                 </button>
               </div>
             </section>
+
+            <DailyItineraryList
+              days={days}
+              itemsByDay={itemsByDay}
+              onOpenDay={(day) => openDay(day, 'schedule')}
+              selectedDayId={selectedDay?.id}
+            />
 
             {/* Schedule Section - timeline with vertical line */}
             {selectedDay ? (
@@ -426,6 +437,58 @@ export function TripWorkspacePage() {
         title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
       />
     </>
+  )
+}
+
+function DailyItineraryList({
+  days,
+  itemsByDay,
+  onOpenDay,
+  selectedDayId,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, { id: string }[]>
+  onOpenDay: (day: Day) => void
+  selectedDayId?: string | null
+}) {
+  return (
+    <section className="flex flex-col gap-stack-gap">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-headline-md text-headline-md text-on-surface">每日行程</h3>
+        <span className="font-label-sm text-label-sm text-on-surface-variant">{days.length} 天</span>
+      </div>
+      <div className="overflow-hidden rounded-xl border-[0.5px] border-outline-variant/30 bg-surface-container">
+        {days.map((day, index) => {
+          const itemCount = itemsByDay[day.id]?.length ?? 0
+          const active = day.id === selectedDayId
+          return (
+            <button
+              className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] ${
+                index === days.length - 1 ? '' : 'border-b border-outline-variant/20'
+              }`}
+              key={day.id}
+              onClick={() => onOpenDay(day)}
+              type="button"
+            >
+              <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl border text-sm font-bold ${
+                active
+                  ? 'border-primary/30 bg-primary/20 text-primary'
+                  : 'border-outline-variant/30 bg-surface-variant text-on-surface-variant'
+              }`}
+              >
+                D{index + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-body-lg text-body-lg font-medium text-on-surface">{day.title}</span>
+                <span className="mt-0.5 block font-label-sm text-label-sm text-on-surface-variant">
+                  {formatDate(day.date)} · {itemCount} 个行程点
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

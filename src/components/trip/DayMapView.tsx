@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, Building2, ChevronDown, Clock3, Crosshair, ExternalLink, Locate, LocateFixed, Navigation } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, Building2, ChevronDown, Clock3, Crosshair, ExternalLink, Locate, LocateFixed, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -59,6 +59,7 @@ type DayMapViewProps = {
   dayItemsByDayId?: Record<string, ItineraryItem[]>
   embedded?: boolean
   isVisible?: boolean
+  minimalOverlay?: boolean
   prewarmEnabled?: boolean
   showFloatingHeader?: boolean
   resizeSignal?: number
@@ -96,6 +97,7 @@ export function DayMapView({
   dayItemsByDayId,
   embedded = false,
   isVisible = true,
+  minimalOverlay = false,
   prewarmEnabled = false,
   showFloatingHeader = true,
   resizeSignal,
@@ -169,19 +171,22 @@ export function DayMapView({
   }, [items, mappedItems, selectedItemId])
   const markerCardItem = useMemo(() => {
     if (!markerCardItemId) {
-      return null
+      return minimalOverlay ? (mappedItems[0] ?? items[0] ?? null) : null
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [mappedItems, markerCardItemId])
-  const routeControlsActive = sheetState !== 'collapsed' && routeControlsOpen
+  }, [items, mappedItems, markerCardItemId, minimalOverlay])
+  const routeControlsActive = !minimalOverlay && sheetState !== 'collapsed' && routeControlsOpen
   const markerCardVisible = Boolean(
-    isVisible &&
-    sheetState === 'collapsed' &&
-    markerCardItem &&
-    !routeControlsActive &&
-    !mapBaseLoading &&
-    !mapError,
+    isVisible
+    && markerCardItem
+    && (minimalOverlay || sheetState === 'collapsed')
+    && !routeControlsActive
+    && !mapBaseLoading
+    && !mapError,
   )
+  const markerCardBottomOffset = minimalOverlay
+    ? undefined
+    : getSheetSnapPoints().collapsed + MAP_OVERLAY_GAP
   const activeSegmentItem = useMemo(() => {
     if (orderedItems.length < 2) {
       return null
@@ -634,7 +639,7 @@ export function DayMapView({
     setMarkerFocusPadding((current) => (
       edgeInsetsEqual(current, nextFocusPadding) ? current : nextFocusPadding
     ))
-  }, [getCurrentMapPadding, markerCardVisible])
+  }, [getCurrentMapPadding, markerCardVisible, setMapViewportPadding, setMarkerFocusPadding])
 
   useLayoutEffect(() => {
     const resizeObserver = new ResizeObserver(updateMapOverlayPadding)
@@ -693,6 +698,7 @@ export function DayMapView({
         {/* Route controls use the middle sheet as the active surface; marker selection is preserved so the card can resume after collapsing. */}
         {markerCardVisible && markerCardItem ? (
           <MarkerPreviewCard
+            bottomOffset={markerCardBottomOffset}
             containerRef={markerCardRef}
             item={markerCardItem}
             onClose={() => setMarkerCardSelection(null)}
@@ -701,7 +707,7 @@ export function DayMapView({
         ) : null}
       </div>
 
-      {isVisible && mappedItems.length > 0 && !mapBaseLoading && !mapError ? (
+      {isVisible && !minimalOverlay && mappedItems.length > 0 && !mapBaseLoading && !mapError ? (
         <RouteStatusChip
           activeRoadMode={activeRoadMode}
           configured={routeConfigured}
@@ -713,7 +719,7 @@ export function DayMapView({
         />
       ) : null}
 
-      {isVisible && items.length > 0 && !mapBaseLoading && !mapError ? (
+      {isVisible && !minimalOverlay && items.length > 0 && !mapBaseLoading && !mapError ? (
         <MapFloatingControls
           containerRef={floatingControlsRef}
           locationStatus={userLocationStatus}
@@ -739,7 +745,7 @@ export function DayMapView({
         />
       ) : null}
 
-      {isVisible ? (
+      {isVisible && !minimalOverlay ? (
         <MapBottomSheet
           day={day}
           itemRefs={itemRefs}
@@ -779,10 +785,13 @@ export function DayMapView({
 }
 
 function MarkerPreviewCard({
+  bottomOffset,
   containerRef,
   item,
+  onClose,
   onOpenItem,
 }: {
+  bottomOffset?: number
   containerRef?: RefObject<HTMLDivElement | null>
   item: ItineraryItem
   onClose: () => void
@@ -791,8 +800,9 @@ function MarkerPreviewCard({
 
   return (
     <div
-      className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30"
+      className="absolute bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30"
       ref={containerRef}
+      style={bottomOffset ? { bottom: `${bottomOffset}px` } : undefined}
     >
       <div
         className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4"
@@ -804,10 +814,15 @@ function MarkerPreviewCard({
         <div className="flex-grow min-w-0">
           <div className="flex justify-between items-start">
             <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{item.title}</h3>
-            <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="text-[10px] font-bold">进行中</span>
-            </div>
+            <button
+              aria-label="关闭地点卡片"
+              className="ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant transition hover:text-on-surface active:scale-95"
+              data-testid="map-marker-card-close"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-4" />
+            </button>
           </div>
           <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
             <Clock3 className="size-3.5" />
@@ -1074,7 +1089,7 @@ function MapBottomSheet({
           </div>
           <Button
             className={`shrink-0 whitespace-nowrap rounded-full bg-surface-container-low/70 dark:bg-surface-container-highest/60 ${sheetState === 'collapsed' || sheetState === 'expanded' ? 'min-h-8 px-2.5 text-xs' : 'min-h-8 px-3 text-xs'}`}
-            data-testid="map-sheet-schedule-button"
+            data-testid="view-switch-schedule"
             icon={<Navigation className="size-3.5" />}
             onClick={onBackToSchedule}
             variant={sheetState === 'middle' ? 'secondary' : 'ghost'}
@@ -1206,7 +1221,7 @@ function RouteStatusChip({
   const chip = getRouteChipStatus(state, configured, warnings, displayMode, activeRoadMode)
 
   return (
-    <div ref={containerRef}>
+    <div className="absolute left-4 top-[72px] z-30" ref={containerRef}>
       <button
         aria-label="打开路线设置"
         className={`pointer-events-auto flex min-h-8 max-w-[calc(100vw-4rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-xl transition active:scale-[0.98] tm-surface tm-focus ${chip.className}`}
@@ -1271,7 +1286,7 @@ function MapControlNotice({
 }) {
   return (
       <div
-        className="ml-auto flex min-h-11 w-fit max-w-full items-center rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-on-surface-variant backdrop-blur-xl tm-surface dark:text-outline-variant"
+        className="absolute right-[calc(1rem+44px+8px)] top-[calc(56px+16px+44px+12px)] z-20 flex min-h-11 w-fit max-w-[calc(100%-5.75rem)] items-center rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-on-surface-variant backdrop-blur-xl tm-surface dark:text-outline-variant"
         data-testid="map-location-notice"
         ref={containerRef}
       >

@@ -12,6 +12,7 @@ import {
   Navigation,
   Search,
   Ticket,
+  Trash2,
 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
@@ -24,6 +25,7 @@ import {
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
 import {
+  buildAppleMapsUrl,
   buildGoogleMapsUrl,
   hasValidCoordinates,
 } from '../lib/mapLinks'
@@ -157,9 +159,28 @@ export function ItemDetailPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-32 app-scrollbar">
-        <div className="page-transition max-w-3xl mx-auto space-y-8">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
+      <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl">
+        <button
+          aria-label="返回上一页"
+          className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          onClick={goBackToDay}
+          type="button"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <div className="font-headline-md text-headline-md font-bold text-on-surface">详情</div>
+        <button
+          aria-label="编辑行程点"
+          className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
+          type="button"
+        >
+          <span className="text-sm font-semibold">编辑</span>
+        </button>
+      </header>
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-32 pt-16 app-scrollbar">
+        <div className="mx-auto max-w-3xl space-y-8">
           <ItemDetailContent
             day={day}
             item={item}
@@ -308,14 +329,6 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       <section className="relative w-full h-[320px] md:h-[400px] -mx-4" data-testid="item-detail-hero">
         <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-        {/* Back button overlay */}
-        <button
-          className="absolute top-4 left-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-surface/50 backdrop-blur-md text-on-surface active:scale-95 transition-transform"
-          onClick={onBack}
-          type="button"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
         <div className="absolute bottom-6 left-gutter right-gutter">
           <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">{item.title}</h1>
           {item.locationName ? (
@@ -328,7 +341,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       </section>
 
       {/* 基础信息 section - matches reference */}
-      <section>
+      <section data-testid="item-detail-core">
         <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">基础信息</h2>
         <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
           {/* Location */}
@@ -339,6 +352,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             <div className="flex-1">
               <div className="font-body-lg text-body-lg text-on-surface">{item.locationName || '地点未填写'}</div>
               <div className="font-body-md text-body-md text-on-surface-variant mt-0.5">{item.address || ''}</div>
+              <div className="font-label-sm text-label-sm text-on-surface-variant mt-1">
+                {hasCoordinates ? `${item.lat?.toFixed(5)}, ${item.lng?.toFixed(5)}` : '暂无坐标'}
+              </div>
             </div>
             <ChevronRight className="size-5 text-outline-variant group-hover:text-primary transition-colors" />
           </div>
@@ -385,6 +401,38 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
               查找地点信息
             </Button>
           </div>
+        </div>
+      </section>
+
+      <section data-testid="item-detail-navigation">
+        <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">地图导航</h2>
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
+          {hasCoordinates ? (
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                href={buildAppleMapsUrl(item)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Navigation className="size-4" />
+                Apple 地图
+              </a>
+              <a
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                href={buildGoogleMapsUrl(item)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <ExternalLink className="size-4" />
+                Google 地图
+              </a>
+            </div>
+          ) : (
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              无法从这里打开外部地图导航。请先补充这个行程点的坐标。
+            </p>
+          )}
         </div>
       </section>
 
@@ -448,11 +496,21 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       ) : null}
 
       {/* 票据 section - horizontal scroll cards */}
-      <section>
+      <section data-testid="item-detail-tickets">
         <div className="flex justify-between items-end mb-3 pl-1">
-          <h2 className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">票据</h2>
-          <button className="text-primary font-label-sm text-label-sm flex items-center gap-1 active:opacity-70 transition-opacity" onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })} type="button">
-            查看全部 <ChevronRight className="size-4" />
+          <div>
+            <h2 className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">现场票据</h2>
+            {!isLoadingRelations ? (
+              <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{tickets.length} 张已绑定</p>
+            ) : null}
+          </div>
+          <button
+            className="text-primary font-label-sm text-label-sm flex items-center gap-1 active:opacity-70 transition-opacity"
+            data-testid="item-ticket-view-all"
+            onClick={() => navigateTo('tickets', { tripId: trip.id })}
+            type="button"
+          >
+            查看全部 {tickets.length > 3 ? <span>+{tickets.length - 3}</span> : null}<ChevronRight className="size-4" />
           </button>
         </div>
         {isLoadingRelations ? (
@@ -466,10 +524,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           </div>
         ) : (
           <div className="flex overflow-x-auto no-scrollbar gap-4 pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-            {tickets.map((ticket) => (
+            {tickets.slice(0, 3).map((ticket) => (
               <button
                 key={ticket.id}
                 className="ticket-cutout relative min-w-[260px] flex-shrink-0 bg-surface-container-high border border-outline-variant/30 rounded-xl overflow-hidden shadow-lg active:scale-[0.98] transition-transform duration-200 cursor-pointer text-left"
+                data-testid="item-ticket-entry"
                 onClick={() => setPreviewTicket(ticket)}
                 type="button"
               >
@@ -495,11 +554,23 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         )}
       </section>
 
+      <section>
+        <Button
+          className="w-full"
+          icon={<Trash2 className="size-4" />}
+          onClick={() => setIsDeleteConfirmOpen(true)}
+          variant="destructive"
+        >
+          删除行程点
+        </Button>
+      </section>
+
       {/* Bottom Action Area - matches reference: 3 buttons */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dim/90 backdrop-blur-xl border-t-[0.5px] border-outline-variant/30 p-4 pb-safe flex justify-between items-center gap-3">
+      <div className="fixed bottom-0 left-1/2 z-50 flex w-full max-w-[600px] -translate-x-1/2 items-center justify-between gap-3 border-t-[0.5px] border-outline-variant/30 bg-surface-dim/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
         <button
           aria-label="上一项"
           className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
+          data-testid="item-previous-button"
           disabled={!previousItem}
           onClick={() => previousItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: previousItem.id, view: sourceView })}
           type="button"
@@ -507,6 +578,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           <ArrowLeft className="size-5" />
         </button>
         <button
+          aria-label={sourceView === 'map' ? '返回地图' : '返回日程'}
           className="flex-1 h-12 bg-primary-container text-on-primary-container font-headline-md text-[16px] rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(62,144,255,0.2)]"
           onClick={onBack}
           type="button"
@@ -517,6 +589,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         <button
           aria-label="下一项"
           className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
+          data-testid="item-next-button"
           disabled={!nextItem}
           onClick={() => nextItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: nextItem.id, view: sourceView })}
           type="button"

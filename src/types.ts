@@ -80,6 +80,7 @@ export type RouteId =
   | 'day'
   | 'item'
   | 'tickets'
+  | 'search'
   | 'settings'
   | 'settings/privacy'
   | 'settings/maps'

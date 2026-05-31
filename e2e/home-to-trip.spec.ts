@@ -29,4 +29,13 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await expect(page.getByTestId('view-switch-schedule')).toBeVisible()
   await expect(page.getByTestId('view-switch-map')).toBeVisible()
   await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('button', { name: '更多操作' }).click()
+  const dayMoreMenu = page.getByTestId('day-more-menu')
+  await expect(dayMoreMenu).toBeVisible()
+  await expect(dayMoreMenu.getByRole('button', { name: '票据库' })).toBeVisible()
+  await dayMoreMenu.getByRole('button', { name: '旅行总览' }).click()
+  await expect(page).toHaveURL(/#\/trip\?tripId=/)
+  await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
 })

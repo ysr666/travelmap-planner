@@ -4,9 +4,13 @@ import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBac
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Card } from './components/ui/Card'
-import { getCanonicalHashRedirect, routeFromHash } from './lib/routes'
+import { getTrip } from './db'
+import { subscribeTravelDataChanged } from './lib/dataEvents'
+import { getCanonicalHashRedirect, getRouteParams, routeFromHash } from './lib/routes'
 import type { RouteId } from './types'
 import { HomePage } from './pages/HomePage'
+
+const DEFAULT_SHELL_TITLE = '旅图'
 
 const TripWorkspacePage = lazy(() =>
   import('./pages/TripWorkspacePage').then((module) => ({ default: module.TripWorkspacePage })),
@@ -22,6 +26,9 @@ const TicketLibraryPage = lazy(() =>
 )
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+)
+const SearchPage = lazy(() =>
+  import('./pages/SearchPage').then((module) => ({ default: module.SearchPage })),
 )
 const TripFormPage = lazy(() =>
   import('./pages/TripFormPage').then((module) => ({ default: module.TripFormPage })),
@@ -44,6 +51,7 @@ const SettingsRoutePage = lazy(() =>
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
+  const [shellTitle, setShellTitle] = useState(DEFAULT_SHELL_TITLE)
   const activeRoute: RouteId = routeFromHash(currentHash)
 
   useEffect(() => {
@@ -66,8 +74,43 @@ function App() {
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function refreshShellTitle() {
+      if (activeRoute !== 'trip') {
+        setShellTitle(DEFAULT_SHELL_TITLE)
+        return
+      }
+
+      const tripId = getRouteParams(currentHash).get('tripId')
+      if (!tripId) {
+        setShellTitle(DEFAULT_SHELL_TITLE)
+        return
+      }
+
+      try {
+        const trip = await getTrip(tripId)
+        if (!cancelled) {
+          setShellTitle(trip?.title || DEFAULT_SHELL_TITLE)
+        }
+      } catch {
+        if (!cancelled) {
+          setShellTitle(DEFAULT_SHELL_TITLE)
+        }
+      }
+    }
+
+    void refreshShellTitle()
+    const unsubscribe = subscribeTravelDataChanged(() => void refreshShellTitle())
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [activeRoute, currentHash])
+
   return (
-    <AppShell activeRoute={activeRoute}>
+    <AppShell activeRoute={activeRoute} title={shellTitle}>
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
       {activeRoute === 'home' ? <HomePage /> : null}
@@ -80,6 +123,7 @@ function App() {
             {activeRoute === 'trip/new' || activeRoute === 'trip/edit' ? <TripFormPage /> : null}
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
+            {activeRoute === 'search' ? <SearchPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
             {activeRoute === 'settings/privacy' ? <SettingsPrivacyPage /> : null}
             {activeRoute === 'settings/maps' ? <SettingsMapsPage /> : null}

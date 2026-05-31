@@ -160,7 +160,7 @@ describe('TripWorkspacePage', () => {
       setItems: vi.fn(),
       setItemsByDay: vi.fn(),
       refresh: vi.fn(),
-    } as any)
+    } as unknown as ReturnType<typeof mocks.useTripData>)
 
     await act(async () => {
       root?.render(<TripWorkspacePage />)

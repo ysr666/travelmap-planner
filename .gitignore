@@ -22,11 +22,22 @@ test-results
 
 # Local agent/tool state
 AGENTS.md
+CLAUDE.md
 .claude/
 .deepflow/
+.playwright-cli/
+.playwright-mcp/
+.wrangler/
 agentdb.rvf
 agentdb.rvf.lock
 ruvector.db
+
+# Generated QA / visual audit artifacts
+output/
+design-reference/
+qa-*.png
+settings*.png
+cloud-snapshot-prompt-*.png
 
 # Editor directories and files
 .vscode/*

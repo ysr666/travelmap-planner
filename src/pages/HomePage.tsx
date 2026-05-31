@@ -12,6 +12,7 @@ import { navigateTo } from '../lib/routes'
 import { formatDateRange } from '../lib/dates'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import type { Trip } from '../types'
+import { AppVersion } from '../components/AppVersion'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -37,6 +38,7 @@ export function HomePage() {
   const hasTrips = trips.length > 0
   const firstTrip = hasTrips ? trips[0] : null
   const firstStats = firstTrip ? tripStatsById[firstTrip.id] : null
+  const firstStatus = firstTrip ? getTripStatus(firstTrip) : null
 
   async function refreshTrips() {
     setError(null)
@@ -85,15 +87,17 @@ export function HomePage() {
 
   return (
     <>{/* ── Main Content Canvas ── 参考: 124 行 (TopAppBar 由 AppShell 管理) */}
-      <main className="flex-1 w-full max-w-2xl mx-auto pt-24 pb-32 px-4 flex flex-col gap-section-gap">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-section-gap px-4 pb-32 pt-24">
 
         {/* ── Hero Section ── */}
         <section className="flex justify-between items-end">
           <div>
             <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">旅图</h2>
             <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
+            <AppVersion className="mt-1 text-left text-on-surface-variant" suffix="本地优先" />
           </div>
           <button
+            aria-label="设置"
             className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors"
             onClick={() => navigateTo('settings')}
             type="button"
@@ -122,7 +126,12 @@ export function HomePage() {
 
         {/* ── Current Trip Card (Travel Pass) ── 参考: 136-167 行 */}
         {firstTrip ? (
-          <section className="relative bg-surface-container rounded-xl overflow-hidden border border-outline-variant/30 group">
+          <button
+            className="group relative w-full overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container text-left transition active:scale-[0.99]"
+            data-testid="trip-card"
+            onClick={() => navigateTo('trip', { tripId: firstTrip.id })}
+            type="button"
+          >
             <div className="absolute inset-0 z-0">
               <div className="w-full h-full bg-surface-variant" />
               <div className="absolute inset-0 bg-gradient-to-t from-surface-container via-surface-container/80 to-transparent" />
@@ -132,29 +141,32 @@ export function HomePage() {
                 <div>
                   <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{firstTrip.title}</h3>
                   <p className="font-body-md text-body-md text-on-surface-variant">{formatDateRange(firstTrip.startDate, firstTrip.endDate)}</p>
+                  <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">{firstTrip.destination}</p>
                 </div>
-                <div className="bg-primary/20 text-primary px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1">
-                  <span className="font-label-sm text-label-sm">已同步 · 3 人同行</span>
-                </div>
+                {firstStatus ? (
+                  <div className={`${firstStatus.className} px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1`}>
+                    <span className="font-label-sm text-label-sm">{firstStatus.label}</span>
+                  </div>
+                ) : null}
               </div>
               {firstStats ? (
                 <div className="grid grid-cols-3 gap-4 pt-4 border-t border-outline-variant/30">
                   <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.dayCount}</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">天</span>
+                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.dayCount} 天</span>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant">日程</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.itemCount}</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">个行程点</span>
+                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.itemCount} 个</span>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant">行程点</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.ticketCount}</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">张票据</span>
+                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.ticketCount} 张</span>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant">票据</span>
                   </div>
                 </div>
               ) : null}
             </div>
-          </section>
+          </button>
         ) : null}
 
         {/* ── Recent Trips Section ── 参考: 169-217 行 */}
@@ -195,7 +207,7 @@ export function HomePage() {
             type="button"
           >
             <Plus className="size-5" />
-            新建行程
+            新建旅行
           </button>
           <button
             className="w-full py-4 rounded-xl bg-[#2C2C2E] text-[#0A84FF] font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#2C2C2E]/80 transition-colors active:scale-[0.98]"
@@ -206,7 +218,7 @@ export function HomePage() {
             导入行程
           </button>
         </section>
-      </main>
+      </div>
 
       <ConfirmDialog
         body="删除后，本机保存的日程、行程点、票据元数据、票据文件和绑定关系都会被移除。"

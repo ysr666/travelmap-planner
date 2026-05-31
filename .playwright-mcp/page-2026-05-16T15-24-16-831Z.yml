@@ -1,7 +1,0 @@
-- generic [ref=e3]:
-  - banner [ref=e4]:
-    - generic [ref=e5]:
-      - button "返回首页" [ref=e49]:
-        - img [ref=e50]
-      - heading "设置" [level=1] [ref=e53]
-  - main [ref=e20]

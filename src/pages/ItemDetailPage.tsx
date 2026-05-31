@@ -305,7 +305,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   return (
     <>
       {/* Hero Header - matches reference _1/code.html */}
-      <section className="relative w-full h-[320px] md:h-[400px] -mx-4 -mt-4" data-testid="item-detail-hero">
+      <section className="relative w-full h-[320px] md:h-[400px] -mx-4" data-testid="item-detail-hero">
         <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         {/* Back button overlay */}

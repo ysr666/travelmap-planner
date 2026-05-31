@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, MapPin, MoreHorizontal, Navigation as NavigationIcon } from 'lucide-react'
+import { ArrowLeft, Building2, CalendarDays, Clock3, MoreHorizontal, Navigation as NavigationIcon } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { listItemsByDay } from '../db'
 import { Button } from '../components/ui/Button'
@@ -296,7 +296,7 @@ export function DayViewPage() {
         <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30">
           <div className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <MapPin className="size-5 text-primary" />
+              <Building2 className="size-5 text-primary" />
             </div>
             <div className="flex-grow min-w-0">
               <div className="flex justify-between items-start">
@@ -307,7 +307,7 @@ export function DayViewPage() {
                 </div>
               </div>
               <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
-                <span className="text-[14px]">🕐</span>
+                <Clock3 className="size-3.5" />
                 {firstItem.startTime || '10:00'}{firstItem.endTime ? ` - ${firstItem.endTime}` : ''}
               </p>
             </div>
@@ -358,7 +358,7 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-on-surface dark:text-on-surface">{item.title}</span>
                   <span className="flex items-center gap-1 truncate text-xs tm-muted">
-                    <MapPin className="size-3.5 shrink-0" />
+                    <Building2 className="size-3.5 shrink-0" />
                     {item.locationName || item.address || '地点未填写'}
                   </span>
                 </span>

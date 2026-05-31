@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
-import { AlertCircle, ArrowDown, ArrowLeft, ChevronDown, Crosshair, ExternalLink, Locate, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, Building2, ChevronDown, Clock3, Crosshair, ExternalLink, Locate, LocateFixed, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -795,7 +795,6 @@ function MarkerPreviewCard({
   onOpenItem: (item: ItineraryItem) => void
   showBelowHeader: boolean
 }) {
-  const location = item.locationName || item.address || '地点未填写'
 
   return (
     <div
@@ -807,9 +806,9 @@ function MarkerPreviewCard({
         data-testid="map-marker-card"
       >
         <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-          <MapPin className="size-5 text-primary" />
+          <Building2 className="size-5 text-primary" />
         </div>
-        <div className="flex-grow min-w-0 pointer-events-none">
+        <div className="flex-grow min-w-0">
           <div className="flex justify-between items-start">
             <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{item.title}</h3>
             <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/20">
@@ -817,8 +816,9 @@ function MarkerPreviewCard({
               <span className="text-[10px] font-bold">进行中</span>
             </div>
           </div>
-          <p className="text-on-surface-variant text-[13px] mt-0.5">
-            {describeItemTime(item)}{location ? ` · ${location}` : ''}
+          <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
+            <Clock3 className="size-3.5" />
+            {describeItemTime(item)}
           </p>
         </div>
         <button
@@ -1804,7 +1804,7 @@ function ItineraryList({
                   {item.title}
                 </span>
                 <span className="flex items-center gap-1 truncate text-xs tm-muted">
-                  <MapPin className="size-3.5 shrink-0" />
+                  <Building2 className="size-3.5 shrink-0" />
                   {item.locationName || item.address || '地点未填写'}
                 </span>
               </span>
@@ -1918,7 +1918,7 @@ function MapEmptyBackdrop({ title, body }: { title: string; body: string }) {
     <div className="flex h-full items-center justify-center bg-map-bg p-6">
       <EmptyState
         body={body}
-        icon={<MapPin className="size-6" />}
+        icon={<Building2 className="size-6" />}
         title={title}
       />
     </div>

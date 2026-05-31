@@ -1,0 +1,59 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]:
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "旅图" [level=2] [ref=e18]
+          - paragraph [ref=e19]: 你的旅行现场控制台
+        - button [ref=e20]:
+          - img [ref=e21]
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - heading "东京春日旅行" [level=3] [ref=e72]
+            - paragraph [ref=e73]: 4月12日 - 4月17日
+          - generic [ref=e75]: 🗼
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - generic [ref=e78]: "2"
+            - generic [ref=e79]: 天
+          - generic [ref=e80]:
+            - generic [ref=e81]: "5"
+            - generic [ref=e82]: 个行程点
+          - generic [ref=e83]:
+            - generic [ref=e84]: "0"
+            - generic [ref=e85]: 张票据
+      - generic [ref=e86]:
+        - heading "最近行程" [level=3] [ref=e87]
+        - button "🗼 东京春日旅行 已完成 · 4月12日 - 4月17日" [ref=e89]:
+          - generic [ref=e91]: 🗼
+          - generic [ref=e92]:
+            - generic [ref=e93]: 东京春日旅行
+            - generic [ref=e94]: 已完成 · 4月12日 - 4月17日
+          - img [ref=e95]
+      - generic [ref=e28]:
+        - button "新建行程" [ref=e29]:
+          - img [ref=e30]
+          - text: 新建行程
+        - button "导入行程" [ref=e31]:
+          - img [ref=e32]
+          - text: 导入行程
+  - navigation [ref=e35]:
+    - button "首页" [ref=e36]:
+      - img [ref=e37]
+      - generic [ref=e40]: 首页
+    - button "行程" [ref=e41]:
+      - img [ref=e42]
+      - generic [ref=e45]: 行程
+    - button "搜索" [ref=e46]:
+      - img [ref=e47]
+      - generic [ref=e50]: 搜索
+    - button "设置" [ref=e51]:
+      - img [ref=e52]
+      - generic [ref=e55]: 设置

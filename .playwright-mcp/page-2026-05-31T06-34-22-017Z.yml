@@ -1,0 +1,157 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e97]:
+        - heading "东京春日旅行" [level=2] [ref=e98]
+        - paragraph [ref=e99]: 4月12日 - 4月17日
+      - generic [ref=e101]:
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - heading "今日概览" [level=3] [ref=e104]
+            - generic [ref=e105]: 第 1 天
+          - paragraph [ref=e106]: 即将开始您的精彩旅程
+          - paragraph [ref=e107]: 抵达与涩谷
+          - generic [ref=e108]:
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - heading "行程地图预览" [level=3] [ref=e111]
+                - paragraph [ref=e112]: 5 个有坐标地点 · 2 天
+              - button "查看地图" [ref=e113]:
+                - img [ref=e114]
+                - text: 查看地图
+            - generic [ref=e116]:
+              - generic [ref=e120]:
+                - region "地图" [ref=e121]
+                - generic [ref=e122]:
+                  - generic [ref=e145]:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic "1. Hotel Metropolitan Tokyo 入住": "1"
+                        - generic:
+                          - generic "2. 明治神宫散步": "2"
+                        - generic:
+                          - generic "3. Shibuya Sky 夜景": "3"
+                        - generic:
+                          - generic "4. 浅草寺": "4"
+                        - generic:
+                          - generic "5. 东京站周边": "5"
+                  - iframe [ref=e147]:
+                    
+              - generic [ref=e148]:
+                - paragraph [ref=e149]: 尚未生成路线预览，直线仅按每天行程顺序连接；路线仅供预览，不会自动改行程顺序。
+                - generic [ref=e151]:
+                  - generic [ref=e152]:
+                    - paragraph [ref=e153]: 路线顺序建议
+                    - paragraph [ref=e154]: 抵达与涩谷 · 仅提供排序建议
+                  - button "查看建议（仅建议）" [ref=e155]:
+                    - img [ref=e156]
+                    - text: 查看建议（仅建议）
+          - generic [ref=e159]:
+            - button "进入日视图" [ref=e160]:
+              - img [ref=e161]
+              - text: 进入日视图
+            - button "票据库" [ref=e165]:
+              - img [ref=e166]
+              - text: 票据库
+        - generic [ref=e168]:
+          - generic [ref=e169]:
+            - generic [ref=e170]:
+              - img [ref=e172]
+              - generic [ref=e176]:
+                - paragraph [ref=e177]: 行程体检
+                - heading "本地检查" [level=3] [ref=e178]
+            - generic [ref=e179]: 注意
+          - generic [ref=e180]:
+            - generic [ref=e181]: 2 天 · 天数
+            - generic [ref=e182]: 5 个 · 行程点
+            - generic [ref=e183]: 0 张 · 票据
+            - generic [ref=e184]: 已结束
+          - paragraph [ref=e185]: 基于当前本地行程信息，发现 3 项本地提醒。
+          - generic [ref=e187]:
+            - paragraph [ref=e188]: 3 项
+            - paragraph [ref=e189]: 交通耗时待补
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - generic [ref=e192]:
+                - heading "缺少交通耗时" [level=4] [ref=e193]
+                - generic [ref=e194]: 注意
+              - paragraph [ref=e195]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+            - generic [ref=e196]:
+              - generic [ref=e197]:
+                - heading "缺少交通耗时" [level=4] [ref=e198]
+                - generic [ref=e199]: 注意
+              - paragraph [ref=e200]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+            - generic [ref=e201]:
+              - generic [ref=e202]:
+                - heading "缺少交通耗时" [level=4] [ref=e203]
+                - generic [ref=e204]: 注意
+              - paragraph [ref=e205]: 相邻行程点之间缺少交通耗时，可能影响当天节奏判断。
+          - generic [ref=e206]:
+            - paragraph [ref=e207]: 准备提醒
+            - paragraph [ref=e209]: 根据已填写内容，这趟行程还有 3 段上一站交通耗时待补。
+          - generic [ref=e210]:
+            - paragraph [ref=e211]: 仅基于本地行程信息，不读取票据文件、完整备注或坐标明细。
+            - paragraph [ref=e212]: 后续可接入天气、开放时间和路线信息；当前仅根据已填写内容提示。
+        - generic [ref=e213]:
+          - generic [ref=e214]:
+            - img [ref=e216]
+            - generic [ref=e219]:
+              - heading "AI 修改建议" [level=3] [ref=e220]
+              - paragraph [ref=e221]: AI 只会生成修改方案，确认前不会改动行程。联网搜索能力将通过旅图服务提供，当前仍不会自动查询网页或实时票价。
+          - textbox "例如：第二天太满了，帮我放松一点" [ref=e222]
+          - button "生成修改方案" [disabled] [ref=e224]:
+            - img [ref=e225]
+            - generic [ref=e228]: 生成修改方案
+        - generic [ref=e230]:
+          - generic [ref=e231]:
+            - generic [ref=e232]:
+              - img [ref=e233]
+              - heading "路线准备" [level=3] [ref=e237]
+            - paragraph [ref=e238]: 可为 2 天生成路线预览
+          - button "生成路线预览" [ref=e239]:
+            - img [ref=e240]
+            - generic [ref=e244]: 生成路线预览
+        - generic [ref=e245]:
+          - heading "今天的安排" [level=3] [ref=e246]
+          - generic [ref=e247]:
+            - button "第一天 · 2026年4月12日 进行中 抵达与涩谷" [ref=e249] [cursor=pointer]:
+              - generic [ref=e252]:
+                - generic [ref=e253]:
+                  - heading "第一天 · 2026年4月12日" [level=4] [ref=e254]
+                  - generic [ref=e255]: 进行中
+                - paragraph [ref=e256]: 抵达与涩谷
+            - button "第二天 · 2026年4月13日 2 个行程点 浅草与东京站" [ref=e257] [cursor=pointer]:
+              - generic [ref=e260]:
+                - generic [ref=e261]:
+                  - heading "第二天 · 2026年4月13日" [level=4] [ref=e262]
+                  - generic [ref=e263]: 2 个行程点
+                - paragraph [ref=e264]: 浅草与东京站
+        - generic [ref=e265]:
+          - img [ref=e267]
+          - generic [ref=e269]:
+            - heading "旅行备注" [level=3] [ref=e270]
+            - paragraph [ref=e271]: 示例数据只保存在本机 IndexedDB，可用于后续地图和时间轴测试。
+        - group [ref=e272]:
+          - generic "备份与恢复" [ref=e273] [cursor=pointer]:
+            - img [ref=e274]
+            - paragraph [ref=e277]: 备份与恢复
+  - navigation [ref=e35]:
+    - button "首页" [ref=e36]:
+      - img [ref=e37]
+      - generic [ref=e40]: 首页
+    - button "行程" [ref=e41]:
+      - img [ref=e42]
+      - generic [ref=e45]: 行程
+    - button "搜索" [ref=e46]:
+      - img [ref=e47]
+      - generic [ref=e50]: 搜索
+    - button "设置" [ref=e51]:
+      - img [ref=e52]
+      - generic [ref=e55]: 设置

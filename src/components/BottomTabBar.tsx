@@ -15,7 +15,7 @@ const tabs = [
 
 export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
   return (
-    <nav className="fixed bottom-0 z-50 flex h-16 w-full items-center justify-around border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+    <nav className="fixed bottom-0 z-50 mx-auto flex h-16 w-full max-w-[600px] items-center justify-around border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
       {tabs.map((tab) => {
         const Icon = tab.icon
         const isActive = activeRoute === tab.id

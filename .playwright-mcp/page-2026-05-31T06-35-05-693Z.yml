@@ -1,0 +1,21 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button [ref=e5]:
+      - img [ref=e6]
+    - heading "旅图" [level=1] [ref=e8]
+    - button "设置" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e13]
+  - navigation [ref=e35]:
+    - button "首页" [ref=e36]:
+      - img [ref=e37]
+      - generic [ref=e40]: 首页
+    - button "行程" [ref=e41]:
+      - img [ref=e42]
+      - generic [ref=e45]: 行程
+    - button "搜索" [ref=e46]:
+      - img [ref=e47]
+      - generic [ref=e50]: 搜索
+    - button "设置" [ref=e51]:
+      - img [ref=e52]
+      - generic [ref=e55]: 设置

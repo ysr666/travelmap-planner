@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Download, Plus, Settings } from 'lucide-react'
+import { CalendarDays, ChevronRight, Download, Plus } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -87,19 +87,10 @@ export function HomePage() {
     <>{/* ── Main Content Canvas ── 参考: 124 行 (TopAppBar 由 AppShell 管理) */}
       <main className="flex-1 w-full max-w-2xl mx-auto pt-24 pb-32 px-4 flex flex-col gap-section-gap">
 
-        {/* ── Hero Section ── 参考: 126-134 行 */}
-        <section className="flex justify-between items-end">
-          <div>
-            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">旅图</h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
-          </div>
-          <button
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors"
-            onClick={() => navigateTo('settings')}
-            type="button"
-          >
-            <Settings className="size-5" />
-          </button>
+        {/* ── Hero Section ── */}
+        <section>
+          <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">旅图</h2>
+          <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
         </section>
 
         {/* Loading */}

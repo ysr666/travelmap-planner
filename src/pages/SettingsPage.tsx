@@ -505,7 +505,7 @@ export function SettingsPage() {
               <Monitor className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface">外观</h3>
+              
               <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 当前显示为{resolvedMode === 'dark' ? '黑夜模式' : '白天模式'}。
               </p>
@@ -557,7 +557,7 @@ export function SettingsPage() {
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface">可添加到 iPhone 主屏幕</h3>
+              
               <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 在 iPhone Safari 打开本页面，点分享按钮，再选择"添加到主屏幕"。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
               </p>
@@ -589,7 +589,7 @@ export function SettingsPage() {
               <Import className="size-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-on-surface">导入备份</h3>
+              
               <p className="text-sm text-on-surface-variant">选择之前导出的 travelmap zip 文件。</p>
             </div>
           </div>
@@ -632,7 +632,7 @@ export function SettingsPage() {
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-on-surface">导入 AI 行程包</h3>
+              
               <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 旅图不会调用 AI。你可以使用 ChatGPT、Claude、Gemini、DeepSeek
                 或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip，然后在本地导入。

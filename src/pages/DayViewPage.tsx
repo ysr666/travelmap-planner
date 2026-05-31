@@ -207,10 +207,6 @@ export function DayViewPage() {
     return () => window.cancelAnimationFrame(frame)
   }, [hasOpenedMap, selectedDay?.id, view])
 
-  const selectedDayIndex = useMemo(() => {
-    return selectedDay ? days.findIndex((day) => day.id === selectedDay.id) : -1
-  }, [days, selectedDay])
-
   const dayBrief = useMemo(() => {
     if (!trip || !selectedDay) {
       return null
@@ -375,11 +371,6 @@ export function DayViewPage() {
         </div>
       ) : null}
 
-      {selectedDay ? (
-        <p className="sr-only">
-          当前第 {selectedDayIndex + 1} 天
-        </p>
-      ) : null}
     </>
   )
 }

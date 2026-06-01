@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { getTrip, listTrips } from '../../db'
 import {
+  markTripAutoSnapshotSynced,
+  type AutoSnapshotBackupEntry,
   completeTripAutoSnapshotFailure,
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
@@ -16,15 +18,19 @@ import {
   getCurrentSession,
   getSupabaseConfigStatus,
   listCloudBackups,
+  restoreCloudBackup,
   uploadTripCloudBackup,
 } from '../../lib/cloudBackup'
 import {
   compareCloudSnapshotVersions,
   groupLatestCloudBackupsByTripId,
+  refreshCloudSnapshotChecks,
 } from '../../lib/cloudSnapshotCheck'
 import { getSupabaseClient } from '../../lib/supabaseClient'
+import type { Trip } from '../../types'
 
 const AUTO_BACKUP_DEBOUNCE_MS = 10_000
+const AUTO_BACKUP_RETRY_MS = 30_000
 
 export function AutoSnapshotBackupController() {
   const timersRef = useRef(new Map<string, number>())
@@ -65,7 +71,7 @@ export function AutoSnapshotBackupController() {
     }
 
     const scanAndScheduleEligibleTrips = () => {
-      scheduleDirtyTrips()
+      scheduleDirtyTrips(0)
       void markEligibleTripsDirtyAndSchedule(scheduleTrip)
     }
 
@@ -181,8 +187,21 @@ async function runAutoBackup(
   }
 
   inFlight.add(tripId)
-  setTripAutoSnapshotUploading(tripId, dirtyAt)
   try {
+    const preflight = await checkAutoSyncDirection(trip, entry)
+    if (preflight.action === 'restore') {
+      setTripAutoSnapshotUploading(tripId, dirtyAt)
+      const result = await restoreCloudBackup(preflight.backupId)
+      const exportedAt = Date.parse(result.exportedAt)
+      markTripAutoSnapshotSynced(
+        result.tripId,
+        Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+      )
+      await refreshCloudSnapshotChecks()
+      return
+    }
+
+    setTripAutoSnapshotUploading(tripId, dirtyAt)
     const result = await uploadTripCloudBackup(tripId)
     const exportedAt = Date.parse(result.exportedAt)
     const cleared = completeTripAutoSnapshotSuccess(
@@ -199,6 +218,9 @@ async function runAutoBackup(
       dirtyAt,
       caught instanceof Error ? caught.message : '云端保存失败，可稍后重试。',
     )
+    if (canAttemptAutoBackup()) {
+      scheduleTrip(tripId, AUTO_BACKUP_RETRY_MS)
+    }
   } finally {
     inFlight.delete(tripId)
     const latestEntry = getTripAutoSnapshotStatus(tripId)
@@ -239,7 +261,7 @@ async function markEligibleTripsDirtyAndSchedule(scheduleTrip: (tripId: string, 
 
     const backup = backupByTripId.get(trip.id)
     if (!backup) {
-      markTripAutoSnapshotDirty(trip.id, 'cloud-backup-missing')
+      markTripAutoSnapshotDirty(trip.id, 'cloud-backup-missing', Date.now(), { cloudVersionAtDirty: null })
       scheduleTrip(trip.id, 0)
       continue
     }
@@ -250,10 +272,48 @@ async function markEligibleTripsDirtyAndSchedule(scheduleTrip: (tripId: string, 
       trip,
     })
     if (comparison.status === 'local_newer') {
-      markTripAutoSnapshotDirty(trip.id, 'local-newer-than-cloud')
+      markTripAutoSnapshotDirty(trip.id, 'local-newer-than-cloud', Date.now(), {
+        cloudVersionAtDirty: comparison.cloudVersion,
+      })
       scheduleTrip(trip.id, 0)
     }
   }
+}
+
+async function checkAutoSyncDirection(trip: Trip, entry: AutoSnapshotBackupEntry) {
+  const backups = await listCloudBackups()
+  const backup = groupLatestCloudBackupsByTripId(backups).get(trip.id)
+
+  if (!backup) {
+    return { action: 'upload' as const }
+  }
+
+  const comparison = compareCloudSnapshotVersions({
+    autoStatus: entry,
+    backup,
+    trip,
+  })
+
+  if (comparison.status === 'cloud_newer') {
+    return {
+      action: 'restore' as const,
+      backupId: backup.id,
+    }
+  }
+
+  if (
+    comparison.status === 'possible_conflict' &&
+    comparison.cloudVersion !== null &&
+    comparison.localVersion !== null &&
+    comparison.cloudVersion > comparison.localVersion
+  ) {
+    return {
+      action: 'restore' as const,
+      backupId: backup.id,
+    }
+  }
+
+  return { action: 'upload' as const }
 }
 
 function canAttemptAutoBackup() {

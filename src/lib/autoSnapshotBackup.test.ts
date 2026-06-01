@@ -7,9 +7,11 @@ import {
   getTripAutoSnapshotStatus,
   hasPendingAutoSnapshotTrips,
   isAutoSnapshotBackupEnabled,
+  listAutoSnapshotBackupEntries,
   listDirtyAutoSnapshotTrips,
   markTripAutoSnapshotDirty,
   markTripAutoSnapshotSynced,
+  requestTripAutoSnapshotRetry,
   resetAutoSnapshotBackupForTests,
   setAutoSnapshotBackupEnabled,
   setTripAutoSnapshotUploading,
@@ -21,12 +23,12 @@ beforeEach(() => {
 })
 
 describe('auto snapshot backup local state', () => {
-  it('defaults to disabled and can be enabled locally', () => {
-    expect(isAutoSnapshotBackupEnabled()).toBe(false)
-    setAutoSnapshotBackupEnabled(true)
+  it('defaults to enabled and can be disabled locally', () => {
     expect(isAutoSnapshotBackupEnabled()).toBe(true)
     setAutoSnapshotBackupEnabled(false)
     expect(isAutoSnapshotBackupEnabled()).toBe(false)
+    setAutoSnapshotBackupEnabled(true)
+    expect(isAutoSnapshotBackupEnabled()).toBe(true)
   })
 
   it('marks trips dirty and lists pending dirty entries', () => {
@@ -72,6 +74,29 @@ describe('auto snapshot backup local state', () => {
       lastAttemptAt: 130,
       lastError: '上传失败',
       status: 'error',
+    })
+  })
+
+  it('stores the cloud baseline for queued uploads and can request a retry', () => {
+    markTripAutoSnapshotDirty('trip_1', 'local-newer-than-cloud', 100, { cloudVersionAtDirty: 90 })
+    completeTripAutoSnapshotFailure('trip_1', 100, '上传失败', 130)
+
+    expect(listAutoSnapshotBackupEntries()).toEqual([
+      expect.objectContaining({
+        cloudVersionAtDirty: 90,
+        dirtyAt: 100,
+        lastError: '上传失败',
+        status: 'error',
+        tripId: 'trip_1',
+      }),
+    ])
+    expect(requestTripAutoSnapshotRetry('trip_1')).toBe(true)
+    const retryStatus = getTripAutoSnapshotStatus('trip_1')
+    expect(retryStatus?.lastError).toBeUndefined()
+    expect(retryStatus).toMatchObject({
+      cloudVersionAtDirty: 90,
+      dirtyAt: 100,
+      status: 'dirty',
     })
   })
 

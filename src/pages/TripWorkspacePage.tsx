@@ -8,6 +8,7 @@ import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { TripBriefCard } from '../components/ai/TripBriefCard'
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
+import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Collapsible } from '../components/ui/Collapsible'
@@ -396,6 +397,9 @@ export function TripWorkspacePage() {
             ) : null}
 
             {/* Extra panels (not in reference design, but useful functionality) */}
+            <div className="flex min-w-0 justify-end">
+              <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
+            </div>
             <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
             {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />

@@ -8,6 +8,7 @@ import {
   getTripAutoSnapshotStatus,
   markTripAutoSnapshotDirty,
   resetAutoSnapshotBackupForTests,
+  setAutoSnapshotBackupEnabled,
 } from '../../lib/autoSnapshotBackup'
 import {
   getCloudSnapshotCheckState,
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listCloudBackups: vi.fn(),
   listTrips: vi.fn(),
   restoreCloudBackup: vi.fn(),
+  uploadTripCloudBackup: vi.fn(),
 }))
 
 vi.mock('../../db', () => ({
@@ -33,6 +35,7 @@ vi.mock('../../lib/cloudBackup', () => ({
   getSupabaseConfigStatus: mocks.getSupabaseConfigStatus,
   listCloudBackups: mocks.listCloudBackups,
   restoreCloudBackup: mocks.restoreCloudBackup,
+  uploadTripCloudBackup: mocks.uploadTripCloudBackup,
 }))
 
 vi.mock('../../lib/supabaseClient', () => ({
@@ -92,6 +95,11 @@ beforeEach(() => {
     tripId: trip.id,
     warnings: [],
   })
+  mocks.uploadTripCloudBackup.mockResolvedValue({
+    backupId: 'backup_cloud_newer',
+    exportedAt: '2026-04-02T12:00:00.000Z',
+    warnings: [],
+  })
 })
 
 afterEach(() => {
@@ -123,17 +131,83 @@ describe('StartupCloudSnapshotCheckController cloud save decisions', () => {
     })
   })
 
-  it('keeps a possible conflict as a prompt instead of restoring silently', async () => {
+  it('auto-uploads a possible conflict when the local version is newer', async () => {
     markTripAutoSnapshotDirty(trip.id, 'local-edit', Date.parse('2026-04-02T12:00:00.000Z'))
     renderController()
 
     await runStartupCheck()
 
     expect(mocks.restoreCloudBackup).not.toHaveBeenCalled()
-    expect(getCloudSnapshotCheckState().results).toHaveLength(1)
-    expect(getCloudSnapshotCheckState().results[0]).toMatchObject({
-      status: 'possible_conflict',
+    expect(mocks.uploadTripCloudBackup).toHaveBeenCalledTimes(1)
+    expect(mocks.uploadTripCloudBackup).toHaveBeenCalledWith(trip.id)
+    expect(getCloudSnapshotCheckState().results).toEqual([])
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({
+      lastSuccessAt: Date.parse('2026-04-02T12:00:00.000Z'),
+      status: 'synced',
+    })
+  })
+
+  it('auto-restores a possible conflict when the cloud version is newer', async () => {
+    mocks.listCloudBackups.mockResolvedValue([
+      {
+        appVersion: '0.3.0',
+        createdAt: '2026-04-02T13:00:00.000Z',
+        destination: trip.destination,
+        exportedAt: '2026-04-02T13:00:00.000Z',
+        filesCount: 0,
+        id: 'backup_cloud_newest',
+        originalTripId: trip.id,
+        schemaVersion: 1,
+        snapshotPath: 'user_1/backup_cloud_newest/snapshot.json',
+        title: trip.title,
+        totalSizeBytes: 0,
+        updatedAt: '2026-04-02T13:00:00.000Z',
+        userId: 'user_1',
+        warnings: [],
+      },
+    ])
+    mocks.restoreCloudBackup.mockResolvedValue({
+      exportedAt: '2026-04-02T13:00:00.000Z',
+      title: trip.title,
       tripId: trip.id,
+      warnings: [],
+    })
+    markTripAutoSnapshotDirty(trip.id, 'local-edit', Date.parse('2026-04-02T12:00:00.000Z'))
+    renderController()
+
+    await runStartupCheck()
+
+    expect(mocks.uploadTripCloudBackup).not.toHaveBeenCalled()
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledTimes(1)
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledWith('backup_cloud_newest')
+    expect(getCloudSnapshotCheckState().results).toEqual([])
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({
+      lastSuccessAt: Date.parse('2026-04-02T13:00:00.000Z'),
+      status: 'synced',
+    })
+  })
+
+  it('does not auto-restore when cloud auto sync is disabled', async () => {
+    setAutoSnapshotBackupEnabled(false)
+    renderController()
+
+    await runStartupCheck()
+
+    expect(mocks.restoreCloudBackup).not.toHaveBeenCalled()
+    expect(getCloudSnapshotCheckState().results).toEqual([])
+  })
+
+  it('restores a cloud-only trip on startup when auto sync is enabled', async () => {
+    mocks.listTrips.mockResolvedValue([])
+    renderController()
+
+    await runStartupCheck()
+
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledTimes(1)
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledWith('backup_cloud_newer')
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({
+      lastSuccessAt: Date.parse('2026-04-02T11:00:00.000Z'),
+      status: 'synced',
     })
   })
 })

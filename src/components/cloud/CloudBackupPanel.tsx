@@ -5,11 +5,14 @@ import {
   Cloud,
   Download,
   KeyRound,
+  LoaderCircle,
   LogOut,
   Mail,
+  RefreshCw,
   ShieldAlert,
   Trash2,
   Upload,
+  WifiOff,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -33,14 +36,21 @@ import {
 } from '../../lib/cloudBackup'
 import { getSupabaseClient, type User } from '../../lib/supabaseClient'
 import {
+  type AutoSnapshotBackupEntry,
   completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
   isAutoSnapshotBackupEnabled,
+  listAutoSnapshotBackupEntries,
   markTripAutoSnapshotSynced,
+  requestTripAutoSnapshotRetry,
   setAutoSnapshotBackupEnabled,
   subscribeAutoSnapshotBackup,
 } from '../../lib/autoSnapshotBackup'
 import { groupCloudBackupsForDisplay } from '../../lib/cloudBackupDisplay'
+import {
+  getCloudSnapshotCheckState,
+  subscribeCloudSnapshotChecks,
+} from '../../lib/cloudSnapshotCheck'
 import { navigateTo } from '../../lib/routes'
 import type { Trip } from '../../types'
 
@@ -131,7 +141,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     const nextValue = !autoBackupEnabled
     setAutoSnapshotBackupEnabled(nextValue)
     setAutoBackupEnabledState(nextValue)
-    setMessage(nextValue ? '自动云端保存已开启。' : '自动云端保存已关闭。')
+    setMessage(nextValue ? '云端自动同步已开启。' : '云端自动同步已关闭。')
     setError(null)
   }
 
@@ -307,7 +317,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-on-surface">Supabase 云端保存</h3>
             <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-              云端保存适合跨设备延续同一旅行。IndexedDB 仍是主数据源，不会实时同步，也不会自动合并多设备修改。
+              云端保存适合跨设备延续同一旅行。IndexedDB 仍是主数据源；自动同步会按最新版本覆盖另一端，不做字段级合并。
             </p>
           </div>
         </div>
@@ -332,6 +342,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           configured={configStatus.configured}
           enabled={autoBackupEnabled}
           onToggle={handleAutoBackupToggle}
+          signedIn={Boolean(user)}
+        />
+        <CloudAutoSyncStatusPanel
+          configured={configStatus.configured}
+          enabled={autoBackupEnabled}
           signedIn={Boolean(user)}
         />
 
@@ -531,8 +546,8 @@ function AutoCloudBackupSetting({
   const helperText = !configured
     ? '配置 Supabase 后才能开启。'
     : signedIn
-      ? '开启后，本机数据变化会延迟更新旅行云端保存。可能冲突时仍会提示确认。'
-      : '可以先保存设置；登录云端保存账号后才会开始自动上传。'
+      ? '打开 PWA 后自动拉取云端状态；本机关键修改会排队上传，版本较新的一端会自动覆盖另一端。'
+      : '登录云端保存账号后，会自动拉取云端状态并排队上传本机关键修改。'
 
   return (
     <div
@@ -541,14 +556,14 @@ function AutoCloudBackupSetting({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-on-surface">自动云端保存</p>
+          <p className="text-sm font-semibold text-on-surface">云端自动同步</p>
           <p className="mt-1 break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
             {helperText}
           </p>
         </div>
         <button
           aria-checked={enabled && configured}
-          aria-label="自动云端保存"
+          aria-label="云端自动同步"
           className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition ${
             enabled && configured ? 'bg-sky-500' : 'bg-surface-container-high'
           } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -567,6 +582,189 @@ function AutoCloudBackupSetting({
       </div>
     </div>
   )
+}
+
+function CloudAutoSyncStatusPanel({
+  configured,
+  enabled,
+  signedIn,
+}: {
+  configured: boolean
+  enabled: boolean
+  signedIn: boolean
+}) {
+  const [entries, setEntries] = useState<AutoSnapshotBackupEntry[]>(() => listAutoSnapshotBackupEntries())
+  const [checkState, setCheckState] = useState(() => getCloudSnapshotCheckState())
+  const [isOnline, setIsOnline] = useState(() => (
+    typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine
+  ))
+
+  useEffect(() => {
+    return subscribeAutoSnapshotBackup(() => {
+      setEntries(listAutoSnapshotBackupEntries())
+    })
+  }, [])
+
+  useEffect(() => subscribeCloudSnapshotChecks(setCheckState), [])
+
+  useEffect(() => {
+    const updateOnlineState = () => {
+      setIsOnline(typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine)
+    }
+    window.addEventListener('online', updateOnlineState)
+    window.addEventListener('offline', updateOnlineState)
+    return () => {
+      window.removeEventListener('online', updateOnlineState)
+      window.removeEventListener('offline', updateOnlineState)
+    }
+  }, [])
+
+  if (!configured) {
+    return null
+  }
+
+  const errorEntries = entries.filter((entry) => entry.status === 'error' && entry.dirtyAt)
+  const uploadingCount = entries.filter((entry) => entry.status === 'uploading').length
+  const queuedCount = entries.filter((entry) => entry.status === 'dirty' && entry.dirtyAt).length
+  const retryableEntries = errorEntries
+  const view = getCloudAutoSyncStatusView({
+    enabled,
+    errorCount: errorEntries.length,
+    checkError: checkState.error,
+    isChecking: checkState.isChecking,
+    isOnline,
+    queuedCount,
+    signedIn,
+    uploadingCount,
+  })
+
+  function handleRetry() {
+    for (const entry of retryableEntries) {
+      requestTripAutoSnapshotRetry(entry.tripId)
+    }
+  }
+
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-3 ${view.className}`}
+      data-testid="cloud-auto-sync-status"
+      role="status"
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-white/70 dark:bg-surface-container-highest/60">
+          {view.icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{view.title}</p>
+          <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{view.detail}</p>
+          <p className="mt-1 break-words text-xs leading-5 opacity-80 [overflow-wrap:anywhere]">
+            按最新版本自动覆盖，不做字段级合并，也不创建额外云端快照。
+          </p>
+        </div>
+      </div>
+      {retryableEntries.length > 0 && enabled && signedIn && isOnline ? (
+        <Button
+          className="mt-3 min-h-9 w-full text-xs"
+          data-testid="cloud-auto-sync-retry"
+          icon={<RefreshCw className="size-4" />}
+          onClick={handleRetry}
+          variant="secondary"
+        >
+          重试失败同步
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function getCloudAutoSyncStatusView({
+  enabled,
+  errorCount,
+  checkError,
+  isChecking,
+  isOnline,
+  queuedCount,
+  signedIn,
+  uploadingCount,
+}: {
+  enabled: boolean
+  errorCount: number
+  checkError: string | null
+  isChecking: boolean
+  isOnline: boolean
+  queuedCount: number
+  signedIn: boolean
+  uploadingCount: number
+}) {
+  if (!enabled) {
+    return {
+      className: 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant',
+      detail: '开启后，登录状态下会自动拉取云端状态并按最新版本同步。',
+      icon: <Cloud className="size-4" />,
+      title: '云端自动同步已关闭',
+    }
+  }
+
+  if (!signedIn) {
+    return {
+      className: 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant',
+      detail: '登录云端保存账号后，会自动检查云端版本并处理待同步修改。',
+      icon: <Cloud className="size-4" />,
+      title: '等待登录后同步',
+    }
+  }
+
+  if (!isOnline) {
+    return {
+      className: 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300',
+      detail: '本地修改会留在队列中，网络恢复后自动重试。',
+      icon: <WifiOff className="size-4" />,
+      title: '当前离线，同步已暂停',
+    }
+  }
+
+  if (checkError) {
+    return {
+      className: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
+      detail: checkError,
+      icon: <AlertTriangle className="size-4" />,
+      title: '同步检查失败',
+    }
+  }
+
+  if (errorCount > 0) {
+    return {
+      className: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
+      detail: `${errorCount} 个旅行同步失败，可稍后重试。`,
+      icon: <AlertTriangle className="size-4" />,
+      title: '同步失败',
+    }
+  }
+
+  if (uploadingCount > 0 || isChecking) {
+    return {
+      className: 'border-sky-100 bg-sky-50 text-sky-700 dark:text-sky-300',
+      detail: uploadingCount > 0 ? `正在同步 ${uploadingCount} 个旅行。` : '正在检查云端状态。',
+      icon: <LoaderCircle className="size-4 animate-spin" />,
+      title: '正在云端同步',
+    }
+  }
+
+  if (queuedCount > 0) {
+    return {
+      className: 'border-sky-100 bg-sky-50 text-sky-700 dark:text-sky-300',
+      detail: `${queuedCount} 个本机修改等待上传，会在后台自动处理。`,
+      icon: <Cloud className="size-4" />,
+      title: '同步已排队',
+    }
+  }
+
+  return {
+    className: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:text-emerald-300',
+    detail: '打开 PWA 会检查云端版本，本机关键修改会自动进入同步队列。',
+    icon: <CheckCircle2 className="size-4" />,
+    title: '云端自动同步已就绪',
+  }
 }
 
 function CloudBackupList({

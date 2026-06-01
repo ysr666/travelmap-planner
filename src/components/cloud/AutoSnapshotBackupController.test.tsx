@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AutoSnapshotBackupController } from './AutoSnapshotBackupController'
 import {
   markTripAutoSnapshotDirty,
+  markTripAutoSnapshotSynced,
   resetAutoSnapshotBackupForTests,
   setAutoSnapshotBackupEnabled,
+  getTripAutoSnapshotStatus,
 } from '../../lib/autoSnapshotBackup'
 import type { Trip } from '../../types'
 
@@ -18,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getTrip: vi.fn(),
   listCloudBackups: vi.fn(),
   listTrips: vi.fn(),
+  restoreCloudBackup: vi.fn(),
   uploadTripCloudBackup: vi.fn(),
 }))
 
@@ -30,6 +33,7 @@ vi.mock('../../lib/cloudBackup', () => ({
   getCurrentSession: mocks.getCurrentSession,
   getSupabaseConfigStatus: mocks.getSupabaseConfigStatus,
   listCloudBackups: mocks.listCloudBackups,
+  restoreCloudBackup: mocks.restoreCloudBackup,
   uploadTripCloudBackup: mocks.uploadTripCloudBackup,
 }))
 
@@ -59,24 +63,7 @@ beforeEach(() => {
 
   mocks.getTrip.mockResolvedValue(trip)
   mocks.listTrips.mockResolvedValue([trip])
-  mocks.listCloudBackups.mockResolvedValue([
-    {
-      appVersion: '0.3.0',
-      createdAt: '2026-04-02T10:00:00.000Z',
-      destination: trip.destination,
-      exportedAt: '2026-04-02T10:00:00.000Z',
-      filesCount: 0,
-      id: 'backup_1',
-      originalTripId: trip.id,
-      schemaVersion: 1,
-      snapshotPath: 'user_1/backup_1/snapshot.json',
-      title: trip.title,
-      totalSizeBytes: 0,
-      updatedAt: '2026-04-02T10:00:00.000Z',
-      userId: 'user_1',
-      warnings: [],
-    },
-  ])
+  mocks.listCloudBackups.mockResolvedValue([])
   mocks.getCurrentSession.mockResolvedValue({ user: { id: 'user_1' } })
   mocks.getSupabaseClient.mockReturnValue(null)
   mocks.getSupabaseConfigStatus.mockReturnValue({
@@ -88,6 +75,12 @@ beforeEach(() => {
   mocks.uploadTripCloudBackup.mockResolvedValue({
     backupId: 'backup_1',
     exportedAt: '2026-04-02T10:00:00.000Z',
+    warnings: [],
+  })
+  mocks.restoreCloudBackup.mockResolvedValue({
+    exportedAt: '2026-04-02T13:00:00.000Z',
+    title: trip.title,
+    tripId: trip.id,
     warnings: [],
   })
 })
@@ -203,6 +196,81 @@ describe('AutoSnapshotBackupController exit protection', () => {
     expect(event.defaultPrevented).toBe(false)
     expect(mocks.uploadTripCloudBackup).not.toHaveBeenCalled()
   })
+
+  it('auto-uploads when local dirty work is newer than a cloud change', async () => {
+    setAutoSnapshotBackupEnabled(true)
+    mocks.listCloudBackups.mockResolvedValue([
+      {
+        appVersion: '0.3.0',
+        createdAt: '2026-04-02T11:00:00.000Z',
+        destination: trip.destination,
+        exportedAt: '2026-04-02T11:00:00.000Z',
+        filesCount: 0,
+        id: 'backup_cloud_changed',
+        originalTripId: trip.id,
+        schemaVersion: 1,
+        snapshotPath: 'user_1/backup_cloud_changed/snapshot.json',
+        title: trip.title,
+        totalSizeBytes: 0,
+        updatedAt: '2026-04-02T11:00:00.000Z',
+        userId: 'user_1',
+        warnings: [],
+      },
+    ])
+    renderController()
+    markTripAutoSnapshotSynced(trip.id, Date.parse('2026-04-02T10:00:00.000Z'))
+    markTripAutoSnapshotDirty(trip.id, 'item-updated', Date.parse('2026-04-02T12:00:00.000Z'))
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000)
+      await flushPromises()
+    })
+
+    expect(mocks.uploadTripCloudBackup).toHaveBeenCalledTimes(1)
+    expect(mocks.uploadTripCloudBackup).toHaveBeenCalledWith(trip.id)
+    expect(mocks.restoreCloudBackup).not.toHaveBeenCalled()
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({
+      status: 'synced',
+    })
+  })
+
+  it('auto-restores when the cloud version is newer than local dirty work', async () => {
+    setAutoSnapshotBackupEnabled(true)
+    mocks.listCloudBackups.mockResolvedValue([
+      {
+        appVersion: '0.3.0',
+        createdAt: '2026-04-02T13:00:00.000Z',
+        destination: trip.destination,
+        exportedAt: '2026-04-02T13:00:00.000Z',
+        filesCount: 0,
+        id: 'backup_cloud_newest',
+        originalTripId: trip.id,
+        schemaVersion: 1,
+        snapshotPath: 'user_1/backup_cloud_newest/snapshot.json',
+        title: trip.title,
+        totalSizeBytes: 0,
+        updatedAt: '2026-04-02T13:00:00.000Z',
+        userId: 'user_1',
+        warnings: [],
+      },
+    ])
+    renderController()
+    markTripAutoSnapshotSynced(trip.id, Date.parse('2026-04-02T10:00:00.000Z'))
+    markTripAutoSnapshotDirty(trip.id, 'item-updated', Date.parse('2026-04-02T12:00:00.000Z'))
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000)
+      await flushPromises()
+    })
+
+    expect(mocks.uploadTripCloudBackup).not.toHaveBeenCalled()
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledTimes(1)
+    expect(mocks.restoreCloudBackup).toHaveBeenCalledWith('backup_cloud_newest')
+    expect(getTripAutoSnapshotStatus(trip.id)).toMatchObject({
+      lastSuccessAt: Date.parse('2026-04-02T13:00:00.000Z'),
+      status: 'synced',
+    })
+  })
 })
 
 function renderController() {
@@ -224,6 +292,9 @@ async function runStartupAutoBackupScan() {
 }
 
 async function flushPromises() {
+  await Promise.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
   await Promise.resolve()
   await Promise.resolve()
   await Promise.resolve()

@@ -9,6 +9,7 @@ export type AutoSnapshotBackupStatus = 'dirty' | 'uploading' | 'synced' | 'error
 
 export type AutoSnapshotBackupEntry = {
   tripId: string
+  cloudVersionAtDirty?: number | null
   dirtyAt?: number
   status: AutoSnapshotBackupStatus
   reason?: string
@@ -30,7 +31,7 @@ export type AutoSnapshotBackupEventDetail = {
 const memoryStorage = new Map<string, string>()
 
 export function isAutoSnapshotBackupEnabled() {
-  return readStorageValue(AUTO_SNAPSHOT_BACKUP_SETTINGS_KEY) === '1'
+  return readStorageValue(AUTO_SNAPSHOT_BACKUP_SETTINGS_KEY) !== '0'
 }
 
 export function setAutoSnapshotBackupEnabled(enabled: boolean) {
@@ -38,7 +39,12 @@ export function setAutoSnapshotBackupEnabled(enabled: boolean) {
   emitAutoSnapshotBackupEvent({ kind: 'settings' }, AUTO_SNAPSHOT_BACKUP_SETTINGS_EVENT)
 }
 
-export function markTripAutoSnapshotDirty(tripId: string, reason?: string, now = Date.now()) {
+export function markTripAutoSnapshotDirty(
+  tripId: string,
+  reason?: string,
+  now = Date.now(),
+  options: { cloudVersionAtDirty?: number | null } = {},
+) {
   if (!tripId) {
     return
   }
@@ -46,6 +52,7 @@ export function markTripAutoSnapshotDirty(tripId: string, reason?: string, now =
   const state = readAutoSnapshotBackupState()
   state.trips[tripId] = {
     ...state.trips[tripId],
+    cloudVersionAtDirty: options.cloudVersionAtDirty,
     dirtyAt: now,
     lastError: undefined,
     reason,
@@ -85,6 +92,10 @@ export function listDirtyAutoSnapshotTrips() {
     .map(cloneEntry)
 }
 
+export function listAutoSnapshotBackupEntries() {
+  return Object.values(readAutoSnapshotBackupState().trips).map(cloneEntry).filter(isAutoSnapshotEntry)
+}
+
 export function hasPendingAutoSnapshotTrips() {
   return Object.values(readAutoSnapshotBackupState().trips).some(
     (entry) => typeof entry.dirtyAt === 'number' || entry.status === 'uploading',
@@ -108,6 +119,7 @@ export function completeTripAutoSnapshotSuccess(tripId: string, dirtyAt: number,
   state.trips[tripId] = {
     ...current,
     dirtyAt: undefined,
+    cloudVersionAtDirty: undefined,
     lastError: undefined,
     lastSuccessAt: now,
     status: 'synced',
@@ -125,6 +137,7 @@ export function markTripAutoSnapshotSynced(tripId: string, now = Date.now()) {
   const state = readAutoSnapshotBackupState()
   state.trips[tripId] = {
     ...state.trips[tripId],
+    cloudVersionAtDirty: undefined,
     dirtyAt: undefined,
     lastError: undefined,
     lastSuccessAt: now,
@@ -146,6 +159,28 @@ export function completeTripAutoSnapshotFailure(
     lastError: error,
     status: 'error',
   })
+}
+
+export function requestTripAutoSnapshotRetry(tripId: string) {
+  if (!tripId) {
+    return false
+  }
+
+  const state = readAutoSnapshotBackupState()
+  const current = state.trips[tripId]
+  if (!current?.dirtyAt) {
+    return false
+  }
+
+  state.trips[tripId] = {
+    ...current,
+    lastError: undefined,
+    status: 'dirty',
+    tripId,
+  }
+  writeAutoSnapshotBackupState(state)
+  emitAutoSnapshotBackupEvent({ kind: 'dirty', tripId })
+  return true
 }
 
 export function subscribeAutoSnapshotBackup(listener: (detail: AutoSnapshotBackupEventDetail) => void) {
@@ -246,6 +281,10 @@ function isAutoSnapshotBackupState(value: unknown): value is AutoSnapshotBackupS
 
 function cloneEntry(entry: AutoSnapshotBackupEntry | undefined) {
   return entry ? { ...entry } : null
+}
+
+function isAutoSnapshotEntry(entry: AutoSnapshotBackupEntry | null): entry is AutoSnapshotBackupEntry {
+  return Boolean(entry)
 }
 
 function emitAutoSnapshotBackupEvent(

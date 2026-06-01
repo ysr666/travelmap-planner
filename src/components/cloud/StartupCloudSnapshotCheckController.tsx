@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { listTrips } from '../../db'
 import {
+  completeTripAutoSnapshotSuccess,
   getTripAutoSnapshotStatus,
+  isAutoSnapshotBackupEnabled,
   markTripAutoSnapshotSynced,
   subscribeAutoSnapshotBackup,
 } from '../../lib/autoSnapshotBackup'
@@ -10,9 +12,11 @@ import {
   getSupabaseConfigStatus,
   listCloudBackups,
   restoreCloudBackup,
+  uploadTripCloudBackup,
 } from '../../lib/cloudBackup'
 import {
   buildCloudSnapshotCheckResults,
+  groupLatestCloudBackupsByTripId,
   refreshCloudSnapshotChecks,
   setCloudSnapshotCheckRefreshProvider,
   suppressCloudSnapshotPrompt,
@@ -44,25 +48,45 @@ export function StartupCloudSnapshotCheckController() {
         backups,
         trips,
       })
-      const remainingResults = []
+      const localTripIds = new Set(trips.map((trip) => trip.id))
 
       for (const result of results) {
-        if (result.status !== 'cloud_newer') {
-          remainingResults.push(result)
-          continue
-        }
-
-        try {
+        if (shouldUploadLocalVersion(result)) {
+          const uploadResult = await uploadTripCloudBackup(result.tripId)
+          const autoStatus = getTripAutoSnapshotStatus(result.tripId)
+          const exportedAt = Date.parse(uploadResult.exportedAt)
+          if (autoStatus?.dirtyAt) {
+            completeTripAutoSnapshotSuccess(
+              result.tripId,
+              autoStatus.dirtyAt,
+              Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+            )
+          } else {
+            markTripAutoSnapshotSynced(result.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
+          }
+        } else {
           const restoreResult = await restoreCloudBackup(result.backupId)
           const exportedAt = Date.parse(restoreResult.exportedAt)
           markTripAutoSnapshotSynced(result.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
-          suppressCloudSnapshotPrompt(result.signature)
-        } catch {
-          remainingResults.push(result)
         }
+        suppressCloudSnapshotPrompt(result.signature)
       }
 
-      return remainingResults
+      const latestBackupByTripId = groupLatestCloudBackupsByTripId(backups)
+      for (const [tripId, backup] of latestBackupByTripId) {
+        if (localTripIds.has(tripId)) {
+          continue
+        }
+
+        const restoreResult = await restoreCloudBackup(backup.id)
+        const exportedAt = Date.parse(restoreResult.exportedAt)
+        markTripAutoSnapshotSynced(
+          restoreResult.tripId,
+          Number.isFinite(exportedAt) ? exportedAt : Date.now(),
+        )
+      }
+
+      return []
     })
 
     const requestRefresh = () => {
@@ -94,8 +118,19 @@ export function StartupCloudSnapshotCheckController() {
   return null
 }
 
+function shouldUploadLocalVersion(result: {
+  cloudVersion: number
+  localVersion: number
+  status: string
+}) {
+  return (
+    result.status === 'local_newer' ||
+    (result.status === 'possible_conflict' && result.localVersion >= result.cloudVersion)
+  )
+}
+
 function canAttemptStartupCloudCheck() {
-  if (!getSupabaseConfigStatus().configured) {
+  if (!isAutoSnapshotBackupEnabled() || !getSupabaseConfigStatus().configured) {
     return false
   }
 

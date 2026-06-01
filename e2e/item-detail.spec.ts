@@ -315,7 +315,7 @@ test('地图来源详情编辑后保留地图上下文', async ({ page }) => {
   await mockMapStyle(page)
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
-  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
   await page.getByTestId('map-marker-card-open').click()
 
@@ -342,7 +342,7 @@ test('地图来源详情上一项下一项保留地图上下文', async ({ page 
   await mockMapStyle(page)
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
-  await expect(page.getByTestId('route-chip')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: /选择 明治神宫散步/ }).click()
   await page.getByTestId('map-marker-card-open').click()
 

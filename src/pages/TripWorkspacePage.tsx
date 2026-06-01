@@ -457,36 +457,49 @@ function DailyItineraryList({
         <h3 className="font-headline-md text-headline-md text-on-surface">每日行程</h3>
         <span className="font-label-sm text-label-sm text-on-surface-variant">{days.length} 天</span>
       </div>
-      <div className="overflow-hidden rounded-xl border-[0.5px] border-outline-variant/30 bg-surface-container">
+      <div className="-mx-1 overflow-x-auto px-1 py-1 app-scrollbar" data-testid="trip-day-selector">
+        <div className="flex min-w-max gap-2">
         {days.map((day, index) => {
           const itemCount = itemsByDay[day.id]?.length ?? 0
           const active = day.id === selectedDayId
           return (
             <button
-              className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] ${
-                index === days.length - 1 ? '' : 'border-b border-outline-variant/20'
+              aria-current={active ? 'page' : undefined}
+              className={`relative z-10 flex min-h-[8.5rem] w-[10.5rem] shrink-0 flex-col justify-between rounded-2xl border p-3 text-left transition active:scale-[0.98] ${
+                active
+                  ? 'border-primary/35 bg-primary text-on-primary shadow-[0_8px_18px_var(--color-primary-shadow)]'
+                  : 'border-outline-variant/30 bg-surface-container text-on-surface hover:bg-surface-container-high'
               }`}
+              data-testid="trip-day-link"
               key={day.id}
               onClick={() => onOpenDay(day)}
               type="button"
             >
-              <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl border text-sm font-bold ${
-                active
-                  ? 'border-primary/30 bg-primary/20 text-primary'
-                  : 'border-outline-variant/30 bg-surface-variant text-on-surface-variant'
-              }`}
-              >
-                D{index + 1}
+              <span className="flex items-center justify-between gap-2">
+                <span className={`font-label-sm text-label-sm uppercase tracking-wider ${active ? 'text-on-primary/80' : 'text-primary'}`}>
+                  Day {index + 1}
+                </span>
+                {active ? (
+                  <span className="rounded-full bg-on-primary/15 px-2 py-0.5 font-label-sm text-[11px] text-on-primary">
+                    当前
+                  </span>
+                ) : null}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-body-lg text-body-lg font-medium text-on-surface">{day.title}</span>
-                <span className="mt-0.5 block font-label-sm text-label-sm text-on-surface-variant">
-                  {formatDate(day.date)} · {itemCount} 个行程点
+              <span className="min-w-0">
+                <span className={`line-clamp-2 font-body-lg text-body-lg font-medium ${active ? 'text-on-primary' : 'text-on-surface'}`}>
+                  {day.title}
+                </span>
+                <span className={`mt-2 block font-label-sm text-label-sm ${active ? 'text-on-primary/75' : 'text-on-surface-variant'}`}>
+                  {formatDate(day.date)}
+                </span>
+                <span className={`mt-1 block font-label-sm text-label-sm ${active ? 'text-on-primary/75' : 'text-on-surface-variant'}`}>
+                  {itemCount} 个行程点
                 </span>
               </span>
             </button>
           )
         })}
+        </div>
       </div>
     </section>
   )

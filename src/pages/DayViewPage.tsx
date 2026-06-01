@@ -81,10 +81,15 @@ export function DayViewPage() {
       return
     }
 
+    const requestedDayExists = requestedDayId ? days.some((day) => day.id === requestedDayId) : false
+    if (requestedDayId && requestedDayExists) {
+      return
+    }
+
     if (requestedDayId !== selectedDay.id) {
       navigateTo('day', { tripId, dayId: selectedDay.id, view })
     }
-  }, [isLoading, requestedDayId, selectedDay, trip, tripId, view])
+  }, [days, isLoading, requestedDayId, selectedDay, trip, tripId, view])
 
   useEffect(() => {
     if (view !== 'map' || hasOpenedMap) {
@@ -309,8 +314,6 @@ export function DayViewPage() {
                 isVisible
                 items={items}
                 onBackToSchedule={() => handleSwitchView('schedule')}
-                onEditItem={() => handleSwitchView('schedule')}
-                onItemsChange={refreshItems}
                 onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'map' })}
                 prewarmEnabled={false}
                 resizeSignal={mapResizeToken}
@@ -321,10 +324,16 @@ export function DayViewPage() {
           ) : (
             <MapLoadingFallback day={selectedDay} items={items} />
           )}
-          <div className="pointer-events-none absolute inset-x-0 top-[116px] z-30 px-4 [&_button]:pointer-events-auto">
+          <ViewSwitch
+            activeView={view}
+            floating
+            onSwitch={handleSwitchView}
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-[124px] z-30 px-4 [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
             <DaySelector
               days={days}
               density="compact"
+              getDayHref={(day) => buildDayHref(trip.id, day.id, view)}
               onSelectDay={(day) => navigateTo('day', { tripId: trip.id, dayId: day.id, view })}
               selectedDayId={selectedDay.id}
             />
@@ -332,9 +341,10 @@ export function DayViewPage() {
         </main>
       ) : (
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-28 pt-20 app-scrollbar">
-          <div className="space-y-section-gap">
+          <div className="mx-auto w-full max-w-3xl space-y-section-gap">
             <DaySelector
               days={days}
+              getDayHref={(day) => buildDayHref(trip.id, day.id, view)}
               onSelectDay={(day) => navigateTo('day', { tripId: trip.id, dayId: day.id, view })}
               selectedDayId={selectedDay.id}
             />
@@ -342,31 +352,13 @@ export function DayViewPage() {
             <section className="space-y-stack-gap">
               <div>
                 <p className="font-label-sm text-label-sm text-primary uppercase tracking-wider">第 {dayIndex} 天</p>
-                <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">{selectedDay.title}</h2>
+                <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-primary">{selectedDay.title}</h2>
                 <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{dayDateStr}</p>
               </div>
               <ViewSwitch
                 activeView={view}
                 onSwitch={handleSwitchView}
               />
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm shadow-md transition active:scale-95"
-                  onClick={() => handleSwitchView('map')}
-                  type="button"
-                >
-                  <MapIcon className="size-4" />
-                  地图
-                </button>
-                <button
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-high text-primary font-label-sm text-label-sm transition hover:bg-surface-container-highest active:scale-95"
-                  onClick={() => navigateTo('tickets', { tripId: trip.id })}
-                  type="button"
-                >
-                  <CalendarDays className="size-4" />
-                  票据库
-                </button>
-              </div>
             </section>
 
             {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
@@ -377,7 +369,6 @@ export function DayViewPage() {
               items={items}
               onItemsChange={refreshItems}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
-              onSwitchToMap={() => handleSwitchView('map')}
               sourceView="schedule"
               trip={trip}
             />
@@ -439,6 +430,10 @@ function normalizeDayView(value: string | null): DayWorkspaceView {
   return value === 'schedule' ? 'schedule' : 'map'
 }
 
+function buildDayHref(tripId: string, dayId: string, view: DayWorkspaceView) {
+  return `#/day?${new URLSearchParams({ tripId, dayId, view }).toString()}`
+}
+
 function ViewSwitch({
   activeView,
   floating = false,
@@ -449,7 +444,7 @@ function ViewSwitch({
   onSwitch: (view: DayWorkspaceView) => void
 }) {
   return (
-    <div className={`${floating ? 'absolute right-4 top-[72px] z-30 shadow-lg' : 'relative'} rounded-full border border-outline-variant/30 bg-surface/90 p-1 backdrop-blur-xl`}>
+    <div className={`${floating ? 'absolute left-4 top-[72px] z-30 shadow-lg' : 'relative'} rounded-full border border-outline-variant/30 bg-surface/90 p-1 backdrop-blur-xl`}>
       <div className="grid grid-cols-2 gap-1">
         <button
           className={`flex min-h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
@@ -488,37 +483,30 @@ function formatShortWorkspaceDate(date: string): string {
 }
 
 function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }) {
+  const previewItem = items[0] ?? null
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-map-bg p-4" data-testid="map-loading-fallback">
-      <div className="rounded-2xl tm-surface p-4">
+    <div className="relative h-full min-h-0 overflow-hidden bg-map-bg p-4" data-testid="map-loading-fallback">
+      <div className="absolute left-4 right-4 top-20 rounded-2xl tm-surface p-4">
         <SkeletonLine className="w-1/2" />
         <p className="mt-3 text-sm font-medium text-on-surface-variant dark:text-outline-variant">
           地图加载中，本地行程仍可查看。
         </p>
       </div>
-      <div className="mt-auto max-h-[54%] min-h-0 rounded-t-3xl tm-surface p-4">
-        <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300/70 dark:bg-slate-600/70" />
-        <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{formatShortWorkspaceDate(day.date)}</p>
-        <h2 className="mt-1 truncate text-base font-semibold text-on-surface dark:text-on-surface">{day.title}</h2>
-        <p className="mt-1 text-xs tm-muted">{items.length} 个行程点，本地列表可先查看。</p>
-        <div className="mt-3 min-h-0 overflow-y-auto app-scrollbar">
-          <div className="space-y-2 pb-3">
-            {items.slice(0, 4).map((item, index) => (
-              <div className="flex items-center gap-3 rounded-xl bg-surface-container-low/80 px-3 py-2 dark:bg-surface-container-highest/50" key={item.id}>
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100/80 text-xs font-bold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-on-surface dark:text-on-surface">{item.title}</span>
-                  <span className="flex items-center gap-1 truncate text-xs tm-muted">
-                    📍 {item.locationName || item.address || '地点未填写'}
-                  </span>
-                </span>
-              </div>
-            ))}
+      {previewItem ? (
+        <div className="absolute bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30 rounded-2xl border border-outline-variant/30 bg-surface-container-high/95 p-4 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+              <CalendarDays className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-primary">{formatShortWorkspaceDate(day.date)} · {items.length} 个行程点</p>
+              <h2 className="mt-0.5 truncate text-base font-semibold text-on-surface dark:text-on-surface">{previewItem.title}</h2>
+              <p className="mt-0.5 truncate text-xs tm-muted">{previewItem.locationName || previewItem.address || day.title}</p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { buildAiTripEditLocalStateFingerprint } from '../../lib/ai/aiTripEditApply'
 import {
+  SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER,
   SMART_TRIP_WORKSPACE_MAX_PLACE_LOOKUPS,
   SMART_TRIP_WORKSPACE_MAX_ROUTE_ORDER_DAYS,
   SMART_TRIP_WORKSPACE_MAX_SEARCHES,
@@ -16,12 +17,17 @@ import {
   buildSmartTripWorkspaceRouteOrderRequestItems,
   buildSmartTripWorkspaceSearchQuery,
   buildSmartTripWorkspaceSearchType,
+  formatSmartTripWorkspaceSourceConfidence,
+  formatSmartTripWorkspaceSourceDate,
   buildSmartTripWorkspaceTripNoteDiff,
+  getSmartTripWorkspaceDiffCategoryLabel,
   getSmartTripWorkspaceDefaultCheckedIds,
   getSmartTripWorkspacePlaceTargets,
   getSmartTripWorkspaceRouteOrderCandidateDays,
   getSmartTripWorkspaceSearchTargets,
+  selectBestSmartTripWorkspacePlaceResult,
   type SmartTripWorkspaceDiffItem,
+  type SmartTripWorkspaceDiffType,
   type SmartTripWorkspacePlaceCalibrationDiff,
 } from '../../lib/ai/smartTripWorkspace'
 import {
@@ -70,6 +76,7 @@ export function SmartTripWorkspacePanel({
   const potentialRouteDayCount = useMemo(() => estimatePotentialRouteDayCount(days, itemsByDay), [days, itemsByDay])
   const estimatedRequestCount = placeTargets.length + searchTargets.length + potentialRouteDayCount
   const selectedWriteCount = diffs.filter((diff) => diff.hasWrite && checkedDiffIds.includes(diff.id)).length
+  const categoryPreviews = useMemo(() => buildCategoryPreviews(diffs, checkedDiffIds), [checkedDiffIds, diffs])
   const canGenerate = Boolean(providerConfig.configured && providerConfig.proxyUrl && days.length > 0 && !isGenerating)
   const canApply = selectedWriteCount > 0 && !isApplying
 
@@ -189,6 +196,23 @@ export function SmartTripWorkspacePanel({
     ))
   }
 
+  function setCategoryChecked(type: SmartTripWorkspaceDiffType, checked: boolean) {
+    const categoryDiffIds = diffs
+      .filter((diff) => diff.type === type && diff.hasWrite)
+      .map((diff) => diff.id)
+    setCheckedDiffIds((current) => {
+      const next = new Set(current)
+      for (const diffId of categoryDiffIds) {
+        if (checked) {
+          next.add(diffId)
+        } else {
+          next.delete(diffId)
+        }
+      }
+      return Array.from(next)
+    })
+  }
+
   return (
     <Card className="space-y-3" data-testid="smart-trip-workspace-panel" variant="grouped">
       <div className="flex items-start gap-3">
@@ -268,6 +292,11 @@ export function SmartTripWorkspacePanel({
               批量应用
             </Button>
           </div>
+          <SmartCategoryControls
+            categories={categoryPreviews}
+            onClear={(type) => setCategoryChecked(type, false)}
+            onSelect={(type) => setCategoryChecked(type, true)}
+          />
           <div className="space-y-2">
             {diffs.map((diff) => (
               <SmartDiffRow
@@ -331,6 +360,63 @@ function SmartMetric({ icon, label, value }: { icon: ReactNode; label: string; v
   )
 }
 
+type SmartCategoryPreview = {
+  label: string
+  selectedCount: number
+  totalCount: number
+  type: SmartTripWorkspaceDiffType
+}
+
+function SmartCategoryControls({
+  categories,
+  onClear,
+  onSelect,
+}: {
+  categories: SmartCategoryPreview[]
+  onClear: (type: SmartTripWorkspaceDiffType) => void
+  onSelect: (type: SmartTripWorkspaceDiffType) => void
+}) {
+  if (categories.length === 0) {
+    return null
+  }
+  return (
+    <div
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+      data-testid="smart-trip-workspace-category-controls"
+    >
+      {categories.map((category) => (
+        <div
+          className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 ring-1 ring-outline-variant/25 dark:bg-surface-dim/35"
+          key={category.type}
+        >
+          <p className="min-w-0 text-[11px] font-semibold leading-5 text-on-surface dark:text-on-surface">
+            <span>{category.label}</span>
+            <span className="ml-1 font-medium tm-muted">{category.selectedCount}/{category.totalCount}</span>
+          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              className="min-h-7 rounded-lg px-2 text-[11px]"
+              data-testid={`smart-trip-workspace-category-select-${category.type}`}
+              onClick={() => onSelect(category.type)}
+              variant="subtle"
+            >
+              全选
+            </Button>
+            <Button
+              className="min-h-7 rounded-lg px-2 text-[11px]"
+              data-testid={`smart-trip-workspace-category-clear-${category.type}`}
+              onClick={() => onClear(category.type)}
+              variant="ghost"
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SmartDiffRow({
   checked,
   diff,
@@ -362,6 +448,17 @@ function SmartDiffRow({
             ) : null}
           </div>
           <p className="mt-1 text-[11px] leading-5 tm-muted">{diff.summary}</p>
+          <div
+            className="mt-2 space-y-1 rounded-lg bg-surface-container-high/70 px-2 py-1.5 text-[11px] leading-5 text-on-surface-variant dark:bg-surface-container-highest/50"
+            data-testid="smart-trip-workspace-source-meta"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">{diff.sourceMeta.label}</span>
+              <span>来源时间：{formatSmartTripWorkspaceSourceDate(diff.sourceMeta.retrievedAt)}</span>
+              <span>可信度：{formatSmartTripWorkspaceSourceConfidence(diff.sourceMeta.confidence)}</span>
+            </div>
+            <p className="break-words [overflow-wrap:anywhere]">建议理由：{diff.sourceMeta.reason}</p>
+          </div>
           <ul className="mt-2 space-y-1 text-[11px] leading-5 text-on-surface-variant">
             {diff.detailLines.slice(0, 4).map((line) => (
               <li className="break-words [overflow-wrap:anywhere]" key={line}>{line}</li>
@@ -374,6 +471,25 @@ function SmartDiffRow({
       </div>
     </label>
   )
+}
+
+function buildCategoryPreviews(
+  diffs: SmartTripWorkspaceDiffItem[],
+  checkedDiffIds: string[],
+): SmartCategoryPreview[] {
+  const checkedIdSet = new Set(checkedDiffIds)
+  return SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER.flatMap((type) => {
+    const categoryDiffs = diffs.filter((diff) => diff.type === type && diff.hasWrite)
+    if (categoryDiffs.length === 0) {
+      return []
+    }
+    return [{
+      label: getSmartTripWorkspaceDiffCategoryLabel(type),
+      selectedCount: categoryDiffs.filter((diff) => checkedIdSet.has(diff.id)).length,
+      totalCount: categoryDiffs.length,
+      type,
+    }]
+  })
 }
 
 async function collectPlaceDiffs({
@@ -394,13 +510,14 @@ async function collectPlaceDiffs({
     try {
       const response = await fetchProviderProxyPlaceLookup({
         locale: 'zh-CN',
-        maxResults: 1,
+        maxResults: 3,
         operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
         query: buildSmartTripWorkspacePlaceLookupQuery(item, trip),
         requestId: `smart-place-${item.id}`,
       }, proxyUrl)
-      const diff = response.results[0]
-        ? buildSmartTripWorkspacePlaceDiff({ day: dayById.get(item.dayId), item, result: response.results[0] })
+      const bestResult = selectBestSmartTripWorkspacePlaceResult(response.results, item)
+      const diff = bestResult
+        ? buildSmartTripWorkspacePlaceDiff({ day: dayById.get(item.dayId), item, result: bestResult })
         : null
       if (diff) {
         diffs.push(diff)

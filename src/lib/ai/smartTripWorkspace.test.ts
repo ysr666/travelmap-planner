@@ -21,6 +21,8 @@ import {
   buildSmartTripWorkspaceRouteOrderRequestItems,
   buildSmartTripWorkspaceTripNoteDiff,
   getSmartTripWorkspaceDefaultCheckedIds,
+  selectBestSmartTripWorkspacePlaceResult,
+  sortSmartTripWorkspaceTravelSearchResults,
   type SmartTripWorkspaceDiffItem,
 } from './smartTripWorkspace'
 import type {
@@ -79,6 +81,60 @@ describe('smartTripWorkspace diff builders', () => {
     expect(diff?.noteText).toContain('搜索来源摘要')
     expect(diff?.noteText).toContain('官方开放时间摘要')
     expect(diff?.sources[0].domain).toBe('travel.example')
+    expect(diff?.sourceMeta.label).toBe('官网')
+    expect(diff?.sourceMeta.reason).toContain('无来源结果不会写入事实性提示')
+  })
+
+  it('prioritizes official and high-confidence sources before low-quality sources', async () => {
+    const seed = await seedTrip()
+    const lowQuality = searchResult('低质量搬运摘要', '低可信摘要', {
+      confidence: 'low',
+      domain: 'unknown.example',
+      sourceType: 'unknown',
+      url: 'https://unknown.example/source',
+    })
+    const official = searchResult('西湖官网开放时间', '官网开放时间摘要', {
+      confidence: 'high',
+      domain: 'westlake.hangzhou.gov.cn',
+      sourceType: 'official',
+      url: 'https://westlake.hangzhou.gov.cn/opening-hours',
+    })
+    const map = searchResult('西湖地图资料', '地图来源摘要', {
+      confidence: 'medium',
+      domain: 'maps.example',
+      sourceType: 'map',
+      url: 'https://maps.example/west-lake',
+    })
+
+    expect(sortSmartTripWorkspaceTravelSearchResults([lowQuality, map, official]).map((result) => result.title)).toEqual([
+      '西湖官网开放时间',
+      '西湖地图资料',
+      '低质量搬运摘要',
+    ])
+
+    const diff = buildSmartTripWorkspaceItemNoteDiff({
+      day: seed.day1,
+      item: seed.item1,
+      retrievedAt: '2026-06-02T01:02:03.000Z',
+      searchResults: [lowQuality, map, official],
+    })
+    expect(diff?.sources.map((source) => source.title)).toEqual([
+      '西湖官网开放时间',
+      '西湖地图资料',
+      '低质量搬运摘要',
+    ])
+    expect(diff?.detailLines[1]).toContain('官网 · 高可信')
+    expect(diff?.sourceMeta).toMatchObject({ confidence: 'high', label: '官网' })
+  })
+
+  it('selects the best source-prioritized place lookup candidate', async () => {
+    const seed = await seedTrip()
+    const weakCandidate = placeResult('相似地点', 30.2, 120.1, { googleMapsUri: null })
+    const officialCandidate = placeResult('西湖风景名胜区', 30.25, 120.14, {
+      googleMapsUri: 'https://maps.google.com/west-lake',
+    })
+
+    expect(selectBestSmartTripWorkspacePlaceResult([weakCandidate, officialCandidate], seed.item1)).toEqual(officialCandidate)
   })
 })
 
@@ -191,6 +247,13 @@ describe('applySmartTripWorkspaceDiffsToDb', () => {
       patches: [{ id: 'missing', sortOrder: 1 }],
       provider: 'mock',
       retrievedAt: '2026-06-02T01:02:03.000Z',
+      sourceMeta: {
+        confidence: 'medium',
+        label: '路线建议',
+        reason: 'bad',
+        retrievedAt: '2026-06-02T01:02:03.000Z',
+        sourceType: 'provider_route',
+      },
       summary: 'bad',
       title: 'bad',
       type: 'route_order',
@@ -244,11 +307,19 @@ async function seedTrip() {
   return { day1, item1, item2, item3, trip }
 }
 
-function placeResult(displayName: string, lat: number, lng: number): ProviderProxyPlaceLookupResult {
+function placeResult(
+  displayName: string,
+  lat: number,
+  lng: number,
+  options: { googleMapsUri?: string | null } = {},
+): ProviderProxyPlaceLookupResult {
+  const googleMapsUri = options.googleMapsUri === undefined
+    ? 'https://maps.google.com/example'
+    : options.googleMapsUri ?? undefined
   return {
     displayName,
     formattedAddress: `${displayName} 地址`,
-    googleMapsUri: 'https://maps.google.com/example',
+    googleMapsUri,
     location: { lat, lng },
     placeId: `place-${displayName}`,
     provider: 'google_places',
@@ -270,15 +341,25 @@ function routeResult(dayId: string, suggestedItemIds: string[]): ProviderProxyRo
   }
 }
 
-function searchResult(title: string, snippet: string): ProviderProxyTravelSearchResult {
+function searchResult(
+  title: string,
+  snippet: string,
+  options: {
+    confidence?: ProviderProxyTravelSearchResult['confidence']
+    domain?: string
+    sourceType?: ProviderProxyTravelSearchResult['sourceType']
+    url?: string
+  } = {},
+): ProviderProxyTravelSearchResult {
+  const url = options.url ?? 'https://travel.example/source'
   return {
-    confidence: 'high',
-    displayUrl: 'travel.example/source',
-    domain: 'travel.example',
+    confidence: options.confidence ?? 'high',
+    displayUrl: url.replace(/^https?:\/\//, ''),
+    domain: options.domain ?? 'travel.example',
     retrievedAt: '2026-06-02T01:02:03.000Z',
     snippet,
-    sourceType: 'official',
+    sourceType: options.sourceType ?? 'official',
     title,
-    url: 'https://travel.example/source',
+    url,
   }
 }

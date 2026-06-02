@@ -9,6 +9,7 @@ import type {
   ProviderProxyRouteOrderSuggestionItem,
   ProviderProxyRouteOrderSuggestionSuccessResponse,
   ProviderProxyTravelSearchResult,
+  ProviderProxyTravelSearchSourceType,
   ProviderProxyTravelSearchType,
 } from './providerProxyContract'
 import type { Day, ItineraryItem, Trip } from '../../types'
@@ -31,10 +32,28 @@ export type SmartTripWorkspaceDiffBase = {
   hasWrite: boolean
   id: string
   routeMayBeStale?: boolean
+  sourceMeta: SmartTripWorkspaceSourceMeta
   summary: string
   title: string
   type: SmartTripWorkspaceDiffType
   warnings?: string[]
+}
+
+export type SmartTripWorkspaceSourceConfidence = 'high' | 'medium' | 'low' | 'unknown'
+
+export type SmartTripWorkspaceSourceType =
+  | ProviderProxyTravelSearchSourceType
+  | 'official_map'
+  | 'official_route'
+  | 'provider_route'
+  | 'local_rule'
+
+export type SmartTripWorkspaceSourceMeta = {
+  confidence: SmartTripWorkspaceSourceConfidence
+  label: string
+  reason: string
+  retrievedAt?: string
+  sourceType: SmartTripWorkspaceSourceType
 }
 
 export type SmartTripWorkspacePlaceCalibrationDiff = SmartTripWorkspaceDiffBase & {
@@ -80,12 +99,13 @@ export type SmartTripWorkspaceDiffItem =
   | SmartTripWorkspaceTripNoteAppendDiff
 
 export type SmartTripWorkspaceSourceSummary = {
-  confidence?: ProviderProxyTravelSearchResult['confidence']
+  confidence: SmartTripWorkspaceSourceConfidence
   displayUrl: string
   domain: string
+  label: string
   retrievedAt: string
   snippet: string
-  sourceType?: ProviderProxyTravelSearchResult['sourceType']
+  sourceType: SmartTripWorkspaceSourceType
   title: string
   url: string
 }
@@ -103,6 +123,31 @@ const NOTE_SOURCE_LIMIT = 3
 const NOTE_SNIPPET_LIMIT = 180
 const NOTE_TEXT_LIMIT = 1200
 const ROUTE_STALE_WARNING = '地点或顺序修改可能让已有路线缓存过期；本次不会清除路线缓存。'
+export const SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER: SmartTripWorkspaceDiffType[] = [
+  'place_calibration',
+  'route_order',
+  'item_note_append',
+  'trip_note_append',
+]
+
+export function getSmartTripWorkspaceDiffCategoryLabel(type: SmartTripWorkspaceDiffType) {
+  if (type === 'place_calibration') return '地点校准'
+  if (type === 'route_order') return '路线顺序'
+  if (type === 'item_note_append') return '景点提示'
+  return '每日提示'
+}
+
+export function formatSmartTripWorkspaceSourceConfidence(confidence: SmartTripWorkspaceSourceConfidence) {
+  if (confidence === 'high') return '高'
+  if (confidence === 'medium') return '中'
+  if (confidence === 'low') return '低'
+  return '未标注'
+}
+
+export function formatSmartTripWorkspaceSourceDate(value: string | undefined) {
+  if (!value) return '本地'
+  return formatDateStamp(value)
+}
 
 export function getSmartTripWorkspacePlaceTargets(items: ItineraryItem[]) {
   return sortItineraryItems(items)
@@ -154,6 +199,19 @@ export function buildSmartTripWorkspaceSearchType(): ProviderProxyTravelSearchTy
   return 'general'
 }
 
+export function selectBestSmartTripWorkspacePlaceResult(
+  results: ProviderProxyPlaceLookupResult[],
+  item?: ItineraryItem,
+) {
+  return [...results]
+    .filter((result) => isValidPlaceLocation(result.location))
+    .sort((first, second) => getPlaceResultPriority(second, item) - getPlaceResultPriority(first, item))[0]
+}
+
+export function sortSmartTripWorkspaceTravelSearchResults(results: ProviderProxyTravelSearchResult[]) {
+  return [...results].sort((first, second) => getSearchResultPriority(second) - getSearchResultPriority(first))
+}
+
 export function buildSmartTripWorkspacePlaceDiff({
   day,
   item,
@@ -193,6 +251,7 @@ export function buildSmartTripWorkspacePlaceDiff({
     nextLocationName,
     routeMayBeStale: true,
     sourceUrl: result.googleMapsUri,
+    sourceMeta: buildPlaceSourceMeta(result),
     summary: `${item.title} 将校准到 ${nextLocationName}`,
     title: `地点校准：${item.title}`,
     type: 'place_calibration',
@@ -255,6 +314,10 @@ export function buildSmartTripWorkspaceRouteOrderDiff({
     provider: result.provider,
     retrievedAt: result.retrievedAt,
     routeMayBeStale: patches.length > 0,
+    sourceMeta: buildRouteSourceMeta(result, {
+      changesCount: patches.length,
+      usesVirtualCoordinates,
+    }),
     summary: patches.length > 0
       ? `${day.title} 将调整 ${patches.length} 个行程点的排序`
       : `${day.title} 当前顺序已接近建议`,
@@ -279,11 +342,12 @@ export function buildSmartTripWorkspaceItemNoteDiff({
   if (sources.length === 0) {
     return null
   }
+  const bestSource = sources[0]
 
   const lines = [
     `智能整理提示（${formatDateStamp(retrievedAt)}）`,
     '开放时间、票价和入场规则请以官方或购票来源为准；以下仅保留本次搜索来源摘要：',
-    ...sources.map((source) => `- ${source.title}：${source.snippet}（${source.domain || source.displayUrl}）`),
+    ...sources.map((source) => `- ${source.title}：${source.snippet}（${source.label}；${source.domain || source.displayUrl}）`),
   ]
   const localTips = buildLocalItemTips(item)
   if (localTips.length > 0) {
@@ -298,13 +362,20 @@ export function buildSmartTripWorkspaceItemNoteDiff({
     checkedByDefault: true,
     detailLines: [
       `将追加 ${sources.length} 条来源摘要到备注。`,
-      ...sources.map((source) => `${source.title} · ${source.domain || source.displayUrl}`),
+      ...sources.map((source) => `${source.label} · ${formatConfidenceLabel(source.confidence)} · ${formatDateStamp(source.retrievedAt)} · ${source.title} · ${source.domain || source.displayUrl}`),
     ],
     hasWrite: true,
     id: `item-note:${item.id}`,
     itemId: item.id,
     noteText,
     sources,
+    sourceMeta: {
+      confidence: bestSource.confidence,
+      label: bestSource.label,
+      reason: `优先采用 ${bestSource.label} 中可信度最高且带来源的摘要；无来源结果不会写入事实性提示。`,
+      retrievedAt: bestSource.retrievedAt,
+      sourceType: bestSource.sourceType,
+    },
     summary: `${item.title} 将追加开放时间/票价/景点提示来源摘要`,
     title: `景点提示：${item.title}`,
     type: 'item_note_append',
@@ -353,6 +424,13 @@ export function buildSmartTripWorkspaceTripNoteDiff({
     hasWrite: true,
     id: 'trip-note:daily-tips',
     noteText,
+    sourceMeta: {
+      confidence: 'medium',
+      label: '本地规则',
+      reason: '根据每日行程点数量、时间完整度和坐标完整度生成，不依赖外部事实来源。',
+      retrievedAt,
+      sourceType: 'local_rule',
+    },
     summary: '将在旅行备注中追加按天分组的整理提示',
     title: '每日提示',
     type: 'trip_note_append',
@@ -545,17 +623,102 @@ function getItemCoordinate(
   return { lat: item.lat as number, lng: item.lng as number }
 }
 
+function buildPlaceSourceMeta(result: ProviderProxyPlaceLookupResult): SmartTripWorkspaceSourceMeta {
+  return {
+    confidence: result.googleMapsUri ? 'high' : 'medium',
+    label: '官方地图',
+    reason: result.googleMapsUri
+      ? 'Google Places 返回了可核验地图链接、地址和有效坐标，适合校准缺失地点。'
+      : 'Google Places 返回了地址和有效坐标，适合校准缺失地点。',
+    retrievedAt: result.retrievedAt,
+    sourceType: 'official_map',
+  }
+}
+
+function buildRouteSourceMeta(
+  result: ProviderProxyRouteOrderSuggestionSuccessResponse,
+  context: { changesCount: number; usesVirtualCoordinates: boolean },
+): SmartTripWorkspaceSourceMeta {
+  const isOfficialRoute = result.provider === 'google'
+  const usesVirtualText = context.usesVirtualCoordinates ? '，并纳入待确认地点校准坐标' : ''
+  return {
+    confidence: isOfficialRoute ? 'high' : 'medium',
+    label: isOfficialRoute ? '官方路线' : '路线建议',
+    reason: context.changesCount > 0
+      ? `按可用坐标${usesVirtualText}生成顺序，可减少回头路；应用后不会清除路线缓存。`
+      : `当前顺序已接近 provider 建议${usesVirtualText}，无需写入排序变化。`,
+    retrievedAt: result.retrievedAt,
+    sourceType: isOfficialRoute ? 'official_route' : 'provider_route',
+  }
+}
+
+function getPlaceResultPriority(result: ProviderProxyPlaceLookupResult, item?: ItineraryItem) {
+  let score = 0
+  if (isValidPlaceLocation(result.location)) score += 100
+  if (result.provider === 'google_places') score += 50
+  if (result.googleMapsUri) score += 25
+  if (result.formattedAddress.trim()) score += 10
+  if (item) {
+    const candidateText = `${result.displayName} ${result.formattedAddress}`.toLowerCase()
+    const title = item.title.trim().toLowerCase()
+    const locationName = item.locationName?.trim().toLowerCase()
+    if (title && candidateText.includes(title)) score += 8
+    if (locationName && candidateText.includes(locationName)) score += 8
+  }
+  return score
+}
+
+function getSearchResultPriority(result: ProviderProxyTravelSearchResult) {
+  const sourceTypeScore: Record<ProviderProxyTravelSearchSourceType, number> = {
+    official: 100,
+    map: 90,
+    ticketing: 78,
+    travel_site: 58,
+    unknown: 20,
+  }
+  const confidenceScore: Record<SmartTripWorkspaceSourceConfidence, number> = {
+    high: 30,
+    medium: 18,
+    low: 4,
+    unknown: 10,
+  }
+  const sourceType = result.sourceType ?? 'unknown'
+  const confidence = normalizeSourceConfidence(result.confidence)
+  return sourceTypeScore[sourceType] + confidenceScore[confidence]
+}
+
 function summarizeSmartTripWorkspaceSources(results: ProviderProxyTravelSearchResult[]): SmartTripWorkspaceSourceSummary[] {
-  return results.slice(0, NOTE_SOURCE_LIMIT).map((result) => ({
-    confidence: result.confidence,
+  return sortSmartTripWorkspaceTravelSearchResults(results).slice(0, NOTE_SOURCE_LIMIT).map((result) => ({
+    confidence: normalizeSourceConfidence(result.confidence),
     displayUrl: result.displayUrl,
     domain: result.domain,
+    label: getTravelSearchSourceLabel(result.sourceType, result.confidence),
     retrievedAt: result.retrievedAt,
     snippet: clampText(result.snippet, NOTE_SNIPPET_LIMIT),
-    sourceType: result.sourceType,
+    sourceType: result.sourceType ?? 'unknown',
     title: clampText(result.title, 120),
     url: result.url,
   })).filter((source) => source.title && source.url && source.snippet)
+}
+
+function getTravelSearchSourceLabel(
+  sourceType: ProviderProxyTravelSearchSourceType | undefined,
+  confidence: ProviderProxyTravelSearchResult['confidence'],
+) {
+  if (sourceType === 'official') return '官网'
+  if (sourceType === 'map') return '官方地图'
+  if (sourceType === 'ticketing') return '购票来源'
+  if (sourceType === 'travel_site') return confidence === 'high' ? '高可信旅行来源' : '旅行来源'
+  if (confidence === 'high') return '高可信来源'
+  return '来源未标注'
+}
+
+function normalizeSourceConfidence(confidence: ProviderProxyTravelSearchResult['confidence']): SmartTripWorkspaceSourceConfidence {
+  return confidence ?? 'unknown'
+}
+
+function formatConfidenceLabel(confidence: SmartTripWorkspaceSourceConfidence) {
+  return `${formatSmartTripWorkspaceSourceConfidence(confidence)}可信`
 }
 
 function buildLocalItemTips(item: ItineraryItem) {

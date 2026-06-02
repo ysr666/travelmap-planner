@@ -47,21 +47,32 @@ describe('SmartTripWorkspacePanel', () => {
     const onApplied = vi.fn().mockResolvedValue(undefined)
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       await delay()
-      const body = JSON.parse(String(init?.body ?? '{}')) as { operation?: string; requestId?: string }
+      const body = JSON.parse(String(init?.body ?? '{}')) as { maxResults?: number; operation?: string; requestId?: string }
       if (body.operation === 'place_lookup') {
+        expect(body.maxResults).toBe(3)
         return jsonResponse({
           ok: true,
           operation: 'place_lookup',
           retrievedAt: '2026-06-02T01:02:03.000Z',
-          results: [{
-            displayName: '西湖风景名胜区',
-            formattedAddress: '杭州西湖风景名胜区',
-            googleMapsUri: 'https://maps.google.com/west-lake',
-            location: { lat: 30.25, lng: 120.14 },
-            placeId: 'place-west-lake',
-            provider: 'google_places',
-            retrievedAt: '2026-06-02T01:02:03.000Z',
-          }],
+          results: [
+            {
+              displayName: '西湖相似地点',
+              formattedAddress: '杭州西湖相似地点',
+              location: { lat: 30.2, lng: 120.1 },
+              placeId: 'place-weak',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+            {
+              displayName: '西湖风景名胜区',
+              formattedAddress: '杭州西湖风景名胜区',
+              googleMapsUri: 'https://maps.google.com/west-lake',
+              location: { lat: 30.25, lng: 120.14 },
+              placeId: 'place-west-lake',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+          ],
           source: 'mock',
         })
       }
@@ -83,16 +94,28 @@ describe('SmartTripWorkspacePanel', () => {
           ok: true,
           operation: 'travel_search',
           query: '西湖 开放时间',
-          results: [{
-            confidence: 'high',
-            displayUrl: 'travel.example/west-lake',
-            domain: 'travel.example',
-            retrievedAt: '2026-06-02T01:02:03.000Z',
-            snippet: '西湖开放时间和票价模拟来源摘要。',
-            sourceType: 'official',
-            title: '西湖开放时间模拟来源',
-            url: 'https://travel.example/west-lake',
-          }],
+          results: [
+            {
+              confidence: 'low',
+              displayUrl: 'unknown.example/west-lake',
+              domain: 'unknown.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '低质量搬运摘要。',
+              sourceType: 'unknown',
+              title: '西湖搬运摘要',
+              url: 'https://unknown.example/west-lake',
+            },
+            {
+              confidence: 'high',
+              displayUrl: 'travel.example/west-lake',
+              domain: 'travel.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '西湖开放时间和票价模拟来源摘要。',
+              sourceType: 'official',
+              title: '西湖开放时间模拟来源',
+              url: 'https://travel.example/west-lake',
+            },
+          ],
           retrievedAt: '2026-06-02T01:02:03.000Z',
           source: 'mock',
         })
@@ -127,6 +150,14 @@ describe('SmartTripWorkspacePanel', () => {
     expect(document.body.textContent).toContain('路线顺序：第一天')
     expect(document.body.textContent).toContain('景点提示：西湖')
     expect(document.body.textContent).toContain('每日提示')
+    expect(document.body.textContent).toContain('官网')
+    expect(document.body.textContent).toContain('可信度：高')
+    expect(document.body.textContent).toContain('建议理由')
+    expect(document.body.textContent).toContain('地点校准')
+    await clickTestId('smart-trip-workspace-category-clear-place_calibration')
+    expect(document.body.textContent).toContain('地点校准0/1')
+    await clickTestId('smart-trip-workspace-category-select-place_calibration')
+    expect(document.body.textContent).toContain('地点校准1/1')
 
     await clickButton('批量应用')
     await clickButton('确认应用')
@@ -169,6 +200,16 @@ async function clickButton(name: string) {
   }
   await act(async () => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+async function clickTestId(testId: string) {
+  const element = document.body.querySelector(`[data-testid="${testId}"]`)
+  if (!element) {
+    throw new Error(`Element not found: ${testId}`)
+  }
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 

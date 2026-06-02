@@ -20,7 +20,9 @@ import {
   buildSmartTripWorkspaceRouteOrderDiff,
   buildSmartTripWorkspaceRouteOrderRequestItems,
   buildSmartTripWorkspaceTripNoteDiff,
+  getSmartTripWorkspaceCheckedPlaceDiffs,
   getSmartTripWorkspaceDefaultCheckedIds,
+  replaceSmartTripWorkspaceCategoryDiffs,
   selectBestSmartTripWorkspacePlaceResult,
   sortSmartTripWorkspaceTravelSearchResults,
   type SmartTripWorkspaceDiffItem,
@@ -135,6 +137,65 @@ describe('smartTripWorkspace diff builders', () => {
     })
 
     expect(selectBestSmartTripWorkspacePlaceResult([weakCandidate, officialCandidate], seed.item1)).toEqual(officialCandidate)
+  })
+
+  it('replaces one preview category while preserving other diffs and checked state', async () => {
+    const seed = await seedTrip()
+    const oldPlaceDiff = buildSmartTripWorkspacePlaceDiff({
+      day: seed.day1,
+      item: seed.item1,
+      result: placeResult('旧西湖地点', 30.25, 120.14),
+    })
+    const routeDiff = buildSmartTripWorkspaceRouteOrderDiff({
+      day: seed.day1,
+      items: [seed.item1, seed.item2, seed.item3],
+      placeDiffs: oldPlaceDiff ? [oldPlaceDiff] : [],
+      result: routeResult(seed.day1.id, [seed.item1.id, seed.item3.id, seed.item2.id]),
+    })
+    const newPlaceDiff = buildSmartTripWorkspacePlaceDiff({
+      day: seed.day1,
+      item: seed.item1,
+      result: placeResult('新西湖地点', 30.26, 120.15),
+    })
+    const diffs = [oldPlaceDiff, routeDiff].filter(Boolean) as SmartTripWorkspaceDiffItem[]
+    expect(newPlaceDiff).toBeTruthy()
+    if (!newPlaceDiff) return
+
+    const result = replaceSmartTripWorkspaceCategoryDiffs({
+      currentCheckedDiffIds: routeDiff ? [routeDiff.id] : [],
+      currentDiffs: diffs,
+      nextDiffs: [newPlaceDiff],
+      type: 'place_calibration',
+    })
+
+    expect(result.diffs.map((diff) => diff.id)).toEqual([newPlaceDiff.id, routeDiff?.id])
+    expect(result.diffs.find((diff) => diff.type === 'place_calibration')?.summary).toContain('新西湖地点')
+    expect(result.checkedDiffIds).toContain(newPlaceDiff.id)
+    expect(result.checkedDiffIds).toContain(routeDiff?.id)
+  })
+
+  it('uses only checked place calibration diffs as virtual route coordinates', async () => {
+    const seed = await seedTrip()
+    const checkedPlaceDiff = buildSmartTripWorkspacePlaceDiff({
+      item: seed.item1,
+      result: placeResult('已勾选西湖地点', 30.25, 120.14),
+    })
+    const uncheckedPlaceDiff = buildSmartTripWorkspacePlaceDiff({
+      item: seed.item2,
+      result: placeResult('未勾选灵隐寺地点', 30.3, 120.2),
+    })
+    expect(checkedPlaceDiff).toBeTruthy()
+    expect(uncheckedPlaceDiff).toBeTruthy()
+    if (!checkedPlaceDiff || !uncheckedPlaceDiff) return
+
+    const placeDiffs = getSmartTripWorkspaceCheckedPlaceDiffs(
+      [checkedPlaceDiff, uncheckedPlaceDiff],
+      [checkedPlaceDiff.id],
+    )
+    const requestItems = buildSmartTripWorkspaceRouteOrderRequestItems([seed.item1, seed.item2], placeDiffs)
+
+    expect(requestItems.find((item) => item.id === seed.item1.id)?.coordinate).toEqual({ lat: 30.25, lng: 120.14 })
+    expect(requestItems.find((item) => item.id === seed.item2.id)?.coordinate).toEqual({ lat: 30.24, lng: 120.16 })
   })
 })
 

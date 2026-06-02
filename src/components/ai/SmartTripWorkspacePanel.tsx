@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { CheckCircle2, Loader2, MapPin, NotebookText, Route, Search, Sparkles } from 'lucide-react'
+import { CheckCircle2, Loader2, MapPin, NotebookText, RefreshCw, Route, Search, Sparkles } from 'lucide-react'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -20,15 +20,17 @@ import {
   formatSmartTripWorkspaceSourceConfidence,
   formatSmartTripWorkspaceSourceDate,
   buildSmartTripWorkspaceTripNoteDiff,
+  getSmartTripWorkspaceCheckedPlaceDiffs,
   getSmartTripWorkspaceDiffCategoryLabel,
-  getSmartTripWorkspaceDefaultCheckedIds,
   getSmartTripWorkspacePlaceTargets,
   getSmartTripWorkspaceRouteOrderCandidateDays,
   getSmartTripWorkspaceSearchTargets,
+  replaceSmartTripWorkspaceCategoryDiffs,
   selectBestSmartTripWorkspacePlaceResult,
   type SmartTripWorkspaceDiffItem,
   type SmartTripWorkspaceDiffType,
   type SmartTripWorkspacePlaceCalibrationDiff,
+  type SmartTripWorkspaceStageType,
 } from '../../lib/ai/smartTripWorkspace'
 import {
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
@@ -52,6 +54,26 @@ type SmartTripWorkspacePanelProps = {
   trip: Trip
 }
 
+type SmartTripWorkspaceStageStatus = 'idle' | 'running' | 'success' | 'partial' | 'failed'
+
+type SmartTripWorkspaceStageState = {
+  message?: string
+  requestCount: number
+  status: SmartTripWorkspaceStageStatus
+}
+
+type SmartTripWorkspaceStageRunResult = {
+  allFailed: boolean
+  diffs: SmartTripWorkspaceDiffItem[]
+  failureCount: number
+  requestCount: number
+  successCount: number
+  type: SmartTripWorkspaceStageType
+  warnings: string[]
+}
+
+const STALE_PREVIEW_MESSAGE = '本地行程已变化，请重新生成全部预览。'
+
 export function SmartTripWorkspacePanel({
   allItems,
   days,
@@ -64,9 +86,11 @@ export function SmartTripWorkspacePanel({
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
+  const [confirmStageType, setConfirmStageType] = useState<SmartTripWorkspaceStageType | null>(null)
   const [diffs, setDiffs] = useState<SmartTripWorkspaceDiffItem[]>([])
   const [checkedDiffIds, setCheckedDiffIds] = useState<string[]>([])
   const [previewBaselineFingerprint, setPreviewBaselineFingerprint] = useState<string | null>(null)
+  const [stageStates, setStageStates] = useState<Record<SmartTripWorkspaceStageType, SmartTripWorkspaceStageState>>(createInitialStageStates)
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -74,11 +98,27 @@ export function SmartTripWorkspacePanel({
   const placeTargets = useMemo(() => getSmartTripWorkspacePlaceTargets(allItems), [allItems])
   const searchTargets = useMemo(() => getSmartTripWorkspaceSearchTargets(allItems), [allItems])
   const potentialRouteDayCount = useMemo(() => estimatePotentialRouteDayCount(days, itemsByDay), [days, itemsByDay])
+  const selectedPlaceDiffs = useMemo(() => getSmartTripWorkspaceCheckedPlaceDiffs(diffs, checkedDiffIds), [checkedDiffIds, diffs])
+  const stageRequestCounts = useMemo(() => buildStageRequestCounts({
+    days,
+    itemsByDay,
+    placeDiffs: selectedPlaceDiffs,
+    placeTargets,
+    searchTargets,
+  }), [days, itemsByDay, placeTargets, searchTargets, selectedPlaceDiffs])
   const estimatedRequestCount = placeTargets.length + searchTargets.length + potentialRouteDayCount
   const selectedWriteCount = diffs.filter((diff) => diff.hasWrite && checkedDiffIds.includes(diff.id)).length
-  const categoryPreviews = useMemo(() => buildCategoryPreviews(diffs, checkedDiffIds), [checkedDiffIds, diffs])
-  const canGenerate = Boolean(providerConfig.configured && providerConfig.proxyUrl && days.length > 0 && !isGenerating)
-  const canApply = selectedWriteCount > 0 && !isApplying
+  const isStageGenerating = Object.values(stageStates).some((stage) => stage.status === 'running')
+  const categoryPreviews = useMemo(() => buildCategoryPreviews({
+    checkedDiffIds,
+    diffs,
+    includeEmpty: Boolean(previewBaselineFingerprint || diffs.length > 0),
+    stageRequestCounts,
+    stageStates,
+  }), [checkedDiffIds, diffs, previewBaselineFingerprint, stageRequestCounts, stageStates])
+  const canGenerate = Boolean(providerConfig.configured && providerConfig.proxyUrl && days.length > 0 && !isGenerating && !isStageGenerating)
+  const canApply = selectedWriteCount > 0 && !isApplying && !isStageGenerating
+  const confirmStageRequestCount = confirmStageType ? stageRequestCounts[confirmStageType] : 0
 
   function prepareSmartOrganize() {
     setError(null)
@@ -103,61 +143,88 @@ export function SmartTripWorkspacePanel({
     setDiffs([])
     setCheckedDiffIds([])
     setWarnings([])
+    setStageStates(createInitialStageStates())
+    setConfirmSendOpen(false)
     const startedAt = new Date().toISOString()
     const baselineFingerprint = buildAiTripEditLocalStateFingerprint({ days, items: allItems, trip })
-    const nextWarnings: string[] = []
+    setPreviewBaselineFingerprint(baselineFingerprint)
+    let workingDiffs: SmartTripWorkspaceDiffItem[] = []
+    let workingCheckedDiffIds: string[] = []
+    let workingWarnings: string[] = []
 
     try {
-      const dayById = new Map(days.map((day) => [day.id, day]))
-      const placeDiffs = await collectPlaceDiffs({
-        dayById,
-        items: placeTargets,
-        proxyUrl: providerConfig.proxyUrl,
-        trip,
-        warnings: nextWarnings,
-      })
-      const routeDiffs = await collectRouteOrderDiffs({
-        days,
-        itemsByDay,
-        placeDiffs,
-        proxyUrl: providerConfig.proxyUrl,
-        trip,
-        warnings: nextWarnings,
-      })
-      const itemNoteDiffs = await collectItemNoteDiffs({
-        dayById,
-        items: searchTargets,
-        proxyUrl: providerConfig.proxyUrl,
-        trip,
-        warnings: nextWarnings,
-      })
-      const tripNoteDiff = buildSmartTripWorkspaceTripNoteDiff({
-        days,
-        itemsByDay,
-        retrievedAt: startedAt,
-        trip,
-      })
-
-      const nextDiffs = [
-        ...placeDiffs,
-        ...routeDiffs,
-        ...itemNoteDiffs,
-        ...(tripNoteDiff ? [tripNoteDiff] : []),
-      ]
-      setPreviewBaselineFingerprint(baselineFingerprint)
-      setDiffs(nextDiffs)
-      setCheckedDiffIds(getSmartTripWorkspaceDefaultCheckedIds(nextDiffs))
+      for (const type of SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER) {
+        const result = await executeStage(type, {
+          placeDiffs: getSmartTripWorkspaceCheckedPlaceDiffs(workingDiffs, workingCheckedDiffIds),
+          proxyUrl: providerConfig.proxyUrl,
+          retrievedAt: startedAt,
+        })
+        const replacement = buildStagePreviewReplacement({
+          checkedDiffIds: workingCheckedDiffIds,
+          diffs: workingDiffs,
+          preserveOnAllFailed: false,
+          result,
+        })
+        workingDiffs = replacement.diffs
+        workingCheckedDiffIds = replacement.checkedDiffIds
+        workingWarnings = dedupeWarnings([
+          ...workingWarnings,
+          ...replacement.warnings,
+          ...workingDiffs.flatMap((diff) => diff.warnings ?? []),
+        ])
+        setDiffs(workingDiffs)
+        setCheckedDiffIds(workingCheckedDiffIds)
+        setWarnings(workingWarnings)
+      }
       setWarnings(dedupeWarnings([
-        ...nextWarnings,
-        ...nextDiffs.flatMap((diff) => diff.warnings ?? []),
-        nextDiffs.length === 0 ? '没有生成可预览的修改。' : '',
+        ...workingWarnings,
+        workingDiffs.length === 0 ? '没有生成可预览的修改。' : '',
       ]))
-      setConfirmSendOpen(false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '智能整理生成失败。')
-      setConfirmSendOpen(false)
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  async function handleConfirmStageRegenerate() {
+    if (!confirmStageType || !providerConfig.proxyUrl) {
+      setConfirmStageType(null)
+      return
+    }
+
+    const freshFingerprint = buildAiTripEditLocalStateFingerprint({ days, items: allItems, trip })
+    if (previewBaselineFingerprint && freshFingerprint !== previewBaselineFingerprint) {
+      setError(STALE_PREVIEW_MESSAGE)
+      setConfirmStageType(null)
+      return
+    }
+
+    setError(null)
+    setSuccessMessage(null)
+    setConfirmStageType(null)
+    const type = confirmStageType
+    try {
+      const result = await executeStage(type, {
+        placeDiffs: getSmartTripWorkspaceCheckedPlaceDiffs(diffs, checkedDiffIds),
+        proxyUrl: providerConfig.proxyUrl,
+        retrievedAt: new Date().toISOString(),
+      })
+      const replacement = buildStagePreviewReplacement({
+        checkedDiffIds,
+        diffs,
+        preserveOnAllFailed: true,
+        result,
+      })
+      setDiffs(replacement.diffs)
+      setCheckedDiffIds(replacement.checkedDiffIds)
+      setWarnings((current) => dedupeWarnings([
+        ...current,
+        ...replacement.warnings,
+        ...replacement.diffs.flatMap((diff) => diff.warnings ?? []),
+      ]))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '重新生成失败。')
     }
   }
 
@@ -211,6 +278,44 @@ export function SmartTripWorkspacePanel({
       }
       return Array.from(next)
     })
+  }
+
+  async function executeStage(
+    type: SmartTripWorkspaceStageType,
+    options: {
+      placeDiffs: SmartTripWorkspacePlaceCalibrationDiff[]
+      proxyUrl: string
+      retrievedAt: string
+    },
+  ): Promise<SmartTripWorkspaceStageRunResult> {
+    setStageStates((current) => ({
+      ...current,
+      [type]: {
+        requestCount: stageRequestCounts[type],
+        status: 'running',
+      },
+    }))
+
+    const result = await collectStageResult({
+      days,
+      itemsByDay,
+      placeDiffs: options.placeDiffs,
+      placeTargets,
+      proxyUrl: options.proxyUrl,
+      retrievedAt: options.retrievedAt,
+      searchTargets,
+      trip,
+      type,
+    })
+    setStageStates((current) => ({
+      ...current,
+      [type]: {
+        message: buildStageStateMessage(result),
+        requestCount: result.requestCount,
+        status: getStageStatus(result),
+      },
+    }))
+    return result
   }
 
   return (
@@ -276,7 +381,7 @@ export function SmartTripWorkspacePanel({
         </div>
       ) : null}
 
-      {diffs.length > 0 ? (
+      {diffs.length > 0 || previewBaselineFingerprint ? (
         <div className="space-y-3 rounded-xl bg-surface-container-low/80 p-3 ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/35" data-testid="smart-trip-workspace-preview">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -295,7 +400,9 @@ export function SmartTripWorkspacePanel({
           <SmartCategoryControls
             categories={categoryPreviews}
             onClear={(type) => setCategoryChecked(type, false)}
+            onRegenerate={(type) => setConfirmStageType(type)}
             onSelect={(type) => setCategoryChecked(type, true)}
+            regenerating={isStageGenerating}
           />
           <div className="space-y-2">
             {diffs.map((diff) => (
@@ -306,6 +413,9 @@ export function SmartTripWorkspacePanel({
                 onToggle={() => toggleDiff(diff.id)}
               />
             ))}
+            {diffs.length === 0 ? (
+              <p className="rounded-lg bg-white/70 px-3 py-2 text-xs leading-5 tm-muted dark:bg-surface-dim/35">暂无可写入建议。</p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -328,6 +438,24 @@ export function SmartTripWorkspacePanel({
         open={confirmSendOpen}
         testId="smart-trip-workspace-send-confirm-dialog"
         title="智能整理此行程？"
+      />
+
+      <ConfirmDialog
+        body={buildStageConfirmBody({
+          requestCount: confirmStageRequestCount,
+          type: confirmStageType,
+        })}
+        cancelLabel="暂不重新生成"
+        confirmLabel="确认重新生成"
+        icon={<RefreshCw className="size-5" />}
+        loading={Boolean(confirmStageType && stageStates[confirmStageType]?.status === 'running')}
+        onCancel={() => {
+          if (!isStageGenerating) setConfirmStageType(null)
+        }}
+        onConfirm={() => void handleConfirmStageRegenerate()}
+        open={Boolean(confirmStageType)}
+        testId="smart-trip-workspace-stage-confirm-dialog"
+        title={confirmStageType ? `重新生成${getSmartTripWorkspaceDiffCategoryLabel(confirmStageType)}？` : '重新生成预览？'}
       />
 
       <ConfirmDialog
@@ -362,7 +490,10 @@ function SmartMetric({ icon, label, value }: { icon: ReactNode; label: string; v
 
 type SmartCategoryPreview = {
   label: string
+  message?: string
+  requestCount: number
   selectedCount: number
+  status: SmartTripWorkspaceStageStatus
   totalCount: number
   type: SmartTripWorkspaceDiffType
 }
@@ -370,11 +501,15 @@ type SmartCategoryPreview = {
 function SmartCategoryControls({
   categories,
   onClear,
+  onRegenerate,
   onSelect,
+  regenerating,
 }: {
   categories: SmartCategoryPreview[]
   onClear: (type: SmartTripWorkspaceDiffType) => void
+  onRegenerate: (type: SmartTripWorkspaceDiffType) => void
   onSelect: (type: SmartTripWorkspaceDiffType) => void
+  regenerating: boolean
 }) {
   if (categories.length === 0) {
     return null
@@ -386,17 +521,27 @@ function SmartCategoryControls({
     >
       {categories.map((category) => (
         <div
-          className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 ring-1 ring-outline-variant/25 dark:bg-surface-dim/35"
+          className="flex min-w-0 flex-col gap-2 rounded-lg bg-white/70 px-2.5 py-2 ring-1 ring-outline-variant/25 sm:flex-row sm:items-center sm:justify-between dark:bg-surface-dim/35"
           key={category.type}
         >
-          <p className="min-w-0 text-[11px] font-semibold leading-5 text-on-surface dark:text-on-surface">
-            <span>{category.label}</span>
-            <span className="ml-1 font-medium tm-muted">{category.selectedCount}/{category.totalCount}</span>
-          </p>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="min-w-0 text-[11px] leading-5">
+            <p className="font-semibold text-on-surface dark:text-on-surface">
+              <span>{category.label}</span>
+              <span className="ml-1 font-medium tm-muted">{category.selectedCount}/{category.totalCount}</span>
+            </p>
+            <p
+              className="break-words tm-muted [overflow-wrap:anywhere]"
+              data-testid={`smart-trip-workspace-stage-status-${category.type}`}
+            >
+              {formatStageStatus(category.status)} · 请求 {category.requestCount}
+              {category.message ? ` · ${category.message}` : ''}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
             <Button
               className="min-h-7 rounded-lg px-2 text-[11px]"
               data-testid={`smart-trip-workspace-category-select-${category.type}`}
+              disabled={category.totalCount === 0 || regenerating}
               onClick={() => onSelect(category.type)}
               variant="subtle"
             >
@@ -405,10 +550,21 @@ function SmartCategoryControls({
             <Button
               className="min-h-7 rounded-lg px-2 text-[11px]"
               data-testid={`smart-trip-workspace-category-clear-${category.type}`}
+              disabled={category.totalCount === 0 || regenerating}
               onClick={() => onClear(category.type)}
               variant="ghost"
             >
               取消
+            </Button>
+            <Button
+              className="min-h-7 rounded-lg px-2 text-[11px]"
+              data-testid={`smart-trip-workspace-category-regenerate-${category.type}`}
+              disabled={regenerating}
+              icon={<RefreshCw className="size-3" />}
+              onClick={() => onRegenerate(category.type)}
+              variant="ghost"
+            >
+              重新生成
             </Button>
           </div>
         </div>
@@ -473,23 +629,69 @@ function SmartDiffRow({
   )
 }
 
-function buildCategoryPreviews(
-  diffs: SmartTripWorkspaceDiffItem[],
-  checkedDiffIds: string[],
-): SmartCategoryPreview[] {
+function buildCategoryPreviews({
+  checkedDiffIds,
+  diffs,
+  includeEmpty,
+  stageRequestCounts,
+  stageStates,
+}: {
+  checkedDiffIds: string[]
+  diffs: SmartTripWorkspaceDiffItem[]
+  includeEmpty: boolean
+  stageRequestCounts: Record<SmartTripWorkspaceStageType, number>
+  stageStates: Record<SmartTripWorkspaceStageType, SmartTripWorkspaceStageState>
+}): SmartCategoryPreview[] {
   const checkedIdSet = new Set(checkedDiffIds)
   return SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER.flatMap((type) => {
     const categoryDiffs = diffs.filter((diff) => diff.type === type && diff.hasWrite)
-    if (categoryDiffs.length === 0) {
+    if (!includeEmpty && categoryDiffs.length === 0) {
       return []
     }
     return [{
       label: getSmartTripWorkspaceDiffCategoryLabel(type),
+      message: stageStates[type].message,
+      requestCount: stageStates[type].requestCount || stageRequestCounts[type],
       selectedCount: categoryDiffs.filter((diff) => checkedIdSet.has(diff.id)).length,
+      status: stageStates[type].status,
       totalCount: categoryDiffs.length,
       type,
     }]
   })
+}
+
+async function collectStageResult({
+  days,
+  itemsByDay,
+  placeDiffs,
+  placeTargets,
+  proxyUrl,
+  retrievedAt,
+  searchTargets,
+  trip,
+  type,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  placeDiffs: SmartTripWorkspacePlaceCalibrationDiff[]
+  placeTargets: ItineraryItem[]
+  proxyUrl: string
+  retrievedAt: string
+  searchTargets: ItineraryItem[]
+  trip: Trip
+  type: SmartTripWorkspaceStageType
+}): Promise<SmartTripWorkspaceStageRunResult> {
+  const dayById = new Map(days.map((day) => [day.id, day]))
+  if (type === 'place_calibration') {
+    return collectPlaceDiffs({ dayById, items: placeTargets, proxyUrl, trip })
+  }
+  if (type === 'route_order') {
+    return collectRouteOrderDiffs({ days, itemsByDay, placeDiffs, proxyUrl, trip })
+  }
+  if (type === 'item_note_append') {
+    return collectItemNoteDiffs({ dayById, items: searchTargets, proxyUrl, trip })
+  }
+  return collectTripNoteDiffs({ days, itemsByDay, retrievedAt, trip })
 }
 
 async function collectPlaceDiffs({
@@ -497,16 +699,19 @@ async function collectPlaceDiffs({
   items,
   proxyUrl,
   trip,
-  warnings,
 }: {
   dayById: Map<string, Day>
   items: ItineraryItem[]
   proxyUrl: string
   trip: Trip
-  warnings: string[]
-}) {
+}): Promise<SmartTripWorkspaceStageRunResult> {
   const diffs: SmartTripWorkspacePlaceCalibrationDiff[] = []
+  const warnings: string[] = []
+  let failureCount = 0
+  let requestCount = 0
+  let successCount = 0
   for (const item of items.slice(0, SMART_TRIP_WORKSPACE_MAX_PLACE_LOOKUPS)) {
+    requestCount += 1
     try {
       const response = await fetchProviderProxyPlaceLookup({
         locale: 'zh-CN',
@@ -525,11 +730,20 @@ async function collectPlaceDiffs({
         warnings.push(`${item.title} 未找到可写入的地点候选。`)
       }
       warnings.push(...(response.warnings ?? []))
+      successCount += 1
     } catch (caught) {
+      failureCount += 1
       warnings.push(`${item.title} 地点校准失败：${formatProviderError(caught)}`)
     }
   }
-  return diffs
+  return buildStageRunResult({
+    diffs,
+    failureCount,
+    requestCount,
+    successCount,
+    type: 'place_calibration',
+    warnings,
+  })
 }
 
 async function collectRouteOrderDiffs({
@@ -538,18 +752,21 @@ async function collectRouteOrderDiffs({
   placeDiffs,
   proxyUrl,
   trip,
-  warnings,
 }: {
   days: Day[]
   itemsByDay: Record<string, ItineraryItem[]>
   placeDiffs: SmartTripWorkspacePlaceCalibrationDiff[]
   proxyUrl: string
   trip: Trip
-  warnings: string[]
-}) {
+}): Promise<SmartTripWorkspaceStageRunResult> {
   const diffs: SmartTripWorkspaceDiffItem[] = []
+  const warnings: string[] = []
+  let failureCount = 0
+  let requestCount = 0
+  let successCount = 0
   const candidateDays = getSmartTripWorkspaceRouteOrderCandidateDays({ days, itemsByDay, placeDiffs })
   for (const day of candidateDays.slice(0, SMART_TRIP_WORKSPACE_MAX_ROUTE_ORDER_DAYS)) {
+    requestCount += 1
     try {
       const items = itemsByDay[day.id] ?? []
       const response = await fetchProviderProxyRouteOrderSuggestion({
@@ -564,11 +781,20 @@ async function collectRouteOrderDiffs({
       if (diff) {
         diffs.push(diff)
       }
+      successCount += 1
     } catch (caught) {
+      failureCount += 1
       warnings.push(`${day.title} 路线顺序建议失败：${formatProviderError(caught)}`)
     }
   }
-  return diffs
+  return buildStageRunResult({
+    diffs,
+    failureCount,
+    requestCount,
+    successCount,
+    type: 'route_order',
+    warnings,
+  })
 }
 
 async function collectItemNoteDiffs({
@@ -576,16 +802,19 @@ async function collectItemNoteDiffs({
   items,
   proxyUrl,
   trip,
-  warnings,
 }: {
   dayById: Map<string, Day>
   items: ItineraryItem[]
   proxyUrl: string
   trip: Trip
-  warnings: string[]
-}) {
+}): Promise<SmartTripWorkspaceStageRunResult> {
   const diffs: SmartTripWorkspaceDiffItem[] = []
+  const warnings: string[] = []
+  let failureCount = 0
+  let requestCount = 0
+  let successCount = 0
   for (const item of items.slice(0, SMART_TRIP_WORKSPACE_MAX_SEARCHES)) {
+    requestCount += 1
     try {
       const response = await fetchProviderProxyTravelSearch({
         locale: 'zh-CN',
@@ -607,11 +836,134 @@ async function collectItemNoteDiffs({
         warnings.push(`${item.title} 搜索没有可引用来源，未生成事实性提示。`)
       }
       warnings.push(...(response.warnings ?? []))
+      successCount += 1
     } catch (caught) {
+      failureCount += 1
       warnings.push(`${item.title} 开放时间/票价搜索失败：${formatProviderError(caught)}`)
     }
   }
-  return diffs
+  return buildStageRunResult({
+    diffs,
+    failureCount,
+    requestCount,
+    successCount,
+    type: 'item_note_append',
+    warnings,
+  })
+}
+
+function collectTripNoteDiffs({
+  days,
+  itemsByDay,
+  retrievedAt,
+  trip,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  retrievedAt: string
+  trip: Trip
+}): SmartTripWorkspaceStageRunResult {
+  const diff = buildSmartTripWorkspaceTripNoteDiff({
+    days,
+    itemsByDay,
+    retrievedAt,
+    trip,
+  })
+  return buildStageRunResult({
+    diffs: diff ? [diff] : [],
+    failureCount: 0,
+    requestCount: 0,
+    successCount: diff ? 1 : 0,
+    type: 'trip_note_append',
+    warnings: diff ? [] : ['没有可生成的每日提示。'],
+  })
+}
+
+function buildStageRunResult({
+  diffs,
+  failureCount,
+  requestCount,
+  successCount,
+  type,
+  warnings,
+}: {
+  diffs: SmartTripWorkspaceDiffItem[]
+  failureCount: number
+  requestCount: number
+  successCount: number
+  type: SmartTripWorkspaceStageType
+  warnings: string[]
+}): SmartTripWorkspaceStageRunResult {
+  return {
+    allFailed: requestCount > 0 && failureCount === requestCount && successCount === 0,
+    diffs,
+    failureCount,
+    requestCount,
+    successCount,
+    type,
+    warnings: dedupeWarnings(warnings),
+  }
+}
+
+function buildStagePreviewReplacement({
+  checkedDiffIds,
+  diffs,
+  preserveOnAllFailed,
+  result,
+}: {
+  checkedDiffIds: string[]
+  diffs: SmartTripWorkspaceDiffItem[]
+  preserveOnAllFailed: boolean
+  result: SmartTripWorkspaceStageRunResult
+}) {
+  const hasPreviousCategoryDiffs = diffs.some((diff) => diff.type === result.type)
+  if (preserveOnAllFailed && result.allFailed && hasPreviousCategoryDiffs) {
+    return {
+      checkedDiffIds,
+      diffs,
+      warnings: [
+        ...result.warnings,
+        `${getSmartTripWorkspaceDiffCategoryLabel(result.type)}重新生成失败，已保留上一版建议。`,
+      ],
+    }
+  }
+  return {
+    ...replaceSmartTripWorkspaceCategoryDiffs({
+      currentCheckedDiffIds: checkedDiffIds,
+      currentDiffs: diffs,
+      nextDiffs: result.diffs,
+      type: result.type,
+    }),
+    warnings: result.warnings,
+  }
+}
+
+function getStageStatus(result: SmartTripWorkspaceStageRunResult): SmartTripWorkspaceStageStatus {
+  if (result.failureCount > 0 && result.successCount === 0) {
+    return 'failed'
+  }
+  if (result.failureCount > 0) {
+    return 'partial'
+  }
+  return 'success'
+}
+
+function buildStageStateMessage(result: SmartTripWorkspaceStageRunResult) {
+  if (result.failureCount > 0 && result.successCount === 0) {
+    return '全部失败'
+  }
+  if (result.failureCount > 0) {
+    return `${result.successCount} 成功 / ${result.failureCount} 失败`
+  }
+  return `${result.diffs.length} 项建议`
+}
+
+function formatStageStatus(status: SmartTripWorkspaceStageStatus) {
+  if (status === 'running') return '生成中'
+  if (status === 'success') return '已完成'
+  if (status === 'partial') return '部分完成'
+  if (status === 'failed') return '失败'
+  return '待生成'
 }
 
 function estimatePotentialRouteDayCount(days: Day[], itemsByDay: Record<string, ItineraryItem[]>) {
@@ -622,6 +974,36 @@ function estimatePotentialRouteDayCount(days: Day[], itemsByDay: Record<string, 
     })
     .slice(0, SMART_TRIP_WORKSPACE_MAX_ROUTE_ORDER_DAYS)
     .length
+}
+
+function buildStageRequestCounts({
+  days,
+  itemsByDay,
+  placeDiffs,
+  placeTargets,
+  searchTargets,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  placeDiffs: SmartTripWorkspacePlaceCalibrationDiff[]
+  placeTargets: ItineraryItem[]
+  searchTargets: ItineraryItem[]
+}): Record<SmartTripWorkspaceStageType, number> {
+  return {
+    item_note_append: Math.min(searchTargets.length, SMART_TRIP_WORKSPACE_MAX_SEARCHES),
+    place_calibration: Math.min(placeTargets.length, SMART_TRIP_WORKSPACE_MAX_PLACE_LOOKUPS),
+    route_order: getSmartTripWorkspaceRouteOrderCandidateDays({ days, itemsByDay, placeDiffs }).length,
+    trip_note_append: 0,
+  }
+}
+
+function createInitialStageStates(): Record<SmartTripWorkspaceStageType, SmartTripWorkspaceStageState> {
+  return {
+    item_note_append: { requestCount: 0, status: 'idle' },
+    place_calibration: { requestCount: 0, status: 'idle' },
+    route_order: { requestCount: 0, status: 'idle' },
+    trip_note_append: { requestCount: 0, status: 'idle' },
+  }
 }
 
 function buildSendConfirmBody({
@@ -639,6 +1021,21 @@ function buildSendConfirmBody({
     `将通过 provider proxy 生成整理预览，预计最多 ${estimatedRequestCount} 次请求。`,
     `地点校准 ${placeCount} 次，路线顺序 ${routeDayCount} 次，开放时间/票价搜索 ${searchCount} 次。`,
     '确认后只生成可勾选 diff，不会直接写入旅行；不会创建票据、上传云端或清除路线缓存。',
+  ].join('\n')
+}
+
+function buildStageConfirmBody({
+  requestCount,
+  type,
+}: {
+  requestCount: number
+  type: SmartTripWorkspaceStageType | null
+}) {
+  const label = type ? getSmartTripWorkspaceDiffCategoryLabel(type) : '该类别'
+  return [
+    `将重新生成${label}预览，预计最多 ${requestCount} 次 provider proxy 请求。`,
+    '确认前不会发送请求；成功后只替换该类别建议，其他类别会保留。',
+    '如果该类别 provider 全部失败，将保留上一版建议并显示警告。',
   ].join('\n')
 }
 

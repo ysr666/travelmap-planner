@@ -143,7 +143,7 @@ describe('SmartTripWorkspacePanel', () => {
 
     await clickButton('确认整理')
     expect(document.body.textContent).toContain('正在整理行程预览')
-    await waitForText('地点校准：西湖')
+    await waitForText('景点提示：西湖')
 
     expect(fetchMock).toHaveBeenCalled()
     expect(document.body.textContent).toContain('地点校准：西湖')
@@ -169,6 +169,127 @@ describe('SmartTripWorkspacePanel', () => {
     expect((await getItineraryItem(seed.item2.id))?.sortOrder).toBe(1)
     expect((await getItineraryItem(seed.item1.id))?.notes).toContain('西湖开放时间和票价模拟来源摘要')
     expect((await getTrip(seed.trip.id))?.notes).toContain('智能整理每日提示')
+  })
+
+  it('keeps successful stage previews when route fails and regenerates only route later', async () => {
+    const seed = await seedTrip()
+    let placeRequests = 0
+    let routeRequests = 0
+    let searchRequests = 0
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      await delay()
+      const body = JSON.parse(String(init?.body ?? '{}')) as { operation?: string; requestId?: string }
+      if (body.operation === 'place_lookup') {
+        placeRequests += 1
+        return jsonResponse({
+          ok: true,
+          operation: 'place_lookup',
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          results: [
+            {
+              displayName: '西湖风景名胜区',
+              formattedAddress: '杭州西湖风景名胜区',
+              googleMapsUri: 'https://maps.google.com/west-lake',
+              location: { lat: 30.25, lng: 120.14 },
+              placeId: 'place-west-lake',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+          ],
+          source: 'mock',
+        })
+      }
+      if (body.operation === 'route_order_suggestion') {
+        routeRequests += 1
+        if (routeRequests === 1 || routeRequests === 3) {
+          return jsonResponse({
+            code: 'provider_unavailable',
+            ok: false,
+            operation: 'route_order_suggestion',
+          }, 503)
+        }
+        return jsonResponse({
+          ok: true,
+          operation: 'route_order_suggestion',
+          provider: 'mock',
+          requestId: body.requestId,
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          suggestedItemIds: [seed.item2.id, seed.item1.id],
+          summary: '已重新生成路线顺序建议。',
+          unchangedItemIds: [],
+          warnings: [],
+        })
+      }
+      if (body.operation === 'travel_search') {
+        searchRequests += 1
+        return jsonResponse({
+          ok: true,
+          operation: 'travel_search',
+          query: '西湖 开放时间',
+          results: [
+            {
+              confidence: 'high',
+              displayUrl: 'travel.example/west-lake',
+              domain: 'travel.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '西湖开放时间和票价模拟来源摘要。',
+              sourceType: 'official',
+              title: '西湖开放时间模拟来源',
+              url: 'https://travel.example/west-lake',
+            },
+          ],
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          source: 'mock',
+        })
+      }
+      return jsonResponse({ code: 'unsupported', ok: false }, 400)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await act(async () => {
+      root?.render(
+        <SmartTripWorkspacePanel
+          allItems={[seed.item1, seed.item2]}
+          days={[seed.day1]}
+          itemsByDay={{ [seed.day1.id]: [seed.item1, seed.item2] }}
+          onApplied={vi.fn().mockResolvedValue(undefined)}
+          trip={seed.trip}
+        />,
+      )
+    })
+
+    await clickButton('智能整理此行程')
+    expect(fetchMock).toHaveBeenCalledTimes(0)
+    await clickButton('确认整理')
+    await waitForText('景点提示：西湖')
+
+    expect(document.body.textContent).toContain('地点校准：西湖')
+    expect(document.body.textContent).toContain('景点提示：西湖')
+    expect(document.body.textContent).toContain('每日提示')
+    expect(document.body.textContent).toContain('路线顺序建议失败')
+    expect(document.body.textContent).toContain('失败 · 请求 1')
+    expect(document.body.textContent).not.toContain('路线顺序：第一天')
+    expect(placeRequests).toBe(1)
+    expect(routeRequests).toBe(1)
+    expect(searchRequests).toBe(2)
+
+    await clickTestId('smart-trip-workspace-category-regenerate-route_order')
+    expect(document.body.textContent).toContain('重新生成路线顺序')
+    expect(routeRequests).toBe(1)
+    await clickButton('确认重新生成')
+    await waitForText('路线顺序：第一天')
+
+    expect(routeRequests).toBe(2)
+    expect(placeRequests).toBe(1)
+    expect(searchRequests).toBe(2)
+    expect(document.body.textContent).toContain('已完成 · 请求 1')
+
+    await clickTestId('smart-trip-workspace-category-regenerate-route_order')
+    await clickButton('确认重新生成')
+    await waitForText('已保留上一版建议')
+
+    expect(routeRequests).toBe(3)
+    expect(document.body.textContent).toContain('路线顺序：第一天')
   })
 })
 

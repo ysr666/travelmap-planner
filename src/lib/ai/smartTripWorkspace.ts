@@ -24,6 +24,8 @@ export type SmartTripWorkspaceDiffType =
   | 'item_note_append'
   | 'trip_note_append'
 
+export type SmartTripWorkspaceStageType = SmartTripWorkspaceDiffType
+
 export type SmartTripWorkspaceDiffBase = {
   affectedDayIds: string[]
   affectedItemIds: string[]
@@ -441,6 +443,45 @@ export function getSmartTripWorkspaceDefaultCheckedIds(diffs: SmartTripWorkspace
   return diffs.filter((diff) => diff.checkedByDefault && diff.hasWrite).map((diff) => diff.id)
 }
 
+export function getSmartTripWorkspaceCheckedPlaceDiffs(
+  diffs: SmartTripWorkspaceDiffItem[],
+  checkedDiffIds: string[],
+): SmartTripWorkspacePlaceCalibrationDiff[] {
+  const checkedIdSet = new Set(checkedDiffIds)
+  return diffs.filter((diff): diff is SmartTripWorkspacePlaceCalibrationDiff => (
+    diff.type === 'place_calibration' &&
+    diff.hasWrite &&
+    checkedIdSet.has(diff.id)
+  ))
+}
+
+export function replaceSmartTripWorkspaceCategoryDiffs({
+  currentCheckedDiffIds,
+  currentDiffs,
+  nextDiffs,
+  type,
+}: {
+  currentCheckedDiffIds: string[]
+  currentDiffs: SmartTripWorkspaceDiffItem[]
+  nextDiffs: SmartTripWorkspaceDiffItem[]
+  type: SmartTripWorkspaceDiffType
+}) {
+  const typedNextDiffs = nextDiffs.filter((diff) => diff.type === type)
+  const otherDiffs = currentDiffs.filter((diff) => diff.type !== type)
+  const otherDiffIds = new Set(otherDiffs.map((diff) => diff.id))
+  const checkedIdSet = new Set(currentCheckedDiffIds.filter((diffId) => otherDiffIds.has(diffId)))
+  for (const diff of typedNextDiffs) {
+    if (diff.checkedByDefault && diff.hasWrite) {
+      checkedIdSet.add(diff.id)
+    }
+  }
+
+  return {
+    checkedDiffIds: Array.from(checkedIdSet),
+    diffs: sortSmartTripWorkspaceDiffs([...otherDiffs, ...typedNextDiffs]),
+  }
+}
+
 export async function applySmartTripWorkspaceDiffsToDb(
   tripId: string,
   diffs: SmartTripWorkspaceDiffItem[],
@@ -469,7 +510,7 @@ export async function applySmartTripWorkspaceDiffsToDb(
       if (options.expectedBaselineFingerprint) {
         const freshFingerprint = buildAiTripEditLocalStateFingerprint({ days, items, trip })
         if (freshFingerprint !== options.expectedBaselineFingerprint) {
-          return { errors: ['本地行程已变化，请重新生成。'], ok: false as const }
+          return { errors: ['本地行程已变化，请重新生成全部预览。'], ok: false as const }
         }
       }
 
@@ -607,6 +648,16 @@ function buildVirtualCoordinateMap(placeDiffs: SmartTripWorkspacePlaceCalibratio
   return new Map<string, SmartTripWorkspaceVirtualCoordinate>(
     placeDiffs.map((diff) => [diff.itemId, { lat: diff.nextLat, lng: diff.nextLng }]),
   )
+}
+
+function sortSmartTripWorkspaceDiffs(diffs: SmartTripWorkspaceDiffItem[]) {
+  return [...diffs].sort((first, second) => {
+    const typeOrder = SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER.indexOf(first.type) - SMART_TRIP_WORKSPACE_DIFF_CATEGORY_ORDER.indexOf(second.type)
+    if (typeOrder !== 0) {
+      return typeOrder
+    }
+    return first.id.localeCompare(second.id)
+  })
 }
 
 function getItemCoordinate(

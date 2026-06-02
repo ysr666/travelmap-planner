@@ -23,6 +23,7 @@ export type PlaceLookupProvider = {
 type GooglePlacesEnv = {
   GOOGLE_MAPS_PLATFORM_API_KEY?: string
   TRIPMAP_GOOGLE_PLACES_API_KEY?: string
+  VITE_GOOGLE_MAPS_API_KEY?: string
 }
 
 type GooglePlacesLookupProviderOptions = {
@@ -129,7 +130,7 @@ export function createGooglePlacesLookupProvider(
 }
 
 export function getGooglePlacesApiKey(env: GooglePlacesEnv) {
-  return env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim()
+  return env.VITE_GOOGLE_MAPS_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim() || env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim()
 }
 
 function buildGooglePlacesTextSearchBody(request: ProviderProxyValidatedPlaceLookupRequest) {

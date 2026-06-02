@@ -696,7 +696,7 @@ function selectPlaceLookupProvider(env: ProviderProxyHandlerEnv, fetcher: typeof
   if (provider === 'disabled') {
     return createDisabledPlaceLookupProvider()
   }
-  if (provider === 'google_places') {
+  if (provider === 'google_places' || (!provider && getGooglePlacesApiKey(env))) {
     if (!getGooglePlacesApiKey(env)) {
       return createUnavailablePlaceLookupProvider()
     }

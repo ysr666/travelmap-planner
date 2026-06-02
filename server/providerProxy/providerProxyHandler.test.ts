@@ -872,6 +872,36 @@ describe('provider proxy handler place_lookup', () => {
     })
   })
 
+  it('defaults place_lookup to Google Places when a shared Google key exists', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('vite-google-maps-secret')
+      return new Response(JSON.stringify({
+        places: [
+          {
+            displayName: { text: '杭州博物馆' },
+            formattedAddress: '浙江省杭州市上城区粮道山18号',
+            id: 'places/mock-google-1',
+            location: { latitude: 30.245, longitude: 120.17 },
+          },
+        ],
+      }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+    }) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { VITE_GOOGLE_MAPS_API_KEY: 'vite-google-maps-secret' },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('vite-google-maps-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      ok: true,
+      operation: 'place_lookup',
+      source: 'google_places',
+    })
+  })
+
   it('does not leak Google provider body, headers, stack traces, or secrets', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       error: 'raw-google-provider-body',

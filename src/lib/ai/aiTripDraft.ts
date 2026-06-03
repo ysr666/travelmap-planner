@@ -20,6 +20,7 @@ export type AiTripDraft = {
 export type AiTripDraftDay = {
   date: string
   title?: string
+  tips?: string[]
   items: AiTripDraftItem[]
 }
 
@@ -32,6 +33,8 @@ export type AiTripDraftItem = {
   startTime?: string
   endTime?: string
   previousTransportMode?: TransportMode
+  previousTransportDurationMinutes?: number
+  previousTransportNote?: string
   note?: string
 }
 
@@ -63,6 +66,10 @@ const MAX_TOTAL_ITEMS = 1000
 const MAX_TITLE_LENGTH = 200
 const MAX_DESTINATION_LENGTH = 200
 const MAX_NOTE_LENGTH = 5000
+const MAX_DAY_TIPS = 10
+const MAX_DAY_TIP_LENGTH = 500
+const MAX_TRANSPORT_NOTE_LENGTH = 1000
+const MAX_TRANSPORT_DURATION_MINUTES = 1440
 
 export function validateAiTripDraft(input: unknown): AiDraftValidationResult {
   const errors: AiDraftValidationError[] = []
@@ -129,6 +136,10 @@ export function validateAiTripDraft(input: unknown): AiDraftValidationResult {
         errors.push({ path: `${dayPath}.title`, message: '标题必须是字符串。' })
       }
 
+      if (day.tips !== undefined) {
+        validateTips(day.tips, `${dayPath}.tips`, errors)
+      }
+
       if (!Array.isArray(day.items)) {
         errors.push({ path: `${dayPath}.items`, message: 'items 必须是数组。' })
         return
@@ -190,6 +201,8 @@ export function convertAiTripDraftToImportData(draft: AiTripDraft) {
         startTime: item.startTime,
         endTime: item.endTime,
         previousTransportMode: item.previousTransportMode,
+        previousTransportDurationMinutes: item.previousTransportDurationMinutes,
+        previousTransportNote: item.previousTransportNote,
         notes: item.note,
       })),
     })),
@@ -245,6 +258,20 @@ function validateItem(item: unknown, path: string, errors: AiDraftValidationErro
     }
   }
 
+  if (item.previousTransportDurationMinutes !== undefined) {
+    if (!isValidTransportDurationMinutes(item.previousTransportDurationMinutes)) {
+      errors.push({ path: `${path}.previousTransportDurationMinutes`, message: `交通耗时必须是 0 到 ${MAX_TRANSPORT_DURATION_MINUTES} 之间的整数分钟。` })
+    }
+  }
+
+  if (item.previousTransportNote !== undefined) {
+    if (typeof item.previousTransportNote !== 'string') {
+      errors.push({ path: `${path}.previousTransportNote`, message: '交通备注必须是字符串。' })
+    } else if (item.previousTransportNote.length > MAX_TRANSPORT_NOTE_LENGTH) {
+      errors.push({ path: `${path}.previousTransportNote`, message: `交通备注不能超过 ${MAX_TRANSPORT_NOTE_LENGTH} 个字符。` })
+    }
+  }
+
   if (item.note !== undefined) {
     if (typeof item.note !== 'string') {
       errors.push({ path: `${path}.note`, message: '备注必须是字符串。' })
@@ -265,6 +292,7 @@ function buildDraft(input: Record<string, unknown>): AiTripDraft {
       return {
         date: normalizeText(d.date) ?? '',
         title: normalizeText(d.title),
+        tips: normalizeStringArray(d.tips),
         items: (d.items as unknown[]).map((item) => {
           const i = item as Record<string, unknown>
           return {
@@ -276,12 +304,31 @@ function buildDraft(input: Record<string, unknown>): AiTripDraft {
             startTime: normalizeText(i.startTime),
             endTime: normalizeText(i.endTime),
             previousTransportMode: isTransportMode(i.previousTransportMode) ? i.previousTransportMode : undefined,
+            previousTransportDurationMinutes: normalizeTransportDurationMinutes(i.previousTransportDurationMinutes),
+            previousTransportNote: normalizeText(i.previousTransportNote),
             note: normalizeText(i.note),
           }
         }),
       }
     }),
   }
+}
+
+export function buildAiTripDraftDailyTipsNotes(draft: AiTripDraft) {
+  const sections = draft.days
+    .map((day, index) => {
+      const tips = (day.tips ?? []).map((tip) => tip.trim()).filter(Boolean)
+      if (tips.length === 0) {
+        return null
+      }
+      const title = day.title ? `${day.date} ${day.title}` : `${day.date} 第 ${index + 1} 天`
+      return [`${title}`, ...tips.map((tip) => `- ${tip}`)].join('\n')
+    })
+    .filter((section): section is string => Boolean(section))
+  if (sections.length === 0) {
+    return undefined
+  }
+  return `AI 生成每日提示\n${sections.join('\n\n')}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -295,6 +342,45 @@ function normalizeText(value: unknown): string | undefined {
 
 function normalizeNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+  const items = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return items.length > 0 ? items : undefined
+}
+
+function validateTips(value: unknown, path: string, errors: AiDraftValidationError[]) {
+  if (!Array.isArray(value)) {
+    errors.push({ path, message: '每日提示必须是数组。' })
+    return
+  }
+  if (value.length > MAX_DAY_TIPS) {
+    errors.push({ path, message: `每日提示不能超过 ${MAX_DAY_TIPS} 条。` })
+  }
+  value.forEach((tip, index) => {
+    if (typeof tip !== 'string') {
+      errors.push({ path: `${path}[${index}]`, message: '每日提示必须是字符串。' })
+    } else if (tip.trim().length > MAX_DAY_TIP_LENGTH) {
+      errors.push({ path: `${path}[${index}]`, message: `每日提示不能超过 ${MAX_DAY_TIP_LENGTH} 个字符。` })
+    }
+  })
+}
+
+function isValidTransportDurationMinutes(value: unknown): value is number {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= MAX_TRANSPORT_DURATION_MINUTES
+}
+
+function normalizeTransportDurationMinutes(value: unknown): number | undefined {
+  return isValidTransportDurationMinutes(value) ? value : undefined
 }
 
 function isValidTimeString(value: unknown): boolean {

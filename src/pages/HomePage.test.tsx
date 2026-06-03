@@ -74,6 +74,22 @@ describe('HomePage', () => {
     expect(container?.textContent).toBeTruthy()
   })
 
+  it('links to AI trip builder from the main action area', async () => {
+    await act(async () => {
+      root?.render(<HomePage />)
+    })
+
+    const button = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((node) => node.textContent?.includes('AI 生成行程'))
+    expect(button).toBeTruthy()
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('ai-draft')
+  })
+
   it('renders trip list when trips exist', async () => {
     mocks.listTrips.mockResolvedValue([
       {

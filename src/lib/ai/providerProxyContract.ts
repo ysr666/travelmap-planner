@@ -153,13 +153,17 @@ export type ProviderProxyRouteOrderSuggestionValidationResult =
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyAiTripDraftRequest = {
+  dayCount?: number
   destination: string
   endDate: string
+  interestTags?: string[]
+  interestText?: string
   mealTimeProtection?: boolean
   mustVisitText?: string
   avoidText?: string
   freeTextRequirement?: string
   operation: typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION
+  partySize?: number
   pace?: TravelPace
   preferTransport?: TravelTransportPreference
   quotaSessionId?: string
@@ -707,22 +711,22 @@ export function buildProviderProxyErrorResponse({
 
 export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, operation?: ProviderProxyOperation) {
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
-    if (code === 'quota_exceeded') return '今日 AI 草稿生成次数已达上限。'
-    if (code === 'invalid_request') return 'AI 草稿请求无效。'
-    if (code === 'provider_error') return 'AI 草稿服务请求失败。'
+    if (code === 'quota_exceeded') return '今日 AI 行程生成次数已达上限。'
+    if (code === 'invalid_request') return 'AI 行程生成请求无效。'
+    if (code === 'provider_error') return 'AI 行程生成服务请求失败。'
     if (code === 'network_error') return '网络异常或请求超时。'
-    if (code === 'unsupported') return '当前 AI 草稿请求暂不支持。'
-    if (code === 'invalid_response') return 'AI 草稿服务返回的内容无法解析。'
-    return 'AI 草稿服务暂不可用。'
+    if (code === 'unsupported') return '当前 AI 行程生成请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 行程生成服务返回的内容无法解析。'
+    return 'AI 行程生成服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
-    if (code === 'quota_exceeded') return '今日 AI 草稿修复次数已达上限。'
-    if (code === 'invalid_request') return 'AI 草稿修复请求无效。'
-    if (code === 'provider_error') return 'AI 草稿修复服务请求失败。'
+    if (code === 'quota_exceeded') return '今日 AI 行程修复次数已达上限。'
+    if (code === 'invalid_request') return 'AI 行程修复请求无效。'
+    if (code === 'provider_error') return 'AI 行程修复服务请求失败。'
     if (code === 'network_error') return '网络异常或请求超时。'
-    if (code === 'unsupported') return '当前 AI 草稿修复请求暂不支持。'
-    if (code === 'invalid_response') return 'AI 草稿修复服务返回的内容无法解析。'
-    return 'AI 草稿修复服务暂不可用。'
+    if (code === 'unsupported') return '当前 AI 行程修复请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 行程修复服务返回的内容无法解析。'
+    return 'AI 行程修复服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
     if (code === 'quota_exceeded') return '今日 AI 修改建议次数已达上限。'
@@ -849,6 +853,40 @@ function readRecord(input: unknown): Record<string, unknown> {
   return input && typeof input === 'object' ? input as Record<string, unknown> : {}
 }
 
+function readOptionalPositiveInteger(value: unknown) {
+  if (value === undefined) {
+    return undefined
+  }
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value.trim())
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+  }
+  return undefined
+}
+
+function readInterestTags(value: unknown): { ok: true; tags?: string[] } | { message: string; ok: false } {
+  if (value === undefined) {
+    return { ok: true }
+  }
+  if (!Array.isArray(value)) {
+    return { message: '兴趣标签必须是数组。', ok: false }
+  }
+  if (value.length > MAX_AI_INTEREST_TAGS) {
+    return { message: `兴趣标签不能超过 ${MAX_AI_INTEREST_TAGS} 个。`, ok: false }
+  }
+  if (value.some((tag) => typeof tag !== 'string' || tag.trim().length === 0)) {
+    return { message: `每个兴趣标签必须为 1 到 ${MAX_AI_INTEREST_TAG_LENGTH} 个字符。`, ok: false }
+  }
+  const tags = Array.from(new Set(value.map((tag) => tag.trim())))
+  if (tags.some((tag) => tag.length > MAX_AI_INTEREST_TAG_LENGTH)) {
+    return { message: `每个兴趣标签必须为 1 到 ${MAX_AI_INTEREST_TAG_LENGTH} 个字符。`, ok: false }
+  }
+  return { ok: true, tags: tags.length > 0 ? tags : undefined }
+}
+
 function findDisallowedObjectFieldPath(input: unknown, allowedFields: Set<string>, path = '$'): string | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return `${path}`
@@ -876,6 +914,9 @@ function isRoutingProfile(value: unknown): value is RoutingProfile {
 const MAX_AI_DESTINATION_LENGTH = 200
 export const MAX_AI_FREE_TEXT_LENGTH = 2000
 const MAX_AI_DAYS = 120
+const MAX_AI_PARTY_SIZE = 99
+const MAX_AI_INTEREST_TAGS = 12
+const MAX_AI_INTEREST_TAG_LENGTH = 40
 
 export function validateProviderProxyAiTripDraftRequest(input: unknown): ProviderProxyAiTripDraftValidationResult {
   const record = readRecord(input)
@@ -918,6 +959,25 @@ export function validateProviderProxyAiTripDraftRequest(input: unknown): Provide
     return aiDraftInvalidRequest(`行程天数不能超过 ${MAX_AI_DAYS} 天。`, requestId)
   }
 
+  const dayCount = readOptionalPositiveInteger(record.dayCount)
+  if (record.dayCount !== undefined && dayCount === undefined) {
+    return aiDraftInvalidRequest(`天数必须是 1 到 ${MAX_AI_DAYS} 之间的整数。`, requestId)
+  }
+  if (dayCount !== undefined && dayCount > MAX_AI_DAYS) {
+    return aiDraftInvalidRequest(`天数必须是 1 到 ${MAX_AI_DAYS} 之间的整数。`, requestId)
+  }
+  if (dayCount !== undefined && dates.length > 0 && dayCount !== dates.length) {
+    return aiDraftInvalidRequest('天数需要和日期范围一致。', requestId)
+  }
+
+  const partySize = readOptionalPositiveInteger(record.partySize)
+  if (record.partySize !== undefined && partySize === undefined) {
+    return aiDraftInvalidRequest(`同行人数必须是 1 到 ${MAX_AI_PARTY_SIZE} 之间的整数。`, requestId)
+  }
+  if (partySize !== undefined && partySize > MAX_AI_PARTY_SIZE) {
+    return aiDraftInvalidRequest(`同行人数必须是 1 到 ${MAX_AI_PARTY_SIZE} 之间的整数。`, requestId)
+  }
+
   const pace = record.pace
   if (pace !== undefined && !isTravelPace(pace)) {
     return aiDraftInvalidRequest('无效的旅行节奏。', requestId)
@@ -943,20 +1003,35 @@ export function validateProviderProxyAiTripDraftRequest(input: unknown): Provide
     return aiDraftInvalidRequest(`"补充要求"不能超过 ${MAX_AI_FREE_TEXT_LENGTH} 个字符。`, requestId)
   }
 
+  const rawInterestText = typeof record.interestText === 'string' ? record.interestText.trim() : undefined
+  if (rawInterestText && rawInterestText.length > MAX_AI_FREE_TEXT_LENGTH) {
+    return aiDraftInvalidRequest(`"兴趣偏好"不能超过 ${MAX_AI_FREE_TEXT_LENGTH} 个字符。`, requestId)
+  }
+
+  const interestTagsResult = readInterestTags(record.interestTags)
+  if (!interestTagsResult.ok) {
+    return aiDraftInvalidRequest(interestTagsResult.message, requestId)
+  }
+
   const mustVisitText = rawMustVisit || undefined
   const avoidText = rawAvoid || undefined
   const freeTextRequirement = rawFreeText || undefined
+  const interestText = rawInterestText || undefined
 
   return {
     ok: true,
     request: {
+      dayCount,
       destination,
       endDate,
       freeTextRequirement,
+      interestTags: interestTagsResult.tags,
+      interestText,
       mealTimeProtection: typeof record.mealTimeProtection === 'boolean' ? record.mealTimeProtection : undefined,
       mustVisitText,
       avoidText,
       operation: PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+      partySize,
       pace: isTravelPace(pace) ? pace : undefined,
       preferTransport: isTravelTransportPreference(preferTransport) ? preferTransport : undefined,
       quotaSessionId: readOptionalString(record.quotaSessionId, 160),
@@ -971,11 +1046,15 @@ export function buildMockAiTripDraftProxyResponse(
 ): ProviderProxyAiTripDraftSuccessResponse {
   const draft = generateMockAiTripDraft({
     destination: request.destination,
+    dayCount: request.dayCount,
     endDate: request.endDate,
     freeTextRequirement: request.freeTextRequirement,
+    interestTags: request.interestTags,
+    interestText: request.interestText,
     mealTimeProtection: request.mealTimeProtection,
     mustVisitText: request.mustVisitText,
     avoidText: request.avoidText,
+    partySize: request.partySize,
     pace: request.pace,
     preferTransport: request.preferTransport,
     startDate: request.startDate,

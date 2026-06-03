@@ -159,12 +159,22 @@ function validRouteOrderRequest() {
 
 describe('provider proxy ai_trip_draft contract', () => {
   it('accepts a valid ai_trip_draft request', () => {
-    const result = validateProviderProxyAiTripDraftRequest(validAiDraftRequest())
+    const result = validateProviderProxyAiTripDraftRequest({
+      ...validAiDraftRequest(),
+      dayCount: '5',
+      interestTags: ['美食', '博物馆', '美食'],
+      interestText: '咖啡馆和建筑',
+      partySize: '3',
+    })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.request.destination).toBe('东京')
       expect(result.request.startDate).toBe('2025-04-01')
       expect(result.request.endDate).toBe('2025-04-05')
+      expect(result.request.dayCount).toBe(5)
+      expect(result.request.partySize).toBe(3)
+      expect(result.request.interestTags).toEqual(['美食', '博物馆'])
+      expect(result.request.interestText).toBe('咖啡馆和建筑')
     }
   })
 
@@ -186,6 +196,34 @@ describe('provider proxy ai_trip_draft contract', () => {
   it('rejects end before start', () => {
     const result = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), startDate: '2025-04-10', endDate: '2025-04-01' })
     expect(result.ok).toBe(false)
+  })
+
+  it('rejects mismatched day count and invalid party size', () => {
+    const dayCountResult = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), dayCount: 4 })
+    expect(dayCountResult.ok).toBe(false)
+
+    const partySizeResult = validateProviderProxyAiTripDraftRequest({ ...validAiDraftRequest(), partySize: 100 })
+    expect(partySizeResult.ok).toBe(false)
+  })
+
+  it('rejects invalid interest values', () => {
+    const nonStringTag = validateProviderProxyAiTripDraftRequest({
+      ...validAiDraftRequest(),
+      interestTags: ['美食', 123],
+    })
+    expect(nonStringTag.ok).toBe(false)
+
+    const tooManyTags = validateProviderProxyAiTripDraftRequest({
+      ...validAiDraftRequest(),
+      interestTags: Array.from({ length: 13 }, (_, index) => `tag-${index}`),
+    })
+    expect(tooManyTags.ok).toBe(false)
+
+    const longInterestText = validateProviderProxyAiTripDraftRequest({
+      ...validAiDraftRequest(),
+      interestText: 'x'.repeat(2001),
+    })
+    expect(longInterestText.ok).toBe(false)
   })
 
   it('rejects free text too long', () => {

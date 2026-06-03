@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Download, Plus, Settings } from 'lucide-react'
+import { CalendarDays, ChevronRight, Download, Plus, Settings, Sparkles } from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -201,6 +201,14 @@ export function HomePage() {
 
         {/* ── Action Buttons ── 参考: 219-228 行 */}
         <section className="flex flex-col gap-3 mt-4">
+          <button
+            className="w-full py-4 rounded-xl bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-[0.98]"
+            onClick={() => navigateTo('ai-draft')}
+            type="button"
+          >
+            <Sparkles className="size-5" />
+            AI 生成行程
+          </button>
           <button
             className="w-full py-4 rounded-xl bg-[#0A84FF] text-white font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#0A84FF]/90 transition-colors active:scale-[0.98]"
             onClick={() => navigateTo('trip/new')}

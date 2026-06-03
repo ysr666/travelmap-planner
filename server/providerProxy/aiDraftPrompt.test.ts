@@ -48,6 +48,16 @@ describe('buildAiTripDraftPrompt', () => {
     expect(prompt).toContain('No markdown')
   })
 
+  it('requests structured builder fields for days, items, transport, and tips', () => {
+    const prompt = buildAiTripDraftPrompt(validRequest())
+    expect(prompt).toContain('optional "tips" string array')
+    expect(prompt).toContain('previousTransportDurationMinutes')
+    expect(prompt).toContain('previousTransportNote')
+    expect(prompt).toContain('Every day should have a theme title')
+    expect(prompt).toContain('specific place names')
+    expect(prompt).toContain('transportation suggestions between adjacent items')
+  })
+
   it('truncates free text fields to embed limit', () => {
     const longText = 'x'.repeat(AI_DRAFT_MAX_FREE_TEXT_EMBED_CHARS + 100)
     const prompt = buildAiTripDraftPrompt(validRequest({
@@ -72,13 +82,19 @@ describe('buildAiTripDraftPrompt', () => {
 
   it('includes preferences when provided', () => {
     const prompt = buildAiTripDraftPrompt(validRequest({
+      interestTags: ['美食', '博物馆'],
+      interestText: '咖啡馆和建筑',
       pace: 'compact',
+      partySize: 3,
       preferTransport: 'walking',
       mealTimeProtection: true,
     }))
     expect(prompt).toContain('紧凑')
     expect(prompt).toContain('步行')
     expect(prompt).toContain('protect meal times')
+    expect(prompt).toContain('party size: 3')
+    expect(prompt).toContain('interest tags: 美食, 博物馆')
+    expect(prompt).toContain('Interest preferences: 咖啡馆和建筑')
   })
 
   it('omits optional fields when not provided', () => {
@@ -110,19 +126,27 @@ describe('summarizeAiDraftPromptInput', () => {
     const summary = summarizeAiDraftPromptInput(validRequest({
       mustVisitText: 'SECRET_MUST_VISIT',
       avoidText: 'SECRET_AVOID',
+      interestText: 'SECRET_INTEREST',
       freeTextRequirement: 'SECRET_FREE_TEXT',
     }))
     expect(summary).not.toContain('SECRET_MUST_VISIT')
     expect(summary).not.toContain('SECRET_AVOID')
+    expect(summary).not.toContain('SECRET_INTEREST')
     expect(summary).not.toContain('SECRET_FREE_TEXT')
   })
 
   it('includes pace and transport when provided', () => {
     const summary = summarizeAiDraftPromptInput(validRequest({
+      interestTags: ['美食', '博物馆'],
+      interestText: '咖啡馆',
       pace: 'relaxed',
+      partySize: 2,
       preferTransport: 'taxi',
     }))
     expect(summary).toContain('pace=relaxed')
     expect(summary).toContain('transport=taxi')
+    expect(summary).toContain('partySize=2')
+    expect(summary).toContain('interestTags=2')
+    expect(summary).toContain('interestText=present')
   })
 })

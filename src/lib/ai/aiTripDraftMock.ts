@@ -51,14 +51,14 @@ function pick<T>(arr: T[], seed: number): T {
 function generateDayItems(dayIndex: number, destinationHash: number): AiTripDraftItem[] {
   const seed = destinationHash + dayIndex
   const items: AiTripDraftItem[] = [
-    { ...pick(MORNING_ITEMS, seed) },
-    { ...pick(LUNCH_ITEMS, seed + 1) },
-    { ...pick(AFTERNOON_ITEMS, seed + 2) },
+    { ...pick(MORNING_ITEMS, seed), previousTransportDurationMinutes: 0 },
+    { ...pick(LUNCH_ITEMS, seed + 1), previousTransportDurationMinutes: 18, previousTransportMode: 'walk' },
+    { ...pick(AFTERNOON_ITEMS, seed + 2), previousTransportDurationMinutes: 24, previousTransportMode: 'transit' },
   ]
 
   // Add evening item on ~half the days (deterministic based on seed)
   if ((seed + dayIndex) % 3 === 0) {
-    items.push({ ...pick(EVENING_ITEMS, seed + 3) })
+    items.push({ ...pick(EVENING_ITEMS, seed + 3), previousTransportDurationMinutes: 20, previousTransportMode: 'walk' })
   }
 
   return items
@@ -67,11 +67,30 @@ function generateDayItems(dayIndex: number, destinationHash: number): AiTripDraf
 export function generateMockAiTripDraft(request: AiTripDraftRequest): AiTripDraft {
   const dates = listPlainDateRangeInclusive(request.startDate, request.endDate)
   const destinationHash = simpleHash(request.destination)
+  const interestText = [
+    ...(request.interestTags ?? []),
+    request.interestText,
+    request.mustVisitText,
+  ].filter(Boolean).join('、')
 
   const days: AiTripDraftDay[] = dates.map((date, dayIndex) => ({
     date,
-    title: pick(DAY_TITLES, dayIndex),
-    items: generateDayItems(dayIndex, destinationHash),
+    title: `${pick(DAY_TITLES, dayIndex)} · ${request.destination}探索`,
+    tips: [
+      request.partySize ? `按 ${request.partySize} 人同行预留集合和用餐时间。` : '预留集合和用餐缓冲时间。',
+      interestText ? `当天安排会照顾偏好：${interestText}。` : '出发前核对开放时间和现场预约要求。',
+    ],
+    items: generateDayItems(dayIndex, destinationHash).map((item, itemIndex) => ({
+      ...item,
+      locationName: `${request.destination}${item.title}`,
+      note: item.note ?? (itemIndex === 0 && request.mustVisitText ? `优先覆盖必去地点：${request.mustVisitText}` : undefined),
+      previousTransportMode: itemIndex === 0
+        ? item.previousTransportMode
+        : normalizeTransportModeForMock(request.preferTransport, item.previousTransportMode),
+      previousTransportNote: itemIndex === 0
+        ? undefined
+        : `按${formatTransportPreference(request.preferTransport)}估算，导入后可生成路线预览核对。`,
+    })),
   }))
 
   return {
@@ -81,4 +100,21 @@ export function generateMockAiTripDraft(request: AiTripDraftRequest): AiTripDraf
     endDate: request.endDate,
     days,
   }
+}
+
+function normalizeTransportModeForMock(
+  preference: AiTripDraftRequest['preferTransport'],
+  fallback: AiTripDraftItem['previousTransportMode'],
+) {
+  if (preference === 'walking') return 'walk'
+  if (preference === 'taxi') return 'car'
+  if (preference === 'public_transport') return 'transit'
+  return fallback
+}
+
+function formatTransportPreference(preference: AiTripDraftRequest['preferTransport']) {
+  if (preference === 'walking') return '步行'
+  if (preference === 'taxi') return '打车'
+  if (preference === 'public_transport') return '公共交通'
+  return '综合交通'
 }

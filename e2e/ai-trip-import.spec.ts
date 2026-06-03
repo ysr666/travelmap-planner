@@ -10,7 +10,7 @@ import {
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 async function openAiTripImportSection(page: Page) {
-  await expect(page.getByRole('heading', { name: '导入 AI 行程包' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'AI 行程包与应用内生成' })).toBeVisible()
 }
 
 test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) => {

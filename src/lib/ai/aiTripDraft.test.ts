@@ -4,6 +4,7 @@ import {
   normalizeAiTripDraft,
   summarizeAiTripDraft,
   convertAiTripDraftToImportData,
+  buildAiTripDraftDailyTipsNotes,
 } from './aiTripDraft'
 
 const validDraft = {
@@ -15,6 +16,7 @@ const validDraft = {
     {
       date: '2025-04-01',
       title: '第一天',
+      tips: ['上午人多，建议提前出发。', '午餐时段预留排队时间。'],
       items: [
         {
           title: '浅草寺',
@@ -30,6 +32,8 @@ const validDraft = {
           title: '东京晴空塔',
           startTime: '14:00',
           previousTransportMode: 'transit',
+          previousTransportDurationMinutes: 25,
+          previousTransportNote: '从浅草搭乘地铁前往。',
         },
       ],
     },
@@ -105,6 +109,26 @@ describe('validateAiTripDraft', () => {
     expect(result.errors.some((e) => e.path.includes('previousTransportMode'))).toBe(true)
   })
 
+  it('rejects invalid daily tips and transport details', () => {
+    const draft = {
+      ...validDraft,
+      days: [{
+        date: '2025-04-01',
+        tips: ['x'.repeat(501)],
+        items: [{
+          title: 'Test',
+          previousTransportDurationMinutes: 1.5,
+          previousTransportNote: 'x'.repeat(1001),
+        }],
+      }],
+    }
+    const result = validateAiTripDraft(draft)
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.path.includes('tips'))).toBe(true)
+    expect(result.errors.some((e) => e.path.includes('previousTransportDurationMinutes'))).toBe(true)
+    expect(result.errors.some((e) => e.path.includes('previousTransportNote'))).toBe(true)
+  })
+
   it('rejects oversized draft', () => {
     const days = Array.from({ length: 121 }, (_, i) => ({
       date: `2025-04-${String(i + 1).padStart(2, '0')}`,
@@ -166,6 +190,8 @@ describe('convertAiTripDraftToImportData', () => {
     expect(importData.days[0].items).toHaveLength(2)
     expect(importData.days[0].items[0].lat).toBe(35.7148)
     expect(importData.days[0].items[1].previousTransportMode).toBe('transit')
+    expect(importData.days[0].items[1].previousTransportDurationMinutes).toBe(25)
+    expect(importData.days[0].items[1].previousTransportNote).toBe('从浅草搭乘地铁前往。')
   })
 
   it('does not include ticket/route/cloud fields', () => {
@@ -174,5 +200,23 @@ describe('convertAiTripDraftToImportData', () => {
     expect(importData).not.toHaveProperty('tickets')
     expect(importData).not.toHaveProperty('routeCache')
     expect(importData).not.toHaveProperty('cloud')
+  })
+})
+
+describe('buildAiTripDraftDailyTipsNotes', () => {
+  it('groups daily tips into trip notes', () => {
+    const draft = normalizeAiTripDraft(validDraft)!
+    const notes = buildAiTripDraftDailyTipsNotes(draft)
+    expect(notes).toContain('AI 生成每日提示')
+    expect(notes).toContain('2025-04-01 第一天')
+    expect(notes).toContain('- 上午人多，建议提前出发。')
+  })
+
+  it('returns undefined when no daily tips exist', () => {
+    const draft = normalizeAiTripDraft({
+      ...validDraft,
+      days: validDraft.days.map((day) => ({ ...day, tips: undefined })),
+    })!
+    expect(buildAiTripDraftDailyTipsNotes(draft)).toBeUndefined()
   })
 })

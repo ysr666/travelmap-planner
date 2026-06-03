@@ -27,21 +27,25 @@ function draftTextarea(page: Page) {
   return page.getByTestId('ai-draft-json-section').getByPlaceholder('{"title": "...", "startDate')
 }
 
-test.describe('AI Draft Page', () => {
+test.describe('AI Trip Builder Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#/ai-draft')
   })
 
   test('shows description and context note', async ({ page }) => {
     const header = page.getByTestId('ai-draft-page-header')
-    await expect(header.getByRole('heading', { name: 'AI 行程草稿' })).toBeVisible()
-    await expect(header).toContainText('当前为本地示例流程')
+    await expect(header.getByRole('heading', { name: 'AI 生成行程' })).toBeVisible()
+    await expect(header).toContainText('生成可预览、可修改、可确认导入的完整行程草案')
+    await expect(header).toContainText('确认导入后才会创建行程')
   })
 
   test('shows request builder section', async ({ page }) => {
     const form = requestForm(page)
     await expect(form.getByLabel(/目的地/)).toBeVisible()
-    await expect(form.getByRole('button', { name: '根据表单生成示例草稿' })).toBeVisible()
+    await expect(form.getByLabel(/天数/)).toBeVisible()
+    await expect(form.getByLabel(/同行人数/)).toBeVisible()
+    await expect(form.getByText('兴趣标签')).toBeVisible()
+    await expect(form.getByRole('button', { name: '生成本地示例草案' })).toBeVisible()
   })
 
   test('shows paste area section', async ({ page }) => {
@@ -50,7 +54,7 @@ test.describe('AI Draft Page', () => {
 
   test('shows validation error for empty destination', async ({ page }) => {
     const form = requestForm(page)
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(form).toContainText('请输入目的地')
   })
 
@@ -58,8 +62,11 @@ test.describe('AI Draft Page', () => {
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('东京')
     await form.getByLabel(/开始日期/).fill('2025-06-01')
-    await form.getByLabel(/结束日期/).fill('2025-06-03')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('3')
+    await form.getByLabel(/同行人数/).fill('4')
+    await form.getByRole('button', { name: '美食' }).click()
+    await form.getByLabel(/兴趣偏好/).fill('咖啡馆和建筑')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     const summary = page.getByTestId('ai-draft-summary')
     await expect(summary).toBeVisible()
     await expect(summary).toContainText('东京之旅')
@@ -70,9 +77,11 @@ test.describe('AI Draft Page', () => {
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('巴黎')
     await form.getByLabel(/开始日期/).fill('2025-07-01')
-    await form.getByLabel(/结束日期/).fill('2025-07-02')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('2')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(page.getByTestId('ai-draft-preview')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-preview')).toContainText('每日提示')
+    await expect(page.getByTestId('ai-draft-preview')).toContainText('交通分钟')
     await expect(page.getByRole('button', { name: '确认导入' })).toBeVisible()
   })
 
@@ -107,14 +116,30 @@ test.describe('AI Draft Page', () => {
     await parseSampleDraft(page)
     const preview = page.getByTestId('ai-draft-preview')
     await expect(preview).toBeVisible()
-    await expect(preview).toContainText('浅草寺')
-    await expect(preview).toContainText('明治神宫')
+    await expect(preview.getByTestId('ai-draft-item-editor').nth(0).getByLabel('标题')).toHaveValue('浅草寺')
+    await expect(preview.getByTestId('ai-draft-item-editor').nth(2).getByLabel('标题')).toHaveValue('明治神宫')
+  })
+
+  test('structured preview can be edited before import', async ({ page }) => {
+    await parseSampleDraft(page)
+    const preview = page.getByTestId('ai-draft-preview')
+    await preview.getByLabel('旅行标题').fill('东京编辑版')
+    await preview.getByLabel('每日主题').first().fill('浅草编辑日')
+    await preview.getByTestId('ai-draft-item-editor').first().getByLabel('标题').fill('浅草寺编辑点')
+    await preview.getByRole('button', { name: '添加提示' }).first().click()
+    await preview.getByPlaceholder('例如：提前确认预约时间').last().fill('新增每日提示')
+
+    await expect(page.getByTestId('ai-draft-summary')).toContainText('东京编辑版')
+    await expect(preview.getByLabel('每日主题').first()).toHaveValue('浅草编辑日')
+    await expect(preview.getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('浅草寺编辑点')
+    await expect(preview.getByPlaceholder('例如：提前确认预约时间').last()).toHaveValue('新增每日提示')
+    await expect(page.getByRole('button', { name: '确认导入' })).toBeEnabled()
   })
 
   test('shows privacy notice', async ({ page }) => {
     await parseSampleDraft(page)
     const privacyNote = page.getByTestId('ai-draft-privacy-note')
-    await expect(privacyNote).toContainText('当前仅在本机解析草稿')
+    await expect(privacyNote).toContainText('这里的修改只更新当前草案')
     await expect(privacyNote).toContainText('确认导入后才会写入本地旅行')
   })
 
@@ -258,14 +283,16 @@ test.describe('AI Draft Page', () => {
     await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '确认导入' }).click()
     await page.waitForURL(/#\/trip/)
     await expect(page.locator('h1').filter({ hasText: '东京五日游' })).toBeVisible()
+    await expect(page.getByText('旅行备注')).toBeVisible()
+    await expect(page.getByText('AI 生成每日提示')).toBeVisible()
   })
 
   test('creates trip on confirm from generated draft', async ({ page }) => {
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('大阪')
     await form.getByLabel(/开始日期/).fill('2025-08-01')
-    await form.getByLabel(/结束日期/).fill('2025-08-02')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('2')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await page.getByRole('button', { name: '确认导入' }).click()
     await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '确认导入' }).click()
@@ -283,8 +310,8 @@ test.describe('AI Draft Page', () => {
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('京都')
     await form.getByLabel(/开始日期/).fill('2025-09-01')
-    await form.getByLabel(/结束日期/).fill('2025-09-02')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('2')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await page.goto('/#/home')
     await expect(page.locator('h1').filter({ hasText: '京都之旅' })).not.toBeVisible()
@@ -295,8 +322,8 @@ test.describe('AI Draft Page', () => {
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('东京')
     await form.getByLabel(/开始日期/).fill('2025-06-01')
-    await form.getByLabel(/结束日期/).fill('2025-06-03')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('3')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     const body = await page.evaluate(() => document.body.scrollWidth)
     expect(body).toBeLessThanOrEqual(390)
@@ -304,20 +331,145 @@ test.describe('AI Draft Page', () => {
 
   test('shows proxy generate button', async ({ page }) => {
     // In e2e environment, proxy is configured so the button is enabled
-    const proxyBtn = page.getByRole('button', { name: '通过旅图服务生成草稿' })
+    const proxyBtn = page.getByRole('button', { name: '生成完整行程' })
     await proxyBtn.scrollIntoViewIfNeeded()
     await expect(proxyBtn).toBeVisible()
   })
+
+  test('provider generation is confirmation gated and sends builder fields only after confirm', async ({ page }) => {
+    let aiDraftRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      expect(body.operation).toBe('ai_trip_draft')
+      expect(body).toMatchObject({
+        dayCount: 2,
+        destination: '首尔',
+        interestTags: ['美食'],
+        interestText: '咖啡馆',
+        partySize: 3,
+        startDate: '2025-10-01',
+        endDate: '2025-10-02',
+      })
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_API_KEY')
+      aiDraftRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft',
+          source: 'mock',
+          draft: {
+            title: '首尔之旅',
+            destination: '首尔',
+            startDate: '2025-10-01',
+            endDate: '2025-10-02',
+            days: [
+              {
+                date: '2025-10-01',
+                title: '抵达与美食',
+                tips: ['提前确认餐厅营业时间。'],
+                items: [
+                  {
+                    title: '景福宫',
+                    locationName: '景福宫',
+                    startTime: '09:00',
+                  },
+                  {
+                    title: '北村韩屋村',
+                    locationName: '北村韩屋村',
+                    previousTransportMode: 'walk',
+                    previousTransportDurationMinutes: 20,
+                    previousTransportNote: '步行前往即可。',
+                    startTime: '11:00',
+                  },
+                ],
+              },
+              { date: '2025-10-02', title: '城市漫游', tips: ['预留购物时间。'], items: [{ title: '明洞', startTime: '10:00' }] },
+            ],
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('首尔')
+    await form.getByLabel(/开始日期/).fill('2025-10-01')
+    await form.getByLabel(/天数/).fill('2')
+    await form.getByLabel(/同行人数/).fill('3')
+    await form.getByRole('button', { name: '美食' }).click()
+    await form.getByLabel(/兴趣偏好/).fill('咖啡馆')
+    await form.getByRole('button', { name: '生成完整行程' }).click()
+    await expect(page.getByTestId('ai-draft-generate-confirm-dialog')).toBeVisible()
+    expect(aiDraftRequests).toBe(0)
+
+    await page.getByTestId('ai-draft-generate-confirm-dialog').getByRole('button', { name: '取消' }).click()
+    expect(aiDraftRequests).toBe(0)
+
+    await form.getByRole('button', { name: '生成完整行程' }).click()
+    await page.getByTestId('ai-draft-generate-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+    await expect(page.getByTestId('ai-draft-summary')).toContainText('首尔之旅')
+    await expect(page.getByTestId('ai-draft-day-editor').first().getByPlaceholder('例如：提前确认预约时间').first()).toHaveValue('提前确认餐厅营业时间。')
+    expect(aiDraftRequests).toBe(1)
+  })
+
+  test('provider error does not create a draft', async ({ page }) => {
+    await page.route('**/api/provider-proxy', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: false,
+          code: 'provider_error',
+          message: 'AI 服务暂时不可用',
+          operation: 'ai_trip_draft',
+        }),
+        contentType: 'application/json',
+        status: 502,
+      })
+    })
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('曼谷')
+    await form.getByLabel(/开始日期/).fill('2025-11-01')
+    await form.getByRole('button', { name: '生成完整行程' }).click()
+    await page.getByTestId('ai-draft-generate-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+    await expect(form).toContainText('AI 服务暂时不可用')
+    await expect(page.getByTestId('ai-draft-summary')).not.toBeVisible()
+  })
+
+  test('invalid provider draft enters validation errors and cannot import', async ({ page }) => {
+    await page.route('**/api/provider-proxy', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft',
+          source: 'future_ai',
+          draft: {
+            title: '',
+            destination: '曼谷',
+            startDate: '2025-11-01',
+            endDate: '2025-11-03',
+            days: [],
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('曼谷')
+    await form.getByLabel(/开始日期/).fill('2025-11-01')
+    await form.getByRole('button', { name: '生成完整行程' }).click()
+    await page.getByTestId('ai-draft-generate-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+    await expect(page.getByTestId('ai-draft-errors')).toContainText('旅行标题不能为空')
+    await expect(page.getByRole('button', { name: '确认导入' })).not.toBeVisible()
+  })
 })
 
-test.describe('AI Draft Quality Check', () => {
+test.describe('AI Trip Builder Quality Check', () => {
   test('shows quality check card after generating mock draft', async ({ page }) => {
     await page.goto('/#/ai-draft')
     const form = requestForm(page)
     await form.getByLabel(/目的地/).fill('东京')
     await form.getByLabel(/开始日期/).fill('2025-06-01')
-    await form.getByLabel(/结束日期/).fill('2025-06-03')
-    await form.getByRole('button', { name: '根据表单生成示例草稿' }).click()
+    await form.getByLabel(/天数/).fill('3')
+    await form.getByRole('button', { name: '生成本地示例草案' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
   })
@@ -513,8 +665,8 @@ test.describe('AI Draft Quality Check', () => {
 test.describe('Settings AI draft entry', () => {
   test('settings page links to ai-draft page', async ({ page }) => {
     await page.goto('/#/settings')
-    await page.getByRole('button', { name: '或者，试试本地草稿生成 →' }).click()
+    await page.getByRole('button', { name: '打开 AI 生成行程 →' }).click()
     await page.waitForURL(/#\/ai-draft/)
-    await expect(page.getByRole('heading', { name: 'AI 行程草稿' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AI 生成行程' })).toBeVisible()
   })
 })

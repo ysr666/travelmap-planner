@@ -541,7 +541,7 @@ export function SettingsPage() {
         />
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="控制 AI 草稿生成和修复时可发送的数据范围" title="AI 与隐私">
+      <Collapsible defaultOpen subtitle="控制 AI 行程生成和修复时可发送的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
           onChange={updateAiPrivacySetting}
           settings={aiPrivacySettings}
@@ -635,17 +635,17 @@ export function SettingsPage() {
         <CloudBackupPanel trip={null} />
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="用 AI 生成行程后导入" title="AI 行程导入">
+      <Collapsible defaultOpen subtitle="在应用内生成或导入 AI 行程" title="AI 生成行程">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入 AI 行程包</h3>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 行程包与应用内生成</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
-                旅图不会调用 AI。你可以使用 ChatGPT、Claude、Gemini、DeepSeek
-                或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip，然后在本地导入。
+                你可以在应用内填写偏好生成完整行程，也可以使用 ChatGPT、Claude、Gemini、DeepSeek
+                或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip 后在本地导入。
               </p>
             </div>
           </div>
@@ -712,7 +712,7 @@ export function SettingsPage() {
               className="text-sky-600 underline underline-offset-2 dark:text-sky-400"
               onClick={() => navigateTo('ai-draft')}
             >
-              或者，试试本地草稿生成 →
+              打开 AI 生成行程 →
             </button>
           </p>
         </Card>
@@ -925,7 +925,7 @@ function AiPrivacySettingsPanel({
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 与隐私</h3>
             <p className="mt-1 text-sm leading-6 tm-muted">
-              这些开关控制 AI 草稿生成和修复时通过旅图服务发送的数据范围；本地检查不会上传数据，也不会调用外部 AI。
+              这些开关控制 AI 行程生成和修复时通过旅图服务发送的数据范围；本地检查不会上传数据，也不会调用外部 AI。
             </p>
           </div>
         </div>

@@ -41,10 +41,19 @@ export function buildAiTripDraftPrompt(request: ProviderProxyAiTripDraftRequest)
   if (request.mealTimeProtection) {
     preferences.push('protect meal times')
   }
+  if (request.partySize) {
+    preferences.push(`party size: ${request.partySize}`)
+  }
+  if (request.interestTags?.length) {
+    preferences.push(`interest tags: ${request.interestTags.join(', ')}`)
+  }
   if (preferences.length > 0) {
     sections.push(`Preferences: ${preferences.join(', ')}.`)
   }
 
+  if (request.interestText) {
+    sections.push(`Interest preferences: ${truncateFreeText(request.interestText)}`)
+  }
   if (request.mustVisitText) {
     sections.push(`Must visit: ${truncateFreeText(request.mustVisitText)}`)
   }
@@ -57,13 +66,15 @@ export function buildAiTripDraftPrompt(request: ProviderProxyAiTripDraftRequest)
 
   sections.push(
     'Output format: JSON object with "title", "destination", "startDate", "endDate", "days" array. '
-    + 'Each day has "date" (YYYY-MM-DD), optional "title", "items" array. '
-    + 'Each item has "title", optional "locationName", "address", "lat", "lng", "startTime" (HH:mm), "endTime" (HH:mm), "previousTransportMode", "note".',
+    + 'Each day has "date" (YYYY-MM-DD), optional "title", optional "tips" string array, "items" array. '
+    + 'Each item has "title", optional "locationName", "address", "lat", "lng", "startTime" (HH:mm), "endTime" (HH:mm), "previousTransportMode", "previousTransportDurationMinutes", "previousTransportNote", "note".',
   )
 
   sections.push(
     'Constraints: '
     + 'Dates must be YYYY-MM-DD. Times must be HH:mm. '
+    + 'Every day should have a theme title and 1-3 practical daily tips. '
+    + 'Items should include specific place names when possible, a realistic time plan, and transportation suggestions between adjacent items. '
     + 'Do NOT include tickets, routes, cloud fields, sync metadata, provider metadata, API keys, or transit line numbers. '
     + 'Do NOT reorder or optimize the itinerary. '
     + 'Do NOT generate coordinates unless you have high confidence. '
@@ -93,6 +104,9 @@ export function summarizeAiDraftPromptInput(request: ProviderProxyAiTripDraftReq
   ]
   if (request.pace) parts.push(`pace=${request.pace}`)
   if (request.preferTransport) parts.push(`transport=${request.preferTransport}`)
+  if (request.partySize) parts.push(`partySize=${request.partySize}`)
+  if (request.interestTags?.length) parts.push(`interestTags=${request.interestTags.length}`)
+  if (request.interestText) parts.push('interestText=present')
   return parts.join(', ')
 }
 

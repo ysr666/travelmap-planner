@@ -34,6 +34,21 @@ describe('generateMockAiTripDraft', () => {
     expect(draft.days).toHaveLength(5)
   })
 
+  it('includes daily tips and transport suggestions from builder preferences', () => {
+    const draft = generateMockAiTripDraft({
+      ...validRequest,
+      interestTags: ['美食', '博物馆'],
+      interestText: '咖啡馆',
+      partySize: 4,
+      preferTransport: 'walking',
+    })
+    expect(draft.days[0].tips?.join('\n')).toContain('4 人')
+    expect(draft.days[0].tips?.join('\n')).toContain('美食')
+    expect(draft.days[0].items[0].locationName).toContain('东京')
+    expect(draft.days[0].items[1].previousTransportMode).toBe('walk')
+    expect(draft.days[0].items[1].previousTransportNote).toContain('步行')
+  })
+
   it('each day has 2-4 items', () => {
     const draft = generateMockAiTripDraft(validRequest)
     for (const day of draft.days) {

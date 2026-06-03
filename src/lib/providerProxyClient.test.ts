@@ -173,6 +173,13 @@ describe('provider proxy ai_trip_draft client', () => {
   it('does not include provider secrets in the ai_trip_draft payload', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        dayCount: 2,
+        interestTags: ['美食'],
+        interestText: '咖啡馆',
+        operation: 'ai_trip_draft',
+        partySize: 2,
+      })
       expect(JSON.stringify(body)).not.toContain('secret-ai-key')
       expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_PROVIDER_KEY')
       return new Response(JSON.stringify({
@@ -190,9 +197,13 @@ describe('provider proxy ai_trip_draft client', () => {
     }) as unknown as typeof fetch
 
     const result = await fetchProviderProxyAiTripDraft({
+      dayCount: 2,
       destination: '东京',
       endDate: '2025-04-02',
+      interestTags: ['美食'],
+      interestText: '咖啡馆',
       operation: 'ai_trip_draft',
+      partySize: 2,
       startDate: '2025-04-01',
     }, '/api/provider-proxy', {
       fetcher,

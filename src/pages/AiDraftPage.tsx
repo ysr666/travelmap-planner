@@ -3,17 +3,22 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Collapsible } from '../components/ui/Collapsible'
-import { FormField, FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS } from '../components/ui/FormField'
+import { FormField, FIELD_INPUT_CLASS, FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS } from '../components/ui/FormField'
 import { navigateTo } from '../lib/routes'
 import { createId } from '../db/ids'
 import {
+  buildAiTripDraftDailyTipsNotes,
+  convertAiTripDraftToImportData,
   validateAiTripDraft,
   summarizeAiTripDraft,
   type AiTripDraft,
+  type AiTripDraftDay,
+  type AiTripDraftItem,
   type AiDraftValidationError,
 } from '../lib/ai/aiTripDraft'
 import {
   buildAiTripDraftRequest,
+  calculateEndDateFromDayCount,
   validateAiTripDraftRequest,
   type AiTripDraftRequestValidationError,
 } from '../lib/ai/aiTripDraftRequest'
@@ -28,7 +33,11 @@ import {
 import { analyzeAiTripDraftQuality } from '../lib/ai/aiTripDraftQuality'
 import { fetchProviderProxyAiTripDraft, fetchProviderProxyAiTripDraftRepair, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
 import { importTripPlanRecords } from '../db'
-import type { Trip, Day, ItineraryItem } from '../types'
+import type { Trip, Day, ItineraryItem, TransportMode } from '../types'
+
+const INTEREST_TAGS = ['亲子', '美食', '历史文化', '自然风景', '购物', '博物馆', '夜景', '轻徒步', '摄影', '温泉']
+const DEFAULT_DAY_COUNT = '3'
+const DEFAULT_PARTY_SIZE = '2'
 
 const SAMPLE_DRAFT = {
   title: '东京五日游',
@@ -39,6 +48,7 @@ const SAMPLE_DRAFT = {
     {
       date: '2025-04-01',
       title: '抵达与浅草',
+      tips: ['抵达日安排保持轻松，预留酒店入住和交通缓冲时间。'],
       items: [
         {
           title: '浅草寺',
@@ -56,12 +66,15 @@ const SAMPLE_DRAFT = {
           startTime: '14:00',
           endTime: '16:00',
           previousTransportMode: 'transit',
+          previousTransportDurationMinutes: 25,
+          previousTransportNote: '从浅草区域搭乘地铁或步行换乘前往晴空塔。',
         },
       ],
     },
     {
       date: '2025-04-02',
       title: '涩谷与原宿',
+      tips: ['上午安排神社和公园，下午再进入涩谷/原宿商圈。'],
       items: [
         {
           title: '明治神宫',
@@ -74,6 +87,8 @@ const SAMPLE_DRAFT = {
           title: '涩谷十字路口',
           startTime: '14:00',
           previousTransportMode: 'transit',
+          previousTransportDurationMinutes: 20,
+          previousTransportNote: '可从原宿/明治神宫前站转乘到涩谷。',
         },
       ],
     },
@@ -93,9 +108,12 @@ export function AiDraftPage() {
   // Request form state
   const [requestDestination, setRequestDestination] = useState('')
   const [requestStartDate, setRequestStartDate] = useState('')
-  const [requestEndDate, setRequestEndDate] = useState('')
+  const [requestDayCount, setRequestDayCount] = useState(DEFAULT_DAY_COUNT)
+  const [requestPartySize, setRequestPartySize] = useState(DEFAULT_PARTY_SIZE)
   const [requestPace, setRequestPace] = useState(profile.pace)
   const [requestPreferTransport, setRequestPreferTransport] = useState(profile.preferTransport)
+  const [requestInterestTags, setRequestInterestTags] = useState<string[]>([])
+  const [requestInterestText, setRequestInterestText] = useState('')
   const [requestMustVisit, setRequestMustVisit] = useState('')
   const [requestAvoid, setRequestAvoid] = useState('')
   const [requestFreeText, setRequestFreeText] = useState('')
@@ -116,6 +134,10 @@ export function AiDraftPage() {
   const [repairError, setRepairError] = useState<string | null>(null)
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
   const [repairSuccessMessage, setRepairSuccessMessage] = useState<string | null>(null)
+  const requestEndDate = useMemo(
+    () => calculateEndDateFromDayCount(requestStartDate, Number(requestDayCount)),
+    [requestDayCount, requestStartDate],
+  )
 
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
@@ -158,18 +180,27 @@ export function AiDraftPage() {
     }
   }
 
+  function buildCurrentDraftRequestInput() {
+    return {
+      destination: requestDestination,
+      startDate: requestStartDate,
+      dayCount: requestDayCount,
+      endDate: requestEndDate,
+      partySize: requestPartySize,
+      interestTags: requestInterestTags,
+      interestText: requestInterestText,
+      pace: requestPace,
+      preferTransport: requestPreferTransport,
+      mealTimeProtection: profile.mealTimeProtection,
+      mustVisitText: requestMustVisit,
+      avoidText: requestAvoid,
+      freeTextRequirement: requestFreeText,
+    }
+  }
+
   function handleGenerateMock() {
     const built = buildAiTripDraftRequest(
-      {
-        destination: requestDestination,
-        startDate: requestStartDate,
-        endDate: requestEndDate,
-        pace: requestPace,
-        preferTransport: requestPreferTransport,
-        mustVisitText: requestMustVisit,
-        avoidText: requestAvoid,
-        freeTextRequirement: requestFreeText,
-      },
+      buildCurrentDraftRequestInput(),
       { pace: profile.pace, preferTransport: profile.preferTransport },
     )
 
@@ -248,16 +279,7 @@ export function AiDraftPage() {
     if (!proxyConfig.proxyUrl) return
 
     const built = buildAiTripDraftRequest(
-      {
-        destination: requestDestination,
-        startDate: requestStartDate,
-        endDate: requestEndDate,
-        pace: requestPace,
-        preferTransport: requestPreferTransport,
-        mustVisitText: requestMustVisit,
-        avoidText: requestAvoid,
-        freeTextRequirement: requestFreeText,
-      },
+      buildCurrentDraftRequestInput(),
       { pace: profile.pace, preferTransport: profile.preferTransport },
     )
 
@@ -275,13 +297,17 @@ export function AiDraftPage() {
     try {
       const result = await fetchProviderProxyAiTripDraft(
         {
+          dayCount: validation.request.dayCount,
           destination: validation.request.destination,
           endDate: validation.request.endDate,
           freeTextRequirement: validation.request.freeTextRequirement,
+          interestTags: validation.request.interestTags,
+          interestText: validation.request.interestText,
           mealTimeProtection: validation.request.mealTimeProtection,
           mustVisitText: validation.request.mustVisitText,
           avoidText: validation.request.avoidText,
           operation: 'ai_trip_draft',
+          partySize: validation.request.partySize,
           pace: validation.request.pace,
           preferTransport: validation.request.preferTransport,
           startDate: validation.request.startDate,
@@ -292,7 +318,7 @@ export function AiDraftPage() {
     } catch (caught) {
       const message = caught instanceof ProviderProxyClientError
         ? caught.message
-        : 'AI 草稿服务请求失败。'
+        : 'AI 行程生成服务请求失败。'
       setProxyError(message)
       setDraft(null)
     } finally {
@@ -306,13 +332,16 @@ export function AiDraftPage() {
     try {
       const now = Date.now()
       const tripId = createId('trip')
+      const importData = convertAiTripDraftToImportData(draft)
+      const dailyTipsNotes = buildAiTripDraftDailyTipsNotes(draft)
 
       const trip: Trip = {
         id: tripId,
-        title: draft.title,
-        destination: draft.destination,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
+        title: importData.trip.title,
+        destination: importData.trip.destination,
+        startDate: importData.trip.startDate,
+        endDate: importData.trip.endDate,
+        notes: dailyTipsNotes,
         createdAt: now,
         updatedAt: now,
       }
@@ -320,7 +349,7 @@ export function AiDraftPage() {
       const days: Day[] = []
       const itineraryItems: ItineraryItem[] = []
 
-      draft.days.forEach((day, dayIndex) => {
+      importData.days.forEach((day, dayIndex) => {
         const dayId = createId('day')
         days.push({
           id: dayId,
@@ -343,7 +372,9 @@ export function AiDraftPage() {
             lat: item.lat,
             lng: item.lng,
             previousTransportMode: item.previousTransportMode,
-            notes: item.note,
+            previousTransportDurationMinutes: item.previousTransportDurationMinutes,
+            previousTransportNote: item.previousTransportNote,
+            notes: item.notes,
             ticketIds: [],
             sortOrder: itemIndex,
             createdAt: now,
@@ -370,24 +401,102 @@ export function AiDraftPage() {
 
   const summary = draft ? summarizeAiTripDraft(draft) : null
   const repairPrivacyNotice = draft ? summarizeAiPrivacyForAiRequest(privacy, 'repair') : null
+  const canImportDraft = Boolean(draft && errors.length === 0)
+
+  function applyDraftEdit(nextDraft: AiTripDraft) {
+    setJsonText(JSON.stringify(nextDraft, null, 2))
+    const validation = validateAiTripDraft(nextDraft)
+    if (validation.valid && validation.draft) {
+      setDraft(validation.draft)
+      setErrors([])
+    } else {
+      setDraft(nextDraft)
+      setErrors(validation.errors)
+    }
+  }
+
+  function updateDraftRoot(patch: Partial<Pick<AiTripDraft, 'destination' | 'endDate' | 'startDate' | 'title'>>) {
+    if (!draft) return
+    applyDraftEdit({ ...draft, ...patch })
+  }
+
+  function updateDraftDay(dayIndex: number, patch: Partial<AiTripDraftDay>) {
+    if (!draft) return
+    applyDraftEdit({
+      ...draft,
+      days: draft.days.map((day, index) => index === dayIndex ? { ...day, ...patch } : day),
+    })
+  }
+
+  function updateDraftDayTip(dayIndex: number, tipIndex: number, value: string) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    const tips = [...(day.tips ?? [])]
+    tips[tipIndex] = value
+    updateDraftDay(dayIndex, { tips })
+  }
+
+  function addDraftDayTip(dayIndex: number) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    updateDraftDay(dayIndex, { tips: [...(day.tips ?? []), ''] })
+  }
+
+  function removeDraftDayTip(dayIndex: number, tipIndex: number) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    updateDraftDay(dayIndex, { tips: (day.tips ?? []).filter((_, index) => index !== tipIndex) })
+  }
+
+  function updateDraftItem(dayIndex: number, itemIndex: number, patch: Partial<AiTripDraftItem>) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    updateDraftDay(dayIndex, {
+      items: day.items.map((item, index) => index === itemIndex ? { ...item, ...patch } : item),
+    })
+  }
+
+  function addDraftItem(dayIndex: number) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    const nextItem: AiTripDraftItem = {
+      title: '新的行程点',
+      previousTransportMode: day.items.length > 0 ? 'walk' : undefined,
+    }
+    updateDraftDay(dayIndex, { items: [...day.items, nextItem] })
+  }
+
+  function removeDraftItem(dayIndex: number, itemIndex: number) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    updateDraftDay(dayIndex, { items: day.items.filter((_, index) => index !== itemIndex) })
+  }
+
+  function moveDraftItem(dayIndex: number, itemIndex: number, direction: -1 | 1) {
+    const day = draft?.days[dayIndex]
+    if (!day) return
+    const nextIndex = itemIndex + direction
+    if (nextIndex < 0 || nextIndex >= day.items.length) return
+    const items = [...day.items]
+    const [item] = items.splice(itemIndex, 1)
+    items.splice(nextIndex, 0, item)
+    updateDraftDay(dayIndex, { items })
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
       <div className="space-y-1" data-testid="ai-draft-page-header">
-        <h1 className="text-xl font-bold text-on-surface dark:text-on-surface">AI 行程草稿</h1>
+        <h1 className="text-xl font-bold text-on-surface dark:text-on-surface">AI 生成行程</h1>
         <p className="text-sm leading-6 tm-muted">
-          先生成或粘贴草稿，检查无误后再导入为本地旅行
+          填写旅行偏好，生成可预览、可修改、可确认导入的完整行程草案
         </p>
         <p className="text-xs tm-muted">
-          当前为本地示例流程，不会调用外部 AI
+          生成草案不会写入本地旅行；确认导入后才会创建行程
         </p>
       </div>
 
       <div className="space-y-3" data-testid="ai-draft-request-form">
         <p className="text-sm font-semibold text-on-surface dark:text-on-surface">填写行程信息</p>
-        <p className="text-xs tm-muted">
-          根据你填写的信息生成一个本地示例草稿，用于预览未来 AI 生成流程。
-        </p>
 
         <FormField
           label="目的地"
@@ -405,13 +514,65 @@ export function AiDraftPage() {
             required
           />
           <FormField
-            label="结束日期"
-            value={requestEndDate}
-            onChange={setRequestEndDate}
-            type="date"
+            label="天数"
+            value={requestDayCount}
+            onChange={setRequestDayCount}
+            type="number"
             required
           />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            label="同行人数"
+            value={requestPartySize}
+            onChange={setRequestPartySize}
+            type="number"
+            required
+          />
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>结束日期</span>
+            <input
+              className={FIELD_INPUT_CLASS}
+              readOnly
+              value={requestEndDate || '选择日期和天数后计算'}
+            />
+          </label>
+        </div>
+        <div className="space-y-2">
+          <span className={FIELD_LABEL_CLASS}>兴趣标签</span>
+          <div className="flex flex-wrap gap-2" data-testid="ai-trip-builder-interest-tags">
+            {INTEREST_TAGS.map((tag) => {
+              const selected = requestInterestTags.includes(tag)
+              return (
+                <button
+                  className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
+                    selected
+                      ? 'border-primary/40 bg-primary-container text-on-primary-container'
+                      : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
+                  }`}
+                  key={tag}
+                  onClick={() => setRequestInterestTags((current) =>
+                    current.includes(tag)
+                      ? current.filter((item) => item !== tag)
+                      : [...current, tag],
+                  )}
+                  type="button"
+                >
+                  {tag}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>兴趣偏好</span>
+          <textarea
+            className={`${FIELD_TEXTAREA_CLASS} h-20`}
+            placeholder="例如：咖啡馆、建筑、适合拍照、少排队"
+            value={requestInterestText}
+            onChange={(e) => setRequestInterestText(e.target.value)}
+          />
+        </label>
         <label className="block">
           <span className={FIELD_LABEL_CLASS}>旅行节奏</span>
           <select
@@ -472,13 +633,13 @@ export function AiDraftPage() {
 
         <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            当前为本地示例草稿，不会调用外部 AI，不会上传数据。
+            生成完整行程会通过旅图服务请求 AI；生成前会先确认，生成结果只进入草案。
             <br />
             生成后仍需预览和确认，确认导入后才会创建本地旅行。
             {proxyConfig.configured && (
               <>
                 <br />
-                如通过旅图服务生成，请求将包含目的地和日期等基本信息，不会包含票据内容。
+                请求将包含目的地、日期和偏好信息，不会包含票据内容；本地示例草案不会调用外部 AI。
               </>
             )}
           </p>
@@ -495,24 +656,23 @@ export function AiDraftPage() {
           </Card>
         )}
 
-        <Button onClick={handleGenerateMock} className="w-full">
-          根据表单生成示例草稿
-        </Button>
-
         {proxyConfig.configured ? (
           <Button
             onClick={() => setShowProxyConfirm(true)}
-            variant="secondary"
             className="w-full"
             loading={proxyGenerating}
           >
-            通过旅图服务生成草稿
+            生成完整行程
           </Button>
         ) : (
           <Button disabled className="w-full" variant="secondary">
             当前未配置 AI 生成服务
           </Button>
         )}
+
+        <Button onClick={handleGenerateMock} className="w-full" variant="secondary">
+          生成本地示例草案
+        </Button>
 
         {proxyError && (
           <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
@@ -639,30 +799,131 @@ export function AiDraftPage() {
             </Card>
           )}
 
-          <Card className="space-y-3" data-testid="ai-draft-preview">
-            <h3 className="font-medium text-on-surface dark:text-on-surface">行程预览</h3>
+          <Card className="space-y-4" data-testid="ai-draft-preview">
+            <h3 className="font-medium text-on-surface dark:text-on-surface">行程草案编辑</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="旅行标题" value={draft!.title} onChange={(value) => updateDraftRoot({ title: value })} />
+              <FormField label="目的地" value={draft!.destination} onChange={(value) => updateDraftRoot({ destination: value })} />
+              <FormField label="开始日期" type="date" value={draft!.startDate} onChange={(value) => updateDraftRoot({ startDate: value })} />
+              <FormField label="结束日期" type="date" value={draft!.endDate} onChange={(value) => updateDraftRoot({ endDate: value })} />
+            </div>
             <div className="space-y-4">
               {draft!.days.map((day, dayIndex) => (
-                <div key={dayIndex} className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium text-on-surface-variant dark:text-outline">
-                      {day.date}
-                    </span>
-                    {day.title && (
-                      <span className="text-sm font-medium text-on-surface dark:text-on-surface">
-                        {day.title}
-                      </span>
-                    )}
+                <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-high/35 p-3" data-testid="ai-draft-day-editor" key={`${day.date}-${dayIndex}`}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      label={`第 ${dayIndex + 1} 天日期`}
+                      onChange={(value) => updateDraftDay(dayIndex, { date: value })}
+                      type="date"
+                      value={day.date}
+                    />
+                    <FormField
+                      label="每日主题"
+                      onChange={(value) => updateDraftDay(dayIndex, { title: value })}
+                      value={day.title ?? ''}
+                    />
                   </div>
-                  <ul className="space-y-1 pl-4">
-                    {day.items.map((item, itemIndex) => (
-                      <li key={itemIndex} className="text-sm">
-                        <span className="font-medium">{item.title}</span>
-                        {item.startTime && <span className="ml-2 tm-muted">{item.startTime}</span>}
-                        {item.locationName && <span className="ml-2 tm-muted">@ {item.locationName}</span>}
-                      </li>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-on-surface dark:text-on-surface">每日提示</p>
+                      <Button className="min-h-8 px-2 text-xs" onClick={() => addDraftDayTip(dayIndex)} variant="secondary">
+                        添加提示
+                      </Button>
+                    </div>
+                    {(day.tips ?? []).map((tip, tipIndex) => (
+                      <div className="flex gap-2" key={tipIndex}>
+                        <input
+                          className={FIELD_INPUT_CLASS}
+                          onChange={(event) => updateDraftDayTip(dayIndex, tipIndex, event.target.value)}
+                          placeholder="例如：提前确认预约时间"
+                          value={tip}
+                        />
+                        <Button className="min-h-11 shrink-0 px-3 text-xs" onClick={() => removeDraftDayTip(dayIndex, tipIndex)} variant="ghost">
+                          删除
+                        </Button>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-on-surface dark:text-on-surface">行程点</p>
+                      <Button className="min-h-8 px-2 text-xs" onClick={() => addDraftItem(dayIndex)} variant="secondary">
+                        添加行程点
+                      </Button>
+                    </div>
+                    {day.items.map((item, itemIndex) => (
+                      <div className="space-y-3 rounded-xl bg-surface-container px-3 py-3 ring-1 ring-outline-variant/25" data-testid="ai-draft-item-editor" key={itemIndex}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-on-surface-variant">#{itemIndex + 1}</p>
+                          <div className="flex gap-1">
+                            <Button className="min-h-8 px-2 text-xs" disabled={itemIndex === 0} onClick={() => moveDraftItem(dayIndex, itemIndex, -1)} variant="ghost">
+                              上移
+                            </Button>
+                            <Button className="min-h-8 px-2 text-xs" disabled={itemIndex === day.items.length - 1} onClick={() => moveDraftItem(dayIndex, itemIndex, 1)} variant="ghost">
+                              下移
+                            </Button>
+                            <Button className="min-h-8 px-2 text-xs" onClick={() => removeDraftItem(dayIndex, itemIndex)} variant="ghost">
+                              删除
+                            </Button>
+                          </div>
+                        </div>
+                        <FormField label="标题" value={item.title} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { title: value })} />
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField label="开始" type="time" value={item.startTime ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { startTime: value || undefined })} />
+                          <FormField label="结束" type="time" value={item.endTime ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { endTime: value || undefined })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField label="地点" value={item.locationName ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { locationName: value || undefined })} />
+                          <FormField label="地址" value={item.address ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { address: value || undefined })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField label="纬度" type="number" value={item.lat?.toString() ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { lat: parseOptionalNumber(value) })} />
+                          <FormField label="经度" type="number" value={item.lng?.toString() ?? ''} onChange={(value) => updateDraftItem(dayIndex, itemIndex, { lng: parseOptionalNumber(value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block">
+                            <span className={FIELD_LABEL_CLASS}>到达交通</span>
+                            <select
+                              className={FIELD_SELECT_CLASS}
+                              onChange={(event) => updateDraftItem(dayIndex, itemIndex, { previousTransportMode: normalizeTransportModeInput(event.target.value) })}
+                              value={item.previousTransportMode ?? ''}
+                            >
+                              <option value="">未指定</option>
+                              <option value="walk">步行</option>
+                              <option value="transit">公共交通</option>
+                              <option value="bus">公交</option>
+                              <option value="car">驾车/打车</option>
+                              <option value="train">火车</option>
+                              <option value="flight">航班</option>
+                              <option value="other">其他</option>
+                            </select>
+                          </label>
+                          <FormField
+                            label="交通分钟"
+                            type="number"
+                            value={item.previousTransportDurationMinutes?.toString() ?? ''}
+                            onChange={(value) => updateDraftItem(dayIndex, itemIndex, { previousTransportDurationMinutes: parseOptionalInteger(value) })}
+                          />
+                        </div>
+                        <label className="block">
+                          <span className={FIELD_LABEL_CLASS}>交通备注</span>
+                          <textarea
+                            className={`${FIELD_TEXTAREA_CLASS} h-16`}
+                            onChange={(event) => updateDraftItem(dayIndex, itemIndex, { previousTransportNote: event.target.value || undefined })}
+                            value={item.previousTransportNote ?? ''}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className={FIELD_LABEL_CLASS}>行程备注</span>
+                          <textarea
+                            className={`${FIELD_TEXTAREA_CLASS} h-16`}
+                            onChange={(event) => updateDraftItem(dayIndex, itemIndex, { note: event.target.value || undefined })}
+                            value={item.note ?? ''}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -670,13 +931,13 @@ export function AiDraftPage() {
 
           <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30" data-testid="ai-draft-privacy-note">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              当前仅在本机解析草稿，不会调用外部 AI。
+              这里的修改只更新当前草案。
               <br />
               确认导入后才会写入本地旅行。
             </p>
           </Card>
 
-          <Button onClick={() => setShowConfirm(true)} className="w-full">
+          <Button disabled={!canImportDraft} onClick={() => setShowConfirm(true)} className="w-full">
             确认导入
           </Button>
         </>
@@ -696,8 +957,8 @@ export function AiDraftPage() {
 
       <ConfirmDialog
         open={showProxyConfirm}
-        title="通过旅图服务生成草稿"
-        body={`将通过旅图服务生成行程草稿\n可能消耗服务额度\n不会自动创建旅行\n生成后仍需预览和确认\n当前不会读取票据图片/PDF`}
+        title="通过旅图服务生成完整行程"
+        body={`将通过旅图服务生成完整行程草案\n可能消耗服务额度\n不会自动创建旅行\n生成后仍需预览和确认\n当前不会读取票据图片/PDF`}
         confirmLabel="确认生成"
         cancelLabel="取消"
         loading={proxyGenerating}
@@ -719,4 +980,22 @@ export function AiDraftPage() {
       />
     </div>
   )
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseOptionalInteger(value: string) {
+  const parsed = parseOptionalNumber(value)
+  if (parsed === undefined) return undefined
+  return Number.isInteger(parsed) ? parsed : undefined
+}
+
+function normalizeTransportModeInput(value: string): TransportMode | undefined {
+  const validModes: TransportMode[] = ['walk', 'transit', 'bus', 'car', 'train', 'flight', 'other']
+  return validModes.includes(value as TransportMode) ? value as TransportMode : undefined
 }

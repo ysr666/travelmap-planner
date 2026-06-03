@@ -59,12 +59,16 @@ export function createMockAiDraftProvider(request: ProviderProxyAiTripDraftReque
     name: 'mock',
     async generateDraft() {
       const draft = generateMockAiTripDraft({
+        dayCount: request.dayCount,
         destination: request.destination,
         endDate: request.endDate,
         freeTextRequirement: request.freeTextRequirement,
+        interestTags: request.interestTags,
+        interestText: request.interestText,
         mealTimeProtection: request.mealTimeProtection,
         mustVisitText: request.mustVisitText,
         avoidText: request.avoidText,
+        partySize: request.partySize,
         pace: request.pace,
         preferTransport: request.preferTransport,
         startDate: request.startDate,

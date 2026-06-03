@@ -67,6 +67,22 @@ describe('createMockAiDraftProvider', () => {
     }
   })
 
+  it('mock draft includes builder tips and transport suggestions', async () => {
+    const provider = createMockAiDraftProvider(validRequest({
+      interestTags: ['美食'],
+      interestText: '咖啡馆',
+      partySize: 2,
+      preferTransport: 'taxi',
+    }))
+    const result = await provider.generateDraft({ prompt: 'ignored' })
+    expect(result.ok).toBe(true)
+    if (result.ok && result.kind === 'draft') {
+      expect(result.draft.days[0].tips?.join('\n')).toContain('2 人')
+      expect(result.draft.days[0].items[1].previousTransportMode).toBe('car')
+      expect(result.draft.days[0].items[1].previousTransportNote).toContain('打车')
+    }
+  })
+
   it('mock draft is deterministic', async () => {
     const request = validRequest({ destination: '巴黎' })
     const a = await createMockAiDraftProvider(request).generateDraft({ prompt: '' })

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "type": "trip-plan",
+  "source": "Playwright route fixture",
+  "trip": {
+    "title": "AI 路线生成测试旅行",
+    "destination": "Tokyo, Japan",
+    "startDate": "2026-04-12",
+    "endDate": "2026-04-13"
+  },
+  "days": [
+    {
+      "date": "2026-04-12",
+      "title": "步行与驾车测试日",
+      "items": [
+        {
+          "title": "东京站",
+          "startTime": "09:00",
+          "locationName": "Tokyo Station",
+          "address": "1 Chome Marunouchi, Chiyoda City, Tokyo",
+          "lat": 35.681236,
+          "lng": 139.767125
+        },
+        {
+          "title": "皇居外苑",
+          "startTime": "10:00",
+          "locationName": "Kokyo Gaien National Garden",
+          "address": "1-1 Kokyogaien, Chiyoda City, Tokyo",
+          "lat": 35.680959,
+          "lng": 139.757133,
+          "previousTransportMode": "walk"
+        },
+        {
+          "title": "东京塔",
+          "startTime": "14:00",
+          "locationName": "Tokyo Tower",
+          "address": "4 Chome-2-8 Shibakoen, Minato City, Tokyo",
+          "lat": 35.658581,
+          "lng": 139.745433,
+          "previousTransportMode": "car"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-13",
+      "title": "坐标不足测试日",
+      "items": [
+        {
+          "title": "未定位咖啡店",
+          "startTime": "16:00",
+          "locationName": "Unknown Cafe",
+          "address": "Tokyo",
+          "lat": 35.671,
+          "lng": 139.765
+        }
+      ]
+    }
+  ]
+}

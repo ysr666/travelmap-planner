@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
+import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
@@ -34,6 +35,7 @@ export function TripWorkspacePage() {
   const tripId = params.get('tripId')
   const requestedDayId = params.get('dayId')
   const requestedView = params.get('view')
+  const hasPostImportRoutePrompt = params.get('postImportRoutePrompt') === '1'
   const {
     trip,
     days,
@@ -60,6 +62,8 @@ export function TripWorkspacePage() {
   const [routeGenerationLoading, setRouteGenerationLoading] = useState(false)
   const [routeGenerationResult, setRouteGenerationResult] = useState<RouteGenerationBatchResult | null>(null)
   const [routeGenerationError, setRouteGenerationError] = useState<string | null>(null)
+  const [dismissedImportRoutePromptTripId, setDismissedImportRoutePromptTripId] = useState<string | null>(null)
+  const [completedImportRoutePromptTripId, setCompletedImportRoutePromptTripId] = useState<string | null>(null)
 
   const tripContextKey = useMemo(() => {
     if (!trip || days.length === 0) {
@@ -230,6 +234,21 @@ export function TripWorkspacePage() {
 
   function openDay(day: Day, view: 'schedule' | 'map' = 'schedule') {
     navigateTo('day', { tripId: day.tripId, dayId: day.id, view })
+  }
+
+  function clearPostImportRoutePrompt({ hide }: { hide: boolean }) {
+    if (!trip) {
+      return
+    }
+    if (hide) {
+      setDismissedImportRoutePromptTripId(trip.id)
+      setCompletedImportRoutePromptTripId(null)
+    } else {
+      setCompletedImportRoutePromptTripId(trip.id)
+    }
+    if (hasPostImportRoutePrompt) {
+      navigateTo('trip', { tripId: trip.id })
+    }
   }
 
   if (isLoading) {
@@ -403,6 +422,14 @@ export function TripWorkspacePage() {
             </div>
             <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
             {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
+            {dismissedImportRoutePromptTripId !== trip.id && (hasPostImportRoutePrompt || completedImportRoutePromptTripId === trip.id) ? (
+              <ImportRouteGenerationPanel
+                onDismiss={() => clearPostImportRoutePrompt({ hide: true })}
+                onGenerated={() => clearPostImportRoutePrompt({ hide: false })}
+                showDismiss
+                tripId={trip.id}
+              />
+            ) : null}
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />

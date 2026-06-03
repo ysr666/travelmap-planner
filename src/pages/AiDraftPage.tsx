@@ -359,7 +359,7 @@ export function AiDraftPage() {
         ticketMetas: [],
         ticketBlobs: [],
       })
-      navigateTo('trip', { tripId: result.tripId })
+      navigateTo('trip', { postImportRoutePrompt: '1', tripId: result.tripId })
     } catch (error) {
       setErrors([{ path: 'root', message: `导入失败: ${error instanceof Error ? error.message : '未知错误'}` }])
       setShowConfirm(false)
@@ -685,7 +685,7 @@ export function AiDraftPage() {
       <ConfirmDialog
         open={showConfirm}
         title="导入行程草稿"
-        body={`将创建新的本地旅行\n不会自动生成路线\n不会创建票据\n不会上传云端\n可在创建后继续编辑`}
+        body={`将创建新的本地旅行\n导入后会检查可生成路线的日程\n确认生成前不会调用路线服务\n不会创建票据\n不会上传云端\n可在创建后继续编辑`}
         confirmLabel="确认导入"
         cancelLabel="取消"
         loading={importing}

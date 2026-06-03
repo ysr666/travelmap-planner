@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { clearTravelDatabase, expectNoHorizontalOverflow, forceRouteProxyFixture } from './helpers'
 
 async function openJsonDraftSection(page: Page) {
   const section = page.getByTestId('ai-draft-json-section')
@@ -129,10 +130,126 @@ test.describe('AI Draft Page', () => {
     const dialog = page.getByTestId('ai-draft-import-confirm-dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText('将创建新的本地旅行')
-    await expect(dialog).toContainText('不会自动生成路线')
+    await expect(dialog).toContainText('导入后会检查可生成路线的日程')
+    await expect(dialog).toContainText('确认生成前不会调用路线服务')
     await expect(dialog).toContainText('不会创建票据')
     await expect(dialog).toContainText('不会上传云端')
     await expect(dialog).toContainText('可在创建后继续编辑')
+  })
+
+  test('shows route generation prompt after import and generates only after confirmation', async ({ page }) => {
+    await clearTravelDatabase(page)
+    let routePreviewRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as {
+        coordinates: number[][]
+        operation: string
+        provider: string
+        quotaSessionId?: string
+        segments: Array<{
+          fromCoordinateIndex: number
+          fromItemId?: string
+          segmentIndex: number
+          toCoordinateIndex: number
+          toItemId?: string
+        }>
+      }
+      expect(body.operation).toBe('route_preview')
+      expect(body.provider).toBe('openrouteservice')
+      expect(body.quotaSessionId).toBeTruthy()
+      expect(JSON.stringify(body)).not.toContain('OPENROUTESERVICE_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('GOOGLE_ROUTES_API_KEY')
+      routePreviewRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_preview',
+          provider: 'openrouteservice',
+          route: {
+            lineStrings: body.segments.map((segment) => [
+              body.coordinates[segment.fromCoordinateIndex],
+              body.coordinates[segment.toCoordinateIndex],
+            ]),
+            segments: body.segments.map((segment) => ({
+              coordinates: [
+                body.coordinates[segment.fromCoordinateIndex],
+                body.coordinates[segment.toCoordinateIndex],
+              ],
+              distanceMeters: 1100,
+              durationSeconds: 540,
+              fromItemId: segment.fromItemId,
+              kind: 'road',
+              segmentIndex: segment.segmentIndex,
+              toItemId: segment.toItemId,
+            })),
+            status: 'road',
+            warnings: [],
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+    await page.goto('/#/ai-draft')
+    await forceRouteProxyFixture(page)
+    const draft = {
+      title: '路线提示测试旅行',
+      destination: '东京',
+      startDate: '2026-04-12',
+      endDate: '2026-04-12',
+      days: [{
+        date: '2026-04-12',
+        title: '路线测试日',
+        items: [
+          {
+            title: '东京站',
+            lat: 35.681236,
+            lng: 139.767125,
+            locationName: 'Tokyo Station',
+            startTime: '09:00',
+          },
+          {
+            title: '皇居外苑',
+            lat: 35.680959,
+            lng: 139.757133,
+            locationName: 'Kokyo Gaien',
+            previousTransportMode: 'walk',
+            startTime: '10:00',
+          },
+          {
+            title: '东京塔',
+            lat: 35.658581,
+            lng: 139.745433,
+            locationName: 'Tokyo Tower',
+            previousTransportMode: 'car',
+            startTime: '14:00',
+          },
+        ],
+      }],
+    }
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(draft))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
+    await page.getByRole('button', { name: '确认导入' }).click()
+    await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '确认导入' }).click()
+    await page.waitForURL(/#\/trip\?/)
+    await expect(page).toHaveURL(/postImportRoutePrompt=1/)
+
+    const panel = page.getByTestId('import-route-generation-panel')
+    await expect(panel).toBeVisible()
+    await expect(panel.getByTestId('import-route-generation-summary')).toContainText('已找到 1 天可生成路线')
+    expect(routePreviewRequests).toBe(0)
+
+    await panel.getByTestId('import-route-generate-button').click()
+    await expect(page.getByTestId('import-route-generation-confirm-dialog')).toContainText('点击确认后才会调用路线服务')
+    expect(routePreviewRequests).toBe(0)
+    await page.getByTestId('import-route-generation-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+
+    await expect(panel.getByTestId('import-route-generation-result')).toContainText('已生成 1 天路线预览')
+    expect(routePreviewRequests).toBeGreaterThan(0)
+    await expect.poll(() => new URL(page.url()).hash.includes('postImportRoutePrompt')).toBe(false)
+    await expectNoHorizontalOverflow(page)
   })
 
   test('creates trip on confirm from pasted draft', async ({ page }) => {

@@ -22,6 +22,7 @@ import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
 import { CloudBackupPanel } from '../components/cloud/CloudBackupPanel'
 import { Collapsible } from '../components/ui/Collapsible'
+import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import {
   FIELD_INPUT_CLASS,
   FIELD_LABEL_CLASS,
@@ -1358,11 +1359,13 @@ function TripPlanSuccessCard({ result }: { result: ImportTripPlanResult }) {
         <p className="font-semibold">建议检查</p>
         <ol className="mt-1 list-decimal space-y-1 pl-5">
           <li>地图坐标是否准确</li>
-          <li>交通方式和预计耗时是否合理</li>
+          <li>可生成路线的日程是否需要批量生成路线预览</li>
           <li>票据是否绑定到正确行程点</li>
           <li>出发前导出完整 zip 备份</li>
         </ol>
       </div>
+
+      <ImportRouteGenerationPanel tripId={result.tripId} />
 
       {result.warnings.length > 0 ? (
         <ValidationList

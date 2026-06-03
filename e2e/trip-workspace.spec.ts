@@ -682,6 +682,423 @@ test('Trip Home AI 修改建议需要两次确认且只在最终确认后写入'
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 智能整理此行程先确认再生成可勾选 diff 并批量应用', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let placeLookupRequests = 0
+  let routeOrderRequests = 0
+  let travelSearchRequests = 0
+  let cloudRequests = 0
+  let deepSeekRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'place_lookup') {
+      placeLookupRequests += 1
+      expect(body.maxResults).toBe(3)
+      expect(JSON.stringify(body)).not.toContain('ticket_')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'place_lookup',
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          source: 'mock',
+          results: [
+            {
+              displayName: '西湖相似地点',
+              formattedAddress: '杭州西湖相似地点',
+              location: { lat: 30.2, lng: 120.1 },
+              placeId: 'place-weak',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+            {
+              displayName: '西湖风景名胜区',
+              formattedAddress: '杭州西湖风景名胜区',
+              googleMapsUri: 'https://maps.google.com/west-lake',
+              location: { lat: 30.25, lng: 120.14 },
+              placeId: 'place-west-lake',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+          ],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_order_suggestion') {
+      routeOrderRequests += 1
+      expect(body.items.find((item: { id: string }) => item.id === 'smart_item_1')?.coordinate).toMatchObject({ lat: 30.25, lng: 120.14 })
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_order_suggestion',
+          provider: 'mock',
+          requestId: body.requestId,
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          suggestedItemIds: ['smart_item_2', 'smart_item_1'],
+          summary: '已生成模拟路线顺序建议。',
+          unchangedItemIds: [],
+          warnings: [],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticket_')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          source: 'mock',
+          results: [
+            {
+              confidence: 'low',
+              displayUrl: 'unknown.example/smart-trip',
+              domain: 'unknown.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '低质量搬运摘要。',
+              sourceType: 'unknown',
+              title: '智能整理搬运来源',
+              url: 'https://unknown.example/smart-trip',
+            },
+            {
+              confidence: 'high',
+              displayUrl: 'travel.example/smart-trip',
+              domain: 'travel.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '模拟来源摘要：开放时间和票价请以官方信息为准。',
+              sourceType: 'official',
+              title: '智能整理模拟来源',
+              url: 'https://travel.example/smart-trip',
+            },
+          ],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_preview') {
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_preview',
+          provider: 'openrouteservice',
+          route: {
+            lineStrings: [],
+            segments: [],
+            status: 'failed',
+            warnings: ['route preview ignored in smart workspace test'],
+          },
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    deepSeekRequests += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-07-10',
+      id: 'trip-smart-workspace',
+      notes: '原旅行备注',
+      startDate: '2026-07-10',
+      title: '杭州智能整理测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-07-10', id: 'smart_day_1', sortOrder: 1, title: '第一天', tripId: 'trip-smart-workspace' },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'smart_day_1',
+        id: 'smart_item_1',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '西湖',
+        tripId: 'trip-smart-workspace',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'smart_day_1',
+        id: 'smart_item_2',
+        lat: 30.24,
+        lng: 120.16,
+        sortOrder: 2,
+        ticketIds: [],
+        title: '灵隐寺',
+        tripId: 'trip-smart-workspace',
+        updatedAt: now,
+      },
+    ],
+  })
+
+  await page.goto('/#/trip?tripId=trip-smart-workspace&dayId=smart_day_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('smart-trip-workspace-panel')
+  await expect(panel).toBeVisible()
+  await panel.getByRole('button', { name: '智能整理此行程' }).click()
+  const sendDialog = page.getByTestId('smart-trip-workspace-send-confirm-dialog')
+  await expect(sendDialog).toContainText('预计最多')
+  await expect(sendDialog).toContainText('不会直接写入旅行')
+  expect(placeLookupRequests).toBe(0)
+  expect(routeOrderRequests).toBe(0)
+  expect(travelSearchRequests).toBe(0)
+  await sendDialog.getByRole('button', { name: '暂不整理' }).click()
+  expect(placeLookupRequests).toBe(0)
+  expect(routeOrderRequests).toBe(0)
+  expect(travelSearchRequests).toBe(0)
+
+  await panel.getByRole('button', { name: '智能整理此行程' }).click()
+  await page.getByTestId('smart-trip-workspace-send-confirm-dialog').getByRole('button', { name: '确认整理' }).click()
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('地点校准：西湖')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('路线顺序：第一天')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('景点提示：西湖')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('每日提示')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('官网')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('来源时间：2026-06-02')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('可信度：高')
+  await expect(panel.getByTestId('smart-trip-workspace-preview')).toContainText('建议理由')
+  await expect(panel.getByTestId('smart-trip-workspace-category-controls')).toContainText('地点校准')
+  await expect(panel.getByTestId('smart-trip-workspace-category-controls')).toContainText('景点提示')
+  await panel.getByTestId('smart-trip-workspace-category-clear-place_calibration').click()
+  await expect(panel.getByTestId('smart-trip-workspace-category-controls')).toContainText(/地点校准\s*0\/1/)
+  await panel.getByTestId('smart-trip-workspace-category-select-place_calibration').click()
+  await expect(panel.getByTestId('smart-trip-workspace-category-controls')).toContainText(/地点校准\s*1\/1/)
+  expect(placeLookupRequests).toBe(1)
+  expect(routeOrderRequests).toBe(1)
+  expect(travelSearchRequests).toBe(2)
+  expect(await readDayItemOrder(page, 'smart_day_1')).toEqual(['smart_item_1', 'smart_item_2'])
+
+  await panel.getByRole('button', { name: '批量应用' }).click()
+  const applyDialog = page.getByTestId('smart-trip-workspace-apply-confirm-dialog')
+  await expect(applyDialog).toContainText('不会创建票据')
+  await expect(applyDialog).toContainText('不会上传云端')
+  await expect(applyDialog).toContainText('不会清除路线缓存')
+  await applyDialog.getByRole('button', { name: '确认应用' }).click()
+  await expect.poll(() => readDayItemOrder(page, 'smart_day_1')).toEqual(['smart_item_2', 'smart_item_1'])
+  const smartItem = await readItineraryItem(page, 'smart_item_1')
+  expect(smartItem.locationName).toBe('西湖风景名胜区')
+  expect(smartItem.notes).toContain('模拟来源摘要')
+  expect(await readTripNotes(page, 'trip-smart-workspace')).toContain('智能整理每日提示')
+  expect(cloudRequests).toBe(0)
+  expect(deepSeekRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Trip Home 智能整理分阶段失败后可单独重新生成路线顺序', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let placeLookupRequests = 0
+  let routeOrderRequests = 0
+  let travelSearchRequests = 0
+  let cloudRequests = 0
+  let deepSeekRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'place_lookup') {
+      placeLookupRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'place_lookup',
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          source: 'mock',
+          results: [
+            {
+              displayName: '西湖风景名胜区',
+              formattedAddress: '杭州西湖风景名胜区',
+              googleMapsUri: 'https://maps.google.com/west-lake',
+              location: { lat: 30.25, lng: 120.14 },
+              placeId: 'place-west-lake',
+              provider: 'google_places',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+            },
+          ],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_order_suggestion') {
+      routeOrderRequests += 1
+      expect(body.items.find((item: { id: string }) => item.id === 'smart_recover_item_1')?.coordinate).toMatchObject({ lat: 30.25, lng: 120.14 })
+      if (routeOrderRequests === 1) {
+        await route.fulfill({
+          body: JSON.stringify({
+            code: 'provider_unavailable',
+            ok: false,
+            operation: 'route_order_suggestion',
+          }),
+          contentType: 'application/json',
+          status: 503,
+        })
+        return
+      }
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_order_suggestion',
+          provider: 'mock',
+          requestId: body.requestId,
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          suggestedItemIds: ['smart_recover_item_2', 'smart_recover_item_1'],
+          summary: '已重新生成路线顺序建议。',
+          unchangedItemIds: [],
+          warnings: [],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          retrievedAt: '2026-06-02T01:02:03.000Z',
+          source: 'mock',
+          results: [
+            {
+              confidence: 'high',
+              displayUrl: 'travel.example/smart-recover',
+              domain: 'travel.example',
+              retrievedAt: '2026-06-02T01:02:03.000Z',
+              snippet: '模拟来源摘要：保留其他阶段建议。',
+              sourceType: 'official',
+              title: '智能整理恢复模拟来源',
+              url: 'https://travel.example/smart-recover',
+            },
+          ],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    deepSeekRequests += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-07-10',
+      id: 'trip-smart-recover',
+      notes: '原旅行备注',
+      startDate: '2026-07-10',
+      title: '杭州智能整理恢复测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-07-10', id: 'smart_recover_day_1', sortOrder: 1, title: '第一天', tripId: 'trip-smart-recover' },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'smart_recover_day_1',
+        id: 'smart_recover_item_1',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '西湖',
+        tripId: 'trip-smart-recover',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'smart_recover_day_1',
+        id: 'smart_recover_item_2',
+        lat: 30.24,
+        lng: 120.16,
+        sortOrder: 2,
+        ticketIds: [],
+        title: '灵隐寺',
+        tripId: 'trip-smart-recover',
+        updatedAt: now,
+      },
+    ],
+  })
+
+  await page.goto('/#/trip?tripId=trip-smart-recover&dayId=smart_recover_day_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('smart-trip-workspace-panel')
+  await expect(panel).toBeVisible()
+  await panel.getByRole('button', { name: '智能整理此行程' }).click()
+  await page.getByTestId('smart-trip-workspace-send-confirm-dialog').getByRole('button', { name: '确认整理' }).click()
+
+  const preview = panel.getByTestId('smart-trip-workspace-preview')
+  await expect(preview).toContainText('地点校准：西湖')
+  await expect(preview).toContainText('景点提示：西湖')
+  await expect(preview).toContainText('每日提示')
+  await expect(preview).not.toContainText('路线顺序：第一天')
+  await expect(panel.getByTestId('smart-trip-workspace-stage-status-route_order')).toContainText('失败')
+  await expect(panel.getByTestId('smart-trip-workspace-warnings')).toContainText('路线顺序建议失败')
+  expect(placeLookupRequests).toBe(1)
+  expect(routeOrderRequests).toBe(1)
+  expect(travelSearchRequests).toBe(2)
+
+  await panel.getByTestId('smart-trip-workspace-category-regenerate-route_order').click()
+  const stageDialog = page.getByTestId('smart-trip-workspace-stage-confirm-dialog')
+  await expect(stageDialog).toContainText('重新生成路线顺序预览')
+  await expect(stageDialog).toContainText('确认前不会发送请求')
+  expect(routeOrderRequests).toBe(1)
+  await stageDialog.getByRole('button', { name: '确认重新生成' }).click()
+
+  await expect(preview).toContainText('路线顺序：第一天')
+  await expect(panel.getByTestId('smart-trip-workspace-stage-status-route_order')).toContainText('已完成')
+  expect(routeOrderRequests).toBe(2)
+  expect(placeLookupRequests).toBe(1)
+  expect(travelSearchRequests).toBe(2)
+  expect(await readDayItemOrder(page, 'smart_recover_day_1')).toEqual(['smart_recover_item_1', 'smart_recover_item_2'])
+  expect(cloudRequests).toBe(0)
+  expect(deepSeekRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home AI 修改建议搜索意图先确认并显示来源', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMapStyle(page)
@@ -939,6 +1356,40 @@ async function readItemTitle(page: import('@playwright/test').Page, itemId: stri
     db.close()
     return title
   }, itemId)
+}
+
+async function readItineraryItem(page: import('@playwright/test').Page, itemId: string) {
+  return page.evaluate(async (currentItemId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const item = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = db.transaction(['itineraryItems'], 'readonly').objectStore('itineraryItems').get(currentItemId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return item
+  }, itemId)
+}
+
+async function readTripNotes(page: import('@playwright/test').Page, tripId: string) {
+  return page.evaluate(async (currentTripId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const notes = await new Promise<string | undefined>((resolve, reject) => {
+      const request = db.transaction(['trips'], 'readonly').objectStore('trips').get(currentTripId)
+      request.onsuccess = () => resolve(request.result?.notes)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return notes
+  }, tripId)
 }
 
 async function writeItemTitle(page: import('@playwright/test').Page, itemId: string, title: string) {

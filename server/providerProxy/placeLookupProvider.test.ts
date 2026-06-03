@@ -141,6 +141,38 @@ describe('place lookup provider foundation', () => {
     expect(JSON.stringify(result)).not.toContain('shared-google-platform-secret')
   })
 
+  it('uses the Vite Google Maps key as the first shared Places key', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      places: [
+        {
+          displayName: { languageCode: 'zh', text: '杭州博物馆' },
+          formattedAddress: '浙江省杭州市上城区粮道山18号',
+          id: 'places/mock-google-1',
+          location: { latitude: 30.245, longitude: 120.17 },
+        },
+      ],
+    }), { headers: { 'Content-Type': 'application/json' }, status: 200 })) as unknown as typeof fetch
+    const provider = createGooglePlacesLookupProvider(
+      {
+        GOOGLE_MAPS_PLATFORM_API_KEY: 'shared-google-platform-secret',
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'dedicated-place-secret',
+        VITE_GOOGLE_MAPS_API_KEY: 'vite-google-maps-secret',
+      },
+      fetcher,
+      { now: '2026-02-03T04:05:06.000Z' },
+    )
+
+    const result = await provider.lookup(validPlaceLookupRequest())
+
+    expect(result.ok).toBe(true)
+    const [, init] = vi.mocked(fetcher).mock.calls[0]
+    expect(init?.headers).toMatchObject({
+      'X-Goog-Api-Key': 'vite-google-maps-secret',
+      'X-Goog-FieldMask': GOOGLE_PLACES_FIELD_MASK,
+    })
+    expect(JSON.stringify(result)).not.toContain('vite-google-maps-secret')
+  })
+
   it('drops malformed candidates and omits unsafe Google Maps URIs', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       places: [

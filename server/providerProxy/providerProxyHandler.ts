@@ -89,6 +89,7 @@ export type ProviderProxyHandlerEnv = {
   GOOGLE_MAPS_PLATFORM_API_KEY?: string
   GOOGLE_ROUTES_API_KEY?: string
   OPENROUTESERVICE_API_KEY?: string
+  VITE_GOOGLE_MAPS_API_KEY?: string
   TRIPMAP_AI_PROVIDER?: string
   TRIPMAP_AI_API_KEY?: string
   TRIPMAP_AI_BASE_URL?: string
@@ -695,7 +696,7 @@ function selectPlaceLookupProvider(env: ProviderProxyHandlerEnv, fetcher: typeof
   if (provider === 'disabled') {
     return createDisabledPlaceLookupProvider()
   }
-  if (provider === 'google_places') {
+  if (provider === 'google_places' || (!provider && getGooglePlacesApiKey(env))) {
     if (!getGooglePlacesApiKey(env)) {
       return createUnavailablePlaceLookupProvider()
     }
@@ -1187,7 +1188,7 @@ function getProviderSecret(provider: ProviderProxyConcreteProvider, env: Provide
 }
 
 function getGoogleRoutesApiKey(env: ProviderProxyHandlerEnv) {
-  return env.GOOGLE_ROUTES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim()
+  return env.VITE_GOOGLE_MAPS_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim() || env.GOOGLE_ROUTES_API_KEY?.trim()
 }
 
 function normalizeProviderProxyHandlerError(

@@ -103,6 +103,78 @@ function qualityIssueDraft() {
   }
 }
 
+function mapPreviewDraft() {
+  return {
+    title: '地图预览测试',
+    destination: '东京',
+    startDate: '2025-04-01',
+    endDate: '2025-04-01',
+    days: [{
+      date: '2025-04-01',
+      title: '地图日',
+      items: [
+        {
+          title: '短 A',
+          locationName: '东京站',
+          lat: 35,
+          lng: 139,
+          startTime: '09:00',
+        },
+        {
+          title: '短 B',
+          locationName: '有乐町',
+          lat: 35.001,
+          lng: 139.001,
+          startTime: '10:00',
+        },
+        {
+          title: '短 C',
+          locationName: '银座',
+          lat: 35.002,
+          lng: 139.002,
+          startTime: '11:00',
+        },
+        {
+          title: '近 D',
+          locationName: '日比谷',
+          lat: 35.003,
+          lng: 139.003,
+          startTime: '12:00',
+        },
+      ],
+    }],
+  }
+}
+
+function mapOrderDraft() {
+  return {
+    title: '地图顺序测试',
+    destination: '东京',
+    startDate: '2025-04-01',
+    endDate: '2025-04-02',
+    days: [
+      {
+        date: '2025-04-01',
+        title: '第一天地图日',
+        items: [
+          { title: '一日保持起点', locationName: '起点', lat: 35, lng: 139, startTime: '09:00' },
+          { title: '一日绕远点', locationName: '远点', lat: 35.4, lng: 139.4, startTime: '10:00' },
+          { title: '一日近点', locationName: '近点', lat: 35.001, lng: 139.001, startTime: '11:00' },
+        ],
+      },
+      {
+        date: '2025-04-02',
+        title: '第二天地图日',
+        items: [
+          { title: '二日起点', locationName: '起点', lat: 36, lng: 140, startTime: '09:00' },
+          { title: '二日绕远点', locationName: '远点', lat: 36.4, lng: 140.4, startTime: '10:00' },
+          { title: '二日近点', locationName: '近点', lat: 36.001, lng: 140.001, startTime: '11:00' },
+        ],
+      },
+    ],
+  }
+}
+
 function variantDraft(title: string, dayCount = 2) {
   const dates = Array.from({ length: dayCount }, (_, index) => `2025-10-0${index + 1}`)
   return {
@@ -116,16 +188,27 @@ function variantDraft(title: string, dayCount = 2) {
         tips: ['提前确认开放时间。'],
         items: index === 0
           ? [
-            { title: `${title}景福宫`, locationName: '景福宫', startTime: '09:00' },
+            { title: `${title}景福宫`, locationName: '景福宫', lat: 37.5796, lng: 126.977, startTime: '09:00' },
+            {
+              title: `${title}首尔塔`,
+              locationName: '首尔塔',
+              lat: 37.5512,
+              lng: 126.9882,
+              previousTransportMode: 'transit',
+              previousTransportDurationMinutes: 35,
+              startTime: '10:00',
+            },
             {
             title: `${title}北村韩屋村`,
             locationName: '北村韩屋村',
+            lat: 37.5826,
+            lng: 126.983,
             previousTransportMode: 'walk',
             previousTransportDurationMinutes: 20,
             startTime: '11:00',
             },
           ]
-          : [{ title: `${title}明洞`, locationName: '明洞', startTime: '10:00' }],
+          : [{ title: `${title}明洞`, locationName: '明洞', lat: 37.5637, lng: 126.985, startTime: '10:00' }],
       })),
   }
 }
@@ -221,6 +304,132 @@ test.describe('AI Trip Builder Page', () => {
     await expect(preview).toBeVisible()
     await expect(preview.getByTestId('ai-draft-item-editor').nth(0).getByLabel('标题')).toHaveValue('浅草寺')
     await expect(preview.getByTestId('ai-draft-item-editor').nth(2).getByLabel('标题')).toHaveValue('明治神宫')
+  })
+
+  test('shows draft map preview with markers path and current order', async ({ page }) => {
+    let providerRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      providerRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ ok: false, operation: 'unexpected' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(mapPreviewDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const map = page.getByTestId('ai-draft-map-preview')
+    await expect(map).toBeVisible()
+    await expect(map).toContainText('地图预览')
+    await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(4)
+    await expect(map.getByTestId('ai-draft-map-preview-segment')).toHaveCount(3)
+    await expect(map.getByTestId('ai-draft-map-preview-path')).toBeVisible()
+    await expect(map).toContainText('直线距离')
+    await expect(map.getByTestId('ai-draft-map-preview-order-item')).toHaveCount(4)
+    await expect(map.getByTestId('ai-draft-map-preview-order-item').first()).toContainText('短 A')
+    expect(providerRequests).toBe(0)
+  })
+
+  test('draft map preview refreshes after item move and coordinate edits', async ({ page }) => {
+    let providerRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      providerRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ ok: false, operation: 'unexpected' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(mapPreviewDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const map = page.getByTestId('ai-draft-map-preview')
+    const preview = page.getByTestId('ai-draft-preview')
+    await expect(map.getByTestId('ai-draft-map-preview-order-item').first()).toContainText('短 A')
+    await preview.getByTestId('ai-draft-item-editor').first().getByRole('button', { name: '下移' }).click()
+    await expect(map.getByTestId('ai-draft-map-preview-order-item').first()).toContainText('短 B')
+
+    const lastItem = preview.getByTestId('ai-draft-item-editor').last()
+    await lastItem.getByLabel('纬度').fill('35.4')
+    await lastItem.getByLabel('经度').fill('139.4')
+    const routeWarning = map.getByTestId('ai-draft-map-preview-warning').filter({ hasText: '直线距离约' })
+    await expect(routeWarning).toContainText('可能需要检查顺序')
+    expect(providerRequests).toBe(0)
+  })
+
+  test('draft map order action reorders only the selected day without provider calls', async ({ page }) => {
+    let providerRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      providerRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ ok: false, operation: 'unexpected' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(mapOrderDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const map = page.getByTestId('ai-draft-map-preview')
+    await map.getByTestId('ai-draft-map-preview-day-select').selectOption('2025-04-02')
+    await expect(map.getByTestId('ai-draft-map-preview-warning').filter({ hasText: '二日绕远点 前后出现折返' })).toBeVisible()
+    await expect(map.getByTestId('ai-draft-map-order-action')).toBeEnabled()
+    await map.getByTestId('ai-draft-map-order-action').click()
+
+    await expect(map.getByTestId('ai-draft-map-order-message')).toContainText('已按地图直线顺序重排本日行程')
+    await expect(map.getByTestId('ai-draft-map-preview-warning').filter({ hasText: '二日绕远点 前后出现折返' })).not.toBeVisible()
+    await expect(map.getByTestId('ai-draft-map-preview-order-item').nth(1)).toContainText('二日近点')
+    await expect(map.getByTestId('ai-draft-map-preview-marker').nth(1)).toContainText('2')
+
+    const firstDay = page.getByTestId('ai-draft-day-editor').nth(0)
+    const secondDay = page.getByTestId('ai-draft-day-editor').nth(1)
+    await expect(firstDay.getByTestId('ai-draft-item-editor').nth(1).getByLabel('标题')).toHaveValue('一日绕远点')
+    await expect(secondDay.getByTestId('ai-draft-item-editor').nth(1).getByLabel('标题')).toHaveValue('二日近点')
+    await expect(map.getByTestId('ai-draft-map-order-action')).toBeDisabled()
+    expect(providerRequests).toBe(0)
+  })
+
+  test('draft map preview keeps missing-coordinate items local without provider calls', async ({ page }) => {
+    let providerRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      providerRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ ok: false, operation: 'unexpected' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+    })
+
+    const draft = {
+      title: '缺坐标测试',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '有坐标', locationName: '东京站', lat: 35.6812, lng: 139.7671 },
+          { title: '没有坐标', locationName: '待校准地点' },
+        ],
+      }],
+    }
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(draft))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const map = page.getByTestId('ai-draft-map-preview')
+    await expect(map).toContainText('坐标点不足 2 个')
+    await expect(map).toContainText('未参与地图线段')
+    await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(1)
+    await expect(map.getByTestId('ai-draft-map-order-action')).toBeDisabled()
+    expect(providerRequests).toBe(0)
   })
 
   test('structured preview can be edited before import', async ({ page }) => {
@@ -877,6 +1086,11 @@ test.describe('AI Trip Builder Page', () => {
     await expect(page.getByTestId('ai-draft-day-editor').nth(1).getByLabel('每日主题')).toHaveValue('轻松游方案第 2 天')
     await expect(page.getByTestId('ai-draft-day-editor').nth(2).getByLabel('每日主题')).toHaveValue('深度游方案第 3 天')
     await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-map-preview')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-map-preview-marker')).toHaveCount(3)
+    await page.getByTestId('ai-draft-map-order-action').click()
+    await expect(page.getByTestId('ai-draft-map-order-message')).toContainText('已按地图直线顺序重排本日行程')
+    await expect(page.getByTestId('ai-draft-day-editor').nth(0).getByTestId('ai-draft-item-editor').nth(1).getByLabel('标题')).toHaveValue('经典游方案北村韩屋村')
     await expectNoHorizontalOverflow(page)
   })
 
@@ -1277,6 +1491,7 @@ test.describe('AI Trip Builder Quality Check', () => {
     await draftTextarea(page).fill(JSON.stringify(draft))
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-map-preview')).toBeVisible()
     const body = await page.evaluate(() => document.body.scrollWidth)
     expect(body).toBeLessThanOrEqual(390)
   })

@@ -20,9 +20,10 @@ let root: Root | null = null
 beforeEach(async () => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetAutoSnapshotBackupForTests()
+  localStorage.clear()
   sessionStorage.clear()
-  sessionStorage.setItem(PROVIDER_PROXY_DEV_URL_STORAGE_KEY, 'https://proxy.example/provider')
-  sessionStorage.setItem(PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY, 'google')
+  localStorage.setItem(PROVIDER_PROXY_DEV_URL_STORAGE_KEY, 'https://proxy.example/provider')
+  localStorage.setItem(PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY, 'google')
   await db.delete()
   await db.open()
   container = document.createElement('div')
@@ -35,6 +36,7 @@ afterEach(() => {
     root?.unmount()
   })
   vi.unstubAllGlobals()
+  localStorage.clear()
   sessionStorage.clear()
   container?.remove()
   container = null

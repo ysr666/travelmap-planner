@@ -741,12 +741,39 @@ test.describe('AI Trip Builder Page', () => {
     await page.getByRole('button', { name: '确认导入' }).click()
     const dialog = page.getByTestId('ai-draft-import-confirm-dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog).toContainText('将创建新的本地旅行')
-    await expect(dialog).toContainText('导入后会检查可生成路线的日程')
+    await expect(dialog.getByRole('heading', { name: '最终导入检查' })).toBeVisible()
+    await expect(dialog).toContainText('确认前不会写入本地旅行')
+    await expect(dialog).toContainText('东京五日游')
+    await expect(dialog.getByTestId('ai-draft-import-check')).toContainText('2 天')
+    await expect(dialog.getByTestId('ai-draft-import-check')).toContainText('4 个')
+    await expect(dialog.getByTestId('ai-draft-import-check')).toContainText('缺坐标')
+    await expect(dialog.getByTestId('ai-draft-import-check-route-summary')).toContainText('暂无可生成路线')
+    await expect(dialog.getByTestId('ai-draft-import-check-sync-summary')).toContainText('等待同步')
+    await expect(dialog).toContainText('每日提示会按天追加到旅行备注')
     await expect(dialog).toContainText('确认生成前不会调用路线服务')
-    await expect(dialog).toContainText('不会创建票据')
-    await expect(dialog).toContainText('不会上传云端')
-    await expect(dialog).toContainText('可在创建后继续编辑')
+  })
+
+  test('final import check cancel keeps draft local and sends no provider request', async ({ page }) => {
+    await clearTravelDatabase(page)
+    await page.goto('/#/ai-draft')
+    let providerRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      providerRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ ok: false, operation: 'unexpected' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+    })
+
+    await parseSampleDraft(page)
+    await page.getByRole('button', { name: '确认导入' }).click()
+    await expect(page.getByTestId('ai-draft-import-confirm-dialog')).toBeVisible()
+    expect(providerRequests).toBe(0)
+    await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '取消' }).click()
+    expect(providerRequests).toBe(0)
+    await page.goto('/#/home')
+    await expect(page.locator('h1').filter({ hasText: '东京五日游' })).not.toBeVisible()
   })
 
   test('shows route generation prompt after import and generates only after confirmation', async ({ page }) => {
@@ -844,6 +871,10 @@ test.describe('AI Trip Builder Page', () => {
     await page.getByRole('button', { name: '解析草稿' }).click()
     await expect(page.getByTestId('ai-draft-summary')).toBeVisible()
     await page.getByRole('button', { name: '确认导入' }).click()
+    const importDialog = page.getByTestId('ai-draft-import-confirm-dialog')
+    await expect(importDialog.getByTestId('ai-draft-import-check')).toContainText('1 天')
+    await expect(importDialog.getByTestId('ai-draft-import-check-route-summary')).toContainText('可生成 1 天路线')
+    expect(routePreviewRequests).toBe(0)
     await page.getByTestId('ai-draft-import-confirm-dialog').getByRole('button', { name: '确认导入' }).click()
     await page.waitForURL(/#\/trip\?/)
     await expect(page).toHaveURL(/postImportRoutePrompt=1/)

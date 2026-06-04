@@ -103,35 +103,30 @@ function qualityIssueDraft() {
   }
 }
 
-function variantDraft(title: string) {
+function variantDraft(title: string, dayCount = 2) {
+  const dates = Array.from({ length: dayCount }, (_, index) => `2025-10-0${index + 1}`)
   return {
     title,
     destination: '首尔',
     startDate: '2025-10-01',
-    endDate: '2025-10-02',
-    days: [
-      {
-        date: '2025-10-01',
-        title: `${title}第一天`,
+    endDate: dates[dates.length - 1],
+    days: dates.map((date, index) => ({
+        date,
+        title: `${title}第 ${index + 1} 天`,
         tips: ['提前确认开放时间。'],
-        items: [
-          { title: `${title}景福宫`, locationName: '景福宫', startTime: '09:00' },
-          {
+        items: index === 0
+          ? [
+            { title: `${title}景福宫`, locationName: '景福宫', startTime: '09:00' },
+            {
             title: `${title}北村韩屋村`,
             locationName: '北村韩屋村',
             previousTransportMode: 'walk',
             previousTransportDurationMinutes: 20,
             startTime: '11:00',
-          },
-        ],
-      },
-      {
-        date: '2025-10-02',
-        title: `${title}第二天`,
-        tips: ['预留用餐缓冲。'],
-        items: [{ title: `${title}明洞`, locationName: '明洞', startTime: '10:00' }],
-      },
-    ],
+            },
+          ]
+          : [{ title: `${title}明洞`, locationName: '明洞', startTime: '10:00' }],
+      })),
   }
 }
 
@@ -788,6 +783,18 @@ test.describe('AI Trip Builder Page', () => {
     await expect(panel).toContainText('经典游方案')
     await expect(panel).toContainText('深度游方案')
     await expect(panel).toContainText('轻松游暂时失败')
+    const comparison = panel.getByTestId('ai-draft-variant-comparison')
+    await expect(comparison).toBeVisible()
+    await expect(comparison).toContainText('方案对比')
+    await expect(comparison).toContainText('节奏')
+    await expect(comparison).toContainText('每日强度')
+    await expect(comparison).toContainText('交通复杂度')
+    await expect(comparison).toContainText('景点数量')
+    await expect(comparison).toContainText('适合人群')
+    await expect(comparison).toContainText('首次到访 / 想稳妥覆盖')
+    await expect(comparison).toContainText('文化爱好者 / 二刷 / 体力较好')
+    const relaxedComparison = comparison.getByTestId('ai-draft-variant-comparison-card').filter({ hasText: '轻松游' })
+    await expect(relaxedComparison).toContainText('生成失败，可重新生成')
     expect(aiDraftRequests).toBe(3)
     expect(new Set(seenStyles)).toEqual(new Set(['classic', 'relaxed', 'deep']))
     await expectNoHorizontalOverflow(page)
@@ -802,12 +809,75 @@ test.describe('AI Trip Builder Page', () => {
     await relaxedCard.getByTestId('ai-draft-variant-retry').click()
     await page.getByTestId('ai-draft-variant-retry-confirm-dialog').getByRole('button', { name: '确认重新生成' }).click()
     await expect(relaxedCard).toContainText('轻松游方案')
+    await expect(relaxedComparison).toContainText('亲子 / 长辈 / 慢节奏')
+    await expect(relaxedComparison).toContainText('约')
     expect(aiDraftRequests).toBe(4)
 
     await relaxedCard.getByTestId('ai-draft-variant-select').click()
     await expect(page.getByTestId('ai-draft-variant-panel')).not.toBeVisible()
     await expect(page.getByTestId('ai-draft-summary')).toContainText('轻松游方案')
     await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
+  })
+
+  test('multi-variant comparison can mix selected days into a new draft without extra provider calls', async ({ page }) => {
+    let aiDraftRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      expect(body.operation).toBe('ai_trip_draft')
+      expect(body).toMatchObject({
+        dayCount: 3,
+        destination: '首尔',
+        partySize: 3,
+        startDate: '2025-10-01',
+        endDate: '2025-10-03',
+      })
+      expect(JSON.stringify(body)).not.toContain('route_cache')
+      expect(JSON.stringify(body)).not.toContain('ticket')
+      aiDraftRequests += 1
+
+      const freeTextRequirement = String(body.freeTextRequirement ?? '')
+      const title = freeTextRequirement.includes('轻松游')
+        ? '轻松游方案'
+        : freeTextRequirement.includes('深度游')
+          ? '深度游方案'
+          : '经典游方案'
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft',
+          source: 'mock',
+          draft: variantDraft(title, 3),
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('首尔')
+    await form.getByLabel(/开始日期/).fill('2025-10-01')
+    await form.getByLabel(/天数/).fill('3')
+    await form.getByLabel(/同行人数/).fill('3')
+
+    await form.getByRole('button', { name: '生成三种方案' }).click()
+    await page.getByTestId('ai-draft-variants-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+
+    const panel = page.getByTestId('ai-draft-variant-panel')
+    await expect(panel).toBeVisible()
+    const mixPanel = panel.getByTestId('ai-draft-variant-mix-panel')
+    await expect(mixPanel).toContainText('混合生成')
+    await expect(mixPanel.getByTestId('ai-draft-variant-mix-day')).toHaveCount(3)
+    await mixPanel.getByTestId('ai-draft-variant-mix-select').nth(1).selectOption('relaxed')
+    await mixPanel.getByTestId('ai-draft-variant-mix-select').nth(2).selectOption('deep')
+    await mixPanel.getByTestId('ai-draft-variant-mix-action').click()
+
+    expect(aiDraftRequests).toBe(3)
+    await expect(page.getByTestId('ai-draft-variant-panel')).not.toBeVisible()
+    await expect(page.getByTestId('ai-draft-summary')).toContainText('首尔混合方案')
+    await expect(page.getByTestId('ai-draft-day-editor').nth(0).getByLabel('每日主题')).toHaveValue('经典游方案第 1 天')
+    await expect(page.getByTestId('ai-draft-day-editor').nth(1).getByLabel('每日主题')).toHaveValue('轻松游方案第 2 天')
+    await expect(page.getByTestId('ai-draft-day-editor').nth(2).getByLabel('每日主题')).toHaveValue('深度游方案第 3 天')
+    await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
+    await expectNoHorizontalOverflow(page)
   })
 
   test('provider error does not create a draft', async ({ page }) => {

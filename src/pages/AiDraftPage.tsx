@@ -32,6 +32,17 @@ import {
 } from '../lib/ai/aiPrivacyGuard'
 import { analyzeAiTripDraftQuality } from '../lib/ai/aiTripDraftQuality'
 import {
+  AI_TRIP_DRAFT_QUALITY_CATEGORY_LABELS,
+  flattenAiTripDraftQualityFindings,
+  selectDefaultAiTripDraftQualityFindingIds,
+  type AiTripDraftQualityCategory,
+  type AiTripDraftQualityFinding,
+} from '../lib/ai/aiTripDraftQuality'
+import {
+  applyAiTripDraftQualityRepairResultIfFresh,
+  buildSelectedAiTripDraftRepairFindings,
+} from '../lib/ai/aiTripDraftQualityRepair'
+import {
   applyAiTripDraftRefineResultIfFresh,
   fingerprintAiTripDraft,
 } from '../lib/ai/aiTripDraftRefine'
@@ -52,6 +63,15 @@ import type { Trip, Day, ItineraryItem, TransportMode } from '../types'
 const INTEREST_TAGS = ['亲子', '美食', '历史文化', '自然风景', '购物', '博物馆', '夜景', '轻徒步', '摄影', '温泉']
 const DEFAULT_DAY_COUNT = '3'
 const DEFAULT_PARTY_SIZE = '2'
+const QUALITY_CATEGORY_ORDER: AiTripDraftQualityCategory[] = [
+  'time_conflict',
+  'dense_schedule',
+  'transport',
+  'location',
+  'duplicate_sight',
+  'meal',
+  'title_specificity',
+]
 
 const SAMPLE_DRAFT = {
   title: '东京五日游',
@@ -144,6 +164,35 @@ export function AiDraftPage() {
     () => draft ? analyzeAiTripDraftQuality(draft, { pace: profile.pace, mealTimeProtection: profile.mealTimeProtection }) : null,
     [draft, profile.pace, profile.mealTimeProtection],
   )
+  const qualityFindings = useMemo(
+    () => qualityResult ? flattenAiTripDraftQualityFindings(qualityResult) : [],
+    [qualityResult],
+  )
+  const qualityFindingGroups = useMemo(
+    () => groupQualityFindingsByCategory(qualityFindings),
+    [qualityFindings],
+  )
+  const defaultSelectedQualityFindingIds = useMemo(
+    () => new Set(qualityResult ? selectDefaultAiTripDraftQualityFindingIds(qualityResult) : []),
+    [qualityResult],
+  )
+  const qualityFindingIds = useMemo(
+    () => new Set(qualityFindings.map((finding) => finding.id)),
+    [qualityFindings],
+  )
+  const [qualitySelectionOverrides, setQualitySelectionOverrides] = useState<Record<string, boolean>>({})
+  const selectedQualityFindingIds = useMemo(() => {
+    const selected = new Set(defaultSelectedQualityFindingIds)
+    for (const [id, enabled] of Object.entries(qualitySelectionOverrides)) {
+      if (!qualityFindingIds.has(id)) continue
+      if (enabled) {
+        selected.add(id)
+      } else {
+        selected.delete(id)
+      }
+    }
+    return selected
+  }, [defaultSelectedQualityFindingIds, qualityFindingIds, qualitySelectionOverrides])
   const [repairGenerating, setRepairGenerating] = useState(false)
   const [repairError, setRepairError] = useState<string | null>(null)
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
@@ -398,41 +447,48 @@ export function AiDraftPage() {
 
   async function handleRepairViaProxy() {
     if (!proxyConfig.proxyUrl || !draft) return
+    if (!qualityResult) return
+
+    const selectedFindings = buildSelectedAiTripDraftRepairFindings(qualityResult, selectedQualityFindingIds)
+    if (selectedFindings.length === 0) {
+      setRepairError('请先选择需要修复的问题。')
+      return
+    }
 
     setRepairError(null)
     setRepairSuccessMessage(null)
     setRepairGenerating(true)
+    const baselineDraft = draftRef.current
+    const baselineFingerprint = baselineDraft ? fingerprintAiTripDraft(baselineDraft) : ''
     try {
-      const sanitizedFindings = sanitizeAiDraftRepairFindingsForProxy(
-        [
-          ...(qualityResult?.warnings ?? []),
-          ...(qualityResult?.criticals ?? []),
-        ].map((f) => ({
-          ruleId: f.ruleId,
-          severity: f.severity,
-          title: f.title,
-          message: f.message,
-          dayDate: f.dayDate,
-        })),
-      )
-
       const result = await fetchProviderProxyAiTripDraftRepair(
         {
           operation: 'ai_trip_draft_repair',
-          draft: sanitizeAiDraftRepairDraftForProxy(draft, privacy),
-          qualityFindings: sanitizedFindings,
+          draft: sanitizeAiDraftRepairDraftForProxy(baselineDraft ?? draft, privacy),
+          qualityFindings: sanitizeAiDraftRepairFindingsForProxy(selectedFindings),
+          repairInstruction: '只修复用户在方案质量检查中勾选的问题，未勾选的问题和无关内容保持不变。',
         },
         proxyConfig.proxyUrl,
       )
 
-      const revalidation = validateAiTripDraft(result.draft)
-      if (!revalidation.valid || !revalidation.draft) {
-        setRepairError('修复结果未通过校验，请重试。')
+      const currentDraft = draftRef.current
+      if (!baselineDraft || !currentDraft) {
+        setRepairError('草案已变化，请重新检查后再修复。')
         return
       }
 
-      previewDraftObject(revalidation.draft)
-      setRepairSuccessMessage('已生成修复版草稿，请重新检查。')
+      const applied = applyAiTripDraftQualityRepairResultIfFresh({
+        baselineFingerprint,
+        currentDraft,
+        repairedDraft: result.draft,
+      })
+      if (!applied.ok) {
+        setRepairError(applied.errors.join('\n'))
+        return
+      }
+
+      previewDraftObject(applied.draft)
+      setRepairSuccessMessage(`已修复 ${selectedFindings.length} 个选中问题，请重新检查。`)
     } catch (caught) {
       if (caught instanceof ProviderProxyClientError) {
         setRepairError(caught.message)
@@ -571,6 +627,8 @@ export function AiDraftPage() {
   const summary = draft ? summarizeAiTripDraft(draft) : null
   const repairPrivacyNotice = draft ? summarizeAiPrivacyForAiRequest(privacy, 'repair') : null
   const canImportDraft = Boolean(draft && errors.length === 0 && !refineGenerating)
+  const repairableQualityFindings = qualityFindings.filter((finding) => finding.repairable)
+  const selectedQualityRepairCount = repairableQualityFindings.filter((finding) => selectedQualityFindingIds.has(finding.id)).length
 
   function applyDraftEdit(nextDraft: AiTripDraft) {
     setJsonText(JSON.stringify(nextDraft, null, 2))
@@ -650,6 +708,27 @@ export function AiDraftPage() {
     const [item] = items.splice(itemIndex, 1)
     items.splice(nextIndex, 0, item)
     updateDraftDay(dayIndex, { items })
+  }
+
+  function toggleQualityFinding(id: string) {
+    setQualitySelectionOverrides((current) => ({
+      ...current,
+      [id]: !selectedQualityFindingIds.has(id),
+    }))
+  }
+
+  function selectAllRepairableQualityFindings() {
+    setQualitySelectionOverrides((current) => ({
+      ...current,
+      ...Object.fromEntries(repairableQualityFindings.map((finding) => [finding.id, true])),
+    }))
+  }
+
+  function clearSelectedQualityFindings() {
+    setQualitySelectionOverrides((current) => ({
+      ...current,
+      ...Object.fromEntries(repairableQualityFindings.map((finding) => [finding.id, false])),
+    }))
   }
 
   return (
@@ -906,55 +985,109 @@ export function AiDraftPage() {
           </Card>
 
           <Card className="space-y-3" data-testid="ai-draft-quality-card">
-            <h3 className="font-medium text-on-surface dark:text-on-surface">草稿检查</h3>
-            {qualityResult && qualityResult.status === 'clean' && (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-medium text-on-surface dark:text-on-surface">方案质量检查</h3>
+                <p className="text-sm tm-muted">{qualityResult?.summary.message ?? '未发现明显问题。'}</p>
+              </div>
+              {repairableQualityFindings.length > 0 && (
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    className="min-h-9 px-3 text-xs"
+                    data-testid="ai-draft-quality-select-all"
+                    onClick={selectAllRepairableQualityFindings}
+                    variant="ghost"
+                  >
+                    全选
+                  </Button>
+                  <Button
+                    className="min-h-9 px-3 text-xs"
+                    data-testid="ai-draft-quality-clear-selection"
+                    onClick={clearSelectedQualityFindings}
+                    variant="ghost"
+                  >
+                    取消
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {qualityFindings.length === 0 && (
               <p className="text-sm text-green-700 dark:text-green-300">未发现明显问题。</p>
             )}
-            {qualityResult && qualityResult.status !== 'clean' && (
-              <div className="space-y-2">
-                {[...qualityResult.criticals, ...qualityResult.warnings].slice(0, 5).map((f) => (
-                  <div key={f.id} className="flex items-start gap-2 text-sm">
-                    <span className={f.severity === 'critical' ? 'text-red-500' : 'text-amber-500'}>
-                      {f.severity === 'critical' ? '!' : '!'}
-                    </span>
-                    <span className="text-on-surface dark:text-outline-variant">
-                      <span className="font-medium">{f.title}</span>
-                      {f.dayDate && <span className="tm-muted ml-1">({f.dayDate})</span>}
-                      <span className="tm-muted ml-1">{f.message}</span>
-                    </span>
+
+            {qualityFindingGroups.length > 0 && (
+              <div className="space-y-3" data-testid="ai-draft-quality-findings">
+                {qualityFindingGroups.map((group) => (
+                  <div className="space-y-2 rounded-xl border border-outline-variant/25 bg-surface-container-high/35 p-3" key={group.category}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-on-surface dark:text-on-surface">
+                        {AI_TRIP_DRAFT_QUALITY_CATEGORY_LABELS[group.category]}
+                      </p>
+                      <span className="rounded-full bg-surface-container-highest px-2 py-1 text-xs tm-muted">
+                        {group.findings.length} 项
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {group.findings.map((finding) => (
+                        <label
+                          className="flex items-start gap-3 rounded-lg bg-surface-container px-3 py-2 text-sm ring-1 ring-outline-variant/20"
+                          data-testid="ai-draft-quality-finding"
+                          key={finding.id}
+                        >
+                          <input
+                            checked={selectedQualityFindingIds.has(finding.id)}
+                            className="mt-1 size-4 shrink-0"
+                            data-testid="ai-draft-quality-checkbox"
+                            disabled={!finding.repairable || repairGenerating}
+                            onChange={() => toggleQualityFinding(finding.id)}
+                            type="checkbox"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-on-surface dark:text-on-surface">{finding.title}</span>
+                              <span className={qualitySeverityPillClass(finding.severity)}>
+                                {qualitySeverityLabel(finding.severity)}
+                              </span>
+                              {finding.dayDate && <span className="text-xs tm-muted">{finding.dayDate}</span>}
+                            </span>
+                            <span className="mt-1 block break-words leading-6 tm-muted [overflow-wrap:anywhere]">
+                              {finding.message}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 ))}
-                {(qualityResult.criticals.length + qualityResult.warnings.length) > 5 && (
-                  <p className="text-xs tm-muted">
-                    还有 {(qualityResult.criticals.length + qualityResult.warnings.length) - 5} 条提醒未显示。
+                {qualityResult && qualityResult.status !== 'clean' && (
+                  <p className="text-xs text-on-surface-variant dark:text-outline">
+                    这些提示不会阻止导入，请在确认前检查。
                   </p>
                 )}
-                <p className="text-xs text-on-surface-variant dark:text-outline">
-                  这些提示不会阻止导入，请在确认前检查。
-                </p>
               </div>
             )}
-          </Card>
 
-          {qualityResult && qualityResult.status !== 'clean' && (
-            <>
-              {proxyConfig.configured ? (
+            {repairableQualityFindings.length > 0 && (
+              proxyConfig.configured ? (
                 <Button
                   onClick={() => setShowRepairConfirm(true)}
                   variant="secondary"
                   className="w-full"
                   data-testid="ai-draft-repair-action"
+                  disabled={selectedQualityRepairCount === 0}
                   loading={repairGenerating}
                 >
-                  让 AI 修复草稿
+                  修复选中问题
+                  {selectedQualityRepairCount > 0 ? `（${selectedQualityRepairCount}）` : ''}
                 </Button>
               ) : (
                 <Button disabled className="w-full" data-testid="ai-draft-repair-action" variant="secondary">
                   当前未配置 AI 修复服务
                 </Button>
-              )}
-            </>
-          )}
+              )
+            )}
+          </Card>
 
           {repairSuccessMessage && (
             <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30">
@@ -1316,8 +1449,8 @@ export function AiDraftPage() {
 
       <ConfirmDialog
         open={showRepairConfirm}
-        title="让 AI 修复草稿"
-        body={`将通过旅图服务尝试修复当前草稿\n可能消耗服务额度\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认${repairPrivacyNotice ? `\n${repairPrivacyNotice}` : ''}`}
+        title="修复选中问题"
+        body={`将通过旅图服务尝试修复 ${selectedQualityRepairCount} 个选中问题\n可能消耗服务额度\n未勾选的问题和无关内容会要求保持不变\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认${repairPrivacyNotice ? `\n${repairPrivacyNotice}` : ''}`}
         confirmLabel="确认修复"
         cancelLabel="取消"
         loading={repairGenerating}
@@ -1365,6 +1498,31 @@ export function AiDraftPage() {
       />
     </div>
   )
+}
+
+function groupQualityFindingsByCategory(findings: AiTripDraftQualityFinding[]) {
+  return QUALITY_CATEGORY_ORDER
+    .map((category) => ({
+      category,
+      findings: findings.filter((finding) => finding.category === category),
+    }))
+    .filter((group) => group.findings.length > 0)
+}
+
+function qualitySeverityLabel(severity: AiTripDraftQualityFinding['severity']) {
+  if (severity === 'critical') return '严重'
+  if (severity === 'warning') return '提醒'
+  return '信息'
+}
+
+function qualitySeverityPillClass(severity: AiTripDraftQualityFinding['severity']) {
+  if (severity === 'critical') {
+    return 'rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-200'
+  }
+  if (severity === 'warning') {
+    return 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'
+  }
+  return 'rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-200'
 }
 
 function parseOptionalNumber(value: string) {

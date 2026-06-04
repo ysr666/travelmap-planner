@@ -1,4 +1,4 @@
-import type { AiTripDraft, AiTripDraftDay } from './aiTripDraft'
+import type { AiTripDraft, AiTripDraftDay, AiTripDraftItem } from './aiTripDraft'
 import type { TravelPace } from '../travelProfile'
 
 const DENSE_DAY_LIMITS: Record<TravelPace, number> = {
@@ -8,13 +8,34 @@ const DENSE_DAY_LIMITS: Record<TravelPace, number> = {
 }
 
 export type AiTripDraftQualityFinding = {
+  category: AiTripDraftQualityCategory
   id: string
+  repairable: boolean
   ruleId: string
   severity: 'info' | 'warning' | 'critical'
   title: string
   message: string
   dayDate?: string
   itemTitle?: string
+}
+
+export type AiTripDraftQualityCategory =
+  | 'dense_schedule'
+  | 'duplicate_sight'
+  | 'location'
+  | 'meal'
+  | 'time_conflict'
+  | 'title_specificity'
+  | 'transport'
+
+export const AI_TRIP_DRAFT_QUALITY_CATEGORY_LABELS: Record<AiTripDraftQualityCategory, string> = {
+  dense_schedule: '过密日程',
+  duplicate_sight: '重复景点',
+  location: '缺地点信息',
+  meal: '用餐安排',
+  time_conflict: '时间冲突',
+  title_specificity: '标题具体度',
+  transport: '交通合理性',
 }
 
 export type AiTripDraftQualityOptions = {
@@ -35,16 +56,46 @@ export type AiTripDraftQualityResult = {
   }
 }
 
-let findingCounter = 0
-
-function nextFindingId(): string {
-  findingCounter += 1
-  return `qf_${findingCounter}`
-}
-
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return h * 60 + m
+}
+
+function makeFinding({
+  category,
+  dayDate,
+  itemTitle,
+  message,
+  repairable = true,
+  ruleId,
+  severity,
+  stableKey,
+  title,
+}: Omit<AiTripDraftQualityFinding, 'id'> & { stableKey?: string }): AiTripDraftQualityFinding {
+  return {
+    category,
+    dayDate,
+    id: [
+      ruleId,
+      dayDate ?? 'trip',
+      stableKey ?? itemTitle ?? title,
+    ].map(stableIdPart).join(':'),
+    itemTitle,
+    message,
+    repairable,
+    ruleId,
+    severity,
+    title,
+  }
+}
+
+function stableIdPart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\u4e00-\u9fa5_-]+/g, '')
+    .slice(0, 80) || 'item'
 }
 
 const GENERIC_TITLE_PATTERNS = [
@@ -80,7 +131,9 @@ function checkDenseDay(
   const findings: AiTripDraftQualityFinding[] = []
   if (day.items.length > dayLimit) {
     findings.push({
-      id: nextFindingId(),
+      category: 'dense_schedule',
+      id: '',
+      repairable: true,
       ruleId: 'dense_day',
       severity: 'warning',
       title: '当天行程偏密',
@@ -88,7 +141,7 @@ function checkDenseDay(
       dayDate: day.date,
     })
   }
-  return findings
+  return findings.map(makeFinding)
 }
 
 function checkTimeIssues(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
@@ -109,27 +162,31 @@ function checkTimeIssues(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
       if (aStart > bStart) {
         // check overlap
         if (aStart < bEnd && bStart < aEnd) {
-          findings.push({
-            id: nextFindingId(),
+          findings.push(makeFinding({
+            category: 'time_conflict',
             ruleId: 'time_overlap',
+            repairable: true,
             severity: 'critical',
             title: '时间重叠',
             message: `${day.date}「${a.item.title}」与「${b.item.title}」时间重叠。`,
             dayDate: day.date,
             itemTitle: a.item.title,
-          })
+            stableKey: `${a.index}-${a.item.title}-${b.index}-${b.item.title}`,
+          }))
         }
       } else {
         if (bStart < aEnd && aStart < bEnd) {
-          findings.push({
-            id: nextFindingId(),
+          findings.push(makeFinding({
+            category: 'time_conflict',
             ruleId: 'time_overlap',
+            repairable: true,
             severity: 'critical',
             title: '时间重叠',
             message: `${day.date}「${a.item.title}」与「${b.item.title}」时间重叠。`,
             dayDate: day.date,
             itemTitle: a.item.title,
-          })
+            stableKey: `${a.index}-${a.item.title}-${b.index}-${b.item.title}`,
+          }))
         }
       }
     }
@@ -144,15 +201,17 @@ function checkTimeIssues(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
     const bStart = timeToMinutes(sorted[i + 1].item.startTime!)
     const gap = bStart - aEnd
     if (gap >= 0 && gap < 30) {
-      findings.push({
-        id: nextFindingId(),
+      findings.push(makeFinding({
+        category: 'transport',
         ruleId: 'short_gap',
+        repairable: true,
         severity: 'warning',
         title: '行程间隔较短',
         message: `${day.date}「${sorted[i].item.title}」到「${sorted[i + 1].item.title}」仅间隔 ${gap} 分钟。`,
         dayDate: day.date,
         itemTitle: sorted[i].item.title,
-      })
+        stableKey: `${sorted[i].index}-${sorted[i].item.title}-${sorted[i + 1].index}-${sorted[i + 1].item.title}`,
+      }))
     }
   }
 
@@ -161,14 +220,15 @@ function checkTimeIssues(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
     const firstStart = timeToMinutes(sorted[0].item.startTime!)
     const lastEnd = timeToMinutes(sorted[sorted.length - 1].item.endTime!)
     if (lastEnd - firstStart > 720) {
-      findings.push({
-        id: nextFindingId(),
+      findings.push(makeFinding({
+        category: 'dense_schedule',
         ruleId: 'long_day_span',
+        repairable: true,
         severity: 'warning',
         title: '当天跨度过长',
         message: `${day.date} 从 ${sorted[0].item.startTime} 到 ${sorted[sorted.length - 1].item.endTime}，跨度超过 12 小时。`,
         dayDate: day.date,
-      })
+      }))
     }
   }
 
@@ -177,17 +237,19 @@ function checkTimeIssues(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
 
 function checkMissingLocation(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
   const findings: AiTripDraftQualityFinding[] = []
-  for (const item of day.items) {
+  for (const [index, item] of day.items.entries()) {
     if (!item.locationName && !item.address) {
-      findings.push({
-        id: nextFindingId(),
+      findings.push(makeFinding({
+        category: 'location',
         ruleId: 'missing_location',
+        repairable: true,
         severity: 'warning',
         title: '缺少地点信息',
         message: `${day.date}「${item.title}」没有地点名称或地址。`,
         dayDate: day.date,
         itemTitle: item.title,
-      })
+        stableKey: `${index}-${item.title}`,
+      }))
     }
   }
   return findings
@@ -197,14 +259,16 @@ function checkGenericTitles(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
   const findings: AiTripDraftQualityFinding[] = []
   const genericItems = day.items.filter((item) => isGenericTitle(item.title))
   if (genericItems.length >= 2) {
-    findings.push({
-      id: nextFindingId(),
+    findings.push(makeFinding({
+      category: 'title_specificity',
       ruleId: 'generic_title',
+      repairable: true,
       severity: 'warning',
       title: '标题过于笼统',
       message: `${day.date} 有 ${genericItems.length} 个行程点使用了笼统标题（如「${genericItems[0].title}」），建议补充具体内容。`,
       dayDate: day.date,
-    })
+      stableKey: genericItems.map((item) => item.title).join('-'),
+    }))
   }
   return findings
 }
@@ -232,25 +296,29 @@ function checkMealGap(
   )
 
   if (!hasLunch && hasLunchTimeItems) {
-    findings.push({
-      id: nextFindingId(),
+    findings.push(makeFinding({
+      category: 'meal',
       ruleId: 'meal_gap',
+      repairable: true,
       severity: 'warning',
       title: '缺少午餐安排',
       message: `${day.date} 中午时段没有发现用餐安排。`,
       dayDate: day.date,
-    })
+      stableKey: 'lunch',
+    }))
   }
 
   if (!hasDinner && hasDinnerTimeItems) {
-    findings.push({
-      id: nextFindingId(),
+    findings.push(makeFinding({
+      category: 'meal',
       ruleId: 'meal_gap',
+      repairable: true,
       severity: 'warning',
       title: '缺少晚餐安排',
       message: `${day.date} 傍晚时段没有发现用餐安排。`,
       dayDate: day.date,
-    })
+      stableKey: 'dinner',
+    }))
   }
 
   return findings
@@ -266,18 +334,115 @@ function checkMissingTransport(day: AiTripDraftDay): AiTripDraftQualityFinding[]
       (curr.locationName || curr.address) &&
       !curr.previousTransportMode
     ) {
-      findings.push({
-        id: nextFindingId(),
+      findings.push(makeFinding({
+        category: 'transport',
         ruleId: 'missing_transport',
+        repairable: true,
         severity: 'info',
         title: '缺少交通信息',
         message: `${day.date}「${prev.title}」到「${curr.title}」缺少交通方式。`,
         dayDate: day.date,
         itemTitle: curr.title,
-      })
+        stableKey: `${i}-${prev.title}-${curr.title}`,
+      }))
     }
   }
   return findings
+}
+
+function checkUnreasonableTransport(day: AiTripDraftDay): AiTripDraftQualityFinding[] {
+  const findings: AiTripDraftQualityFinding[] = []
+  for (let i = 1; i < day.items.length; i++) {
+    const prev = day.items[i - 1]
+    const curr = day.items[i]
+    const duration = curr.previousTransportDurationMinutes
+    if (duration === undefined || duration === null) continue
+
+    const samePlace = normalizeSightKey(curr) && normalizeSightKey(curr) === normalizeSightKey(prev)
+    if (duration <= 0 && !samePlace) {
+      findings.push(makeFinding({
+        category: 'transport',
+        dayDate: day.date,
+        itemTitle: curr.title,
+        message: `${day.date}「${prev.title}」到「${curr.title}」交通耗时为 ${duration} 分钟，建议重新估算。`,
+        repairable: true,
+        ruleId: 'unreasonable_transport',
+        severity: 'warning',
+        stableKey: `${i}-${prev.title}-${curr.title}-zero`,
+        title: '交通耗时不合理',
+      }))
+    } else if (curr.previousTransportMode === 'walk' && duration > 60) {
+      findings.push(makeFinding({
+        category: 'transport',
+        dayDate: day.date,
+        itemTitle: curr.title,
+        message: `${day.date}「${prev.title}」到「${curr.title}」步行约 ${duration} 分钟，建议改用公共交通或打车。`,
+        repairable: true,
+        ruleId: 'unreasonable_transport',
+        severity: 'warning',
+        stableKey: `${i}-${prev.title}-${curr.title}-walk-long`,
+        title: '交通方式不合理',
+      }))
+    } else if ((curr.previousTransportMode === 'car' || curr.previousTransportMode === 'transit' || curr.previousTransportMode === 'bus') && duration < 3 && !samePlace) {
+      findings.push(makeFinding({
+        category: 'transport',
+        dayDate: day.date,
+        itemTitle: curr.title,
+        message: `${day.date}「${prev.title}」到「${curr.title}」交通耗时仅 ${duration} 分钟，建议确认地点是否重复或耗时是否低估。`,
+        repairable: true,
+        ruleId: 'unreasonable_transport',
+        severity: 'warning',
+        stableKey: `${i}-${prev.title}-${curr.title}-too-short`,
+        title: '交通耗时可能低估',
+      }))
+    }
+  }
+  return findings
+}
+
+function checkDuplicateSights(draft: AiTripDraft): AiTripDraftQualityFinding[] {
+  const sightings = new Map<string, Array<{ dayDate: string; item: AiTripDraftItem }>>()
+  for (const day of draft.days) {
+    for (const item of day.items) {
+      const key = normalizeSightKey(item)
+      if (!key) continue
+      const values = sightings.get(key) ?? []
+      values.push({ dayDate: day.date, item })
+      sightings.set(key, values)
+    }
+  }
+
+  const findings: AiTripDraftQualityFinding[] = []
+  for (const [key, values] of sightings.entries()) {
+    if (values.length < 2) continue
+    const first = values[0]
+    findings.push(makeFinding({
+      category: 'duplicate_sight',
+      dayDate: first.dayDate,
+      itemTitle: first.item.title,
+      message: `「${first.item.locationName || first.item.title}」在草案中出现了 ${values.length} 次，建议合并或替换其中一次。`,
+      repairable: true,
+      ruleId: 'duplicate_sight',
+      severity: 'warning',
+      stableKey: key,
+      title: '重复景点',
+    }))
+  }
+  return findings
+}
+
+function normalizeSightKey(item: AiTripDraftItem): string {
+  const value = item.locationName || item.address || item.title
+  return normalizeComparableText(value)
+}
+
+function normalizeComparableText(value?: string): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[（(].*?[）)]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[·・.,，。:：;；'"“”‘’]/g, '')
 }
 
 export function analyzeAiTripDraftQuality(
@@ -300,6 +465,7 @@ export function analyzeAiTripDraftQuality(
       ...checkGenericTitles(day),
       ...(mealTimeProtection ? checkMealGap(day) : []),
       ...checkMissingTransport(day),
+      ...checkUnreasonableTransport(day),
     ]
 
     for (const f of dayFindings) {
@@ -307,6 +473,12 @@ export function analyzeAiTripDraftQuality(
       else if (f.severity === 'info') allInfos.push(f)
       else allWarnings.push(f)
     }
+  }
+
+  for (const f of checkDuplicateSights(draft)) {
+    if (f.severity === 'critical') allCriticals.push(f)
+    else if (f.severity === 'info') allInfos.push(f)
+    else allWarnings.push(f)
   }
 
   const infoCount = allInfos.length
@@ -337,4 +509,18 @@ export function analyzeAiTripDraftQuality(
 
 export function summarizeAiTripDraftQuality(result: AiTripDraftQualityResult): string {
   return result.summary.message
+}
+
+export function flattenAiTripDraftQualityFindings(result: AiTripDraftQualityResult): AiTripDraftQualityFinding[] {
+  return [...result.criticals, ...result.warnings, ...result.infos]
+}
+
+export function shouldSelectAiTripDraftQualityFindingByDefault(finding: AiTripDraftQualityFinding): boolean {
+  return finding.repairable && finding.severity !== 'info'
+}
+
+export function selectDefaultAiTripDraftQualityFindingIds(result: AiTripDraftQualityResult): string[] {
+  return flattenAiTripDraftQualityFindings(result)
+    .filter(shouldSelectAiTripDraftQualityFindingByDefault)
+    .map((finding) => finding.id)
 }

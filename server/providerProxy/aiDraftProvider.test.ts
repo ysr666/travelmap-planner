@@ -4,9 +4,14 @@ import {
   createDisabledAiDraftProvider,
   createMockAiDraftProvider,
   createMockAiDraftRefineProvider,
+  createMockAiDraftRepairProvider,
   createUnavailableAiDraftProvider,
 } from './aiDraftProvider'
-import type { ProviderProxyAiTripDraftRefineRequest, ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
+import type {
+  ProviderProxyAiTripDraftRefineRequest,
+  ProviderProxyAiTripDraftRepairRequest,
+  ProviderProxyAiTripDraftRequest,
+} from '../../src/lib/ai/providerProxyContract'
 
 function validRequest(overrides?: Partial<ProviderProxyAiTripDraftRequest>): ProviderProxyAiTripDraftRequest {
   return {
@@ -123,6 +128,57 @@ describe('createMockAiDraftRefineProvider', () => {
     }
   })
 })
+
+describe('createMockAiDraftRepairProvider', () => {
+  it('repairs only selected quality rule ids with deterministic output', async () => {
+    const provider = createMockAiDraftRepairProvider(validRepairRequest(['duplicate_sight', 'unreasonable_transport']))
+    const result = await provider.repairDraft({ prompt: 'ignored' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok && result.kind === 'draft') {
+      const validation = validateAiTripDraft(result.draft)
+      expect(validation.valid).toBe(true)
+      expect(result.draft.days[0].items[1].locationName).toContain('替代点')
+      expect(result.draft.days[0].items[2].previousTransportMode).toBe('transit')
+      expect(result.draft.days[0].items[2].previousTransportDurationMinutes).toBe(35)
+      expect(result.draft.days[0].items[0].title).toBe('西湖')
+    }
+  })
+})
+
+function validRepairRequest(ruleIds: string[]): ProviderProxyAiTripDraftRepairRequest {
+  return {
+    draft: {
+      title: '杭州之旅',
+      destination: '杭州',
+      startDate: '2025-04-01',
+      endDate: '2025-04-01',
+      days: [{
+        date: '2025-04-01',
+        items: [
+          { title: '西湖', locationName: '西湖', startTime: '09:00', endTime: '11:00' },
+          { title: '再次西湖', locationName: '西湖（湖滨）', startTime: '12:00', endTime: '13:00' },
+          {
+            title: '灵隐寺',
+            locationName: '灵隐寺',
+            previousTransportDurationMinutes: 90,
+            previousTransportMode: 'walk',
+            startTime: '15:00',
+            endTime: '17:00',
+          },
+        ],
+      }],
+    },
+    operation: 'ai_trip_draft_repair',
+    qualityFindings: ruleIds.map((ruleId) => ({
+      dayDate: '2025-04-01',
+      message: `${ruleId} message`,
+      ruleId,
+      severity: 'warning',
+      title: ruleId,
+    })),
+  }
+}
 
 function validRefineRequest(): ProviderProxyAiTripDraftRefineRequest {
   return {

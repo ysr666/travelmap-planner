@@ -74,6 +74,35 @@ function threeDayDraft() {
   }
 }
 
+function qualityIssueDraft() {
+  return {
+    title: '质量检查测试',
+    destination: '杭州',
+    startDate: '2025-04-01',
+    endDate: '2025-04-01',
+    days: [{
+      date: '2025-04-01',
+      title: '密集测试日',
+      items: [
+        { title: '西湖', locationName: '西湖', startTime: '08:00', endTime: '10:00' },
+        {
+          title: '再次西湖',
+          locationName: '西湖（湖滨）',
+          previousTransportDurationMinutes: 90,
+          previousTransportMode: 'walk',
+          startTime: '09:30',
+          endTime: '11:00',
+        },
+        { title: '自由活动', startTime: '11:05', endTime: '11:45' },
+        { title: '景点参观', startTime: '12:00', endTime: '12:45' },
+        { title: '景点A', locationName: 'A', startTime: '13:00', endTime: '13:45' },
+        { title: '景点B', locationName: 'B', startTime: '14:00', endTime: '14:45' },
+        { title: '景点C', locationName: 'C', startTime: '15:00', endTime: '15:45' },
+      ],
+    }],
+  }
+}
+
 test.describe('AI Trip Builder Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#/ai-draft')
@@ -849,6 +878,158 @@ test.describe('AI Trip Builder Quality Check', () => {
     const repairBtn = page.getByTestId('ai-draft-repair-action')
     await repairBtn.scrollIntoViewIfNeeded()
     await expect(repairBtn).toBeVisible()
+  })
+
+  test('quality check groups issues with selectable defaults', async ({ page }) => {
+    await page.goto('/#/ai-draft')
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(qualityIssueDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const quality = page.getByTestId('ai-draft-quality-card')
+    await expect(quality).toContainText('方案质量检查')
+    await expect(quality).toContainText('过密日程')
+    await expect(quality).toContainText('交通合理性')
+    await expect(quality).toContainText('缺地点信息')
+    await expect(quality).toContainText('时间冲突')
+    await expect(quality).toContainText('重复景点')
+    await expect(quality.getByTestId('ai-draft-quality-finding')).toHaveCount(await quality.getByTestId('ai-draft-quality-checkbox').count())
+    const checkedCount = await quality.locator('[data-testid="ai-draft-quality-checkbox"]:checked').count()
+    expect(checkedCount).toBeGreaterThan(0)
+    await expect(page.getByTestId('ai-draft-repair-action')).toContainText('修复选中问题')
+  })
+
+  test('selected quality repair is confirmation gated and sends only selected findings', async ({ page }) => {
+    let repairRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as {
+        draft: ReturnType<typeof qualityIssueDraft>
+        operation: string
+        qualityFindings: Array<{ ruleId: string; message: string }>
+      }
+      expect(body.operation).toBe('ai_trip_draft_repair')
+      expect(body.qualityFindings).toHaveLength(1)
+      expect(body.qualityFindings[0].ruleId).toBe('missing_location')
+      expect(JSON.stringify(body)).not.toContain('这是用户备注')
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_API_KEY')
+      repairRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          draft: {
+            ...body.draft,
+            days: body.draft.days.map((day) => ({
+              ...day,
+              items: day.items.map((item) => item.title === '自由活动'
+                ? { ...item, locationName: '自由活动地点' }
+                : item),
+            })),
+          },
+          operation: 'ai_trip_draft_repair',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    await page.goto('/#/ai-draft')
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(qualityIssueDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    const quality = page.getByTestId('ai-draft-quality-card')
+    await quality.getByTestId('ai-draft-quality-clear-selection').click()
+    await quality.getByTestId('ai-draft-quality-finding').filter({ hasText: '缺少地点信息' }).getByTestId('ai-draft-quality-checkbox').first().check()
+    await page.getByTestId('ai-draft-repair-action').click()
+    await expect(page.getByTestId('ai-draft-repair-confirm-dialog')).toBeVisible()
+    expect(repairRequests).toBe(0)
+    await page.getByTestId('ai-draft-repair-confirm-dialog').getByRole('button', { name: '取消' }).click()
+    expect(repairRequests).toBe(0)
+
+    await page.getByTestId('ai-draft-repair-action').click()
+    await page.getByTestId('ai-draft-repair-confirm-dialog').getByRole('button', { name: '确认修复' }).click()
+    await expect(page.getByTestId('ai-draft-refine-panel')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').nth(2).getByLabel('地点')).toHaveValue('自由活动地点')
+    expect(repairRequests).toBe(1)
+  })
+
+  test('quality repair failure invalid response and stale draft preserve current draft', async ({ page }) => {
+    await page.route('**/api/provider-proxy', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          code: 'provider_error',
+          message: 'AI 行程修复服务请求失败。',
+          ok: false,
+          operation: 'ai_trip_draft_repair',
+        }),
+        contentType: 'application/json',
+        status: 502,
+      })
+    })
+
+    await page.goto('/#/ai-draft')
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(qualityIssueDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    await page.getByTestId('ai-draft-repair-action').click()
+    await page.getByTestId('ai-draft-repair-confirm-dialog').getByRole('button', { name: '确认修复' }).click()
+    await expect(page.getByText('AI 行程修复服务请求失败。')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('西湖')
+
+    await page.unroute('**/api/provider-proxy')
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as { draft: ReturnType<typeof qualityIssueDraft> }
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          draft: {
+            ...body.draft,
+            days: [{
+              ...body.draft.days[0],
+              items: [{ title: '' }],
+            }],
+          },
+          operation: 'ai_trip_draft_repair',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+    })
+    await page.getByTestId('ai-draft-repair-action').click()
+    await page.getByTestId('ai-draft-repair-confirm-dialog').getByRole('button', { name: '确认修复' }).click()
+    await expect(page.getByText('行程点标题不能为空')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('西湖')
+
+    await page.unroute('**/api/provider-proxy')
+    let releaseRepair: (() => void) | undefined
+    const releasePromise = new Promise<void>((resolve) => {
+      releaseRepair = resolve
+    })
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as { draft: ReturnType<typeof qualityIssueDraft> }
+      await releasePromise
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          draft: {
+            ...body.draft,
+            days: body.draft.days.map((day) => ({
+              ...day,
+              items: day.items.map((item, index) => index === 0 ? { ...item, title: '不应应用的修复' } : item),
+            })),
+          },
+          operation: 'ai_trip_draft_repair',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+    })
+    await page.getByTestId('ai-draft-repair-action').click()
+    await page.getByTestId('ai-draft-repair-confirm-dialog').getByRole('button', { name: '确认修复' }).click()
+    await page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').last().getByLabel('标题').fill('用户请求中编辑')
+    releaseRepair?.()
+    await expect(page.getByText('草案已变化，请重新检查后再修复。')).toBeVisible()
+    await expect(page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('西湖')
+    await expect(page.getByTestId('ai-draft-preview').getByTestId('ai-draft-item-editor').last().getByLabel('标题')).toHaveValue('用户请求中编辑')
   })
 
   test('no horizontal overflow at 390px with quality card', async ({ page }) => {

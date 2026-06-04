@@ -5,7 +5,7 @@ export type AiSearchFutureOperation =
 
 export type AiSearchPolicyInput = {
   text?: string
-  operation?: 'ai_trip_draft' | 'ai_trip_draft_repair'
+  operation?: 'ai_trip_draft' | 'ai_trip_draft_repair' | 'ai_trip_draft_refine'
 }
 
 export type AiSearchDecision = {

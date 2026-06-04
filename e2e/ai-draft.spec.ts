@@ -1,6 +1,24 @@
 import { test, expect, type Page } from '@playwright/test'
 import { clearTravelDatabase, expectNoHorizontalOverflow, forceRouteProxyFixture } from './helpers'
 
+type TestDraftDay = {
+  date: string
+  title?: string
+  tips?: string[]
+  items: Array<Record<string, unknown>>
+}
+
+type RefineProxyBody = {
+  draft: {
+    days: TestDraftDay[]
+    [key: string]: unknown
+  }
+  guidance?: string
+  operation: string
+  preferences?: Record<string, unknown>
+  scope: unknown
+}
+
 async function openJsonDraftSection(page: Page) {
   const section = page.getByTestId('ai-draft-json-section')
   await section.locator('summary').click()
@@ -25,6 +43,35 @@ function requestForm(page: Page) {
 
 function draftTextarea(page: Page) {
   return page.getByTestId('ai-draft-json-section').getByPlaceholder('{"title": "...", "startDate')
+}
+
+function threeDayDraft() {
+  return {
+    title: '局部优化测试',
+    destination: '东京',
+    startDate: '2025-04-01',
+    endDate: '2025-04-03',
+    days: [
+      {
+        date: '2025-04-01',
+        title: '抵达日',
+        tips: ['保持轻松。'],
+        items: [{ title: '浅草寺', locationName: '浅草寺', startTime: '09:00' }],
+      },
+      {
+        date: '2025-04-02',
+        title: '文化日',
+        tips: ['预留排队时间。'],
+        items: [{ title: '上野公园', locationName: '上野公园', startTime: '10:00' }],
+      },
+      {
+        date: '2025-04-03',
+        title: '购物日',
+        tips: ['保留退税时间。'],
+        items: [{ title: '银座', locationName: '银座', startTime: '14:00' }],
+      },
+    ],
+  }
 }
 
 test.describe('AI Trip Builder Page', () => {
@@ -134,6 +181,172 @@ test.describe('AI Trip Builder Page', () => {
     await expect(preview.getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('浅草寺编辑点')
     await expect(preview.getByPlaceholder('例如：提前确认预约时间').last()).toHaveValue('新增每日提示')
     await expect(page.getByRole('button', { name: '确认导入' })).toBeEnabled()
+  })
+
+  test('single-day regeneration is confirmation gated and only replaces target day', async ({ page }) => {
+    let refineRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as RefineProxyBody
+      expect(body.operation).toBe('ai_trip_draft_refine')
+      expect(body.scope).toEqual({ kind: 'day', date: '2025-04-01' })
+      expect(body.guidance).toBe('让第一天更轻松')
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('Bearer')
+      refineRequests += 1
+      const draft = body.draft
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft_refine',
+          source: 'mock',
+          draft: {
+            ...draft,
+            title: '不应采用的新标题',
+            destination: '不应采用的新目的地',
+            days: draft.days.map((day) => day.date === '2025-04-01'
+              ? { ...day, title: 'AI 优化第一天', items: [{ title: 'AI 第一日景点', startTime: '09:30' }] }
+              : { ...day, title: '不应替换第二天', items: [{ title: '不应替换景点' }] }),
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    await parseSampleDraft(page)
+    const preview = page.getByTestId('ai-draft-preview')
+    await preview.getByTestId('ai-draft-day-regenerate-button').first().click()
+    const dialog = page.getByTestId('ai-draft-day-refine-confirm-dialog')
+    await expect(dialog).toBeVisible()
+    expect(refineRequests).toBe(0)
+    await dialog.getByRole('button', { name: '取消' }).click()
+    expect(refineRequests).toBe(0)
+
+    await preview.getByTestId('ai-draft-day-regenerate-button').first().click()
+    await page.getByTestId('ai-draft-day-refine-guidance').fill('让第一天更轻松')
+    await dialog.getByRole('button', { name: '确认重新生成' }).click()
+
+    await expect(page.getByTestId('ai-draft-refine-success')).toContainText('已重新生成 2025-04-01')
+    await expect(preview.getByLabel('每日主题').first()).toHaveValue('AI 优化第一天')
+    await expect(preview.getByLabel('每日主题').nth(1)).toHaveValue('涩谷与原宿')
+    await expect(preview.getByTestId('ai-draft-item-editor').first().getByLabel('标题')).toHaveValue('AI 第一日景点')
+    expect(refineRequests).toBe(1)
+  })
+
+  test('range preference regeneration only replaces selected dates and preserves outside edits', async ({ page }) => {
+    let refineRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as RefineProxyBody
+      expect(body.operation).toBe('ai_trip_draft_refine')
+      expect(body.scope).toEqual({ kind: 'date_range', startDate: '2025-04-01', endDate: '2025-04-02' })
+      expect(body.preferences).toMatchObject({
+        interestText: '咖啡馆和博物馆',
+        partySize: 4,
+        preferTransport: 'walking',
+      })
+      expect(body.guidance).toBe('少购物，多休息')
+      refineRequests += 1
+      const draft = body.draft
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft_refine',
+          source: 'mock',
+          draft: {
+            ...draft,
+            days: draft.days.map((day) => ({
+              ...day,
+              title: `AI 优化 ${day.date}`,
+              items: [{ title: `AI 景点 ${day.date}`, startTime: '10:00' }],
+            })),
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(threeDayDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    const preview = page.getByTestId('ai-draft-preview')
+    await preview.getByLabel('每日主题').nth(2).fill('用户保留第三天')
+    const panel = page.getByTestId('ai-draft-refine-panel')
+    await panel.getByTestId('ai-draft-refine-start-date').selectOption('2025-04-01')
+    await panel.getByTestId('ai-draft-refine-end-date').selectOption('2025-04-02')
+    await panel.getByLabel(/同行人数/).fill('4')
+    await panel.getByLabel(/交通偏好/).selectOption('walking')
+    await panel.getByTestId('ai-draft-refine-interest-text').fill('咖啡馆和博物馆')
+    await panel.getByTestId('ai-draft-refine-guidance').fill('少购物，多休息')
+    await panel.getByTestId('ai-draft-range-refine-action').click()
+    await expect(page.getByTestId('ai-draft-range-refine-confirm-dialog')).toBeVisible()
+    expect(refineRequests).toBe(0)
+
+    await page.getByTestId('ai-draft-range-refine-confirm-dialog').getByRole('button', { name: '确认优化' }).click()
+
+    await expect(page.getByTestId('ai-draft-refine-success')).toContainText('已重新生成 2025-04-01 至 2025-04-02')
+    await expect(preview.getByLabel('每日主题').nth(0)).toHaveValue('AI 优化 2025-04-01')
+    await expect(preview.getByLabel('每日主题').nth(1)).toHaveValue('AI 优化 2025-04-02')
+    await expect(preview.getByLabel('每日主题').nth(2)).toHaveValue('用户保留第三天')
+    expect(refineRequests).toBe(1)
+  })
+
+  test('refine provider failure and stale draft keep current draft unchanged', async ({ page }) => {
+    await page.route('**/api/provider-proxy', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          code: 'provider_error',
+          message: 'AI 行程优化服务请求失败。',
+          ok: false,
+          operation: 'ai_trip_draft_refine',
+        }),
+        contentType: 'application/json',
+        status: 502,
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(threeDayDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+    const preview = page.getByTestId('ai-draft-preview')
+    await preview.getByTestId('ai-draft-day-regenerate-button').nth(1).click()
+    await page.getByTestId('ai-draft-day-refine-confirm-dialog').getByRole('button', { name: '确认重新生成' }).click()
+
+    await expect(page.getByTestId('ai-draft-refine-error')).toContainText('AI 行程优化服务请求失败')
+    await expect(preview.getByLabel('每日主题').nth(1)).toHaveValue('文化日')
+
+    await page.unroute('**/api/provider-proxy')
+    let releaseRefine: (() => void) | undefined
+    const releasePromise = new Promise<void>((resolve) => {
+      releaseRefine = resolve
+    })
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as RefineProxyBody
+      await releasePromise
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'ai_trip_draft_refine',
+          source: 'mock',
+          draft: {
+            ...body.draft,
+            days: body.draft.days.map((day) => day.date === '2025-04-02'
+              ? { ...day, title: '不应应用的优化结果', items: [{ title: '不应应用' }] }
+              : day),
+          },
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    await preview.getByTestId('ai-draft-day-regenerate-button').nth(1).click()
+    await page.getByTestId('ai-draft-day-refine-confirm-dialog').getByRole('button', { name: '确认重新生成' }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('ai-draft-day-refine-confirm-dialog')).not.toBeVisible()
+    await preview.getByLabel('每日主题').nth(2).fill('用户请求中编辑第三天')
+    releaseRefine?.()
+
+    await expect(page.getByTestId('ai-draft-refine-error')).toContainText('草案已变化，请重新生成')
+    await expect(preview.getByLabel('每日主题').nth(1)).toHaveValue('文化日')
+    await expect(preview.getByLabel('每日主题').nth(2)).toHaveValue('用户请求中编辑第三天')
   })
 
   test('shows privacy notice', async ({ page }) => {

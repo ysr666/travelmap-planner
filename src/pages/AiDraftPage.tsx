@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -31,7 +31,21 @@ import {
   summarizeAiPrivacyForAiRequest,
 } from '../lib/ai/aiPrivacyGuard'
 import { analyzeAiTripDraftQuality } from '../lib/ai/aiTripDraftQuality'
-import { fetchProviderProxyAiTripDraft, fetchProviderProxyAiTripDraftRepair, getProviderProxyConfig, ProviderProxyClientError } from '../lib/providerProxyClient'
+import {
+  applyAiTripDraftRefineResultIfFresh,
+  fingerprintAiTripDraft,
+} from '../lib/ai/aiTripDraftRefine'
+import {
+  fetchProviderProxyAiTripDraft,
+  fetchProviderProxyAiTripDraftRefine,
+  fetchProviderProxyAiTripDraftRepair,
+  getProviderProxyConfig,
+  ProviderProxyClientError,
+} from '../lib/providerProxyClient'
+import type {
+  ProviderProxyAiTripDraftRefinePreferences,
+  ProviderProxyAiTripDraftRefineScope,
+} from '../lib/ai/providerProxyContract'
 import { importTripPlanRecords } from '../db'
 import type { Trip, Day, ItineraryItem, TransportMode } from '../types'
 
@@ -134,10 +148,32 @@ export function AiDraftPage() {
   const [repairError, setRepairError] = useState<string | null>(null)
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
   const [repairSuccessMessage, setRepairSuccessMessage] = useState<string | null>(null)
+  const [refineGenerating, setRefineGenerating] = useState(false)
+  const [refineError, setRefineError] = useState<string | null>(null)
+  const [refineSuccessMessage, setRefineSuccessMessage] = useState<string | null>(null)
+  const [pendingDayRefine, setPendingDayRefine] = useState<{ date: string; title?: string } | null>(null)
+  const [dayRefineGuidance, setDayRefineGuidance] = useState('')
+  const [showRangeRefineConfirm, setShowRangeRefineConfirm] = useState(false)
+  const [rangeRefineStartDate, setRangeRefineStartDate] = useState('')
+  const [rangeRefineEndDate, setRangeRefineEndDate] = useState('')
+  const [rangeRefinePartySize, setRangeRefinePartySize] = useState(requestPartySize)
+  const [rangeRefinePace, setRangeRefinePace] = useState(requestPace)
+  const [rangeRefinePreferTransport, setRangeRefinePreferTransport] = useState(requestPreferTransport)
+  const [rangeRefineInterestTags, setRangeRefineInterestTags] = useState<string[]>(requestInterestTags)
+  const [rangeRefineInterestText, setRangeRefineInterestText] = useState(requestInterestText)
+  const [rangeRefineMustVisit, setRangeRefineMustVisit] = useState(requestMustVisit)
+  const [rangeRefineAvoid, setRangeRefineAvoid] = useState(requestAvoid)
+  const [rangeRefineFreeText, setRangeRefineFreeText] = useState(requestFreeText)
+  const [rangeRefineGuidance, setRangeRefineGuidance] = useState('')
+  const draftRef = useRef<AiTripDraft | null>(draft)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
   const requestEndDate = useMemo(
     () => calculateEndDateFromDayCount(requestStartDate, Number(requestDayCount)),
     [requestDayCount, requestStartDate],
   )
+  const draftDateOptions = useMemo(() => draft?.days.map((day) => day.date) ?? [], [draft])
 
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
@@ -225,6 +261,139 @@ export function AiDraftPage() {
   function handleRepairConfirm() {
     setShowRepairConfirm(false)
     handleRepairViaProxy()
+  }
+
+  function openDayRefine(day: AiTripDraftDay) {
+    setRefineError(null)
+    setRefineSuccessMessage(null)
+    setDayRefineGuidance('')
+    setPendingDayRefine({ date: day.date, title: day.title })
+  }
+
+  function openRangeRefineConfirm() {
+    if (!draft) return
+    const startDate = rangeRefineStartDate || draft.days[0]?.date || draft.startDate
+    const endDate = rangeRefineEndDate || draft.days[draft.days.length - 1]?.date || draft.endDate
+    if (!startDate || !endDate || endDate < startDate) {
+      setRefineError('请选择有效的优化日期范围。')
+      return
+    }
+    setRangeRefineStartDate(startDate)
+    setRangeRefineEndDate(endDate)
+    setRefineError(null)
+    setRefineSuccessMessage(null)
+    setShowRangeRefineConfirm(true)
+  }
+
+  async function handleDayRefineConfirm() {
+    const pending = pendingDayRefine
+    if (!pending) return
+    await runDraftRefine({
+      guidance: dayRefineGuidance,
+      scope: { date: pending.date, kind: 'day' },
+      successMessage: `已重新生成 ${pending.date} 的草案内容。`,
+    })
+    setPendingDayRefine(null)
+  }
+
+  async function handleRangeRefineConfirm() {
+    await runDraftRefine({
+      guidance: rangeRefineGuidance,
+      preferences: buildRangeRefinePreferences(),
+      scope: {
+        endDate: rangeRefineEndDate,
+        kind: 'date_range',
+        startDate: rangeRefineStartDate,
+      },
+      successMessage: `已重新生成 ${rangeRefineStartDate} 至 ${rangeRefineEndDate} 的草案内容。`,
+    })
+    setShowRangeRefineConfirm(false)
+  }
+
+  async function runDraftRefine({
+    guidance,
+    preferences,
+    scope,
+    successMessage,
+  }: {
+    guidance?: string
+    preferences?: ProviderProxyAiTripDraftRefinePreferences
+    scope: ProviderProxyAiTripDraftRefineScope
+    successMessage: string
+  }) {
+    if (!proxyConfig.proxyUrl) {
+      setRefineError('当前未配置 AI 行程优化服务。')
+      return
+    }
+    const baselineDraft = draftRef.current
+    if (!baselineDraft) {
+      setRefineError('请先生成或解析一个行程草案。')
+      return
+    }
+
+    const baselineFingerprint = fingerprintAiTripDraft(baselineDraft)
+    setRefineError(null)
+    setRefineSuccessMessage(null)
+    setRefineGenerating(true)
+    try {
+      const result = await fetchProviderProxyAiTripDraftRefine(
+        {
+          draft: sanitizeAiDraftRepairDraftForProxy(baselineDraft, privacy),
+          guidance: guidance?.trim() || undefined,
+          operation: 'ai_trip_draft_refine',
+          preferences,
+          scope,
+        },
+        proxyConfig.proxyUrl,
+      )
+
+      const currentDraft = draftRef.current
+      if (!currentDraft) {
+        setRefineError('草案已变化，请重新生成。')
+        return
+      }
+
+      const applied = applyAiTripDraftRefineResultIfFresh({
+        baselineFingerprint,
+        currentDraft,
+        providerDraft: result.draft,
+        scope,
+      })
+      if (!applied.ok) {
+        setRefineError(applied.errors.join('\n'))
+        return
+      }
+
+      previewDraftObject(applied.draft)
+      setRefineSuccessMessage(result.warnings?.length
+        ? `${successMessage} ${result.warnings.join(' ')}`
+        : successMessage)
+    } catch (caught) {
+      if (caught instanceof ProviderProxyClientError) {
+        setRefineError(caught.message)
+      } else {
+        setRefineError('AI 行程优化请求失败，请重试。')
+      }
+    } finally {
+      setRefineGenerating(false)
+    }
+  }
+
+  function buildRangeRefinePreferences(): ProviderProxyAiTripDraftRefinePreferences | undefined {
+    const preferences: ProviderProxyAiTripDraftRefinePreferences = {}
+    const partySize = Number(rangeRefinePartySize)
+    if (Number.isInteger(partySize)) {
+      preferences.partySize = partySize
+    }
+    if (rangeRefinePace) preferences.pace = rangeRefinePace
+    if (rangeRefinePreferTransport) preferences.preferTransport = rangeRefinePreferTransport
+    if (profile.mealTimeProtection !== undefined) preferences.mealTimeProtection = profile.mealTimeProtection
+    if (rangeRefineInterestTags.length > 0) preferences.interestTags = rangeRefineInterestTags
+    if (rangeRefineInterestText.trim()) preferences.interestText = rangeRefineInterestText.trim()
+    if (rangeRefineMustVisit.trim()) preferences.mustVisitText = rangeRefineMustVisit.trim()
+    if (rangeRefineAvoid.trim()) preferences.avoidText = rangeRefineAvoid.trim()
+    if (rangeRefineFreeText.trim()) preferences.freeTextRequirement = rangeRefineFreeText.trim()
+    return Object.values(preferences).some((value) => value !== undefined) ? preferences : undefined
   }
 
   async function handleRepairViaProxy() {
@@ -401,7 +570,7 @@ export function AiDraftPage() {
 
   const summary = draft ? summarizeAiTripDraft(draft) : null
   const repairPrivacyNotice = draft ? summarizeAiPrivacyForAiRequest(privacy, 'repair') : null
-  const canImportDraft = Boolean(draft && errors.length === 0)
+  const canImportDraft = Boolean(draft && errors.length === 0 && !refineGenerating)
 
   function applyDraftEdit(nextDraft: AiTripDraft) {
     setJsonText(JSON.stringify(nextDraft, null, 2))
@@ -799,6 +968,168 @@ export function AiDraftPage() {
             </Card>
           )}
 
+          <Card className="space-y-3" data-testid="ai-draft-refine-panel">
+            <div className="space-y-1">
+              <h3 className="font-medium text-on-surface dark:text-on-surface">调整整体偏好后再生成</h3>
+              <p className="text-sm tm-muted">
+                选择草案内日期范围，确认后只替换所选日期；范围外已编辑内容会保留。
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>开始日期</span>
+                <select
+                  className={FIELD_SELECT_CLASS}
+                  data-testid="ai-draft-refine-start-date"
+                  value={rangeRefineStartDate || draftDateOptions[0] || ''}
+                  onChange={(event) => setRangeRefineStartDate(event.target.value)}
+                >
+                  {draftDateOptions.map((date) => (
+                    <option key={date} value={date}>{date}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>结束日期</span>
+                <select
+                  className={FIELD_SELECT_CLASS}
+                  data-testid="ai-draft-refine-end-date"
+                  value={rangeRefineEndDate || draftDateOptions[draftDateOptions.length - 1] || ''}
+                  onChange={(event) => setRangeRefineEndDate(event.target.value)}
+                >
+                  {draftDateOptions.map((date) => (
+                    <option key={date} value={date}>{date}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                label="同行人数"
+                value={rangeRefinePartySize}
+                onChange={setRangeRefinePartySize}
+                type="number"
+              />
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>旅行节奏</span>
+                <select
+                  className={FIELD_SELECT_CLASS}
+                  value={rangeRefinePace}
+                  onChange={(event) => setRangeRefinePace(event.target.value as typeof rangeRefinePace)}
+                >
+                  <option value="relaxed">轻松</option>
+                  <option value="moderate">适中</option>
+                  <option value="compact">紧凑</option>
+                </select>
+              </label>
+            </div>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>交通偏好</span>
+              <select
+                className={FIELD_SELECT_CLASS}
+                value={rangeRefinePreferTransport}
+                onChange={(event) => setRangeRefinePreferTransport(event.target.value as typeof rangeRefinePreferTransport)}
+              >
+                <option value="public_transport">公共交通</option>
+                <option value="walking">步行</option>
+                <option value="taxi">打车</option>
+                <option value="mixed">综合</option>
+              </select>
+            </label>
+            <div className="space-y-2">
+              <span className={FIELD_LABEL_CLASS}>兴趣标签</span>
+              <div className="flex flex-wrap gap-2" data-testid="ai-draft-refine-interest-tags">
+                {INTEREST_TAGS.map((tag) => {
+                  const selected = rangeRefineInterestTags.includes(tag)
+                  return (
+                    <button
+                      className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
+                        selected
+                          ? 'border-primary/40 bg-primary-container text-on-primary-container'
+                          : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
+                      }`}
+                      key={tag}
+                      onClick={() => setRangeRefineInterestTags((current) =>
+                        current.includes(tag)
+                          ? current.filter((item) => item !== tag)
+                          : [...current, tag],
+                      )}
+                      type="button"
+                    >
+                      {tag}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>兴趣偏好</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                data-testid="ai-draft-refine-interest-text"
+                value={rangeRefineInterestText}
+                onChange={(event) => setRangeRefineInterestText(event.target.value)}
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>想去的地方</span>
+                <textarea
+                  className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                  value={rangeRefineMustVisit}
+                  onChange={(event) => setRangeRefineMustVisit(event.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>不想要的安排</span>
+                <textarea
+                  className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                  value={rangeRefineAvoid}
+                  onChange={(event) => setRangeRefineAvoid(event.target.value)}
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>补充要求</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                value={rangeRefineFreeText}
+                onChange={(event) => setRangeRefineFreeText(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>本次优化说明</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                data-testid="ai-draft-refine-guidance"
+                value={rangeRefineGuidance}
+                onChange={(event) => setRangeRefineGuidance(event.target.value)}
+              />
+            </label>
+            <Button
+              className="w-full"
+              data-testid="ai-draft-range-refine-action"
+              disabled={!proxyConfig.configured || refineGenerating}
+              loading={refineGenerating && showRangeRefineConfirm}
+              onClick={openRangeRefineConfirm}
+              variant="secondary"
+            >
+              调整整体偏好后再生成
+            </Button>
+          </Card>
+
+          {refineSuccessMessage && (
+            <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30" data-testid="ai-draft-refine-success">
+              <p className="whitespace-pre-line text-sm text-green-700 dark:text-green-300">{refineSuccessMessage}</p>
+            </Card>
+          )}
+
+          {refineError && (
+            <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30" data-testid="ai-draft-refine-error">
+              <p className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">{refineError}</p>
+            </Card>
+          )}
+
           <Card className="space-y-4" data-testid="ai-draft-preview">
             <h3 className="font-medium text-on-surface dark:text-on-surface">行程草案编辑</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -810,6 +1141,22 @@ export function AiDraftPage() {
             <div className="space-y-4">
               {draft!.days.map((day, dayIndex) => (
                 <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-high/35 p-3" data-testid="ai-draft-day-editor" key={`${day.date}-${dayIndex}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 text-sm font-semibold text-on-surface dark:text-on-surface">
+                      第 {dayIndex + 1} 天
+                      <span className="ml-2 text-xs font-normal tm-muted">{day.date}</span>
+                    </p>
+                    <Button
+                      className="min-h-9 px-3 text-xs"
+                      data-testid="ai-draft-day-regenerate-button"
+                      disabled={!proxyConfig.configured || refineGenerating}
+                      loading={refineGenerating && pendingDayRefine?.date === day.date}
+                      onClick={() => openDayRefine(day)}
+                      variant="secondary"
+                    >
+                      重新生成本日
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <FormField
                       label={`第 ${dayIndex + 1} 天日期`}
@@ -977,6 +1324,44 @@ export function AiDraftPage() {
         onCancel={() => setShowRepairConfirm(false)}
         onConfirm={handleRepairConfirm}
         testId="ai-draft-repair-confirm-dialog"
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDayRefine)}
+        title="重新生成本日"
+        body={`将通过旅图服务重新生成 ${pendingDayRefine?.date ?? ''} 的草案内容\n可能消耗服务额度\n只替换这一天\n不会创建旅行、路线、票据或云端数据`}
+        confirmLabel="确认重新生成"
+        cancelLabel="取消"
+        loading={refineGenerating && Boolean(pendingDayRefine)}
+        onCancel={() => {
+          setPendingDayRefine(null)
+          setDayRefineGuidance('')
+        }}
+        onConfirm={handleDayRefineConfirm}
+        testId="ai-draft-day-refine-confirm-dialog"
+      >
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>本日调整要求</span>
+          <textarea
+            className={`${FIELD_TEXTAREA_CLASS} h-24`}
+            data-testid="ai-draft-day-refine-guidance"
+            placeholder={pendingDayRefine?.title ? `例如：让“${pendingDayRefine.title}”更轻松一些` : '例如：减少购物，增加咖啡馆和休息时间'}
+            value={dayRefineGuidance}
+            onChange={(event) => setDayRefineGuidance(event.target.value)}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={showRangeRefineConfirm}
+        title="调整整体偏好后再生成"
+        body={`将通过旅图服务优化 ${rangeRefineStartDate} 至 ${rangeRefineEndDate}\n可能消耗服务额度\n只替换所选日期范围\n范围外草案和已编辑内容会保留\n不会创建旅行、路线、票据或云端数据`}
+        confirmLabel="确认优化"
+        cancelLabel="取消"
+        loading={refineGenerating && showRangeRefineConfirm}
+        onCancel={() => setShowRangeRefineConfirm(false)}
+        onConfirm={handleRangeRefineConfirm}
+        testId="ai-draft-range-refine-confirm-dialog"
       />
     </div>
   )

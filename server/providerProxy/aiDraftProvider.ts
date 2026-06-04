@@ -1,12 +1,18 @@
 export {
   createOpenAiCompatibleAiDraftProvider,
   createOpenAiCompatibleAiDraftRepairProvider,
+  createOpenAiCompatibleAiDraftRefineProvider,
 } from './aiDraftRealProvider'
 
 import type { AiTripDraft, AiTripDraftDay } from '../../src/lib/ai/aiTripDraft'
 import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import { generateMockAiTripDraft } from '../../src/lib/ai/aiTripDraftMock'
-import type { ProviderProxyAiTripDraftRequest, ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/ai/providerProxyContract'
+import {
+  buildMockAiTripDraftRefineProxyResponse,
+  type ProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRepairRequest,
+  type ProviderProxyAiTripDraftRefineRequest,
+} from '../../src/lib/ai/providerProxyContract'
 import type { AiDraftProviderInput } from './aiDraftPrompt'
 
 export type AiDraftProviderErrorCode =
@@ -34,6 +40,11 @@ export type AiDraftProvider = {
 export type AiDraftRepairProvider = {
   readonly name: string
   repairDraft(input: AiDraftProviderInput): Promise<AiDraftProviderResult>
+}
+
+export type AiDraftRefineProvider = {
+  readonly name: string
+  refineDraft(input: AiDraftProviderInput): Promise<AiDraftProviderResult>
 }
 
 export function createDisabledAiDraftProvider(): AiDraftProvider {
@@ -117,6 +128,44 @@ export function createMockAiDraftRepairProvider(request: ProviderProxyAiTripDraf
         ok: true,
         source: 'mock',
         warnings: ['当前为本地示例修复，非真实 AI 修复。'],
+      }
+    },
+  }
+}
+
+export function createDisabledAiDraftRefineProvider(): AiDraftRefineProvider {
+  return {
+    name: 'disabled',
+    async refineDraft() {
+      return { ok: false, errorCode: 'unsupported', message: 'AI draft refinement is not currently available.' }
+    },
+  }
+}
+
+export function createUnavailableAiDraftRefineProvider(): AiDraftRefineProvider {
+  return {
+    name: 'unavailable',
+    async refineDraft() {
+      return { ok: false, errorCode: 'provider_unavailable', message: 'AI draft refinement provider is not configured.' }
+    },
+  }
+}
+
+export function createMockAiDraftRefineProvider(request: ProviderProxyAiTripDraftRefineRequest): AiDraftRefineProvider {
+  return {
+    name: 'mock',
+    async refineDraft() {
+      const response = buildMockAiTripDraftRefineProxyResponse(request)
+      const validation = validateAiTripDraft(response.draft)
+      if (!validation.valid || !validation.draft) {
+        return { ok: false, errorCode: 'provider_error', message: 'Mock refinement produced invalid draft.' }
+      }
+      return {
+        draft: validation.draft,
+        kind: 'draft',
+        ok: true,
+        source: 'mock',
+        warnings: response.warnings,
       }
     },
   }

@@ -1,5 +1,6 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
+  PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW,
@@ -19,6 +20,7 @@ export type ProviderProxyQuotaBucket =
   | 'search|'
   | 'place|'
   | 'ai_draft|'
+  | 'ai_draft_refine|'
   | 'ai_draft_repair|'
   | 'ai_trip_edit|'
 
@@ -293,6 +295,9 @@ export function getProviderProxyQuotaBucketConfig(
 ): ProviderProxyQuotaBucketConfig {
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
     return { bucket: 'ai_draft_repair|', maxRequests: limits.maxAiDraftRepairRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION) {
+    return { bucket: 'ai_draft_refine|', maxRequests: limits.maxAiDraftRepairRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
     return { bucket: 'ai_draft|', maxRequests: limits.maxAiDraftRequestsPerWindow }

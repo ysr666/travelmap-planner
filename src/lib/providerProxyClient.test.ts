@@ -6,6 +6,7 @@ import {
   fetchProviderProxyRouteOrderSuggestion,
   fetchProviderProxyRoutePreview,
   fetchProviderProxyAiTripDraft,
+  fetchProviderProxyAiTripDraftRefine,
   fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyPlaceLookup,
   fetchProviderProxyTravelSearch,
@@ -248,6 +249,81 @@ describe('provider proxy ai_trip_draft client', () => {
     expect(result.draft.days).toHaveLength(3)
   })
 })
+
+describe('provider proxy ai_trip_draft_refine client', () => {
+  it('does not include provider secrets in refine payload and parses a valid draft', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        operation: 'ai_trip_draft_refine',
+        preferences: {
+          partySize: 3,
+          preferTransport: 'walking',
+        },
+        scope: { kind: 'day', date: '2025-04-02' },
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-ai-key')
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('Bearer')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'ai_trip_draft_refine',
+        source: 'mock',
+        draft: {
+          ...validRefineDraft(),
+          days: validRefineDraft().days.map((day) => day.date === '2025-04-02'
+            ? { ...day, title: '优化后的文化日', items: [{ title: '东京国立博物馆' }] }
+            : day),
+        },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAiTripDraftRefine({
+      draft: validRefineDraft(),
+      operation: 'ai_trip_draft_refine',
+      preferences: { partySize: 3, preferTransport: 'walking' },
+      scope: { kind: 'day', date: '2025-04-02' },
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-ai-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.draft.days[1].title).toBe('优化后的文化日')
+  })
+
+  it('rejects invalid refine responses', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      operation: 'ai_trip_draft_refine',
+      source: 'mock',
+      draft: { title: '', startDate: 'bad', endDate: '2025-04-02', days: [] },
+    }), { status: 200 })) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyAiTripDraftRefine({
+      draft: validRefineDraft(),
+      operation: 'ai_trip_draft_refine',
+      scope: { kind: 'day', date: '2025-04-02' },
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    })
+  })
+})
+
+function validRefineDraft() {
+  return {
+    title: '东京之旅',
+    destination: '东京',
+    startDate: '2025-04-01',
+    endDate: '2025-04-03',
+    days: [
+      { date: '2025-04-01', title: '抵达', items: [{ title: '浅草寺' }] },
+      { date: '2025-04-02', title: '文化', items: [{ title: '上野公园' }] },
+      { date: '2025-04-03', title: '购物', items: [{ title: '银座' }] },
+    ],
+  }
+}
 
 describe('provider proxy travel_search client', () => {
   it('validates and sends a search payload without provider secrets', async () => {

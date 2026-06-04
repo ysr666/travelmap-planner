@@ -46,7 +46,16 @@ describe('chooseAiReasoningMode', () => {
   it('defaults missing signals to off', () => {
     expect(chooseAiReasoningMode({ operation: 'ai_trip_draft' })).toBe('off')
     expect(chooseAiReasoningMode({ operation: 'ai_trip_draft_repair' })).toBe('off')
+    expect(chooseAiReasoningMode({ operation: 'ai_trip_draft_refine' })).toBe('off')
     expect(chooseAiReasoningMode({ operation: 'ai_trip_edit_plan' })).toBe('off')
+  })
+
+  it('uses repair-level thresholds for draft refinement', () => {
+    expect(chooseAiReasoningMode({ itemCount: 8, operation: 'ai_trip_draft_refine', repairInstructionLength: 80 })).toBe('off')
+    expect(chooseAiReasoningMode({ itemCount: 15, operation: 'ai_trip_draft_refine' })).toBe('auto')
+    expect(chooseAiReasoningMode({ operation: 'ai_trip_draft_refine', repairInstructionLength: 300 })).toBe('auto')
+    expect(chooseAiReasoningMode({ itemCount: 25, operation: 'ai_trip_draft_refine' })).toBe('high')
+    expect(chooseAiReasoningMode({ operation: 'ai_trip_draft_refine', repairInstructionLength: 600 })).toBe('high')
   })
 
   it('keeps simple edit planning off and escalates only for complex edit signals', () => {

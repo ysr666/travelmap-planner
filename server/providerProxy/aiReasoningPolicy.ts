@@ -1,7 +1,7 @@
 export type AiBackendReasoningMode = 'off' | 'auto' | 'high'
 
 export type AiReasoningPolicyInput = {
-  operation: 'ai_trip_draft' | 'ai_trip_draft_repair' | 'ai_trip_edit_plan'
+  operation: 'ai_trip_draft' | 'ai_trip_draft_repair' | 'ai_trip_draft_refine' | 'ai_trip_edit_plan'
   dayCount?: number
   itemCount?: number
   findingCount?: number
@@ -35,6 +35,22 @@ export function chooseAiReasoningMode(input: AiReasoningPolicyInput): AiBackendR
       return 'auto'
     }
 
+    return 'off'
+  }
+
+  if (input.operation === 'ai_trip_draft_refine') {
+    if (
+      atLeast(input.itemCount, 25)
+      || atLeast(input.repairInstructionLength, 600)
+    ) {
+      return 'high'
+    }
+    if (
+      atLeast(input.itemCount, 15)
+      || atLeast(input.repairInstructionLength, 300)
+    ) {
+      return 'auto'
+    }
     return 'off'
   }
 

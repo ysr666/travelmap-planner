@@ -20,9 +20,21 @@ import {
   buildAiTripDraftRequest,
   calculateEndDateFromDayCount,
   validateAiTripDraftRequest,
+  type AiTripDraftRequest,
   type AiTripDraftRequestValidationError,
 } from '../lib/ai/aiTripDraftRequest'
 import { generateMockAiTripDraft } from '../lib/ai/aiTripDraftMock'
+import {
+  AI_TRIP_DRAFT_VARIANTS,
+  buildAiTripDraftVariantRequest,
+  createInitialAiTripDraftVariantStates,
+  getSelectableAiTripDraftVariantDraft,
+  getSuccessfulAiTripDraftVariantCount,
+  mergeAiTripDraftVariantState,
+  summarizeAiTripDraftVariantDraft,
+  type AiTripDraftVariantKind,
+  type AiTripDraftVariantState,
+} from '../lib/ai/aiTripDraftVariants'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { getStoredAiPrivacySettings } from '../lib/ai/aiPrivacy'
 import {
@@ -54,6 +66,7 @@ import {
   ProviderProxyClientError,
 } from '../lib/providerProxyClient'
 import type {
+  ProviderProxyAiTripDraftRequest,
   ProviderProxyAiTripDraftRefinePreferences,
   ProviderProxyAiTripDraftRefineScope,
 } from '../lib/ai/providerProxyContract'
@@ -158,6 +171,10 @@ export function AiDraftPage() {
   const [proxyGenerating, setProxyGenerating] = useState(false)
   const [proxyError, setProxyError] = useState<string | null>(null)
   const [showProxyConfirm, setShowProxyConfirm] = useState(false)
+  const [variantGenerating, setVariantGenerating] = useState(false)
+  const [variantStates, setVariantStates] = useState<AiTripDraftVariantState[]>([])
+  const [showVariantConfirm, setShowVariantConfirm] = useState(false)
+  const [pendingVariantRetry, setPendingVariantRetry] = useState<AiTripDraftVariantKind | null>(null)
 
   // Quality check state
   const qualityResult = useMemo(
@@ -227,6 +244,8 @@ export function AiDraftPage() {
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
     setJsonText(text)
+    setVariantStates([])
+    setPendingVariantRetry(null)
     try {
       const result = validateAiTripDraft(draftObj)
       if (result.valid && result.draft) {
@@ -305,6 +324,19 @@ export function AiDraftPage() {
   function handleProxyConfirm() {
     setShowProxyConfirm(false)
     handleGenerateViaProxy()
+  }
+
+  function handleVariantConfirm() {
+    setShowVariantConfirm(false)
+    handleGenerateVariantsViaProxy()
+  }
+
+  function handleVariantRetryConfirm() {
+    const kind = pendingVariantRetry
+    setPendingVariantRetry(null)
+    if (kind) {
+      handleRegenerateVariantViaProxy(kind)
+    }
   }
 
   function handleRepairConfirm() {
@@ -500,9 +532,28 @@ export function AiDraftPage() {
     }
   }
 
-  async function handleGenerateViaProxy() {
-    if (!proxyConfig.proxyUrl) return
+  function buildProxyAiTripDraftRequest(
+    request: AiTripDraftRequest,
+  ): ProviderProxyAiTripDraftRequest {
+    return {
+      dayCount: request.dayCount,
+      destination: request.destination,
+      endDate: request.endDate,
+      freeTextRequirement: request.freeTextRequirement,
+      interestTags: request.interestTags,
+      interestText: request.interestText,
+      mealTimeProtection: request.mealTimeProtection,
+      mustVisitText: request.mustVisitText,
+      avoidText: request.avoidText,
+      operation: 'ai_trip_draft',
+      partySize: request.partySize,
+      pace: request.pace,
+      preferTransport: request.preferTransport,
+      startDate: request.startDate,
+    }
+  }
 
+  function validateCurrentDraftRequestForGeneration() {
     const built = buildAiTripDraftRequest(
       buildCurrentDraftRequestInput(),
       { pace: profile.pace, preferTransport: profile.preferTransport },
@@ -513,30 +564,136 @@ export function AiDraftPage() {
       setRequestErrors(validation.errors)
       setErrors([])
       setDraft(null)
-      return
+      return null
     }
+
+    return validation.request
+  }
+
+  async function generateVariantDraftViaProxy(
+    baseRequest: AiTripDraftRequest,
+    kind: AiTripDraftVariantKind,
+  ): Promise<Partial<Omit<AiTripDraftVariantState, 'definition'>>> {
+    if (!proxyConfig.proxyUrl) {
+      return {
+        error: '当前未配置 AI 生成服务。',
+        status: 'error',
+        warnings: [],
+      }
+    }
+
+    const request = buildAiTripDraftVariantRequest(baseRequest, kind)
+    try {
+      const result = await fetchProviderProxyAiTripDraft(
+        buildProxyAiTripDraftRequest(request),
+        proxyConfig.proxyUrl,
+      )
+      const validation = validateAiTripDraft(result.draft)
+      if (!validation.valid || !validation.draft) {
+        return {
+          error: validation.errors.map((error) => error.message).join('\n') || 'AI 返回的草案校验失败。',
+          status: 'error',
+          warnings: result.warnings ?? [],
+        }
+      }
+      return {
+        draft: validation.draft,
+        error: undefined,
+        status: 'success',
+        warnings: result.warnings ?? [],
+      }
+    } catch (caught) {
+      return {
+        error: caught instanceof ProviderProxyClientError
+          ? caught.message
+          : 'AI 行程生成服务请求失败。',
+        status: 'error',
+        warnings: [],
+      }
+    }
+  }
+
+  async function handleGenerateVariantsViaProxy() {
+    const request = validateCurrentDraftRequestForGeneration()
+    if (!request) return
 
     setRequestErrors([])
     setProxyError(null)
+    setErrors([])
+    setDraft(null)
+    setVariantGenerating(true)
+    setVariantStates(createInitialAiTripDraftVariantStates().map((state) => ({
+      ...state,
+      status: 'loading',
+    })))
+
+    try {
+      const results = await Promise.all(
+        AI_TRIP_DRAFT_VARIANTS.map(async (variant) => ({
+          kind: variant.kind,
+          patch: await generateVariantDraftViaProxy(request, variant.kind),
+        })),
+      )
+      const nextStates = results.reduce(
+        (states, result) => mergeAiTripDraftVariantState(states, result.kind, result.patch),
+        createInitialAiTripDraftVariantStates(),
+      )
+      setVariantStates(nextStates)
+      if (getSuccessfulAiTripDraftVariantCount(nextStates) === 0) {
+        setProxyError('三种方案都生成失败，请稍后重试。')
+      }
+    } finally {
+      setVariantGenerating(false)
+    }
+  }
+
+  async function handleRegenerateVariantViaProxy(kind: AiTripDraftVariantKind) {
+    const request = validateCurrentDraftRequestForGeneration()
+    if (!request) return
+
+    setRequestErrors([])
+    setProxyError(null)
+    setVariantGenerating(true)
+    setVariantStates((current) => mergeAiTripDraftVariantState(
+      current.length > 0 ? current : createInitialAiTripDraftVariantStates(),
+      kind,
+      {
+        draft: undefined,
+        error: undefined,
+        status: 'loading',
+        warnings: [],
+      },
+    ))
+
+    const patch = await generateVariantDraftViaProxy(request, kind)
+    setVariantStates((current) => mergeAiTripDraftVariantState(
+      current.length > 0 ? current : createInitialAiTripDraftVariantStates(),
+      kind,
+      patch,
+    ))
+    setVariantGenerating(false)
+  }
+
+  function handleSelectVariantDraft(state: AiTripDraftVariantState) {
+    const selectedDraft = getSelectableAiTripDraftVariantDraft(state)
+    if (!selectedDraft) return
+    setProxyError(null)
+    previewDraftObject(selectedDraft)
+  }
+
+  async function handleGenerateViaProxy() {
+    if (!proxyConfig.proxyUrl) return
+
+    const request = validateCurrentDraftRequestForGeneration()
+    if (!request) return
+
+    setRequestErrors([])
+    setProxyError(null)
+    setVariantStates([])
     setProxyGenerating(true)
     try {
       const result = await fetchProviderProxyAiTripDraft(
-        {
-          dayCount: validation.request.dayCount,
-          destination: validation.request.destination,
-          endDate: validation.request.endDate,
-          freeTextRequirement: validation.request.freeTextRequirement,
-          interestTags: validation.request.interestTags,
-          interestText: validation.request.interestText,
-          mealTimeProtection: validation.request.mealTimeProtection,
-          mustVisitText: validation.request.mustVisitText,
-          avoidText: validation.request.avoidText,
-          operation: 'ai_trip_draft',
-          partySize: validation.request.partySize,
-          pace: validation.request.pace,
-          preferTransport: validation.request.preferTransport,
-          startDate: validation.request.startDate,
-        },
+        buildProxyAiTripDraftRequest(request),
         proxyConfig.proxyUrl,
       )
       previewDraftObject(result.draft)
@@ -905,13 +1062,26 @@ export function AiDraftPage() {
         )}
 
         {proxyConfig.configured ? (
-          <Button
-            onClick={() => setShowProxyConfirm(true)}
-            className="w-full"
-            loading={proxyGenerating}
-          >
-            生成完整行程
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              onClick={() => setShowVariantConfirm(true)}
+              className="w-full"
+              data-testid="ai-draft-generate-variants-action"
+              disabled={proxyGenerating}
+              loading={variantGenerating}
+            >
+              生成三种方案
+            </Button>
+            <Button
+              onClick={() => setShowProxyConfirm(true)}
+              className="w-full"
+              disabled={variantGenerating}
+              loading={proxyGenerating}
+              variant="secondary"
+            >
+              生成完整行程
+            </Button>
+          </div>
         ) : (
           <Button disabled className="w-full" variant="secondary">
             当前未配置 AI 生成服务
@@ -925,6 +1095,28 @@ export function AiDraftPage() {
         {proxyError && (
           <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
             <p className="text-sm text-red-700 dark:text-red-300">{proxyError}</p>
+          </Card>
+        )}
+
+        {variantStates.length > 0 && (
+          <Card className="space-y-3" data-testid="ai-draft-variant-panel">
+            <div className="space-y-1">
+              <h3 className="font-medium text-on-surface dark:text-on-surface">多方案草案</h3>
+              <p className="text-sm tm-muted">
+                选择一个方案后会进入编辑和方案质量检查，其他方案会被丢弃。
+              </p>
+            </div>
+            <div className="space-y-3">
+              {variantStates.map((state) => (
+                <AiDraftVariantCard
+                  key={state.definition.kind}
+                  state={state}
+                  disabled={variantGenerating || proxyGenerating}
+                  onRetry={() => setPendingVariantRetry(state.definition.kind)}
+                  onSelect={() => handleSelectVariantDraft(state)}
+                />
+              ))}
+            </div>
           </Card>
         )}
       </div>
@@ -1448,6 +1640,30 @@ export function AiDraftPage() {
       />
 
       <ConfirmDialog
+        open={showVariantConfirm}
+        title="生成三种方案"
+        body={`将通过旅图服务分别生成经典游、轻松游、深度游三份草案\n会发起 3 次 AI 草案生成请求，可能消耗 3 次服务额度\n生成结果只进入多方案预览\n选择方案前不会创建旅行\n不会调用路线、地点、搜索、票据或云端服务`}
+        confirmLabel="确认生成"
+        cancelLabel="取消"
+        loading={variantGenerating}
+        onCancel={() => setShowVariantConfirm(false)}
+        onConfirm={handleVariantConfirm}
+        testId="ai-draft-variants-confirm-dialog"
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingVariantRetry)}
+        title="重新生成方案"
+        body={`将通过旅图服务重新生成 ${pendingVariantRetry ? getVariantLabel(pendingVariantRetry) : ''} 草案\n会发起 1 次 AI 草案生成请求\n只替换这个方案卡片\n不会创建旅行、路线、票据或云端数据`}
+        confirmLabel="确认重新生成"
+        cancelLabel="取消"
+        loading={variantGenerating && Boolean(pendingVariantRetry)}
+        onCancel={() => setPendingVariantRetry(null)}
+        onConfirm={handleVariantRetryConfirm}
+        testId="ai-draft-variant-retry-confirm-dialog"
+      />
+
+      <ConfirmDialog
         open={showRepairConfirm}
         title="修复选中问题"
         body={`将通过旅图服务尝试修复 ${selectedQualityRepairCount} 个选中问题\n可能消耗服务额度\n未勾选的问题和无关内容会要求保持不变\n不会自动创建旅行\n不会直接覆盖已保存旅行\n修复后仍需预览和确认${repairPrivacyNotice ? `\n${repairPrivacyNotice}` : ''}`}
@@ -1498,6 +1714,110 @@ export function AiDraftPage() {
       />
     </div>
   )
+}
+
+function AiDraftVariantCard({
+  disabled,
+  onRetry,
+  onSelect,
+  state,
+}: {
+  disabled: boolean
+  onRetry: () => void
+  onSelect: () => void
+  state: AiTripDraftVariantState
+}) {
+  const summary = state.draft ? summarizeAiTripDraftVariantDraft(state.draft) : null
+  const selectable = Boolean(getSelectableAiTripDraftVariantDraft(state))
+
+  return (
+    <div
+      className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-high/35 p-3"
+      data-testid="ai-draft-variant-card"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-on-surface dark:text-on-surface">{state.definition.label}</p>
+            <span className={variantStatusPillClass(state.status)}>
+              {variantStatusLabel(state.status)}
+            </span>
+          </div>
+          <p className="mt-1 break-words text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
+            {state.definition.description}
+          </p>
+        </div>
+      </div>
+
+      {state.status === 'loading' && (
+        <p className="text-sm tm-muted">正在生成方案草案...</p>
+      )}
+
+      {state.error && (
+        <div className="space-y-2">
+          <p className="whitespace-pre-line break-words text-sm text-red-700 dark:text-red-300 [overflow-wrap:anywhere]">
+            {state.error}
+          </p>
+          <Button
+            className="min-h-9 px-3 text-xs"
+            data-testid="ai-draft-variant-retry"
+            disabled={disabled}
+            onClick={onRetry}
+            variant="secondary"
+          >
+            重新生成
+          </Button>
+        </div>
+      )}
+
+      {state.draft && summary && (
+        <div className="space-y-3">
+          <dl className="grid grid-cols-2 gap-2 text-sm">
+            <dt className="tm-muted">标题</dt>
+            <dd className="font-medium">{state.draft.title}</dd>
+            <dt className="tm-muted">日期</dt>
+            <dd>{state.draft.startDate} 至 {state.draft.endDate}</dd>
+            <dt className="tm-muted">天数</dt>
+            <dd>{summary.dayCount} 天</dd>
+            <dt className="tm-muted">行程点</dt>
+            <dd>{summary.itemCount} 个</dd>
+          </dl>
+          {state.warnings.length > 0 && (
+            <p className="whitespace-pre-line break-words text-xs text-amber-700 dark:text-amber-300 [overflow-wrap:anywhere]">
+              {state.warnings.join('\n')}
+            </p>
+          )}
+          <Button
+            className="w-full"
+            data-testid="ai-draft-variant-select"
+            disabled={disabled || !selectable}
+            onClick={onSelect}
+          >
+            选择此方案
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function getVariantLabel(kind: AiTripDraftVariantKind): string {
+  return AI_TRIP_DRAFT_VARIANTS.find((variant) => variant.kind === kind)?.label ?? '该方案'
+}
+
+function variantStatusLabel(status: AiTripDraftVariantState['status']) {
+  if (status === 'loading') return '生成中'
+  if (status === 'success') return '已生成'
+  if (status === 'error') return '失败'
+  return '待生成'
+}
+
+function variantStatusPillClass(status: AiTripDraftVariantState['status']) {
+  const base = 'rounded-full px-2 py-1 text-xs font-medium'
+  if (status === 'success') return `${base} bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200`
+  if (status === 'error') return `${base} bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200`
+  if (status === 'loading') return `${base} bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200`
+  return `${base} bg-surface-container-highest text-on-surface-variant`
 }
 
 function groupQualityFindingsByCategory(findings: AiTripDraftQualityFinding[]) {

@@ -103,6 +103,38 @@ function qualityIssueDraft() {
   }
 }
 
+function variantDraft(title: string) {
+  return {
+    title,
+    destination: '首尔',
+    startDate: '2025-10-01',
+    endDate: '2025-10-02',
+    days: [
+      {
+        date: '2025-10-01',
+        title: `${title}第一天`,
+        tips: ['提前确认开放时间。'],
+        items: [
+          { title: `${title}景福宫`, locationName: '景福宫', startTime: '09:00' },
+          {
+            title: `${title}北村韩屋村`,
+            locationName: '北村韩屋村',
+            previousTransportMode: 'walk',
+            previousTransportDurationMinutes: 20,
+            startTime: '11:00',
+          },
+        ],
+      },
+      {
+        date: '2025-10-02',
+        title: `${title}第二天`,
+        tips: ['预留用餐缓冲。'],
+        items: [{ title: `${title}明洞`, locationName: '明洞', startTime: '10:00' }],
+      },
+    ],
+  }
+}
+
 test.describe('AI Trip Builder Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#/ai-draft')
@@ -652,6 +684,130 @@ test.describe('AI Trip Builder Page', () => {
     await expect(page.getByTestId('ai-draft-summary')).toContainText('首尔之旅')
     await expect(page.getByTestId('ai-draft-day-editor').first().getByPlaceholder('例如：提前确认预约时间').first()).toHaveValue('提前确认餐厅营业时间。')
     expect(aiDraftRequests).toBe(1)
+  })
+
+  test('multi-variant generation is gated supports partial failure retry and selects one draft', async ({ page }) => {
+    let aiDraftRequests = 0
+    let relaxedAttempts = 0
+    const seenStyles: string[] = []
+
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      expect(body.operation).toBe('ai_trip_draft')
+      expect(body).toMatchObject({
+        dayCount: 2,
+        destination: '首尔',
+        interestTags: ['美食'],
+        interestText: '咖啡馆',
+        partySize: 3,
+        startDate: '2025-10-01',
+        endDate: '2025-10-02',
+      })
+      expect(JSON.stringify(body)).not.toContain('TRIPMAP_AI_API_KEY')
+      expect(JSON.stringify(body)).not.toContain('route_cache')
+      expect(JSON.stringify(body)).not.toContain('ticket')
+      aiDraftRequests += 1
+
+      const freeTextRequirement = String(body.freeTextRequirement ?? '')
+      if (freeTextRequirement.includes('经典游')) {
+        seenStyles.push('classic')
+        await route.fulfill({
+          body: JSON.stringify({
+            ok: true,
+            operation: 'ai_trip_draft',
+            source: 'mock',
+            warnings: ['经典游 warning'],
+            draft: variantDraft('经典游方案'),
+          }),
+          contentType: 'application/json',
+        })
+        return
+      }
+      if (freeTextRequirement.includes('轻松游')) {
+        seenStyles.push('relaxed')
+        relaxedAttempts += 1
+        if (relaxedAttempts === 1) {
+          await route.fulfill({
+            body: JSON.stringify({
+              ok: false,
+              code: 'provider_error',
+              message: '轻松游暂时失败',
+              operation: 'ai_trip_draft',
+            }),
+            contentType: 'application/json',
+            status: 502,
+          })
+          return
+        }
+        await route.fulfill({
+          body: JSON.stringify({
+            ok: true,
+            operation: 'ai_trip_draft',
+            source: 'mock',
+            draft: variantDraft('轻松游方案'),
+          }),
+          contentType: 'application/json',
+        })
+        return
+      }
+      if (freeTextRequirement.includes('深度游')) {
+        seenStyles.push('deep')
+        await route.fulfill({
+          body: JSON.stringify({
+            ok: true,
+            operation: 'ai_trip_draft',
+            source: 'mock',
+            draft: variantDraft('深度游方案'),
+          }),
+          contentType: 'application/json',
+        })
+        return
+      }
+      throw new Error(`Missing variant guidance: ${freeTextRequirement}`)
+    })
+
+    const form = requestForm(page)
+    await form.getByLabel(/目的地/).fill('首尔')
+    await form.getByLabel(/开始日期/).fill('2025-10-01')
+    await form.getByLabel(/天数/).fill('2')
+    await form.getByLabel(/同行人数/).fill('3')
+    await form.getByRole('button', { name: '美食' }).click()
+    await form.getByLabel(/兴趣偏好/).fill('咖啡馆')
+
+    await form.getByRole('button', { name: '生成三种方案' }).click()
+    await expect(page.getByTestId('ai-draft-variants-confirm-dialog')).toBeVisible()
+    expect(aiDraftRequests).toBe(0)
+    await page.getByTestId('ai-draft-variants-confirm-dialog').getByRole('button', { name: '取消' }).click()
+    expect(aiDraftRequests).toBe(0)
+
+    await form.getByRole('button', { name: '生成三种方案' }).click()
+    await page.getByTestId('ai-draft-variants-confirm-dialog').getByRole('button', { name: '确认生成' }).click()
+    const panel = page.getByTestId('ai-draft-variant-panel')
+    await expect(panel).toBeVisible()
+    await expect(panel.getByTestId('ai-draft-variant-card')).toHaveCount(3)
+    await expect(panel).toContainText('经典游方案')
+    await expect(panel).toContainText('深度游方案')
+    await expect(panel).toContainText('轻松游暂时失败')
+    expect(aiDraftRequests).toBe(3)
+    expect(new Set(seenStyles)).toEqual(new Set(['classic', 'relaxed', 'deep']))
+    await expectNoHorizontalOverflow(page)
+
+    const relaxedCard = panel.getByTestId('ai-draft-variant-card').filter({ hasText: '轻松游' })
+    await relaxedCard.getByTestId('ai-draft-variant-retry').click()
+    await expect(page.getByTestId('ai-draft-variant-retry-confirm-dialog')).toBeVisible()
+    expect(aiDraftRequests).toBe(3)
+    await page.getByTestId('ai-draft-variant-retry-confirm-dialog').getByRole('button', { name: '取消' }).click()
+    expect(aiDraftRequests).toBe(3)
+
+    await relaxedCard.getByTestId('ai-draft-variant-retry').click()
+    await page.getByTestId('ai-draft-variant-retry-confirm-dialog').getByRole('button', { name: '确认重新生成' }).click()
+    await expect(relaxedCard).toContainText('轻松游方案')
+    expect(aiDraftRequests).toBe(4)
+
+    await relaxedCard.getByTestId('ai-draft-variant-select').click()
+    await expect(page.getByTestId('ai-draft-variant-panel')).not.toBeVisible()
+    await expect(page.getByTestId('ai-draft-summary')).toContainText('轻松游方案')
+    await expect(page.getByTestId('ai-draft-quality-card')).toBeVisible()
   })
 
   test('provider error does not create a draft', async ({ page }) => {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeAiTripDraftQuality, summarizeAiTripDraftQuality } from './aiTripDraftQuality'
+import {
+  analyzeAiTripDraftQuality,
+  flattenAiTripDraftQualityFindings,
+  selectDefaultAiTripDraftQualityFindingIds,
+  summarizeAiTripDraftQuality,
+} from './aiTripDraftQuality'
 import type { AiTripDraft } from './aiTripDraft'
 
 function draft(days: AiTripDraft['days']): AiTripDraft {
@@ -31,7 +36,9 @@ describe('analyzeAiTripDraftQuality', () => {
       endTime: `${String(8 + i).padStart(2, '0')}:45`,
     }))
     const result = analyzeAiTripDraftQuality(draft([{ date: '2025-04-01', items }]))
-    expect(result.warnings.some((f) => f.ruleId === 'dense_day')).toBe(true)
+    const finding = result.warnings.find((f) => f.ruleId === 'dense_day')
+    expect(finding).toBeTruthy()
+    expect(finding?.category).toBe('dense_schedule')
   })
 
   it('respects relaxed pace threshold (5)', () => {
@@ -64,7 +71,8 @@ describe('analyzeAiTripDraftQuality', () => {
         { title: '景点B', locationName: 'B', startTime: '10:05', endTime: '11:00' },
       ],
     }]))
-    expect(result.warnings.some((f) => f.ruleId === 'short_gap')).toBe(true)
+    const finding = result.warnings.find((f) => f.ruleId === 'short_gap')
+    expect(finding?.category).toBe('transport')
   })
 
   it('critical for time overlap', () => {
@@ -76,7 +84,8 @@ describe('analyzeAiTripDraftQuality', () => {
       ],
     }]))
     expect(result.status).toBe('has_critical')
-    expect(result.criticals.some((f) => f.ruleId === 'time_overlap')).toBe(true)
+    const finding = result.criticals.find((f) => f.ruleId === 'time_overlap')
+    expect(finding?.category).toBe('time_conflict')
   })
 
   it('warns for long day span > 12h', () => {
@@ -98,7 +107,8 @@ describe('analyzeAiTripDraftQuality', () => {
         { title: '自由活动' },
       ],
     }]))
-    expect(result.warnings.some((f) => f.ruleId === 'missing_location')).toBe(true)
+    const finding = result.warnings.find((f) => f.ruleId === 'missing_location')
+    expect(finding?.category).toBe('location')
   })
 
   it('warns for repeated generic titles', () => {
@@ -165,6 +175,74 @@ describe('analyzeAiTripDraftQuality', () => {
       ],
     }]))
     expect(result.infos.some((f) => f.ruleId === 'missing_transport' && f.severity === 'info')).toBe(true)
+  })
+
+  it('warns for unreasonable transport duration and mode', () => {
+    const result = analyzeAiTripDraftQuality(draft([{
+      date: '2025-04-01',
+      items: [
+        { title: '景点A', locationName: 'A', startTime: '09:00', endTime: '10:00' },
+        {
+          title: '景点B',
+          locationName: 'B',
+          previousTransportDurationMinutes: 90,
+          previousTransportMode: 'walk',
+          startTime: '12:00',
+          endTime: '13:00',
+        },
+      ],
+    }]))
+    const finding = result.warnings.find((f) => f.ruleId === 'unreasonable_transport')
+    expect(finding?.category).toBe('transport')
+    expect(finding?.title).toContain('交通')
+  })
+
+  it('warns for duplicate sights with normalized location names', () => {
+    const result = analyzeAiTripDraftQuality(draft([
+      {
+        date: '2025-04-01',
+        items: [
+          { title: '游览西湖', locationName: '西湖', startTime: '09:00', endTime: '11:00' },
+        ],
+      },
+      {
+        date: '2025-04-02',
+        items: [
+          { title: '西湖散步', locationName: '西湖（湖滨）', startTime: '09:00', endTime: '11:00' },
+        ],
+      },
+    ]))
+    const finding = result.warnings.find((f) => f.ruleId === 'duplicate_sight')
+    expect(finding?.category).toBe('duplicate_sight')
+    expect(finding?.message).toContain('出现了 2 次')
+  })
+
+  it('uses stable deterministic finding ids', () => {
+    const input = draft([{
+      date: '2025-04-01',
+      items: [
+        { title: '景点A', locationName: 'A', startTime: '09:00', endTime: '11:00' },
+        { title: '景点B', locationName: 'B', startTime: '10:00', endTime: '12:00' },
+      ],
+    }])
+    const first = flattenAiTripDraftQualityFindings(analyzeAiTripDraftQuality(input)).map((f) => f.id)
+    const second = flattenAiTripDraftQualityFindings(analyzeAiTripDraftQuality(input)).map((f) => f.id)
+    expect(first).toEqual(second)
+    expect(first[0]).toContain('time_overlap')
+  })
+
+  it('selects critical and warning findings by default but not info', () => {
+    const result = analyzeAiTripDraftQuality(draft([{
+      date: '2025-04-01',
+      items: [
+        { title: '景点A', locationName: 'A', startTime: '09:00', endTime: '10:00' },
+        { title: '景点B', locationName: 'B', startTime: '10:05', endTime: '11:00' },
+      ],
+    }]))
+    const defaultIds = new Set(selectDefaultAiTripDraftQualityFindingIds(result))
+    const all = flattenAiTripDraftQualityFindings(result)
+    expect(all.some((finding) => finding.severity === 'warning' && defaultIds.has(finding.id))).toBe(true)
+    expect(all.some((finding) => finding.severity === 'info' && defaultIds.has(finding.id))).toBe(false)
   })
 })
 

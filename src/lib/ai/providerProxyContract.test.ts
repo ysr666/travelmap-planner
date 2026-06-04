@@ -8,6 +8,8 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripDraftRefineRequest,
+  buildMockAiTripDraftRefineProxyResponse,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyTravelSearchRequest,
@@ -329,6 +331,111 @@ describe('provider proxy ai_trip_draft_repair contract', () => {
     expect(message).toContain('修复')
   })
 })
+
+describe('provider proxy ai_trip_draft_refine contract', () => {
+  it('accepts a valid single-day refine request', () => {
+    const result = validateProviderProxyAiTripDraftRefineRequest(validRefineRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.scope).toEqual({ date: '2025-04-02', kind: 'day' })
+      expect(result.request.preferences?.partySize).toBe(3)
+      expect(result.request.preferences?.interestTags).toEqual(['美食', '博物馆'])
+      expect(result.request.guidance).toBe('更轻松一点')
+    }
+  })
+
+  it('accepts a valid date-range refine request', () => {
+    const result = validateProviderProxyAiTripDraftRefineRequest({
+      ...validRefineRequest(),
+      scope: { kind: 'date_range', startDate: '2025-04-01', endDate: '2025-04-02' },
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.scope).toEqual({ endDate: '2025-04-02', kind: 'date_range', startDate: '2025-04-01' })
+    }
+  })
+
+  it('rejects scopes outside the draft and invalid preferences', () => {
+    expect(validateProviderProxyAiTripDraftRefineRequest({
+      ...validRefineRequest(),
+      scope: { kind: 'day', date: '2025-04-04' },
+    }).ok).toBe(false)
+
+    expect(validateProviderProxyAiTripDraftRefineRequest({
+      ...validRefineRequest(),
+      preferences: { partySize: 0 },
+    }).ok).toBe(false)
+
+    expect(validateProviderProxyAiTripDraftRefineRequest({
+      ...validRefineRequest(),
+      preferences: { Authorization: 'Bearer secret' },
+    }).ok).toBe(false)
+  })
+
+  it('builds a mock refine response without leaking secrets or changing root metadata', () => {
+    const validation = validateProviderProxyAiTripDraftRefineRequest(validRefineRequest())
+    expect(validation.ok).toBe(true)
+    if (!validation.ok) return
+
+    const response = buildMockAiTripDraftRefineProxyResponse(validation.request)
+    expect(response.ok).toBe(true)
+    expect(response.operation).toBe('ai_trip_draft_refine')
+    expect(response.draft.title).toBe(validation.request.draft.title)
+    expect(response.draft.startDate).toBe(validation.request.draft.startDate)
+    expect(response.draft.endDate).toBe(validation.request.draft.endDate)
+    expect(response.draft.days[0]).toEqual(validation.request.draft.days[0])
+    expect(JSON.stringify(response)).not.toContain('Bearer')
+    expect(JSON.stringify(response)).not.toContain('secret')
+    expect(JSON.stringify(response)).not.toContain('apiKey')
+  })
+
+  it('returns non-empty error message for refine operation', () => {
+    const message = defaultProviderProxyErrorMessage('invalid_response', 'ai_trip_draft_refine')
+    expect(message.length).toBeGreaterThan(0)
+    expect(message).toContain('优化')
+  })
+})
+
+function validRefineRequest() {
+  return {
+    operation: 'ai_trip_draft_refine',
+    requestId: 'refine-1',
+    draft: {
+      title: '东京之旅',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-03',
+      days: [
+        {
+          date: '2025-04-01',
+          title: '抵达',
+          items: [{ title: '浅草寺', locationName: '浅草寺', startTime: '09:00', endTime: '11:00' }],
+        },
+        {
+          date: '2025-04-02',
+          title: '文化',
+          items: [{ title: '上野公园', locationName: '上野公园', startTime: '10:00', endTime: '12:00' }],
+        },
+        {
+          date: '2025-04-03',
+          title: '购物',
+          items: [{ title: '银座', locationName: '银座', startTime: '14:00', endTime: '16:00' }],
+        },
+      ],
+    },
+    guidance: '更轻松一点',
+    preferences: {
+      interestTags: ['美食', '博物馆', '美食'],
+      interestText: '咖啡馆',
+      partySize: '3',
+      pace: 'relaxed',
+      preferTransport: 'walking',
+    },
+    scope: { kind: 'day', date: '2025-04-02' },
+  }
+}
 
 function validRepairRequest() {
   return {

@@ -1,12 +1,18 @@
 export {
   createOpenAiCompatibleAiDraftProvider,
   createOpenAiCompatibleAiDraftRepairProvider,
+  createOpenAiCompatibleAiDraftRefineProvider,
 } from './aiDraftRealProvider'
 
 import type { AiTripDraft, AiTripDraftDay } from '../../src/lib/ai/aiTripDraft'
 import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import { generateMockAiTripDraft } from '../../src/lib/ai/aiTripDraftMock'
-import type { ProviderProxyAiTripDraftRequest, ProviderProxyAiTripDraftRepairRequest } from '../../src/lib/ai/providerProxyContract'
+import {
+  buildMockAiTripDraftRefineProxyResponse,
+  type ProviderProxyAiTripDraftRequest,
+  type ProviderProxyAiTripDraftRepairRequest,
+  type ProviderProxyAiTripDraftRefineRequest,
+} from '../../src/lib/ai/providerProxyContract'
 import type { AiDraftProviderInput } from './aiDraftPrompt'
 
 export type AiDraftProviderErrorCode =
@@ -34,6 +40,11 @@ export type AiDraftProvider = {
 export type AiDraftRepairProvider = {
   readonly name: string
   repairDraft(input: AiDraftProviderInput): Promise<AiDraftProviderResult>
+}
+
+export type AiDraftRefineProvider = {
+  readonly name: string
+  refineDraft(input: AiDraftProviderInput): Promise<AiDraftProviderResult>
 }
 
 export function createDisabledAiDraftProvider(): AiDraftProvider {
@@ -122,6 +133,44 @@ export function createMockAiDraftRepairProvider(request: ProviderProxyAiTripDraf
   }
 }
 
+export function createDisabledAiDraftRefineProvider(): AiDraftRefineProvider {
+  return {
+    name: 'disabled',
+    async refineDraft() {
+      return { ok: false, errorCode: 'unsupported', message: 'AI draft refinement is not currently available.' }
+    },
+  }
+}
+
+export function createUnavailableAiDraftRefineProvider(): AiDraftRefineProvider {
+  return {
+    name: 'unavailable',
+    async refineDraft() {
+      return { ok: false, errorCode: 'provider_unavailable', message: 'AI draft refinement provider is not configured.' }
+    },
+  }
+}
+
+export function createMockAiDraftRefineProvider(request: ProviderProxyAiTripDraftRefineRequest): AiDraftRefineProvider {
+  return {
+    name: 'mock',
+    async refineDraft() {
+      const response = buildMockAiTripDraftRefineProxyResponse(request)
+      const validation = validateAiTripDraft(response.draft)
+      if (!validation.valid || !validation.draft) {
+        return { ok: false, errorCode: 'provider_error', message: 'Mock refinement produced invalid draft.' }
+      }
+      return {
+        draft: validation.draft,
+        kind: 'draft',
+        ok: true,
+        source: 'mock',
+        warnings: response.warnings,
+      }
+    },
+  }
+}
+
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return h * 60 + m
@@ -139,11 +188,30 @@ function hasMealInWindow(items: AiTripDraftDay['items'], startMin: number, endMi
 }
 
 function mockRepairDraft(draft: AiTripDraft, ruleIds: string[]): AiTripDraft {
+  const needsDenseFix = ruleIds.includes('dense_day') || ruleIds.includes('long_day_span')
+  const needsDuplicateFix = ruleIds.includes('duplicate_sight')
+  const needsLocationFix = ruleIds.includes('missing_location')
   const needsMealFix = ruleIds.includes('meal_gap')
   const needsGenericFix = ruleIds.includes('generic_title')
+  const needsTimeFix = ruleIds.includes('time_overlap') || ruleIds.includes('short_gap')
+  const needsTransportFix = ruleIds.includes('missing_transport') || ruleIds.includes('unreasonable_transport')
 
   const repairedDays = draft.days.map((day) => {
     let items = [...day.items]
+
+    if (needsDenseFix && items.length > 6) {
+      items = items.slice(0, 6)
+    }
+
+    if (needsTimeFix || needsDenseFix) {
+      items = normalizeMockTiming(items)
+    }
+
+    if (needsLocationFix) {
+      items = items.map((item) => item.locationName || item.address
+        ? item
+        : { ...item, locationName: item.title })
+    }
 
     // Add meal items if missing
     if (needsMealFix) {
@@ -190,10 +258,90 @@ function mockRepairDraft(draft: AiTripDraft, ruleIds: string[]): AiTripDraft {
       })
     }
 
+    if (needsTransportFix) {
+      items = items.map((item, index) => {
+        if (index === 0) return item
+        const duration = item.previousTransportDurationMinutes
+        if (!item.previousTransportMode) {
+          return {
+            ...item,
+            previousTransportDurationMinutes: duration ?? 20,
+            previousTransportMode: 'transit',
+            previousTransportNote: item.previousTransportNote ?? '已补充为公共交通建议，导入后可生成路线预览核对。',
+          }
+        }
+        if (duration !== undefined && duration <= 0) {
+          return {
+            ...item,
+            previousTransportDurationMinutes: 20,
+            previousTransportNote: '已重新估算交通耗时，导入后可生成路线预览核对。',
+          }
+        }
+        if (item.previousTransportMode === 'walk' && duration !== undefined && duration > 60) {
+          return {
+            ...item,
+            previousTransportDurationMinutes: 35,
+            previousTransportMode: 'transit',
+            previousTransportNote: '步行时间偏长，已改为公共交通建议。',
+          }
+        }
+        return item
+      })
+    }
+
     return { ...day, items }
   })
 
-  return { ...draft, days: repairedDays }
+  return needsDuplicateFix
+    ? { ...draft, days: dedupeMockSights(repairedDays) }
+    : { ...draft, days: repairedDays }
+}
+
+function normalizeMockTiming(items: AiTripDraftDay['items']): AiTripDraftDay['items'] {
+  let startMinutes = 9 * 60
+  return items.map((item, index) => {
+    const startTime = minutesToTime(startMinutes)
+    const endTime = minutesToTime(startMinutes + (index === 0 ? 90 : 75))
+    startMinutes += index === 0 ? 135 : 120
+    return { ...item, endTime, startTime }
+  })
+}
+
+function minutesToTime(value: number): string {
+  const normalized = Math.max(0, Math.min(value, 23 * 60 + 59))
+  const hours = Math.floor(normalized / 60)
+  const minutes = normalized % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function dedupeMockSights(days: AiTripDraftDay[]): AiTripDraftDay[] {
+  const seen = new Set<string>()
+  return days.map((day) => ({
+    ...day,
+    items: day.items.map((item, index) => {
+      const key = normalizeMockSightKey(item.locationName || item.address || item.title)
+      if (!key || !seen.has(key)) {
+        if (key) seen.add(key)
+        return item
+      }
+      const replacement = `${item.title} 替代点 ${index + 1}`
+      seen.add(normalizeMockSightKey(replacement))
+      return {
+        ...item,
+        locationName: replacement,
+        title: replacement,
+      }
+    }),
+  }))
+}
+
+function normalizeMockSightKey(value?: string): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[（(].*?[）)]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[·・.,，。:：;；'"“”‘’]/g, '')
 }
 
 const GENERIC_TITLES = [

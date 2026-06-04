@@ -1,5 +1,5 @@
 import { AI_DRAFT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
-import type { AiDraftProvider, AiDraftProviderResult, AiDraftRepairProvider } from './aiDraftProvider'
+import type { AiDraftProvider, AiDraftProviderResult, AiDraftRefineProvider, AiDraftRepairProvider } from './aiDraftProvider'
 import type { AiBackendReasoningMode } from './aiReasoningPolicy'
 import type { ProviderProxyAiTripDraftRequest } from '../../src/lib/ai/providerProxyContract'
 
@@ -63,6 +63,36 @@ export function createOpenAiCompatibleAiDraftRepairProvider(
   return {
     name: 'openai_compatible',
     async repairDraft(input): Promise<AiDraftProviderResult> {
+      if (!apiKey || !baseUrl || !model) {
+        return { ok: false, errorCode: 'provider_unavailable', message: 'AI provider environment is not fully configured.' }
+      }
+
+      return requestOpenAiCompatibleDraft({
+        apiKey,
+        endpoint: joinUrl(baseUrl, CHAT_COMPLETIONS_PATH),
+        fetchImpl,
+        maxTokens: input.maxOutputTokens ?? AI_DRAFT_MAX_OUTPUT_TOKENS_HINT,
+        messages: [
+          { role: 'system', content: input.prompt },
+        ],
+        model,
+        reasoningMode: input.reasoningMode,
+      })
+    },
+  }
+}
+
+export function createOpenAiCompatibleAiDraftRefineProvider(
+  env: OpenAiCompatibleEnv,
+  fetchImpl: typeof fetch = fetch,
+): AiDraftRefineProvider {
+  const apiKey = env.TRIPMAP_AI_API_KEY?.trim()
+  const baseUrl = env.TRIPMAP_AI_BASE_URL?.trim()
+  const model = env.TRIPMAP_AI_MODEL?.trim()
+
+  return {
+    name: 'openai_compatible',
+    async refineDraft(input): Promise<AiDraftProviderResult> {
       if (!apiKey || !baseUrl || !model) {
         return { ok: false, errorCode: 'provider_unavailable', message: 'AI provider environment is not fully configured.' }
       }

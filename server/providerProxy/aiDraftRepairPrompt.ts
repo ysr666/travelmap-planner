@@ -21,7 +21,8 @@ INSTRUCTIONS:
 - Output ONLY valid JSON. No markdown, no explanation, no code fences.
 - Output a COMPLETE repaired draft, not a patch.
 - Preserve: title, destination, startDate, endDate, number of days, day dates.
-- Fix: reduce density per day, adjust timing to avoid overlaps, add specific location names, add meal break items where missing, replace generic titles with more specific ones.
+- Fix ONLY the listed quality findings. If a problem is not listed, preserve that part of the draft unless it must change to keep the repaired draft valid.
+- Supported fixes include: reduce density per day, adjust timing to avoid overlaps, add specific location names, repair unreasonable transport notes/durations, remove or replace duplicate sights, add meal break items where missing, replace generic titles with more specific ones.
 - Do NOT generate: tickets, routes, cloud fields, provider metadata, API keys, transit line numbers.
 - Do NOT reorder items by route optimization.
 - Do NOT add days beyond the original date range.

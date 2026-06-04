@@ -5,12 +5,16 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
   type ProviderProxyAiTripDraftRepairSuccessResponse,
+  type ProviderProxyAiTripDraftRefineRequest,
+  type ProviderProxyAiTripDraftRefineResponse,
+  type ProviderProxyAiTripDraftRefineSuccessResponse,
   type ProviderProxyAiTripDraftResponse,
   type ProviderProxyAiTripDraftSuccessResponse,
   type ProviderProxyAiTripEditPlanRequest,
@@ -36,6 +40,7 @@ import {
   type ProviderProxyTravelSearchSuccessResponse,
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
+import { validateAiTripDraft } from './ai/aiTripDraft'
 
 export type ProviderProxyRuntimeConfig = {
   configured: boolean
@@ -252,6 +257,49 @@ export async function fetchProviderProxyAiTripDraftRepair(
   }
 
   const parsed = parseProviderProxyAiTripDraftRepairResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
+export async function fetchProviderProxyAiTripDraftRefine(
+  request: ProviderProxyAiTripDraftRefineRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiTripDraftRefineSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyAiTripDraftRefineRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_refine' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_refine' }), response.status)
+  }
+
+  const parsed = parseProviderProxyAiTripDraftRefineResponse(body)
   if (!parsed.ok) {
     throw new ProviderProxyClientError(parsed, response.status)
   }
@@ -513,6 +561,30 @@ function parseProviderProxyAiTripDraftRepairResponse(input: unknown): ProviderPr
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_repair' })
+}
+
+function parseProviderProxyAiTripDraftRefineResponse(input: unknown): ProviderProxyAiTripDraftRefineResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyAiTripDraftRefineSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'ai_trip_draft_refine' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'ai_trip_draft_refine'),
+      operation: 'ai_trip_draft_refine',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_draft_refine' })
 }
 
 function parseProviderProxyAiTripEditPlanResponse(
@@ -832,6 +904,27 @@ function validateProviderProxyAiTripDraftRepairSuccessResponse(record: Record<st
     draft: record.draft as ProviderProxyAiTripDraftRepairSuccessResponse['draft'],
     ok: true,
     operation: 'ai_trip_draft_repair',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    source: record.source,
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((w: unknown) => typeof w === 'string') : undefined,
+  }
+}
+
+function validateProviderProxyAiTripDraftRefineSuccessResponse(record: Record<string, unknown>): ProviderProxyAiTripDraftRefineSuccessResponse | null {
+  if (record.operation !== 'ai_trip_draft_refine') {
+    return null
+  }
+  const validation = validateAiTripDraft(record.draft)
+  if (!validation.valid || !validation.draft) {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  return {
+    draft: validation.draft,
+    ok: true,
+    operation: 'ai_trip_draft_refine',
     requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     source: record.source,
     warnings: Array.isArray(record.warnings) ? record.warnings.filter((w: unknown) => typeof w === 'string') : undefined,

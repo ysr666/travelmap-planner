@@ -12,6 +12,7 @@ import { isTravelPace, isTravelTransportPreference } from '../travelProfile'
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION = 'ai_trip_draft_repair' as const
+export const PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION = 'ai_trip_draft_refine' as const
 export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as const
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
@@ -26,7 +27,7 @@ export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -225,6 +226,49 @@ export type ProviderProxyAiTripDraftRepairResponse =
 
 export type ProviderProxyAiTripDraftRepairValidationResult =
   | { ok: true; request: ProviderProxyAiTripDraftRepairRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyAiTripDraftRefineScope =
+  | { date: string; kind: 'day' }
+  | { endDate: string; kind: 'date_range'; startDate: string }
+
+export type ProviderProxyAiTripDraftRefinePreferences = {
+  avoidText?: string
+  freeTextRequirement?: string
+  interestTags?: string[]
+  interestText?: string
+  mealTimeProtection?: boolean
+  mustVisitText?: string
+  partySize?: number
+  pace?: TravelPace
+  preferTransport?: TravelTransportPreference
+}
+
+export type ProviderProxyAiTripDraftRefineRequest = {
+  draft: AiTripDraft
+  guidance?: string
+  operation: typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION
+  preferences?: ProviderProxyAiTripDraftRefinePreferences
+  quotaSessionId?: string
+  requestId?: string
+  scope: ProviderProxyAiTripDraftRefineScope
+}
+
+export type ProviderProxyAiTripDraftRefineSuccessResponse = {
+  draft: AiTripDraft
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  warnings?: string[]
+}
+
+export type ProviderProxyAiTripDraftRefineResponse =
+  | ProviderProxyAiTripDraftRefineSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyAiTripDraftRefineValidationResult =
+  | { ok: true; request: ProviderProxyAiTripDraftRefineRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyAiTripEditPlanRequest = {
@@ -728,6 +772,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return 'AI 行程修复服务返回的内容无法解析。'
     return 'AI 行程修复服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION) {
+    if (code === 'quota_exceeded') return '今日 AI 行程优化次数已达上限。'
+    if (code === 'invalid_request') return 'AI 行程优化请求无效。'
+    if (code === 'provider_error') return 'AI 行程优化服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 行程优化请求暂不支持。'
+    if (code === 'invalid_response') return 'AI 行程优化服务返回的内容无法解析。'
+    return 'AI 行程优化服务暂不可用。'
+  }
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
     if (code === 'quota_exceeded') return '今日 AI 修改建议次数已达上限。'
     if (code === 'invalid_request') return 'AI 修改建议请求无效。'
@@ -1094,6 +1147,18 @@ function aiDraftRepairInvalidRequest(message: string, requestId?: string): Provi
   }
 }
 
+function aiDraftRefineInvalidRequest(message: string, requestId?: string): ProviderProxyAiTripDraftRefineValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
 function aiTripEditPlanInvalidRequest(message: string, requestId?: string): ProviderProxyAiTripEditPlanValidationResult {
   return {
     error: buildProviderProxyErrorResponse({
@@ -1212,6 +1277,238 @@ export function validateProviderProxyAiTripDraftRepairRequest(input: unknown): P
       requestId: requestId ?? undefined,
     },
   }
+}
+
+export function validateProviderProxyAiTripDraftRefineRequest(input: unknown): ProviderProxyAiTripDraftRefineValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION) {
+    return aiDraftRefineInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  if (record.draft === undefined || record.draft === null) {
+    return aiDraftRefineInvalidRequest('缺少 draft 参数。', requestId)
+  }
+
+  const draftValidation = validateAiTripDraft(record.draft)
+  if (!draftValidation.valid || !draftValidation.draft) {
+    return aiDraftRefineInvalidRequest('draft 未通过 schema 校验。', requestId)
+  }
+
+  const scopeResult = readRefineScope(record.scope, draftValidation.draft)
+  if (!scopeResult.ok) {
+    return aiDraftRefineInvalidRequest(scopeResult.message, requestId)
+  }
+
+  const preferencesResult = readRefinePreferences(record.preferences)
+  if (!preferencesResult.ok) {
+    return aiDraftRefineInvalidRequest(preferencesResult.message, requestId)
+  }
+
+  if (record.guidance !== undefined && typeof record.guidance !== 'string') {
+    return aiDraftRefineInvalidRequest('guidance 必须是字符串。', requestId)
+  }
+  if (typeof record.guidance === 'string' && record.guidance.length > MAX_REPAIR_INSTRUCTION_LENGTH) {
+    return aiDraftRefineInvalidRequest(`guidance 不能超过 ${MAX_REPAIR_INSTRUCTION_LENGTH} 个字符。`, requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      draft: draftValidation.draft,
+      guidance: readOptionalString(record.guidance, MAX_REPAIR_INSTRUCTION_LENGTH),
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+      preferences: preferencesResult.preferences,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 128),
+      requestId,
+      scope: scopeResult.scope,
+    },
+  }
+}
+
+export function buildMockAiTripDraftRefineProxyResponse(
+  request: ProviderProxyAiTripDraftRefineRequest,
+): ProviderProxyAiTripDraftRefineSuccessResponse {
+  const mockDraft = generateMockAiTripDraft({
+    destination: request.draft.destination,
+    endDate: request.draft.endDate,
+    mealTimeProtection: request.preferences?.mealTimeProtection,
+    mustVisitText: request.preferences?.mustVisitText,
+    avoidText: request.preferences?.avoidText,
+    freeTextRequirement: request.preferences?.freeTextRequirement,
+    interestTags: request.preferences?.interestTags,
+    interestText: request.preferences?.interestText,
+    partySize: request.preferences?.partySize,
+    pace: request.preferences?.pace,
+    preferTransport: request.preferences?.preferTransport,
+    startDate: request.draft.startDate,
+  })
+  const mockDaysByDate = new Map(mockDraft.days.map((day) => [day.date, day]))
+  const days = request.draft.days.map((day) => {
+    if (!isDateInRefineScope(day.date, request.scope)) {
+      return day
+    }
+    return mockDaysByDate.get(day.date) ?? day
+  })
+
+  return {
+    draft: {
+      ...request.draft,
+      days,
+    },
+    ok: true,
+    operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+    requestId: request.requestId,
+    source: 'mock',
+    warnings: ['当前为本地示例优化，非真实 AI 生成。'],
+  }
+}
+
+function readRefineScope(
+  input: unknown,
+  draft: AiTripDraft,
+): { ok: true; scope: ProviderProxyAiTripDraftRefineScope } | { message: string; ok: false } {
+  const record = readRecord(input)
+  const draftDates = new Set(draft.days.map((day) => day.date))
+  if (record.kind === 'day') {
+    const date = typeof record.date === 'string' ? record.date.trim() : ''
+    if (!isValidPlainDate(date)) {
+      return { message: '单日优化日期无效。', ok: false }
+    }
+    if (!draftDates.has(date)) {
+      return { message: '单日优化日期必须存在于当前草案。', ok: false }
+    }
+    return { ok: true, scope: { date, kind: 'day' } }
+  }
+
+  if (record.kind === 'date_range') {
+    const startDate = typeof record.startDate === 'string' ? record.startDate.trim() : ''
+    const endDate = typeof record.endDate === 'string' ? record.endDate.trim() : ''
+    if (!isValidPlainDate(startDate) || !isValidPlainDate(endDate)) {
+      return { message: '日期范围无效。', ok: false }
+    }
+    if (endDate < startDate) {
+      return { message: '日期范围结束日期不能早于开始日期。', ok: false }
+    }
+    if (!draftDates.has(startDate) || !draftDates.has(endDate)) {
+      return { message: '日期范围必须存在于当前草案。', ok: false }
+    }
+    const selected = draft.days.some((day) => day.date >= startDate && day.date <= endDate)
+    if (!selected) {
+      return { message: '日期范围未选中任何草案日程。', ok: false }
+    }
+    return { ok: true, scope: { endDate, kind: 'date_range', startDate } }
+  }
+
+  return { message: '优化 scope 必须是 day 或 date_range。', ok: false }
+}
+
+const REFINE_PREFERENCE_FIELDS = new Set([
+  'avoidText',
+  'freeTextRequirement',
+  'interestTags',
+  'interestText',
+  'mealTimeProtection',
+  'mustVisitText',
+  'partySize',
+  'pace',
+  'preferTransport',
+])
+
+function readRefinePreferences(
+  input: unknown,
+): { ok: true; preferences?: ProviderProxyAiTripDraftRefinePreferences } | { message: string; ok: false } {
+  if (input === undefined) {
+    return { ok: true }
+  }
+  const record = readRecord(input)
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { message: 'preferences 必须是对象。', ok: false }
+  }
+  const disallowed = findDisallowedObjectFieldPath(record, REFINE_PREFERENCE_FIELDS)
+  if (disallowed) {
+    return { message: 'preferences 包含不允许的字段。', ok: false }
+  }
+
+  const partySize = readOptionalPositiveInteger(record.partySize)
+  if (record.partySize !== undefined && partySize === undefined) {
+    return { message: `同行人数必须是 1 到 ${MAX_AI_PARTY_SIZE} 之间的整数。`, ok: false }
+  }
+  if (partySize !== undefined && partySize > MAX_AI_PARTY_SIZE) {
+    return { message: `同行人数必须是 1 到 ${MAX_AI_PARTY_SIZE} 之间的整数。`, ok: false }
+  }
+
+  const interestTagsResult = readInterestTags(record.interestTags)
+  if (!interestTagsResult.ok) {
+    return { message: interestTagsResult.message, ok: false }
+  }
+
+  const avoidText = readRefineTextPreference(record.avoidText, '"不想要的安排"')
+  if (!avoidText.ok) {
+    return avoidText
+  }
+  const freeTextRequirement = readRefineTextPreference(record.freeTextRequirement, '"补充要求"')
+  if (!freeTextRequirement.ok) {
+    return freeTextRequirement
+  }
+  const interestText = readRefineTextPreference(record.interestText, '"兴趣偏好"')
+  if (!interestText.ok) {
+    return interestText
+  }
+  const mustVisitText = readRefineTextPreference(record.mustVisitText, '"想去的地方"')
+  if (!mustVisitText.ok) {
+    return mustVisitText
+  }
+
+  if (record.mealTimeProtection !== undefined && typeof record.mealTimeProtection !== 'boolean') {
+    return { message: 'mealTimeProtection 必须是布尔值。', ok: false }
+  }
+  if (record.pace !== undefined && !isTravelPace(record.pace)) {
+    return { message: '无效的旅行节奏。', ok: false }
+  }
+  if (record.preferTransport !== undefined && !isTravelTransportPreference(record.preferTransport)) {
+    return { message: '无效的交通偏好。', ok: false }
+  }
+
+  const preferences: ProviderProxyAiTripDraftRefinePreferences = {
+    avoidText: avoidText.value,
+    freeTextRequirement: freeTextRequirement.value,
+    interestTags: interestTagsResult.tags,
+    interestText: interestText.value,
+    mealTimeProtection: typeof record.mealTimeProtection === 'boolean' ? record.mealTimeProtection : undefined,
+    mustVisitText: mustVisitText.value,
+    partySize,
+    pace: isTravelPace(record.pace) ? record.pace : undefined,
+    preferTransport: isTravelTransportPreference(record.preferTransport) ? record.preferTransport : undefined,
+  }
+  return Object.values(preferences).some((value) => value !== undefined)
+    ? { ok: true, preferences }
+    : { ok: true }
+}
+
+function readRefineTextPreference(
+  input: unknown,
+  label: string,
+): { ok: true; value?: string } | { message: string; ok: false } {
+  if (input === undefined) {
+    return { ok: true }
+  }
+  if (typeof input !== 'string') {
+    return { message: `${label}必须是字符串。`, ok: false }
+  }
+  const trimmed = input.trim()
+  if (trimmed.length > MAX_AI_FREE_TEXT_LENGTH) {
+    return { message: `${label}不能超过 ${MAX_AI_FREE_TEXT_LENGTH} 个字符。`, ok: false }
+  }
+  return { ok: true, value: trimmed || undefined }
+}
+
+function isDateInRefineScope(date: string, scope: ProviderProxyAiTripDraftRefineScope) {
+  if (scope.kind === 'day') {
+    return date === scope.date
+  }
+  return date >= scope.startDate && date <= scope.endDate
 }
 
 export function validateProviderProxyAiTripEditPlanRequest(input: unknown): ProviderProxyAiTripEditPlanValidationResult {

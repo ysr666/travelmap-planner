@@ -1,6 +1,7 @@
 import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+  PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
@@ -11,12 +12,15 @@ import {
   isProviderProxyConcreteProvider,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
+  validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
+  type ProviderProxyAiTripDraftRefineRequest,
+  type ProviderProxyAiTripDraftRefineScope,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
@@ -41,18 +45,24 @@ import {
 } from './quotaGuard'
 import { buildAiTripDraftProviderInput } from './aiDraftPrompt'
 import { buildAiTripDraftRepairProviderInput } from './aiDraftRepairPrompt'
+import { buildAiTripDraftRefineProviderInput } from './aiDraftRefinePrompt'
 import { buildAiTripEditProviderInput } from './aiTripEditPrompt'
 import {
   createDisabledAiDraftProvider,
   createDisabledAiDraftRepairProvider,
+  createDisabledAiDraftRefineProvider,
   createMockAiDraftProvider,
   createMockAiDraftRepairProvider,
+  createMockAiDraftRefineProvider,
   createOpenAiCompatibleAiDraftProvider,
   createOpenAiCompatibleAiDraftRepairProvider,
+  createOpenAiCompatibleAiDraftRefineProvider,
   createUnavailableAiDraftProvider,
   createUnavailableAiDraftRepairProvider,
+  createUnavailableAiDraftRefineProvider,
   type AiDraftProvider,
   type AiDraftProviderErrorCode,
+  type AiDraftRefineProvider,
   type AiDraftRepairProvider,
 } from './aiDraftProvider'
 import { normalizeAiDraftProviderOutput } from './aiDraftResponse'
@@ -184,6 +194,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION) {
     return handleAiTripDraftRepairRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION) {
+    return handleAiTripDraftRefineRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
@@ -419,8 +433,125 @@ function selectAiDraftRepairProvider(
   return createDisabledAiDraftRepairProvider()
 }
 
+async function handleAiTripDraftRefineRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiTripDraftRefineRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const refineRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: refineRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: refineRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectAiDraftRefineProvider(env, refineRequest, fetcher)
+    const providerInput = buildAiTripDraftRefineProviderInput(refineRequest, refineRequest.requestId)
+    const reasoningMode = chooseAiReasoningMode({
+      itemCount: countDraftItemsInScope(refineRequest.draft, refineRequest.scope),
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+      repairInstructionLength: refineRequest.guidance?.trim().length,
+    })
+    const result = await provider.refineDraft({ ...providerInput, reasoningMode })
+
+    if (!result.ok) {
+      const status = mapAiDraftErrorCodeToStatus(result.errorCode)
+      throw new ProviderProxyServerError(result.errorCode, status)
+    }
+
+    if (result.kind === 'draft') {
+      return jsonResponse({
+        draft: result.draft,
+        ok: true,
+        operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+        requestId: refineRequest.requestId,
+        source: result.source,
+        warnings: result.warnings,
+      }, 200, corsHeaders)
+    }
+
+    const extraction = normalizeAiDraftProviderOutput(result.rawText)
+    if (!extraction.ok) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+
+    return jsonResponse({
+      draft: extraction.draft,
+      ok: true,
+      operation: PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+      requestId: refineRequest.requestId,
+      source: 'future_ai',
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION, refineRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAiDraftRefineProvider(
+  env: ProviderProxyHandlerEnv,
+  request: ProviderProxyAiTripDraftRefineRequest,
+  fetchImpl?: typeof fetch,
+): AiDraftRefineProvider {
+  if (isMockMode(env)) {
+    return createMockAiDraftRefineProvider(request)
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleAiDraftRefineProvider(env, fetchImpl)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAiDraftRefineProvider()
+  }
+  return createDisabledAiDraftRefineProvider()
+}
+
 function countDraftItems(draft: AiTripDraft): number {
   return draft.days.reduce((total, day) => total + day.items.length, 0)
+}
+
+function countDraftItemsInScope(draft: AiTripDraft, scope: ProviderProxyAiTripDraftRefineScope): number {
+  return draft.days.reduce((total, day) => {
+    if (!isDraftDateInRefineScope(day.date, scope)) {
+      return total
+    }
+    return total + day.items.length
+  }, 0)
+}
+
+function isDraftDateInRefineScope(date: string, scope: ProviderProxyAiTripDraftRefineScope): boolean {
+  if (scope.kind === 'day') {
+    return date === scope.date
+  }
+  return date >= scope.startDate && date <= scope.endDate
 }
 
 function countCriticalFindings(findings: ProviderProxyAiTripDraftRepairRequest['qualityFindings']): number {

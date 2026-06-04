@@ -118,6 +118,7 @@ describe('provider proxy quota guard', () => {
       'route_preview',
       'ai_trip_draft',
       'ai_trip_draft_repair',
+      'ai_trip_draft_refine',
       'ai_trip_edit_plan',
       'travel_search',
       'place_lookup',
@@ -136,6 +137,7 @@ describe('provider proxy quota guard', () => {
     }
 
     expect(Array.from(store.keys()).sort()).toEqual([
+      'ai_draft_refine|same-hash',
       'ai_draft_repair|same-hash',
       'ai_draft|same-hash',
       'ai_trip_edit|same-hash',

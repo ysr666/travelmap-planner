@@ -7,6 +7,7 @@ type ConfirmDialogProps = {
   open: boolean
   title: string
   body: string
+  children?: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   loading?: boolean
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   open,
   title,
   body,
+  children,
   confirmLabel = '确认删除',
   cancelLabel = '取消',
   loading = false,
@@ -73,6 +75,11 @@ export function ConfirmDialog({
               <p className="mt-1 break-words whitespace-pre-line text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
                 {body}
               </p>
+              {children && (
+                <div className="mt-3">
+                  {children}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1405,6 +1405,135 @@ describe('provider proxy handler ai_trip_draft_repair', () => {
   })
 })
 
+describe('provider proxy handler ai_trip_draft_refine', () => {
+  it('returns mock refine in mock mode without provider calls', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validRefineRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'ai_trip_draft_refine',
+      source: 'mock',
+    })
+    expect(body.draft.days[0]).toEqual(validRefineRequest().draft.days[0])
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('checks quota for refine requests using repair-level limits', async () => {
+    const quotaStorage = createProviderProxyMemoryQuotaStorage()
+    const input = {
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      quotaLimits: { maxAiDraftRepairRequestsPerWindow: 1, windowMs: 60_000 },
+      quotaStorage,
+    }
+
+    expect((await handleProviderProxyRequest({ ...input, request: jsonRequest(validRefineRequest()) })).status).toBe(200)
+    const blocked = await handleProviderProxyRequest({
+      ...input,
+      request: jsonRequest({ ...validRefineRequest(), requestId: 'refine-2' }),
+    })
+
+    expect(blocked.status).toBe(429)
+    expect(await blocked.json()).toMatchObject({ code: 'quota_exceeded', ok: false })
+  })
+
+  it('returns provider_unavailable when no mock and no AI provider key', async () => {
+    const response = await handleProviderProxyRequest({
+      env: {},
+      request: jsonRequest(validRefineRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: 'provider_unavailable', ok: false })
+  })
+
+  it('openai_compatible returns valid refined draft from injected fetch', async () => {
+    const refinedDraft = {
+      ...validRefineRequest().draft,
+      days: validRefineRequest().draft.days.map((day) => day.date === '2025-04-02'
+        ? { ...day, title: '优化后的文化日', items: [{ title: '东京国立博物馆', startTime: '10:00' }] }
+        : day),
+    }
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as Record<string, unknown>
+      expect(body.response_format).toEqual({ type: 'json_object' })
+      expect(JSON.stringify(body)).toContain('kind=day')
+      expect(JSON.stringify(body)).toContain('Only change day content within the requested scope')
+      expect(JSON.stringify(body)).not.toContain('secret-key')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCaches')
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(refinedDraft) } }] }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'secret-key',
+        TRIPMAP_AI_BASE_URL: 'https://api.example.com/v1',
+        TRIPMAP_AI_MODEL: 'gpt-4o-mini',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validRefineRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.operation).toBe('ai_trip_draft_refine')
+    expect(body.source).toBe('future_ai')
+    expect(body.draft.days[1].title).toBe('优化后的文化日')
+  })
+
+  it('rejects refine request with invalid draft', async () => {
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      request: jsonRequest({
+        ...validRefineRequest(),
+        draft: { title: '', startDate: 'bad', endDate: '2025-04-05', days: [] },
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+})
+
+function validRefineRequest() {
+  return {
+    operation: 'ai_trip_draft_refine',
+    requestId: 'refine-1',
+    quotaSessionId: 'session-refine-1',
+    draft: {
+      title: '东京之旅',
+      destination: '东京',
+      startDate: '2025-04-01',
+      endDate: '2025-04-03',
+      days: [
+        { date: '2025-04-01', title: '抵达', items: [{ title: '浅草寺', startTime: '09:00' }] },
+        { date: '2025-04-02', title: '文化', items: [{ title: '上野公园', startTime: '10:00' }] },
+        { date: '2025-04-03', title: '购物', items: [{ title: '银座', startTime: '14:00' }] },
+      ],
+    },
+    guidance: '减少排队，保留休息时间。',
+    preferences: {
+      interestTags: ['美食'],
+      partySize: 3,
+      pace: 'relaxed',
+      preferTransport: 'walking',
+    },
+    scope: { kind: 'day', date: '2025-04-02' },
+  }
+}
+
 function validRepairRequest() {
   return {
     operation: 'ai_trip_draft_repair',

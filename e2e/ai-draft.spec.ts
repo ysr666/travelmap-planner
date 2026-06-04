@@ -175,6 +175,36 @@ function mapOrderDraft() {
   }
 }
 
+function missingCoordinateLookupDraft() {
+  return {
+    title: '缺坐标补全测试',
+    destination: '东京',
+    startDate: '2025-04-01',
+    endDate: '2025-04-01',
+    days: [{
+      date: '2025-04-01',
+      title: '补全日',
+      items: [
+        {
+          title: '有坐标',
+          locationName: '东京站',
+          lat: 35.6812,
+          lng: 139.7671,
+          startTime: '09:00',
+        },
+        {
+          title: '待补全地点',
+          locationName: '东京国立博物馆',
+          address: '上野公园',
+          previousTransportMode: 'transit',
+          previousTransportDurationMinutes: 18,
+          startTime: '10:00',
+        },
+      ],
+    }],
+  }
+}
+
 function variantDraft(title: string, dayCount = 2) {
   const dates = Array.from({ length: dayCount }, (_, index) => `2025-10-0${index + 1}`)
   return {
@@ -430,6 +460,85 @@ test.describe('AI Trip Builder Page', () => {
     await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(1)
     await expect(map.getByTestId('ai-draft-map-order-action')).toBeDisabled()
     expect(providerRequests).toBe(0)
+  })
+
+  test('draft map missing-coordinate lookup is click-gated and confirm-gated', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await forceRouteProxyFixture(page)
+    const providerBodies: Array<Record<string, unknown>> = []
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      providerBodies.push(body)
+      expect(body.operation).toBe('place_lookup')
+      expect(body.locale).toBe('zh-CN')
+      expect(body.maxResults).toBe(3)
+      expect(String(body.query)).toContain('东京国立博物馆')
+      const serialized = JSON.stringify(body)
+      expect(serialized).not.toContain('ticket')
+      expect(serialized).not.toContain('routeCache')
+      expect(serialized).not.toContain('cloud')
+      expect(serialized).not.toContain('days')
+      expect(serialized).not.toContain('trip')
+      expect(serialized).not.toContain('notes')
+      expect(serialized).not.toContain('Bearer')
+      expect(serialized).not.toContain('Authorization')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'place_lookup',
+          requestId: body.requestId,
+          results: [{
+            displayName: '东京国立博物馆',
+            formattedAddress: '东京都台东区上野公园13-9',
+            googleMapsUri: 'https://maps.google.com/?cid=123',
+            location: { lat: 35.718835, lng: 139.776522 },
+            placeId: 'tokyo-national-museum',
+            provider: 'google_places',
+            retrievedAt: '2026-06-04T00:00:00.000Z',
+          }],
+          retrievedAt: '2026-06-04T00:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+    })
+
+    await openJsonDraftSection(page)
+    await draftTextarea(page).fill(JSON.stringify(missingCoordinateLookupDraft()))
+    await page.getByRole('button', { name: '解析草稿' }).click()
+
+    const map = page.getByTestId('ai-draft-map-preview')
+    await expect(map.getByTestId('ai-draft-place-lookup-panel')).toContainText('1 个待补全')
+    await expect(map.getByTestId('ai-draft-place-lookup-item')).toContainText('东京国立博物馆')
+    await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(1)
+    expect(providerBodies).toHaveLength(0)
+
+    await map.getByTestId('ai-draft-place-lookup-search').click()
+    await expect(map.getByTestId('ai-draft-place-lookup-result')).toContainText('Google Places')
+    await expect(map.getByTestId('ai-draft-place-lookup-result')).toContainText('35.71883, 139.77652')
+    expect(providerBodies).toHaveLength(1)
+
+    const preview = page.getByTestId('ai-draft-preview')
+    const missingItemEditor = preview.getByTestId('ai-draft-item-editor').nth(1)
+    await expect(missingItemEditor.getByLabel('纬度')).toHaveValue('')
+    await map.getByTestId('ai-draft-place-lookup-use-result').click()
+    const dialog = page.getByTestId('ai-draft-place-lookup-confirm-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('只更新地点名称、地址和坐标')
+    await dialog.getByRole('button', { name: '取消' }).click()
+    await expect(missingItemEditor.getByLabel('纬度')).toHaveValue('')
+    await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(1)
+
+    await map.getByTestId('ai-draft-place-lookup-use-result').click()
+    await page.getByTestId('ai-draft-place-lookup-confirm-dialog').getByRole('button', { name: '填入草案' }).click()
+    await expect(missingItemEditor.getByLabel('地点')).toHaveValue('东京国立博物馆')
+    await expect(missingItemEditor.getByLabel('地址')).toHaveValue('东京都台东区上野公园13-9')
+    await expect(missingItemEditor.getByLabel('纬度')).toHaveValue('35.718835')
+    await expect(missingItemEditor.getByLabel('经度')).toHaveValue('139.776522')
+    await expect(map.getByTestId('ai-draft-map-preview-marker')).toHaveCount(2)
+    await expect(map.getByTestId('ai-draft-place-lookup-panel')).toContainText('0 个待补全')
+    expect(providerBodies.map((body) => body.operation)).toEqual(['place_lookup'])
+    await expectNoHorizontalOverflow(page)
   })
 
   test('structured preview can be edited before import', async ({ page }) => {

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { AiTripDraft } from './aiTripDraft'
 import {
+  applyAiTripDraftPlaceLookupCandidateIfFresh,
+  buildAiTripDraftMissingCoordinateLookupItems,
   buildAiTripDraftMapOrderAdjustment,
   buildAiTripDraftMapPreviews,
+  buildAiTripDraftPlaceLookupQuery,
   formatAiTripDraftMapDistance,
 } from './aiTripDraftMapPreview'
+import { fingerprintAiTripDraft } from './aiTripDraftRefine'
 
 describe('aiTripDraftMapPreview', () => {
   it('filters invalid coordinates and preserves item order numbers', () => {
@@ -159,6 +163,110 @@ describe('aiTripDraftMapPreview', () => {
     expect(result.changed).toBe(false)
     expect(result.nextItems.map((item) => item.title)).toEqual(['起点', '近点', '远点'])
     expect(result.reason).toContain('当前顺序已经接近')
+  })
+
+  it('builds missing-coordinate lookup items and source queries', () => {
+    const day = draftWithItems([
+      { title: '已定位', locationName: '东京站', lat: 35.6812, lng: 139.7671 },
+      { title: '待补全', locationName: '上野公园', address: '台东区 上野 公园' },
+      { title: '坏坐标', locationName: '浅草寺', lat: 91, lng: 139.7967 },
+    ]).days[0]
+
+    const items = buildAiTripDraftMissingCoordinateLookupItems(day, '东京')
+
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      itemIndex: 1,
+      locationLabel: '上野公园',
+      number: 2,
+      query: '上野公园 台东区 上野 公园 待补全 东京',
+      title: '待补全',
+    })
+    expect(items[1].lookupKey).toContain('2025-04-01:2:坏坐标')
+  })
+
+  it('deduplicates and caps place lookup query text', () => {
+    const query = buildAiTripDraftPlaceLookupQuery({
+      address: `  ${'很长的地址'.repeat(40)}  `,
+      locationName: '浅草寺',
+      title: '浅草寺',
+    }, '东京')
+
+    expect(query.startsWith('浅草寺 很长的地址')).toBe(true)
+    expect(query).toHaveLength(200)
+    expect(query.match(/浅草寺/g)).toHaveLength(1)
+  })
+
+  it('applies place lookup candidate to draft fields only when fresh', () => {
+    const draft = draftWithItems([
+      {
+        note: '保留备注',
+        previousTransportDurationMinutes: 20,
+        title: '待补全',
+        startTime: '09:00',
+      },
+    ])
+    const result = applyAiTripDraftPlaceLookupCandidateIfFresh({
+      baselineFingerprint: fingerprintAiTripDraft(draft),
+      candidate: {
+        displayName: '东京国立博物馆',
+        formattedAddress: '东京都台东区上野公园13-9',
+        location: { lat: 35.7188, lng: 139.7765 },
+        placeId: 'tokyo-national-museum',
+        provider: 'google_places',
+        retrievedAt: '2026-06-04T00:00:00.000Z',
+      },
+      currentDraft: draft,
+      currentFingerprint: fingerprintAiTripDraft(draft),
+      dayDate: '2025-04-01',
+      dayIndex: 0,
+      itemIndex: 0,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error)
+    expect(result.draft.days[0].items[0]).toMatchObject({
+      address: '东京都台东区上野公园13-9',
+      lat: 35.7188,
+      lng: 139.7765,
+      locationName: '东京国立博物馆',
+      note: '保留备注',
+      previousTransportDurationMinutes: 20,
+      startTime: '09:00',
+      title: '待补全',
+    })
+  })
+
+  it('rejects stale or coordinate-less place lookup candidates', () => {
+    const draft = draftWithItems([{ title: '待补全' }])
+    const changedDraft = draftWithItems([{ title: '待补全编辑后' }])
+    const candidate = {
+      displayName: '无坐标候选',
+      formattedAddress: '地址',
+      placeId: 'missing-location',
+      provider: 'google_places' as const,
+      retrievedAt: '2026-06-04T00:00:00.000Z',
+    }
+
+    expect(applyAiTripDraftPlaceLookupCandidateIfFresh({
+      baselineFingerprint: fingerprintAiTripDraft(draft),
+      candidate: { ...candidate, location: { lat: 35, lng: 139 } },
+      currentDraft: changedDraft,
+      currentFingerprint: fingerprintAiTripDraft(changedDraft),
+      dayDate: '2025-04-01',
+      dayIndex: 0,
+      itemIndex: 0,
+    })).toMatchObject({ error: '草案已变化，请重新查找。', ok: false })
+
+    expect(applyAiTripDraftPlaceLookupCandidateIfFresh({
+      baselineFingerprint: fingerprintAiTripDraft(draft),
+      candidate,
+      currentDraft: draft,
+      currentFingerprint: fingerprintAiTripDraft(draft),
+      dayDate: '2025-04-01',
+      dayIndex: 0,
+      itemIndex: 0,
+    })).toMatchObject({ error: '候选地点缺少有效坐标，不能填入草案。', ok: false })
   })
 })
 

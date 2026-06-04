@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ExternalLink, MapPinned, Search } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -63,9 +64,12 @@ import {
   fingerprintAiTripDraft,
 } from '../lib/ai/aiTripDraftRefine'
 import {
+  applyAiTripDraftPlaceLookupCandidateIfFresh,
+  buildAiTripDraftMissingCoordinateLookupItems,
   buildAiTripDraftMapOrderAdjustment,
   buildAiTripDraftMapPreviews,
   formatAiTripDraftMapDistance,
+  type AiTripDraftMissingCoordinateLookupItem,
   type AiTripDraftMapOrderAdjustmentResult,
   type AiTripDraftMapPreviewDay,
 } from '../lib/ai/aiTripDraftMapPreview'
@@ -73,6 +77,7 @@ import {
   fetchProviderProxyAiTripDraft,
   fetchProviderProxyAiTripDraftRefine,
   fetchProviderProxyAiTripDraftRepair,
+  fetchProviderProxyPlaceLookup,
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../lib/providerProxyClient'
@@ -80,7 +85,9 @@ import type {
   ProviderProxyAiTripDraftRequest,
   ProviderProxyAiTripDraftRefinePreferences,
   ProviderProxyAiTripDraftRefineScope,
+  ProviderProxyPlaceLookupResult,
 } from '../lib/ai/providerProxyContract'
+import { PROVIDER_PROXY_PLACE_LOOKUP_OPERATION } from '../lib/ai/providerProxyContract'
 import { importTripPlanRecords } from '../db'
 import type { Trip, Day, ItineraryItem, TransportMode } from '../types'
 
@@ -96,6 +103,23 @@ const QUALITY_CATEGORY_ORDER: AiTripDraftQualityCategory[] = [
   'meal',
   'title_specificity',
 ]
+
+type DraftPlaceLookupState = {
+  baselineFingerprint?: string
+  error: string | null
+  loading: boolean
+  query: string
+  results: ProviderProxyPlaceLookupResult[]
+}
+
+type PendingDraftPlaceLookupCandidate = {
+  baselineFingerprint: string
+  candidate: ProviderProxyPlaceLookupResult
+  dayDate: string
+  dayIndex: number
+  itemIndex: number
+  lookupKey: string
+}
 
 const SAMPLE_DRAFT = {
   title: '东京五日游',
@@ -267,6 +291,9 @@ export function AiDraftPage() {
   const [rangeRefineFreeText, setRangeRefineFreeText] = useState(requestFreeText)
   const [rangeRefineGuidance, setRangeRefineGuidance] = useState('')
   const [mapOrderMessage, setMapOrderMessage] = useState<{ date: string; message: string } | null>(null)
+  const [draftPlaceLookups, setDraftPlaceLookups] = useState<Record<string, DraftPlaceLookupState>>({})
+  const [pendingDraftPlaceCandidate, setPendingDraftPlaceCandidate] = useState<PendingDraftPlaceLookupCandidate | null>(null)
+  const [draftPlaceLookupApplyError, setDraftPlaceLookupApplyError] = useState<string | null>(null)
   const draftRef = useRef<AiTripDraft | null>(draft)
   useEffect(() => {
     draftRef.current = draft
@@ -282,14 +309,31 @@ export function AiDraftPage() {
     () => mapPreviewDays.find((day) => day.date === activeMapPreviewDate) ?? mapPreviewDays[0] ?? null,
     [activeMapPreviewDate, mapPreviewDays],
   )
+  const activeMapPreviewDraftDay = useMemo(() => {
+    if (!draft || !activeMapPreview) return null
+    return draft.days[activeMapPreview.dayIndex] ?? null
+  }, [activeMapPreview, draft])
+  const activeMissingCoordinateLookupItems = useMemo(
+    () => activeMapPreviewDraftDay
+      ? buildAiTripDraftMissingCoordinateLookupItems(activeMapPreviewDraftDay, draft?.destination)
+      : [],
+    [activeMapPreviewDraftDay, draft?.destination],
+  )
   const activeMapOrderAdjustment = useMemo(() => {
     if (!draft || !activeMapPreview) return null
     const day = draft.days.find((candidate) => candidate.date === activeMapPreview.date)
     return day ? buildAiTripDraftMapOrderAdjustment(day) : null
   }, [activeMapPreview, draft])
 
+  function clearDraftPlaceLookupState() {
+    setDraftPlaceLookups({})
+    setPendingDraftPlaceCandidate(null)
+    setDraftPlaceLookupApplyError(null)
+  }
+
   function previewDraftObject(draftObj: unknown) {
     const text = JSON.stringify(draftObj, null, 2)
+    clearDraftPlaceLookupState()
     setJsonText(text)
     setVariantStates([])
     setPendingVariantRetry(null)
@@ -311,6 +355,7 @@ export function AiDraftPage() {
   }
 
   function handleLoadSample() {
+    clearDraftPlaceLookupState()
     setJsonText(JSON.stringify(SAMPLE_DRAFT, null, 2))
     setDraft(null)
     setErrors([])
@@ -320,6 +365,7 @@ export function AiDraftPage() {
     try {
       const input = JSON.parse(jsonText)
       const result = validateAiTripDraft(input)
+      clearDraftPlaceLookupState()
       if (result.valid && result.draft) {
         setDraft(result.draft)
         setErrors([])
@@ -863,6 +909,7 @@ export function AiDraftPage() {
 
   function applyDraftEdit(nextDraft: AiTripDraft) {
     setMapOrderMessage(null)
+    clearDraftPlaceLookupState()
     setJsonText(JSON.stringify(nextDraft, null, 2))
     const validation = validateAiTripDraft(nextDraft)
     if (validation.valid && validation.draft) {
@@ -964,6 +1011,185 @@ export function AiDraftPage() {
       date: activeMapPreview.date,
       message: `已按地图直线顺序重排本日行程，直线距离约从 ${formatAiTripDraftMapDistance(activeMapOrderAdjustment.beforeDistanceMeters)} 调整为 ${formatAiTripDraftMapDistance(activeMapOrderAdjustment.afterDistanceMeters)}。`,
     })
+  }
+
+  async function searchDraftPlaceCandidates(lookupItem: AiTripDraftMissingCoordinateLookupItem) {
+    const config = getProviderProxyConfig()
+    const query = lookupItem.query.trim()
+    if (!query) {
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          error: '缺少可查询的地点名称或地址。',
+          loading: false,
+          query,
+          results: [],
+        },
+      }))
+      return
+    }
+    if (!config.proxyUrl) {
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          error: '当前未配置地点查询服务。',
+          loading: false,
+          query,
+          results: [],
+        },
+      }))
+      return
+    }
+
+    const baselineDraft = draftRef.current
+    if (!baselineDraft || !activeMapPreview) {
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          error: '请先生成或解析一个行程草案。',
+          loading: false,
+          query,
+          results: [],
+        },
+      }))
+      return
+    }
+    const day = baselineDraft.days[activeMapPreview.dayIndex]
+    if (!day || day.date !== activeMapPreview.date || !day.items[lookupItem.itemIndex]) {
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          error: '当前日期或行程点已变化，请重新选择。',
+          loading: false,
+          query,
+          results: [],
+        },
+      }))
+      return
+    }
+
+    const baselineFingerprint = fingerprintAiTripDraft(baselineDraft)
+    setDraftPlaceLookupApplyError(null)
+    setDraftPlaceLookups((current) => ({
+      ...current,
+      [lookupItem.lookupKey]: {
+        baselineFingerprint,
+        error: null,
+        loading: true,
+        query,
+        results: [],
+      },
+    }))
+
+    try {
+      const response = await fetchProviderProxyPlaceLookup({
+        locale: 'zh-CN',
+        maxResults: 3,
+        operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+        query,
+        requestId: `draft-place-${activeMapPreview.date}-${lookupItem.itemIndex + 1}`,
+      }, config.proxyUrl)
+
+      const currentDraft = draftRef.current
+      if (!currentDraft || fingerprintAiTripDraft(currentDraft) !== baselineFingerprint) {
+        setDraftPlaceLookups((current) => ({
+          ...current,
+          [lookupItem.lookupKey]: {
+            baselineFingerprint,
+            error: '草案已变化，请重新查找。',
+            loading: false,
+            query,
+            results: [],
+          },
+        }))
+        return
+      }
+
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          baselineFingerprint,
+          error: response.results.length === 0 ? '没有找到可用候选地点。' : null,
+          loading: false,
+          query,
+          results: response.results,
+        },
+      }))
+    } catch (caught) {
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [lookupItem.lookupKey]: {
+          baselineFingerprint,
+          error: caught instanceof ProviderProxyClientError ? caught.message : '地点查询失败，请稍后再试。',
+          loading: false,
+          query,
+          results: [],
+        },
+      }))
+    }
+  }
+
+  function openDraftPlaceCandidate(
+    lookupItem: AiTripDraftMissingCoordinateLookupItem,
+    candidate: ProviderProxyPlaceLookupResult,
+  ) {
+    if (!activeMapPreview) return
+    const state = draftPlaceLookups[lookupItem.lookupKey]
+    const baselineDraft = draftRef.current
+    const baselineFingerprint = state?.baselineFingerprint ?? (baselineDraft ? fingerprintAiTripDraft(baselineDraft) : '')
+    if (!baselineFingerprint) {
+      setDraftPlaceLookupApplyError('草案已变化，请重新查找。')
+      return
+    }
+    setDraftPlaceLookupApplyError(null)
+    setPendingDraftPlaceCandidate({
+      baselineFingerprint,
+      candidate,
+      dayDate: activeMapPreview.date,
+      dayIndex: activeMapPreview.dayIndex,
+      itemIndex: lookupItem.itemIndex,
+      lookupKey: lookupItem.lookupKey,
+    })
+  }
+
+  function confirmApplyDraftPlaceCandidate() {
+    if (!pendingDraftPlaceCandidate) return
+    const currentDraft = draftRef.current
+    if (!currentDraft) {
+      setPendingDraftPlaceCandidate(null)
+      setDraftPlaceLookupApplyError('草案已变化，请重新查找。')
+      return
+    }
+
+    const applied = applyAiTripDraftPlaceLookupCandidateIfFresh({
+      baselineFingerprint: pendingDraftPlaceCandidate.baselineFingerprint,
+      candidate: pendingDraftPlaceCandidate.candidate,
+      currentDraft,
+      currentFingerprint: fingerprintAiTripDraft(currentDraft),
+      dayDate: pendingDraftPlaceCandidate.dayDate,
+      dayIndex: pendingDraftPlaceCandidate.dayIndex,
+      itemIndex: pendingDraftPlaceCandidate.itemIndex,
+    })
+    if (!applied.ok) {
+      setPendingDraftPlaceCandidate(null)
+      setDraftPlaceLookupApplyError(applied.error)
+      setDraftPlaceLookups((current) => ({
+        ...current,
+        [pendingDraftPlaceCandidate.lookupKey]: {
+          ...(current[pendingDraftPlaceCandidate.lookupKey] ?? {
+            loading: false,
+            query: '',
+            results: [],
+          }),
+          error: applied.error,
+          loading: false,
+        },
+      }))
+      return
+    }
+
+    setPendingDraftPlaceCandidate(null)
+    applyDraftEdit(applied.draft)
   }
 
   function toggleQualityFinding(id: string) {
@@ -1287,9 +1513,15 @@ export function AiDraftPage() {
           <AiDraftMapPreviewCard
             activePreview={activeMapPreview}
             adjustment={activeMapOrderAdjustment}
+            applyError={draftPlaceLookupApplyError}
+            missingCoordinateItems={activeMissingCoordinateLookupItems}
             orderMessage={mapOrderMessage?.date === activeMapPreview?.date ? mapOrderMessage.message : null}
             onActiveDateChange={setActiveMapPreviewDate}
             onApplyMapOrder={applyActiveMapOrderAdjustment}
+            onSearchMissingCoordinate={(lookupItem) => void searchDraftPlaceCandidates(lookupItem)}
+            onSelectPlaceCandidate={openDraftPlaceCandidate}
+            placeLookupConfigured={Boolean(getProviderProxyConfig().proxyUrl)}
+            placeLookups={draftPlaceLookups}
             previews={mapPreviewDays}
           />
 
@@ -1829,6 +2061,31 @@ export function AiDraftPage() {
         onConfirm={handleRangeRefineConfirm}
         testId="ai-draft-range-refine-confirm-dialog"
       />
+
+      <ConfirmDialog
+        open={Boolean(pendingDraftPlaceCandidate)}
+        title="填入候选地点"
+        body={`将把候选地点写入当前草案\n只更新地点名称、地址和坐标\n不会创建本地旅行\n不会写入数据库、路线缓存、票据或云端`}
+        confirmLabel="填入草案"
+        cancelLabel="取消"
+        onCancel={() => setPendingDraftPlaceCandidate(null)}
+        onConfirm={confirmApplyDraftPlaceCandidate}
+        testId="ai-draft-place-lookup-confirm-dialog"
+      >
+        {pendingDraftPlaceCandidate ? (
+          <div className="space-y-2 rounded-xl bg-surface-container px-3 py-2 text-sm">
+            <p className="break-words font-semibold text-on-surface dark:text-on-surface [overflow-wrap:anywhere]">
+              {pendingDraftPlaceCandidate.candidate.displayName}
+            </p>
+            <p className="break-words tm-muted [overflow-wrap:anywhere]">
+              {pendingDraftPlaceCandidate.candidate.formattedAddress}
+            </p>
+            <p className="break-words text-xs tm-muted [overflow-wrap:anywhere]">
+              {formatPlaceLookupCandidateCoordinate(pendingDraftPlaceCandidate.candidate)}
+            </p>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </div>
   )
 }
@@ -1836,16 +2093,28 @@ export function AiDraftPage() {
 function AiDraftMapPreviewCard({
   activePreview,
   adjustment,
+  applyError,
+  missingCoordinateItems,
   orderMessage,
   onActiveDateChange,
   onApplyMapOrder,
+  onSearchMissingCoordinate,
+  onSelectPlaceCandidate,
+  placeLookupConfigured,
+  placeLookups,
   previews,
 }: {
   activePreview: AiTripDraftMapPreviewDay | null
   adjustment: AiTripDraftMapOrderAdjustmentResult | null
+  applyError: string | null
+  missingCoordinateItems: AiTripDraftMissingCoordinateLookupItem[]
   orderMessage: string | null
   onActiveDateChange: (date: string) => void
   onApplyMapOrder: () => void
+  onSearchMissingCoordinate: (lookupItem: AiTripDraftMissingCoordinateLookupItem) => void
+  onSelectPlaceCandidate: (lookupItem: AiTripDraftMissingCoordinateLookupItem, candidate: ProviderProxyPlaceLookupResult) => void
+  placeLookupConfigured: boolean
+  placeLookups: Record<string, DraftPlaceLookupState>
   previews: AiTripDraftMapPreviewDay[]
 }) {
   if (previews.length === 0 || !activePreview) return null
@@ -1915,6 +2184,139 @@ function AiDraftMapPreviewCard({
           <p className="break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]" data-testid="ai-draft-map-order-disabled-reason">
             {adjustment.reason}
           </p>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-xl bg-surface-container px-3 py-3 ring-1 ring-outline-variant/20" data-testid="ai-draft-place-lookup-panel">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-on-surface dark:text-on-surface">缺坐标地点补全</p>
+            <p className="break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+              对当前日期缺坐标地点查找候选，确认后只填入当前草案。
+            </p>
+          </div>
+          <span className="rounded-full bg-surface-container-highest px-2 py-1 text-xs font-semibold tm-muted">
+            {missingCoordinateItems.length} 个待补全
+          </span>
+        </div>
+        {!placeLookupConfigured && missingCoordinateItems.length > 0 && (
+          <p className="break-words rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200 [overflow-wrap:anywhere]">
+            当前未配置地点查询服务。
+          </p>
+        )}
+        {applyError && (
+          <p
+            className="break-words rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200 [overflow-wrap:anywhere]"
+            data-testid="ai-draft-place-lookup-apply-error"
+          >
+            {applyError}
+          </p>
+        )}
+        {missingCoordinateItems.length === 0 ? (
+          <p className="break-words text-sm leading-6 text-green-700 dark:text-green-300 [overflow-wrap:anywhere]">
+            当前日期的行程点都有有效坐标。
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {missingCoordinateItems.map((lookupItem) => {
+              const state = placeLookups[lookupItem.lookupKey]
+              return (
+                <div
+                  className="space-y-3 rounded-lg bg-surface-container-high/60 px-3 py-3 ring-1 ring-outline-variant/20"
+                  data-testid="ai-draft-place-lookup-item"
+                  key={lookupItem.lookupKey}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-medium text-on-surface dark:text-on-surface [overflow-wrap:anywhere]">
+                        #{lookupItem.number} {lookupItem.title}
+                      </p>
+                      <p className="break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+                        {lookupItem.timeLabel} · {lookupItem.locationLabel}
+                      </p>
+                      <p className="break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+                        查询：{lookupItem.query || '无可用查询词'}
+                      </p>
+                    </div>
+                    <Button
+                      className="min-h-9 shrink-0 px-3 text-xs"
+                      data-testid="ai-draft-place-lookup-search"
+                      disabled={!lookupItem.query || state?.loading}
+                      icon={<Search className="size-4" />}
+                      loading={Boolean(state?.loading)}
+                      onClick={() => onSearchMissingCoordinate(lookupItem)}
+                      variant="secondary"
+                    >
+                      查找候选
+                    </Button>
+                  </div>
+                  {state?.error ? (
+                    <p
+                      className="break-words rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200 [overflow-wrap:anywhere]"
+                      data-testid="ai-draft-place-lookup-error"
+                    >
+                      {state.error}
+                    </p>
+                  ) : null}
+                  {state?.results.length ? (
+                    <div className="space-y-2" data-testid="ai-draft-place-lookup-results">
+                      {state.results.map((candidate) => (
+                        <div
+                          className="grid min-w-0 grid-cols-[auto,minmax(0,1fr)] gap-3 rounded-xl bg-white px-3 py-3 ring-1 ring-outline-variant/30 dark:bg-surface-dim/70 dark:ring-outline-variant/30"
+                          data-testid="ai-draft-place-lookup-result"
+                          key={candidate.placeId}
+                        >
+                          <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary">
+                            <MapPinned className="size-5" />
+                          </span>
+                          <div className="min-w-0 space-y-2">
+                            <div className="min-w-0">
+                              <p className="break-words font-body-lg text-body-lg text-on-surface [overflow-wrap:anywhere]">
+                                {candidate.displayName}
+                              </p>
+                              <p className="mt-0.5 break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">
+                                {candidate.formattedAddress}
+                              </p>
+                              <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+                                {formatPlaceLookupCandidateCoordinate(candidate)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="rounded-full bg-surface-container-highest px-2 py-1 font-semibold tm-muted">
+                                来源：{formatPlaceLookupCandidateProvider(candidate)}
+                              </span>
+                              <span className="rounded-full bg-surface-container-highest px-2 py-1 font-semibold tm-muted">
+                                {formatPlaceLookupCandidateRetrievedAt(candidate)}
+                              </span>
+                              {candidate.googleMapsUri ? (
+                                <a
+                                  className="inline-flex min-h-7 items-center gap-1 rounded-full bg-primary-container/20 px-2 py-1 font-semibold text-primary"
+                                  href={candidate.googleMapsUri}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  <ExternalLink className="size-3" />
+                                  Google Maps
+                                </a>
+                              ) : null}
+                            </div>
+                            <Button
+                              className="min-h-9 w-full text-xs"
+                              data-testid="ai-draft-place-lookup-use-result"
+                              onClick={() => onSelectPlaceCandidate(lookupItem, candidate)}
+                              variant="secondary"
+                            >
+                              使用此候选
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
 
@@ -2067,6 +2469,20 @@ function MapPreviewMetric({ label, value }: { label: string; value: string }) {
       </dd>
     </div>
   )
+}
+
+function formatPlaceLookupCandidateCoordinate(candidate: ProviderProxyPlaceLookupResult): string {
+  if (!candidate.location) return '候选缺少坐标'
+  return `${candidate.location.lat.toFixed(5)}, ${candidate.location.lng.toFixed(5)}`
+}
+
+function formatPlaceLookupCandidateProvider(candidate: ProviderProxyPlaceLookupResult): string {
+  if (candidate.provider === 'google_places') return 'Google Places'
+  return candidate.provider
+}
+
+function formatPlaceLookupCandidateRetrievedAt(candidate: ProviderProxyPlaceLookupResult): string {
+  return `来源时间：${candidate.retrievedAt.slice(0, 10)}`
 }
 
 function AiDraftVariantComparisonPanel({

@@ -1,4 +1,5 @@
 import type { AiTripDraft, AiTripDraftDay, AiTripDraftItem } from './aiTripDraft'
+import type { ProviderProxyPlaceLookupResult } from './providerProxyContract'
 import { getDistanceMeters, isValidLngLat } from '../dayMapViewport'
 import type { LngLat } from '../routing'
 
@@ -73,11 +74,26 @@ export type AiTripDraftMapOrderAdjustmentResult = {
   reason: string
 }
 
+export type AiTripDraftMissingCoordinateLookupItem = {
+  itemIndex: number
+  lookupKey: string
+  locationLabel: string
+  number: number
+  query: string
+  timeLabel: string
+  title: string
+}
+
+export type AiTripDraftPlaceLookupApplyResult =
+  | { draft: AiTripDraft; ok: true }
+  | { error: string; ok: false }
+
 const CANVAS_MIN = 8
 const CANVAS_MAX = 92
 const LONG_JUMP_MIN_METERS = 15_000
 const LONG_JUMP_MEDIAN_FACTOR = 2
 const BACKTRACKING_DIRECT_RATIO = 0.45
+const PLACE_LOOKUP_QUERY_MAX_LENGTH = 200
 
 export function buildAiTripDraftMapPreviews(draft: AiTripDraft): AiTripDraftMapPreviewDay[] {
   return draft.days.map((day, dayIndex) => buildAiTripDraftMapPreviewDay(day, dayIndex))
@@ -130,6 +146,106 @@ export function buildAiTripDraftMapOrderAdjustment(day: AiTripDraftDay): AiTripD
     reason: changed
       ? '已按地图直线顺序重排本日行程。'
       : '当前顺序已经接近按地图直线距离排序。',
+  }
+}
+
+export function buildAiTripDraftMissingCoordinateLookupItems(
+  day: AiTripDraftDay,
+  destination?: string,
+): AiTripDraftMissingCoordinateLookupItem[] {
+  return day.items.reduce<AiTripDraftMissingCoordinateLookupItem[]>((items, item, itemIndex) => {
+    if (getDraftItemLngLat(item)) return items
+    items.push({
+      itemIndex,
+      lookupKey: buildAiTripDraftPlaceLookupTargetKey(day.date, itemIndex, item.title),
+      locationLabel: getDraftItemLocationLabel(item),
+      number: itemIndex + 1,
+      query: buildAiTripDraftPlaceLookupQuery(item, destination),
+      timeLabel: formatDraftItemTime(item),
+      title: item.title || `行程点 ${itemIndex + 1}`,
+    })
+    return items
+  }, [])
+}
+
+export function buildAiTripDraftPlaceLookupQuery(item: AiTripDraftItem, destination?: string): string {
+  const seen = new Set<string>()
+  const parts = [item.locationName, item.address, item.title, destination]
+    .map((value) => normalizePlaceLookupQueryPart(value))
+    .filter((value): value is string => {
+      if (!value) return false
+      const key = value.toLocaleLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+  return parts.join(' ').slice(0, PLACE_LOOKUP_QUERY_MAX_LENGTH).trim()
+}
+
+export function buildAiTripDraftPlaceLookupTargetKey(
+  dayDate: string,
+  itemIndex: number,
+  title: string,
+): string {
+  return `${dayDate}:${itemIndex}:${normalizePlaceLookupQueryPart(title) ?? ''}`
+}
+
+export function applyAiTripDraftPlaceLookupCandidateIfFresh({
+  baselineFingerprint,
+  candidate,
+  currentDraft,
+  currentFingerprint,
+  dayDate,
+  dayIndex,
+  itemIndex,
+}: {
+  baselineFingerprint: string
+  candidate: ProviderProxyPlaceLookupResult
+  currentDraft: AiTripDraft
+  currentFingerprint: string
+  dayDate: string
+  dayIndex: number
+  itemIndex: number
+}): AiTripDraftPlaceLookupApplyResult {
+  if (currentFingerprint !== baselineFingerprint) {
+    return { error: '草案已变化，请重新查找。', ok: false }
+  }
+
+  const day = currentDraft.days[dayIndex]
+  if (!day || day.date !== dayDate) {
+    return { error: '当前日期已变化，请重新查找。', ok: false }
+  }
+
+  const item = day.items[itemIndex]
+  if (!item) {
+    return { error: '行程点已变化，请重新查找。', ok: false }
+  }
+
+  if (!isValidPlaceLookupLocation(candidate.location)) {
+    return { error: '候选地点缺少有效坐标，不能填入草案。', ok: false }
+  }
+  const location = candidate.location
+
+  return {
+    draft: {
+      ...currentDraft,
+      days: currentDraft.days.map((draftDay, index) => index === dayIndex
+        ? {
+            ...draftDay,
+            items: draftDay.items.map((draftItem, draftItemIndex) => draftItemIndex === itemIndex
+              ? {
+                  ...draftItem,
+                  address: candidate.formattedAddress,
+                  lat: location.lat,
+                  lng: location.lng,
+                  locationName: candidate.displayName,
+                }
+              : draftItem),
+          }
+        : draftDay),
+    },
+    ok: true,
   }
 }
 
@@ -416,6 +532,19 @@ function getMedian(values: number[]): number | null {
   const middle = Math.floor(values.length / 2)
   if (values.length % 2 === 1) return values[middle]
   return (values[middle - 1] + values[middle]) / 2
+}
+
+function normalizePlaceLookupQueryPart(value: string | undefined): string | null {
+  const normalized = value?.replace(/\s+/g, ' ').trim()
+  return normalized || null
+}
+
+function isValidPlaceLookupLocation(location: ProviderProxyPlaceLookupResult['location']): location is {
+  lat: number
+  lng: number
+} {
+  if (!location) return false
+  return isValidLngLat([location.lng, location.lat])
 }
 
 function clampCanvasValue(value: number): number {

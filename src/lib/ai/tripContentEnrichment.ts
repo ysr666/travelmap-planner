@@ -23,6 +23,7 @@ import {
 } from '../providerProxyClient'
 import type {
   ContentEnrichmentConfidence,
+  ContentEnrichmentFactSection,
   ContentEnrichmentSource,
   ContentEnrichmentSourceType,
   Day,
@@ -66,6 +67,34 @@ export type TripContentEnrichmentApplyResult =
   | { appliedCount: number; ok: true }
   | { errors: string[]; ok: false }
 
+export type TripContentSourceRefreshSectionKey = 'openingHours' | 'ticketPrice' | 'officialWebsite'
+
+export type TripContentSourceRefreshSection = {
+  changed: boolean
+  key: TripContentSourceRefreshSectionKey
+  label: string
+  newSourceIds: string[]
+  newText?: string
+  oldSourceIds: string[]
+  oldText?: string
+  warning?: string
+}
+
+export type TripContentSourceRefreshPreview = {
+  baselineFingerprint: string
+  enrichment: ItemContentEnrichment
+  generatedAt: string
+  itemId: string
+  itemTitle: string
+  requestCounts: TripContentEnrichmentRequestCounts
+  sections: TripContentSourceRefreshSection[]
+  warnings: string[]
+}
+
+export type TripContentSourceRefreshApplyResult =
+  | { ok: true }
+  | { errors: string[]; ok: false }
+
 type TripContentEnrichmentProviderClients = {
   contentEnrichment?: typeof fetchProviderProxyTripContentEnrichment
   placeDetails?: typeof fetchProviderProxyPlaceDetails
@@ -98,6 +127,20 @@ export function estimateTripContentEnrichmentRequestCounts(items: ItineraryItem[
   const placeDetails = targetCount
   const travelSearch = targetCount * TRIP_CONTENT_ENRICHMENT_MAX_SEARCHES_PER_ITEM
   const aiSynthesis = targetCount > 0 ? 1 : 0
+  return {
+    aiSynthesis,
+    placeDetails,
+    placeLookup,
+    total: placeLookup + placeDetails + travelSearch + aiSynthesis,
+    travelSearch,
+  }
+}
+
+export function estimateTripContentSourceRefreshRequestCounts(item: ItineraryItem) {
+  const placeLookup = item.contentEnrichment?.matchedPlace?.placeId ? 0 : 1
+  const placeDetails = 1
+  const travelSearch = 3
+  const aiSynthesis = 0
   return {
     aiSynthesis,
     placeDetails,
@@ -394,6 +437,152 @@ export async function applyTripContentEnrichmentPreviewsToDb(
   }
 }
 
+export async function generateTripContentSourceRefreshPreview({
+  clients = {},
+  item,
+  proxyUrl,
+  trip,
+}: {
+  clients?: Pick<TripContentEnrichmentProviderClients, 'placeDetails' | 'placeLookup' | 'travelSearch'>
+  item: ItineraryItem
+  proxyUrl: string
+  trip: Trip
+}): Promise<TripContentSourceRefreshPreview> {
+  const placeLookup = clients.placeLookup ?? fetchProviderProxyPlaceLookup
+  const placeDetails = clients.placeDetails ?? fetchProviderProxyPlaceDetails
+  const travelSearch = clients.travelSearch ?? fetchProviderProxyTravelSearch
+  const generatedAt = new Date().toISOString()
+  const requestCounts: TripContentEnrichmentRequestCounts = {
+    aiSynthesis: 0,
+    placeDetails: 0,
+    placeLookup: 0,
+    total: 0,
+    travelSearch: 0,
+  }
+  const warnings: string[] = []
+  const baselineFingerprint = buildItemContentSourceRefreshBaselineFingerprint(item, trip)
+  const baseEnrichment = buildRefreshBaseEnrichment(item, trip, generatedAt)
+
+  let details: ProviderProxyPlaceDetailsSuccessResponse['details'] | undefined
+  let placeId = item.contentEnrichment?.matchedPlace?.placeId
+  if (!placeId) {
+    requestCounts.placeLookup += 1
+    requestCounts.total += 1
+    try {
+      const lookupResponse = await placeLookup({
+        locale: 'zh-CN',
+        maxResults: 3,
+        operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+        query: buildTripContentEnrichmentPlaceLookupQuery(item, trip),
+      }, proxyUrl)
+      placeId = selectBestPlaceLookupResult(lookupResponse)?.placeId
+      if (!placeId) {
+        warnings.push('未找到可用于刷新来源的 Places 候选。')
+      }
+    } catch {
+      warnings.push('Places 候选查询失败，已跳过地点详情刷新。')
+    }
+  }
+
+  if (placeId) {
+    requestCounts.placeDetails += 1
+    requestCounts.total += 1
+    try {
+      const detailsResponse = await placeDetails({
+        locale: 'zh-CN',
+        operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+        placeId,
+      }, proxyUrl)
+      details = detailsResponse.details
+    } catch {
+      warnings.push('Places 详情刷新失败，已保留已有地点详情。')
+    }
+  }
+
+  const sources: ContentEnrichmentSource[] = []
+  if (details) {
+    sources.push(...buildSourcesFromPlaceDetails(details))
+  }
+  const searchPlan = buildSourceRefreshSearchPlan(details)
+  for (const searchType of searchPlan) {
+    requestCounts.travelSearch += 1
+    requestCounts.total += 1
+    try {
+      const searchResponse = await travelSearch({
+        locale: 'zh-CN',
+        maxResults: 3,
+        operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+        query: buildTravelSearchQuery(item, trip, searchType),
+        searchType,
+      }, proxyUrl)
+      sources.push(...buildSourcesFromTravelSearch(item, searchResponse))
+    } catch {
+      warnings.push(`${formatSearchType(searchType)}来源搜索失败。`)
+    }
+  }
+
+  const next = buildSourceRefreshEnrichment({
+    baseEnrichment,
+    details,
+    generatedAt,
+    item,
+    refreshedSources: dedupeSources(sortSourcesByPriority(sources)),
+    trip,
+    warnings,
+  })
+
+  return {
+    baselineFingerprint,
+    enrichment: next.enrichment,
+    generatedAt,
+    itemId: item.id,
+    itemTitle: item.title,
+    requestCounts,
+    sections: next.sections,
+    warnings: next.warnings,
+  }
+}
+
+export async function applyTripContentSourceRefreshPreviewToDb(
+  tripId: string,
+  preview: TripContentSourceRefreshPreview,
+  options: { expectedBaselineFingerprint?: string; now?: number } = {},
+): Promise<TripContentSourceRefreshApplyResult> {
+  try {
+    const now = options.now ?? Date.now()
+    const result = await db.transaction('rw', db.trips, db.itineraryItems, async () => {
+      const [trip, item] = await Promise.all([
+        db.trips.get(tripId),
+        db.itineraryItems.get(preview.itemId),
+      ])
+      if (!trip || !item || item.tripId !== tripId) {
+        return { errors: ['行程点不存在。'], ok: false as const }
+      }
+      if (options.expectedBaselineFingerprint) {
+        const freshFingerprint = buildItemContentSourceRefreshBaselineFingerprint(item, trip)
+        if (freshFingerprint !== options.expectedBaselineFingerprint) {
+          return { errors: ['本地行程已变化，请重新刷新来源。'], ok: false as const }
+        }
+      }
+      await db.itineraryItems.put({
+        ...item,
+        contentEnrichment: preview.enrichment,
+        updatedAt: now,
+      })
+      await db.trips.update(tripId, { updatedAt: now })
+      return { ok: true as const }
+    })
+    if (!result.ok) {
+      return result
+    }
+    markTripAutoSnapshotDirty(tripId, 'trip-content-source-refresh-applied')
+    emitTravelDataChanged()
+    return { ok: true }
+  } catch {
+    return { errors: ['应用来源刷新失败，行程点未完成写入。'], ok: false }
+  }
+}
+
 function buildTripContentEnrichmentAiRequest(
   workingItems: EnrichmentWorkingItem[],
   trip: Trip,
@@ -503,6 +692,328 @@ function buildItemContentEnrichment({
     warnings: dedupeWarnings(warnings),
   }
   return enrichment
+}
+
+function buildItemContentSourceRefreshBaselineFingerprint(item: ItineraryItem, trip: Trip) {
+  return stableHash(JSON.stringify({
+    contentEnrichment: item.contentEnrichment ? {
+      baselineFingerprint: item.contentEnrichment.baselineFingerprint,
+      generatedAt: item.contentEnrichment.generatedAt,
+      matchedPlace: item.contentEnrichment.matchedPlace,
+      openingHours: item.contentEnrichment.openingHours,
+      sources: item.contentEnrichment.sources.map((source) => ({
+        id: source.id,
+        retrievedAt: source.retrievedAt,
+        sourceType: source.sourceType,
+        url: source.url,
+      })),
+      ticketPrice: item.contentEnrichment.ticketPrice,
+    } : undefined,
+    item: buildItemContentEnrichmentFingerprint(item, trip),
+    tripId: trip.id,
+  }))
+}
+
+function buildRefreshBaseEnrichment(item: ItineraryItem, trip: Trip, generatedAt: string): ItemContentEnrichment {
+  return item.contentEnrichment ?? {
+    baselineFingerprint: buildItemContentEnrichmentFingerprint(item, trip),
+    generatedAt,
+    notices: [],
+    schemaVersion: 1,
+    sources: [],
+    warnings: [],
+  }
+}
+
+function buildSourceRefreshSearchPlan(details?: ProviderProxyPlaceDetailsSuccessResponse['details']): ProviderProxyTravelSearchType[] {
+  const plan: ProviderProxyTravelSearchType[] = ['ticket_price']
+  if (!details?.regularOpeningHours?.weekdayDescriptions.length) {
+    plan.push('opening_hours')
+  }
+  if (!details?.websiteUri) {
+    plan.push('official_site')
+  }
+  return plan
+}
+
+function buildSourceRefreshEnrichment({
+  baseEnrichment,
+  details,
+  generatedAt,
+  item,
+  refreshedSources,
+  trip,
+  warnings,
+}: {
+  baseEnrichment: ItemContentEnrichment
+  details?: ProviderProxyPlaceDetailsSuccessResponse['details']
+  generatedAt: string
+  item: ItineraryItem
+  refreshedSources: ContentEnrichmentSource[]
+  trip: Trip
+  warnings: string[]
+}) {
+  const placeSource = refreshedSources.find((source) => source.sourceType === 'google_places')
+  const refreshedOpeningHours = buildOpeningHoursFactFromDetails(details, placeSource) ?? buildFactFromSource(selectOpeningHoursSource(refreshedSources))
+  const refreshedTicketPrice = buildTicketPriceFactFromSource(selectTicketPriceSource(refreshedSources))
+  const officialSource = selectOfficialWebsiteSource(refreshedSources)
+  const nextOpeningHours = refreshedOpeningHours ?? baseEnrichment.openingHours
+  const nextTicketPrice = refreshedTicketPrice ?? baseEnrichment.ticketPrice
+  const nextMatchedPlace = buildRefreshedMatchedPlace(baseEnrichment, details, officialSource, generatedAt)
+  const nextWarnings = dedupeWarnings([
+    ...baseEnrichment.warnings,
+    ...warnings,
+    refreshedOpeningHours ? '' : baseEnrichment.openingHours ? '未找到新的开放时间来源，已保留原内容。' : '未找到开放时间来源。',
+    refreshedTicketPrice ? '' : baseEnrichment.ticketPrice ? '未找到新的票价来源，已保留原内容。' : '未找到票价来源。',
+    officialSource ? '' : baseEnrichment.matchedPlace?.websiteUri ? '未找到新的官网来源，已保留原内容。' : '未找到官网来源。',
+  ])
+  const enrichment: ItemContentEnrichment = {
+    ...baseEnrichment,
+    baselineFingerprint: buildItemContentEnrichmentFingerprint(item, trip),
+    generatedAt,
+    matchedPlace: nextMatchedPlace,
+    openingHours: nextOpeningHours,
+    sources: mergeSourceRefreshSources({
+      baseEnrichment,
+      nextOpeningHours,
+      nextTicketPrice,
+      officialWebsiteUri: nextMatchedPlace?.websiteUri,
+      officialSource,
+      refreshedSources,
+    }),
+    ticketPrice: nextTicketPrice,
+    warnings: nextWarnings,
+  }
+
+  return {
+    enrichment,
+    sections: buildSourceRefreshSections(baseEnrichment, enrichment),
+    warnings: nextWarnings,
+  }
+}
+
+function buildOpeningHoursFactFromDetails(
+  details: ProviderProxyPlaceDetailsSuccessResponse['details'] | undefined,
+  placeSource: ContentEnrichmentSource | undefined,
+): ContentEnrichmentFactSection | undefined {
+  const descriptions = details?.regularOpeningHours?.weekdayDescriptions
+  if (!descriptions?.length || !placeSource) return undefined
+  return {
+    sourceIds: [placeSource.id],
+    text: descriptions.join('；'),
+  }
+}
+
+function buildFactFromSource(source: ContentEnrichmentSource | undefined): ContentEnrichmentFactSection | undefined {
+  if (!source?.snippet?.trim()) return undefined
+  return {
+    sourceIds: [source.id],
+    text: source.snippet.trim(),
+  }
+}
+
+function buildTicketPriceFactFromSource(source: ContentEnrichmentSource | undefined): ItemContentEnrichment['ticketPrice'] {
+  const fact = buildFactFromSource(source)
+  if (!fact) return undefined
+  return {
+    ...fact,
+    kind: 'admission',
+  }
+}
+
+function buildRefreshedMatchedPlace(
+  baseEnrichment: ItemContentEnrichment,
+  details: ProviderProxyPlaceDetailsSuccessResponse['details'] | undefined,
+  officialSource: ContentEnrichmentSource | undefined,
+  generatedAt: string,
+): ItemContentEnrichment['matchedPlace'] {
+  if (details) {
+    return {
+      address: details.formattedAddress,
+      googleMapsUri: details.googleMapsUri,
+      lat: details.location?.lat,
+      lng: details.location?.lng,
+      name: details.displayName,
+      placeId: details.placeId,
+      retrievedAt: details.retrievedAt,
+      websiteUri: details.websiteUri ?? officialSource?.url ?? baseEnrichment.matchedPlace?.websiteUri,
+    }
+  }
+  if (baseEnrichment.matchedPlace && officialSource?.url) {
+    return {
+      ...baseEnrichment.matchedPlace,
+      retrievedAt: generatedAt,
+      websiteUri: officialSource.url,
+    }
+  }
+  return baseEnrichment.matchedPlace
+}
+
+function mergeSourceRefreshSources({
+  baseEnrichment,
+  nextOpeningHours,
+  nextTicketPrice,
+  officialWebsiteUri,
+  officialSource,
+  refreshedSources,
+}: {
+  baseEnrichment: ItemContentEnrichment
+  nextOpeningHours?: ContentEnrichmentFactSection
+  nextTicketPrice?: ItemContentEnrichment['ticketPrice']
+  officialWebsiteUri?: string
+  officialSource?: ContentEnrichmentSource
+  refreshedSources: ContentEnrichmentSource[]
+}) {
+  const preservedSourceIds = new Set<string>()
+  collectFactSourceIds(baseEnrichment.introduction, preservedSourceIds)
+  collectFactSourceIds(nextOpeningHours, preservedSourceIds)
+  collectFactSourceIds(nextTicketPrice, preservedSourceIds)
+  for (const notice of baseEnrichment.notices) {
+    collectFactSourceIds(notice, preservedSourceIds)
+  }
+  for (const sourceId of baseEnrichment.recommendedStay?.sourceIds ?? []) {
+    preservedSourceIds.add(sourceId)
+  }
+  if (officialSource) {
+    preservedSourceIds.add(officialSource.id)
+  }
+  for (const source of baseEnrichment.sources) {
+    if (officialWebsiteUri && source.sourceType === 'official' && source.url === officialWebsiteUri) {
+      preservedSourceIds.add(source.id)
+    }
+  }
+
+  const preservedSources = baseEnrichment.sources.filter((source) => preservedSourceIds.has(source.id))
+  return dedupeSources(sortSourcesByPriority([...preservedSources, ...refreshedSources]))
+}
+
+function collectFactSourceIds(section: ContentEnrichmentFactSection | undefined, sourceIds: Set<string>) {
+  for (const sourceId of section?.sourceIds ?? []) {
+    sourceIds.add(sourceId)
+  }
+}
+
+function buildSourceRefreshSections(
+  oldEnrichment: ItemContentEnrichment,
+  newEnrichment: ItemContentEnrichment,
+): TripContentSourceRefreshSection[] {
+  return [
+    buildFactRefreshSection('openingHours', '开放时间', oldEnrichment.openingHours, newEnrichment.openingHours),
+    buildFactRefreshSection('ticketPrice', '票价', oldEnrichment.ticketPrice, newEnrichment.ticketPrice),
+    buildOfficialWebsiteRefreshSection(oldEnrichment, newEnrichment),
+  ]
+}
+
+function buildFactRefreshSection(
+  key: Extract<TripContentSourceRefreshSectionKey, 'openingHours' | 'ticketPrice'>,
+  label: string,
+  oldSection: ContentEnrichmentFactSection | undefined,
+  newSection: ContentEnrichmentFactSection | undefined,
+): TripContentSourceRefreshSection {
+  const oldSourceIds = oldSection?.sourceIds ?? []
+  const newSourceIds = newSection?.sourceIds ?? []
+  const changed = (oldSection?.text ?? '') !== (newSection?.text ?? '') || normalizeSourceIds(oldSourceIds) !== normalizeSourceIds(newSourceIds)
+  return {
+    changed,
+    key,
+    label,
+    newSourceIds,
+    newText: newSection?.text,
+    oldSourceIds,
+    oldText: oldSection?.text,
+    warning: changed ? undefined : '未发现新的可更新来源。',
+  }
+}
+
+function buildOfficialWebsiteRefreshSection(
+  oldEnrichment: ItemContentEnrichment,
+  newEnrichment: ItemContentEnrichment,
+): TripContentSourceRefreshSection {
+  const oldSourceIds = getOfficialWebsiteSourceIds(oldEnrichment)
+  const newSourceIds = getOfficialWebsiteSourceIds(newEnrichment)
+  const oldText = getOfficialWebsiteText(oldEnrichment)
+  const newText = getOfficialWebsiteText(newEnrichment)
+  const changed = (oldText ?? '') !== (newText ?? '') || normalizeSourceIds(oldSourceIds) !== normalizeSourceIds(newSourceIds)
+  return {
+    changed,
+    key: 'officialWebsite',
+    label: '官网来源',
+    newSourceIds,
+    newText,
+    oldSourceIds,
+    oldText,
+    warning: changed ? undefined : '未发现新的官网来源。',
+  }
+}
+
+function getOfficialWebsiteText(enrichment: ItemContentEnrichment) {
+  const websiteUri = enrichment.matchedPlace?.websiteUri
+  const matchingSource = websiteUri
+    ? enrichment.sources.find((source) => source.sourceType === 'official' && source.url === websiteUri)
+    : undefined
+  return matchingSource?.url ?? websiteUri ?? selectOfficialWebsiteSource(enrichment.sources)?.url
+}
+
+function getOfficialWebsiteSourceIds(enrichment: ItemContentEnrichment) {
+  const websiteUri = enrichment.matchedPlace?.websiteUri
+  const sources = enrichment.sources
+    .filter((source) => source.sourceType === 'official' && Boolean(source.url))
+    .filter((source) => !websiteUri || source.url === websiteUri)
+    .map((source) => source.id)
+  return sources.length > 0
+    ? sources
+    : enrichment.sources
+      .filter((source) => source.sourceType === 'official' && Boolean(source.url))
+      .map((source) => source.id)
+}
+
+function normalizeSourceIds(sourceIds: string[]) {
+  return [...sourceIds].sort().join('|')
+}
+
+function selectOpeningHoursSource(sources: ContentEnrichmentSource[]) {
+  return sortSourcesByPriority(sources.filter((source) => {
+    if (!source.snippet?.trim()) return false
+    if (source.sourceType === 'official' || source.sourceType === 'map') return true
+    return source.sourceType === 'travel_site' && source.confidence === 'high'
+  }))[0]
+}
+
+function selectTicketPriceSource(sources: ContentEnrichmentSource[]) {
+  return sources.filter((source) => {
+    if (!source.snippet?.trim()) return false
+    if (source.sourceType === 'ticketing') return true
+    const text = `${source.label} ${source.title} ${source.snippet}`.toLowerCase()
+    const mentionsTicket = /票|门票|收费|免费|元|价格|入场|admission|ticket|price/.test(text)
+    if (!mentionsTicket) return false
+    if (source.sourceType === 'official' || source.sourceType === 'map') return true
+    return source.sourceType === 'travel_site' && source.confidence === 'high'
+  }).sort((first, second) => ticketSourcePriority(second) - ticketSourcePriority(first))[0]
+}
+
+function selectOfficialWebsiteSource(sources: ContentEnrichmentSource[]) {
+  return sources
+    .filter((source) => source.sourceType === 'official' && Boolean(source.url))
+    .sort((first, second) => officialWebsiteSourcePriority(second) - officialWebsiteSourcePriority(first))[0]
+}
+
+function ticketSourcePriority(source: ContentEnrichmentSource) {
+  return (source.sourceType === 'ticketing' ? 1000 : 0) + sourcePriority(source)
+}
+
+function officialWebsiteSourcePriority(source: ContentEnrichmentSource) {
+  const text = `${source.label} ${source.title} ${source.snippet ?? ''}`
+  const looksLikeWebsite = /官网|官方网站|official site/i.test(text) ? 500 : 0
+  let rootUrlBonus = 0
+  if (source.url) {
+    try {
+      const url = new URL(source.url)
+      rootUrlBonus = url.pathname === '/' || url.pathname === '' ? 100 : 0
+    } catch {
+      rootUrlBonus = 0
+    }
+  }
+  return looksLikeWebsite + rootUrlBonus + sourcePriority(source)
 }
 
 function filterFact<T extends { sourceIds: string[]; text: string } | undefined>(

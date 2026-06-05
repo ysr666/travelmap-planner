@@ -26,6 +26,14 @@ type SeedTicket = {
 
 type ItemRecordSnapshot = {
   address?: string
+  contentEnrichment?: {
+    introduction?: { text?: string }
+    matchedPlace?: { websiteUri?: string }
+    notices?: Array<{ text?: string }>
+    openingHours?: { text?: string }
+    recommendedStay?: { text?: string }
+    ticketPrice?: { text?: string }
+  }
   googleMapsUri?: string
   lat?: number
   lng?: number
@@ -223,6 +231,53 @@ async function addItemTickets(page: Page, tripId: string, itemId: string, ticket
       return new Blob(['ticket file'], { type: seedTicket.mimeType })
     }
   }, { targetTripId: tripId, targetItemId: itemId, seedTickets: tickets })
+}
+
+async function setItemContentEnrichment(page: Page, itemId: string) {
+  await page.evaluate(async (targetItemId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const tx = db.transaction(['itineraryItems'], 'readwrite')
+    const store = tx.objectStore('itineraryItems')
+    const item = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = store.get(targetItemId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    item.contentEnrichment = {
+      baselineFingerprint: 'old-baseline',
+      generatedAt: '2026-06-01T00:00:00.000Z',
+      introduction: { sourceIds: ['intro-source'], text: '旧景点介绍' },
+      matchedPlace: {
+        name: '明治神宫',
+        placeId: 'place-meiji',
+        retrievedAt: '2026-06-01T00:00:00.000Z',
+        websiteUri: 'https://meiji.example/old',
+      },
+      notices: [{ sourceIds: ['intro-source'], text: '旧注意事项' }],
+      openingHours: { sourceIds: ['old-opening'], text: '旧开放时间' },
+      recommendedStay: { basis: 'ai_estimate', durationMinutes: 60, reason: '旧估算', text: '建议停留约 1 小时' },
+      schemaVersion: 1,
+      sources: [
+        { confidence: 'high', id: 'intro-source', label: '官网', retrievedAt: '2026-06-01T00:00:00.000Z', sourceType: 'official', title: '旧介绍来源', url: 'https://meiji.example/intro' },
+        { confidence: 'high', id: 'old-opening', label: '官网', retrievedAt: '2026-06-01T00:00:00.000Z', sourceType: 'official', title: '旧开放时间', url: 'https://meiji.example/old-hours' },
+        { confidence: 'high', id: 'old-ticket', label: '购票来源', retrievedAt: '2026-06-01T00:00:00.000Z', sourceType: 'ticketing', title: '旧票价', url: 'https://tickets.example/old' },
+        { confidence: 'high', id: 'old-official', label: '官网', retrievedAt: '2026-06-01T00:00:00.000Z', sourceType: 'official', title: '旧官网', url: 'https://meiji.example/old' },
+      ],
+      ticketPrice: { kind: 'admission', sourceIds: ['old-ticket'], text: '旧票价' },
+      warnings: [],
+    }
+    item.updatedAt = Date.now()
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(item)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+  }, itemId)
 }
 
 function makeTicketSeeds(count: number): SeedTicket[] {
@@ -541,6 +596,161 @@ test('行程点详情地点查询候选需确认后才更新当前行程点', as
   expect(otherProviderRequests).toBe(0)
   expect(googlePlacesCalls).toBe(0)
   expect(cloudCalls).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('行程点详情景点内容来源刷新需确认后才更新三块来源', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  let placeLookupRequests = 0
+  let placeDetailsRequests = 0
+  let travelSearchRequests = 0
+  let unexpectedProviderRequests = 0
+  let googlePlacesCalls = 0
+  let cloudCalls = 0
+  let deepSeekCalls = 0
+
+  await page.route('https://places.googleapis.com/**', (route) => {
+    googlePlacesCalls += 1
+    return route.abort()
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    deepSeekCalls += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudCalls += 1
+    return route.abort()
+  })
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('ticketIds')
+    expect(serialized).not.toContain('routeCache')
+    expect(serialized).not.toContain('cloud')
+    expect(serialized).not.toContain('notes')
+    if (body.operation === 'place_lookup') {
+      placeLookupRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({ code: 'unexpected_lookup', ok: false, operation: 'place_lookup' }),
+        contentType: 'application/json',
+        status: 500,
+      })
+      return
+    }
+    if (body.operation === 'place_details') {
+      placeDetailsRequests += 1
+      expect(body.placeId).toBe('place-meiji')
+      await route.fulfill({
+        body: JSON.stringify({
+          details: {
+            displayName: '明治神宫',
+            formattedAddress: '1-1 Yoyogikamizonocho, Shibuya City, Tokyo',
+            googleMapsUri: 'https://maps.google.com/?cid=meiji',
+            location: { lat: 35.6764, lng: 139.6993 },
+            placeId: 'place-meiji',
+            provider: 'google_places',
+            regularOpeningHours: { weekdayDescriptions: ['周一至周日 05:00-18:00'] },
+            retrievedAt: '2026-06-02T00:00:00.000Z',
+            websiteUri: 'https://meiji.example/new',
+          },
+          ok: true,
+          operation: 'place_details',
+          retrievedAt: '2026-06-02T00:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(body.searchType).toBe('ticket_price')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          retrievedAt: '2026-06-02T00:00:00.000Z',
+          source: 'mock',
+          results: [{
+            confidence: 'high',
+            displayUrl: 'tickets.example/meiji',
+            domain: 'tickets.example',
+            retrievedAt: '2026-06-02T00:00:00.000Z',
+            snippet: '明治神宫参拜免费。',
+            sourceType: 'ticketing',
+            title: '明治神宫票价',
+            url: 'https://tickets.example/meiji',
+          }],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    unexpectedProviderRequests += 1
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+
+  const tripId = await createDemoTripViaUi(page)
+  await setRouteProxyConfig(page)
+  const { dayId, secondItemId } = await getDemoRecords(page, tripId)
+  await addItemTickets(page, tripId, secondItemId, makeTicketSeeds(1))
+  await setItemContentEnrichment(page, secondItemId)
+  const beforeTicketCount = await countTicketMetas(page)
+
+  await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${secondItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  const card = page.getByTestId('item-content-enrichment-card')
+  await expect(card).toContainText('开放时间')
+  await expect(card).toContainText('旧开放时间')
+  await expect(card).toContainText('票价')
+  await expect(card).toContainText('旧票价')
+  await expect(card).toContainText('官网来源')
+  await expect(card).toContainText('meiji.example/old')
+
+  await card.getByRole('button', { name: '刷新来源' }).click()
+  const confirmDialog = page.getByTestId('item-content-source-refresh-confirm-dialog')
+  await expect(confirmDialog).toContainText('0 次 AI')
+  expect(placeLookupRequests).toBe(0)
+  expect(placeDetailsRequests).toBe(0)
+  expect(travelSearchRequests).toBe(0)
+  await confirmDialog.getByRole('button', { name: '暂不刷新' }).click()
+  expect(placeDetailsRequests).toBe(0)
+
+  await card.getByRole('button', { name: '刷新来源' }).click()
+  await page.getByTestId('item-content-source-refresh-confirm-dialog').getByRole('button', { name: '确认刷新' }).click()
+  await expect(page.getByTestId('item-content-source-refresh-preview')).toContainText('来源更新预览')
+  await expect(page.getByTestId('item-content-source-refresh-preview')).toContainText('周一至周日 05:00-18:00')
+  await expect(page.getByTestId('item-content-source-refresh-preview')).toContainText('明治神宫参拜免费')
+  await expect(page.getByTestId('item-content-source-refresh-preview')).toContainText('meiji.example/new')
+  expect(placeLookupRequests).toBe(0)
+  expect(placeDetailsRequests).toBe(1)
+  expect(travelSearchRequests).toBe(1)
+  expect(unexpectedProviderRequests).toBe(0)
+  expect((await getItemRecord(page, secondItemId)).contentEnrichment?.openingHours?.text).toBe('旧开放时间')
+
+  await page.getByTestId('item-content-source-refresh-preview').getByRole('button', { name: '更新来源' }).click()
+  await page.getByTestId('item-content-source-refresh-apply-dialog').getByRole('button', { name: '暂不更新' }).click()
+  expect((await getItemRecord(page, secondItemId)).contentEnrichment?.ticketPrice?.text).toBe('旧票价')
+
+  await page.getByTestId('item-content-source-refresh-preview').getByRole('button', { name: '更新来源' }).click()
+  await page.getByTestId('item-content-source-refresh-apply-dialog').getByRole('button', { name: '确认更新' }).click()
+  await expect(card).toContainText('已更新开放时间、票价和官网来源')
+  const updated = await getItemRecord(page, secondItemId)
+  expect(updated.contentEnrichment?.openingHours?.text).toContain('05:00-18:00')
+  expect(updated.contentEnrichment?.ticketPrice?.text).toContain('参拜免费')
+  expect(updated.contentEnrichment?.matchedPlace?.websiteUri).toBe('https://meiji.example/new')
+  expect(updated.contentEnrichment?.introduction?.text).toBe('旧景点介绍')
+  expect(updated.contentEnrichment?.notices?.[0]?.text).toBe('旧注意事项')
+  expect(updated.contentEnrichment?.recommendedStay?.text).toBe('建议停留约 1 小时')
+  expect(await countTicketMetas(page)).toBe(beforeTicketCount)
+  expect(googlePlacesCalls).toBe(0)
+  expect(cloudCalls).toBe(0)
+  expect(deepSeekCalls).toBe(0)
+  expect(unexpectedProviderRequests).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
 

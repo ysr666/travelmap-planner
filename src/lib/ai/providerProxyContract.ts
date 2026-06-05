@@ -8,6 +8,10 @@ import type { AiTripEditPatchPlan } from './aiTripEditPatch'
 import { isValidPlainDate, listPlainDateRangeInclusive } from '../plainDate'
 import type { TravelPace, TravelTransportPreference } from '../travelProfile'
 import { isTravelPace, isTravelTransportPreference } from '../travelProfile'
+import type {
+  ContentEnrichmentConfidence,
+  ContentEnrichmentSourceType,
+} from '../../types'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -16,6 +20,8 @@ export const PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION = 'ai_trip_draft_refi
 export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as const
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
+export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
+export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
@@ -26,8 +32,9 @@ export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
+export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -418,6 +425,144 @@ export type ProviderProxyPlaceLookupValidationResult =
   | { ok: true; request: ProviderProxyValidatedPlaceLookupRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyPlaceDetailsRequest = {
+  operation: typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  placeId: string
+  locale?: ProviderProxyPlaceLookupLocale
+  region?: string
+}
+
+export type ProviderProxyValidatedPlaceDetailsRequest = ProviderProxyPlaceDetailsRequest
+
+export type ProviderProxyPlaceDetailsResult = {
+  placeId: string
+  displayName: string
+  formattedAddress?: string
+  location?: {
+    lat: number
+    lng: number
+  }
+  googleMapsUri?: string
+  websiteUri?: string
+  regularOpeningHours?: {
+    openNow?: boolean
+    weekdayDescriptions: string[]
+  }
+  priceLevel?: string
+  priceRangeText?: string
+  editorialSummary?: string
+  provider: 'google_places'
+  retrievedAt: string
+}
+
+export type ProviderProxyPlaceDetailsSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION
+  requestId?: string
+  source: 'mock' | 'google_places'
+  retrievedAt: string
+  details: ProviderProxyPlaceDetailsResult
+  warnings?: string[]
+}
+
+export type ProviderProxyPlaceDetailsResponse =
+  | ProviderProxyPlaceDetailsSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyPlaceDetailsValidationResult =
+  | { ok: true; request: ProviderProxyValidatedPlaceDetailsRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyTripContentEnrichmentSourceSummary = {
+  id: string
+  confidence: ContentEnrichmentConfidence
+  displayUrl?: string
+  domain?: string
+  label: string
+  retrievedAt: string
+  snippet?: string
+  sourceType: ContentEnrichmentSourceType
+  title: string
+  url?: string
+}
+
+export type ProviderProxyTripContentEnrichmentPlaceSummary = {
+  placeId: string
+  displayName: string
+  formattedAddress?: string
+  googleMapsUri?: string
+  websiteUri?: string
+  regularOpeningHours?: ProviderProxyPlaceDetailsResult['regularOpeningHours']
+  priceLevel?: string
+  priceRangeText?: string
+  editorialSummary?: string
+  retrievedAt: string
+}
+
+export type ProviderProxyTripContentEnrichmentItemInput = {
+  itemId: string
+  title: string
+  destination?: string
+  dayTitle?: string
+  date?: string
+  locationName?: string
+  address?: string
+  place?: ProviderProxyTripContentEnrichmentPlaceSummary
+  sources: ProviderProxyTripContentEnrichmentSourceSummary[]
+}
+
+export type ProviderProxyTripContentEnrichmentRequest = {
+  operation: typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  locale?: ProviderProxyPlaceLookupLocale
+  items: ProviderProxyTripContentEnrichmentItemInput[]
+}
+
+export type ProviderProxyTripContentEnrichmentFact = {
+  text: string
+  sourceIds: string[]
+}
+
+export type ProviderProxyTripContentEnrichmentStay = {
+  basis: 'ai_estimate' | 'source'
+  durationMinutes: number
+  reason: string
+  sourceIds?: string[]
+  text: string
+}
+
+export type ProviderProxyTripContentEnrichmentItemResult = {
+  itemId: string
+  introduction?: ProviderProxyTripContentEnrichmentFact
+  openingHours?: ProviderProxyTripContentEnrichmentFact
+  ticketPrice?: ProviderProxyTripContentEnrichmentFact & {
+    kind?: 'admission' | 'place_price_level' | 'unknown'
+  }
+  notices?: ProviderProxyTripContentEnrichmentFact[]
+  recommendedStay?: ProviderProxyTripContentEnrichmentStay
+  warnings?: string[]
+}
+
+export type ProviderProxyTripContentEnrichmentSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  items: ProviderProxyTripContentEnrichmentItemResult[]
+  warnings?: string[]
+}
+
+export type ProviderProxyTripContentEnrichmentResponse =
+  | ProviderProxyTripContentEnrichmentSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyTripContentEnrichmentValidationResult =
+  | { ok: true; request: ProviderProxyTripContentEnrichmentRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -437,6 +582,8 @@ const VALID_TRAVEL_SEARCH_TYPES = new Set<ProviderProxyTravelSearchType>(['gener
 const VALID_TRAVEL_SEARCH_SOURCE_TYPES = new Set<ProviderProxyTravelSearchSourceType>(['official', 'map', 'ticketing', 'travel_site', 'unknown'])
 const VALID_TRAVEL_SEARCH_CONFIDENCES = new Set<ProviderProxyTravelSearchConfidence>(['low', 'medium', 'high'])
 const VALID_PLACE_LOOKUP_LOCALES = new Set<ProviderProxyPlaceLookupLocale>(['zh-CN', 'en-US'])
+const VALID_CONTENT_ENRICHMENT_SOURCE_TYPES = new Set<ContentEnrichmentSourceType>(['google_places', 'official', 'map', 'ticketing', 'travel_site', 'ai_estimate', 'unknown'])
+const VALID_CONTENT_ENRICHMENT_CONFIDENCES = new Set<ContentEnrichmentConfidence>(['high', 'medium', 'low', 'unknown'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
   'items',
@@ -511,6 +658,49 @@ const FORBIDDEN_PLACE_LOOKUP_FIELDS = new Set([
   'token',
   'trip',
 ])
+const FORBIDDEN_PLACE_DETAILS_FIELDS = new Set([
+  ...FORBIDDEN_PLACE_LOOKUP_FIELDS,
+  'query',
+  'search',
+])
+const FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS = new Set([
+  'apikey',
+  'authorization',
+  'bearer',
+  'blob',
+  'blobs',
+  'cloud',
+  'cloudstate',
+  'cloudstatus',
+  'cloudtoken',
+  'coordinates',
+  'days',
+  'file',
+  'filename',
+  'filenames',
+  'files',
+  'fulldb',
+  'fulltrip',
+  'headers',
+  'itineraryitems',
+  'lat',
+  'lng',
+  'localdb',
+  'note',
+  'notes',
+  'ocr',
+  'providerkey',
+  'route',
+  'routecache',
+  'ticket',
+  'ticketid',
+  'ticketids',
+  'ticketblobs',
+  'ticketfiles',
+  'ticketmetas',
+  'token',
+  'trip',
+])
 const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
   'apiKey',
   'providerKey',
@@ -543,6 +733,11 @@ const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
 const MAX_PLACE_LOOKUP_QUERY_LENGTH = 200
 const DEFAULT_PLACE_LOOKUP_MAX_RESULTS = 5
+const MAX_PLACE_ID_LENGTH = 220
+const MAX_TRIP_CONTENT_ENRICHMENT_ITEMS = 6
+const MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM = 8
+const MAX_TRIP_CONTENT_ENRICHMENT_TEXT = 700
+const MAX_TRIP_CONTENT_ENRICHMENT_SOURCE_SNIPPET = 500
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -808,6 +1003,24 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return '地点查询服务返回的内容无法解析。'
     return '地点查询服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
+    if (code === 'quota_exceeded') return '今日地点详情次数已达上限。'
+    if (code === 'invalid_request') return '地点详情请求无效。'
+    if (code === 'provider_error') return '地点详情服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前地点详情请求暂不支持。'
+    if (code === 'invalid_response') return '地点详情服务返回的内容无法解析。'
+    return '地点详情服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
+    if (code === 'quota_exceeded') return '今日内容补充次数已达上限。'
+    if (code === 'invalid_request') return '内容补充请求无效。'
+    if (code === 'provider_error') return '内容补充服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前内容补充请求暂不支持。'
+    if (code === 'invalid_response') return '内容补充服务返回的内容无法解析。'
+    return '内容补充服务暂不可用。'
+  }
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
     if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
     if (code === 'invalid_request') return '路线顺序建议请求无效。'
@@ -900,6 +1113,14 @@ function readOptionalString(value: unknown, maxLength: number) {
   }
   const trimmed = value.trim()
   return trimmed ? trimmed.slice(0, maxLength) : undefined
+}
+
+function readRequiredTrimmedString(value: unknown, maxLength: number) {
+  return readOptionalString(value, maxLength) ?? ''
+}
+
+function clampText(value: string, maxLength: number) {
+  return value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 1)).trim()}…`
 }
 
 function readRecord(input: unknown): Record<string, unknown> {
@@ -1189,6 +1410,33 @@ function placeLookupInvalidRequest(message: string, requestId?: string): Provide
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function placeDetailsInvalidRequest(message: string, requestId?: string): ProviderProxyPlaceDetailsValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function tripContentEnrichmentInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyTripContentEnrichmentValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
       requestId,
     }),
     ok: false,
@@ -1775,6 +2023,228 @@ export function validateProviderProxyPlaceLookupRequest(input: unknown): Provide
       region: region || undefined,
       requestId,
     },
+  }
+}
+
+export function validateProviderProxyPlaceDetailsRequest(input: unknown): ProviderProxyPlaceDetailsValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
+    return placeDetailsInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_PLACE_DETAILS_FIELDS)
+  if (forbiddenFieldPath) {
+    return placeDetailsInvalidRequest('地点详情请求包含不允许的敏感字段。', requestId)
+  }
+
+  const placeId = typeof record.placeId === 'string' ? record.placeId.trim() : ''
+  if (!placeId || placeId.length > MAX_PLACE_ID_LENGTH) {
+    return placeDetailsInvalidRequest('地点详情 placeId 无效。', requestId)
+  }
+
+  const locale = record.locale
+  if (locale !== undefined && !isPlaceLookupLocale(locale)) {
+    return placeDetailsInvalidRequest('地点详情语言设置无效。', requestId)
+  }
+
+  const region = typeof record.region === 'string' ? record.region.trim().toUpperCase() : undefined
+  if (record.region !== undefined && typeof record.region !== 'string') {
+    return placeDetailsInvalidRequest('地点详情地区必须是字符串。', requestId)
+  }
+  if (region && !/^[A-Z]{2}$/.test(region)) {
+    return placeDetailsInvalidRequest('地点详情地区必须是 2 位国家或地区代码。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      locale: isPlaceLookupLocale(locale) ? locale : undefined,
+      operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+      placeId,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      region: region || undefined,
+      requestId,
+    },
+  }
+}
+
+export function validateProviderProxyTripContentEnrichmentRequest(input: unknown): ProviderProxyTripContentEnrichmentValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
+    return tripContentEnrichmentInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS)
+  if (forbiddenFieldPath) {
+    return tripContentEnrichmentInvalidRequest('内容补充请求包含不允许的敏感字段。', requestId)
+  }
+
+  const locale = record.locale
+  if (locale !== undefined && !isPlaceLookupLocale(locale)) {
+    return tripContentEnrichmentInvalidRequest('内容补充语言设置无效。', requestId)
+  }
+
+  if (!Array.isArray(record.items) || record.items.length < 1 || record.items.length > MAX_TRIP_CONTENT_ENRICHMENT_ITEMS) {
+    return tripContentEnrichmentInvalidRequest(`内容补充一次最多支持 ${MAX_TRIP_CONTENT_ENRICHMENT_ITEMS} 个行程点。`, requestId)
+  }
+
+  const items: ProviderProxyTripContentEnrichmentItemInput[] = []
+  const itemIds = new Set<string>()
+  for (const rawItem of record.items) {
+    const item = readTripContentEnrichmentItem(rawItem)
+    if (!item.ok) {
+      return tripContentEnrichmentInvalidRequest(item.message, requestId)
+    }
+    if (itemIds.has(item.item.itemId)) {
+      return tripContentEnrichmentInvalidRequest('内容补充行程点不能重复。', requestId)
+    }
+    itemIds.add(item.item.itemId)
+    items.push(item.item)
+  }
+
+  return {
+    ok: true,
+    request: {
+      items,
+      locale: isPlaceLookupLocale(locale) ? locale : undefined,
+      operation: PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+    },
+  }
+}
+
+function readTripContentEnrichmentItem(input: unknown): { ok: true; item: ProviderProxyTripContentEnrichmentItemInput } | { message: string; ok: false } {
+  const record = readRecord(input)
+  const itemId = readRequiredTrimmedString(record.itemId, 128)
+  const title = readRequiredTrimmedString(record.title, 160)
+  if (!itemId || !title) {
+    return { message: '内容补充行程点缺少标题或 ID。', ok: false }
+  }
+  const sourcesResult = readTripContentEnrichmentSources(record.sources)
+  if (!sourcesResult.ok) {
+    return sourcesResult
+  }
+  const placeResult = readTripContentEnrichmentPlace(record.place)
+  if (!placeResult.ok) {
+    return placeResult
+  }
+
+  return {
+    item: {
+      address: readOptionalString(record.address, 240),
+      date: readOptionalString(record.date, 32),
+      dayTitle: readOptionalString(record.dayTitle, 160),
+      destination: readOptionalString(record.destination, 160),
+      itemId,
+      locationName: readOptionalString(record.locationName, 160),
+      place: placeResult.place,
+      sources: sourcesResult.sources,
+      title,
+    },
+    ok: true,
+  }
+}
+
+function readTripContentEnrichmentPlace(
+  input: unknown,
+): { ok: true; place?: ProviderProxyTripContentEnrichmentPlaceSummary } | { message: string; ok: false } {
+  if (input === undefined) {
+    return { ok: true, place: undefined }
+  }
+  const record = readRecord(input)
+  const placeId = readRequiredTrimmedString(record.placeId, MAX_PLACE_ID_LENGTH)
+  const displayName = readRequiredTrimmedString(record.displayName, 160)
+  const retrievedAt = readRequiredTrimmedString(record.retrievedAt, 80)
+  if (!placeId || !displayName || !isValidIsoLikeDate(retrievedAt)) {
+    return { message: '内容补充地点详情摘要无效。', ok: false }
+  }
+  const googleMapsUri = readOptionalString(record.googleMapsUri, 500)
+  const websiteUri = readOptionalString(record.websiteUri, 500)
+  if ((googleMapsUri && !isSafeHttpUrl(googleMapsUri)) || (websiteUri && !isSafeHttpUrl(websiteUri))) {
+    return { message: '内容补充地点详情链接无效。', ok: false }
+  }
+  return {
+    ok: true,
+    place: {
+      displayName,
+      editorialSummary: readOptionalString(record.editorialSummary, MAX_TRIP_CONTENT_ENRICHMENT_TEXT),
+      formattedAddress: readOptionalString(record.formattedAddress, 300),
+      googleMapsUri,
+      placeId,
+      priceLevel: readOptionalString(record.priceLevel, 80),
+      priceRangeText: readOptionalString(record.priceRangeText, 120),
+      regularOpeningHours: readOpeningHoursSummary(record.regularOpeningHours),
+      retrievedAt,
+      websiteUri,
+    },
+  }
+}
+
+function readTripContentEnrichmentSources(
+  input: unknown,
+): { ok: true; sources: ProviderProxyTripContentEnrichmentSourceSummary[] } | { message: string; ok: false } {
+  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM) {
+    return { message: `内容补充每个行程点需提供 1-${MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM} 条来源摘要。`, ok: false }
+  }
+  const sources: ProviderProxyTripContentEnrichmentSourceSummary[] = []
+  const ids = new Set<string>()
+  for (const rawSource of input) {
+    const record = readRecord(rawSource)
+    const id = readRequiredTrimmedString(record.id, 128)
+    const label = readRequiredTrimmedString(record.label, 80)
+    const title = readRequiredTrimmedString(record.title, 160)
+    const retrievedAt = readRequiredTrimmedString(record.retrievedAt, 80)
+    const sourceType = record.sourceType
+    const confidence = record.confidence
+    const url = readOptionalString(record.url, 500)
+    if (
+      !id ||
+      ids.has(id) ||
+      !label ||
+      !title ||
+      !isValidIsoLikeDate(retrievedAt) ||
+      !VALID_CONTENT_ENRICHMENT_SOURCE_TYPES.has(sourceType as ContentEnrichmentSourceType) ||
+      !VALID_CONTENT_ENRICHMENT_CONFIDENCES.has(confidence as ContentEnrichmentConfidence) ||
+      (url && !isSafeHttpUrl(url))
+    ) {
+      return { message: '内容补充来源摘要无效。', ok: false }
+    }
+    ids.add(id)
+    sources.push({
+      confidence: confidence as ContentEnrichmentConfidence,
+      displayUrl: readOptionalString(record.displayUrl, 180),
+      domain: readOptionalString(record.domain, 180),
+      id,
+      label,
+      retrievedAt,
+      snippet: readOptionalString(record.snippet, MAX_TRIP_CONTENT_ENRICHMENT_SOURCE_SNIPPET),
+      sourceType: sourceType as ContentEnrichmentSourceType,
+      title,
+      url,
+    })
+  }
+  return { ok: true, sources }
+}
+
+function readOpeningHoursSummary(input: unknown): ProviderProxyPlaceDetailsResult['regularOpeningHours'] {
+  const record = readRecord(input)
+  const weekdayDescriptions = Array.isArray(record.weekdayDescriptions)
+    ? record.weekdayDescriptions
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => clampText(value.trim(), 180))
+      .slice(0, 7)
+    : []
+  if (weekdayDescriptions.length === 0 && typeof record.openNow !== 'boolean') {
+    return undefined
+  }
+  return {
+    openNow: typeof record.openNow === 'boolean' ? record.openNow : undefined,
+    weekdayDescriptions,
   }
 }
 

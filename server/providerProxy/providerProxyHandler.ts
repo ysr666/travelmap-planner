@@ -3,9 +3,11 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+  PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
+  PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
@@ -14,7 +16,9 @@ import {
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyAiTripEditPlanRequest,
+  validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlaceLookupRequest,
+  validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
@@ -93,6 +97,23 @@ import {
   type PlaceLookupProvider,
   type PlaceLookupProviderErrorCode,
 } from './placeLookupProvider'
+import {
+  createDisabledPlaceDetailsProvider,
+  createGooglePlacesDetailsProvider,
+  createMockPlaceDetailsProvider,
+  createUnavailablePlaceDetailsProvider,
+  type PlaceDetailsProvider,
+  type PlaceDetailsProviderErrorCode,
+} from './placeDetailsProvider'
+import {
+  buildTripContentEnrichmentProviderInput,
+  createDisabledTripContentEnrichmentProvider,
+  createMockTripContentEnrichmentProvider,
+  createOpenAiCompatibleTripContentEnrichmentProvider,
+  createUnavailableTripContentEnrichmentProvider,
+  type TripContentEnrichmentProvider,
+  type TripContentEnrichmentProviderErrorCode,
+} from './tripContentEnrichmentProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -210,6 +231,14 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
     return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
+    return handlePlaceDetailsRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
+    return handleTripContentEnrichmentRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
@@ -844,6 +873,178 @@ function mapPlaceLookupErrorCodeToStatus(code: PlaceLookupProviderErrorCode): nu
     case 'provider_unavailable': return 503
     case 'quota_exceeded': return 429
     case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handlePlaceDetailsRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyPlaceDetailsRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const detailsRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: detailsRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: detailsRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectPlaceDetailsProvider(env, fetcher)
+    const result = await provider.getDetails(detailsRequest)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapPlaceDetailsErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse(result.response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_PLACE_DETAILS_OPERATION, detailsRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectPlaceDetailsProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): PlaceDetailsProvider {
+  if (isMockMode(env)) {
+    return createMockPlaceDetailsProvider()
+  }
+  const provider = env.TRIPMAP_PLACE_PROVIDER?.trim().toLowerCase()
+  if (provider === 'mock') {
+    return createMockPlaceDetailsProvider()
+  }
+  if (provider === 'disabled') {
+    return createDisabledPlaceDetailsProvider()
+  }
+  if (provider === 'google_places' || (!provider && getGooglePlacesApiKey(env))) {
+    if (!getGooglePlacesApiKey(env)) {
+      return createUnavailablePlaceDetailsProvider()
+    }
+    return createGooglePlacesDetailsProvider(env, fetcher)
+  }
+  if (provider) {
+    return createDisabledPlaceDetailsProvider()
+  }
+  return createUnavailablePlaceDetailsProvider()
+}
+
+function mapPlaceDetailsErrorCodeToStatus(code: PlaceDetailsProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleTripContentEnrichmentRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyTripContentEnrichmentRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const enrichmentRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: enrichmentRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: enrichmentRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectTripContentEnrichmentProvider(env, fetcher)
+    const providerInput = buildTripContentEnrichmentProviderInput(enrichmentRequest, enrichmentRequest.requestId)
+    const result = await provider.enrich(enrichmentRequest, providerInput)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapTripContentEnrichmentErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse({
+      items: result.items,
+      ok: true,
+      operation: PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+      requestId: enrichmentRequest.requestId,
+      source: result.source,
+      warnings: result.warnings,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION, enrichmentRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectTripContentEnrichmentProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): TripContentEnrichmentProvider {
+  if (isMockMode(env)) {
+    return createMockTripContentEnrichmentProvider()
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleTripContentEnrichmentProvider(env, fetcher)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableTripContentEnrichmentProvider()
+  }
+  return createDisabledTripContentEnrichmentProvider()
+}
+
+function mapTripContentEnrichmentErrorCodeToStatus(code: TripContentEnrichmentProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'invalid_response': return 502
     case 'network_error': return 502
     case 'provider_error': return 502
     default: return 502

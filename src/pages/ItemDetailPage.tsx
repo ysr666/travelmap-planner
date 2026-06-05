@@ -24,6 +24,7 @@ import {
   updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
+import { ItemContentEnrichmentCard } from '../components/ai/TripContentEnrichmentPanel'
 import {
   buildAppleMapsUrl,
   buildGoogleMapsUrl,
@@ -473,6 +474,19 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           ) : null}
         </section>
       ) : null}
+
+      <ItemContentEnrichmentCard
+        day={day}
+        item={item}
+        onApplied={async () => {
+          const updated = await getItineraryItem(item.id)
+          if (updated) {
+            onItemUpdated(updated)
+          }
+          await loadRelations()
+        }}
+        trip={trip}
+      />
 
       {/* 交通 section - matches reference */}
       {transportDescription ? (

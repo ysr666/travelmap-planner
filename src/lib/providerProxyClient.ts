@@ -8,6 +8,7 @@ import {
   validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
+  validateProviderProxyPlaceDetailsRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
@@ -26,6 +27,9 @@ import {
   type ProviderProxyPlaceLookupRequest,
   type ProviderProxyPlaceLookupResponse,
   type ProviderProxyPlaceLookupSuccessResponse,
+  type ProviderProxyPlaceDetailsRequest,
+  type ProviderProxyPlaceDetailsResponse,
+  type ProviderProxyPlaceDetailsSuccessResponse,
   type ProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyRouteOrderSuggestionResponse,
   type ProviderProxyRouteOrderSuggestionSuccessResponse,
@@ -33,11 +37,15 @@ import {
   type ProviderProxyRoutePreviewResponse,
   type ProviderProxyRoutePreviewSuccessResponse,
   validateProviderProxyTravelSearchRequest,
+  validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchResponse,
   type ProviderProxyTravelSearchSourceType,
   type ProviderProxyTravelSearchSuccessResponse,
+  type ProviderProxyTripContentEnrichmentRequest,
+  type ProviderProxyTripContentEnrichmentResponse,
+  type ProviderProxyTripContentEnrichmentSuccessResponse,
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 import { validateAiTripDraft } from './ai/aiTripDraft'
@@ -435,6 +443,92 @@ export async function fetchProviderProxyPlaceLookup(
   return parsed
 }
 
+export async function fetchProviderProxyPlaceDetails(
+  request: ProviderProxyPlaceDetailsRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyPlaceDetailsSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyPlaceDetailsRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_details' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_details' }), response.status)
+  }
+
+  const parsed = parseProviderProxyPlaceDetailsResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
+export async function fetchProviderProxyTripContentEnrichment(
+  request: ProviderProxyTripContentEnrichmentRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyTripContentEnrichmentSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyTripContentEnrichmentRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_content_enrichment' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_content_enrichment' }), response.status)
+  }
+
+  const parsed = parseProviderProxyTripContentEnrichmentResponse(body, validation.request)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -659,6 +753,55 @@ function parseProviderProxyPlaceLookupResponse(input: unknown): ProviderProxyPla
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_lookup' })
 }
 
+function parseProviderProxyPlaceDetailsResponse(input: unknown): ProviderProxyPlaceDetailsResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyPlaceDetailsSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'place_details' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'place_details'),
+      operation: 'place_details',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_details' })
+}
+
+function parseProviderProxyTripContentEnrichmentResponse(
+  input: unknown,
+  request: ProviderProxyTripContentEnrichmentRequest,
+): ProviderProxyTripContentEnrichmentResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyTripContentEnrichmentSuccessResponse(record, request)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'trip_content_enrichment' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'trip_content_enrichment'),
+      operation: 'trip_content_enrichment',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_content_enrichment' })
+}
+
 function validateProviderProxyAiTripEditPlanSuccessResponse(
   record: Record<string, unknown>,
   request: ProviderProxyAiTripEditPlanRequest,
@@ -799,6 +942,129 @@ function validateProviderProxyPlaceLookupSuccessResponse(record: Record<string, 
   }
 }
 
+function validateProviderProxyPlaceDetailsSuccessResponse(record: Record<string, unknown>): ProviderProxyPlaceDetailsSuccessResponse | null {
+  if (record.operation !== 'place_details') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'google_places') {
+    return null
+  }
+  const retrievedAt = typeof record.retrievedAt === 'string' ? record.retrievedAt : null
+  const detailsRecord = readRecord(record.details)
+  if (!retrievedAt || !isValidIsoLikeDate(retrievedAt)) {
+    return null
+  }
+
+  const location = readRecord(detailsRecord.location)
+  const hasLocation = detailsRecord.location !== undefined
+  const lat = Number(location.lat)
+  const lng = Number(location.lng)
+  const googleMapsUri = detailsRecord.googleMapsUri
+  const websiteUri = detailsRecord.websiteUri
+  const regularOpeningHours = readRegularOpeningHours(detailsRecord.regularOpeningHours)
+  if (
+    !isNonEmptyString(detailsRecord.placeId)
+    || !isNonEmptyString(detailsRecord.displayName)
+    || detailsRecord.provider !== 'google_places'
+    || !isNonEmptyString(detailsRecord.retrievedAt)
+    || !isValidIsoLikeDate(detailsRecord.retrievedAt)
+    || (detailsRecord.formattedAddress !== undefined && !isNonEmptyString(detailsRecord.formattedAddress))
+    || (hasLocation && (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180))
+    || (googleMapsUri !== undefined && (!isNonEmptyString(googleMapsUri) || !isSafeHttpUrl(googleMapsUri)))
+    || (websiteUri !== undefined && (!isNonEmptyString(websiteUri) || !isSafeHttpUrl(websiteUri)))
+  ) {
+    return null
+  }
+
+  return {
+    details: {
+      displayName: detailsRecord.displayName,
+      editorialSummary: typeof detailsRecord.editorialSummary === 'string' ? detailsRecord.editorialSummary : undefined,
+      formattedAddress: typeof detailsRecord.formattedAddress === 'string' ? detailsRecord.formattedAddress : undefined,
+      googleMapsUri: googleMapsUri as string | undefined,
+      location: hasLocation ? { lat, lng } : undefined,
+      placeId: detailsRecord.placeId,
+      priceLevel: typeof detailsRecord.priceLevel === 'string' ? detailsRecord.priceLevel : undefined,
+      priceRangeText: typeof detailsRecord.priceRangeText === 'string' ? detailsRecord.priceRangeText : undefined,
+      provider: 'google_places',
+      regularOpeningHours,
+      retrievedAt: detailsRecord.retrievedAt,
+      websiteUri: websiteUri as string | undefined,
+    },
+    ok: true,
+    operation: 'place_details',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    retrievedAt,
+    source: record.source,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((w): w is string => typeof w === 'string')
+      : undefined,
+  }
+}
+
+function validateProviderProxyTripContentEnrichmentSuccessResponse(
+  record: Record<string, unknown>,
+  request: ProviderProxyTripContentEnrichmentRequest,
+): ProviderProxyTripContentEnrichmentSuccessResponse | null {
+  if (record.operation !== 'trip_content_enrichment') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  if (!Array.isArray(record.items)) {
+    return null
+  }
+
+  const sourceIdsByItemId = new Map(request.items.map((item) => [item.itemId, new Set(item.sources.map((source) => source.id))]))
+  const itemIds = new Set(sourceIdsByItemId.keys())
+  const results: ProviderProxyTripContentEnrichmentSuccessResponse['items'] = []
+  const seen = new Set<string>()
+  for (const rawResult of record.items) {
+    const result = readRecord(rawResult)
+    const itemId = typeof result.itemId === 'string' ? result.itemId.trim() : ''
+    const validSourceIds = sourceIdsByItemId.get(itemId)
+    if (!itemId || !itemIds.has(itemId) || seen.has(itemId) || !validSourceIds) {
+      return null
+    }
+    seen.add(itemId)
+
+    const introduction = readEnrichmentFact(result.introduction, validSourceIds)
+    const openingHours = readEnrichmentFact(result.openingHours, validSourceIds)
+    const ticketPrice = readTicketPriceFact(result.ticketPrice, validSourceIds)
+    const notices = readEnrichmentFacts(result.notices, validSourceIds)
+    const recommendedStay = readRecommendedStay(result.recommendedStay, validSourceIds)
+    if (
+      (result.introduction !== undefined && !introduction) ||
+      (result.openingHours !== undefined && !openingHours) ||
+      (result.ticketPrice !== undefined && !ticketPrice) ||
+      (result.notices !== undefined && !notices) ||
+      (result.recommendedStay !== undefined && !recommendedStay)
+    ) {
+      return null
+    }
+
+    results.push({
+      itemId,
+      introduction,
+      notices,
+      openingHours,
+      recommendedStay,
+      ticketPrice,
+      warnings: Array.isArray(result.warnings) ? result.warnings.filter((w): w is string => typeof w === 'string').slice(0, 5) : undefined,
+    })
+  }
+
+  return {
+    items: results,
+    ok: true,
+    operation: 'trip_content_enrichment',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    source: record.source,
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((w): w is string => typeof w === 'string') : undefined,
+  }
+}
+
 function validateProviderProxyTravelSearchSuccessResponse(record: Record<string, unknown>): ProviderProxyTravelSearchSuccessResponse | null {
   if (record.operation !== 'travel_search') {
     return null
@@ -859,6 +1125,81 @@ function validateProviderProxyTravelSearchSuccessResponse(record: Record<string,
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function readRegularOpeningHours(input: unknown): ProviderProxyPlaceDetailsSuccessResponse['details']['regularOpeningHours'] {
+  const record = readRecord(input)
+  const weekdayDescriptions = Array.isArray(record.weekdayDescriptions)
+    ? record.weekdayDescriptions.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).slice(0, 7)
+    : []
+  if (weekdayDescriptions.length === 0 && typeof record.openNow !== 'boolean') {
+    return undefined
+  }
+  return {
+    openNow: typeof record.openNow === 'boolean' ? record.openNow : undefined,
+    weekdayDescriptions,
+  }
+}
+
+function readEnrichmentFact(input: unknown, validSourceIds: Set<string>): ProviderProxyTripContentEnrichmentSuccessResponse['items'][number]['introduction'] {
+  if (input === undefined) return undefined
+  const record = readRecord(input)
+  const text = typeof record.text === 'string' ? record.text.trim() : ''
+  const sourceIds = readValidSourceIds(record.sourceIds, validSourceIds)
+  if (!text || sourceIds.length === 0) {
+    return undefined
+  }
+  return { sourceIds, text }
+}
+
+function readTicketPriceFact(input: unknown, validSourceIds: Set<string>): ProviderProxyTripContentEnrichmentSuccessResponse['items'][number]['ticketPrice'] {
+  const fact = readEnrichmentFact(input, validSourceIds)
+  if (!fact) return undefined
+  const record = readRecord(input)
+  const kind = record.kind === 'admission' || record.kind === 'place_price_level' || record.kind === 'unknown'
+    ? record.kind
+    : 'unknown'
+  return { ...fact, kind }
+}
+
+function readEnrichmentFacts(input: unknown, validSourceIds: Set<string>): ProviderProxyTripContentEnrichmentSuccessResponse['items'][number]['notices'] {
+  if (input === undefined) return undefined
+  if (!Array.isArray(input)) return undefined
+  const facts = input.flatMap((rawFact) => {
+    const fact = readEnrichmentFact(rawFact, validSourceIds)
+    return fact ? [fact] : []
+  }).slice(0, 5)
+  return facts.length ? facts : undefined
+}
+
+function readRecommendedStay(input: unknown, validSourceIds: Set<string>): ProviderProxyTripContentEnrichmentSuccessResponse['items'][number]['recommendedStay'] {
+  if (input === undefined) return undefined
+  const record = readRecord(input)
+  const basis = record.basis === 'source' ? 'source' : record.basis === 'ai_estimate' ? 'ai_estimate' : undefined
+  const durationMinutes = Number(record.durationMinutes)
+  const text = typeof record.text === 'string' ? record.text.trim() : ''
+  const reason = typeof record.reason === 'string' ? record.reason.trim() : ''
+  const sourceIds = readValidSourceIds(record.sourceIds, validSourceIds)
+  if (!basis || !Number.isInteger(durationMinutes) || durationMinutes < 10 || durationMinutes > 720 || !text || !reason) {
+    return undefined
+  }
+  if (basis === 'source' && sourceIds.length === 0) {
+    return undefined
+  }
+  return {
+    basis,
+    durationMinutes,
+    reason,
+    sourceIds: sourceIds.length ? sourceIds : undefined,
+    text,
+  }
+}
+
+function readValidSourceIds(input: unknown, validSourceIds: Set<string>) {
+  if (!Array.isArray(input)) return []
+  return Array.from(new Set(input.filter((value): value is string => (
+    typeof value === 'string' && validSourceIds.has(value)
+  ))))
 }
 
 function hasDuplicateStrings(values: string[]) {

@@ -1099,6 +1099,215 @@ test('Trip Home 智能整理分阶段失败后可单独重新生成路线顺序'
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 内容补充使用 Places 优先来源并在确认后写入结构化字段', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  let placeLookupRequests = 0
+  let placeDetailsRequests = 0
+  let travelSearchRequests = 0
+  let contentEnrichmentRequests = 0
+  let routeRequests = 0
+  let cloudRequests = 0
+  let directAiRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'place_lookup') {
+      placeLookupRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'place_lookup',
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          source: 'mock',
+          results: [{
+            displayName: '西湖风景名胜区',
+            formattedAddress: '杭州西湖',
+            googleMapsUri: 'https://maps.google.com/west-lake',
+            location: { lat: 30.25, lng: 120.14 },
+            placeId: 'place-west-lake',
+            provider: 'google_places',
+            retrievedAt: '2026-06-01T00:00:00.000Z',
+          }],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'place_details') {
+      placeDetailsRequests += 1
+      expect(body.placeId).toBe('place-west-lake')
+      expect(JSON.stringify(body)).not.toContain('notes')
+      await route.fulfill({
+        body: JSON.stringify({
+          details: {
+            displayName: '西湖风景名胜区',
+            editorialSummary: '西湖是杭州代表性湖泊景观。',
+            formattedAddress: '杭州西湖',
+            googleMapsUri: 'https://maps.google.com/west-lake',
+            location: { lat: 30.25, lng: 120.14 },
+            placeId: 'place-west-lake',
+            provider: 'google_places',
+            regularOpeningHours: { weekdayDescriptions: ['周一至周日 全天开放'] },
+            retrievedAt: '2026-06-01T00:00:00.000Z',
+            websiteUri: 'https://westlake.example',
+          },
+          ok: true,
+          operation: 'place_details',
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(body.searchType).toBe('ticket_price')
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          source: 'mock',
+          results: [{
+            confidence: 'high',
+            displayUrl: 'tickets.example/west-lake',
+            domain: 'tickets.example',
+            retrievedAt: '2026-06-01T00:00:00.000Z',
+            snippet: '主景区免费，部分项目另行收费。',
+            sourceType: 'ticketing',
+            title: '西湖票价来源',
+            url: 'https://tickets.example/west-lake',
+          }],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'trip_content_enrichment') {
+      contentEnrichmentRequests += 1
+      expect(body.items).toHaveLength(1)
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('notes')
+      const item = body.items[0]
+      const placeSource = item.sources.find((source: { sourceType: string }) => source.sourceType === 'google_places')
+      const ticketSource = item.sources.find((source: { sourceType: string }) => source.sourceType === 'ticketing')
+      await route.fulfill({
+        body: JSON.stringify({
+          items: [{
+            introduction: { sourceIds: [placeSource.id], text: '西湖是杭州代表性湖泊景观。' },
+            itemId: item.itemId,
+            openingHours: { sourceIds: [placeSource.id], text: '周一至周日全天开放。' },
+            recommendedStay: { basis: 'ai_estimate', durationMinutes: 120, reason: '湖区范围较大，适合慢游。', text: '建议停留约 2 小时' },
+            ticketPrice: { kind: 'admission', sourceIds: [ticketSource.id], text: '主景区免费，部分项目另行收费。' },
+          }],
+          ok: true,
+          operation: 'trip_content_enrichment',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_preview' || body.operation === 'route_order_suggestion') {
+      routeRequests += 1
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    directAiRequests += 1
+    return route.abort()
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-07-10',
+      id: 'trip-content-enrichment',
+      startDate: '2026-07-10',
+      title: '杭州内容补充测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-07-10', id: 'content_day_1', sortOrder: 1, title: '第一天', tripId: 'trip-content-enrichment' },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'content_day_1',
+        id: 'content_item_1',
+        locationName: '西湖',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '西湖',
+        tripId: 'trip-content-enrichment',
+        updatedAt: now,
+      },
+    ],
+  })
+
+  await page.goto('/#/trip?tripId=trip-content-enrichment&dayId=content_day_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('trip-content-enrichment-panel')
+  await expect(panel).toBeVisible()
+  await panel.getByRole('button', { name: '补充景点内容' }).click()
+  const confirmDialog = page.getByTestId('trip-content-enrichment-confirm-dialog')
+  await expect(confirmDialog).toContainText('预计最多')
+  expect(placeLookupRequests).toBe(0)
+  expect(placeDetailsRequests).toBe(0)
+  expect(travelSearchRequests).toBe(0)
+  expect(contentEnrichmentRequests).toBe(0)
+  await confirmDialog.getByRole('button', { name: '暂不补充' }).click()
+  expect(placeLookupRequests).toBe(0)
+
+  await panel.getByRole('button', { name: '补充景点内容' }).click()
+  await page.getByTestId('trip-content-enrichment-confirm-dialog').getByRole('button', { name: '确认补充' }).click()
+  await expect(panel.getByTestId('trip-content-enrichment-preview')).toContainText('西湖是杭州代表性湖泊景观')
+  await expect(panel.getByTestId('trip-content-enrichment-preview')).toContainText('Google Places')
+  await expect(panel.getByTestId('trip-content-enrichment-preview')).toContainText('购票来源')
+  await expect(panel.getByTestId('trip-content-enrichment-preview')).toContainText('AI 估算')
+  expect(placeLookupRequests).toBe(1)
+  expect(placeDetailsRequests).toBe(1)
+  expect(travelSearchRequests).toBe(1)
+  expect(contentEnrichmentRequests).toBe(1)
+  expect((await readItineraryItem(page, 'content_item_1')).contentEnrichment).toBeUndefined()
+
+  await panel.getByRole('button', { name: '应用内容' }).click()
+  await page.getByTestId('trip-content-enrichment-apply-dialog').getByRole('button', { name: '暂不应用' }).click()
+  expect((await readItineraryItem(page, 'content_item_1')).contentEnrichment).toBeUndefined()
+
+  await panel.getByRole('button', { name: '应用内容' }).click()
+  await page.getByTestId('trip-content-enrichment-apply-dialog').getByRole('button', { name: '确认应用' }).click()
+  await expect.poll(async () => {
+    const current = await readItineraryItem(page, 'content_item_1')
+    return (current.contentEnrichment as { introduction?: { text?: string } } | undefined)?.introduction?.text ?? ''
+  }).toContain('西湖')
+  const updated = await readItineraryItem(page, 'content_item_1')
+  expect((updated.contentEnrichment as { introduction?: { text?: string }; recommendedStay?: { basis?: string } }).introduction?.text).toContain('西湖')
+  expect((updated.contentEnrichment as { recommendedStay?: { basis?: string } }).recommendedStay?.basis).toBe('ai_estimate')
+  expect(routeRequests).toBe(0)
+  expect(cloudRequests).toBe(0)
+  expect(directAiRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home AI 修改建议搜索意图先确认并显示来源', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMapStyle(page)

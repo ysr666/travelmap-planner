@@ -12,6 +12,8 @@ import {
   buildMockAiTripDraftRefineProxyResponse,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
+  validateProviderProxyPlaceDetailsRequest,
+  validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -122,6 +124,67 @@ describe('provider proxy route_order_suggestion contract', () => {
   })
 })
 
+describe('provider proxy place_details contract', () => {
+  it('accepts a safe place_details request', () => {
+    const result = validateProviderProxyPlaceDetailsRequest({
+      locale: 'zh-CN',
+      operation: 'place_details',
+      placeId: 'place-west-lake',
+      region: 'cn',
+      requestId: 'details-1',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.region).toBe('CN')
+      expect(result.request.placeId).toBe('place-west-lake')
+    }
+  })
+
+  it('rejects sensitive place_details fields', () => {
+    const result = validateProviderProxyPlaceDetailsRequest({
+      operation: 'place_details',
+      placeId: 'place-west-lake',
+      ticketIds: ['ticket'],
+    })
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('provider proxy trip_content_enrichment contract', () => {
+  it('accepts sanitized source-backed enrichment requests', () => {
+    const result = validateProviderProxyTripContentEnrichmentRequest(validContentEnrichmentRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.items[0].sources[0]).toMatchObject({
+        confidence: 'high',
+        id: 'place:west-lake',
+        sourceType: 'google_places',
+      })
+      expect(JSON.stringify(result.request)).not.toContain('ticketIds')
+      expect(JSON.stringify(result.request)).not.toContain('routeCache')
+    }
+  })
+
+  it('rejects full trip, notes, coordinates, tickets, and unsafe urls', () => {
+    for (const patch of [
+      { trip: { id: 'trip' } },
+      { notes: 'private notes' },
+      { routeCache: {} },
+      { items: [{ ...validContentEnrichmentRequest().items[0], lat: 30.2 }] },
+      { items: [{ ...validContentEnrichmentRequest().items[0], ticketIds: ['ticket'] }] },
+      { items: [{ ...validContentEnrichmentRequest().items[0], sources: [{ ...validContentEnrichmentRequest().items[0].sources[0], url: 'javascript:alert(1)' }] }] },
+    ]) {
+      const result = validateProviderProxyTripContentEnrichmentRequest({
+        ...validContentEnrichmentRequest(),
+        ...patch,
+      })
+      expect(result.ok).toBe(false)
+    }
+  })
+})
+
 function validRequest() {
   return {
     coordinates: [[139.1, 35.1], [139.2, 35.2]],
@@ -156,6 +219,40 @@ function validRouteOrderRequest() {
     provider: 'auto',
     requestId: 'route-order-1',
     tripId: 'trip',
+  }
+}
+
+function validContentEnrichmentRequest() {
+  return {
+    items: [
+      {
+        address: '杭州西湖',
+        destination: '杭州',
+        itemId: 'item-west-lake',
+        place: {
+          displayName: '西湖风景名胜区',
+          editorialSummary: '西湖是杭州代表性湖泊景观。',
+          placeId: 'place-west-lake',
+          regularOpeningHours: { weekdayDescriptions: ['周一至周日 全天开放'] },
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          websiteUri: 'https://westlake.example',
+        },
+        sources: [
+          {
+            confidence: 'high',
+            id: 'place:west-lake',
+            label: 'Google Places',
+            retrievedAt: '2026-06-01T00:00:00.000Z',
+            sourceType: 'google_places',
+            title: '西湖风景名胜区',
+            url: 'https://maps.google.com/west-lake',
+          },
+        ],
+        title: '西湖',
+      },
+    ],
+    locale: 'zh-CN',
+    operation: 'trip_content_enrichment',
   }
 }
 

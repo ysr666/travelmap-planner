@@ -9,6 +9,7 @@ import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePanel'
 import { TripBriefCard } from '../components/ai/TripBriefCard'
+import { TripContentEnrichmentPanel } from '../components/ai/TripContentEnrichmentPanel'
 import { CloudSnapshotCheckPrompts } from '../components/cloud/CloudSnapshotCheckPrompts'
 import { AutoSnapshotBackupStatus } from '../components/cloud/AutoSnapshotBackupStatus'
 import { Button } from '../components/ui/Button'
@@ -430,6 +431,7 @@ export function TripWorkspacePage() {
                 tripId={trip.id}
               />
             ) : null}
+            <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />

@@ -1,6 +1,59 @@
 export type TransportMode = 'walk' | 'transit' | 'bus' | 'car' | 'train' | 'flight' | 'other'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
+export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
+export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
+
+export type ContentEnrichmentSource = {
+  id: string
+  label: string
+  title: string
+  sourceType: ContentEnrichmentSourceType
+  confidence: ContentEnrichmentConfidence
+  retrievedAt: string
+  url?: string
+  displayUrl?: string
+  domain?: string
+  snippet?: string
+}
+
+export type ContentEnrichmentFactSection = {
+  text: string
+  sourceIds: string[]
+}
+
+export type ContentEnrichmentStayRecommendation = {
+  basis: 'ai_estimate' | 'source'
+  durationMinutes: number
+  reason: string
+  sourceIds?: string[]
+  text: string
+}
+
+export type ItemContentEnrichment = {
+  schemaVersion: 1
+  generatedAt: string
+  baselineFingerprint: string
+  matchedPlace?: {
+    address?: string
+    googleMapsUri?: string
+    lat?: number
+    lng?: number
+    name: string
+    placeId: string
+    retrievedAt: string
+    websiteUri?: string
+  }
+  introduction?: ContentEnrichmentFactSection
+  openingHours?: ContentEnrichmentFactSection
+  ticketPrice?: ContentEnrichmentFactSection & {
+    kind: 'admission' | 'place_price_level' | 'unknown'
+  }
+  notices: ContentEnrichmentFactSection[]
+  recommendedStay?: ContentEnrichmentStayRecommendation
+  sources: ContentEnrichmentSource[]
+  warnings: string[]
+}
 
 export type Trip = {
   id: string
@@ -41,6 +94,7 @@ export type ItineraryItem = {
   previousTransportDurationMinutes?: number
   previousTransportNote?: string
   notes?: string
+  contentEnrichment?: ItemContentEnrichment
   ticketIds: string[]
   sortOrder: number
   createdAt: number

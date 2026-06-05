@@ -2,6 +2,7 @@ import { ArrowLeft, CalendarDays, Home, Map as MapIcon, MoreHorizontal, Route, S
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { listItemsByDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
+import { DayLiveBriefingCard } from '../components/trip/DayLiveBriefingCard'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -18,6 +19,9 @@ import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildDayBrief } from '../lib/travelBrief'
 import { formatDateKey } from '../lib/dates'
+import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
+import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
+import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import type { Day, ItineraryItem } from '../types'
 
 type DayWorkspaceView = 'schedule' | 'map'
@@ -65,6 +69,8 @@ export function DayViewPage() {
   const [hasOpenedMap, setHasOpenedMap] = useState(() => view === 'map')
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
   const [mapResizeToken, setMapResizeToken] = useState(0)
+  const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
+  const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
   const mapPreloadStartedRef = useRef(false)
   const backgroundMapWarmupStartedRef = useRef(false)
 
@@ -192,6 +198,50 @@ export function DayViewPage() {
     return () => window.cancelAnimationFrame(frame)
   }, [hasOpenedMap, selectedDay?.id, view])
 
+  useEffect(() => {
+    function refreshRoutePreparation() {
+      setRoutePreparationVersion((version) => version + 1)
+    }
+
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
+    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
+    window.addEventListener('storage', refreshRoutePreparation)
+    return () => {
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
+      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
+      window.removeEventListener('storage', refreshRoutePreparation)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isLoading || !trip || !selectedDay) {
+      queueMicrotask(() => {
+        setRoutePreparation(null)
+      })
+      return
+    }
+
+    let cancelled = false
+    void loadTripRoutePreparation({
+      days: [selectedDay],
+      itemsByDay: { [selectedDay.id]: items },
+      provider: getPersistentRouteProvider(getRoutingConfig()),
+      tripId: trip.id,
+    }).then((preparation) => {
+      if (!cancelled) {
+        setRoutePreparation(preparation)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setRoutePreparation(null)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoading, items, routePreparationVersion, selectedDay, trip])
+
 
 
   function handleSwitchView(nextView: DayWorkspaceView) {
@@ -250,6 +300,7 @@ export function DayViewPage() {
   const dayIndex = days.findIndex(d => d.id === selectedDay.id) + 1
   const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
   const isMapView = view === 'map'
+  const selectedRouteDay = routePreparation?.days.find((routeDay) => routeDay.day.id === selectedDay.id) ?? null
   const dayBrief = buildDayBrief(
     buildTripContext({
       days,
@@ -360,6 +411,16 @@ export function DayViewPage() {
                 onSwitch={handleSwitchView}
               />
             </section>
+
+            <DayLiveBriefingCard
+              day={selectedDay}
+              items={items}
+              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
+              onOpenMap={() => handleSwitchView('map')}
+              onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+              routeDay={selectedRouteDay}
+              trip={trip}
+            />
 
             {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
 

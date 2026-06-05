@@ -137,6 +137,161 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
+test('Day View 下一站提醒只做本地计算并提供详情地图票据入口', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => {
+    const fixedNow = new Date('2026-06-05T10:05:00+08:00').valueOf()
+    const RealDate = Date
+    class MockDate extends RealDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(fixedNow)
+        } else {
+          super(args[0] as string | number | Date)
+        }
+      }
+
+      static now() {
+        return fixedNow
+      }
+    }
+    Object.setPrototypeOf(MockDate, RealDate)
+    window.Date = MockDate as DateConstructor
+  })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
+
+  let providerProxyRequests = 0
+  await page.route('**/api/provider-proxy', async (route) => {
+    providerProxyRequests += 1
+    await route.fulfill({
+      body: JSON.stringify({ error: 'unexpected provider call in day live briefing test', ok: false }),
+      contentType: 'application/json',
+      status: 500,
+    })
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-06-05',
+      id: 'trip-live-briefing',
+      startDate: '2026-06-05',
+      title: '杭州现场旅行',
+      updatedAt: now,
+    }],
+    days: [{
+      date: '2026-06-05',
+      id: 'day-live-briefing',
+      sortOrder: 1,
+      title: '西湖一日',
+      tripId: 'trip-live-briefing',
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'day-live-briefing',
+      endTime: '10:00',
+      id: 'item-live-hotel',
+      lat: 30.24,
+      lng: 120.15,
+      locationName: '湖滨酒店',
+      sortOrder: 1,
+      startTime: '09:00',
+      ticketIds: [],
+      title: '酒店早餐',
+      tripId: 'trip-live-briefing',
+      updatedAt: now,
+    }, {
+      contentEnrichment: {
+        baselineFingerprint: 'e2e',
+        generatedAt: '2026-06-01T00:00:00.000Z',
+        introduction: { sourceIds: ['source-opening'], text: '西湖是杭州代表性景区。' },
+        notices: [{ sourceIds: ['source-opening'], text: '旺季请提前预约并预留排队时间。' }],
+        openingHours: { sourceIds: ['source-opening'], text: '08:00-18:00' },
+        recommendedStay: { basis: 'ai_estimate', durationMinutes: 120, reason: '本地估算', text: '建议停留 2 小时' },
+        schemaVersion: 1,
+        sources: [{
+          confidence: 'high',
+          id: 'source-opening',
+          label: '官网',
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          sourceType: 'official',
+          title: '西湖开放公告',
+          url: 'https://example.com/west-lake',
+        }],
+        ticketPrice: { kind: 'admission', sourceIds: ['source-opening'], text: '主景区免费开放' },
+        warnings: [],
+      },
+      createdAt: now,
+      dayId: 'day-live-briefing',
+      id: 'item-live-west-lake',
+      lat: 30.25,
+      lng: 120.16,
+      locationName: '西湖风景名胜区',
+      previousTransportDurationMinutes: 20,
+      sortOrder: 2,
+      startTime: '10:20',
+      ticketIds: ['ticket-live-west-lake'],
+      title: '西湖门票预约入场',
+      tripId: 'trip-live-briefing',
+      updatedAt: now,
+    }],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'west-lake-ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket-live-west-lake',
+      itemId: 'item-live-west-lake',
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 128,
+      storageMode: 'external',
+      title: '西湖预约凭证',
+      tripId: 'trip-live-briefing',
+      updatedAt: now,
+    }],
+  })
+
+  await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+
+  const liveBriefing = page.getByTestId('day-live-briefing-card')
+  await expect(liveBriefing).toBeVisible()
+  await expect(liveBriefing).toContainText('下一站提醒')
+  await expect(liveBriefing).toContainText('当前 10:05')
+  await expect(liveBriefing).toContainText('下一站：西湖门票预约入场')
+  await expect(liveBriefing).toContainText('基于本地行程信息')
+  await expect(liveBriefing).toContainText('已绑定 1 张票据')
+  await expect(liveBriefing).toContainText('08:00-18:00')
+  await expect(liveBriefing).toContainText('主景区免费开放')
+  await expect(liveBriefing).toContainText('旺季请提前预约')
+  await expect(liveBriefing).toContainText('缓冲偏短')
+  await expect(page.getByTestId('day-local-brief-card')).toBeVisible()
+  expect(providerProxyRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+
+  await liveBriefing.getByRole('button', { name: '查看详情' }).click()
+  await expect(page).toHaveURL(/#\/item\?/)
+  await expect(page).toHaveURL(/itemId=item-live-west-lake/)
+  expect(providerProxyRequests).toBe(0)
+
+  await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('day-live-briefing-card').getByRole('button', { name: '打开地图' }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/view=map/)
+  await expect(page.getByTestId('day-live-briefing-card')).toHaveCount(0)
+  expect(providerProxyRequests).toBe(0)
+
+  await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('day-live-briefing-card').getByRole('button', { name: '查看票据' }).click()
+  await expect(page).toHaveURL(/#\/tickets\?/)
+  await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+  expect(providerProxyRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ page }) => {
   await clearTravelDatabase(page)
   const now = Date.now()

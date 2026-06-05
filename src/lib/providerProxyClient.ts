@@ -38,6 +38,7 @@ import {
   type ProviderProxyRoutePreviewSuccessResponse,
   validateProviderProxyTravelSearchRequest,
   validateProviderProxyTripContentEnrichmentRequest,
+  validateProviderProxyTripDailyTipRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchResponse,
@@ -46,6 +47,9 @@ import {
   type ProviderProxyTripContentEnrichmentRequest,
   type ProviderProxyTripContentEnrichmentResponse,
   type ProviderProxyTripContentEnrichmentSuccessResponse,
+  type ProviderProxyTripDailyTipRequest,
+  type ProviderProxyTripDailyTipResponse,
+  type ProviderProxyTripDailyTipSuccessResponse,
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 import { validateAiTripDraft } from './ai/aiTripDraft'
@@ -529,6 +533,49 @@ export async function fetchProviderProxyTripContentEnrichment(
   return parsed
 }
 
+export async function fetchProviderProxyTripDailyTip(
+  request: ProviderProxyTripDailyTipRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyTripDailyTipSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyTripDailyTipRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_daily_tip' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_daily_tip' }), response.status)
+  }
+
+  const parsed = parseProviderProxyTripDailyTipResponse(body, validation.request)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -802,6 +849,32 @@ function parseProviderProxyTripContentEnrichmentResponse(
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_content_enrichment' })
 }
 
+function parseProviderProxyTripDailyTipResponse(
+  input: unknown,
+  request: ProviderProxyTripDailyTipRequest,
+): ProviderProxyTripDailyTipResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyTripDailyTipSuccessResponse(record, request)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'trip_daily_tip' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'trip_daily_tip'),
+      operation: 'trip_daily_tip',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_daily_tip' })
+}
+
 function validateProviderProxyAiTripEditPlanSuccessResponse(
   record: Record<string, unknown>,
   request: ProviderProxyAiTripEditPlanRequest,
@@ -1062,6 +1135,54 @@ function validateProviderProxyTripContentEnrichmentSuccessResponse(
     requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     source: record.source,
     warnings: Array.isArray(record.warnings) ? record.warnings.filter((w): w is string => typeof w === 'string') : undefined,
+  }
+}
+
+function validateProviderProxyTripDailyTipSuccessResponse(
+  record: Record<string, unknown>,
+  request: ProviderProxyTripDailyTipRequest,
+): ProviderProxyTripDailyTipSuccessResponse | null {
+  if (record.operation !== 'trip_daily_tip') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  const summary = typeof record.summary === 'string' ? record.summary.trim() : ''
+  if (!summary) {
+    return null
+  }
+  const validSourceIds = new Set(request.sources.map((source) => source.id))
+  const sections: ProviderProxyTripDailyTipSuccessResponse['sections'] = []
+  if (Array.isArray(record.sections)) {
+    for (const rawSection of record.sections) {
+      const section = readRecord(rawSection)
+      const key = section.key
+      if (key !== 'opening_hours' && key !== 'ticket_price' && key !== 'notices' && key !== 'route_risk') {
+        return null
+      }
+      const title = typeof section.title === 'string' ? section.title.trim().slice(0, 80) : ''
+      const text = typeof section.text === 'string' ? section.text.trim().slice(0, 700) : ''
+      const sourceIds = readValidSourceIdList(section.sourceIds, validSourceIds)
+      if (!title || !text || !sourceIds || sourceIds.length === 0) {
+        return null
+      }
+      sections.push({ key, sourceIds, text, title })
+    }
+  }
+  const sourceIds = readValidSourceIdList(record.sourceIds, validSourceIds)
+  if (!sourceIds || sourceIds.length === 0 || sections.some((section) => section.sourceIds.some((sourceId) => !sourceIds.includes(sourceId)))) {
+    return null
+  }
+  return {
+    ok: true,
+    operation: 'trip_daily_tip',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    sections,
+    source: record.source,
+    sourceIds,
+    summary,
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((w): w is string => typeof w === 'string').slice(0, 5) : undefined,
   }
 }
 
@@ -1381,4 +1502,12 @@ function createSessionId() {
 
 function readRecord(input: unknown): Record<string, unknown> {
   return input && typeof input === 'object' ? input as Record<string, unknown> : {}
+}
+
+function readValidSourceIdList(input: unknown, validSourceIds: Set<string>): string[] | null {
+  if (!Array.isArray(input)) {
+    return null
+  }
+  const sourceIds = input.filter((value): value is string => typeof value === 'string' && validSourceIds.has(value))
+  return sourceIds.length === input.length ? sourceIds : null
 }

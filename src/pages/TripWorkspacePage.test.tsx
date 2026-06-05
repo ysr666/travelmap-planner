@@ -67,7 +67,19 @@ vi.mock('../lib/ai/aiTripContext', () => ({
 }))
 
 vi.mock('../lib/tripCheck', () => ({
-  analyzeTripContext: vi.fn(() => ({ issues: [] })),
+  analyzeTripContext: vi.fn(() => ({
+    evidence: [],
+    suggestions: [],
+    summary: {
+      criticalCount: 0,
+      message: 'ok',
+      severity: 'info',
+      suggestionCount: 0,
+      title: 'ok',
+      warningCount: 0,
+    },
+    warnings: [],
+  })),
 }))
 
 vi.mock('../lib/travelProfile', () => ({
@@ -103,6 +115,7 @@ vi.mock('../lib/dates', () => ({
   formatDate: vi.fn(() => '4月1日'),
   formatDateKey: vi.fn(() => '2026-04-01'),
   formatDateRange: vi.fn(() => '4月1日 - 4月5日'),
+  formatShortDateWithWeekday: vi.fn(() => '4月1日 周三'),
 }))
 
 vi.mock('../lib/dayOrdinal', () => ({

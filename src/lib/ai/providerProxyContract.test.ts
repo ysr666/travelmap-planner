@@ -14,6 +14,7 @@ import {
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyTripContentEnrichmentRequest,
+  validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -185,6 +186,43 @@ describe('provider proxy trip_content_enrichment contract', () => {
   })
 })
 
+describe('provider proxy trip_daily_tip contract', () => {
+  it('accepts sanitized source-backed daily tip requests', () => {
+    const result = validateProviderProxyTripDailyTipRequest(validDailyTipRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.sources[0].sourceType).toBe('official')
+      expect(result.request.localSections[0].items[0].sourceIds).toEqual(['daily-source-1'])
+      expect(JSON.stringify(result.request)).not.toContain('ticketIds')
+      expect(JSON.stringify(result.request)).not.toContain('routeCache')
+      expect(JSON.stringify(result.request)).not.toContain('private notes')
+    }
+  })
+
+  it('rejects sensitive daily tip fields and invalid source references', () => {
+    for (const patch of [
+      { notes: 'private notes' },
+      { routeCache: {} },
+      { cloud: { status: 'dirty' } },
+      { tickets: [{ id: 'ticket' }] },
+      { sources: [{ ...validDailyTipRequest().sources[0], url: 'javascript:alert(1)' }] },
+      { localSections: [{ ...validDailyTipRequest().localSections[0], items: [{ title: '开放时间', text: '无来源事实', sourceIds: ['missing'] }] }] },
+    ]) {
+      const result = validateProviderProxyTripDailyTipRequest({
+        ...validDailyTipRequest(),
+        ...patch,
+      })
+      expect(result.ok).toBe(false)
+    }
+  })
+
+  it('returns non-empty error message for trip_daily_tip operation', () => {
+    const message = defaultProviderProxyErrorMessage('provider_unavailable', 'trip_daily_tip')
+    expect(message).toContain('今日旅行提示')
+  })
+})
+
 function validRequest() {
   return {
     coordinates: [[139.1, 35.1], [139.2, 35.2]],
@@ -253,6 +291,51 @@ function validContentEnrichmentRequest() {
     ],
     locale: 'zh-CN',
     operation: 'trip_content_enrichment',
+  }
+}
+
+function validDailyTipRequest() {
+  return {
+    dayTitle: '第一天',
+    destination: '杭州',
+    generatedAt: '2026-06-05T08:00:00.000Z',
+    items: [
+      {
+        itemId: 'item-west-lake',
+        locationName: '西湖',
+        startTime: '09:00',
+        title: '西湖',
+      },
+    ],
+    localSections: [
+      {
+        items: [
+          {
+            sourceIds: ['daily-source-1'],
+            text: '开放时间以官网为准。',
+            title: '西湖',
+          },
+        ],
+        key: 'opening_hours',
+        title: '开放时间',
+      },
+    ],
+    mode: 'today',
+    operation: 'trip_daily_tip',
+    routeStatus: 'ready_to_generate',
+    sources: [
+      {
+        confidence: 'high',
+        id: 'daily-source-1',
+        label: '官网',
+        retrievedAt: '2026-06-05T08:00:00.000Z',
+        sourceType: 'official',
+        title: '西湖官网',
+        url: 'https://example.com/west-lake',
+      },
+    ],
+    targetDate: '2026-06-05',
+    tripTitle: '杭州旅行',
   }
 }
 

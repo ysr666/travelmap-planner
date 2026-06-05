@@ -14,6 +14,7 @@ import {
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+  PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   type ProviderProxyOperation,
 } from '../../src/lib/ai/providerProxyContract'
@@ -26,6 +27,7 @@ export type ProviderProxyQuotaBucket =
   | 'ai_draft_refine|'
   | 'ai_draft_repair|'
   | 'ai_trip_content|'
+  | 'ai_trip_daily_tip|'
   | 'ai_trip_edit|'
 
 export type ProviderProxyQuotaLimits = {
@@ -313,6 +315,9 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     return { bucket: 'ai_trip_content|', maxRequests: limits.maxAiTripContentEnrichmentRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
+    return { bucket: 'ai_trip_daily_tip|', maxRequests: limits.maxAiTripContentEnrichmentRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
     return { bucket: 'place|', maxRequests: limits.maxPlaceLookupRequestsPerWindow }

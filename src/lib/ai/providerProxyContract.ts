@@ -22,6 +22,7 @@ export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
+export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
@@ -34,7 +35,7 @@ export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -563,6 +564,69 @@ export type ProviderProxyTripContentEnrichmentValidationResult =
   | { ok: true; request: ProviderProxyTripContentEnrichmentRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyTripDailyTipMode = 'pre_trip' | 'today' | 'tomorrow' | 'completed'
+export type ProviderProxyTripDailyTipSectionKey = 'opening_hours' | 'ticket_price' | 'notices' | 'route_risk'
+
+export type ProviderProxyTripDailyTipLocalSection = {
+  key: ProviderProxyTripDailyTipSectionKey
+  title: string
+  items: Array<{
+    sourceIds?: string[]
+    text: string
+    title: string
+  }>
+}
+
+export type ProviderProxyTripDailyTipRequestItem = {
+  endTime?: string
+  itemId: string
+  locationName?: string
+  startTime?: string
+  title: string
+}
+
+export type ProviderProxyTripDailyTipRequest = {
+  dayTitle?: string
+  destination: string
+  generatedAt?: string
+  items: ProviderProxyTripDailyTipRequestItem[]
+  localSections: ProviderProxyTripDailyTipLocalSection[]
+  mode: ProviderProxyTripDailyTipMode
+  operation: typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
+  quotaSessionId?: string
+  requestId?: string
+  routeStatus?: 'no_coordinates' | 'not_enough_points' | 'ready_to_generate' | 'cached' | 'stale_if_cache_key_changed'
+  sources: ProviderProxyTripContentEnrichmentSourceSummary[]
+  targetDate?: string
+  tripTitle: string
+}
+
+export type ProviderProxyTripDailyTipSectionResult = {
+  key: ProviderProxyTripDailyTipSectionKey
+  sourceIds: string[]
+  text: string
+  title: string
+}
+
+export type ProviderProxyTripDailyTipSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
+  requestId?: string
+  sections: ProviderProxyTripDailyTipSectionResult[]
+  source: 'mock' | 'future_ai'
+  sourceIds: string[]
+  summary: string
+  warnings?: string[]
+}
+
+export type ProviderProxyTripDailyTipResponse =
+  | ProviderProxyTripDailyTipSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyTripDailyTipValidationResult =
+  | { ok: true; request: ProviderProxyTripDailyTipRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -584,6 +648,9 @@ const VALID_TRAVEL_SEARCH_CONFIDENCES = new Set<ProviderProxyTravelSearchConfide
 const VALID_PLACE_LOOKUP_LOCALES = new Set<ProviderProxyPlaceLookupLocale>(['zh-CN', 'en-US'])
 const VALID_CONTENT_ENRICHMENT_SOURCE_TYPES = new Set<ContentEnrichmentSourceType>(['google_places', 'official', 'map', 'ticketing', 'travel_site', 'ai_estimate', 'unknown'])
 const VALID_CONTENT_ENRICHMENT_CONFIDENCES = new Set<ContentEnrichmentConfidence>(['high', 'medium', 'low', 'unknown'])
+const VALID_TRIP_DAILY_TIP_MODES = new Set<ProviderProxyTripDailyTipMode>(['pre_trip', 'today', 'tomorrow', 'completed'])
+const VALID_TRIP_DAILY_TIP_SECTION_KEYS = new Set<ProviderProxyTripDailyTipSectionKey>(['opening_hours', 'ticket_price', 'notices', 'route_risk'])
+const VALID_TRIP_DAILY_TIP_ROUTE_STATUSES = new Set<NonNullable<ProviderProxyTripDailyTipRequest['routeStatus']>>(['no_coordinates', 'not_enough_points', 'ready_to_generate', 'cached', 'stale_if_cache_key_changed'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
   'items',
@@ -650,6 +717,7 @@ const FORBIDDEN_PLACE_LOOKUP_FIELDS = new Set([
   'providerkey',
   'routecache',
   'ticket',
+  'tickets',
   'ticketid',
   'ticketids',
   'ticketblobs',
@@ -693,6 +761,7 @@ const FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS = new Set([
   'route',
   'routecache',
   'ticket',
+  'tickets',
   'ticketid',
   'ticketids',
   'ticketblobs',
@@ -738,6 +807,11 @@ const MAX_TRIP_CONTENT_ENRICHMENT_ITEMS = 6
 const MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM = 8
 const MAX_TRIP_CONTENT_ENRICHMENT_TEXT = 700
 const MAX_TRIP_CONTENT_ENRICHMENT_SOURCE_SNIPPET = 500
+const MAX_TRIP_DAILY_TIP_ITEMS = 20
+const MAX_TRIP_DAILY_TIP_LOCAL_SECTIONS = 4
+const MAX_TRIP_DAILY_TIP_LOCAL_SECTION_ITEMS = 5
+const MAX_TRIP_DAILY_TIP_SOURCES = 12
+const MAX_TRIP_DAILY_TIP_TEXT = 700
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -1020,6 +1094,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前内容补充请求暂不支持。'
     if (code === 'invalid_response') return '内容补充服务返回的内容无法解析。'
     return '内容补充服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
+    if (code === 'quota_exceeded') return '今日旅行提示生成次数已达上限。'
+    if (code === 'invalid_request') return '今日旅行提示请求无效。'
+    if (code === 'provider_error') return '今日旅行提示服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前今日旅行提示暂不支持。'
+    if (code === 'invalid_response') return '今日旅行提示服务返回的内容无法解析。'
+    return '今日旅行提示服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
     if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
@@ -1437,6 +1520,21 @@ function tripContentEnrichmentInvalidRequest(
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function tripDailyTipInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyTripDailyTipValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
       requestId,
     }),
     ok: false,
@@ -2118,6 +2216,65 @@ export function validateProviderProxyTripContentEnrichmentRequest(input: unknown
   }
 }
 
+export function validateProviderProxyTripDailyTipRequest(input: unknown): ProviderProxyTripDailyTipValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
+    return tripDailyTipInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS)
+  if (forbiddenFieldPath) {
+    return tripDailyTipInvalidRequest('今日旅行提示请求包含不允许的敏感字段。', requestId)
+  }
+
+  const tripTitle = readRequiredTrimmedString(record.tripTitle, 160)
+  const destination = readRequiredTrimmedString(record.destination, 160)
+  if (!tripTitle || !destination) {
+    return tripDailyTipInvalidRequest('今日旅行提示缺少旅行标题或目的地。', requestId)
+  }
+  if (!VALID_TRIP_DAILY_TIP_MODES.has(record.mode as ProviderProxyTripDailyTipMode)) {
+    return tripDailyTipInvalidRequest('今日旅行提示模式无效。', requestId)
+  }
+  if (record.routeStatus !== undefined && !VALID_TRIP_DAILY_TIP_ROUTE_STATUSES.has(record.routeStatus as NonNullable<ProviderProxyTripDailyTipRequest['routeStatus']>)) {
+    return tripDailyTipInvalidRequest('今日旅行提示路线状态无效。', requestId)
+  }
+
+  const sourcesResult = readTripDailyTipSources(record.sources)
+  if (!sourcesResult.ok) {
+    return tripDailyTipInvalidRequest(sourcesResult.message, requestId)
+  }
+  const validSourceIds = new Set(sourcesResult.sources.map((source) => source.id))
+  const sectionsResult = readTripDailyTipLocalSections(record.localSections, validSourceIds)
+  if (!sectionsResult.ok) {
+    return tripDailyTipInvalidRequest(sectionsResult.message, requestId)
+  }
+  const itemsResult = readTripDailyTipItems(record.items)
+  if (!itemsResult.ok) {
+    return tripDailyTipInvalidRequest(itemsResult.message, requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      dayTitle: readOptionalString(record.dayTitle, 160),
+      destination,
+      generatedAt: readOptionalString(record.generatedAt, 80),
+      items: itemsResult.items,
+      localSections: sectionsResult.sections,
+      mode: record.mode as ProviderProxyTripDailyTipMode,
+      operation: PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      routeStatus: record.routeStatus as ProviderProxyTripDailyTipRequest['routeStatus'],
+      sources: sourcesResult.sources,
+      targetDate: readOptionalString(record.targetDate, 32),
+      tripTitle,
+    },
+  }
+}
+
 function readTripContentEnrichmentItem(input: unknown): { ok: true; item: ProviderProxyTripContentEnrichmentItemInput } | { message: string; ok: false } {
   const record = readRecord(input)
   const itemId = readRequiredTrimmedString(record.itemId, 128)
@@ -2229,6 +2386,126 @@ function readTripContentEnrichmentSources(
     })
   }
   return { ok: true, sources }
+}
+
+function readTripDailyTipSources(
+  input: unknown,
+): { ok: true; sources: ProviderProxyTripContentEnrichmentSourceSummary[] } | { message: string; ok: false } {
+  if (!Array.isArray(input) || input.length > MAX_TRIP_DAILY_TIP_SOURCES) {
+    return { message: `今日旅行提示来源摘要不能超过 ${MAX_TRIP_DAILY_TIP_SOURCES} 条。`, ok: false }
+  }
+  const sources: ProviderProxyTripContentEnrichmentSourceSummary[] = []
+  const ids = new Set<string>()
+  for (const rawSource of input) {
+    const record = readRecord(rawSource)
+    const id = readRequiredTrimmedString(record.id, 128)
+    const label = readRequiredTrimmedString(record.label, 80)
+    const title = readRequiredTrimmedString(record.title, 160)
+    const retrievedAt = readRequiredTrimmedString(record.retrievedAt, 80)
+    const sourceType = record.sourceType
+    const confidence = record.confidence
+    const url = readOptionalString(record.url, 500)
+    if (
+      !id ||
+      ids.has(id) ||
+      !label ||
+      !title ||
+      !isValidIsoLikeDate(retrievedAt) ||
+      !VALID_CONTENT_ENRICHMENT_SOURCE_TYPES.has(sourceType as ContentEnrichmentSourceType) ||
+      !VALID_CONTENT_ENRICHMENT_CONFIDENCES.has(confidence as ContentEnrichmentConfidence) ||
+      (url && !isSafeHttpUrl(url))
+    ) {
+      return { message: '今日旅行提示来源摘要无效。', ok: false }
+    }
+    ids.add(id)
+    sources.push({
+      confidence: confidence as ContentEnrichmentConfidence,
+      displayUrl: readOptionalString(record.displayUrl, 180),
+      domain: readOptionalString(record.domain, 180),
+      id,
+      label,
+      retrievedAt,
+      snippet: readOptionalString(record.snippet, MAX_TRIP_CONTENT_ENRICHMENT_SOURCE_SNIPPET),
+      sourceType: sourceType as ContentEnrichmentSourceType,
+      title,
+      url,
+    })
+  }
+  return { ok: true, sources }
+}
+
+function readTripDailyTipLocalSections(
+  input: unknown,
+  validSourceIds: Set<string>,
+): { ok: true; sections: ProviderProxyTripDailyTipLocalSection[] } | { message: string; ok: false } {
+  if (!Array.isArray(input) || input.length > MAX_TRIP_DAILY_TIP_LOCAL_SECTIONS) {
+    return { message: `今日旅行提示本地摘要不能超过 ${MAX_TRIP_DAILY_TIP_LOCAL_SECTIONS} 组。`, ok: false }
+  }
+  const sections: ProviderProxyTripDailyTipLocalSection[] = []
+  const keys = new Set<string>()
+  for (const rawSection of input) {
+    const record = readRecord(rawSection)
+    const key = record.key
+    const title = readRequiredTrimmedString(record.title, 80)
+    if (!VALID_TRIP_DAILY_TIP_SECTION_KEYS.has(key as ProviderProxyTripDailyTipSectionKey) || !title || keys.has(String(key))) {
+      return { message: '今日旅行提示本地摘要分类无效。', ok: false }
+    }
+    if (!Array.isArray(record.items) || record.items.length > MAX_TRIP_DAILY_TIP_LOCAL_SECTION_ITEMS) {
+      return { message: `今日旅行提示每组摘要不能超过 ${MAX_TRIP_DAILY_TIP_LOCAL_SECTION_ITEMS} 条。`, ok: false }
+    }
+    const items: ProviderProxyTripDailyTipLocalSection['items'] = []
+    for (const rawItem of record.items) {
+      const item = readRecord(rawItem)
+      const itemTitle = readRequiredTrimmedString(item.title, 120)
+      const text = readRequiredTrimmedString(item.text, MAX_TRIP_DAILY_TIP_TEXT)
+      const sourceIds = readSourceIds(item.sourceIds, validSourceIds)
+      if (!itemTitle || !text || (item.sourceIds !== undefined && !sourceIds)) {
+        return { message: '今日旅行提示本地摘要条目无效。', ok: false }
+      }
+      items.push({ sourceIds, text, title: itemTitle })
+    }
+    keys.add(String(key))
+    sections.push({ items, key: key as ProviderProxyTripDailyTipSectionKey, title })
+  }
+  return { ok: true, sections }
+}
+
+function readTripDailyTipItems(
+  input: unknown,
+): { ok: true; items: ProviderProxyTripDailyTipRequestItem[] } | { message: string; ok: false } {
+  if (!Array.isArray(input) || input.length > MAX_TRIP_DAILY_TIP_ITEMS) {
+    return { message: `今日旅行提示行程点不能超过 ${MAX_TRIP_DAILY_TIP_ITEMS} 个。`, ok: false }
+  }
+  const items: ProviderProxyTripDailyTipRequestItem[] = []
+  const itemIds = new Set<string>()
+  for (const rawItem of input) {
+    const record = readRecord(rawItem)
+    const itemId = readRequiredTrimmedString(record.itemId, 128)
+    const title = readRequiredTrimmedString(record.title, 160)
+    if (!itemId || !title || itemIds.has(itemId)) {
+      return { message: '今日旅行提示行程点无效。', ok: false }
+    }
+    itemIds.add(itemId)
+    items.push({
+      endTime: readOptionalString(record.endTime, 20),
+      itemId,
+      locationName: readOptionalString(record.locationName, 160),
+      startTime: readOptionalString(record.startTime, 20),
+      title,
+    })
+  }
+  return { ok: true, items }
+}
+
+function readSourceIds(input: unknown, validSourceIds: Set<string>): string[] | undefined {
+  if (input === undefined) {
+    return undefined
+  }
+  if (!Array.isArray(input)) {
+    return undefined
+  }
+  const sourceIds = input.filter((value): value is string => typeof value === 'string' && validSourceIds.has(value))
+  return sourceIds.length === input.length ? sourceIds : undefined
 }
 
 function readOpeningHoursSummary(input: unknown): ProviderProxyPlaceDetailsResult['regularOpeningHours'] {

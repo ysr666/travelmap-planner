@@ -1750,6 +1750,31 @@ describe('provider proxy handler ai_trip_edit_plan', () => {
   })
 })
 
+describe('provider proxy handler trip_daily_tip', () => {
+  it('returns deterministic mock daily tips without provider calls or secret leakage', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_API_KEY: 'server-secret', TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validDailyTipRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-secret')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    const body = JSON.parse(text)
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'trip_daily_tip',
+      source: 'mock',
+    })
+    expect(body.summary).toContain('出发前')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
 function validEditRequest(command = '第二天太满了，帮我放松一点') {
   return {
     command,
@@ -1776,6 +1801,32 @@ function validEditRequest(command = '第二天太满了，帮我放松一点') {
     operation: 'ai_trip_edit_plan',
     quotaSessionId: 'session-edit-1',
     requestId: 'edit-1',
+  }
+}
+
+function validDailyTipRequest() {
+  return {
+    dayTitle: '第一天',
+    destination: '杭州',
+    items: [{ itemId: 'item_1', locationName: '西湖', startTime: '09:00', title: '西湖' }],
+    localSections: [{
+      items: [{ sourceIds: ['source-1'], text: '周一至周日全天开放。', title: '西湖' }],
+      key: 'opening_hours',
+      title: '开放时间',
+    }],
+    mode: 'today',
+    operation: 'trip_daily_tip',
+    sources: [{
+      confidence: 'high',
+      id: 'source-1',
+      label: '官网',
+      retrievedAt: '2026-06-05T08:00:00.000Z',
+      sourceType: 'official',
+      title: '西湖官网',
+      url: 'https://example.com/west-lake',
+    }],
+    targetDate: '2026-06-05',
+    tripTitle: '杭州旅行',
   }
 }
 

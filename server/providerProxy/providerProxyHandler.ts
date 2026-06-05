@@ -8,6 +8,7 @@ import {
   PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
+  PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
@@ -19,6 +20,7 @@ import {
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyTripContentEnrichmentRequest,
+  validateProviderProxyTripDailyTipRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
@@ -114,6 +116,15 @@ import {
   type TripContentEnrichmentProvider,
   type TripContentEnrichmentProviderErrorCode,
 } from './tripContentEnrichmentProvider'
+import {
+  buildTripDailyTipProviderInput,
+  createDisabledTripDailyTipProvider,
+  createMockTripDailyTipProvider,
+  createOpenAiCompatibleTripDailyTipProvider,
+  createUnavailableTripDailyTipProvider,
+  type TripDailyTipProvider,
+  type TripDailyTipProviderErrorCode,
+} from './tripDailyTipProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -239,6 +250,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     return handleTripContentEnrichmentRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
+    return handleTripDailyTipRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
@@ -1041,6 +1056,93 @@ function selectTripContentEnrichmentProvider(env: ProviderProxyHandlerEnv, fetch
 }
 
 function mapTripContentEnrichmentErrorCodeToStatus(code: TripContentEnrichmentProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'invalid_response': return 502
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleTripDailyTipRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyTripDailyTipRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const tipRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: tipRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: tipRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectTripDailyTipProvider(env, fetcher)
+    const providerInput = buildTripDailyTipProviderInput(tipRequest, tipRequest.requestId)
+    const result = await provider.generate(tipRequest, providerInput)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapTripDailyTipErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse({
+      ok: true,
+      operation: PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+      requestId: tipRequest.requestId,
+      sections: result.sections,
+      source: result.source,
+      sourceIds: result.sourceIds,
+      summary: result.summary,
+      warnings: result.warnings,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION, tipRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectTripDailyTipProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): TripDailyTipProvider {
+  if (isMockMode(env)) {
+    return createMockTripDailyTipProvider()
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleTripDailyTipProvider(env, fetcher)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableTripDailyTipProvider()
+  }
+  return createDisabledTripDailyTipProvider()
+}
+
+function mapTripDailyTipErrorCodeToStatus(code: TripDailyTipProviderErrorCode): number {
   switch (code) {
     case 'provider_unavailable': return 503
     case 'unsupported': return 501

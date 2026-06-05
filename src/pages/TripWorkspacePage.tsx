@@ -5,6 +5,7 @@ import { TripCover } from '../components/trip/TripCover'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
+import { TripDailyTravelTipCard } from '../components/trip/TripDailyTravelTipCard'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePanel'
@@ -169,12 +170,12 @@ export function TripWorkspacePage() {
   }, [days, itemsByDay, loadedTripContextKey, routePreparationVersion, trip, tripContextKey])
 
 
-  const tripBrief = useMemo(() => {
+  const tripContext = useMemo(() => {
     if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
       return null
     }
 
-    const context = buildTripContext({
+    return buildTripContext({
       days,
       items: allItems,
       nowPlainDate: formatDateKey(new Date()),
@@ -183,8 +184,15 @@ export function TripWorkspacePage() {
       tickets: ticketMetas,
       trip,
     })
-    return buildTripBrief(context, analyzeTripContext(context))
   }, [allItems, days, loadedTripContextKey, selectedDay?.id, ticketMetas, trip, tripContextKey])
+
+  const tripCheckResult = useMemo(() => {
+    return tripContext ? analyzeTripContext(tripContext) : null
+  }, [tripContext])
+
+  const tripBrief = useMemo(() => {
+    return tripContext && tripCheckResult ? buildTripBrief(tripContext, tripCheckResult) : null
+  }, [tripCheckResult, tripContext])
 
   async function handleGenerateDays() {
     if (!trip) {
@@ -341,6 +349,21 @@ export function TripWorkspacePage() {
                 selectedDay={selectedDay}
                 tripId={trip.id}
               />
+              <TripDailyTravelTipCard
+                days={days}
+                itemsByDay={itemsByDay}
+                onOpenContentEnrichment={() => document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                onOpenDay={(targetDay) => openDay(targetDay, 'schedule')}
+                onOpenRouteGeneration={() => {
+                  if (routePreparation?.canGenerate) {
+                    setRouteGenerationConfirmOpen(true)
+                  }
+                }}
+                onSaved={async () => { await refresh() }}
+                routePreparation={routePreparation}
+                trip={trip}
+                tripCheck={tripCheckResult}
+              />
               {/* Action Buttons */}
               <div className="flex gap-3 mt-2">
                 <button
@@ -431,7 +454,9 @@ export function TripWorkspacePage() {
                 tripId={trip.id}
               />
             ) : null}
-            <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+            <div id="trip-content-enrichment-panel">
+              <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+            </div>
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />

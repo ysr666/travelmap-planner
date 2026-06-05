@@ -178,6 +178,216 @@ test('Trip Home 路线准备在坐标不足时保持安静不可用', async ({ p
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 今日旅行提示本地展示并在确认后保存增强提示', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => {
+    const fixedNow = new Date('2026-06-05T10:00:00+08:00').valueOf()
+    const RealDate = Date
+    class MockDate extends RealDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(fixedNow)
+        } else {
+          super(args[0] as string | number | Date)
+        }
+      }
+
+      static now() {
+        return fixedNow
+      }
+    }
+    Object.setPrototypeOf(MockDate, RealDate)
+    window.Date = MockDate as DateConstructor
+  })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  await forceSupabaseUnconfigured(page)
+  let travelSearchRequests = 0
+  let dailyTipRequests = 0
+  let routePreviewRequests = 0
+  let cloudRequests = 0
+  let ticketRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('旅行备注')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          results: [{
+            confidence: 'high',
+            displayUrl: 'transport.example/west-lake',
+            domain: 'transport.example',
+            retrievedAt: '2026-06-05T02:00:00.000Z',
+            snippet: '出发前请核对景区周边交通管制和步行入口。',
+            sourceType: 'official',
+            title: '西湖交通提示',
+            url: 'https://transport.example/west-lake',
+          }],
+          retrievedAt: '2026-06-05T02:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'trip_daily_tip') {
+      dailyTipRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('cloud')
+      expect(JSON.stringify(body)).not.toContain('旅行备注')
+      expect(body.sources.length).toBeGreaterThan(0)
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'trip_daily_tip',
+          sections: [
+            { key: 'opening_hours', sourceIds: ['source-opening'], text: '西湖开放时间以官网为准。', title: '开放时间' },
+            { key: 'ticket_price', sourceIds: ['source-opening'], text: '主景区免费，收费项目以现场公告为准。', title: '票价' },
+          ],
+          source: 'mock',
+          sourceIds: ['source-opening'],
+          summary: '出发前优先核对西湖开放状态、收费项目和路线风险。',
+          warnings: [],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'route_preview') {
+      routePreviewRequests += 1
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+  await page.route('**/tickets/**', (route) => {
+    ticketRequests += 1
+    return route.abort()
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    trips: [{
+      createdAt: now,
+      destination: '杭州',
+      endDate: '2026-06-06',
+      id: 'trip-daily-tip',
+      notes: '旅行备注',
+      startDate: '2026-06-05',
+      title: '杭州今日提示测试',
+      updatedAt: now,
+    }],
+    days: [
+      { date: '2026-06-05', id: 'daily_tip_day_1', sortOrder: 1, title: '第一天', tripId: 'trip-daily-tip' },
+      { date: '2026-06-06', id: 'daily_tip_day_2', sortOrder: 2, title: '第二天', tripId: 'trip-daily-tip' },
+    ],
+    itineraryItems: [
+      {
+        contentEnrichment: {
+          baselineFingerprint: 'baseline',
+          generatedAt: '2026-06-01T00:00:00.000Z',
+          introduction: { sourceIds: ['source-opening'], text: '西湖介绍。' },
+          notices: [{ sourceIds: ['source-opening'], text: '节假日建议提前预约。' }],
+          openingHours: { sourceIds: ['source-opening'], text: '周一至周日 全天开放' },
+          recommendedStay: { basis: 'ai_estimate', durationMinutes: 90, reason: '估算', text: '建议停留约 1.5 小时' },
+          schemaVersion: 1,
+          sources: [{
+            confidence: 'high',
+            id: 'source-opening',
+            label: '官网',
+            retrievedAt: '2026-06-01T00:00:00.000Z',
+            sourceType: 'official',
+            title: '西湖官网',
+            url: 'https://westlake.example',
+          }],
+          ticketPrice: { kind: 'admission', sourceIds: ['source-opening'], text: '主景区免费。' },
+          warnings: [],
+        },
+        createdAt: now,
+        dayId: 'daily_tip_day_1',
+        id: 'daily_tip_item_1',
+        lat: 30.25,
+        lng: 120.14,
+        sortOrder: 1,
+        startTime: '09:00',
+        ticketIds: [],
+        title: '西湖',
+        tripId: 'trip-daily-tip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'daily_tip_day_1',
+        id: 'daily_tip_item_2',
+        lat: 30.26,
+        lng: 120.15,
+        sortOrder: 2,
+        startTime: '13:00',
+        ticketIds: [],
+        title: '孤山',
+        tripId: 'trip-daily-tip',
+        updatedAt: now,
+      },
+    ],
+  })
+
+  await page.goto('/#/trip?tripId=trip-daily-tip&dayId=daily_tip_day_1', { waitUntil: 'domcontentloaded' })
+  const card = page.getByTestId('trip-daily-travel-tip-card')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('今日旅行提示')
+  await expect(card).toContainText('当日提示')
+  await expect(card).toContainText('开放时间')
+  await expect(card).toContainText('主景区免费')
+  await expect(card).toContainText('节假日建议提前预约')
+  expect(travelSearchRequests).toBe(0)
+  expect(dailyTipRequests).toBe(0)
+  expect(routePreviewRequests).toBe(0)
+  expect(await readTripNotes(page, 'trip-daily-tip')).toBe('旅行备注')
+
+  await card.getByRole('button', { name: '生成增强提示' }).click()
+  await expect(page.getByRole('dialog')).toContainText('travel_search')
+  expect(travelSearchRequests).toBe(0)
+  expect(dailyTipRequests).toBe(0)
+  await page.getByRole('dialog').getByRole('button', { name: '暂不生成' }).click()
+  expect(travelSearchRequests).toBe(0)
+  expect(dailyTipRequests).toBe(0)
+
+  await card.getByRole('button', { name: '生成增强提示' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认生成' }).click()
+  await expect(card.getByTestId('trip-daily-tip-preview')).toContainText('出发前优先核对')
+  expect(dailyTipRequests).toBe(1)
+  expect(routePreviewRequests).toBe(0)
+
+  await card.getByRole('button', { name: '保存到旅行备注' }).click()
+  await expect(page.getByRole('dialog')).toContainText('旅行备注')
+  await page.getByRole('dialog').getByRole('button', { name: '暂不保存' }).click()
+  expect(await readTripNotes(page, 'trip-daily-tip')).toBe('旅行备注')
+
+  await card.getByRole('button', { name: '保存到旅行备注' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认保存' }).click()
+  await expect.poll(() => readTripNotes(page, 'trip-daily-tip')).toContain('今日旅行提示')
+  expect(await readRouteCacheEntryCount(page)).toBe(0)
+  expect(routePreviewRequests).toBe(0)
+  expect(cloudRequests).toBe(0)
+  expect(ticketRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home 地图预览缓存路线并通过 proxy 应用路线顺序建议', async ({ page }) => {
   await mockMapStyle(page)
   let routePreviewRequests = 0

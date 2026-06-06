@@ -7,7 +7,7 @@
 - 轻量化不是删内容。必要信息要保留，空壳 card、chip、分栏和无意义留白要删除。
 - 独立页面不等于表单完成。新建 / 编辑页面需要继续做移动端布局、重叠、错误提示和键盘场景 QA。
 - 路由拆分不等于交互完成。Trip Home / Day View / Item Detail 已拆开，但 Day View 仍未完成理想的“marker → 轻卡片 → Item Detail”地图交互。
-- 继续保持 local-first。IndexedDB 是主数据源；Supabase 是单旅行云端保存，不是实时表同步。
+- 继续保持离线可用、本机先落盘。IndexedDB 是此设备离线缓存与首写层；Supabase 是单旅行云端同步，不是实时表同步。
 - AI 和地图 API 只做辅助。AI draft generation / repair 只更新草稿 preview，用户确认后才写入；server-only provider keys 通过后端 proxy 保存；不缓存商业地图瓦片。
 
 ## 已完成基线
@@ -18,8 +18,8 @@
 - Phase 12-pre-D：Trip Home / Day View 拆分实施计划完成。
 - Phase 12-pre-E：共享数据加载与路由拆分铺垫完成。
 - Phase 12-pre-F：Trip Home / Day View / Item Detail 导航回归检查完成。
-- Phase 12A：自动云端保存基础完成。
-- Phase 12B：PWA 启动云端保存检查完成。
+- Phase 12A：自动云端同步基础完成。
+- Phase 12B：PWA 启动云端同步检查完成。
 - Phase 12C：冲突感知云端提示与操作链路完成。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
 - AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation 完成。
@@ -131,13 +131,14 @@
 ## 长期边界
 
 - 用户可见文案保持中文。
-- 本地 IndexedDB 仍是主数据源。
+- IndexedDB 仍是此设备离线缓存与首写层。
 - 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
-- Supabase 是手动 / 自动单旅行云端保存，不是实时表同步。
-- 从当前版本开始，一个本地 `trip.id` 对应一个云端保存；上传会覆盖该旅行的云端保存。
-- 云端版本较新时使用云端版本覆盖本地，本地版本较新时用本地覆盖云端；可能冲突时提示用户确认方向，不做自动合并。
-- 旧版多条云端记录和旧版恢复出的本地副本可能仍存在；不自动迁移、合并、删除或清理。
-- 本地 zip 备份仍然重要。
+- Supabase 是单旅行账号同步，不是实时表同步。
+- 从当前版本开始，一个本地 `trip.id` 对应一个云端同步记录；同步会覆盖该旅行的云端同步记录。
+- 账号数据较新时同步账号数据到此设备，此设备版本较新时同步此设备版本到账号；可能冲突时提示用户确认方向，不做自动合并。
+- 旧版多条云端记录和旧版恢复出的离线缓存可能仍存在；不自动迁移、合并、删除或清理。
+- zip 归档是可选离线归档能力。
+- 长期同步路线见 `docs/SUPABASE_CLOUD_BACKUP.md`：分对象同步、票据 blob 独立上传、可清理本机缓存、增量队列和更细粒度冲突合并均是后续协议升级，不属于当前 snapshot 兼容实现。
 - OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
 - 当前 AI 不联网搜索。`travel_search` 只是未来真实搜索的结构槽位，当前成功 runtime source 仅限 mock。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。

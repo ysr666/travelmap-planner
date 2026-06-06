@@ -21,9 +21,14 @@ import {
   buildAiTripEditLocalStateFingerprint,
 } from './aiTripEditApply'
 import { buildAiTripEditContext } from './aiTripEditContext'
+import {
+  getTripAutoSnapshotStatus,
+  resetAutoSnapshotBackupForTests,
+} from '../autoSnapshotBackup'
 import type { AiTripEditPatchPlan } from './aiTripEditPatch'
 
 beforeEach(async () => {
+  resetAutoSnapshotBackupForTests()
   await db.delete()
   await db.open()
 })
@@ -72,6 +77,7 @@ describe('applyAiTripEditPatchPlanToDb', () => {
     expect(day2Items.find((item) => item.title === '咖啡休息')?.ticketIds).toEqual([])
     expect(day2Items.map((item) => item.sortOrder)).toEqual([1, 2])
     expect((await getTrip(seed.trip.id))?.updatedAt).toBe(12345)
+    expect(getTripAutoSnapshotStatus(seed.trip.id)?.reason).toBe('ai-trip-edit-applied')
   })
 
   it('reorders a day while preserving item IDs and normalized sortOrder', async () => {
@@ -135,6 +141,7 @@ describe('applyAiTripEditPatchPlanToDb', () => {
 
     expect(result.ok).toBe(false)
     expect((await getItineraryItem(seed.item1.id))?.title).toBe('用户手动修改')
+    expect(getTripAutoSnapshotStatus(seed.trip.id)).toBeNull()
   })
 
   it('builds zero-write payload for valid no-op plans', async () => {

@@ -44,6 +44,7 @@ import {
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
+import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type SmartTripWorkspacePanelProps = {
@@ -246,7 +247,7 @@ export function SmartTripWorkspacePanel({
       setCheckedDiffIds([])
       setPreviewBaselineFingerprint(null)
       setConfirmApplyOpen(false)
-      setSuccessMessage(result.appliedDiffCount > 0 ? `已应用 ${result.appliedDiffCount} 项智能整理。` : '没有需要应用的修改。')
+      setSuccessMessage(result.appliedDiffCount > 0 ? `已应用 ${result.appliedDiffCount} 项智能整理。${SYNC_QUEUE_SUCCESS_COPY}` : '没有需要应用的修改。')
     } catch {
       setError('应用智能整理失败。')
       setConfirmApplyOpen(false)
@@ -459,7 +460,7 @@ export function SmartTripWorkspacePanel({
       />
 
       <ConfirmDialog
-        body={`将把已勾选的 ${selectedWriteCount} 项修改写入当前本地旅行。\n不会创建票据，不会上传云端，不会清除路线缓存。若行程在预览后已变化，将要求重新生成。`}
+        body={`将把已勾选的 ${selectedWriteCount} 项修改写入当前旅行。\n不会创建票据，不会清除路线缓存。确认写入后，登录状态下会自动同步。若行程在预览后已变化，将要求重新生成。`}
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<Sparkles className="size-5" />}
@@ -1020,7 +1021,7 @@ function buildSendConfirmBody({
   return [
     `将通过 provider proxy 生成整理预览，预计最多 ${estimatedRequestCount} 次请求。`,
     `地点校准 ${placeCount} 次，路线顺序 ${routeDayCount} 次，开放时间/票价搜索 ${searchCount} 次。`,
-    '确认后只生成可勾选 diff，不会直接写入旅行；不会创建票据、上传云端或清除路线缓存。',
+    '确认后只生成可勾选 diff，不会直接写入旅行；不会创建票据或清除路线缓存。',
   ].join('\n')
 }
 

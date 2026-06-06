@@ -1,6 +1,5 @@
-import { markTripAutoSnapshotDirty } from '../autoSnapshotBackup'
-import { emitTravelDataChanged } from '../dataEvents'
 import { sortItineraryItems } from '../itinerary'
+import { recordTripWriteForSync } from '../tripSyncQueue'
 import { db } from '../../db/database'
 import {
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
@@ -428,8 +427,7 @@ export async function applyTripContentEnrichmentPreviewsToDb(
       return result
     }
     if (result.changed) {
-      markTripAutoSnapshotDirty(tripId, 'trip-content-enrichment-applied')
-      emitTravelDataChanged()
+      recordTripWriteForSync(tripId, 'trip-content-enrichment-applied')
     }
     return { appliedCount: result.appliedCount, ok: true }
   } catch {
@@ -575,8 +573,7 @@ export async function applyTripContentSourceRefreshPreviewToDb(
     if (!result.ok) {
       return result
     }
-    markTripAutoSnapshotDirty(tripId, 'trip-content-source-refresh-applied')
-    emitTravelDataChanged()
+    recordTripWriteForSync(tripId, 'trip-content-source-refresh-applied')
     return { ok: true }
   } catch {
     return { errors: ['应用来源刷新失败，行程点未完成写入。'], ok: false }

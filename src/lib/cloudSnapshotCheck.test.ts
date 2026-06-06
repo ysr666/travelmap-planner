@@ -338,18 +338,18 @@ describe('cloud snapshot version context fields', () => {
 
     expect(buildCloudSnapshotVersionContextRows(result)).toEqual([
       {
-        description: '来自当前设备未上传修改时间',
-        label: '本地版本',
+        description: '来自当前设备待同步修改时间',
+        label: '此设备版本',
         value: '2026-04-02 20:00',
       },
       {
-        description: '来自云端保存更新时间',
-        label: '云端版本',
+        description: '来自账号数据同步更新时间',
+        label: '账号数据版本',
         value: '2026-04-02 17:00',
       },
       {
-        description: '当前设备尚未上传到云端保存的修改',
-        label: '未上传修改',
+        description: '当前设备尚未同步到账号的修改',
+        label: '待同步修改',
         value: '2026-04-02 20:00',
       },
     ])

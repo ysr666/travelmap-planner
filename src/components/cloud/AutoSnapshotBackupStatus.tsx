@@ -53,7 +53,7 @@ function getStatusView(status: string | undefined, enabled: boolean, lastError?:
     return {
       className: 'bg-sky-50 text-sky-700 dark:text-sky-300',
       icon: <LoaderCircle className="size-3.5 animate-spin" />,
-      text: '正在云端同步',
+      text: '正在同步',
       weight: 'active',
     }
   }
@@ -62,7 +62,7 @@ function getStatusView(status: string | undefined, enabled: boolean, lastError?:
     return {
       className: 'bg-amber-50 text-amber-800 dark:text-amber-300',
       icon: <CloudOff className="size-3.5" />,
-      text: lastError || '云端同步失败，可稍后重试',
+      text: lastError || '同步失败，可稍后重试',
       weight: 'active',
     }
   }
@@ -71,7 +71,7 @@ function getStatusView(status: string | undefined, enabled: boolean, lastError?:
     return {
       className: 'bg-sky-50 text-sky-700 dark:text-sky-300',
       icon: <Cloud className="size-3.5" />,
-      text: '等待同步到云端',
+      text: '等待自动同步',
       weight: 'active',
     }
   }
@@ -80,7 +80,7 @@ function getStatusView(status: string | undefined, enabled: boolean, lastError?:
     return {
       className: 'bg-emerald-50 text-emerald-700 dark:text-emerald-300',
       icon: <Cloud className="size-3.5" />,
-      text: '已同步到云端',
+      text: '已同步',
       weight: 'quiet',
     }
   }
@@ -88,7 +88,7 @@ function getStatusView(status: string | undefined, enabled: boolean, lastError?:
   return {
     className: 'bg-surface-container-low text-on-surface-variant',
     icon: <Cloud className="size-3.5" />,
-    text: '已自动保存到本地',
+    text: '已保存在此设备',
     weight: 'quiet',
   }
 }

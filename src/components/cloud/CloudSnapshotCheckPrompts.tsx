@@ -78,7 +78,7 @@ export function CloudSnapshotCheckPrompts({
       await refreshCloudSnapshotChecks()
       navigateTo('trip', { tripId: result.tripId })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '使用云端版本覆盖本地失败。')
+      setError(caught instanceof Error ? caught.message : '同步账号数据到此设备失败。')
     } finally {
       setBusySignature(null)
     }
@@ -111,11 +111,11 @@ export function CloudSnapshotCheckPrompts({
       } else {
         markTripAutoSnapshotSynced(target.tripId, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地版本已上传，云端保存已覆盖更新。')
+      setMessage('此设备版本已同步到账号。')
       setUploadConfirmTarget(null)
       await refreshCloudSnapshotChecks()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '覆盖云端保存失败。')
+      setError(caught instanceof Error ? caught.message : '立即同步失败。')
     } finally {
       setBusySignature(null)
     }
@@ -144,12 +144,12 @@ export function CloudSnapshotCheckPrompts({
       ))}
       {hiddenCount > 0 ? (
         <p className="rounded-xl bg-surface-container-low px-3 py-2 text-xs leading-5 text-on-surface-variant">
-          还有 {hiddenCount} 个云端保存提醒，请在云端保存列表中查看。
+          还有 {hiddenCount} 个云端同步提醒，请在云端同步列表中查看。
         </p>
       ) : null}
       <ConfirmDialog
         body={buildCloudRestoreConfirmBody(restoreTarget)}
-        confirmLabel={getRestoreActionLabel(restoreTarget?.status)}
+        confirmLabel={getRestoreActionLabel()}
         icon={<Download className="size-5" />}
         loading={Boolean(busySignature && restoreTarget?.signature === busySignature)}
         onCancel={() => {
@@ -160,7 +160,7 @@ export function CloudSnapshotCheckPrompts({
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
         testId="cloud-save-confirm-dialog"
-        title={restoreTarget?.status === 'possible_conflict' ? '用云端覆盖本地？' : '使用云端版本覆盖本地？'}
+        title="同步账号数据到此设备？"
       />
       <ConfirmDialog
         body={buildCloudUploadConfirmBody(uploadConfirmTarget)}
@@ -175,7 +175,7 @@ export function CloudSnapshotCheckPrompts({
         onConfirm={() => void handleUploadConfirmed()}
         open={Boolean(uploadConfirmTarget)}
         testId="cloud-save-confirm-dialog"
-        title={uploadConfirmTarget?.status === 'possible_conflict' ? '用本地覆盖云端？' : '上传并覆盖云端保存？'}
+        title={uploadConfirmTarget?.status === 'possible_conflict' ? '将此设备版本同步到账号？' : '立即同步到账号？'}
       />
     </section>
   )
@@ -201,7 +201,7 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
           </p>
         ))}
         <p className="pt-1 leading-5 text-outline">
-          系统不会做字段级合并或云端删除；若本地或云端版本变化，提醒可能再次出现。
+          系统不会做字段级合并或自动删除账号数据；若此设备或账号数据变化，提醒可能再次出现。
         </p>
       </div>
     </details>
@@ -291,7 +291,7 @@ function CloudSnapshotPromptCard({
             loading={busy}
             onClick={onRestore}
           >
-            {getRestoreActionLabel(result.status)}
+            {getRestoreActionLabel()}
           </Button>
         ) : null}
         <Button
@@ -300,7 +300,7 @@ function CloudSnapshotPromptCard({
           onClick={() => navigateTo('settings', { section: 'cloud' })}
           variant="secondary"
         >
-          查看云端保存
+          查看云端同步
         </Button>
       </div>
       <button
@@ -343,43 +343,43 @@ function getPromptView(result: CloudSnapshotCheckResult) {
 
 async function ensureCloudSnapshotActionReady() {
   if (!getSupabaseConfigStatus().configured) {
-    throw new Error('云端保存未配置，请先配置 Supabase 环境变量。')
+    throw new Error('云端同步未配置，请先配置 Supabase 环境变量。')
   }
 
   if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
-    throw new Error('当前离线，无法访问云端保存。')
+    throw new Error('当前离线，无法访问云端同步。')
   }
 
   const session = await getCurrentSession().catch(() => null)
   if (!session) {
-    throw new Error('请先登录云端保存账号。')
+    throw new Error('请先登录账号。')
   }
 }
 
 function getUploadActionLabel(status: CloudSnapshotCheckResult['status'] | undefined) {
-  return status === 'possible_conflict' ? '用本地覆盖云端' : '上传并覆盖云端保存'
+  return status === 'possible_conflict' ? '将此设备版本同步到账号' : '立即同步'
 }
 
-function getRestoreActionLabel(status: CloudSnapshotCheckResult['status'] | undefined) {
-  return status === 'possible_conflict' ? '用云端覆盖本地' : '使用云端版本覆盖本地'
+function getRestoreActionLabel() {
+  return '同步账号数据到此设备'
 }
 
 function buildCloudUploadConfirmBody(result: CloudSnapshotCheckResult | null) {
   return [
-    '将用当前本地版本更新云端保存。',
-    '云端原有版本会被覆盖。',
-    '不会创建新的云端快照列表。',
-    '不会自动合并云端修改。',
-    '这是按方向覆盖，不会自动合并本地和云端修改。',
+    '将用此设备版本立即同步到账号。',
+    '账号中原有版本会被覆盖。',
+    '不会创建新的云端记录列表。',
+    '不会自动合并账号中的修改。',
+    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
   ].join('\n') + buildVersionTimestampText(result)
 }
 
 function buildCloudRestoreConfirmBody(result: CloudSnapshotCheckResult | null) {
   return [
-    '将用云端版本覆盖当前本地旅行。',
-    '当前未上传的本地修改可能被覆盖。',
-    '不会创建新的本地旅行副本。',
-    '这是按方向覆盖，不会自动合并本地和云端修改。',
+    '将用账号数据更新此设备旅行。',
+    '此设备未同步的修改可能被覆盖。',
+    '不会创建重复旅行。',
+    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
     '建议确认方向后再继续。',
   ].join('\n') + buildVersionTimestampText(result)
 }
@@ -390,7 +390,7 @@ function buildVersionTimestampText(result: CloudSnapshotCheckResult | null) {
   }
 
   const rows = buildCloudSnapshotVersionContextRows(result).filter((row) => (
-    row.label === '本地版本' || row.label === '云端版本'
+    row.label === '此设备版本' || row.label === '账号数据版本'
   ))
   if (rows.length === 0) {
     return ''

@@ -235,27 +235,27 @@ export function buildCloudSnapshotVersionContextRows(
   const dirtyTime = formatVersionTimestamp(result.dirtyAt)
   const localSource =
     result.dirtyAt && result.localVersion === result.dirtyAt
-      ? '来自当前设备未上传修改时间'
+      ? '来自当前设备待同步修改时间'
       : '来自当前设备旅行最后更新时间'
 
   if (localTime) {
     rows.push({
       description: localSource,
-      label: '本地版本',
+      label: '此设备版本',
       value: localTime,
     })
   }
   if (cloudTime) {
     rows.push({
-      description: '来自云端保存更新时间',
-      label: '云端版本',
+      description: '来自账号数据同步更新时间',
+      label: '账号数据版本',
       value: cloudTime,
     })
   }
   if (dirtyTime) {
     rows.push({
-      description: '当前设备尚未上传到云端保存的修改',
-      label: '未上传修改',
+      description: '当前设备尚未同步到账号的修改',
+      label: '待同步修改',
       value: dirtyTime,
     })
   }
@@ -358,7 +358,7 @@ export async function refreshCloudSnapshotChecks() {
     .catch((caught) => {
       setCloudSnapshotCheckState({
         ...currentState,
-        error: caught instanceof Error ? caught.message : '检查云端保存失败。',
+        error: caught instanceof Error ? caught.message : '检查云端同步失败。',
         isChecking: false,
       })
       return []

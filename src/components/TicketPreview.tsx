@@ -101,7 +101,9 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
       if (storageMode !== 'copy') return
       try {
         const record = await getTicketBlob(ticket.id)
-        if (!record) throw new Error('文件内容缺失，可能是备份不完整或仅记录了文件信息。')
+        if (!record) {
+          throw new Error('离线缓存不可用，可能尚未同步到此设备或浏览器缓存已被清理。请重新同步账号数据或重新上传票据。')
+        }
         nextObjectUrl = URL.createObjectURL(record.blob)
         if (!isActive) { URL.revokeObjectURL(nextObjectUrl); return }
         setBlobState({ blob: record.blob, error: null, isLoading: false, objectUrl: nextObjectUrl, ticketId: ticket.id })
@@ -402,7 +404,7 @@ function ReferencePreview({ ticket }: { ticket: TicketMeta }) {
   return (
     <div className="w-full space-y-3 rounded-3xl bg-amber-50 p-4 text-amber-900" data-testid="ticket-preview-reference">
       <p className="text-sm leading-6">
-        此票据仅记录文件位置，旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到"文件"App、网盘或相册中查找。
+        此票据仅记录文件位置，旅图未保存文件内容，也不能直接打开本地路径。请按你填写的位置到"文件"App、网盘或相册中查找。
       </p>
       <p className="break-words rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold leading-6 [overflow-wrap:anywhere]">
         {ticket.referenceLocation || '未填写位置说明'}

@@ -10,6 +10,7 @@ import {
 } from '../../lib/ai/tripDailyTravelTip'
 import type { TripRoutePreparation } from '../../lib/routePreparation'
 import type { TripCheckResult } from '../../lib/tripCheck'
+import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import type { Day, ItineraryItem, Trip } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -95,7 +96,7 @@ export function TripDailyTravelTipCard({
         setError(result.errors.join('\n'))
         return
       }
-      setMessage('已保存到旅行备注。')
+      setMessage(`已保存到旅行备注。${SYNC_QUEUE_SUCCESS_COPY}`)
       setPreview(null)
       setConfirmSaveOpen(false)
       await onSaved?.()

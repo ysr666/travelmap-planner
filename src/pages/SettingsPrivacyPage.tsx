@@ -37,7 +37,7 @@ export function SettingsPrivacyPage() {
       </section>
 
       <p className="text-xs text-on-surface-variant px-4">
-        这些设置只保存在当前浏览器 localStorage，不会进入备份或云端。
+        这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 归档或云端同步。
       </p>
     </main>
   )

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { getProviderProxyConfig, ProviderProxyClientError } from '../../lib/providerProxyClient'
+import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import {
   TRIP_CONTENT_ENRICHMENT_MAX_ITEMS,
   applyTripContentEnrichmentPreviewsToDb,
@@ -97,7 +98,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
       setConfirmApplyOpen(false)
       setPreview(null)
       setCheckedIds([])
-      setSuccess(result.appliedCount > 0 ? `已补充 ${result.appliedCount} 个行程点内容。` : '没有需要写入的内容。')
+      setSuccess(result.appliedCount > 0 ? `已补充 ${result.appliedCount} 个行程点内容。${SYNC_QUEUE_SUCCESS_COPY}` : '没有需要写入的内容。')
     } catch {
       setError('应用内容补充失败。')
       setConfirmApplyOpen(false)
@@ -346,7 +347,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
       await onApplied()
       setConfirmSourceRefreshApplyOpen(false)
       setSourceRefreshPreview(null)
-      setSuccess('已更新开放时间、票价和官网来源。')
+      setSuccess(`已更新开放时间、票价和官网来源。${SYNC_QUEUE_SUCCESS_COPY}`)
     } catch {
       setError('应用来源刷新失败。')
       setConfirmSourceRefreshApplyOpen(false)

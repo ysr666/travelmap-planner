@@ -20,7 +20,7 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
 
   async function handleExport() {
     if (!trip) {
-      setError('请先进入某个旅行，再导出该旅行备份。')
+      setError('请先进入某个旅行，再导出离线归档。')
       return
     }
 
@@ -30,9 +30,9 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
     try {
       const zipBlob = await exportTripBackup(trip.id)
       downloadBlob(zipBlob, buildTripBackupFileName(trip.title))
-      setSuccess('备份 zip 已生成。请把它保存到 iCloud Drive、OneDrive 或电脑本地。')
+      setSuccess('旅行 zip 归档已生成。可把它保存到 iCloud Drive、OneDrive 或电脑。')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '导出备份失败')
+      setError(caught instanceof Error ? caught.message : '导出归档失败')
     } finally {
       setIsExporting(false)
     }
@@ -40,19 +40,22 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
 
   return (
     <section className="space-y-3" id="travel-backup-panel">
-      <SectionHeader title="备份与恢复" />
+      <SectionHeader title="同步与归档" />
+
+      <CloudBackupPanel trip={trip} />
+
       <Card className="space-y-3">
         <p className="text-sm leading-6 text-on-surface-variant">
-          备份只在本机生成，不会上传服务器。zip 会包含行程、交通段、地图坐标、票据元数据，以及可用的 copy 模式票据文件。
+          zip 归档是高级迁移和手动留存工具，不是日常同步路径。它只在此设备生成，不会上传服务器。
         </p>
         <div className="flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
             <HardDriveDownload className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-on-surface">导出当前旅行</h3>
+            <h3 className="text-base font-semibold text-on-surface">高级：导出 zip 归档</h3>
             <p className="truncate text-sm text-on-surface-variant">
-              {trip ? trip.title : '请先进入某个旅行，再导出该旅行备份。'}
+              {trip ? trip.title : '请先进入某个旅行，再导出离线归档。'}
             </p>
           </div>
         </div>
@@ -66,11 +69,11 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
             loading={isExporting}
             onClick={() => void handleExport()}
           >
-            导出当前旅行备份 zip
+            导出当前旅行 zip 归档
           </Button>
         ) : (
           <EmptyState
-            body="从旅行总览进入设置页后，可以导出该旅行的完整备份。"
+            body="从旅行总览进入设置页后，可以导出该旅行的完整 zip 归档。"
             icon={<Archive className="size-6" />}
             title="当前没有可导出的旅行"
           />
@@ -83,8 +86,6 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
           <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">{success}</p>
         ) : null}
       </Card>
-
-      {trip ? <CloudBackupPanel trip={trip} /> : null}
     </section>
   )
 }

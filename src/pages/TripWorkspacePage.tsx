@@ -475,7 +475,7 @@ export function TripWorkspacePage() {
               </Card>
             ) : null}
 
-            <Collapsible title="备份与恢复">
+            <Collapsible title="同步与归档">
               <TravelBackupPanel trip={trip} />
             </Collapsible>
           </div>

@@ -1,8 +1,7 @@
 import { createId } from '../../db/ids'
 import { db } from '../../db/database'
-import { markTripAutoSnapshotDirty } from '../autoSnapshotBackup'
-import { emitTravelDataChanged } from '../dataEvents'
 import { safeFileName } from '../backup'
+import { recordTripWriteForSync } from '../tripSyncQueue'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, TransportMode, Trip } from '../../types'
 
 export type ExistingTripImportConfidence = 'high' | 'medium' | 'low'
@@ -559,8 +558,7 @@ export async function applyExistingTripImportPreview({
     })
 
     if (result.ok && result.appliedCount > 0) {
-      markTripAutoSnapshotDirty(tripId, 'existing-trip-imported')
-      emitTravelDataChanged()
+      recordTripWriteForSync(tripId, 'existing-trip-imported')
     }
     return result
   } catch (caught) {

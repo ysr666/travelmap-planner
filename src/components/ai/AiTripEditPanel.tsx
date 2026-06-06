@@ -304,7 +304,7 @@ export function AiTripEditPanel({
       />
 
       <ConfirmDialog
-        body="将把这些修改写入当前本地旅行。不会联网搜索或查询网页，不会生成路线，不会创建票据，不会上传云端。"
+        body="将把这些修改写入当前旅行。不会联网搜索或查询网页，不会生成路线，不会创建票据。确认写入后，登录状态下会自动同步。"
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<Wand2 className="size-5" />}

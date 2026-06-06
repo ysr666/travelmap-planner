@@ -47,7 +47,7 @@ describe('aiTripDraftImportCheck', () => {
     expect(check.routeProviderConfigured).toBe(false)
     expect(check.routeReadyDayCount).toBe(0)
     expect(check.routeSummary).toContain('路线服务未配置')
-    expect(check.autoSyncMessage).toContain('只会保存在当前设备')
+    expect(check.autoSyncMessage).toContain('重新开启后可同步到账号')
   })
 
   it('handles drafts without route-ready days', () => {

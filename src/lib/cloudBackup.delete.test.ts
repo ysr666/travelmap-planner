@@ -120,7 +120,7 @@ describe('deleteCloudBackup', () => {
     })
 
     await expect(deleteCloudBackup('backup-id')).resolves.toEqual({
-      warnings: ['云端 snapshot 无法读取，已按当前备份路径清理可枚举文件。'],
+      warnings: ['云端 snapshot 无法读取，已按当前云端记录路径清理可枚举文件。'],
     })
     expect(mockClient.bucket.remove).toHaveBeenCalledWith(
       expect.arrayContaining([

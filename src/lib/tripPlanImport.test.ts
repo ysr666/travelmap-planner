@@ -326,7 +326,7 @@ describe('parseTripPlanFile', () => {
   it('rejects backup-shaped zip, mixed zip, missing trip-plan.json, and missing copy files', async () => {
     await expect(
       parseTripPlanFile(await makeZipFile({ 'data/trip.json': '{}', 'manifest.json': '{}' })),
-    ).rejects.toThrow('完整备份 zip')
+    ).rejects.toThrow('完整 zip 归档')
 
     await expect(
       parseTripPlanFile(await makeZipFile({
@@ -334,7 +334,7 @@ describe('parseTripPlanFile', () => {
         'manifest.json': '{}',
         'trip-plan.json': JSON.stringify(basicPackage()),
       })),
-    ).rejects.toThrow('同时包含 AI 行程包和完整备份结构')
+    ).rejects.toThrow('同时包含 AI 行程包和完整归档结构')
 
     await expect(parseTripPlanFile(await makeZipFile({ 'files/a.txt': 'hello' }))).rejects.toThrow('缺少 trip-plan.json')
 

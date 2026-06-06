@@ -29,6 +29,7 @@ import {
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
+import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
 type ExistingTripImportPanelProps = {
@@ -175,7 +176,7 @@ export function ExistingTripImportPanel({
         return
       }
       setConfirmApplyOpen(false)
-      setSuccessMessage(result.appliedCount > 0 ? `已应用 ${result.appliedCount} 项导入建议。` : '没有应用任何建议。')
+      setSuccessMessage(result.appliedCount > 0 ? `已应用 ${result.appliedCount} 项导入建议。${SYNC_QUEUE_SUCCESS_COPY}` : '没有应用任何建议。')
       setPreview(null)
       setCheckedDiffIds([])
       await onApplied()
@@ -358,7 +359,7 @@ export function ExistingTripImportPanel({
         title="发送提取文本给 AI 识别？"
       />
       <ConfirmDialog
-        body={`将应用 ${selectedCount} 项已勾选建议，创建/更新当前旅行的日期、行程点、票据和备注。应用前会检查本地行程是否变化。`}
+        body={`将应用 ${selectedCount} 项已勾选建议，创建/更新当前旅行的日期、行程点、票据和备注。应用前会检查本地行程是否变化；确认写入后，登录状态下会自动同步。`}
         confirmLabel="确认应用"
         loading={isApplying}
         onCancel={() => setConfirmApplyOpen(false)}
@@ -471,7 +472,7 @@ function describeDiff(diff: ExistingTripImportDiff) {
     return diff.data.note
   }
   if (diff.type === 'create_ticket') {
-    return diff.data.fileName ? `保存副本：${diff.data.fileName}` : '创建未绑定票据记录'
+    return diff.data.fileName ? `保存票据：${diff.data.fileName}` : '创建未绑定票据记录'
   }
   if (diff.type === 'bind_ticket') {
     return '将票据绑定到目标行程点'

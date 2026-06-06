@@ -44,8 +44,8 @@ export function buildAiTripDraftImportCheck({
   return {
     autoSyncEnabled,
     autoSyncMessage: autoSyncEnabled
-      ? '导入后会标记为等待同步；若已登录并配置云端保存，现有云端自动同步会后台处理。'
-      : '云端自动同步已关闭；导入后只会保存在当前设备。',
+      ? '导入后会标记为等待同步；若已登录并配置云端同步，现有云端自动同步会后台处理。'
+      : '云端自动同步已关闭；导入后会先保存在此设备，重新开启后可同步到账号。',
     dateRangeLabel: `${draft.startDate} 至 ${draft.endDate}`,
     dayCount: draft.days.length,
     dailyTipCount,

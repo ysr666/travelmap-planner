@@ -512,11 +512,11 @@ async function parseTripPlanZip(file: File): Promise<ParsedTripPlanFile> {
   const hasBackup = Boolean(zip.file('manifest.json') && zip.file('data/trip.json'))
 
   if (hasTripPlan && hasBackup) {
-    throw new Error('该 zip 同时包含 AI 行程包和完整备份结构。请拆分后重新导入。')
+    throw new Error('该 zip 同时包含 AI 行程包和完整归档结构。请拆分后重新导入。')
   }
 
   if (hasBackup) {
-    throw new Error('这是旅图完整备份 zip，请使用“导入备份 zip”入口。')
+    throw new Error('这是旅图完整 zip 归档，请使用“高级与迁移”里的 zip 归档入口。')
   }
 
   if (!hasTripPlan) {

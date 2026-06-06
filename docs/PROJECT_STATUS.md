@@ -7,7 +7,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 
 ## 当前定位
 
-旅图是 local-first 出国旅行 PWA。核心数据保存在浏览器 IndexedDB；zip 和 Supabase 都是备份 / 恢复层，不替代本地数据源。
+旅图是离线可用、登录后自动同步的出国旅行 PWA。核心数据先写入浏览器 IndexedDB 离线缓存；Supabase 用于账号数据同步，zip 是可选离线归档。
 
 它不是订票软件、完整导航软件、实时同步产品或多人协作工具。AI 与地图服务只做辅助，最终写入仍应由用户确认。
 
@@ -33,7 +33,7 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - `#/day`：Day View，承载 schedule / map 切换和当前 Day 的日程、地图。
 - `#/item`：Item Detail 独立页面。
 - `#/tickets`：票据库。
-- `#/settings`：设置、备份、导入与 provider 配置。
+- `#/settings`：设置、同步、归档导入与 provider 配置。
 
 ## 已完成能力
 
@@ -45,16 +45,16 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - 本地路线缓存 `TripMapRouteCacheDB`，缓存自动加载、失效和清理。
 - 地图 collapsed sheet 轻量化第一轮、route chip、route controls、公交近似提示。
 - 票据 copy / reference / external 三模式。
-- 完整 zip 备份导出 / 导入。
+- 完整 zip 归档导出 / 导入。
 - AI trip-plan JSON / zip 导入，含 copy 附件和本地校验预览。
 - AI Draft 页面：本地 mock 草稿、手动 JSON 草稿、provider proxy 真实草稿生成、草稿质量检查和 AI repair preview flow。
 - Trip Home AI 修改建议：一次性用户指令 → 脱敏 saved-trip context → provider proxy patch plan → 本地校验 → diff preview → 二次确认后本地事务 apply。
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
 - Provider proxy quota foundation：生产可绑定 Cloudflare D1 `TRIPMAP_PROVIDER_QUOTA_D1`，本地/dev 无 binding 时使用内存 fallback；route/search/place/AI buckets 保持隔离。
-- Supabase 手动云端保存 / 原地恢复。
-- 自动云端保存基础。
-- PWA 启动云端保存检查。
+- Supabase 云端同步 / 原地恢复。
+- 自动云端同步基础。
+- PWA 启动云端同步检查。
 - 冲突感知云端提示：本地较新、云端较新、可能冲突时只显示非阻塞提示。
 - Playwright 移动端 E2E 与 Vitest 单元测试。
 
@@ -66,8 +66,8 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - Phase 12-pre-D：Trip Home / Day View 拆分计划。
 - Phase 12-pre-E：拆分准备与共享数据加载。
 - Phase 12-pre-F：导航回归检查。
-- Phase 12A：自动云端保存基础。
-- Phase 12B：启动云端保存检查。
+- Phase 12A：自动云端同步基础。
+- Phase 12B：启动云端同步检查。
 - Phase 12C：冲突感知云端提示。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
@@ -89,20 +89,21 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 
 ## 云端与同步状态
 
-- Supabase 用于账号登录后的单旅行云端保存和恢复。
-- 从当前版本开始，一个本地 `trip.id` 对应一个云端保存；同一用户的同一 `trip.id` 使用稳定 `backupId`，手动上传会覆盖同一个云端保存，包含旅行结构化数据和 copy 模式票据附件。
-- 自动云端保存默认关闭；开启后在本地 Trip / Day / Item / Ticket 变更成功后延迟覆盖同一个云端保存。
-- 启动、恢复在线或登录变化时会比较本地版本信号与最新云端保存 metadata，并补偿本地更新、缺失云端保存或遗留上传中状态。
-- 云端版本较新时会提示使用云端版本覆盖同一 `trip.id` 的本地旅行；本地版本较新时会上传本地版本并覆盖同一个云端保存；可能双向修改时要求用户选择用本地覆盖云端或用云端覆盖本地。
-- 旧版多条云端记录和旧版恢复出的本地副本可能仍存在；当前版本不会自动迁移、合并、删除或清理这些历史数据。
-- 删除本地旅行不会删除云端保存；删除云端保存必须走手动确认。
+- Supabase 用于账号登录后的单旅行云端同步和恢复。
+- 从当前版本开始，一个本地 `trip.id` 对应一个云端同步记录；同一用户的同一 `trip.id` 使用稳定 `backupId`，同步会覆盖同一个云端同步记录，包含旅行结构化数据和已保存票据文件。
+- 自动云端同步默认开启，可由用户关闭；开启后在 Trip / Day / Item / Ticket / AI 应用 / 导入 / 内容补充 / 备注追加等写入成功后延迟同步同一个云端记录。
+- 启动、恢复在线或登录变化时会比较此设备版本信号与账号数据 metadata，并补偿此设备更新、缺失云端同步记录或遗留同步中状态。
+- 账号数据较新时会提示同步账号数据到此设备；此设备版本较新时会同步此设备版本并覆盖同一个云端同步记录；可能双向修改时要求用户选择同步方向。
+- 旧版多条云端记录和旧版恢复出的离线缓存可能仍存在；当前版本不会自动迁移、合并、删除或清理这些历史数据。
+- 删除本地旅行不会删除云端同步记录；删除云端记录必须走手动确认。
 - 当前不是实时表同步，不做字段级合并、实时协作或云端删除同步。
+- 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；分对象同步、票据 blob 独立云端 id、本机缓存清理和对象级冲突合并仍是未来工作。
 
 ## 数据与缓存边界
 
-- IndexedDB 是主数据源。
+- IndexedDB 是此设备离线缓存与首写层。
 - 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
-- 完整 zip 备份包含旅行、Day、Item、票据元数据和 copy 文件内容。
+- 完整 zip 归档包含旅行、Day、Item、票据元数据和 copy 文件内容。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
 - Server-only OpenRouteService / Google Routes / Google Maps Platform shared server key / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。若 Maps JS、Google Routes 和 Google Places 使用同一个实际 key 值，后端仍通过 `GOOGLE_MAPS_PLATFORM_API_KEY` 读取。
 - Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。D1 binding 缺失时仅本地/dev 内存 fallback；binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。

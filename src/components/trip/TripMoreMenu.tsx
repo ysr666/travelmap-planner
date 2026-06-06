@@ -32,7 +32,7 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
               <X className="size-4" />
             </button>
             <MenuItem icon={<Ticket className="size-4" />} label="全部票据" onClick={() => navigateTo('tickets', { tripId })} />
-            <MenuItem icon={<Archive className="size-4" />} label="备份与恢复" onClick={() => navigateTo('trip', { tripId, view: 'overview' })} />
+            <MenuItem icon={<Archive className="size-4" />} label="同步与归档" onClick={() => navigateTo('trip', { tripId, view: 'overview' })} />
             <MenuItem icon={<Settings className="size-4" />} label="设置" onClick={() => navigateTo('settings')} />
             <MenuItem icon={<Home className="size-4" />} label="返回首页" onClick={() => navigateTo('home')} />
           </div>

@@ -83,7 +83,7 @@ export function getSupabaseClient() {
 export function requireSupabaseClient() {
   const client = getSupabaseClient()
   if (!client) {
-    throw new Error('云端保存未配置，请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。')
+    throw new Error('云端同步未配置，请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。')
   }
 
   return client

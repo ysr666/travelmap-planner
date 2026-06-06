@@ -216,7 +216,7 @@ async function runAutoBackup(
     completeTripAutoSnapshotFailure(
       tripId,
       dirtyAt,
-      caught instanceof Error ? caught.message : '云端保存失败，可稍后重试。',
+      caught instanceof Error ? caught.message : '云端同步失败，可稍后重试。',
     )
     if (canAttemptAutoBackup()) {
       scheduleTrip(tripId, AUTO_BACKUP_RETRY_MS)

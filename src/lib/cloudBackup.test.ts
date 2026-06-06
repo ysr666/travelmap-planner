@@ -21,7 +21,7 @@ const trip: Trip = {
   id: 'trip_old',
   notes: '测试',
   startDate: '2026-04-01',
-  title: '云端保存测试',
+  title: '云端同步测试',
   updatedAt: 200,
 }
 
@@ -261,7 +261,7 @@ describe('supabase cloud backup helpers', () => {
 
   it('rejects unsupported cloud snapshot schema and broken references', () => {
     expect(() => parseCloudSnapshot({ schemaVersion: 2, type: 'cloud-trip-backup' })).toThrow(
-      '不支持的云端保存版本',
+      '不支持的云端同步版本',
     )
 
     const snapshot = buildCloudSnapshotFromRecords({
@@ -280,7 +280,7 @@ describe('supabase cloud backup helpers', () => {
   })
 
   it('reports invalid snapshot json with a user-facing error', () => {
-    expect(() => parseCloudSnapshotText('{not json')).toThrow('云端保存 snapshot.json 无法解析')
+    expect(() => parseCloudSnapshotText('{not json')).toThrow('云端同步 snapshot.json 无法解析')
   })
 
   it('rejects file refs outside the current backup storage prefix', () => {

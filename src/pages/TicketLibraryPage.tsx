@@ -5,6 +5,7 @@ import {
   createTicketMeta,
   deleteTicket,
   getItineraryItem,
+  getTicketBlob,
   getTrip,
   listDaysByTrip,
   listItemsByTrip,
@@ -34,13 +35,27 @@ import {
   getTicketDisplayTitle,
   getTicketFileType,
   getTicketScope,
+  getTicketStorageMode,
   isValidExternalUrl,
   normalizeTicketFileName,
   ticketScopeLabels,
 } from '../lib/tickets'
 import {
+  getTicketCloudSyncView,
   getTicketDisplayMeta,
+  type TicketCloudSyncView,
 } from '../lib/ticketDisplay'
+import {
+  getTripAutoSnapshotStatus,
+  isAutoSnapshotBackupEnabled,
+  subscribeAutoSnapshotBackup,
+  type AutoSnapshotBackupEntry,
+} from '../lib/autoSnapshotBackup'
+import {
+  getCurrentUser,
+  getSupabaseConfigStatus,
+} from '../lib/cloudBackup'
+import { getSupabaseClient } from '../lib/supabaseClient'
 import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
@@ -49,6 +64,7 @@ type StorageEstimateState = {
   usage?: number
   quota?: number
 }
+type TicketBlobPresenceState = Record<string, boolean | undefined>
 
 const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -61,8 +77,8 @@ const filterOptions: Array<{ value: TicketFilter; label: string }> = [
 const storageOptions: Array<{ value: TicketStorageMode; label: string; description: string; icon: ReactNode }> = [
   {
     value: 'copy',
-    label: '保存文件副本',
-    description: '离线可看，会进入 zip 备份。',
+    label: '保存票据文件',
+    description: '立即可看；登录后随旅行自动同步，离线缓存可用。',
     icon: <Upload className="size-4" />,
   },
   {
@@ -98,6 +114,13 @@ export function TicketLibraryPage() {
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
+  const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
+  const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
+  const [tripSyncEntry, setTripSyncEntry] = useState<AutoSnapshotBackupEntry | null>(() => getTripAutoSnapshotStatus(tripId))
+  const [isCloudSignedIn, setIsCloudSignedIn] = useState(false)
+  const [isOnline, setIsOnline] = useState(() => (
+    typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine
+  ))
   const [fileInputKey, setFileInputKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
@@ -105,6 +128,7 @@ export function TicketLibraryPage() {
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<TicketMeta | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
 
   const itemById = useMemo(() => {
     return new Map(items.map((item) => [item.id, item]))
@@ -196,6 +220,91 @@ export function TicketLibraryPage() {
   useEffect(() => {
     let isActive = true
 
+    async function refreshTicketBlobPresence() {
+      const copyTickets = tickets.filter((ticket) => getTicketStorageMode(ticket) === 'copy')
+      if (copyTickets.length === 0) {
+        if (isActive) {
+          setTicketBlobPresence({})
+        }
+        return
+      }
+
+      const nextPresence: TicketBlobPresenceState = {}
+      await Promise.all(copyTickets.map(async (ticket) => {
+        try {
+          nextPresence[ticket.id] = Boolean(await getTicketBlob(ticket.id))
+        } catch {
+          nextPresence[ticket.id] = false
+        }
+      }))
+      if (isActive) {
+        setTicketBlobPresence(nextPresence)
+      }
+    }
+
+    void refreshTicketBlobPresence()
+
+    return () => {
+      isActive = false
+    }
+  }, [tickets])
+
+  useEffect(() => {
+    const refreshTripSyncEntry = () => {
+      setAutoSyncEnabledState(isAutoSnapshotBackupEnabled())
+      setTripSyncEntry(getTripAutoSnapshotStatus(tripId))
+    }
+
+    refreshTripSyncEntry()
+    return subscribeAutoSnapshotBackup(refreshTripSyncEntry)
+  }, [tripId])
+
+  useEffect(() => {
+    let isActive = true
+
+    async function refreshCloudSignInState() {
+      if (!getSupabaseConfigStatus().configured) {
+        if (isActive) {
+          setIsCloudSignedIn(false)
+        }
+        return
+      }
+
+      const currentUser = await getCurrentUser().catch(() => null)
+      if (isActive) {
+        setIsCloudSignedIn(Boolean(currentUser))
+      }
+    }
+
+    void refreshCloudSignInState()
+
+    const client = getSupabaseClient()
+    const subscription = client?.auth.onAuthStateChange(() => {
+      void refreshCloudSignInState()
+    }).data.subscription
+
+    return () => {
+      isActive = false
+      subscription?.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    const updateOnlineState = () => {
+      setIsOnline(typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine)
+    }
+
+    window.addEventListener('online', updateOnlineState)
+    window.addEventListener('offline', updateOnlineState)
+    return () => {
+      window.removeEventListener('online', updateOnlineState)
+      window.removeEventListener('offline', updateOnlineState)
+    }
+  }, [])
+
+  useEffect(() => {
+    let isActive = true
+
     async function loadStorageEstimate() {
       if (!navigator.storage?.estimate) {
         return
@@ -220,9 +329,10 @@ export function TicketLibraryPage() {
     }
 
     setActionError(null)
+    setActionMessage(null)
 
     if (storageMode === 'copy' && !selectedFile) {
-      setActionError('请选择要保存到本机的文件。')
+      setActionError('请选择要保存的票据文件。')
       return
     }
 
@@ -240,7 +350,7 @@ export function TicketLibraryPage() {
       storageMode === 'copy' &&
       selectedFile &&
       selectedFile.size > 20 * 1024 * 1024 &&
-      !window.confirm('这个文件超过 20MB，可能占用较多本地空间。仍然继续保存到本机浏览器吗？')
+      !window.confirm('这个文件超过 20MB，会占用较多离线缓存空间。仍然继续保存票据吗？')
     ) {
       return
     }
@@ -289,6 +399,11 @@ export function TicketLibraryPage() {
 
       resetForm()
       await refreshLibrary()
+      setActionMessage(getTicketSaveSuccessMessage({
+        autoSyncEnabled,
+        isOnline,
+        signedIn: isCloudSignedIn,
+      }))
     } catch (caught) {
       if (createdTicketId) {
         await deleteTicket(createdTicketId)
@@ -306,6 +421,7 @@ export function TicketLibraryPage() {
 
     const ticket = pendingDeleteTicket
     setActionError(null)
+    setActionMessage(null)
     setDeletingTicketId(ticket.id)
     try {
       await deleteTicket(ticket.id)
@@ -365,12 +481,12 @@ export function TicketLibraryPage() {
           <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
           <h2 className="mt-1 text-xl font-semibold text-on-surface dark:text-on-surface">票据和订单</h2>
           <p className="mt-2 text-sm leading-6 tm-muted">
-            可保存文件副本，也可只记录文件位置或外部链接。
+            可保存票据文件以便离线查看；登录后会随旅行自动同步，也可只记录文件位置或外部链接。
           </p>
         </div>
 
         <div className="rounded-xl bg-amber-50/80 px-3 py-3 text-sm leading-6 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
-          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致票据丢失。重要旅行出发前必须导出 zip 备份到 iCloud Drive。
+          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致此设备离线缓存不可用。登录并同步完成后，账号数据是长期来源；重要旅行仍可按需导出 zip 归档。
         </div>
 
         {storageEstimate ? (
@@ -392,7 +508,7 @@ export function TicketLibraryPage() {
           </div>
           <div>
             <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">添加票据</h3>
-            <p className="text-xs tm-muted">文件副本单个建议不超过 20MB。</p>
+            <p className="text-xs tm-muted">票据文件单个建议不超过 20MB。</p>
           </div>
         </div>
 
@@ -408,6 +524,7 @@ export function TicketLibraryPage() {
               onClick={() => {
                 setStorageMode(option.value)
                 setActionError(null)
+                setActionMessage(null)
               }}
               type="button"
             >
@@ -486,6 +603,11 @@ export function TicketLibraryPage() {
             {actionError}
           </p>
         ) : null}
+        {actionMessage ? (
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+            {actionMessage}
+          </p>
+        ) : null}
 
         <Button
           className="w-full"
@@ -522,15 +644,25 @@ export function TicketLibraryPage() {
           />
         ) : (
           <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3" data-testid="ticket-gallery">
-            {filteredTickets.map((ticket) => (
-              <TicketCard
-                bindingLabel={describeTicketBinding(ticket, itemById)}
-                key={ticket.id}
-                onDelete={() => setPendingDeleteTicket(ticket)}
-                onPreview={() => setPreviewTicket(ticket)}
-                ticket={ticket}
-              />
-            ))}
+            {filteredTickets.map((ticket) => {
+              const syncView = getTicketCloudSyncView(ticket, {
+                autoSyncEnabled,
+                autoSyncEntry: tripSyncEntry,
+                hasOfflineCache: ticketBlobPresence[ticket.id],
+                isOnline,
+                signedIn: isCloudSignedIn,
+              })
+              return (
+                <TicketCard
+                  bindingLabel={describeTicketBinding(ticket, itemById)}
+                  key={ticket.id}
+                  onDelete={() => setPendingDeleteTicket(ticket)}
+                  onPreview={() => setPreviewTicket(ticket)}
+                  syncView={syncView}
+                  ticket={ticket}
+                />
+              )
+            })}
           </div>
         )}
       </section>
@@ -546,7 +678,7 @@ export function TicketLibraryPage() {
       ) : null}
 
       <ConfirmDialog
-        body="删除后，本机票据文件、元数据和行程点绑定关系都会被移除。"
+        body="删除后，票据文件、元数据和行程点绑定关系都会从此设备移除，并会随旅行同步到账号。"
         confirmLabel="删除票据"
         loading={Boolean(deletingTicketId)}
         onCancel={() => {
@@ -569,11 +701,13 @@ export function TicketLibraryPage() {
 function TicketCard({
   ticket,
   bindingLabel,
+  syncView,
   onPreview,
   onDelete,
 }: {
   ticket: TicketMeta
   bindingLabel: string
+  syncView: TicketCloudSyncView
   onPreview: () => void
   onDelete: () => void
 }) {
@@ -598,12 +732,18 @@ function TicketCard({
             <span className="block min-w-0 truncate text-sm font-semibold text-on-surface dark:text-on-surface">
               {displayTitle}
             </span>
-            <span className="tm-chip shrink-0 text-[10px]">
-              {visual.storageLabel}
+            <span
+              className={`shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getTicketSyncToneClass(syncView.tone)}`}
+              title={syncView.detail}
+            >
+              {syncView.label}
             </span>
           </span>
           <span className="mt-0.5 block truncate text-[11px] leading-4 tm-muted">
             {visual.secondaryLine}
+          </span>
+          <span className="mt-1 line-clamp-2 block text-[11px] leading-4 tm-muted">
+            {syncView.detail}
           </span>
         </span>
 
@@ -693,10 +833,56 @@ function ReferenceTicketFields({
         value={location}
       />
       <p className="rounded-xl bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
-        旅图没有保存这个文件副本，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
+        旅图只记录这个文件的位置说明，不保存文件内容，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
       </p>
     </div>
   )
+}
+
+function getTicketSaveSuccessMessage({
+  autoSyncEnabled,
+  isOnline,
+  signedIn,
+}: {
+  autoSyncEnabled: boolean
+  isOnline: boolean
+  signedIn: boolean
+}) {
+  if (!autoSyncEnabled) {
+    return signedIn
+      ? '已保存到此设备，重新开启云端自动同步后会随旅行同步。'
+      : '已保存到此设备，登录后会自动同步。'
+  }
+
+  if (!signedIn) {
+    return '已保存到此设备，登录后会自动同步。'
+  }
+
+  if (!isOnline) {
+    return '已保存到此设备，网络恢复后会自动同步。'
+  }
+
+  return '已保存，已加入同步队列。'
+}
+
+function getTicketSyncToneClass(tone: TicketCloudSyncView['tone']) {
+  if (tone === 'success') {
+    return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50'
+  }
+
+  if (tone === 'warning') {
+    return 'bg-amber-50 text-amber-800 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50'
+  }
+
+  if (tone === 'danger') {
+    return 'bg-red-50 text-red-600 ring-1 ring-red-100 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50'
+  }
+
+  if (tone === 'info') {
+    return 'bg-sky-50 text-sky-700 ring-1 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50'
+  }
+
+  return 'bg-surface-container-low text-on-surface-variant ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/45 dark:text-outline-variant dark:ring-outline-variant/30/70'
 }
 
 function TextField({

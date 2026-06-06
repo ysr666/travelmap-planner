@@ -162,7 +162,7 @@ describe('formatFileSize', () => {
 
 describe('describeTicketStorage', () => {
   it('describes reference mode', () => {
-    expect(describeTicketStorage(makeTicket({ storageMode: 'reference' }))).toBe('未保存文件副本')
+    expect(describeTicketStorage(makeTicket({ storageMode: 'reference' }))).toBe('仅记录位置')
   })
 
   it('describes external mode', () => {
@@ -171,7 +171,7 @@ describe('describeTicketStorage', () => {
 
   it('describes copy mode with size', () => {
     const result = describeTicketStorage(makeTicket({ storageMode: 'copy', size: 2048 }))
-    expect(result).toContain('保存文件副本')
+    expect(result).toContain('保存票据文件')
     expect(result).toContain('KB')
   })
 })
@@ -180,6 +180,6 @@ describe('describeTicketMetaLine', () => {
   it('combines file type and storage', () => {
     const result = describeTicketMetaLine(makeTicket({ fileType: 'pdf', size: 2048 }))
     expect(result).toContain('PDF')
-    expect(result).toContain('保存文件副本')
+    expect(result).toContain('保存票据文件')
   })
 })

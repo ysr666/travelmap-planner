@@ -536,6 +536,6 @@ async function assertIncomingRecordsBelongToTrip({
     existingTicketMetas.some((ticket) => ticket && ticket.tripId !== tripId)
 
   if (hasForeignRecord) {
-    throw new Error('云端保存中的记录 ID 与其他本地旅行冲突，已停止恢复以避免覆盖。')
+    throw new Error('云端同步中的记录 ID 与其他本地旅行冲突，已停止恢复以避免覆盖。')
   }
 }

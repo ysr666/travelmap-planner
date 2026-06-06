@@ -9,7 +9,7 @@
 - Trip 的 `startDate` / `endDate`、Day 的 `date`、行程点的 `startTime` / `endTime` 都以字符串保存，没有存成浏览器本地 `Date` 或 ISO timestamp。
 - Trip / Item 表单使用浏览器原生 `date` / `time` input，读取和写入的仍是 `YYYY-MM-DD` 与 `HH:mm` 字符串。
 - AI trip-plan 导入要求日期为 `YYYY-MM-DD`，时间为 `HH:mm`，导入记录会保留这些字符串。
-- zip 备份和 Supabase cloud snapshot 会序列化现有记录，不会在导出 / 恢复时转换旅行日期。
+- zip 归档和 Supabase cloud snapshot 会序列化现有记录，不会在导出 / 恢复时转换旅行日期。
 - `createdAt` / `updatedAt` 是系统时间戳；`exportedAt`、cloud metadata 和 route cache 时间是绝对系统时间，可以继续使用 epoch milliseconds 或 ISO timestamp。
 
 已有修正：
@@ -71,7 +71,7 @@ future timezone fields：
 - Day timezone: 默认继承 Trip timezone；跨国家旅行时未来允许按 Day 覆盖。
 - Item timezone: 默认继承 Day timezone；一般景点和餐厅不需要单独设置。
 - Cross-timezone transport: 未来用 departure / arrival 两组日期、时间、timezone 表达，不要把航班或夜车硬塞进单个本地时间。
-- `updatedAt` / `exportedAt`: 继续使用绝对系统时间，用于排序、冲突检查、备份版本判断。
+- `updatedAt` / `exportedAt`: 继续使用绝对系统时间，用于排序、冲突检查、同步版本判断。
 
 本阶段暂缓添加 timezone 字段，原因：
 

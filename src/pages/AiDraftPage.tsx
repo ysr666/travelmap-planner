@@ -2146,7 +2146,7 @@ function AiDraftImportCheckPanel({ check }: { check: AiTripDraftImportCheck }) {
           {check.autoSyncMessage}
         </p>
         <p className="break-words text-xs leading-5 [overflow-wrap:anywhere]">
-          导入确认本身不会直接上传云端；现有同步控制器会按设置继续处理。
+          导入确认会先写入此设备；登录状态下，现有同步控制器会按设置继续处理。
         </p>
       </div>
 

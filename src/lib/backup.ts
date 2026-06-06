@@ -123,7 +123,7 @@ export async function importTripBackup(file: File): Promise<ImportTripBackupResu
 
     const zipFile = zip.file(filePath)
     if (!zipFile) {
-      warnings.push(`票据「${ticket.fileName}」缺少文件内容，可能是备份不完整。`)
+      warnings.push(`票据「${ticket.fileName}」缺少文件内容，可能是 zip 归档不完整。`)
       continue
     }
 
@@ -191,7 +191,7 @@ function stringifyJson(value: unknown) {
 
 function validateImportFile(file: File | null | undefined) {
   if (!file || file.size <= 0) {
-    throw new Error('请选择一个有效的 zip 备份文件。')
+    throw new Error('请选择一个有效的 zip 归档文件。')
   }
 
   const warnings: string[] = []
@@ -203,7 +203,7 @@ function validateImportFile(file: File | null | undefined) {
     file.type === 'application/octet-stream'
 
   if (!hasZipExtension && !hasZipMime) {
-    warnings.push('选择的文件看起来不像 zip，已尝试按备份文件导入。')
+    warnings.push('选择的文件看起来不像 zip，已尝试按归档文件导入。')
   }
 
   return warnings
@@ -212,13 +212,13 @@ function validateImportFile(file: File | null | undefined) {
 async function readJsonFile<T>(zip: JSZip, path: string): Promise<T> {
   const file = zip.file(path)
   if (!file) {
-    throw new Error(`备份缺少必要文件：${path}`)
+    throw new Error(`归档缺少必要文件：${path}`)
   }
 
   try {
     return JSON.parse(await file.async('string')) as T
   } catch {
-    throw new Error(`备份文件无法解析：${path}`)
+    throw new Error(`归档文件无法解析：${path}`)
   }
 }
 
@@ -228,7 +228,7 @@ function validateManifest(manifest: BackupManifest) {
   }
 
   if (manifest.schemaVersion !== SCHEMA_VERSION) {
-    throw new Error(`不支持的备份版本：${String(manifest.schemaVersion)}`)
+    throw new Error(`不支持的归档版本：${String(manifest.schemaVersion)}`)
   }
 
   if (!manifest.fileMap || typeof manifest.fileMap !== 'object') {
@@ -238,7 +238,7 @@ function validateManifest(manifest: BackupManifest) {
 
 function validatePayload(payload: BackupPayload) {
   if (!payload.trip?.id || !payload.trip.title) {
-    throw new Error('备份中的旅行数据不完整。')
+    throw new Error('归档中的旅行数据不完整。')
   }
 
   if (
@@ -246,18 +246,18 @@ function validatePayload(payload: BackupPayload) {
     !Array.isArray(payload.itineraryItems) ||
     !Array.isArray(payload.ticketMetas)
   ) {
-    throw new Error('备份中的结构化数据格式不正确。')
+    throw new Error('归档中的结构化数据格式不正确。')
   }
 
   for (const day of payload.days) {
     if (!day.id || !day.tripId) {
-      throw new Error('备份中的 Day 数据不完整。')
+      throw new Error('归档中的 Day 数据不完整。')
     }
   }
 
   for (const item of payload.itineraryItems) {
     if (!item.id || !item.tripId || !item.dayId) {
-      throw new Error('备份中的行程点数据不完整。')
+      throw new Error('归档中的行程点数据不完整。')
     }
     if (!Array.isArray(item.ticketIds)) {
       item.ticketIds = []
@@ -266,7 +266,7 @@ function validatePayload(payload: BackupPayload) {
 
   for (const ticket of payload.ticketMetas) {
     if (!ticket.id || !ticket.tripId || !ticket.fileName) {
-      throw new Error('备份中的票据元数据不完整。')
+      throw new Error('归档中的票据元数据不完整。')
     }
   }
 }

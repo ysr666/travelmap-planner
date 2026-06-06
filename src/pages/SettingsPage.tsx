@@ -187,9 +187,9 @@ const aiPrivacyGroups: Array<{
         title: '票据图片/PDF 内容',
       },
       {
-        description: '云端保存备份状态；默认关闭。',
+        description: '云端同步状态；默认不发送给 AI。',
         key: 'allowCloudSyncStatus',
-        title: '云端保存状态',
+        title: '云端同步状态',
       },
     ],
   },
@@ -327,8 +327,8 @@ export function SettingsPage() {
       setPersistedStorage(granted)
       setPersistenceMessage(
         granted
-          ? '浏览器已授予持久化本地存储。仍建议定期导出 zip 备份。'
-          : '浏览器未授予持久化本地存储。请务必导出 zip 备份。',
+          ? '浏览器已授予持久化本地存储；重要旅行仍可按需导出 zip 归档。'
+          : '浏览器未授予持久化本地存储；重要旅行建议导出 zip 归档。',
       )
       await refreshStorageStatus()
     } catch (caught) {
@@ -340,7 +340,7 @@ export function SettingsPage() {
 
   async function handleImport() {
     if (!selectedFile) {
-      setError('请选择一个 zip 备份文件。')
+      setError('请选择一个 zip 归档文件。')
       return
     }
 
@@ -359,7 +359,7 @@ export function SettingsPage() {
         result.warnings.length > 0 ? 2200 : 600,
       )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '导入备份失败')
+      setError(caught instanceof Error ? caught.message : '导入归档失败')
     } finally {
       setIsImporting(false)
     }
@@ -571,7 +571,7 @@ export function SettingsPage() {
             />
             <InfoPill
               icon={<Database className="size-4" />}
-              text="已保存的旅行、时间轴、交通段、票据和备份功能依赖本机 IndexedDB。"
+              text="旅行会先写入此设备离线缓存；登录后数据和票据会按设置自动同步。"
             />
             <InfoPill
               icon={<AlertTriangle className="size-4" />}
@@ -582,57 +582,55 @@ export function SettingsPage() {
         </Card>
       </section>
 
-      <section className="space-y-3">
-        <SectionHeader title="导入备份" />
-
-      <Card variant="grouped" className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
-            <Import className="size-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入备份</h3>
-            <p className="text-sm tm-muted">选择之前导出的 travelmap zip 文件。</p>
-          </div>
-        </div>
-
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>备份文件</span>
-          <input
-            accept=".zip,application/zip,application/x-zip-compressed"
-            className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
-            key={fileInputKey}
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            type="file"
-          />
-        </label>
-
-        {selectedFile ? (
-          <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-            已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
-          </p>
-        ) : null}
-
-        <Button
-          className="w-full"
-          disabled={!selectedFile}
-          icon={<Import className="size-4" />}
-          loading={isImporting}
-          onClick={() => void handleImport()}
-          variant="secondary"
-        >
-          导入 zip 备份
-        </Button>
-      </Card>
-      </section>
-
       <Collapsible
         defaultOpen
         key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
-        subtitle="Supabase 云端保存与恢复"
-        title="云端保存"
+        subtitle="账号同步状态、自动同步队列和冲突方向确认"
+        title="云端同步"
       >
         <CloudBackupPanel trip={null} />
+      </Collapsible>
+
+      <Collapsible subtitle="zip 归档用于迁移或手动留存，不是主同步路径" title="高级与迁移">
+        <Card variant="grouped" className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+              <Import className="size-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入 zip 归档</h3>
+              <p className="text-sm tm-muted">选择之前导出的 travelmap zip 归档，用于迁移或旧设备恢复。</p>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>归档文件</span>
+            <input
+              accept=".zip,application/zip,application/x-zip-compressed"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
+              key={fileInputKey}
+              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+          </label>
+
+          {selectedFile ? (
+            <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+              已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
+            </p>
+          ) : null}
+
+          <Button
+            className="w-full"
+            disabled={!selectedFile}
+            icon={<Import className="size-4" />}
+            loading={isImporting}
+            onClick={() => void handleImport()}
+            variant="secondary"
+          >
+            导入 zip 归档
+          </Button>
+        </Card>
       </Collapsible>
 
       <Collapsible defaultOpen subtitle="在应用内生成或导入 AI 行程" title="AI 生成行程">
@@ -653,7 +651,7 @@ export function SettingsPage() {
           <div className="grid gap-2">
             <InfoPill
               icon={<FileJson className="size-4" />}
-              text="AI 行程包用于新建旅行；完整备份 zip 仍请使用上方“导入备份”入口。"
+              text="AI 行程包用于新建旅行；完整 zip 归档仍请使用“高级与迁移”入口。"
             />
             <InfoPill
               icon={<Sparkles className="size-4" />}
@@ -754,9 +752,9 @@ export function SettingsPage() {
               title="持久化存储"
             />
             <ListRow
-              detail="浏览器数据、私密浏览、系统清理或长期未使用都可能影响 IndexedDB。"
+              detail="当前设备可离线查看已缓存旅行和票据；清除浏览器数据、私密浏览、系统清理或长期未使用都可能移除这些缓存。"
               icon={<Smartphone className="size-5" />}
-              title="本机 IndexedDB"
+              title="此设备离线缓存"
             />
           </div>
 
@@ -779,13 +777,13 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible subtitle="版本信息与备份提醒" title="关于">
+      <Collapsible subtitle="版本信息与离线缓存提醒" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">
           <div>
-            <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">备份提醒</h3>
+            <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">离线缓存提醒</h3>
             <p className="mt-2 text-sm leading-6 text-amber-800 dark:text-amber-300">
-              重要旅行出发前必须把 zip 保存到 iCloud Drive、OneDrive 或电脑本地。即使浏览器授予持久化存储，iOS Safari
-              在存储压力、清除数据、私密浏览或长期未使用时仍可能丢失本地数据。
+              旅行会先写入此设备离线缓存。即使浏览器授予持久化存储，iOS Safari
+              在存储压力、清除数据、私密浏览或长期未使用时仍可能清理离线缓存；zip 归档可作为高级迁移或手动留存工具。
             </p>
           </div>
           <div className="rounded-xl bg-white/60 px-3 py-2 dark:bg-slate-950/35">
@@ -967,7 +965,7 @@ function AiPrivacySettingsPanel({
         ))}
 
         <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 备份或 Supabase 云端保存。
+          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 归档或 Supabase 云端同步。
         </p>
       </Card>
     </section>
@@ -1102,7 +1100,7 @@ function RouteServiceSettings({
             <div className="min-w-0 flex-1">
               <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线缓存</h4>
               <p className="mt-1 text-xs leading-5 tm-muted">
-                只缓存道路路线 polyline，不缓存地图瓦片，也不会进入备份或云端。
+                只缓存道路路线 polyline，不缓存地图瓦片，也不会进入 zip 归档或账号同步。
               </p>
             </div>
             <span
@@ -1365,7 +1363,7 @@ function TripPlanSuccessCard({ result }: { result: ImportTripPlanResult }) {
           <li>地图坐标是否准确</li>
           <li>可生成路线的日程是否需要批量生成路线预览</li>
           <li>票据是否绑定到正确行程点</li>
-          <li>出发前导出完整 zip 备份</li>
+          <li>重要旅行可导出完整 zip 归档</li>
         </ol>
       </div>
 
@@ -1506,7 +1504,7 @@ function getPersistenceDetail(isSupported: boolean, persisted: boolean | null) {
   }
 
   if (persisted === true) {
-    return '已获得持久化存储许可，但仍需要导出 zip 备份'
+    return '已获得持久化存储许可，重要旅行仍可按需导出 zip 归档'
   }
 
   if (persisted === false) {

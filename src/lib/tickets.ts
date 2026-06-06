@@ -13,7 +13,7 @@ export const ticketFileTypeLabels: Record<TicketMeta['fileType'], string> = {
 }
 
 export const ticketStorageModeLabels: Record<TicketStorageMode, string> = {
-  copy: '保存文件副本',
+  copy: '保存票据文件',
   reference: '仅记录文件位置',
   external: '外部链接',
 }
@@ -90,14 +90,14 @@ export function describeTicketStorage(ticket: TicketMeta) {
   const storageMode = getTicketStorageMode(ticket)
 
   if (storageMode === 'reference') {
-    return '未保存文件副本'
+    return '仅记录位置'
   }
 
   if (storageMode === 'external') {
     return '外部链接'
   }
 
-  return `保存文件副本 · ${formatFileSize(ticket.size)}`
+  return `保存票据文件 · 离线缓存 · ${formatFileSize(ticket.size)}`
 }
 
 export function describeTicketMetaLine(ticket: TicketMeta) {

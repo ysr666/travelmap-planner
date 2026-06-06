@@ -193,7 +193,7 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
   await expect(page.getByTestId('ticket-gallery')).toContainText('链接')
   await expect(page.getByTestId('ticket-gallery')).toContainText('图片')
   await expect(page.getByTestId('ticket-gallery')).toContainText('PDF')
-  await expect(page.getByTestId('ticket-gallery')).toContainText('本地副本')
+  await expect(page.getByTestId('ticket-gallery')).toContainText('离线可用')
   await expect(page.getByTestId('ticket-gallery')).toContainText('绑定到行程点')
   await expect(page.getByRole('button', { name: /删除酒店订单 PDF/ })).toBeVisible()
 

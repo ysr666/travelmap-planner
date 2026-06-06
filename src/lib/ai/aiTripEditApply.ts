@@ -1,6 +1,6 @@
 import { createId } from '../../db/ids'
 import { db } from '../../db/database'
-import { emitTravelDataChanged } from '../dataEvents'
+import { recordTripWriteForSync } from '../tripSyncQueue'
 import { buildAiTripEditContext, type AiTripEditContext } from './aiTripEditContext'
 import {
   buildAiTripEditPatchPreview,
@@ -325,7 +325,7 @@ export async function applyAiTripEditPatchPlanToDb(
     })
 
     if (result.ok && result.appliedOperationCount > 0) {
-      emitTravelDataChanged()
+      recordTripWriteForSync(tripId, 'ai-trip-edit-applied')
     }
     return result
   } catch {

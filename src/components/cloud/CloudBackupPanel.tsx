@@ -51,6 +51,11 @@ import {
   getCloudSnapshotCheckState,
   subscribeCloudSnapshotChecks,
 } from '../../lib/cloudSnapshotCheck'
+import {
+  getCloudAccountSyncStatusView,
+  type CloudAccountSyncStatus,
+  type CloudAccountSyncTone,
+} from '../../lib/cloudAccountSyncStatus'
 import { navigateTo } from '../../lib/routes'
 import type { Trip } from '../../types'
 
@@ -97,7 +102,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         setBackups([])
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '读取云端保存状态失败。')
+      setError(caught instanceof Error ? caught.message : '读取云端同步状态失败。')
     } finally {
       setIsLoading(false)
     }
@@ -179,7 +184,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       await verifyEmailOtp(trimmedEmail, token)
       setOtp('')
-      setMessage('已登录云端保存账号。')
+      setMessage('已登录账号，正在检查账号数据并处理同步队列。')
       await refreshCloudBackups()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '验证码验证失败。')
@@ -197,7 +202,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setUser(null)
       setBackups([])
       setRestoreResult(null)
-      setMessage('已退出云端保存账号。')
+      setMessage('已退出账号。此设备仍可离线查看已缓存内容；登录后可继续同步。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
     } finally {
@@ -207,7 +212,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   function handleUploadRequest() {
     if (!trip) {
-      setError('请先进入某个旅行，再上传本地数据。')
+      setError('请先进入某个旅行，再立即同步。')
       return
     }
 
@@ -216,7 +221,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   async function handleUploadConfirmed() {
     if (!trip) {
-      setError('请先进入某个旅行，再上传本地数据。')
+      setError('请先进入某个旅行，再立即同步。')
       setUploadConfirmOpen(false)
       return
     }
@@ -239,13 +244,13 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       } else {
         markTripAutoSnapshotSynced(trip.id, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('本地版本已上传，云端保存已覆盖更新。')
+      setMessage('此设备版本已同步到账号。')
       setUploadConfirmOpen(false)
       setWarnings(result.warnings)
       await refreshCloudBackups()
     } catch (caught) {
       setUploadConfirmOpen(false)
-      setError(caught instanceof Error ? caught.message : '覆盖云端保存失败。')
+      setError(caught instanceof Error ? caught.message : '立即同步失败。')
     } finally {
       setIsUploading(false)
     }
@@ -269,15 +274,15 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setWarnings(result.warnings)
       if (result.warnings.length > 0) {
         setRestoreResult(result)
-        setMessage('云端版本已覆盖当前本地旅行。请先检查下列提醒。')
+        setMessage('账号数据已同步到此设备。请先检查下列提醒。')
       } else {
-        setMessage('云端版本已覆盖当前本地旅行。')
+        setMessage('账号数据已同步到此设备。')
         setRestoreResult(null)
       }
       await refreshCloudBackups()
       navigateTo('trip', { tripId: result.tripId })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '使用云端版本覆盖本地失败。')
+      setError(caught instanceof Error ? caught.message : '同步账号数据到此设备失败。')
     } finally {
       setIsRestoring(false)
     }
@@ -296,11 +301,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       const result = await deleteCloudBackup(deleteTarget.id)
       setDeleteTarget(null)
-      setMessage('云端保存已删除。本地旅行不受影响。')
+      setMessage('云端同步记录已删除。此设备旅行不受影响。')
       setWarnings(result.warnings)
       await refreshCloudBackups()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '删除云端保存失败。')
+      setError(caught instanceof Error ? caught.message : '删除云端同步记录失败。')
     } finally {
       setIsDeleting(false)
     }
@@ -308,16 +313,16 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   return (
     <section className="space-y-3" data-testid="cloud-backup-section">
-      <SectionHeader title="云端保存" />
+      <SectionHeader title="云端同步" />
       <Card className="space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
             <Cloud className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-on-surface">Supabase 云端保存</h3>
+            <h3 className="text-base font-semibold text-on-surface">Supabase 云端同步</h3>
             <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-              云端保存适合跨设备延续同一旅行。IndexedDB 仍是主数据源；自动同步会按最新版本覆盖另一端，不做字段级合并。
+              登录后，旅行数据和票据文件会进入自动同步队列，方便跨设备延续同一旅行。此设备仍保留离线缓存；同步按最新版本覆盖另一端，不做字段级合并。
             </p>
           </div>
         </div>
@@ -325,7 +330,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         <div className="grid gap-2">
           <CloudInfoPill
             icon={<Upload className="size-4" />}
-            text="上传本地数据会覆盖当前旅行的云端保存，包含旅行数据和 copy 票据附件。"
+            text="立即同步会用此设备旅行更新账号数据，包含旅行数据和已保存票据文件。"
           />
           <CloudInfoPill
             icon={<ShieldAlert className="size-4" />}
@@ -334,7 +339,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           />
           <CloudInfoPill
             icon={<ShieldAlert className="size-4" />}
-            text="真实上传/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。"
+            text="真实同步/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。"
           />
         </div>
 
@@ -357,15 +362,14 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800 dark:text-amber-300"
             data-testid="supabase-unconfigured-message"
           >
-            <p className="font-semibold">云端保存未配置</p>
+            <p className="font-semibold">云端同步未配置</p>
             <p className="mt-1">
-              请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。未配置时，本地 zip 备份和 IndexedDB
-              功能仍可正常使用。
+              请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。未配置时，离线缓存和 zip 归档功能仍可正常使用。
             </p>
           </div>
         ) : isLoading ? (
           <div aria-busy="true" className="space-y-2" data-testid="cloud-loading-state" role="status">
-            <p className="text-sm font-semibold text-on-surface-variant">正在读取云端保存状态...</p>
+            <p className="text-sm font-semibold text-on-surface-variant">正在读取云端同步状态...</p>
             <SkeletonLine />
             <SkeletonLine className="w-2/3" />
           </div>
@@ -392,11 +396,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
                 loading={isUploading}
                 onClick={handleUploadRequest}
               >
-                更新云端保存
+                立即同步
               </Button>
               {!trip ? (
                 <p className="rounded-xl bg-surface-container-low px-3 py-2 text-xs leading-5 text-on-surface-variant">
-                  请先进入某个旅行，再上传本地数据。
+                  请先进入某个旅行，再立即同步。
                 </p>
               ) : null}
               <Button
@@ -468,7 +472,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
       <ConfirmDialog
         body={buildCloudBackupUploadConfirmBody()}
-        confirmLabel="更新云端保存"
+        confirmLabel="立即同步"
         icon={<Upload className="size-5" />}
         loading={isUploading}
         onCancel={() => {
@@ -479,28 +483,28 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         onConfirm={() => void handleUploadConfirmed()}
         open={uploadConfirmOpen}
         testId="cloud-save-confirm-dialog"
-        title="更新当前旅行的云端保存？"
+        title="立即同步当前旅行？"
       />
       <ConfirmDialog
         body={buildCloudBackupRestoreConfirmBody(restoreTarget)}
-        confirmLabel="用云端覆盖本地"
+        confirmLabel="同步账号数据到此设备"
         icon={<Download className="size-5" />}
         loading={isRestoring}
         onCancel={() => setRestoreTarget(null)}
         onConfirm={() => void handleRestoreConfirmed()}
         open={Boolean(restoreTarget)}
         testId="cloud-save-confirm-dialog"
-        title="用云端覆盖本地？"
+        title="同步账号数据到此设备？"
       />
       <ConfirmDialog
-        body="删除这个云端保存不会删除本地旅行，也不会影响其他云端保存。"
-        confirmLabel="删除云端保存"
+        body="删除这个云端同步记录不会删除此设备旅行，也不会影响其他云端记录。"
+        confirmLabel="删除云端记录"
         icon={<Trash2 className="size-5" />}
         loading={isDeleting}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => void handleDeleteConfirmed()}
         open={Boolean(deleteTarget)}
-        title="删除云端保存？"
+        title="删除云端同步记录？"
       />
     </section>
   )
@@ -515,7 +519,7 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
       <div>
         <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
         <p className="mt-1 text-xs leading-5 text-emerald-800 dark:text-emerald-300">
-          云端版本已覆盖当前本地旅行，不会创建新的旅行副本。
+          账号数据已同步到此设备，不会创建重复旅行。
         </p>
       </div>
       <ul className="list-inside list-disc space-y-1 text-xs leading-5">
@@ -546,8 +550,8 @@ function AutoCloudBackupSetting({
   const helperText = !configured
     ? '配置 Supabase 后才能开启。'
     : signedIn
-      ? '打开 PWA 后自动拉取云端状态；本机关键修改会排队上传，版本较新的一端会自动覆盖另一端。'
-      : '登录云端保存账号后，会自动拉取云端状态并排队上传本机关键修改。'
+      ? '打开 PWA 后自动检查账号数据；此设备关键修改会排队同步，版本较新的一端会自动覆盖另一端。'
+      : '登录账号后，会自动检查账号数据并排队同步此设备关键修改。'
 
   return (
     <div
@@ -619,15 +623,14 @@ function CloudAutoSyncStatusPanel({
     }
   }, [])
 
-  if (!configured) {
-    return null
-  }
-
   const errorEntries = entries.filter((entry) => entry.status === 'error' && entry.dirtyAt)
   const uploadingCount = entries.filter((entry) => entry.status === 'uploading').length
   const queuedCount = entries.filter((entry) => entry.status === 'dirty' && entry.dirtyAt).length
   const retryableEntries = errorEntries
-  const view = getCloudAutoSyncStatusView({
+  const actionRequiredCount = checkState.results.length
+  const view = getCloudAccountSyncStatusView({
+    actionRequiredCount,
+    configured,
     enabled,
     errorCount: errorEntries.length,
     checkError: checkState.error,
@@ -635,7 +638,7 @@ function CloudAutoSyncStatusPanel({
     isOnline,
     queuedCount,
     signedIn,
-    uploadingCount,
+    syncingCount: uploadingCount,
   })
 
   function handleRetry() {
@@ -644,24 +647,43 @@ function CloudAutoSyncStatusPanel({
     }
   }
 
+  function handleShowSyncPrompts() {
+    document.querySelector('[data-testid="cloud-snapshot-check-prompts"]')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    })
+  }
+
   return (
     <div
-      className={`rounded-2xl border px-3 py-3 ${view.className}`}
+      className={`rounded-2xl border px-3 py-3 ${getCloudSyncStatusClassName(view.tone)}`}
+      data-sync-status={view.status}
       data-testid="cloud-auto-sync-status"
       role="status"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-white/70 dark:bg-surface-container-highest/60">
-          {view.icon}
+          {getCloudSyncStatusIcon(view.status)}
         </div>
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{view.title}</p>
           <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{view.detail}</p>
           <p className="mt-1 break-words text-xs leading-5 opacity-80 [overflow-wrap:anywhere]">
-            按最新版本自动覆盖，不做字段级合并，也不创建额外云端快照。
+            按最新版本自动覆盖，不做字段级合并，也不创建额外云端记录。
           </p>
         </div>
       </div>
+      {view.status === 'conflict' ? (
+        <Button
+          className="mt-3 min-h-9 w-full text-xs"
+          data-testid="cloud-auto-sync-resolve-conflict"
+          icon={<AlertTriangle className="size-4" />}
+          onClick={handleShowSyncPrompts}
+          variant="secondary"
+        >
+          处理同步方向
+        </Button>
+      ) : null}
       {retryableEntries.length > 0 && enabled && signedIn && isOnline ? (
         <Button
           className="mt-3 min-h-9 w-full text-xs"
@@ -677,96 +699,6 @@ function CloudAutoSyncStatusPanel({
   )
 }
 
-function getCloudAutoSyncStatusView({
-  enabled,
-  errorCount,
-  checkError,
-  isChecking,
-  isOnline,
-  queuedCount,
-  signedIn,
-  uploadingCount,
-}: {
-  enabled: boolean
-  errorCount: number
-  checkError: string | null
-  isChecking: boolean
-  isOnline: boolean
-  queuedCount: number
-  signedIn: boolean
-  uploadingCount: number
-}) {
-  if (!enabled) {
-    return {
-      className: 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant',
-      detail: '开启后，登录状态下会自动拉取云端状态并按最新版本同步。',
-      icon: <Cloud className="size-4" />,
-      title: '云端自动同步已关闭',
-    }
-  }
-
-  if (!signedIn) {
-    return {
-      className: 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant',
-      detail: '登录云端保存账号后，会自动检查云端版本并处理待同步修改。',
-      icon: <Cloud className="size-4" />,
-      title: '等待登录后同步',
-    }
-  }
-
-  if (!isOnline) {
-    return {
-      className: 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300',
-      detail: '本地修改会留在队列中，网络恢复后自动重试。',
-      icon: <WifiOff className="size-4" />,
-      title: '当前离线，同步已暂停',
-    }
-  }
-
-  if (checkError) {
-    return {
-      className: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
-      detail: checkError,
-      icon: <AlertTriangle className="size-4" />,
-      title: '同步检查失败',
-    }
-  }
-
-  if (errorCount > 0) {
-    return {
-      className: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
-      detail: `${errorCount} 个旅行同步失败，可稍后重试。`,
-      icon: <AlertTriangle className="size-4" />,
-      title: '同步失败',
-    }
-  }
-
-  if (uploadingCount > 0 || isChecking) {
-    return {
-      className: 'border-sky-100 bg-sky-50 text-sky-700 dark:text-sky-300',
-      detail: uploadingCount > 0 ? `正在同步 ${uploadingCount} 个旅行。` : '正在检查云端状态。',
-      icon: <LoaderCircle className="size-4 animate-spin" />,
-      title: '正在云端同步',
-    }
-  }
-
-  if (queuedCount > 0) {
-    return {
-      className: 'border-sky-100 bg-sky-50 text-sky-700 dark:text-sky-300',
-      detail: `${queuedCount} 个本机修改等待上传，会在后台自动处理。`,
-      icon: <Cloud className="size-4" />,
-      title: '同步已排队',
-    }
-  }
-
-  return {
-    className: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:text-emerald-300',
-    detail: '打开 PWA 会检查云端版本，本机关键修改会自动进入同步队列。',
-    icon: <CheckCircle2 className="size-4" />,
-    title: '云端自动同步已就绪',
-  }
-}
-
 function CloudBackupList({
   backups,
   onDelete,
@@ -779,9 +711,9 @@ function CloudBackupList({
   if (backups.length === 0) {
     return (
       <EmptyState
-        body="更新当前旅行的云端保存后，这里会显示可用于覆盖本地的云端版本。"
+        body="当前旅行同步到账号后，这里会显示可用于更新此设备的账号数据。"
         icon={<Cloud className="size-6" />}
-        title="还没有云端保存"
+        title="还没有云端同步记录"
       />
     )
   }
@@ -804,11 +736,11 @@ function CloudBackupList({
               {group.title}
             </h4>
             <p className="break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
-              {group.destination || '目的地未填写'} · {group.isGrouped ? `${group.backups.length} 条历史备份` : '当前旅行的云端保存'}
+              {group.destination || '目的地未填写'} · {group.isGrouped ? `${group.backups.length} 条历史备份（旧版本）` : '当前旅行的云端同步'}
             </p>
             {group.isGrouped ? (
               <p className="break-words text-xs leading-5 text-amber-700 [overflow-wrap:anywhere] dark:text-amber-300">
-                旧版本可能留下多条云端保存；这些记录仅为兼容保留，不会自动清理。
+                旧版本可能留下多条历史备份；这些记录仅为兼容保留，不会自动清理。
               </p>
             ) : null}
           </div>
@@ -817,13 +749,13 @@ function CloudBackupList({
               <article className="space-y-3 px-3 py-3" data-testid="cloud-backup-card" key={backup.id}>
                 <div className="grid gap-2 text-xs">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300 dark:text-sky-300">云端保存</span>
+                    <span className="shrink-0 font-semibold text-sky-600 dark:text-sky-300 dark:text-sky-300">云端同步</span>
                     <span className="min-w-0 text-right font-medium text-on-surface dark:text-on-surface">
-                      {group.isGrouped ? `旧版备份 ${group.backups.length - index}` : '当前旅行的云端保存'}
+                      {group.isGrouped ? `旧版备份 ${group.backups.length - index}` : '当前旅行的云端同步'}
                     </span>
                   </div>
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <span className="shrink-0 font-semibold text-outline dark:text-on-surface-variant">云端版本时间</span>
+                    <span className="shrink-0 font-semibold text-outline dark:text-on-surface-variant">账号数据时间</span>
                     <span className="min-w-0 text-right text-on-surface-variant dark:text-outline-variant">
                       {formatCloudDate(backup.exportedAt || backup.createdAt)}
                     </span>
@@ -845,14 +777,14 @@ function CloudBackupList({
                 ) : null}
                 <div className="grid grid-cols-2 gap-2">
                   <Button
-                    aria-label="用这个云端保存覆盖本地旅行"
+                    aria-label="用这份账号数据更新此设备旅行"
                     className="px-2 text-xs"
                     data-testid="cloud-restore-backup"
                     icon={<Download className="size-4" />}
                     onClick={() => onRestore(backup)}
                     variant="secondary"
                   >
-                    用云端覆盖本地
+                    同步到此设备
                   </Button>
                   <Button
                     className="px-2 text-xs text-red-600 dark:text-red-300"
@@ -861,7 +793,7 @@ function CloudBackupList({
                     onClick={() => onDelete(backup)}
                     variant="secondary"
                   >
-                    删除云端保存
+                    删除云端记录
                   </Button>
                 </div>
               </article>
@@ -871,6 +803,46 @@ function CloudBackupList({
       ))}
     </div>
   )
+}
+
+function getCloudSyncStatusIcon(status: CloudAccountSyncStatus) {
+  if (status === 'syncing') {
+    return <LoaderCircle className="size-4 animate-spin" />
+  }
+
+  if (status === 'offline') {
+    return <WifiOff className="size-4" />
+  }
+
+  if (status === 'conflict' || status === 'error') {
+    return <AlertTriangle className="size-4" />
+  }
+
+  if (status === 'synced') {
+    return <CheckCircle2 className="size-4" />
+  }
+
+  return <Cloud className="size-4" />
+}
+
+function getCloudSyncStatusClassName(tone: CloudAccountSyncTone) {
+  if (tone === 'success') {
+    return 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:text-emerald-300'
+  }
+
+  if (tone === 'info') {
+    return 'border-sky-100 bg-sky-50 text-sky-700 dark:text-sky-300'
+  }
+
+  if (tone === 'warning') {
+    return 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300'
+  }
+
+  if (tone === 'danger') {
+    return 'border-red-100 bg-red-50 text-red-600 dark:text-red-300'
+  }
+
+  return 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant'
 }
 
 function CloudStatusMessage({
@@ -957,22 +929,22 @@ function SkeletonLine({ className = '' }: { className?: string }) {
 
 function buildCloudBackupUploadConfirmBody() {
   return [
-    '将用当前本地版本更新云端保存。',
-    '云端原有版本会被覆盖。',
-    '不会创建新的云端快照列表。',
-    '不会自动合并云端修改。',
+    '将用此设备版本立即同步到账号。',
+    '账号中原有版本会被覆盖。',
+    '不会创建新的云端记录列表。',
+    '不会自动合并账号中的修改。',
   ].join('\n')
 }
 
 function buildCloudBackupRestoreConfirmBody(backup: CloudBackupSummary | null) {
   const cloudTime = backup ? formatCloudDate(backup.exportedAt || backup.createdAt) : null
-  const versionLine = cloudTime ? `\n\n云端版本时间：${cloudTime}` : ''
+  const versionLine = cloudTime ? `\n\n账号数据时间：${cloudTime}` : ''
 
   return [
-    '将用云端版本覆盖当前本地旅行。',
-    '当前未上传的本地修改可能被覆盖。',
-    '不会创建新的本地旅行副本。',
-    '这是按方向覆盖，不会自动合并本地和云端修改。',
+    '将用账号数据更新此设备旅行。',
+    '此设备未同步的修改可能被覆盖。',
+    '不会创建重复旅行。',
+    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
     '建议确认方向后再继续。',
   ].join('\n') + versionLine
 }

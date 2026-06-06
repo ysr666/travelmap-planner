@@ -1,7 +1,6 @@
-import { markTripAutoSnapshotDirty } from '../autoSnapshotBackup'
-import { emitTravelDataChanged } from '../dataEvents'
 import { formatDateKey, formatShortDateWithWeekday } from '../dates'
 import { sortItineraryItems } from '../itinerary'
+import { recordTripWriteForSync } from '../tripSyncQueue'
 import { db } from '../../db/database'
 import {
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
@@ -322,8 +321,7 @@ export async function saveTripDailyTravelTipPreviewToNotes({
     if (!result.ok) {
       return result
     }
-    markTripAutoSnapshotDirty(tripId, 'trip-daily-tip-saved')
-    emitTravelDataChanged()
+    recordTripWriteForSync(tripId, 'trip-daily-tip-saved')
     return { ok: true }
   } catch {
     return { errors: ['保存今日旅行提示失败，旅行备注未完成写入。'], ok: false }

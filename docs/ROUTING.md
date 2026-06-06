@@ -40,8 +40,8 @@ Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRout
 
 道路路线生成成功后，旅图会把最终可渲染的 polyline 保存到独立 IndexedDB：`TripMapRouteCacheDB`。这只是本机加速缓存：
 
-- 不进入旅行完整 zip 备份。
-- 不上传到 Supabase 云端保存。
+- 不进入旅行完整 zip 归档。
+- 不进入 Supabase 云端同步。
 - 不进入 AI trip-plan import/export。
 - 不保存 provider API key。
 - 不缓存 OpenFreeMap tiles / glyph / sprite。

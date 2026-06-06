@@ -5,7 +5,7 @@ Baseline audited: current `main` code, docs, and tests after branching to `docs/
 
 ## A. Executive Summary
 
-TripMap is close to a controlled limited beta for local-first trip planning, map/day viewing, ticket storage, zip backup, and one-to-one Supabase cloud save. The product should not be positioned as real-time search, booking, full navigation, realtime sync, or autonomous AI editing.
+TripMap is close to a controlled limited beta for offline-capable trip planning, map/day viewing, ticket storage, optional zip archive, and one-to-one Supabase account sync. The product should not be positioned as real-time search, booking, full navigation, realtime collaboration, or autonomous AI editing.
 
 The largest beta blockers are provider abuse operations and production smoke coverage: quota now has a D1-backed foundation when `TRIPMAP_PROVIDER_QUOTA_D1` is configured, but production binding setup, origin controls, account/IP policy, budgets, and real browser plus Cloudflare Pages/worker smoke are still needed for provider-backed paths.
 
@@ -67,7 +67,7 @@ AI Draft generation and repair are beta-usable only with caveats: they have prev
 
 ## D. Safe To Beta With Caveats
 
-- Local-first trip/day/item CRUD and hash routes.
+- Offline-capable trip/day/item CRUD and hash routes.
 - Zip backup/export/import, with user education that zip is still the strongest pre-travel backup.
 - Ticket library and previewer for copy/reference/external tickets, with storage and sensitive-document warnings.
 - Day Map and Trip Home preview, as route preview and map inspection only.

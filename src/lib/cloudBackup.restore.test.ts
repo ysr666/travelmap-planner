@@ -62,7 +62,7 @@ describe('cloud restore write verification', () => {
     await replaceTripPlanRecords(cloudRecords, { markDirty: false })
     await db.trips.update(tripId, { title: 'Local V3 after restore' })
 
-    await expect(verifyRestoredCloudRecords(cloudRecords)).rejects.toThrow('云端版本写入本地后校验失败')
+    await expect(verifyRestoredCloudRecords(cloudRecords)).rejects.toThrow('账号数据写入此设备后校验失败')
   })
 })
 

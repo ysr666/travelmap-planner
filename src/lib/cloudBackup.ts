@@ -226,7 +226,7 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    throw new Error('获取云端保存列表失败：' + error.message)
+    throw new Error('获取云端同步列表失败：' + error.message)
   }
 
   return (data as CloudBackupRow[] | null ?? []).map(mapCloudBackupRow)
@@ -262,14 +262,14 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
     upsert: true,
   })
   if (snapshotError) {
-    throw new Error('云端保存文件上传失败：' + snapshotError.message)
+    throw new Error('云端同步文件上传失败：' + snapshotError.message)
   }
 
   const { error: upsertError } = await client.from(CLOUD_BACKUP_TABLE).upsert(snapshotResult.metadata, {
     onConflict: 'id',
   })
   if (upsertError) {
-    throw new Error('云端保存记录写入失败：' + upsertError.message)
+    throw new Error('云端同步记录写入失败：' + upsertError.message)
   }
 
   const warnings = [...snapshotResult.warnings]
@@ -281,7 +281,7 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
       new Set([snapshotResult.metadata.snapshot_path, ...snapshotResult.snapshot.fileRefs.map((fileRef) => fileRef.path)]),
     )
   } catch {
-    warnings.push('旧云端附件清理失败，下一次更新云端保存时会再次尝试。')
+    warnings.push('旧云端附件清理失败，下一次立即同步时会再次尝试。')
   }
 
   return { backupId, exportedAt: snapshotResult.snapshot.exportedAt, warnings }
@@ -301,7 +301,7 @@ export async function restoreCloudBackup(backupId: string): Promise<RestoreCloud
   const { data: snapshotBlob, error: snapshotError } = await bucket.download(metadata.snapshot_path)
 
   if (snapshotError || !snapshotBlob) {
-    throw new Error(snapshotError?.message ?? '云端保存 snapshot.json 下载失败。')
+    throw new Error(snapshotError?.message ?? '云端同步 snapshot.json 下载失败。')
   }
 
   const snapshot = parseCloudSnapshotText(await snapshotBlob.text())
@@ -362,7 +362,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
       }
     }
   } catch {
-    warnings.push('云端 snapshot 无法读取，已按当前备份路径清理可枚举文件。')
+    warnings.push('云端 snapshot 无法读取，已按当前云端记录路径清理可枚举文件。')
   }
 
   const safePathsToRemove = [...pathsToRemove].map((path) => {
@@ -371,7 +371,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
   })
 
   if (safePathsToRemove.length === 0) {
-    throw new Error('没有找到可删除的云端保存文件。')
+    throw new Error('没有找到可删除的云端同步文件。')
   }
 
   const { error: removeError } = await bucket.remove(safePathsToRemove)
@@ -386,7 +386,7 @@ export async function deleteCloudBackup(backupId: string): Promise<DeleteCloudBa
     .eq('user_id', user.id)
 
   if (deleteError) {
-    throw new Error(`云端文件已清理，但 metadata 删除失败。请在 Supabase 后台检查该云端保存记录：${deleteError.message}`)
+    throw new Error(`云端文件已清理，但 metadata 删除失败。请在 Supabase 后台检查该云端同步记录：${deleteError.message}`)
   }
 
   return { warnings }
@@ -461,13 +461,13 @@ async function restoreCloudBackupFromE2eFixture(
 ): Promise<RestoreCloudBackupResult> {
   const metadata = fixture.backups?.find((backup) => backup.id === backupId && backup.userId === userId)
   if (!metadata) {
-    throw new Error('没有找到该云端保存。')
+    throw new Error('没有找到该云端同步。')
   }
 
   validateCloudBackupSnapshotPath(userId, backupId, metadata.snapshotPath)
   const snapshot = fixture.snapshots?.[backupId]
   if (!snapshot) {
-    throw new Error('云端保存 snapshot.json 下载失败。')
+    throw new Error('云端同步 snapshot.json 下载失败。')
   }
   validateCloudSnapshotForRestore(snapshot, userId, backupId)
   const ticketBlobs: TicketBlob[] = []
@@ -505,7 +505,7 @@ function deleteCloudBackupFromE2eFixture(
 ): DeleteCloudBackupResult {
   const metadata = fixture.backups?.find((backup) => backup.id === backupId && backup.userId === userId)
   if (!metadata) {
-    throw new Error('没有找到该云端保存。')
+    throw new Error('没有找到该云端同步。')
   }
 
   validateCloudBackupSnapshotPath(userId, backupId, metadata.snapshotPath)
@@ -719,7 +719,7 @@ export async function buildStableCloudBackupId(userId: string, tripId: string) {
 export function validateCloudBackupSnapshotPath(userId: string, backupId: string, snapshotPath: string) {
   const expectedPath = buildCloudSnapshotPath(userId, backupId)
   if (snapshotPath !== expectedPath) {
-    throw new Error('云端保存 metadata 中的 snapshot 路径与当前用户或保存记录不匹配。')
+    throw new Error('云端同步 metadata 中的 snapshot 路径与当前用户或保存记录不匹配。')
   }
 }
 
@@ -732,19 +732,19 @@ export function buildMissingCloudFileRefWarnings(snapshot: CloudTripSnapshot) {
 
 export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
   if (!isRecord(value)) {
-    throw new Error('云端保存 snapshot.json 格式不正确。')
+    throw new Error('云端同步 snapshot.json 格式不正确。')
   }
   if (value.schemaVersion !== CLOUD_BACKUP_SCHEMA_VERSION) {
-    throw new Error(`不支持的云端保存版本：${String(value.schemaVersion)}`)
+    throw new Error(`不支持的云端同步版本：${String(value.schemaVersion)}`)
   }
   if (value.type !== CLOUD_BACKUP_TYPE) {
     throw new Error('这不是旅图云端旅行保存。')
   }
   if (!isRecord(value.trip) || !Array.isArray(value.days) || !Array.isArray(value.itineraryItems)) {
-    throw new Error('云端保存缺少必要的旅行结构化数据。')
+    throw new Error('云端同步缺少必要的旅行结构化数据。')
   }
   if (!Array.isArray(value.ticketMetas) || !Array.isArray(value.fileRefs)) {
-    throw new Error('云端保存缺少票据元数据。')
+    throw new Error('云端同步缺少票据元数据。')
   }
 
   return {
@@ -773,7 +773,7 @@ export function parseCloudSnapshotText(text: string): CloudTripSnapshot {
   try {
     value = JSON.parse(text)
   } catch {
-    throw new Error('云端保存 snapshot.json 无法解析。')
+    throw new Error('云端同步 snapshot.json 无法解析。')
   }
 
   return parseCloudSnapshot(value)
@@ -821,7 +821,7 @@ async function buildCloudSnapshotForTrip(tripId: string, userId: string, backupI
 async function requireCurrentUser() {
   const user = await getCurrentUser()
   if (!user) {
-    throw new Error('请先登录后再使用云端保存。')
+    throw new Error('请先登录后再使用云端同步。')
   }
 
   return user
@@ -840,7 +840,7 @@ async function getCloudBackupRow(backupId: string, userId: string) {
     throw new Error(error.message)
   }
   if (!data) {
-    throw new Error('没有找到该云端保存。')
+    throw new Error('没有找到该云端同步。')
   }
 
   return data as CloudBackupRow
@@ -919,7 +919,7 @@ function readE2eCloudFixture(): E2eCloudFixture | null {
 function writeE2eCloudFixture(fixture: E2eCloudFixture) {
   const currentFixture = readE2eCloudFixture()
   if (!currentFixture?.user) {
-    throw new Error('测试云端保存 fixture 不可用。')
+    throw new Error('测试云端同步 fixture 不可用。')
   }
 
   window.localStorage.setItem(E2E_CLOUD_FIXTURE_KEY, JSON.stringify(fixture))
@@ -927,16 +927,16 @@ function writeE2eCloudFixture(fixture: E2eCloudFixture) {
 
 function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   if (!snapshot.trip.id || !snapshot.trip.title) {
-    throw new Error('云端保存中的旅行数据不完整。')
+    throw new Error('云端同步中的旅行数据不完整。')
   }
 
   const dayIds = new Set<string>()
   for (const day of snapshot.days) {
     if (!day.id || day.tripId !== snapshot.trip.id) {
-      throw new Error('云端保存中的 Day 数据引用不正确。')
+      throw new Error('云端同步中的 Day 数据引用不正确。')
     }
     if (dayIds.has(day.id)) {
-      throw new Error(`云端保存中的 Day 数据存在重复 ID：${day.id}`)
+      throw new Error(`云端同步中的 Day 数据存在重复 ID：${day.id}`)
     }
     dayIds.add(day.id)
   }
@@ -944,13 +944,13 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const itemIds = new Set<string>()
   for (const item of snapshot.itineraryItems) {
     if (!item.id || item.tripId !== snapshot.trip.id || !dayIds.has(item.dayId)) {
-      throw new Error('云端保存中的行程点引用不正确。')
+      throw new Error('云端同步中的行程点引用不正确。')
     }
     if (itemIds.has(item.id)) {
-      throw new Error(`云端保存中的行程点存在重复 ID：${item.id}`)
+      throw new Error(`云端同步中的行程点存在重复 ID：${item.id}`)
     }
     if (!Array.isArray(item.ticketIds)) {
-      throw new Error('云端保存中的行程点票据列表格式不正确。')
+      throw new Error('云端同步中的行程点票据列表格式不正确。')
     }
     itemIds.add(item.id)
   }
@@ -959,13 +959,13 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const ticketMap = new Map<string, TicketMeta>()
   for (const ticket of snapshot.ticketMetas) {
     if (!ticket.id || ticket.tripId !== snapshot.trip.id) {
-      throw new Error('云端保存中的票据元数据引用不正确。')
+      throw new Error('云端同步中的票据元数据引用不正确。')
     }
     if (ticket.itemId && !itemIds.has(ticket.itemId)) {
-      throw new Error('云端保存中的票据绑定了不存在的行程点。')
+      throw new Error('云端同步中的票据绑定了不存在的行程点。')
     }
     if (ticketIds.has(ticket.id)) {
-      throw new Error(`云端保存中的票据存在重复 ID：${ticket.id}`)
+      throw new Error(`云端同步中的票据存在重复 ID：${ticket.id}`)
     }
     ticketIds.add(ticket.id)
     ticketMap.set(ticket.id, ticket)
@@ -974,7 +974,7 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   for (const item of snapshot.itineraryItems) {
     for (const ticketId of item.ticketIds) {
       if (!ticketIds.has(ticketId)) {
-        throw new Error('云端保存中的行程点引用了不存在的票据。')
+        throw new Error('云端同步中的行程点引用了不存在的票据。')
       }
     }
   }
@@ -982,19 +982,19 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
   const fileRefTicketIds = new Set<string>()
   for (const rawFileRef of snapshot.fileRefs as unknown[]) {
     if (!isCloudFileRefShape(rawFileRef)) {
-      throw new Error('云端保存中的文件引用格式不正确。')
+      throw new Error('云端同步中的文件引用格式不正确。')
     }
     const fileRef = rawFileRef
     if (fileRefTicketIds.has(fileRef.ticketId)) {
-      throw new Error('云端保存中的文件引用存在重复票据。')
+      throw new Error('云端同步中的文件引用存在重复票据。')
     }
     fileRefTicketIds.add(fileRef.ticketId)
     if (!ticketIds.has(fileRef.ticketId)) {
-      throw new Error('云端保存中的文件引用了不存在的票据。')
+      throw new Error('云端同步中的文件引用了不存在的票据。')
     }
     const ticket = ticketMap.get(fileRef.ticketId)
     if (!ticket || !shouldExpectTicketBlob(ticket)) {
-      throw new Error('云端保存中的文件引用只能绑定 copy 模式票据。')
+      throw new Error('云端同步中的文件引用只能绑定 copy 模式票据。')
     }
   }
 }
@@ -1004,11 +1004,11 @@ function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, 
 
   for (const rawFileRef of snapshot.fileRefs as unknown[]) {
     if (!isCloudFileRefShape(rawFileRef)) {
-      throw new Error('云端保存中的文件引用格式不正确。')
+      throw new Error('云端同步中的文件引用格式不正确。')
     }
     const fileRef = rawFileRef
     if (seenTicketIds.has(fileRef.ticketId)) {
-      throw new Error('云端保存中的文件引用存在重复票据。')
+      throw new Error('云端同步中的文件引用存在重复票据。')
     }
     seenTicketIds.add(fileRef.ticketId)
 
@@ -1016,7 +1016,7 @@ function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, 
       fileRef.ticketId,
     )}/`
     if (!isSafeCloudObjectPath(fileRef.path, expectedPrefix)) {
-      throw new Error('云端保存中的文件路径不属于当前保存记录。')
+      throw new Error('云端同步中的文件路径不属于当前保存记录。')
     }
   }
 }
@@ -1085,7 +1085,7 @@ async function listCloudStorageFolder(bucket: CloudStorageBucket, path: string) 
 function assertCloudObjectPathInBackup(path: string, userId: string, backupId: string) {
   const expectedPrefix = `${buildCloudBackupPrefix(userId, backupId)}/`
   if (!isSafeCloudObjectPath(path, expectedPrefix)) {
-    throw new Error('云端保存文件路径不属于当前用户或保存记录。')
+    throw new Error('云端同步文件路径不属于当前用户或保存记录。')
   }
 }
 
@@ -1129,7 +1129,7 @@ function hasControlCharacter(value: string) {
 function safeCloudPathSegment(value: string) {
   const clean = safeFileName(value, 'segment')
   if (clean.includes('/') || clean.includes('\\') || clean === '.' || clean === '..') {
-    throw new Error('云端保存路径包含不安全片段。')
+    throw new Error('云端同步路径包含不安全片段。')
   }
 
   return clean
@@ -1148,7 +1148,7 @@ function assertSameIdsForCloudRestore(
 }
 
 function throwCloudRestoreWriteVerificationError(label: string): never {
-  throw new Error(`云端版本写入本地后校验失败：${label} 未与云端保存一致。请重试恢复，或先导出 zip 备份后再继续。`)
+  throw new Error(`账号数据写入此设备后校验失败：${label} 未与云端同步一致。请重试同步，或先导出 zip 归档后再继续。`)
 }
 
 async function blobToBase64(blob: Blob) {

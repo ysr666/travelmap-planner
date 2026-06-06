@@ -391,5 +391,5 @@ function describeRouteGenerationResult(result: RouteGenerationBatchResult) {
 }
 
 function buildImportRouteGenerationConfirmBody(count: number) {
-  return `点击确认后才会调用路线服务生成路线预览，可能消耗 API 次数。只为可生成路线的日期生成（共 ${count} 天），不会调整行程顺序，不会创建票据，不会上传云端。`
+  return `点击确认后才会调用路线服务生成路线预览，可能消耗 API 次数。只为可生成路线的日期生成（共 ${count} 天），不会调整行程顺序，不会创建票据，也不会触发云端写入。`
 }

@@ -1,7 +1,6 @@
-import { markTripAutoSnapshotDirty } from '../autoSnapshotBackup'
-import { emitTravelDataChanged } from '../dataEvents'
 import { sortItineraryItems } from '../itinerary'
 import { hasValidCoordinates } from '../mapLinks'
+import { recordTripWriteForSync } from '../tripSyncQueue'
 import { db } from '../../db/database'
 import { buildAiTripEditLocalStateFingerprint } from './aiTripEditApply'
 import type {
@@ -595,8 +594,7 @@ export async function applySmartTripWorkspaceDiffsToDb(
       return result
     }
     if (result.changed) {
-      markTripAutoSnapshotDirty(tripId, 'smart-trip-workspace-applied')
-      emitTravelDataChanged()
+      recordTripWriteForSync(tripId, 'smart-trip-workspace-applied')
     }
     return { appliedDiffCount: result.appliedDiffCount, ok: true }
   } catch {

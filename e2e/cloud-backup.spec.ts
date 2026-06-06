@@ -40,6 +40,39 @@ test('设置页通过 section=cloud 可以直接打开云端同步区域', async
   await expectNoHorizontalOverflow(page)
 })
 
+test('设置页轻量显示同步队列和票据上传状态', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await clearTravelDatabase(page)
+  const trip = createSeedTrip({ id: 'trip_queue_summary', title: '同步队列旅行' })
+  const ticket = createSeedTicket(trip.id, {
+    id: 'ticket_queue_summary',
+    title: '迪士尼门票',
+  })
+  await seedTravelRecords(page, {
+    ticketMetas: [ticket],
+    trips: [trip],
+  })
+  await forceSupabaseFixture(page, {
+    backups: [],
+    user: { email: 'qa@example.com', id: 'user_1' },
+  })
+  await page.evaluate(() => window.localStorage.setItem('tripmap:cloud-auto-snapshot:enabled', '0'))
+  await seedSyncQueueSummary(page, { ticket, trip })
+
+  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+
+  const summary = page.getByTestId('cloud-sync-queue-summary')
+  await expect(summary).toBeVisible()
+  await expect(summary).toContainText('还有 2 项')
+  await expect(summary).toContainText('上次同步')
+  await expect(summary).toContainText('1 个处理中')
+  await summary.getByText('查看同步明细').click()
+  await expect(summary).toContainText('1 个对象等待同步')
+  await expect(summary).toContainText('迪士尼门票')
+  await expect(summary).toContainText('等待上传')
+  await expectNoHorizontalOverflow(page)
+})
+
 test('设置页对象同步字段冲突需要确认后才写入', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await clearTravelDatabase(page)
@@ -371,6 +404,22 @@ function createSeedItem(tripId: string, dayId: string, patch: Record<string, unk
   }
 }
 
+function createSeedTicket(tripId: string, patch: Record<string, unknown> = {}) {
+  return {
+    createdAt: Date.parse('2026-04-02T10:00:00.000Z'),
+    fileName: 'ticket.pdf',
+    fileType: 'pdf',
+    id: 'ticket_1',
+    mimeType: 'application/pdf',
+    size: 1200,
+    storageMode: 'copy',
+    title: '票据',
+    tripId,
+    updatedAt: Date.parse('2026-04-02T10:00:00.000Z'),
+    ...patch,
+  }
+}
+
 function createCloudBackup(patch: Record<string, unknown> = {}) {
   return {
     appVersion: '0.3.0.2',
@@ -389,6 +438,79 @@ function createCloudBackup(patch: Record<string, unknown> = {}) {
     warnings: [],
     ...patch,
   }
+}
+
+async function seedSyncQueueSummary(
+  page: Page,
+  input: {
+    ticket: ReturnType<typeof createSeedTicket>
+    trip: ReturnType<typeof createSeedTrip>
+  },
+) {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async ({ ticket, trip }) => {
+    window.localStorage.setItem(
+      'tripmap:cloud-auto-snapshot:state',
+      JSON.stringify({
+        trips: {
+          [trip.id]: {
+            lastSuccessAt: Date.parse('2026-04-02T09:00:00.000Z'),
+            status: 'synced',
+            tripId: trip.id,
+          },
+        },
+        version: 1,
+      }),
+    )
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['syncOutbox', 'objectSyncStates', 'ticketBlobSyncStates'], 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入同步队列测试数据失败'))
+      const objectKey = `trip:${trip.id}`
+      transaction.objectStore('syncOutbox').put({
+        attempts: 0,
+        createdAt: Date.now(),
+        deviceId: 'e2e-device',
+        id: 'sync_outbox_queue_summary',
+        objectId: trip.id,
+        objectKey,
+        objectType: 'trip',
+        operation: 'upsert',
+        opId: 'op_queue_summary',
+        payload: trip,
+        status: 'pending',
+        tripId: trip.id,
+        updatedAt: Date.now(),
+        updatedAtMs: trip.updatedAt,
+      })
+      transaction.objectStore('objectSyncStates').put({
+        localUpdatedAtMs: trip.updatedAt,
+        objectId: trip.id,
+        objectKey,
+        objectType: 'trip',
+        tripId: trip.id,
+      })
+      transaction.objectStore('ticketBlobSyncStates').put({
+        cacheStatus: 'cached',
+        fileName: ticket.fileName,
+        mimeType: ticket.mimeType,
+        size: ticket.size,
+        ticketId: ticket.id,
+        tripId: trip.id,
+        updatedAt: Date.now(),
+        uploadStatus: 'pending',
+      })
+    })
+  }, input)
 }
 
 async function seedObjectSyncConflict(

@@ -21,6 +21,7 @@ import { EmptyState } from '../ui/EmptyState'
 import { SectionHeader } from '../ui/SectionHeader'
 import { CloudSnapshotCheckPrompts } from './CloudSnapshotCheckPrompts'
 import { ObjectSyncConflictPanel } from './ObjectSyncConflictPanel'
+import { listTrips } from '../../db'
 import {
   deleteCloudBackup,
   formatCloudBackupSize,
@@ -59,6 +60,12 @@ import {
   type CloudAccountSyncStatus,
   type CloudAccountSyncTone,
 } from '../../lib/cloudAccountSyncStatus'
+import {
+  getCloudLoginOnboardingCopy,
+  getCloudSyncQueueSummary,
+  type CloudLoginOnboardingCopy,
+  type CloudSyncQueueSummary,
+} from '../../lib/cloudSyncQueueSummary'
 import { navigateTo } from '../../lib/routes'
 import type { Trip } from '../../types'
 
@@ -87,6 +94,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [restoreResult, setRestoreResult] = useState<RestoreCloudBackupResult | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupSummary | null>(null)
   const [message, setMessage] = useState<string | null>(() => readPersistedCloudPanelMessage(trip?.id))
+  const [loginOnboarding, setLoginOnboarding] = useState<CloudLoginOnboardingCopy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
@@ -187,10 +195,23 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setIsVerifyingOtp(true)
     setError(null)
     setMessage(null)
+    setLoginOnboarding(null)
     try {
       await verifyEmailOtp(trimmedEmail, token)
       setOtp('')
-      setMessage('已登录账号，正在检查账号数据并处理同步队列。')
+      const [localTrips, accountBackups, queueSummary] = await Promise.all([
+        listTrips().catch(() => []),
+        listCloudBackups().catch(() => []),
+        getCloudSyncQueueSummary(trip?.id).catch(() => null),
+      ])
+      const accountTripIds = new Set(accountBackups.map((backup) => backup.originalTripId || backup.id))
+      const onboarding = getCloudLoginOnboardingCopy({
+        accountTripCount: accountTripIds.size,
+        localTripCount: localTrips.length,
+        pendingQueueCount: queueSummary?.syncItemCount ?? 0,
+      })
+      setLoginOnboarding(onboarding)
+      setMessage(`${onboarding.title}：${onboarding.detail}`)
       await refreshCloudBackups()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '验证码验证失败。')
@@ -208,6 +229,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setUser(null)
       setBackups([])
       setRestoreResult(null)
+      setLoginOnboarding(null)
       setMessage('已退出账号。此设备仍可离线查看已缓存内容；登录后可继续同步。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
@@ -395,6 +417,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
                 {user.email || user.id}
               </p>
             </div>
+            {loginOnboarding ? <CloudLoginOnboardingNotice copy={loginOnboarding} /> : null}
 
             <div className="grid gap-2">
               <Button
@@ -545,6 +568,24 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
   )
 }
 
+function CloudLoginOnboardingNotice({ copy }: { copy: CloudLoginOnboardingCopy }) {
+  const toneClassName = copy.tone === 'success'
+    ? 'border-emerald-100 bg-emerald-50 text-emerald-900 dark:text-emerald-300'
+    : copy.tone === 'warning'
+      ? 'border-amber-100 bg-amber-50 text-amber-900 dark:text-amber-200'
+      : 'border-sky-100 bg-sky-50 text-sky-900 dark:text-sky-200'
+
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-3 text-sm leading-6 ${toneClassName}`}
+      data-testid="cloud-login-onboarding"
+    >
+      <p className="font-semibold">{copy.title}</p>
+      <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{copy.detail}</p>
+    </div>
+  )
+}
+
 function AutoCloudBackupSetting({
   configured,
   enabled,
@@ -611,6 +652,7 @@ function CloudAutoSyncStatusPanel({
   const [entries, setEntries] = useState<AutoSnapshotBackupEntry[]>(() => listAutoSnapshotBackupEntries())
   const [checkState, setCheckState] = useState(() => getCloudSnapshotCheckState())
   const [objectConflictCount, setObjectConflictCount] = useState(0)
+  const [queueSummary, setQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine
   ))
@@ -618,8 +660,9 @@ function CloudAutoSyncStatusPanel({
   useEffect(() => {
     return subscribeAutoSnapshotBackup(() => {
       setEntries(listAutoSnapshotBackupEntries())
+      void refreshQueueSummary(tripId, setQueueSummary)
     })
-  }, [])
+  }, [tripId])
 
   useEffect(() => subscribeCloudSnapshotChecks(setCheckState), [])
 
@@ -640,11 +683,17 @@ function CloudAutoSyncStatusPanel({
     void refreshObjectConflictCount()
     const unsubscribe = subscribeTravelDataChanged(() => {
       void refreshObjectConflictCount()
+      void refreshQueueSummary(tripId, setQueueSummary)
     })
     return () => {
       cancelled = true
       unsubscribe()
     }
+  }, [tripId])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void refreshQueueSummary(tripId, setQueueSummary), 0)
+    return () => window.clearTimeout(timeout)
   }, [tripId])
 
   useEffect(() => {
@@ -720,6 +769,7 @@ function CloudAutoSyncStatusPanel({
           处理冲突
         </Button>
       ) : null}
+      {queueSummary ? <CloudSyncQueueSummaryPanel summary={queueSummary} /> : null}
       {retryableEntries.length > 0 && enabled && signedIn && isOnline ? (
         <Button
           className="mt-3 min-h-9 w-full text-xs"
@@ -731,6 +781,89 @@ function CloudAutoSyncStatusPanel({
           重试失败同步
         </Button>
       ) : null}
+    </div>
+  )
+}
+
+async function refreshQueueSummary(
+  tripId: string | undefined,
+  setQueueSummary: (summary: CloudSyncQueueSummary | null) => void,
+) {
+  try {
+    setQueueSummary(await getCloudSyncQueueSummary(tripId))
+  } catch {
+    setQueueSummary(null)
+  }
+}
+
+function CloudSyncQueueSummaryPanel({ summary }: { summary: CloudSyncQueueSummary }) {
+  const ticketWorkCount = summary.ticketPendingCount +
+    summary.ticketUploadingCount +
+    summary.ticketErrorCount +
+    summary.ticketDeletedCount
+  const lastSyncText = summary.lastSuccessAt
+    ? formatCloudDate(new Date(summary.lastSuccessAt).toISOString())
+    : '尚无'
+  const hasDetails = summary.syncItemCount > 0 || summary.tickets.length > 0 || summary.lastAttemptAt
+
+  return (
+    <div
+      className="mt-3 space-y-2 rounded-xl bg-white/70 px-3 py-3 text-xs leading-5 dark:bg-surface-container-highest/50"
+      data-testid="cloud-sync-queue-summary"
+    >
+      <div className="grid gap-2 sm:grid-cols-3">
+        <QueueMetric
+          label="同步队列"
+          value={summary.syncItemCount > 0 ? `还有 ${summary.syncItemCount} 项` : '暂无等待'}
+        />
+        <QueueMetric label="上次同步" value={lastSyncText} />
+        <QueueMetric
+          label="票据文件"
+          value={ticketWorkCount > 0 ? `${ticketWorkCount} 个处理中` : '无上传中'}
+        />
+      </div>
+      {hasDetails ? (
+        <details className="group">
+          <summary className="cursor-pointer text-xs font-semibold text-on-surface-variant marker:text-outline">
+            查看同步明细
+          </summary>
+          <div className="mt-2 space-y-2">
+            <div className="grid gap-1 text-on-surface-variant">
+              {summary.pendingObjectCount > 0 ? <p>{summary.pendingObjectCount} 个对象等待同步</p> : null}
+              {summary.syncingObjectCount > 0 ? <p>{summary.syncingObjectCount} 个对象正在同步</p> : null}
+              {summary.errorObjectCount > 0 ? <p>{summary.errorObjectCount} 个对象同步失败，等待重试</p> : null}
+              {summary.conflictCount > 0 ? <p>{summary.conflictCount} 个对象需要处理冲突</p> : null}
+              {summary.dirtyTripCount > 0 && summary.pendingObjectCount === 0 ? (
+                <p>{summary.dirtyTripCount} 个旅行修改等待自动同步</p>
+              ) : null}
+              {summary.lastAttemptAt ? <p>上次尝试：{formatCloudDate(new Date(summary.lastAttemptAt).toISOString())}</p> : null}
+            </div>
+            {summary.tickets.length > 0 ? (
+              <div className="space-y-1">
+                <p className="font-semibold text-on-surface">票据文件</p>
+                {summary.tickets.map((ticket) => (
+                  <div
+                    className="flex min-w-0 items-start justify-between gap-3 rounded-lg bg-surface-container-low px-2 py-2"
+                    key={ticket.ticketId}
+                  >
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{ticket.title}</span>
+                    <span className="shrink-0 text-on-surface-variant">{ticket.label}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
+function QueueMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2">
+      <p className="text-[11px] font-semibold text-outline">{label}</p>
+      <p className="mt-0.5 break-words font-semibold text-on-surface [overflow-wrap:anywhere]">{value}</p>
     </div>
   )
 }

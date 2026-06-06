@@ -1,6 +1,7 @@
 export type TransportMode = 'walk' | 'transit' | 'bus' | 'car' | 'train' | 'flight' | 'other'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
+export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticket' | 'hotel_booking' | 'restaurant_reservation' | 'transport_booking' | 'other'
 export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
 export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
 
@@ -110,6 +111,7 @@ export type TicketMeta = {
   storageMode?: TicketStorageMode
   externalUrl?: string
   referenceLocation?: string
+  ticketCategory?: TicketCategory
   fileName: string
   fileType: 'image' | 'pdf' | 'other'
   mimeType: string

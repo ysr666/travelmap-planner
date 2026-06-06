@@ -5,7 +5,9 @@ import {
   addTravelInboxErrorEntry,
   addTravelInboxExtraction,
   buildTravelInboxApplyFiles,
+  buildTravelInboxProviderTicketSummaries,
   buildTravelInboxSourceSummaries,
+  buildTravelInboxTicketSummaries,
   deleteTravelInboxEntries,
   getActiveTravelInboxPreview,
   isTravelInboxAutoRecognizeEnabled,
@@ -179,6 +181,41 @@ describe('travel inbox local queue', () => {
     setTravelInboxAutoRecognizeEnabled(false)
     expect(isTravelInboxAutoRecognizeEnabled()).toBe(false)
     expect(window.localStorage.getItem('tripmap:travel-inbox:auto-recognize')).toBe('0')
+  })
+
+  it('builds sanitized existing ticket summaries for provider matching', () => {
+    const summaries = buildTravelInboxTicketSummaries([{
+      createdAt: 100,
+      fileName: 'private-order-file.pdf',
+      fileType: 'pdf',
+      id: 'ticket-secret-id',
+      itemId: 'item-1',
+      mimeType: 'application/pdf',
+      note: '原始备注',
+      scope: 'item',
+      size: 10,
+      storageMode: 'copy',
+      ticketCategory: 'hotel_booking',
+      title: '酒店订单',
+      tripId: 'trip_inbox',
+      updatedAt: 100,
+    }])
+
+    expect(summaries[0]).toMatchObject({
+      summaryId: 'existing-ticket:1',
+      ticketCategory: 'hotel_booking',
+      ticketId: 'ticket-secret-id',
+      title: '酒店订单',
+    })
+    expect(buildTravelInboxProviderTicketSummaries(summaries)[0]).toEqual({
+      itemId: 'item-1',
+      scope: 'item',
+      summaryId: 'existing-ticket:1',
+      ticketCategory: 'hotel_booking',
+      title: '酒店订单',
+    })
+    expect(JSON.stringify(buildTravelInboxProviderTicketSummaries(summaries))).not.toContain('private-order-file')
+    expect(JSON.stringify(buildTravelInboxProviderTicketSummaries(summaries))).not.toContain('ticket-secret-id')
   })
 
   it('persists one active preview per trip and removes it with source entries', async () => {

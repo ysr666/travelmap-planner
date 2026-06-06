@@ -6,7 +6,7 @@ import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import { formatDateRange } from '../lib/dates'
 import { describeItemTime } from '../lib/itinerary'
-import { getTicketDisplayTitle } from '../lib/tickets'
+import { getTicketCategoryLabel, getTicketDisplayTitle } from '../lib/tickets'
 import { navigateTo } from '../lib/routes'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 
@@ -194,7 +194,7 @@ function getRecordView(record: SearchRecord) {
   }
 
   return {
-    detail: `${record.trip.title}${record.item ? ` · ${record.item.title}` : ''}`,
+    detail: `${record.trip.title}${record.item ? ` · ${record.item.title}` : ''} · ${getTicketCategoryLabel(record.ticket)}`,
     icon: <FileText className="size-5" />,
     iconClassName: 'bg-tertiary/20 text-tertiary',
     onClick: () => navigateTo('tickets', { tripId: record.trip.id, itemId: record.ticket.itemId ?? '' }),
@@ -220,6 +220,7 @@ function getSearchText(record: SearchRecord) {
     record.trip.title,
     record.item?.title,
     record.ticket.title,
+    getTicketCategoryLabel(record.ticket),
     record.ticket.fileName,
     record.ticket.note,
   ].join(' ').toLowerCase()

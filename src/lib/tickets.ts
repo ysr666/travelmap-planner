@@ -1,4 +1,4 @@
-import type { TicketMeta, TicketScope, TicketStorageMode } from '../types'
+import type { TicketCategory, TicketMeta, TicketScope, TicketStorageMode } from '../types'
 
 export const ticketScopeLabels: Record<TicketScope, string> = {
   trip: '绑定到整个旅行',
@@ -18,6 +18,21 @@ export const ticketStorageModeLabels: Record<TicketStorageMode, string> = {
   external: '外部链接',
 }
 
+export const ticketCategoryLabels: Record<TicketCategory, string> = {
+  admission_ticket: '门票',
+  flight_ticket: '机票',
+  hotel_booking: '酒店订单',
+  other: '其他票据',
+  restaurant_reservation: '餐厅预约',
+  train_ticket: '火车票',
+  transport_booking: '交通订单',
+}
+
+export const ticketCategoryOptions = Object.entries(ticketCategoryLabels).map(([value, label]) => ({
+  label,
+  value: value as TicketCategory,
+}))
+
 export function getTicketScope(ticket: TicketMeta): TicketScope {
   if (ticket.scope) {
     return ticket.scope
@@ -32,6 +47,14 @@ export function getTicketScope(ticket: TicketMeta): TicketScope {
 
 export function getTicketStorageMode(ticket: TicketMeta): TicketStorageMode {
   return ticket.storageMode ?? 'copy'
+}
+
+export function getTicketCategory(ticket: Pick<TicketMeta, 'ticketCategory'>): TicketCategory {
+  return ticket.ticketCategory ?? 'other'
+}
+
+export function getTicketCategoryLabel(ticket: Pick<TicketMeta, 'ticketCategory'>) {
+  return ticketCategoryLabels[getTicketCategory(ticket)]
 }
 
 export function shouldExpectTicketBlob(ticket: TicketMeta) {
@@ -101,7 +124,7 @@ export function describeTicketStorage(ticket: TicketMeta) {
 }
 
 export function describeTicketMetaLine(ticket: TicketMeta) {
-  return `${ticketFileTypeLabels[ticket.fileType]} · ${describeTicketStorage(ticket)}`
+  return `${getTicketCategoryLabel(ticket)} · ${ticketFileTypeLabels[ticket.fileType]} · ${describeTicketStorage(ticket)}`
 }
 
 function normalizeDisplayText(value: string | undefined) {

@@ -474,11 +474,24 @@ function describeDiff(diff: ExistingTripImportDiff) {
   if (diff.type === 'create_ticket') {
     return diff.data.fileName ? `保存票据：${diff.data.fileName}` : '创建未绑定票据记录'
   }
+  if (diff.type === 'merge_ticket_meta') {
+    return [
+      diff.data.patch.title ? `命名为「${diff.data.patch.title}」` : '',
+      diff.data.patch.ticketCategory ? '更新票据分类' : '',
+      diff.data.patch.note ? '追加票据备注' : '',
+    ].filter(Boolean).join(' · ') || '更新票据元数据'
+  }
   if (diff.type === 'bind_ticket') {
     return '将票据绑定到目标行程点'
+  }
+  if (diff.type === 'bind_existing_ticket') {
+    return '将现有票据绑定到目标行程点'
   }
   if (diff.type === 'update_trip_dates') {
     return `${diff.data.startDate} 至 ${diff.data.endDate}`
   }
-  return diff.data.date
+  if (diff.type === 'create_day') {
+    return diff.data.date
+  }
+  return ''
 }

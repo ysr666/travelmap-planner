@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, FileUp, Inbox, Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRight, CheckCircle2, FileUp, Inbox, Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
@@ -7,9 +7,9 @@ import {
   applyExistingTripImportPreview,
   buildExistingTripImportPreview,
   type ExistingTripImportDiff,
-  type ExistingTripImportDiffCategory,
   type ExistingTripImportItemFields,
   type ExistingTripImportItemPatch,
+  type ExistingTripImportAppliedChange,
   type ExistingTripImportPreview,
 } from '../../lib/ai/existingTripImport'
 import {
@@ -25,6 +25,8 @@ import {
   addTravelInboxExtraction,
   buildTravelInboxApplyFiles,
   buildTravelInboxSourceSummaries,
+  buildTravelInboxProviderTicketSummaries,
+  buildTravelInboxTicketSummaries,
   deleteTravelInboxEntries,
   deleteTravelInboxPreview,
   describeTravelInboxSourceKind,
@@ -50,21 +52,17 @@ import {
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
 import { db } from '../../db/database'
+import { navigateTo } from '../../lib/routes'
 import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
-import type { Day, ItineraryItem, TravelInboxEntry, TravelInboxPreviewRecord, Trip } from '../../types'
+import { ticketCategoryOptions, ticketCategoryLabels } from '../../lib/tickets'
+import type { Day, ItineraryItem, TicketCategory, TicketMeta, TravelInboxEntry, TravelInboxPreviewRecord, Trip } from '../../types'
 
 type TravelInboxPanelProps = {
   allItems: ItineraryItem[]
   days: Day[]
   onApplied: () => Promise<void>
+  tickets: TicketMeta[]
   trip: Trip
-}
-
-const categoryLabels: Record<ExistingTripImportDiffCategory, string> = {
-  dates: '日期范围',
-  items: '待导入行程点',
-  notes: '待确认备注',
-  tickets: '待绑定票据',
 }
 
 const languageLabels: Record<ExistingTripImportOcrLanguage, string> = {
@@ -81,10 +79,13 @@ const languageLabels: Record<ExistingTripImportOcrLanguage, string> = {
   tha: '泰文',
 }
 
+const TRAVEL_INBOX_APPLIED_CHANGES_KEY_PREFIX = 'tripmap:travel-inbox:applied-changes:'
+
 export function TravelInboxPanel({
   allItems,
   days,
   onApplied,
+  tickets,
   trip,
 }: TravelInboxPanelProps) {
   const providerConfig = useMemo(() => getProviderProxyConfig(), [])
@@ -103,14 +104,16 @@ export function TravelInboxPanel({
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [appliedChanges, setAppliedChanges] = useState<ExistingTripImportAppliedChange[]>(() => readTravelInboxAppliedChanges(trip.id))
   const [warnings, setWarnings] = useState<string[]>([])
 
   const preview = previewRecord?.preview as ExistingTripImportPreview | undefined
   const selectedCount = preview?.diffs.filter((diff) => checkedDiffIds.includes(diff.id)).length ?? 0
   const readyEntries = entries.filter((entry) => entry.status === 'ready' || entry.status === 'previewed')
   const failedEntries = entries.filter((entry) => entry.status === 'error')
-  const groupedDiffs = useMemo(() => groupDiffs(preview?.diffs ?? []), [preview])
   const summary = preview ? summarizeTravelInboxPreview(preview) : null
+  const readyDiffs = useMemo(() => preview?.diffs.filter((diff) => !needsReview(diff, preview)) ?? [], [preview])
+  const reviewDiffs = useMemo(() => preview?.diffs.filter((diff) => needsReview(diff, preview)) ?? [], [preview])
 
   const loadInbox = useCallback(async () => {
     try {
@@ -160,6 +163,8 @@ export function TravelInboxPanel({
     setProgress(null)
     setError(null)
     setSuccessMessage(null)
+    setAppliedChanges([])
+    persistTravelInboxAppliedChanges(trip.id, [])
     try {
       const extraction = await extractExistingTripImportSources({
         files,
@@ -258,12 +263,13 @@ export function TravelInboxPanel({
     await markTravelInboxEntriesRecognizing(sourceEntries.map((entry) => entry.id), true)
     try {
       const sourceSummaries = buildTravelInboxSourceSummaries(sourceEntries)
+      const ticketSummaries = buildTravelInboxTicketSummaries(tickets)
       const response = await fetchProviderProxyExistingTripImport(
-        buildProviderRequest({ allItems, days, sourceSummaries, trip }),
+        buildProviderRequest({ allItems, days, sourceSummaries, ticketSummaries, trip }),
         providerConfig.proxyUrl,
       )
       const nextPreview = buildExistingTripImportPreview({
-        context: { days, items: allItems, trip },
+        context: { days, items: allItems, ticketSummaries, trip },
         providerResult: response.result,
         sourceSummaries,
       })
@@ -319,8 +325,12 @@ export function TravelInboxPanel({
       setConfirmApplyOpen(false)
       if (result.appliedCount > 0) {
         await deleteTravelInboxEntries(previewRecord.entryIds)
+        persistTravelInboxAppliedChanges(trip.id, result.appliedChanges)
+        setAppliedChanges(result.appliedChanges)
         setSuccessMessage(`已应用 ${result.appliedCount} 项收件箱建议。${SYNC_QUEUE_SUCCESS_COPY}`)
       } else {
+        persistTravelInboxAppliedChanges(trip.id, [])
+        setAppliedChanges([])
         setSuccessMessage('没有应用任何建议。')
       }
       setPreviewRecord(null)
@@ -341,14 +351,6 @@ export function TravelInboxPanel({
   function toggleAutoRecognize(checked: boolean) {
     setAutoRecognize(checked)
     setTravelInboxAutoRecognizeEnabled(checked)
-  }
-
-  function toggleCategory(category: ExistingTripImportDiffCategory, checked: boolean) {
-    const ids = (preview?.diffs ?? []).filter((diff) => diff.category === category).map((diff) => diff.id)
-    const next = checked
-      ? Array.from(new Set([...checkedDiffIds, ...ids]))
-      : checkedDiffIds.filter((id) => !ids.includes(id))
-    void commitChecked(next)
   }
 
   function toggleDiff(diffId: string, checked: boolean) {
@@ -421,14 +423,68 @@ export function TravelInboxPanel({
     const nextPreview = {
       ...preview,
       diffs: preview.diffs.map((diff) => {
-        if (diff.id !== diffId || diff.type !== 'bind_ticket') return diff
-        if (value.startsWith('item:')) {
-          return { ...diff, data: { ...diff.data, targetItemId: value.slice('item:'.length), targetTempItemKey: undefined } }
+        if (diff.id !== diffId) return diff
+        if (diff.type === 'bind_ticket') {
+          if (value.startsWith('item:')) {
+            return { ...diff, data: { ...diff.data, targetItemId: value.slice('item:'.length), targetTempItemKey: undefined } }
+          }
+          if (value.startsWith('temp:')) {
+            return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: value.slice('temp:'.length) } }
+          }
+          return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: undefined } }
         }
-        if (value.startsWith('temp:')) {
-          return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: value.slice('temp:'.length) } }
+        if (diff.type === 'bind_existing_ticket') {
+          if (value.startsWith('item:')) {
+            return { ...diff, data: { ...diff.data, targetItemId: value.slice('item:'.length), targetTempItemKey: undefined } }
+          }
+          if (value.startsWith('temp:')) {
+            return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: value.slice('temp:'.length) } }
+          }
+          return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: undefined } }
         }
-        return { ...diff, data: { ...diff.data, targetItemId: undefined, targetTempItemKey: undefined } }
+        return diff
+      }),
+    }
+    void commitPreview(nextPreview)
+  }
+
+  function updateCreateTicketFields(diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) {
+    if (!preview) return
+    const nextPreview = {
+      ...preview,
+      diffs: preview.diffs.map((diff) => {
+        if (diff.id !== diffId || diff.type !== 'create_ticket') return diff
+        return {
+          ...diff,
+          data: {
+            ...diff.data,
+            ticketCategory: patch.ticketCategory ?? diff.data.ticketCategory,
+            title: patch.title ?? diff.data.title,
+          },
+          summary: patch.title ? `新增票据「${patch.title}」` : diff.summary,
+        }
+      }),
+    }
+    void commitPreview(nextPreview)
+  }
+
+  function updateMergeTicketFields(diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) {
+    if (!preview) return
+    const nextPreview = {
+      ...preview,
+      diffs: preview.diffs.map((diff) => {
+        if (diff.id !== diffId || diff.type !== 'merge_ticket_meta') return diff
+        return {
+          ...diff,
+          data: {
+            ...diff.data,
+            patch: {
+              ...diff.data.patch,
+              ticketCategory: patch.ticketCategory ?? diff.data.patch.ticketCategory,
+              title: patch.title ?? diff.data.patch.title,
+            },
+          },
+        }
       }),
     }
     void commitPreview(nextPreview)
@@ -442,10 +498,10 @@ export function TravelInboxPanel({
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Inbox className="size-4" />
             </div>
-            <h3 className="text-base font-semibold text-on-surface">旅行收件箱</h3>
+            <h3 className="text-base font-semibold text-on-surface">旅行收件箱 · 智能整理中心</h3>
           </div>
           <p className="mt-1 text-sm leading-6 tm-muted">
-            粘贴邮件、PDF、截图或票据，本地提取/OCR 后归类为待导入行程点、待绑定票据和待确认备注。
+            粘贴邮件、PDF、截图或票据，本地提取/OCR 后自动整理成行程点、票据、备注和绑定建议。
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium tm-muted">
@@ -513,7 +569,7 @@ export function TravelInboxPanel({
           loading={isRecognizing}
           onClick={() => autoRecognize ? void recognizeEntries(readyEntries) : setConfirmRecognizeOpen(true)}
         >
-          发送 AI 识别
+          {isRecognizing ? '自动整理中' : autoRecognize ? '重新整理' : '整理材料'}
         </Button>
       </div>
 
@@ -604,7 +660,7 @@ export function TravelInboxPanel({
         <section className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-on-surface">导入预览</p>
+              <p className="text-sm font-semibold text-on-surface">整理建议</p>
               <p className="text-xs tm-muted">最终确认前不会写入旅行。已选择 {selectedCount} 项。</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -629,45 +685,65 @@ export function TravelInboxPanel({
           </div>
 
           {summary ? (
-            <div className="grid gap-2 sm:grid-cols-3">
-              <SummaryPill label="日期" value={summary.createDays + summary.updateDates} />
-              <SummaryPill label="行程点" value={summary.createItems + summary.mergeItems} />
-              <SummaryPill label="票据/备注" value={summary.createTickets + summary.bindTickets + summary.notes} />
+            <div className="grid gap-2 sm:grid-cols-5">
+              <SummaryPill label="新增行程点" value={summary.createItems} />
+              <SummaryPill label="合并行程点" value={summary.mergeItems} />
+              <SummaryPill label="保存票据" value={summary.createTickets} />
+              <SummaryPill label="绑定票据" value={summary.bindTickets} />
+              <SummaryPill label="追加备注" value={summary.notes} />
             </div>
           ) : null}
 
-          {Object.entries(groupedDiffs).map(([category, diffs]) => diffs.length ? (
-            <section className="rounded-xl border border-outline-variant/30 bg-surface-container-high p-3" key={category}>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-on-surface">{categoryLabels[category as ExistingTripImportDiffCategory]}</h4>
-                <div className="flex gap-2">
-                  <button className="text-xs font-semibold text-primary" onClick={() => toggleCategory(category as ExistingTripImportDiffCategory, true)} type="button">全选</button>
-                  <button className="text-xs font-semibold tm-muted" onClick={() => toggleCategory(category as ExistingTripImportDiffCategory, false)} type="button">取消</button>
+          <SuggestionSection
+            allItems={allItems}
+            checkedDiffIds={checkedDiffIds}
+            days={days}
+            diffs={readyDiffs}
+            onBindTicketTargetChange={updateBindTicketTarget}
+            onCreateItemDateChange={updateCreateItemDate}
+            onCreateItemMergeTargetChange={convertCreateItemToMerge}
+            onCreateTicketFieldChange={updateCreateTicketFields}
+            onMergeTicketFieldChange={updateMergeTicketFields}
+            onToggleDiff={toggleDiff}
+            preview={preview}
+            title="可一键应用"
+          />
+          <SuggestionSection
+            allItems={allItems}
+            checkedDiffIds={checkedDiffIds}
+            days={days}
+            diffs={reviewDiffs}
+            onBindTicketTargetChange={updateBindTicketTarget}
+            onCreateItemDateChange={updateCreateItemDate}
+            onCreateItemMergeTargetChange={convertCreateItemToMerge}
+            onCreateTicketFieldChange={updateCreateTicketFields}
+            onMergeTicketFieldChange={updateMergeTicketFields}
+            onToggleDiff={toggleDiff}
+            preview={preview}
+            title="需确认"
+          />
+        </section>
+      ) : null}
+
+      {appliedChanges.length > 0 ? (
+        <section className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3" data-testid="travel-inbox-applied-changes">
+          <p className="text-sm font-semibold text-on-surface">写入了什么</p>
+          <div className="space-y-2">
+            {appliedChanges.map((change, index) => (
+              <div className="flex flex-col gap-2 rounded-lg bg-surface-container-high px-3 py-2 sm:flex-row sm:items-center sm:justify-between" key={`${change.kind}:${change.id}:${index}`}>
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{formatAppliedChange(change)}</p>
+                  <p className="text-xs tm-muted">{change.title}</p>
                 </div>
+                {canOpenAppliedChange(change) ? (
+                  <button className="inline-flex items-center gap-1 text-xs font-semibold text-primary" onClick={() => openAppliedChange(trip.id, change)} type="button">
+                    查看
+                    <ArrowRight className="size-3" />
+                  </button>
+                ) : null}
               </div>
-              <div className="space-y-2">
-                {diffs.map((diff) => (
-                  <div className="grid grid-cols-[auto_1fr] gap-3 rounded-lg bg-surface-container px-3 py-2" key={diff.id}>
-                    <input
-                      checked={checkedDiffIds.includes(diff.id)}
-                      className="mt-1 size-4"
-                      onChange={(event) => toggleDiff(diff.id, event.target.checked)}
-                      type="checkbox"
-                    />
-                    <DiffPreview
-                      allItems={allItems}
-                      days={days}
-                      diff={diff}
-                      onBindTicketTargetChange={updateBindTicketTarget}
-                      onCreateItemDateChange={updateCreateItemDate}
-                      onCreateItemMergeTargetChange={convertCreateItemToMerge}
-                      preview={preview}
-                    />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null)}
+            ))}
+          </div>
         </section>
       ) : null}
 
@@ -699,11 +775,13 @@ function buildProviderRequest({
   allItems,
   days,
   sourceSummaries,
+  ticketSummaries,
   trip,
 }: {
   allItems: ItineraryItem[]
   days: Day[]
   sourceSummaries: ReturnType<typeof buildTravelInboxSourceSummaries>
+  ticketSummaries: ReturnType<typeof buildTravelInboxTicketSummaries>
   trip: Trip
 }): ProviderProxyExistingTripImportRequest {
   const dayById = new Map(days.map((day) => [day.id, day]))
@@ -714,6 +792,7 @@ function buildProviderRequest({
       sortOrder: day.sortOrder,
       title: day.title,
     })),
+    existingTicketSummaries: buildTravelInboxProviderTicketSummaries(ticketSummaries),
     items: allItems.map((item) => ({
       address: item.address,
       date: dayById.get(item.dayId)?.date ?? trip.startDate,
@@ -742,6 +821,67 @@ function buildProviderRequest({
   }
 }
 
+function SuggestionSection({
+  allItems,
+  checkedDiffIds,
+  days,
+  diffs,
+  onBindTicketTargetChange,
+  onCreateItemDateChange,
+  onCreateItemMergeTargetChange,
+  onCreateTicketFieldChange,
+  onMergeTicketFieldChange,
+  onToggleDiff,
+  preview,
+  title,
+}: {
+  allItems: ItineraryItem[]
+  checkedDiffIds: string[]
+  days: Day[]
+  diffs: ExistingTripImportDiff[]
+  onBindTicketTargetChange: (diffId: string, value: string) => void
+  onCreateItemDateChange: (diffId: string, value: string) => void
+  onCreateItemMergeTargetChange: (diffId: string, targetItemId: string) => void
+  onCreateTicketFieldChange: (diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) => void
+  onMergeTicketFieldChange: (diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) => void
+  onToggleDiff: (diffId: string, checked: boolean) => void
+  preview: ExistingTripImportPreview
+  title: string
+}) {
+  if (diffs.length === 0) return null
+  return (
+    <section className="rounded-xl border border-outline-variant/30 bg-surface-container-high p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-on-surface">{title}</h4>
+        <span className="text-xs tm-muted">{diffs.filter((diff) => checkedDiffIds.includes(diff.id)).length}/{diffs.length} 已选</span>
+      </div>
+      <div className="space-y-2">
+        {diffs.map((diff) => (
+          <div className="grid grid-cols-[auto_1fr] gap-3 rounded-lg bg-surface-container px-3 py-2" key={diff.id}>
+            <input
+              checked={checkedDiffIds.includes(diff.id)}
+              className="mt-1 size-4"
+              onChange={(event) => onToggleDiff(diff.id, event.target.checked)}
+              type="checkbox"
+            />
+            <DiffPreview
+              allItems={allItems}
+              days={days}
+              diff={diff}
+              onBindTicketTargetChange={onBindTicketTargetChange}
+              onCreateItemDateChange={onCreateItemDateChange}
+              onCreateItemMergeTargetChange={onCreateItemMergeTargetChange}
+              onCreateTicketFieldChange={onCreateTicketFieldChange}
+              onMergeTicketFieldChange={onMergeTicketFieldChange}
+              preview={preview}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function DiffPreview({
   allItems,
   days,
@@ -749,6 +889,8 @@ function DiffPreview({
   onBindTicketTargetChange,
   onCreateItemDateChange,
   onCreateItemMergeTargetChange,
+  onCreateTicketFieldChange,
+  onMergeTicketFieldChange,
   preview,
 }: {
   allItems: ItineraryItem[]
@@ -757,6 +899,8 @@ function DiffPreview({
   onBindTicketTargetChange: (diffId: string, value: string) => void
   onCreateItemDateChange: (diffId: string, value: string) => void
   onCreateItemMergeTargetChange: (diffId: string, targetItemId: string) => void
+  onCreateTicketFieldChange: (diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) => void
+  onMergeTicketFieldChange: (diffId: string, patch: { ticketCategory?: TicketCategory; title?: string }) => void
   preview: ExistingTripImportPreview
 }) {
   const sourceLabels = diff.sourceIds
@@ -809,7 +953,60 @@ function DiffPreview({
         </div>
       ) : null}
 
-      {diff.type === 'bind_ticket' ? (
+      {diff.type === 'create_ticket' ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="min-w-0 text-xs font-semibold tm-muted">
+            票据名称
+            <input
+              className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface-container-high px-2 py-2 text-xs text-on-surface"
+              onBlur={(event) => {
+                const title = event.target.value.trim()
+                if (title) onCreateTicketFieldChange(diff.id, { title })
+              }}
+              defaultValue={diff.data.title}
+            />
+          </label>
+          <label className="min-w-0 text-xs font-semibold tm-muted">
+            票据分类
+            <select
+              className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface-container-high px-2 py-2 text-xs text-on-surface"
+              onChange={(event) => onCreateTicketFieldChange(diff.id, { ticketCategory: event.target.value as TicketCategory })}
+              value={diff.data.ticketCategory ?? 'other'}
+            >
+              {ticketCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+      ) : null}
+
+      {diff.type === 'merge_ticket_meta' ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="min-w-0 text-xs font-semibold tm-muted">
+            建议名称
+            <input
+              className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface-container-high px-2 py-2 text-xs text-on-surface"
+              onBlur={(event) => {
+                const title = event.target.value.trim()
+                if (title) onMergeTicketFieldChange(diff.id, { title })
+              }}
+              defaultValue={diff.data.patch.title ?? ''}
+              placeholder="保持现有名称"
+            />
+          </label>
+          <label className="min-w-0 text-xs font-semibold tm-muted">
+            票据分类
+            <select
+              className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface-container-high px-2 py-2 text-xs text-on-surface"
+              onChange={(event) => onMergeTicketFieldChange(diff.id, { ticketCategory: event.target.value as TicketCategory })}
+              value={diff.data.patch.ticketCategory ?? 'other'}
+            >
+              {ticketCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+      ) : null}
+
+      {diff.type === 'bind_ticket' || diff.type === 'bind_existing_ticket' ? (
         <label className="block min-w-0 text-xs font-semibold tm-muted">
           绑定目标
           <select
@@ -838,11 +1035,18 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
   )
 }
 
-function groupDiffs(diffs: ExistingTripImportDiff[]) {
-  return diffs.reduce<Record<ExistingTripImportDiffCategory, ExistingTripImportDiff[]>>((groups, diff) => {
-    groups[diff.category].push(diff)
-    return groups
-  }, { dates: [], items: [], notes: [], tickets: [] })
+function needsReview(diff: ExistingTripImportDiff, preview: ExistingTripImportPreview) {
+  if (diff.confidence === 'low' || !diff.checked || diff.type === 'update_trip_dates') {
+    return true
+  }
+  if (diff.type === 'create_ticket') {
+    return !preview.diffs.some((candidate) =>
+      candidate.type === 'bind_ticket' &&
+      candidate.data.tempTicketKey === diff.data.tempTicketKey &&
+      Boolean(candidate.data.targetItemId || candidate.data.targetTempItemKey)
+    )
+  }
+  return false
 }
 
 function buildMergePatchForPreview(target: ItineraryItem, fields: ExistingTripImportItemFields): ExistingTripImportItemPatch {
@@ -853,6 +1057,52 @@ function buildMergePatchForPreview(target: ItineraryItem, fields: ExistingTripIm
     }
   }
   return patch
+}
+
+function getTravelInboxAppliedChangesStorageKey(tripId: string) {
+  return `${TRAVEL_INBOX_APPLIED_CHANGES_KEY_PREFIX}${tripId}`
+}
+
+function readTravelInboxAppliedChanges(tripId: string): ExistingTripImportAppliedChange[] {
+  try {
+    if (typeof window === 'undefined') return []
+    const raw = window.sessionStorage.getItem(getTravelInboxAppliedChangesStorageKey(tripId))
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(isTravelInboxAppliedChange) : []
+  } catch {
+    return []
+  }
+}
+
+function persistTravelInboxAppliedChanges(tripId: string, changes: ExistingTripImportAppliedChange[]) {
+  try {
+    if (typeof window === 'undefined') return
+    const key = getTravelInboxAppliedChangesStorageKey(tripId)
+    if (changes.length === 0) {
+      window.sessionStorage.removeItem(key)
+      return
+    }
+    window.sessionStorage.setItem(key, JSON.stringify(changes))
+  } catch {
+    // Session storage is best-effort; the in-memory result list still renders until remount.
+  }
+}
+
+function isTravelInboxAppliedChange(input: unknown): input is ExistingTripImportAppliedChange {
+  if (!input || typeof input !== 'object') return false
+  const record = input as Record<string, unknown>
+  const action = record.action
+  const kind = record.kind
+  return (
+    typeof record.id === 'string' &&
+    typeof record.title === 'string' &&
+    (action === 'appended' || action === 'bound' || action === 'created' || action === 'merged' || action === 'updated') &&
+    (kind === 'day' || kind === 'item' || kind === 'note' || kind === 'ticket' || kind === 'trip') &&
+    (record.dayId === undefined || typeof record.dayId === 'string') &&
+    (record.itemId === undefined || typeof record.itemId === 'string') &&
+    (record.ticketId === undefined || typeof record.ticketId === 'string')
+  )
 }
 
 function describeEntryStatus(entry: TravelInboxEntry) {
@@ -879,15 +1129,58 @@ function describeDiff(diff: ExistingTripImportDiff) {
     return diff.data.note
   }
   if (diff.type === 'create_ticket') {
-    return diff.data.fileName ? `保存票据：${diff.data.fileName}` : '创建未绑定票据记录'
+    const category = ticketCategoryLabels[diff.data.ticketCategory ?? 'other']
+    return diff.data.fileName ? `保存${category}：${diff.data.fileName}` : `创建${category}记录`
   }
-  if (diff.type === 'bind_ticket') {
+  if (diff.type === 'merge_ticket_meta') {
+    return [
+      diff.data.patch.title ? `命名为「${diff.data.patch.title}」` : '',
+      diff.data.patch.ticketCategory ? `分类：${ticketCategoryLabels[diff.data.patch.ticketCategory]}` : '',
+      diff.data.patch.note ? '追加备注' : '',
+    ].filter(Boolean).join(' · ') || '更新票据元数据'
+  }
+  if (diff.type === 'bind_ticket' || diff.type === 'bind_existing_ticket') {
     return '将票据绑定到目标行程点'
   }
   if (diff.type === 'update_trip_dates') {
     return `${diff.data.startDate} 至 ${diff.data.endDate}`
   }
-  return diff.data.date
+  if (diff.type === 'create_day') {
+    return diff.data.date
+  }
+  return ''
+}
+
+function canOpenAppliedChange(change: ExistingTripImportAppliedChange) {
+  return (change.kind === 'item' && Boolean(change.dayId && change.itemId)) || change.kind === 'ticket'
+}
+
+function openAppliedChange(tripId: string, change: ExistingTripImportAppliedChange) {
+  if (change.kind === 'item' && change.dayId && change.itemId) {
+    navigateTo('item', { dayId: change.dayId, itemId: change.itemId, tripId })
+    return
+  }
+  if (change.kind === 'ticket') {
+    navigateTo('tickets', change.itemId ? { itemId: change.itemId, tripId } : { tripId })
+  }
+}
+
+function formatAppliedChange(change: ExistingTripImportAppliedChange) {
+  const actionLabels: Record<ExistingTripImportAppliedChange['action'], string> = {
+    appended: '追加',
+    bound: '绑定',
+    created: '新增',
+    merged: '合并',
+    updated: '更新',
+  }
+  const kindLabels: Record<ExistingTripImportAppliedChange['kind'], string> = {
+    day: '日期',
+    item: '行程点',
+    note: '备注',
+    ticket: '票据',
+    trip: '旅行',
+  }
+  return `${actionLabels[change.action]}${kindLabels[change.kind]}`
 }
 
 function inferMimeType(fileName: string) {

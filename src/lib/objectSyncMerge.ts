@@ -68,6 +68,7 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '存储方式', path: 'storageMode' },
     { label: '外部链接', path: 'externalUrl' },
     { label: '参考位置', path: 'referenceLocation' },
+    { label: '票据分类', path: 'ticketCategory' },
     { label: '文件名', path: 'fileName' },
     { label: '文件类型', path: 'fileType' },
     { label: 'MIME 类型', path: 'mimeType' },

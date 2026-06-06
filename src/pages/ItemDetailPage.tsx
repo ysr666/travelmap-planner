@@ -34,6 +34,7 @@ import { describeItemTime, describePreviousTransport } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
 import { navigateTo } from '../lib/routes'
 import {
+  getTicketCategoryLabel,
   getTicketDisplayTitle,
 } from '../lib/tickets'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
@@ -555,7 +556,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                     <span className="px-2 py-1 rounded bg-secondary-container/20 text-secondary-fixed-dim font-label-sm text-[11px] border border-secondary-container/30">已生效</span>
                   </div>
                   <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{getTicketDisplayTitle(ticket)}</h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">{ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">{getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
                   <div className="border-t border-dashed border-outline-variant/50 w-full my-3" />
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-body-md text-body-md text-on-surface-variant">点击预览</span>

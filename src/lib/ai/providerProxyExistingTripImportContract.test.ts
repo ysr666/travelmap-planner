@@ -36,12 +36,24 @@ function validRequest(): ProviderProxyExistingTripImportRequest {
 
 describe('validateProviderProxyExistingTripImportRequest', () => {
   it('accepts sanitized existing-trip import requests', () => {
-    const result = validateProviderProxyExistingTripImportRequest(validRequest())
+    const request = validRequest()
+    request.existingTicketSummaries = [{
+      itemId: 'item-1',
+      scope: 'item',
+      summaryId: 'existing-ticket:1',
+      ticketCategory: 'admission_ticket',
+      title: '西湖门票',
+    }]
+    const result = validateProviderProxyExistingTripImportRequest(request)
 
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.request.operation).toBe(PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION)
       expect(result.request.sources[0].text).toContain('西湖')
+      expect(result.request.existingTicketSummaries?.[0]).toMatchObject({
+        summaryId: 'existing-ticket:1',
+        ticketCategory: 'admission_ticket',
+      })
     }
   })
 
@@ -49,6 +61,21 @@ describe('validateProviderProxyExistingTripImportRequest', () => {
     for (const field of ['blob', 'ticketIds', 'ticketBlobs', 'routeCache', 'cloud', 'Authorization', 'Bearer']) {
       const request = validRequest() as unknown as Record<string, unknown>
       request[field] = 'secret'
+
+      const result = validateProviderProxyExistingTripImportRequest(request)
+
+      expect(result.ok, field).toBe(false)
+    }
+  })
+
+  it('rejects forbidden fields inside existing ticket summaries', () => {
+    for (const field of ['fileName', 'ticketId', 'ticketMetas', 'ticketBlobs']) {
+      const request = validRequest() as unknown as Record<string, unknown>
+      request.existingTicketSummaries = [{
+        [field]: 'secret',
+        summaryId: 'existing-ticket:1',
+        title: '西湖门票',
+      }]
 
       const result = validateProviderProxyExistingTripImportRequest(request)
 

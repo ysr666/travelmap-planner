@@ -28,7 +28,7 @@ describe('getTicketDisplayMeta', () => {
       storageMode: 'copy',
     }))).toMatchObject({
       iconKind: 'image',
-      secondaryLine: 'qr.png',
+      secondaryLine: '其他票据 · qr.png',
       storageLabel: '离线缓存',
       toneKey: 'sky',
       typeLabel: '图片',
@@ -36,9 +36,9 @@ describe('getTicketDisplayMeta', () => {
   })
 
   it('maps copy pdf tickets', () => {
-    expect(getTicketDisplayMeta(makeTicket({ storageMode: 'copy' }))).toMatchObject({
+    expect(getTicketDisplayMeta(makeTicket({ storageMode: 'copy', ticketCategory: 'flight_ticket' }))).toMatchObject({
       iconKind: 'pdf',
-      secondaryLine: 'boarding-pass.pdf',
+      secondaryLine: '机票 · boarding-pass.pdf',
       storageLabel: '离线缓存',
       toneKey: 'rose',
       typeLabel: 'PDF',
@@ -52,7 +52,7 @@ describe('getTicketDisplayMeta', () => {
       storageMode: 'copy',
     }))).toMatchObject({
       iconKind: 'file',
-      secondaryLine: 'order.zip',
+      secondaryLine: '其他票据 · order.zip',
       storageLabel: '离线缓存',
       toneKey: 'slate',
       typeLabel: '文件',
@@ -65,7 +65,7 @@ describe('getTicketDisplayMeta', () => {
       storageMode: 'reference',
     }))).toMatchObject({
       iconKind: 'reference',
-      secondaryLine: 'iCloud Drive/TravelMap/hotel.pdf',
+      secondaryLine: '其他票据 · iCloud Drive/TravelMap/hotel.pdf',
       storageLabel: '位置记录',
       toneKey: 'amber',
       typeLabel: '位置',
@@ -78,7 +78,7 @@ describe('getTicketDisplayMeta', () => {
       storageMode: 'external',
     }))).toMatchObject({
       iconKind: 'external',
-      secondaryLine: 'https://example.com/order',
+      secondaryLine: '其他票据 · https://example.com/order',
       storageLabel: '外部链接',
       toneKey: 'violet',
       typeLabel: '链接',

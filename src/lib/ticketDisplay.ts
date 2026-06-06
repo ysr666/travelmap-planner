@@ -1,7 +1,7 @@
 import type { TicketMeta } from '../types'
 import type { AutoSnapshotBackupEntry } from './autoSnapshotBackup'
 import type { TicketBlobSyncState } from '../types'
-import { getTicketStorageMode } from './tickets'
+import { getTicketCategoryLabel, getTicketStorageMode } from './tickets'
 
 export type TicketDisplayIconKind = 'image' | 'pdf' | 'file' | 'reference' | 'external'
 export type TicketDisplayToneKey = 'sky' | 'rose' | 'slate' | 'amber' | 'violet'
@@ -35,11 +35,12 @@ export type TicketCloudSyncContext = {
 
 export function getTicketDisplayMeta(ticket: TicketMeta): TicketDisplayMeta {
   const storageMode = getTicketStorageMode(ticket)
+  const categoryLabel = getTicketCategoryLabel(ticket)
 
   if (storageMode === 'external') {
     return {
       iconKind: 'external',
-      secondaryLine: ticket.externalUrl?.trim() || ticket.fileName,
+      secondaryLine: `${categoryLabel} · ${ticket.externalUrl?.trim() || ticket.fileName}`,
       storageLabel: '外部链接',
       toneKey: 'violet',
       typeLabel: '链接',
@@ -49,7 +50,7 @@ export function getTicketDisplayMeta(ticket: TicketMeta): TicketDisplayMeta {
   if (storageMode === 'reference') {
     return {
       iconKind: 'reference',
-      secondaryLine: ticket.referenceLocation?.trim() || ticket.fileName,
+      secondaryLine: `${categoryLabel} · ${ticket.referenceLocation?.trim() || ticket.fileName}`,
       storageLabel: '位置记录',
       toneKey: 'amber',
       typeLabel: '位置',
@@ -59,7 +60,7 @@ export function getTicketDisplayMeta(ticket: TicketMeta): TicketDisplayMeta {
   if (ticket.fileType === 'image') {
     return {
       iconKind: 'image',
-      secondaryLine: ticket.fileName,
+      secondaryLine: `${categoryLabel} · ${ticket.fileName}`,
       storageLabel: '离线缓存',
       toneKey: 'sky',
       typeLabel: '图片',
@@ -69,7 +70,7 @@ export function getTicketDisplayMeta(ticket: TicketMeta): TicketDisplayMeta {
   if (ticket.fileType === 'pdf') {
     return {
       iconKind: 'pdf',
-      secondaryLine: ticket.fileName,
+      secondaryLine: `${categoryLabel} · ${ticket.fileName}`,
       storageLabel: '离线缓存',
       toneKey: 'rose',
       typeLabel: 'PDF',
@@ -78,7 +79,7 @@ export function getTicketDisplayMeta(ticket: TicketMeta): TicketDisplayMeta {
 
   return {
     iconKind: 'file',
-    secondaryLine: ticket.fileName,
+    secondaryLine: `${categoryLabel} · ${ticket.fileName}`,
     storageLabel: '离线缓存',
     toneKey: 'slate',
     typeLabel: '文件',

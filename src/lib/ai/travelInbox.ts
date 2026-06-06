@@ -2,12 +2,15 @@ import { db } from '../../db/database'
 import { createId } from '../../db/ids'
 import {
   type ExistingTripImportApplyFile,
+  type ExistingTripImportTicketSummary,
   type ExistingTripImportPreview,
   type ExistingTripImportSourceKind,
   type ExistingTripImportSourceSummary,
 } from './existingTripImport'
 import { buildExistingTripImportRequestSources, type ExistingTripImportExtractionResult } from './existingTripImportExtraction'
+import type { ProviderProxyExistingTripImportTicketSummary } from './providerProxyContract'
 import type {
+  TicketMeta,
   TravelInboxEntry,
   TravelInboxEntryCategory,
   TravelInboxPreviewRecord,
@@ -164,6 +167,31 @@ export function buildTravelInboxProviderSources(entries: TravelInboxEntry[]) {
   return buildExistingTripImportRequestSources(buildTravelInboxSourceSummaries(entries))
 }
 
+export function buildTravelInboxTicketSummaries(tickets: TicketMeta[]): ExistingTripImportTicketSummary[] {
+  return [...tickets]
+    .sort((first, second) => first.createdAt - second.createdAt || first.id.localeCompare(second.id))
+    .map((ticket, index) => ({
+      itemId: ticket.itemId,
+      scope: ticket.scope,
+      summaryId: `existing-ticket:${index + 1}`,
+      ticketCategory: ticket.ticketCategory ?? 'other',
+      ticketId: ticket.id,
+      title: ticket.title?.trim() || ticket.note?.trim() || '未命名票据',
+    }))
+}
+
+export function buildTravelInboxProviderTicketSummaries(
+  summaries: ExistingTripImportTicketSummary[],
+): ProviderProxyExistingTripImportTicketSummary[] {
+  return summaries.map((summary) => ({
+    itemId: summary.itemId,
+    scope: summary.scope,
+    summaryId: summary.summaryId,
+    ticketCategory: summary.ticketCategory,
+    title: summary.title,
+  }))
+}
+
 export async function buildTravelInboxApplyFiles(entryIds: string[]) {
   const entries = await db.travelInboxEntries.bulkGet(entryIds)
   const blobs = await db.travelInboxBlobs.bulkGet(entryIds)
@@ -267,7 +295,8 @@ export function summarizeTravelInboxPreview(preview: ExistingTripImportPreview) 
     if (diff.type === 'merge_item_fields') summary.mergeItems += 1
     if (diff.type === 'append_item_note' || diff.type === 'append_trip_note') summary.notes += 1
     if (diff.type === 'create_ticket') summary.createTickets += 1
-    if (diff.type === 'bind_ticket') summary.bindTickets += 1
+    if (diff.type === 'merge_ticket_meta') summary.createTickets += 1
+    if (diff.type === 'bind_ticket' || diff.type === 'bind_existing_ticket') summary.bindTickets += 1
     return summary
   }, {
     bindTickets: 0,

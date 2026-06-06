@@ -3,7 +3,7 @@ import { db } from '../../db/database'
 import { safeFileName } from '../backup'
 import { enqueueObjectUpsert, markTicketBlobPendingUpload } from '../objectSyncLocal'
 import { recordTripWriteForSync } from '../tripSyncQueue'
-import type { Day, ItineraryItem, TicketBlob, TicketMeta, TransportMode, Trip } from '../../types'
+import type { Day, ItineraryItem, TicketBlob, TicketCategory, TicketMeta, TicketScope, TransportMode, Trip } from '../../types'
 
 export type ExistingTripImportConfidence = 'high' | 'medium' | 'low'
 export type ExistingTripImportSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'trip_plan' | 'ticket_file'
@@ -22,7 +22,17 @@ export type ExistingTripImportSourceSummary = {
 export type ExistingTripImportContext = {
   days: Day[]
   items: ItineraryItem[]
+  ticketSummaries?: ExistingTripImportTicketSummary[]
   trip: Trip
+}
+
+export type ExistingTripImportTicketSummary = {
+  itemId?: string
+  scope?: TicketScope
+  summaryId: string
+  ticketCategory?: TicketCategory
+  ticketId: string
+  title: string
 }
 
 export type ExistingTripImportProviderCandidateItem = {
@@ -54,7 +64,9 @@ export type ExistingTripImportProviderCandidateTicket = {
   reason?: string
   sourceFileId?: string
   sourceIds?: string[]
+  targetExistingTicketSummaryId?: string
   targetItemId?: string
+  ticketCategory?: TicketCategory
   title: string
 }
 
@@ -92,7 +104,9 @@ export type ExistingTripImportDiffType =
   | 'merge_item_fields'
   | 'append_item_note'
   | 'create_ticket'
+  | 'merge_ticket_meta'
   | 'bind_ticket'
+  | 'bind_existing_ticket'
   | 'append_trip_note'
 
 export type ExistingTripImportDiffCategory = 'dates' | 'items' | 'tickets' | 'notes'
@@ -114,8 +128,10 @@ export type ExistingTripImportDiff =
   | (ExistingTripImportDiffBase & { data: { date: string; fields: ExistingTripImportItemFields; targetDayId?: string; tempDayKey?: string; tempItemKey: string }; type: 'create_item' })
   | (ExistingTripImportDiffBase & { data: { patch: ExistingTripImportItemPatch; targetItemId: string }; type: 'merge_item_fields' })
   | (ExistingTripImportDiffBase & { data: { note: string; targetItemId: string }; type: 'append_item_note' })
-  | (ExistingTripImportDiffBase & { data: { fileName?: string; note?: string; sourceFileId?: string; tempTicketKey: string; title: string }; type: 'create_ticket' })
+  | (ExistingTripImportDiffBase & { data: { fileName?: string; note?: string; sourceFileId?: string; tempTicketKey: string; ticketCategory?: TicketCategory; title: string }; type: 'create_ticket' })
+  | (ExistingTripImportDiffBase & { data: { patch: ExistingTripImportTicketPatch; targetTicketId: string; targetTicketSummaryId?: string }; type: 'merge_ticket_meta' })
   | (ExistingTripImportDiffBase & { data: { targetItemId?: string; targetTempItemKey?: string; tempTicketKey: string }; type: 'bind_ticket' })
+  | (ExistingTripImportDiffBase & { data: { targetItemId?: string; targetTempItemKey?: string; targetTicketId: string; targetTicketSummaryId?: string }; type: 'bind_existing_ticket' })
   | (ExistingTripImportDiffBase & { data: { note: string }; type: 'append_trip_note' })
 
 export type ExistingTripImportPreview = {
@@ -140,9 +156,24 @@ export type ExistingTripImportItemFields = {
 }
 
 export type ExistingTripImportItemPatch = Partial<ExistingTripImportItemFields>
+export type ExistingTripImportTicketPatch = {
+  note?: string
+  ticketCategory?: TicketCategory
+  title?: string
+}
+
+export type ExistingTripImportAppliedChange = {
+  action: 'appended' | 'bound' | 'created' | 'merged' | 'updated'
+  dayId?: string
+  id: string
+  itemId?: string
+  kind: 'day' | 'item' | 'note' | 'ticket' | 'trip'
+  ticketId?: string
+  title: string
+}
 
 export type ExistingTripImportApplyResult =
-  | { affectedDayIds?: string[]; affectedItemIds?: string[]; affectedTicketIds?: string[]; appliedCount: number; ok: true }
+  | { affectedDayIds?: string[]; affectedItemIds?: string[]; affectedTicketIds?: string[]; appliedChanges: ExistingTripImportAppliedChange[]; appliedCount: number; ok: true }
   | { errors: string[]; ok: false }
 
 export type ExistingTripImportApplyFile = {
@@ -172,6 +203,17 @@ export function buildExistingTripImportBaselineFingerprint(context: ExistingTrip
       item.ticketIds.length,
       item.updatedAt,
     ].join(':'))
+  const ticketSummaries = context.ticketSummaries
+    ? [...context.ticketSummaries]
+      .sort((first, second) => first.ticketId.localeCompare(second.ticketId))
+      .map((ticket) => [
+        ticket.ticketId,
+        ticket.title,
+        ticket.ticketCategory ?? '',
+        ticket.scope ?? '',
+        ticket.itemId ?? '',
+      ].join(':'))
+    : undefined
 
   return JSON.stringify({
     days,
@@ -179,6 +221,7 @@ export function buildExistingTripImportBaselineFingerprint(context: ExistingTrip
     items,
     notes: context.trip.notes ?? '',
     startDate: context.trip.startDate,
+    ...(ticketSummaries ? { ticketSummaries } : {}),
     title: context.trip.title,
     tripId: context.trip.id,
     updatedAt: context.trip.updatedAt,
@@ -196,6 +239,7 @@ export function buildExistingTripImportPreview({
 }): ExistingTripImportPreview {
   const daysByDate = new Map(context.days.map((day) => [day.date, day]))
   const itemsById = new Map(context.items.map((item) => [item.id, item]))
+  const ticketSummariesById = new Map((context.ticketSummaries ?? []).map((ticket) => [ticket.summaryId, ticket]))
   const sourceIds = new Set(sourceSummaries.map((source) => source.id))
   const diffs: ExistingTripImportDiff[] = []
   const warnings = [...(providerResult.warnings ?? [])]
@@ -335,6 +379,38 @@ export function buildExistingTripImportPreview({
     const confidence = normalizeConfidence(candidate.confidence)
     const sourceIdList = filterSourceIds(candidate.sourceIds, sourceIds)
     const target = resolveTicketTarget({ candidate, context, tempItemByCandidateId, tempItemByDateTitle })
+    const existingTicket = resolveExistingTicketSummary({ candidate, ticketSummariesById })
+    if (existingTicket) {
+      const patch = buildTicketMergePatch(existingTicket, candidate)
+      if (Object.keys(patch).length > 0) {
+        diffs.push({
+          category: 'tickets',
+          checked: confidence !== 'low',
+          confidence,
+          data: { patch, targetTicketId: existingTicket.ticketId, targetTicketSummaryId: existingTicket.summaryId },
+          id: `merge-ticket:${candidate.candidateId}`,
+          reason: normalizeText(candidate.reason) ?? '识别内容可补充现有票据。',
+          sourceIds: sourceIdList,
+          summary: `更新票据「${existingTicket.title}」`,
+          type: 'merge_ticket_meta',
+        })
+      }
+      const alreadyBound = Boolean(target.targetItemId && existingTicket.itemId === target.targetItemId)
+      if ((target.targetItemId || target.targetTempItemKey) && !alreadyBound) {
+        diffs.push({
+          category: 'tickets',
+          checked: confidence !== 'low',
+          confidence,
+          data: { targetTicketId: existingTicket.ticketId, targetTicketSummaryId: existingTicket.summaryId, ...target },
+          id: `bind-existing-ticket:${candidate.candidateId}`,
+          reason: '将现有票据绑定到识别出的行程点。',
+          sourceIds: sourceIdList,
+          summary: `绑定现有票据「${existingTicket.title}」`,
+          type: 'bind_existing_ticket',
+        })
+      }
+      continue
+    }
     diffs.push({
       category: 'tickets',
       checked: confidence !== 'low',
@@ -344,6 +420,7 @@ export function buildExistingTripImportPreview({
         note: normalizeText(candidate.note),
         sourceFileId: normalizeText(candidate.sourceFileId),
         tempTicketKey,
+        ticketCategory: normalizeTicketCategory(candidate.ticketCategory),
         title,
       },
       id: `create-ticket:${candidate.candidateId}`,
@@ -413,7 +490,14 @@ export async function applyExistingTripImportPreview({
         db.days.where('tripId').equals(tripId).toArray(),
         db.itineraryItems.where('tripId').equals(tripId).toArray(),
       ])
-      const currentFingerprint = buildExistingTripImportBaselineFingerprint({ days, items, trip })
+      const shouldCheckTickets = baselineFingerprintIncludesTicketSummaries(preview.baselineFingerprint)
+      const tickets = shouldCheckTickets ? await db.ticketMetas.where('tripId').equals(tripId).toArray() : []
+      const currentFingerprint = buildExistingTripImportBaselineFingerprint({
+        days,
+        items,
+        ticketSummaries: shouldCheckTickets ? buildFingerprintTicketSummaries(tickets) : undefined,
+        trip,
+      })
       if (currentFingerprint !== expectedBaselineFingerprint || currentFingerprint !== preview.baselineFingerprint) {
         return { errors: ['本地行程已变化，请重新识别。'], ok: false as const }
       }
@@ -424,10 +508,13 @@ export async function applyExistingTripImportPreview({
       const itemIdByTemp = new Map<string, string>()
       const ticketIdByTemp = new Map<string, string>()
       const changedItems = new Map(items.map((item) => [item.id, { ...item }]))
+      const changedTickets = new Map(tickets.map((ticket) => [ticket.id, { ...ticket }]))
+      const changedTicketIds = new Set<string>()
       const newDays: Day[] = []
       const newItems: ItineraryItem[] = []
       const newTicketMetas: TicketMeta[] = []
       const newTicketBlobs: TicketBlob[] = []
+      const appliedChanges: ExistingTripImportAppliedChange[] = []
       let nextTrip: Trip = { ...trip }
       let appliedCount = 0
 
@@ -445,12 +532,14 @@ export async function applyExistingTripImportPreview({
           title: diff.data.title,
           tripId,
         })
+        appliedChanges.push({ action: 'created', dayId: id, id, kind: 'day', title: diff.data.title })
         appliedCount += 1
       }
 
       for (const diff of checkedDiffs) {
         if (diff.type !== 'update_trip_dates') continue
         nextTrip = { ...nextTrip, endDate: diff.data.endDate, startDate: diff.data.startDate, updatedAt: now }
+        appliedChanges.push({ action: 'updated', id: tripId, kind: 'trip', title: `旅行日期 ${diff.data.startDate} 至 ${diff.data.endDate}` })
         appliedCount += 1
       }
 
@@ -473,18 +562,23 @@ export async function applyExistingTripImportPreview({
           }
           newItems.push(item)
           changedItems.set(item.id, item)
+          appliedChanges.push({ action: 'created', dayId, id, itemId: id, kind: 'item', title: item.title })
           appliedCount += 1
         }
         if (diff.type === 'merge_item_fields') {
           const item = changedItems.get(diff.data.targetItemId)
           if (!item) throw new Error('合并目标行程点不存在。')
-          changedItems.set(item.id, { ...item, ...diff.data.patch, updatedAt: now })
+          const nextItem = { ...item, ...diff.data.patch, updatedAt: now }
+          changedItems.set(item.id, nextItem)
+          appliedChanges.push({ action: 'merged', dayId: nextItem.dayId, id: nextItem.id, itemId: nextItem.id, kind: 'item', title: nextItem.title })
           appliedCount += 1
         }
         if (diff.type === 'append_item_note') {
           const item = changedItems.get(diff.data.targetItemId)
           if (!item) throw new Error('备注目标行程点不存在。')
-          changedItems.set(item.id, { ...item, notes: appendNote(item.notes, diff.data.note), updatedAt: now })
+          const nextItem = { ...item, notes: appendNote(item.notes, diff.data.note), updatedAt: now }
+          changedItems.set(item.id, nextItem)
+          appliedChanges.push({ action: 'appended', dayId: nextItem.dayId, id: nextItem.id, itemId: nextItem.id, kind: 'note', title: `${nextItem.title} 备注` })
           appliedCount += 1
         }
       }
@@ -506,6 +600,7 @@ export async function applyExistingTripImportPreview({
           scope: 'unassigned',
           size: file?.size ?? 0,
           storageMode: file ? 'copy' : 'reference',
+          ticketCategory: diff.data.ticketCategory ?? 'other',
           title: diff.data.title,
           tripId,
           updatedAt: now,
@@ -515,12 +610,13 @@ export async function applyExistingTripImportPreview({
         }
         newTicketMetas.push(meta)
         if (file) newTicketBlobs.push({ blob: file.blob, ticketId: id })
+        appliedChanges.push({ action: 'created', id, kind: 'ticket', ticketId: id, title: meta.title ?? meta.fileName })
         appliedCount += 1
       }
 
       for (const diff of checkedDiffs) {
-        if (diff.type !== 'bind_ticket') continue
-        const ticketId = ticketIdByTemp.get(diff.data.tempTicketKey)
+        if (diff.type !== 'bind_ticket' && diff.type !== 'bind_existing_ticket') continue
+        const ticketId = diff.type === 'bind_ticket' ? ticketIdByTemp.get(diff.data.tempTicketKey) : diff.data.targetTicketId
         if (!ticketId) continue
         const targetItemId = diff.data.targetItemId ?? (diff.data.targetTempItemKey ? itemIdByTemp.get(diff.data.targetTempItemKey) : undefined)
         if (!targetItemId) continue
@@ -532,33 +628,62 @@ export async function applyExistingTripImportPreview({
         if (newItemIndex >= 0) {
           newItems[newItemIndex] = nextItem
         }
-        const ticket = newTicketMetas.find((meta) => meta.id === ticketId)
+        const ticket = newTicketMetas.find((meta) => meta.id === ticketId) ?? changedTickets.get(ticketId)
         if (ticket) {
           ticket.itemId = item.id
           ticket.scope = 'item'
+          ticket.updatedAt = now
+          if (!newTicketMetas.some((meta) => meta.id === ticket.id)) {
+            changedTickets.set(ticket.id, ticket)
+            changedTicketIds.add(ticket.id)
+          }
         }
+        appliedChanges.push({ action: 'bound', dayId: item.dayId, id: ticketId, itemId: item.id, kind: 'ticket', ticketId, title: ticket?.title ?? ticket?.fileName ?? '票据' })
+        appliedCount += 1
+      }
+
+      for (const diff of checkedDiffs) {
+        if (diff.type !== 'merge_ticket_meta') continue
+        const ticket = changedTickets.get(diff.data.targetTicketId)
+        if (!ticket) throw new Error('更新目标票据不存在。')
+        const nextTicket: TicketMeta = {
+          ...ticket,
+          note: diff.data.patch.note ? appendNote(ticket.note, diff.data.patch.note) : ticket.note,
+          ticketCategory: diff.data.patch.ticketCategory ?? ticket.ticketCategory,
+          title: diff.data.patch.title ?? ticket.title,
+          updatedAt: now,
+        }
+        changedTickets.set(ticket.id, nextTicket)
+        changedTicketIds.add(ticket.id)
+        appliedChanges.push({ action: 'merged', id: ticket.id, itemId: nextTicket.itemId, kind: 'ticket', ticketId: ticket.id, title: nextTicket.title ?? nextTicket.fileName })
         appliedCount += 1
       }
 
       for (const diff of checkedDiffs) {
         if (diff.type !== 'append_trip_note') continue
         nextTrip = { ...nextTrip, notes: appendNote(nextTrip.notes, diff.data.note), updatedAt: now }
+        appliedChanges.push({ action: 'appended', id: tripId, kind: 'note', title: '旅行备注' })
         appliedCount += 1
       }
 
-      if (appliedCount === 0) return { appliedCount: 0, ok: true as const }
+      if (appliedCount === 0) return { appliedChanges: [], appliedCount: 0, ok: true as const }
       nextTrip = { ...nextTrip, updatedAt: now }
       await db.trips.put(nextTrip)
       if (newDays.length > 0) await db.days.bulkAdd(newDays)
       if (newItems.length > 0) await db.itineraryItems.bulkAdd(newItems)
       const changedExistingItems = Array.from(changedItems.values()).filter((item) => items.some((existing) => existing.id === item.id))
       if (changedExistingItems.length > 0) await db.itineraryItems.bulkPut(changedExistingItems)
+      const changedExistingTickets = [...changedTicketIds]
+        .map((ticketId) => changedTickets.get(ticketId))
+        .filter((ticket): ticket is TicketMeta => Boolean(ticket))
+      if (changedExistingTickets.length > 0) await db.ticketMetas.bulkPut(changedExistingTickets)
       if (newTicketMetas.length > 0) await db.ticketMetas.bulkAdd(newTicketMetas)
       if (newTicketBlobs.length > 0) await db.ticketBlobs.bulkAdd(newTicketBlobs)
       return {
         affectedDayIds: newDays.map((day) => day.id),
         affectedItemIds: [...newItems.map((item) => item.id), ...changedExistingItems.map((item) => item.id)],
-        affectedTicketIds: newTicketMetas.map((ticket) => ticket.id),
+        affectedTicketIds: [...newTicketMetas.map((ticket) => ticket.id), ...changedExistingTickets.map((ticket) => ticket.id)],
+        appliedChanges,
         appliedCount,
         ok: true as const,
       }
@@ -666,6 +791,66 @@ function resolveTicketTarget({
   return {}
 }
 
+function resolveExistingTicketSummary({
+  candidate,
+  ticketSummariesById,
+}: {
+  candidate: ExistingTripImportProviderCandidateTicket
+  ticketSummariesById: Map<string, ExistingTripImportTicketSummary>
+}) {
+  const explicit = candidate.targetExistingTicketSummaryId
+    ? ticketSummariesById.get(candidate.targetExistingTicketSummaryId)
+    : undefined
+  if (explicit) return explicit
+
+  const title = normalizeText(candidate.title)
+  if (!title) return undefined
+  const scored = [...ticketSummariesById.values()]
+    .map((ticket) => ({ score: similarity(title, ticket.title), ticket }))
+    .sort((first, second) => second.score - first.score)[0]
+  return scored && scored.score >= 0.82 ? scored.ticket : undefined
+}
+
+function buildTicketMergePatch(
+  target: ExistingTripImportTicketSummary,
+  candidate: ExistingTripImportProviderCandidateTicket,
+): ExistingTripImportTicketPatch {
+  const patch: ExistingTripImportTicketPatch = {}
+  const title = normalizeText(candidate.title)
+  const category = normalizeTicketCategory(candidate.ticketCategory)
+  const note = normalizeText(candidate.note)
+  if (title && normalizeForSimilarity(title) !== normalizeForSimilarity(target.title)) {
+    patch.title = title
+  }
+  if (category && category !== (target.ticketCategory ?? 'other')) {
+    patch.ticketCategory = category
+  }
+  if (note) {
+    patch.note = note
+  }
+  return patch
+}
+
+function buildFingerprintTicketSummaries(tickets: TicketMeta[]): ExistingTripImportTicketSummary[] {
+  return tickets.map((ticket) => ({
+    itemId: ticket.itemId,
+    scope: ticket.scope,
+    summaryId: ticket.id,
+    ticketCategory: ticket.ticketCategory ?? 'other',
+    ticketId: ticket.id,
+    title: ticket.title?.trim() || ticket.note?.trim() || '未命名票据',
+  }))
+}
+
+function baselineFingerprintIncludesTicketSummaries(fingerprint: string) {
+  try {
+    const parsed: unknown = JSON.parse(fingerprint)
+    return Boolean(parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'ticketSummaries'))
+  } catch {
+    return false
+  }
+}
+
 function normalizeItemFields(candidate: ExistingTripImportProviderCandidateItem): ExistingTripImportItemFields {
   return {
     address: normalizeText(candidate.address),
@@ -729,6 +914,18 @@ function normalizeConfidence(value: ExistingTripImportConfidence | undefined): E
 
 function normalizeTransportMode(value: TransportMode | undefined) {
   return value && validTransportModes.has(value) ? value : undefined
+}
+
+function normalizeTicketCategory(value: TicketCategory | undefined) {
+  return value === 'admission_ticket' ||
+    value === 'train_ticket' ||
+    value === 'flight_ticket' ||
+    value === 'hotel_booking' ||
+    value === 'restaurant_reservation' ||
+    value === 'transport_booking' ||
+    value === 'other'
+    ? value
+    : undefined
 }
 
 function normalizePositiveInteger(value: number | undefined) {

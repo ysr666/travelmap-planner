@@ -38,6 +38,7 @@ import {
   getTicketStorageMode,
   isValidExternalUrl,
   normalizeTicketFileName,
+  ticketCategoryOptions,
   ticketScopeLabels,
 } from '../lib/tickets'
 import {
@@ -62,7 +63,7 @@ import {
 } from '../lib/cloudObjectSync'
 import { getTicketBlobSyncState } from '../lib/objectSyncLocal'
 import { getSupabaseClient } from '../lib/supabaseClient'
-import type { Day, ItineraryItem, TicketBlobSyncState, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
+import type { Day, ItineraryItem, TicketBlobSyncState, TicketCategory, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
@@ -113,6 +114,7 @@ export function TicketLibraryPage() {
   const [storageMode, setStorageMode] = useState<TicketStorageMode>('copy')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
+  const [ticketCategory, setTicketCategory] = useState<TicketCategory>('other')
   const [note, setNote] = useState('')
   const [referenceFileName, setReferenceFileName] = useState('')
   const [referenceLocation, setReferenceLocation] = useState('')
@@ -384,6 +386,7 @@ export function TicketLibraryPage() {
           referenceFileName,
           referenceLocation,
           selectedFile,
+          ticketCategory,
           title: normalizedTitle,
         }),
         itemId,
@@ -508,6 +511,7 @@ export function TicketLibraryPage() {
   function resetForm() {
     setSelectedFile(null)
     setTitle('')
+    setTicketCategory('other')
     setNote('')
     setReferenceFileName('')
     setReferenceLocation('')
@@ -611,6 +615,21 @@ export function TicketLibraryPage() {
           placeholder="例如：浅草寺门票二维码"
           value={title}
         />
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>票据分类</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            onChange={(event) => setTicketCategory(event.target.value as TicketCategory)}
+            value={ticketCategory}
+          >
+            {ticketCategoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {storageMode === 'copy' ? (
           <CopyTicketFields
@@ -1048,6 +1067,7 @@ function buildTicketMetaInput(
     referenceFileName,
     referenceLocation,
     externalUrl,
+    ticketCategory,
   }: {
     selectedFile: File | null
     title?: string
@@ -1055,6 +1075,7 @@ function buildTicketMetaInput(
     referenceFileName: string
     referenceLocation: string
     externalUrl: string
+    ticketCategory: TicketCategory
   },
 ) {
   if (storageMode === 'copy' && selectedFile) {
@@ -1065,6 +1086,7 @@ function buildTicketMetaInput(
       note,
       size: selectedFile.size,
       storageMode,
+      ticketCategory,
       title,
     }
   }
@@ -1079,6 +1101,7 @@ function buildTicketMetaInput(
       referenceLocation: referenceLocation.trim(),
       size: 0,
       storageMode,
+      ticketCategory,
       title,
     }
   }
@@ -1093,6 +1116,7 @@ function buildTicketMetaInput(
     note,
     size: 0,
     storageMode,
+    ticketCategory,
     title,
   }
 }

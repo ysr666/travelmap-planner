@@ -16,6 +16,7 @@ import type {
   ExistingTripImportProviderResult,
   ExistingTripImportSourceKind,
 } from './existingTripImport'
+import type { TicketCategory, TicketScope } from '../../types'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -376,8 +377,17 @@ export type ProviderProxyExistingTripImportSourceSummary = {
   warnings?: string[]
 }
 
+export type ProviderProxyExistingTripImportTicketSummary = {
+  itemId?: string
+  scope?: TicketScope
+  summaryId: string
+  ticketCategory?: TicketCategory
+  title: string
+}
+
 export type ProviderProxyExistingTripImportRequest = {
   days: ProviderProxyExistingTripImportDaySummary[]
+  existingTicketSummaries?: ProviderProxyExistingTripImportTicketSummary[]
   items: ProviderProxyExistingTripImportItemSummary[]
   locale?: ProviderProxyPlaceLookupLocale
   operation: typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION
@@ -932,10 +942,12 @@ const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrieve
 const AI_TRIP_EDIT_SEARCH_RESULT_ALLOWED_FIELDS = new Set(['title', 'url', 'displayUrl', 'domain', 'snippet', 'retrievedAt', 'sourceType', 'confidence'])
 const MAX_EXISTING_TRIP_IMPORT_DAYS = 120
 const MAX_EXISTING_TRIP_IMPORT_ITEMS = 1000
+const MAX_EXISTING_TRIP_IMPORT_EXISTING_TICKETS = 1000
 const MAX_EXISTING_TRIP_IMPORT_SOURCES = 12
 const MAX_EXISTING_TRIP_IMPORT_SOURCE_TEXT_LENGTH = 4000
 const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 24000
 const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
+const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'summaryId', 'ticketCategory', 'title'])
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -2196,6 +2208,11 @@ export function validateProviderProxyExistingTripImportRequest(
     items.push(item)
   }
 
+  const existingTicketSummariesResult = readExistingTripImportTicketSummaries(record.existingTicketSummaries, itemIds)
+  if (!existingTicketSummariesResult.ok) {
+    return existingTripImportInvalidRequest(existingTicketSummariesResult.message, requestId)
+  }
+
   if (!Array.isArray(record.sources) || record.sources.length < 1 || record.sources.length > MAX_EXISTING_TRIP_IMPORT_SOURCES) {
     return existingTripImportInvalidRequest(`识别来源必须为 1 到 ${MAX_EXISTING_TRIP_IMPORT_SOURCES} 段文本。`, requestId)
   }
@@ -2224,6 +2241,7 @@ export function validateProviderProxyExistingTripImportRequest(
     ok: true,
     request: {
       days,
+      existingTicketSummaries: existingTicketSummariesResult.existingTicketSummaries,
       items,
       locale: locale as ProviderProxyPlaceLookupLocale | undefined,
       operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
@@ -2295,6 +2313,66 @@ function readExistingTripImportItem(input: unknown, dayIds: Set<string>): Provid
     title,
     transportMode: readOptionalString(record.transportMode, 40),
   }
+}
+
+function readExistingTripImportTicketSummaries(
+  input: unknown,
+  itemIds: Set<string>,
+): { existingTicketSummaries?: ProviderProxyExistingTripImportTicketSummary[]; ok: true } | { message: string; ok: false } {
+  if (input === undefined) {
+    return { ok: true }
+  }
+  if (!Array.isArray(input) || input.length > MAX_EXISTING_TRIP_IMPORT_EXISTING_TICKETS) {
+    return { message: `现有票据摘要不能超过 ${MAX_EXISTING_TRIP_IMPORT_EXISTING_TICKETS} 个。`, ok: false }
+  }
+
+  const summaryIds = new Set<string>()
+  const existingTicketSummaries: ProviderProxyExistingTripImportTicketSummary[] = []
+  for (const rawSummary of input) {
+    const record = readRecord(rawSummary)
+    if (!rawSummary || typeof rawSummary !== 'object' || Array.isArray(rawSummary)) {
+      return { message: '现有票据摘要无效。', ok: false }
+    }
+    for (const key of Object.keys(record)) {
+      if (!EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS.has(key)) {
+        return { message: '现有票据摘要包含不允许的字段。', ok: false }
+      }
+    }
+    const summaryId = readRequiredTrimmedString(record.summaryId, 128)
+    const title = readRequiredTrimmedString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+    const itemId = readOptionalString(record.itemId, 128)
+    const scope = record.scope
+    const ticketCategory = record.ticketCategory
+    if (
+      !summaryId ||
+      summaryIds.has(summaryId) ||
+      !title ||
+      (itemId !== undefined && !itemIds.has(itemId)) ||
+      (scope !== undefined && scope !== 'trip' && scope !== 'item' && scope !== 'unassigned') ||
+      (ticketCategory !== undefined && !isExistingTripImportTicketCategory(ticketCategory))
+    ) {
+      return { message: '现有票据摘要无效。', ok: false }
+    }
+    summaryIds.add(summaryId)
+    existingTicketSummaries.push({
+      itemId,
+      scope: scope as TicketScope | undefined,
+      summaryId,
+      ticketCategory: ticketCategory as TicketCategory | undefined,
+      title,
+    })
+  }
+  return { existingTicketSummaries, ok: true }
+}
+
+function isExistingTripImportTicketCategory(input: unknown): input is TicketCategory {
+  return input === 'admission_ticket' ||
+    input === 'train_ticket' ||
+    input === 'flight_ticket' ||
+    input === 'hotel_booking' ||
+    input === 'restaurant_reservation' ||
+    input === 'transport_booking' ||
+    input === 'other'
 }
 
 function readExistingTripImportSource(input: unknown): ProviderProxyExistingTripImportSourceSummary | null {

@@ -1,6 +1,7 @@
 import { createId } from '../../db/ids'
 import { db } from '../../db/database'
 import { safeFileName } from '../backup'
+import { enqueueObjectUpsert, markTicketBlobPendingUpload } from '../objectSyncLocal'
 import { recordTripWriteForSync } from '../tripSyncQueue'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, TransportMode, Trip } from '../../types'
 
@@ -141,7 +142,7 @@ export type ExistingTripImportItemFields = {
 export type ExistingTripImportItemPatch = Partial<ExistingTripImportItemFields>
 
 export type ExistingTripImportApplyResult =
-  | { ok: true; appliedCount: number }
+  | { affectedDayIds?: string[]; affectedItemIds?: string[]; affectedTicketIds?: string[]; appliedCount: number; ok: true }
   | { errors: string[]; ok: false }
 
 export type ExistingTripImportApplyFile = {
@@ -554,16 +555,59 @@ export async function applyExistingTripImportPreview({
       if (changedExistingItems.length > 0) await db.itineraryItems.bulkPut(changedExistingItems)
       if (newTicketMetas.length > 0) await db.ticketMetas.bulkAdd(newTicketMetas)
       if (newTicketBlobs.length > 0) await db.ticketBlobs.bulkAdd(newTicketBlobs)
-      return { appliedCount, ok: true as const }
+      return {
+        affectedDayIds: newDays.map((day) => day.id),
+        affectedItemIds: [...newItems.map((item) => item.id), ...changedExistingItems.map((item) => item.id)],
+        affectedTicketIds: newTicketMetas.map((ticket) => ticket.id),
+        appliedCount,
+        ok: true as const,
+      }
     })
 
     if (result.ok && result.appliedCount > 0) {
+      await enqueueExistingTripImportObjectsForSync({
+        dayIds: result.affectedDayIds ?? [],
+        itemIds: result.affectedItemIds ?? [],
+        ticketIds: result.affectedTicketIds ?? [],
+        tripId,
+      })
       recordTripWriteForSync(tripId, 'existing-trip-imported')
     }
     return result
   } catch (caught) {
     return { errors: [caught instanceof Error ? caught.message : '导入应用失败。'], ok: false }
   }
+}
+
+async function enqueueExistingTripImportObjectsForSync({
+  dayIds,
+  itemIds,
+  ticketIds,
+  tripId,
+}: {
+  dayIds: string[]
+  itemIds: string[]
+  ticketIds: string[]
+  tripId: string
+}) {
+  const trip = await db.trips.get(tripId)
+  const days = dayIds.length > 0 ? await db.days.bulkGet(dayIds) : []
+  const items = itemIds.length > 0 ? await db.itineraryItems.bulkGet(itemIds) : []
+  const tickets = ticketIds.length > 0 ? await db.ticketMetas.bulkGet(ticketIds) : []
+  if (trip) await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
+  await Promise.all([
+    ...days.filter((day): day is Day => Boolean(day)).map((day) => enqueueObjectUpsert({ object: day, objectType: 'day' })),
+    ...items.filter((item): item is ItineraryItem => Boolean(item)).map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' })),
+    ...tickets.filter((ticket): ticket is TicketMeta => Boolean(ticket)).map(async (ticket) => {
+      await enqueueObjectUpsert({ object: ticket, objectType: 'ticket_meta' })
+      if ((ticket.storageMode ?? 'copy') === 'copy') {
+        const blob = await db.ticketBlobs.get(ticket.id)
+        if (blob?.blob) {
+          await markTicketBlobPendingUpload({ blob: blob.blob, ticket })
+        }
+      }
+    }),
+  ])
 }
 
 function resolveTargetItem({

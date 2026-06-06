@@ -138,6 +138,16 @@ describe('applyExistingTripImportPreview', () => {
     expect(tickets).toHaveLength(1)
     expect(tickets[0]).toMatchObject({ fileName: expect.stringContaining('ticket'), fileType: 'pdf', itemId: items[0].id, scope: 'item', storageMode: 'copy' })
     await expect(getTicketBlob(tickets[0].id)).resolves.toMatchObject({ ticketId: tickets[0].id })
+    await expect(db.syncOutbox.toArray()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'trip', tripId: trip.id }),
+      expect.objectContaining({ objectType: 'item', tripId: trip.id }),
+      expect.objectContaining({ objectType: 'ticket_meta', objectId: tickets[0].id, tripId: trip.id }),
+    ]))
+    await expect(db.ticketBlobSyncStates.get(tickets[0].id)).resolves.toMatchObject({
+      cacheStatus: 'cached',
+      ticketId: tickets[0].id,
+      uploadStatus: 'pending',
+    })
     const updatedTrip = await db.trips.get(trip.id)
     expect(updatedTrip?.notes).toContain('订单提醒')
   })

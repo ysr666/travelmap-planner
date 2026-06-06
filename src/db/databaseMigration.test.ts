@@ -122,5 +122,8 @@ describe('TravelConsoleDB migrations', () => {
       objectType: 'ticket_meta',
       tripId: trip.id,
     })
+    await expect(db.travelInboxEntries.toArray()).resolves.toEqual([])
+    await expect(db.travelInboxBlobs.toArray()).resolves.toEqual([])
+    await expect(db.travelInboxPreviews.toArray()).resolves.toEqual([])
   })
 })

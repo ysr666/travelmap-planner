@@ -229,6 +229,44 @@ export type TicketBlobSyncState = {
   updatedAt: number
 }
 
+export type TravelInboxSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'trip_plan' | 'ticket_file'
+export type TravelInboxEntryStatus = 'ready' | 'recognizing' | 'previewed' | 'error'
+export type TravelInboxEntryCategory = 'unclassified' | 'itinerary' | 'ticket' | 'note' | 'mixed'
+export type TravelInboxPreviewStatus = 'ready' | 'applying' | 'applied' | 'discarded'
+
+export type TravelInboxEntry = {
+  id: string
+  tripId: string
+  status: TravelInboxEntryStatus
+  sourceKind: TravelInboxSourceKind
+  category: TravelInboxEntryCategory
+  label?: string
+  fileName?: string
+  mimeType?: string
+  size?: number
+  extractedText: string
+  warnings: string[]
+  error?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type TravelInboxBlob = {
+  entryId: string
+  blob: Blob
+}
+
+export type TravelInboxPreviewRecord = {
+  id: string
+  tripId: string
+  entryIds: string[]
+  preview: unknown
+  checkedDiffIds: string[]
+  status: TravelInboxPreviewStatus
+  createdAt: number
+  updatedAt: number
+}
+
 export type TicketFile = TicketMeta & {
   blob: Blob
 }

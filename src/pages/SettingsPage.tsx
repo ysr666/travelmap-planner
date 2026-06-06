@@ -37,6 +37,10 @@ import {
   type AiPrivacySettings,
 } from '../lib/ai/aiPrivacy'
 import {
+  isTravelInboxAutoRecognizeEnabled,
+  setTravelInboxAutoRecognizeEnabled,
+} from '../lib/ai/travelInbox'
+import {
   importTripBackup,
 } from '../lib/backup'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -243,6 +247,7 @@ export function SettingsPage() {
   const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
   const [travelProfile, setTravelProfile] = useState<TravelProfile>(() => getStoredTravelProfile())
   const [aiPrivacySettings, setAiPrivacySettings] = useState<AiPrivacySettings>(() => getStoredAiPrivacySettings())
+  const [travelInboxAutoRecognize, setTravelInboxAutoRecognize] = useState(() => isTravelInboxAutoRecognizeEnabled())
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -512,6 +517,11 @@ export function SettingsPage() {
     })
   }
 
+  function updateTravelInboxAutoRecognize(value: boolean) {
+    setTravelInboxAutoRecognize(value)
+    setTravelInboxAutoRecognizeEnabled(value)
+  }
+
   async function handleRouteCacheMaxBytesChange(bytes: number) {
     setIsUpdatingRouteCacheLimit(true)
     setRouteCacheError(null)
@@ -613,7 +623,9 @@ export function SettingsPage() {
       <Collapsible defaultOpen subtitle="控制 AI 行程生成和修复时可发送的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
           onChange={updateAiPrivacySetting}
+          onTravelInboxAutoRecognizeChange={updateTravelInboxAutoRecognize}
           settings={aiPrivacySettings}
+          travelInboxAutoRecognize={travelInboxAutoRecognize}
         />
       </Collapsible>
 
@@ -724,7 +736,7 @@ export function SettingsPage() {
             />
             <InfoPill
               icon={<Sparkles className="size-4" />}
-              text="要把订单邮件、PDF、图片或票据追加/合并到现有旅行，请进入该旅行总览使用“AI 识别导入”。"
+              text="要把订单邮件、PDF、图片或票据追加/合并到现有旅行，请进入该旅行总览使用“旅行收件箱”。"
             />
             <InfoPill
               icon={<AlertTriangle className="size-4" />}
@@ -1012,9 +1024,13 @@ function TravelProfileSettings({
 function AiPrivacySettingsPanel({
   settings,
   onChange,
+  onTravelInboxAutoRecognizeChange,
+  travelInboxAutoRecognize,
 }: {
   settings: AiPrivacySettings
   onChange: (key: keyof AiPrivacySettings, value: boolean) => void
+  onTravelInboxAutoRecognizeChange: (value: boolean) => void
+  travelInboxAutoRecognize: boolean
 }) {
   return (
     <section className="space-y-3" data-testid="ai-privacy-section">
@@ -1039,7 +1055,7 @@ function AiPrivacySettingsPanel({
           />
           <InfoPill
             icon={<AlertTriangle className="size-4" />}
-            text="票据图片/PDF 内容默认不可读取；本阶段不会解析、上传或发送票据文件。"
+            text="旅行收件箱会在此设备本地提取/OCR 文件；只有开启或确认 AI 识别后才发送提取文本。"
             tone="warning"
           />
         </div>
@@ -1062,6 +1078,17 @@ function AiPrivacySettingsPanel({
             </div>
           </div>
         ))}
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行收件箱</p>
+          <ToggleRow
+            checked={travelInboxAutoRecognize}
+            description="默认关闭。开启后，新增收件材料完成本地提取/OCR 后，会自动发送提取文本给 AI 识别；原始文件不会上传。"
+            onChange={onTravelInboxAutoRecognizeChange}
+            testId="travel-inbox-auto-recognize-setting"
+            title="提取后自动 AI 识别"
+          />
+        </div>
 
         <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
           这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 归档或 Supabase 云端同步。

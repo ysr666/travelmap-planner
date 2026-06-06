@@ -10,6 +10,9 @@ import type {
   TicketBlobSyncState,
   TicketMeta,
   Trip,
+  TravelInboxBlob,
+  TravelInboxEntry,
+  TravelInboxPreviewRecord,
 } from '../types'
 
 class TravelConsoleDatabase extends Dexie {
@@ -23,6 +26,9 @@ class TravelConsoleDatabase extends Dexie {
   objectSyncConflicts!: Table<ObjectSyncConflict, string>
   objectSyncStates!: Table<ObjectSyncState, string>
   ticketBlobSyncStates!: Table<TicketBlobSyncState, string>
+  travelInboxBlobs!: Table<TravelInboxBlob, string>
+  travelInboxEntries!: Table<TravelInboxEntry, string>
+  travelInboxPreviews!: Table<TravelInboxPreviewRecord, string>
 
   constructor() {
     super('TravelConsoleDB')
@@ -149,6 +155,22 @@ class TravelConsoleDatabase extends Dexie {
       if (bases.length > 0) {
         await objectSyncBases.bulkPut(bases)
       }
+    })
+
+    this.version(4).stores({
+      trips: 'id, updatedAt',
+      days: 'id, tripId, [tripId+sortOrder], date',
+      itineraryItems: 'id, tripId, dayId, [dayId+sortOrder], [dayId+startTime]',
+      ticketMetas: 'id, tripId, itemId, createdAt',
+      ticketBlobs: 'ticketId',
+      syncOutbox: 'id, tripId, objectKey, [tripId+status], [objectType+objectId], updatedAt',
+      objectSyncBases: 'objectKey, tripId, [objectType+objectId], cloudUpdatedAtMs, updatedAt',
+      objectSyncConflicts: 'id, tripId, objectKey, status, [tripId+status], [objectType+objectId], createdAt',
+      objectSyncStates: 'objectKey, tripId, [objectType+objectId], conflictAt',
+      ticketBlobSyncStates: 'ticketId, tripId, [tripId+uploadStatus], [tripId+cacheStatus], updatedAt',
+      travelInboxBlobs: 'entryId',
+      travelInboxEntries: 'id, tripId, [tripId+status], sourceKind, category, createdAt',
+      travelInboxPreviews: 'id, tripId, status, createdAt',
     })
   }
 }

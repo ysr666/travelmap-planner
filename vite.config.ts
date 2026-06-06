@@ -30,6 +30,15 @@ export default defineConfig({
           if (normalizedId.includes('/node_modules/jszip/')) {
             return 'jszip'
           }
+          if (normalizedId.includes('/node_modules/pdfjs-dist/')) {
+            return 'pdf-ocr'
+          }
+          if (
+            normalizedId.includes('/node_modules/tesseract.js/') ||
+            normalizedId.includes('/node_modules/@tesseract.js-data/')
+          ) {
+            return 'ocr'
+          }
           if (
             normalizedId.includes('/node_modules/react/') ||
             normalizedId.includes('/node_modules/react-dom/') ||

@@ -12,6 +12,10 @@ import type {
   ContentEnrichmentConfidence,
   ContentEnrichmentSourceType,
 } from '../../types'
+import type {
+  ExistingTripImportProviderResult,
+  ExistingTripImportSourceKind,
+} from './existingTripImport'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -23,6 +27,7 @@ export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
+export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
@@ -31,11 +36,12 @@ export const PROVIDER_PROXY_MAX_DAYS_PER_BATCH = 7
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
+export const PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -326,6 +332,76 @@ export type ProviderProxyAiTripEditPlanResponse =
 
 export type ProviderProxyAiTripEditPlanValidationResult =
   | { ok: true; request: ProviderProxyAiTripEditPlanRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyExistingTripImportTripSummary = {
+  destination?: string
+  endDate: string
+  id: string
+  startDate: string
+  title: string
+}
+
+export type ProviderProxyExistingTripImportDaySummary = {
+  date: string
+  id: string
+  sortOrder?: number
+  title?: string
+}
+
+export type ProviderProxyExistingTripImportItemSummary = {
+  address?: string
+  date: string
+  dayId: string
+  endTime?: string
+  id: string
+  locationName?: string
+  previousTransportDurationMinutes?: number
+  previousTransportMode?: string
+  previousTransportNote?: string
+  startTime?: string
+  ticketCount?: number
+  title: string
+  transportMode?: string
+}
+
+export type ProviderProxyExistingTripImportSourceSummary = {
+  fileName?: string
+  id: string
+  kind: ExistingTripImportSourceKind
+  label: string
+  mimeType?: string
+  size?: number
+  text: string
+  warnings?: string[]
+}
+
+export type ProviderProxyExistingTripImportRequest = {
+  days: ProviderProxyExistingTripImportDaySummary[]
+  items: ProviderProxyExistingTripImportItemSummary[]
+  locale?: ProviderProxyPlaceLookupLocale
+  operation: typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION
+  quotaSessionId?: string
+  requestId?: string
+  sources: ProviderProxyExistingTripImportSourceSummary[]
+  trip: ProviderProxyExistingTripImportTripSummary
+}
+
+export type ProviderProxyExistingTripImportSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION
+  requestId?: string
+  result: ExistingTripImportProviderResult
+  source: 'mock' | 'future_ai'
+  warnings?: string[]
+}
+
+export type ProviderProxyExistingTripImportResponse =
+  | ProviderProxyExistingTripImportSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyExistingTripImportValidationResult =
+  | { ok: true; request: ProviderProxyExistingTripImportRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyTravelSearchLocale = 'zh-CN' | 'en-US'
@@ -651,6 +727,7 @@ const VALID_CONTENT_ENRICHMENT_CONFIDENCES = new Set<ContentEnrichmentConfidence
 const VALID_TRIP_DAILY_TIP_MODES = new Set<ProviderProxyTripDailyTipMode>(['pre_trip', 'today', 'tomorrow', 'completed'])
 const VALID_TRIP_DAILY_TIP_SECTION_KEYS = new Set<ProviderProxyTripDailyTipSectionKey>(['opening_hours', 'ticket_price', 'notices', 'route_risk'])
 const VALID_TRIP_DAILY_TIP_ROUTE_STATUSES = new Set<NonNullable<ProviderProxyTripDailyTipRequest['routeStatus']>>(['no_coordinates', 'not_enough_points', 'ready_to_generate', 'cached', 'stale_if_cache_key_changed'])
+const VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS = new Set<ExistingTripImportSourceKind>(['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'trip_plan', 'ticket_file'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
   'items',
@@ -797,6 +874,43 @@ const FORBIDDEN_AI_TRIP_EDIT_FIELDS = new Set([
   'cloud',
   'cloudStatus',
 ])
+const FORBIDDEN_EXISTING_TRIP_IMPORT_FIELDS = new Set([
+  'apiKey',
+  'apikey',
+  'Authorization',
+  'authorization',
+  'Bearer',
+  'bearer',
+  'blob',
+  'blobs',
+  'cloud',
+  'cloudState',
+  'cloudStatus',
+  'cloudToken',
+  'coordinates',
+  'externalUrl',
+  'file',
+  'files',
+  'headers',
+  'lat',
+  'lng',
+  'localDb',
+  'localdb',
+  'providerKey',
+  'route',
+  'routeCache',
+  'ticket',
+  'tickets',
+  'ticketBlob',
+  'ticketBlobs',
+  'ticketFile',
+  'ticketFiles',
+  'ticketId',
+  'ticketIds',
+  'ticketMeta',
+  'ticketMetas',
+  'token',
+])
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
@@ -816,6 +930,12 @@ const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
 const AI_TRIP_EDIT_SEARCH_RESULT_ALLOWED_FIELDS = new Set(['title', 'url', 'displayUrl', 'domain', 'snippet', 'retrievedAt', 'sourceType', 'confidence'])
+const MAX_EXISTING_TRIP_IMPORT_DAYS = 120
+const MAX_EXISTING_TRIP_IMPORT_ITEMS = 1000
+const MAX_EXISTING_TRIP_IMPORT_SOURCES = 12
+const MAX_EXISTING_TRIP_IMPORT_SOURCE_TEXT_LENGTH = 4000
+const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 24000
+const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -1058,6 +1178,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前 AI 修改建议请求暂不支持。'
     if (code === 'invalid_response') return 'AI 修改建议服务返回的内容无法解析。'
     return 'AI 修改建议服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION) {
+    if (code === 'quota_exceeded') return '今日 AI 识别导入次数已达上限。'
+    if (code === 'invalid_request') return 'AI 识别导入请求无效。'
+    if (code === 'provider_error') return 'AI 识别导入服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 识别导入暂不支持。'
+    if (code === 'invalid_response') return 'AI 识别导入服务返回的内容无法解析。'
+    return 'AI 识别导入服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
     if (code === 'quota_exceeded') return '今日搜索请求次数已达上限。'
@@ -1541,6 +1670,21 @@ function tripDailyTipInvalidRequest(
   }
 }
 
+function existingTripImportInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyExistingTripImportValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
 function routeOrderSuggestionInvalidRequest(
   message: string,
   requestId?: string,
@@ -2002,6 +2146,178 @@ function withoutSearchResults(record: Record<string, unknown>) {
     }
   }
   return rest
+}
+
+export function validateProviderProxyExistingTripImportRequest(
+  input: unknown,
+): ProviderProxyExistingTripImportValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION) {
+    return existingTripImportInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_EXISTING_TRIP_IMPORT_FIELDS)
+  if (forbiddenFieldPath) {
+    return existingTripImportInvalidRequest('AI 识别导入请求包含不允许的敏感字段。', requestId)
+  }
+
+  const trip = readExistingTripImportTrip(record.trip)
+  if (!trip) {
+    return existingTripImportInvalidRequest('当前旅行摘要无效。', requestId)
+  }
+
+  if (!Array.isArray(record.days) || record.days.length > MAX_EXISTING_TRIP_IMPORT_DAYS) {
+    return existingTripImportInvalidRequest(`日期摘要不能超过 ${MAX_EXISTING_TRIP_IMPORT_DAYS} 天。`, requestId)
+  }
+  const days: ProviderProxyExistingTripImportDaySummary[] = []
+  const dayIds = new Set<string>()
+  for (const rawDay of record.days) {
+    const day = readExistingTripImportDay(rawDay)
+    if (!day || dayIds.has(day.id)) {
+      return existingTripImportInvalidRequest('日期摘要无效。', requestId)
+    }
+    dayIds.add(day.id)
+    days.push(day)
+  }
+
+  if (!Array.isArray(record.items) || record.items.length > MAX_EXISTING_TRIP_IMPORT_ITEMS) {
+    return existingTripImportInvalidRequest(`行程点摘要不能超过 ${MAX_EXISTING_TRIP_IMPORT_ITEMS} 个。`, requestId)
+  }
+  const items: ProviderProxyExistingTripImportItemSummary[] = []
+  const itemIds = new Set<string>()
+  for (const rawItem of record.items) {
+    const item = readExistingTripImportItem(rawItem, dayIds)
+    if (!item || itemIds.has(item.id)) {
+      return existingTripImportInvalidRequest('行程点摘要无效。', requestId)
+    }
+    itemIds.add(item.id)
+    items.push(item)
+  }
+
+  if (!Array.isArray(record.sources) || record.sources.length < 1 || record.sources.length > MAX_EXISTING_TRIP_IMPORT_SOURCES) {
+    return existingTripImportInvalidRequest(`识别来源必须为 1 到 ${MAX_EXISTING_TRIP_IMPORT_SOURCES} 段文本。`, requestId)
+  }
+  const sources: ProviderProxyExistingTripImportSourceSummary[] = []
+  const sourceIds = new Set<string>()
+  let totalTextLength = 0
+  for (const rawSource of record.sources) {
+    const source = readExistingTripImportSource(rawSource)
+    if (!source || sourceIds.has(source.id)) {
+      return existingTripImportInvalidRequest('识别来源摘要无效。', requestId)
+    }
+    sourceIds.add(source.id)
+    totalTextLength += source.text.length
+    sources.push(source)
+  }
+  if (totalTextLength > MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH) {
+    return existingTripImportInvalidRequest(`识别文本总长度不能超过 ${MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH} 个字符。`, requestId)
+  }
+
+  const locale = record.locale
+  if (locale !== undefined && !isPlaceLookupLocale(locale)) {
+    return existingTripImportInvalidRequest('识别语言设置无效。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      days,
+      items,
+      locale: locale as ProviderProxyPlaceLookupLocale | undefined,
+      operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      sources,
+      trip,
+    },
+  }
+}
+
+function readExistingTripImportTrip(input: unknown): ProviderProxyExistingTripImportTripSummary | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 128)
+  const title = readRequiredTrimmedString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+  const startDate = readRequiredTrimmedString(record.startDate, 10)
+  const endDate = readRequiredTrimmedString(record.endDate, 10)
+  if (!id || !title || !isValidPlainDate(startDate) || !isValidPlainDate(endDate) || endDate < startDate) {
+    return null
+  }
+  return {
+    destination: readOptionalString(record.destination, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+    endDate,
+    id,
+    startDate,
+    title,
+  }
+}
+
+function readExistingTripImportDay(input: unknown): ProviderProxyExistingTripImportDaySummary | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 128)
+  const date = readRequiredTrimmedString(record.date, 10)
+  if (!id || !isValidPlainDate(date)) return null
+  const sortOrder = typeof record.sortOrder === 'number' && Number.isFinite(record.sortOrder) ? record.sortOrder : undefined
+  return {
+    date,
+    id,
+    sortOrder,
+    title: readOptionalString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+  }
+}
+
+function readExistingTripImportItem(input: unknown, dayIds: Set<string>): ProviderProxyExistingTripImportItemSummary | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 128)
+  const dayId = readRequiredTrimmedString(record.dayId, 128)
+  const date = readRequiredTrimmedString(record.date, 10)
+  const title = readRequiredTrimmedString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+  if (!id || !dayIds.has(dayId) || !isValidPlainDate(date) || !title) return null
+  const startTime = readOptionalString(record.startTime, 5)
+  const endTime = readOptionalString(record.endTime, 5)
+  if ((startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) || (endTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime))) {
+    return null
+  }
+  const duration = readOptionalPositiveInteger(record.previousTransportDurationMinutes)
+  return {
+    address: readOptionalString(record.address, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+    date,
+    dayId,
+    endTime,
+    id,
+    locationName: readOptionalString(record.locationName, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+    previousTransportDurationMinutes: duration !== undefined && duration <= 24 * 60 ? duration : undefined,
+    previousTransportMode: readOptionalString(record.previousTransportMode, 40),
+    previousTransportNote: readOptionalString(record.previousTransportNote, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+    startTime,
+    ticketCount: readOptionalPositiveInteger(record.ticketCount),
+    title,
+    transportMode: readOptionalString(record.transportMode, 40),
+  }
+}
+
+function readExistingTripImportSource(input: unknown): ProviderProxyExistingTripImportSourceSummary | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 128)
+  const label = readRequiredTrimmedString(record.label, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+  const text = readRequiredTrimmedString(record.text, MAX_EXISTING_TRIP_IMPORT_SOURCE_TEXT_LENGTH)
+  const kind = record.kind
+  if (!id || !label || !text || typeof kind !== 'string' || !VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS.has(kind as ExistingTripImportSourceKind)) {
+    return null
+  }
+  return {
+    fileName: readOptionalString(record.fileName, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
+    id,
+    kind: kind as ExistingTripImportSourceKind,
+    label,
+    mimeType: readOptionalString(record.mimeType, 120),
+    size: readOptionalPositiveInteger(record.size),
+    text,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim().length > 0).slice(0, 5)
+      : undefined,
+  }
 }
 
 export function validateProviderProxyTravelSearchRequest(input: unknown): ProviderProxyTravelSearchValidationResult {

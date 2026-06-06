@@ -18,13 +18,18 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/chi_tra": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "dayjs": "^1.11.20",
     "dexie": "^4.4.2",
     "jszip": "^3.10.1",
     "lucide-react": "^1.14.0",
     "maplibre-gl": "^5.24.0",
+    "pdfjs-dist": "^6.0.227",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -2,6 +2,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
+  PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
@@ -16,6 +17,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
+  validateProviderProxyExistingTripImportRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlaceLookupRequest,
@@ -27,6 +29,7 @@ import {
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRefineRequest,
   type ProviderProxyAiTripDraftRefineScope,
+  type ProviderProxyExistingTripImportRequest,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
@@ -125,6 +128,15 @@ import {
   type TripDailyTipProvider,
   type TripDailyTipProviderErrorCode,
 } from './tripDailyTipProvider'
+import {
+  buildExistingTripImportProviderInput,
+  createDisabledExistingTripImportProvider,
+  createMockExistingTripImportProvider,
+  createOpenAiCompatibleExistingTripImportProvider,
+  createUnavailableExistingTripImportProvider,
+  type ExistingTripImportProvider,
+  type ExistingTripImportProviderErrorCode,
+} from './existingTripImportProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -234,6 +246,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
     return handleAiTripEditPlanRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION) {
+    return handleExistingTripImportRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
@@ -711,6 +727,97 @@ function countEditContextItems(request: ProviderProxyAiTripEditPlanRequest): num
 }
 
 function mapAiTripEditErrorCodeToStatus(code: AiTripEditProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleExistingTripImportRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyExistingTripImportRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const importRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: importRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: importRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectExistingTripImportProvider(env, importRequest, fetcher)
+    const providerInput = buildExistingTripImportProviderInput(importRequest, importRequest.requestId)
+    const result = await provider.importTrip(importRequest, providerInput)
+
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapExistingTripImportErrorCodeToStatus(result.errorCode))
+    }
+
+    return jsonResponse({
+      ok: true,
+      operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+      requestId: importRequest.requestId,
+      result: result.result,
+      source: result.source,
+      warnings: result.warnings,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION, importRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectExistingTripImportProvider(
+  env: ProviderProxyHandlerEnv,
+  _request: ProviderProxyExistingTripImportRequest,
+  fetchImpl?: typeof fetch,
+): ExistingTripImportProvider {
+  if (isMockMode(env)) {
+    return createMockExistingTripImportProvider()
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleExistingTripImportProvider(env, fetchImpl)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableExistingTripImportProvider()
+  }
+  return createDisabledExistingTripImportProvider()
+}
+
+function mapExistingTripImportErrorCodeToStatus(code: ExistingTripImportProviderErrorCode): number {
   switch (code) {
     case 'provider_unavailable': return 503
     case 'quota_exceeded': return 429

@@ -656,6 +656,10 @@ export function SettingsPage() {
               text="AI 行程包用于新建旅行；完整备份 zip 仍请使用上方“导入备份”入口。"
             />
             <InfoPill
+              icon={<Sparkles className="size-4" />}
+              text="要把订单邮件、PDF、图片或票据追加/合并到现有旅行，请进入该旅行总览使用“AI 识别导入”。"
+            />
+            <InfoPill
               icon={<AlertTriangle className="size-4" />}
               text="AI 生成内容可能不准确，导入前请人工核对日期、地点、坐标和交通时间。"
               tone="warning"

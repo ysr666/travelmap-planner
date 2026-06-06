@@ -6,6 +6,7 @@ import {
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
+  validateProviderProxyExistingTripImportRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
@@ -18,6 +19,9 @@ import {
   type ProviderProxyAiTripDraftRefineSuccessResponse,
   type ProviderProxyAiTripDraftResponse,
   type ProviderProxyAiTripDraftSuccessResponse,
+  type ProviderProxyExistingTripImportRequest,
+  type ProviderProxyExistingTripImportResponse,
+  type ProviderProxyExistingTripImportSuccessResponse,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyAiTripEditPlanResponse,
   type ProviderProxyAiTripEditPlanSuccessResponse,
@@ -576,6 +580,49 @@ export async function fetchProviderProxyTripDailyTip(
   return parsed
 }
 
+export async function fetchProviderProxyExistingTripImport(
+  request: ProviderProxyExistingTripImportRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyExistingTripImportSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyExistingTripImportRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_existing_trip_import' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_existing_trip_import' }), response.status)
+  }
+
+  const parsed = parseProviderProxyExistingTripImportResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -752,6 +799,30 @@ function parseProviderProxyAiTripEditPlanResponse(
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_trip_edit_plan' })
+}
+
+function parseProviderProxyExistingTripImportResponse(input: unknown): ProviderProxyExistingTripImportResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyExistingTripImportSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'ai_existing_trip_import' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      details: typeof record.details === 'string' ? record.details : undefined,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'ai_existing_trip_import'),
+      operation: 'ai_existing_trip_import',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_existing_trip_import' })
 }
 
 function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTravelSearchResponse {
@@ -1183,6 +1254,39 @@ function validateProviderProxyTripDailyTipSuccessResponse(
     sourceIds,
     summary,
     warnings: Array.isArray(record.warnings) ? record.warnings.filter((w): w is string => typeof w === 'string').slice(0, 5) : undefined,
+  }
+}
+
+function validateProviderProxyExistingTripImportSuccessResponse(
+  record: Record<string, unknown>,
+): ProviderProxyExistingTripImportSuccessResponse | null {
+  if (record.operation !== 'ai_existing_trip_import') {
+    return null
+  }
+  if (record.source !== 'mock' && record.source !== 'future_ai') {
+    return null
+  }
+  const result = readRecord(record.result)
+  const days = Array.isArray(result.days) ? result.days : undefined
+  const items = Array.isArray(result.items) ? result.items : undefined
+  const tickets = Array.isArray(result.tickets) ? result.tickets : undefined
+  const notes = Array.isArray(result.notes) ? result.notes : undefined
+  if (!days && !items && !tickets && !notes) {
+    return null
+  }
+  return {
+    ok: true,
+    operation: 'ai_existing_trip_import',
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    result: {
+      days: days as ProviderProxyExistingTripImportSuccessResponse['result']['days'],
+      items: items as ProviderProxyExistingTripImportSuccessResponse['result']['items'],
+      notes: notes as ProviderProxyExistingTripImportSuccessResponse['result']['notes'],
+      tickets: tickets as ProviderProxyExistingTripImportSuccessResponse['result']['tickets'],
+      warnings: Array.isArray(result.warnings) ? result.warnings.filter((w): w is string => typeof w === 'string').slice(0, 8) : undefined,
+    },
+    source: record.source,
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((w): w is string => typeof w === 'string').slice(0, 8) : undefined,
   }
 }
 

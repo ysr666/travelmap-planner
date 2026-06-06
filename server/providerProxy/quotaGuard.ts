@@ -2,6 +2,8 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+  PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+  PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
@@ -26,6 +28,7 @@ export type ProviderProxyQuotaBucket =
   | 'ai_draft|'
   | 'ai_draft_refine|'
   | 'ai_draft_repair|'
+  | 'ai_existing_trip_import|'
   | 'ai_trip_content|'
   | 'ai_trip_daily_tip|'
   | 'ai_trip_edit|'
@@ -33,6 +36,7 @@ export type ProviderProxyQuotaBucket =
 export type ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: number
   maxAiDraftRequestsPerWindow: number
+  maxAiExistingTripImportRequestsPerWindow: number
   maxAiTripContentEnrichmentRequestsPerWindow: number
   maxAiTripEditRequestsPerWindow: number
   maxCoordinatesPerRequest: number
@@ -118,6 +122,7 @@ export const PROVIDER_PROXY_QUOTA_D1_BINDING = 'TRIPMAP_PROVIDER_QUOTA_D1'
 export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW,
   maxAiDraftRequestsPerWindow: PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
+  maxAiExistingTripImportRequestsPerWindow: PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW,
   maxAiTripContentEnrichmentRequestsPerWindow: PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW,
   maxAiTripEditRequestsPerWindow: PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
@@ -309,6 +314,9 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
     return { bucket: 'ai_draft|', maxRequests: limits.maxAiDraftRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION) {
+    return { bucket: 'ai_existing_trip_import|', maxRequests: limits.maxAiExistingTripImportRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION) {
     return { bucket: 'ai_trip_edit|', maxRequests: limits.maxAiTripEditRequestsPerWindow }

@@ -1,0 +1,9 @@
+project_id = "rfpcooafakuvgrdlfxpg"
+
+[api]
+enabled = true
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+major_version = 15

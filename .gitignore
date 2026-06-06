@@ -28,6 +28,7 @@ CLAUDE.md
 .playwright-cli/
 .playwright-mcp/
 .wrangler/
+supabase/.temp/
 agentdb.rvf
 agentdb.rvf.lock
 ruvector.db

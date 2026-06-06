@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:serial": "playwright test --workers=1",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "smoke:supabase": "node scripts/supabase-staging-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",

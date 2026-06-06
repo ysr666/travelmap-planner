@@ -3,7 +3,7 @@ import { Blob as NodeBlob } from 'node:buffer'
 import Dexie from 'dexie'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './database'
-import type { TicketBlob, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
 
 const legacyStores = {
   days: 'id, tripId, [tripId+sortOrder], date',
@@ -19,7 +19,7 @@ beforeEach(async () => {
 })
 
 describe('TravelConsoleDB migrations', () => {
-  it('creates ticket blob sync states for legacy copy tickets', async () => {
+  it('creates ticket blob sync states and object bases for legacy data', async () => {
     const legacyDb = new Dexie('TravelConsoleDB')
     legacyDb.version(1).stores(legacyStores)
     await legacyDb.open()
@@ -45,6 +45,23 @@ describe('TravelConsoleDB migrations', () => {
       tripId: trip.id,
       updatedAt: 100,
     }
+    const day: Day = {
+      date: '2026-04-01',
+      id: 'day_legacy',
+      sortOrder: 1,
+      title: '第一天',
+      tripId: trip.id,
+    }
+    const item: ItineraryItem = {
+      createdAt: 100,
+      dayId: day.id,
+      id: 'item_legacy',
+      ticketIds: [],
+      sortOrder: 1,
+      title: '涩谷',
+      tripId: trip.id,
+      updatedAt: 100,
+    }
     const missingTicket: TicketMeta = {
       ...cachedTicket,
       fileName: 'missing.pdf',
@@ -62,6 +79,8 @@ describe('TravelConsoleDB migrations', () => {
     }
 
     await legacyDb.table<Trip, string>('trips').put(trip)
+    await legacyDb.table<Day, string>('days').put(day)
+    await legacyDb.table<ItineraryItem, string>('itineraryItems').put(item)
     await legacyDb.table<TicketMeta, string>('ticketMetas').bulkPut([cachedTicket, missingTicket, referenceTicket])
     await legacyDb.table<TicketBlob, string>('ticketBlobs').put({
       blob: new NodeBlob(['cached'], { type: 'application/pdf' }) as Blob,
@@ -82,5 +101,26 @@ describe('TravelConsoleDB migrations', () => {
       uploadStatus: 'missing',
     })
     await expect(db.ticketBlobSyncStates.get(referenceTicket.id)).resolves.toBeUndefined()
+    await expect(db.objectSyncBases.get(`trip:${trip.id}`)).resolves.toMatchObject({
+      objectId: trip.id,
+      objectType: 'trip',
+      payload: trip,
+      tripId: trip.id,
+    })
+    await expect(db.objectSyncBases.get(`day:${day.id}`)).resolves.toMatchObject({
+      objectId: day.id,
+      objectType: 'day',
+      tripId: trip.id,
+    })
+    await expect(db.objectSyncBases.get(`item:${item.id}`)).resolves.toMatchObject({
+      objectId: item.id,
+      objectType: 'item',
+      tripId: trip.id,
+    })
+    await expect(db.objectSyncBases.get(`ticket_meta:${cachedTicket.id}`)).resolves.toMatchObject({
+      objectId: cachedTicket.id,
+      objectType: 'ticket_meta',
+      tripId: trip.id,
+    })
   })
 })

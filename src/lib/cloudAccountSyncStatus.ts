@@ -85,7 +85,7 @@ export function getCloudAccountSyncStatusView({
 
   if (actionRequiredCount > 0) {
     return {
-      detail: `${actionRequiredCount} 个旅行需要选择同步方向；系统不会自动合并或静默覆盖。`,
+      detail: `${actionRequiredCount} 个对象或旅行需要处理冲突；系统不会静默覆盖同一字段。`,
       status: 'conflict',
       title: '需要处理冲突',
       tone: 'warning',

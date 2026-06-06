@@ -22,7 +22,7 @@ export function getCloudSnapshotPromptCopy(status: CloudSnapshotCheckStatus): Cl
 
   if (status === 'possible_conflict') {
     return {
-      detail: '此设备版本和账号数据可能都包含不同修改。请选择同步方向；系统不会自动合并。',
+      detail: '此设备版本和账号数据可能都包含不同修改。请选择整旅行同步方向；当前方向操作不会自动合并未选方向的修改。',
       title: '此设备和账号可能都有更新',
     }
   }

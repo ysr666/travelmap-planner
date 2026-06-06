@@ -3,10 +3,14 @@ import 'fake-indexeddb/auto'
 import { Blob as NodeBlob } from 'node:buffer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createDay,
+  createItineraryItem,
   createTicketMeta,
   createTrip,
   getTicketBlob,
+  getItineraryItem,
   saveTicketBlob,
+  updateItineraryItem,
 } from '../db'
 import { db } from '../db/database'
 import { resetAutoSnapshotBackupForTests } from './autoSnapshotBackup'
@@ -14,6 +18,8 @@ import { uploadTripCloudBackup } from './cloudBackup'
 import {
   clearSyncedTicketBlobCache,
   getTicketBlobCacheSummary,
+  listPendingObjectSyncConflicts,
+  resolveObjectSyncConflict,
   restoreTicketBlobCacheFromCloud,
 } from './cloudObjectSync'
 
@@ -71,6 +77,56 @@ describe('cloud object sync ticket blob cache', () => {
       uploadStatus: 'synced',
     })
   })
+
+  it('pulls before pushing and auto merges different item fields', async () => {
+    const { item, trip } = await seedTripWithItem()
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+    await uploadTripCloudBackup(trip.id)
+
+    await updateItineraryItem(item.id, { title: '此设备标题' })
+    mutateFixtureItemRow(item.id, { startTime: '10:30' }, 50_000)
+
+    await uploadTripCloudBackup(trip.id)
+
+    await expect(getItineraryItem(item.id)).resolves.toMatchObject({
+      startTime: '10:30',
+      title: '此设备标题',
+    })
+    const fixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as {
+      objectRows?: Array<{ object_id: string; payload?: Record<string, unknown> }>
+    }
+    const remoteItem = fixture.objectRows?.find((row) => row.object_id === item.id)
+    expect(remoteItem?.payload).toMatchObject({
+      startTime: '10:30',
+      title: '此设备标题',
+    })
+    await expect(listPendingObjectSyncConflicts(trip.id)).resolves.toHaveLength(0)
+  })
+
+  it('keeps same-field conflicts pending until the user resolves them', async () => {
+    const { item, trip } = await seedTripWithItem()
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+    await uploadTripCloudBackup(trip.id)
+
+    await updateItineraryItem(item.id, { title: '此设备标题' })
+    mutateFixtureItemRow(item.id, { title: '账号标题' }, 50_000)
+
+    await uploadTripCloudBackup(trip.id)
+
+    await expect(getItineraryItem(item.id)).resolves.toMatchObject({ title: '此设备标题' })
+    const conflicts = await listPendingObjectSyncConflicts(trip.id)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0]).toMatchObject({
+      objectId: item.id,
+      fields: [expect.objectContaining({ fieldPath: 'title' })],
+    })
+
+    await resolveObjectSyncConflict(conflicts[0].id, {
+      fieldResolutions: { title: 'remote' },
+    })
+    await expect(getItineraryItem(item.id)).resolves.toMatchObject({ title: '账号标题' })
+    await expect(listPendingObjectSyncConflicts(trip.id)).resolves.toHaveLength(0)
+  })
 })
 
 async function seedCopyTicket() {
@@ -91,4 +147,50 @@ async function seedCopyTicket() {
   })
   await saveTicketBlob(ticket.id, new NodeBlob(['pdf'], { type: 'application/pdf' }) as Blob)
   return { ticket, trip }
+}
+
+async function seedTripWithItem() {
+  const trip = await createTrip({
+    destination: '日本东京',
+    endDate: '2026-04-03',
+    startDate: '2026-04-01',
+    title: '东京',
+  })
+  const day = await createDay({
+    date: '2026-04-01',
+    sortOrder: 1,
+    title: '第一天',
+    tripId: trip.id,
+  })
+  const item = await createItineraryItem({
+    dayId: day.id,
+    startTime: '09:00',
+    ticketIds: [],
+    sortOrder: 1,
+    title: '涩谷散步',
+    tripId: trip.id,
+  })
+  return { day, item, trip }
+}
+
+function mutateFixtureItemRow(itemId: string, patch: Record<string, unknown>, timestamp: number) {
+  const fixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as {
+    objectRows?: Array<{
+      object_id: string
+      object_type: string
+      payload?: Record<string, unknown>
+      updated_at_ms: number
+    }>
+  }
+  const row = fixture.objectRows?.find((candidate) => candidate.object_type === 'item' && candidate.object_id === itemId)
+  if (!row || !row.payload) {
+    throw new Error('fixture item row not found')
+  }
+  row.payload = {
+    ...row.payload,
+    ...patch,
+    updatedAt: timestamp,
+  }
+  row.updated_at_ms = timestamp
+  window.localStorage.setItem(fixtureKey, JSON.stringify(fixture))
 }

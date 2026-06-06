@@ -56,7 +56,7 @@ describe('getCloudAccountSyncStatusView', () => {
 
   it('shows conflict state when direction needs handling', () => {
     expect(getCloudAccountSyncStatusView({ ...baseInput, actionRequiredCount: 2 })).toMatchObject({
-      detail: expect.stringContaining('选择同步方向'),
+      detail: expect.stringContaining('不会静默覆盖同一字段'),
       status: 'conflict',
       title: '需要处理冲突',
     })

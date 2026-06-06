@@ -23,7 +23,7 @@ describe('cloud snapshot prompt copy', () => {
     const copy = getCloudSnapshotPromptCopy('possible_conflict')
 
     expect(copy.title).toBe('此设备和账号可能都有更新')
-    expect(copy.detail).toContain('请选择同步方向')
-    expect(copy.detail).toContain('不会自动合并')
+    expect(copy.detail).toContain('请选择整旅行同步方向')
+    expect(copy.detail).toContain('当前方向操作不会自动合并')
   })
 })

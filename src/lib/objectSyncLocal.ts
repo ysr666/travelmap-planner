@@ -3,7 +3,10 @@ import { createId } from '../db/ids'
 import type {
   Day,
   ItineraryItem,
+  ObjectSyncBase,
+  ObjectSyncConflict,
   ObjectSyncState,
+  SyncObjectPayload,
   SyncObjectType,
   SyncOutboxEntry,
   TicketBlobSyncState,
@@ -13,7 +16,7 @@ import type {
 
 const OBJECT_SYNC_DEVICE_ID_KEY = 'tripmap:object-sync:device-id'
 
-type SyncPayload = Trip | Day | ItineraryItem | TicketMeta
+type SyncPayload = SyncObjectPayload
 
 export type ObjectSyncRecordInput =
   | { object: Trip; objectType: 'trip'; operation?: 'upsert' }
@@ -138,10 +141,19 @@ export async function markObjectOutboxEntriesSyncing(entries: SyncOutboxEntry[],
   })))
 }
 
+export async function markObjectOutboxEntriesPending(entries: SyncOutboxEntry[], now = Date.now()) {
+  if (entries.length === 0) return
+  await db.syncOutbox.bulkPut(entries.map((entry) => ({
+    ...entry,
+    status: 'pending',
+    updatedAt: now,
+  })))
+}
+
 export async function markObjectOutboxEntriesSynced(entries: SyncOutboxEntry[], cloudUpdatedAtMs: number, now = Date.now()) {
   if (entries.length === 0) return
   const ids = entries.map((entry) => entry.id)
-  await db.transaction('rw', db.syncOutbox, db.objectSyncStates, async () => {
+  await db.transaction('rw', db.syncOutbox, db.objectSyncStates, db.objectSyncBases, db.objectSyncConflicts, async () => {
     await db.syncOutbox.bulkDelete(ids)
     await Promise.all(entries.map(async (entry) => {
       const existing = await db.objectSyncStates.get(entry.objectKey)
@@ -157,6 +169,17 @@ export async function markObjectOutboxEntriesSynced(entries: SyncOutboxEntry[], 
         objectType: entry.objectType,
         tripId: entry.tripId,
       })
+      await db.objectSyncBases.put({
+        cloudUpdatedAtMs,
+        deletedAtMs: entry.operation === 'delete' ? entry.deletedAtMs ?? entry.updatedAtMs : undefined,
+        objectId: entry.objectId,
+        objectKey: entry.objectKey,
+        objectType: entry.objectType,
+        payload: entry.operation === 'upsert' ? entry.payload : undefined,
+        tripId: entry.tripId,
+        updatedAt: now,
+      })
+      await db.objectSyncConflicts.where('objectKey').equals(entry.objectKey).delete()
     }))
   })
 }
@@ -170,6 +193,132 @@ export async function markObjectOutboxEntriesFailed(entries: SyncOutboxEntry[], 
     status: 'error',
     updatedAt: now,
   })))
+}
+
+export async function getObjectSyncBase(objectKey: string) {
+  return db.objectSyncBases.get(objectKey)
+}
+
+export async function listObjectSyncBasesByTrip(tripId: string) {
+  return db.objectSyncBases.where('tripId').equals(tripId).toArray()
+}
+
+export async function putObjectSyncBase(base: ObjectSyncBase) {
+  await db.objectSyncBases.put(base)
+  return base
+}
+
+export async function putObjectSyncBaseFromPayload({
+  cloudUpdatedAtMs,
+  deletedAtMs,
+  objectId,
+  objectType,
+  payload,
+  tripId,
+}: {
+  cloudUpdatedAtMs: number
+  deletedAtMs?: number
+  objectId: string
+  objectType: SyncObjectType
+  payload?: SyncObjectPayload
+  tripId: string
+}) {
+  const base: ObjectSyncBase = {
+    cloudUpdatedAtMs,
+    deletedAtMs,
+    objectId,
+    objectKey: buildObjectSyncKey(objectType, objectId),
+    objectType,
+    payload,
+    tripId,
+    updatedAt: Date.now(),
+  }
+  await db.objectSyncBases.put(base)
+  return base
+}
+
+export async function listObjectSyncConflictsByTrip(tripId?: string) {
+  if (tripId) {
+    return db.objectSyncConflicts
+      .where('[tripId+status]')
+      .equals([tripId, 'pending'])
+      .toArray()
+  }
+  return db.objectSyncConflicts.where('status').equals('pending').toArray()
+}
+
+export async function countObjectSyncConflicts(tripId?: string) {
+  if (tripId) {
+    return db.objectSyncConflicts
+      .where('[tripId+status]')
+      .equals([tripId, 'pending'])
+      .count()
+  }
+  return db.objectSyncConflicts.where('status').equals('pending').count()
+}
+
+export async function putObjectSyncConflict(conflict: ObjectSyncConflict) {
+  const now = Date.now()
+  await db.transaction('rw', db.objectSyncConflicts, db.objectSyncStates, async () => {
+    await db.objectSyncConflicts.where('objectKey').equals(conflict.objectKey).delete()
+    await db.objectSyncConflicts.put({
+      ...conflict,
+      status: 'pending',
+      updatedAt: now,
+    })
+    await db.objectSyncStates.put({
+      ...await db.objectSyncStates.get(conflict.objectKey),
+      conflictAt: conflict.createdAt,
+      conflictReason: conflict.conflictType === 'field_conflict'
+        ? '同一对象的同一字段在此设备和账号中都有不同修改。'
+        : '同一对象在此设备和账号中出现删除/更新冲突。',
+      objectId: conflict.objectId,
+      objectKey: conflict.objectKey,
+      objectType: conflict.objectType,
+      tripId: conflict.tripId,
+    })
+  })
+}
+
+export async function clearObjectSyncConflict(conflictId: string, now = Date.now()) {
+  const conflict = await db.objectSyncConflicts.get(conflictId)
+  if (!conflict) return
+  await db.transaction('rw', db.objectSyncConflicts, db.objectSyncStates, async () => {
+    await db.objectSyncConflicts.put({
+      ...conflict,
+      status: 'resolved',
+      updatedAt: now,
+    })
+    const remaining = await db.objectSyncConflicts
+      .where('objectKey')
+      .equals(conflict.objectKey)
+      .filter((record) => record.id !== conflictId && record.status === 'pending')
+      .count()
+    if (remaining === 0) {
+      const existing = await db.objectSyncStates.get(conflict.objectKey)
+      if (existing) {
+        await db.objectSyncStates.put({
+          ...existing,
+          conflictAt: undefined,
+          conflictReason: undefined,
+        })
+      }
+    }
+  })
+}
+
+export async function deletePendingObjectSyncConflictForKey(objectKey: string) {
+  await db.transaction('rw', db.objectSyncConflicts, db.objectSyncStates, async () => {
+    await db.objectSyncConflicts.where('objectKey').equals(objectKey).delete()
+    const existing = await db.objectSyncStates.get(objectKey)
+    if (existing) {
+      await db.objectSyncStates.put({
+        ...existing,
+        conflictAt: undefined,
+        conflictReason: undefined,
+      })
+    }
+  })
 }
 
 export async function getTicketBlobSyncState(ticketId: string) {

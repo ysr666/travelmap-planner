@@ -40,6 +40,61 @@ test('设置页通过 section=cloud 可以直接打开云端同步区域', async
   await expectNoHorizontalOverflow(page)
 })
 
+test('设置页对象同步字段冲突需要确认后才写入', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await clearTravelDatabase(page)
+  const trip = createSeedTrip({ id: 'trip_object_conflict' })
+  const day = createSeedDay(trip.id, 'day_object_conflict')
+  const baseItem = createSeedItem(trip.id, day.id, {
+    id: 'item_object_conflict',
+    title: '涩谷散步',
+  })
+  const localItem = {
+    ...baseItem,
+    title: '此设备标题',
+    updatedAt: Date.parse('2026-04-02T11:00:00.000Z'),
+  }
+  await seedTravelRecords(page, {
+    days: [day],
+    itineraryItems: [localItem],
+    trips: [trip],
+  })
+  await forceSupabaseFixture(page, {
+    backups: [],
+    user: { email: 'qa@example.com', id: 'user_1' },
+  })
+  await seedObjectSyncConflict(page, {
+    baseItem,
+    localItem,
+    remoteItem: {
+      ...baseItem,
+      title: '账号标题',
+      updatedAt: Date.parse('2026-04-02T12:00:00.000Z'),
+    },
+    tripId: trip.id,
+  })
+
+  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByTestId('cloud-auto-sync-status')).toContainText('需要处理冲突')
+  const panel = page.getByTestId('object-sync-conflict-panel')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('此设备标题')
+  await expect(panel).toContainText('账号标题')
+
+  await panel.getByText('账号版本').click()
+  await panel.getByRole('button', { name: '应用解决方案' }).click()
+  const dialog = page.getByTestId('object-sync-conflict-confirm-dialog')
+  await expect(dialog).toContainText('确认前不会改动本地数据')
+  await expect.poll(async () => readLocalItemTitle(page, localItem.id)).toBe('此设备标题')
+
+  await dialog.getByRole('button', { name: '确认应用' }).click()
+  await expect.poll(async () => readLocalItemTitle(page, localItem.id)).toBe('账号标题')
+  await expect(panel.getByTestId('object-sync-conflict-card')).toHaveCount(0)
+  await expect(page.locator('body')).toContainText('冲突已处理，已加入同步队列')
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Day View 不显示云端同步检查提醒', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
@@ -302,6 +357,20 @@ function createSeedDay(tripId: string, id = 'day_1') {
   }
 }
 
+function createSeedItem(tripId: string, dayId: string, patch: Record<string, unknown> = {}) {
+  return {
+    createdAt: Date.parse('2026-04-02T10:00:00.000Z'),
+    dayId,
+    id: 'item_1',
+    sortOrder: 1,
+    ticketIds: [],
+    title: '涩谷散步',
+    tripId,
+    updatedAt: Date.parse('2026-04-02T10:00:00.000Z'),
+    ...patch,
+  }
+}
+
 function createCloudBackup(patch: Record<string, unknown> = {}) {
   return {
     appVersion: '0.3.0.2',
@@ -320,6 +389,77 @@ function createCloudBackup(patch: Record<string, unknown> = {}) {
     warnings: [],
     ...patch,
   }
+}
+
+async function seedObjectSyncConflict(
+  page: Page,
+  input: {
+    baseItem: ReturnType<typeof createSeedItem>
+    localItem: ReturnType<typeof createSeedItem>
+    remoteItem: ReturnType<typeof createSeedItem>
+    tripId: string
+  },
+) {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async ({ baseItem, localItem, remoteItem, tripId }) => {
+    const objectKey = `item:${localItem.id}`
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['objectSyncConflicts', 'objectSyncStates', 'objectSyncBases'], 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入测试冲突失败'))
+      const now = Date.now()
+      transaction.objectStore('objectSyncBases').put({
+        cloudUpdatedAtMs: baseItem.updatedAt,
+        objectId: localItem.id,
+        objectKey,
+        objectType: 'item',
+        payload: baseItem,
+        tripId,
+        updatedAt: now,
+      })
+      transaction.objectStore('objectSyncStates').put({
+        conflictAt: now,
+        conflictReason: '同一对象的同一字段在此设备和账号中都有不同修改。',
+        localUpdatedAtMs: localItem.updatedAt,
+        objectId: localItem.id,
+        objectKey,
+        objectType: 'item',
+        tripId,
+      })
+      transaction.objectStore('objectSyncConflicts').put({
+        basePayload: baseItem,
+        conflictType: 'field_conflict',
+        createdAt: now,
+        fields: [{
+          baseValue: baseItem.title,
+          defaultResolution: 'local',
+          fieldPath: 'title',
+          label: '标题',
+          localValue: localItem.title,
+          remoteValue: remoteItem.title,
+        }],
+        id: 'object_conflict_e2e',
+        localPayload: localItem,
+        objectId: localItem.id,
+        objectKey,
+        objectLabel: localItem.title,
+        objectType: 'item',
+        remotePayload: remoteItem,
+        status: 'pending',
+        tripId,
+        updatedAt: now,
+      })
+    })
+  }, input)
 }
 
 function createCloudSnapshot({
@@ -363,7 +503,7 @@ async function expectUploadCurrentTrip(page: Page, tripId: string, expectedTitle
   const dialog = page.getByTestId('cloud-save-confirm-dialog')
   await expect(dialog).toContainText('账号中原有版本会被覆盖')
   await expect(dialog).toContainText('不会创建新的云端记录列表')
-  await expect(dialog).toContainText('不会自动合并')
+  await expect(dialog).toContainText('当前方向操作不会自动合并')
   await dialog.getByRole('button', { name: '立即同步' }).click()
   await expect(page.locator('body')).toContainText('此设备版本已同步到账号')
   await expect(page.getByTestId('cloud-backup-group').filter({ hasText: expectedTitle })).toBeVisible()
@@ -382,7 +522,7 @@ async function restoreCloudBackupFromPanel(
   const dialog = page.getByTestId('cloud-save-confirm-dialog')
   await expect(dialog).toContainText('将用账号数据更新此设备旅行')
   await expect(dialog).toContainText('不会创建重复旅行')
-  await expect(dialog).toContainText('不会自动合并')
+  await expect(dialog).toContainText('当前方向操作不会自动合并')
   if (confirm) {
     await dialog.getByRole('button', { name: '同步账号数据到此设备' }).click()
     await expect(dialog).toHaveCount(0)
@@ -417,7 +557,7 @@ async function updateLocalTripVersion(
 
     const db = await openTravelConsoleDb()
     await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(['trips', 'itineraryItems'], 'readwrite')
+      const transaction = db.transaction(['trips', 'itineraryItems', 'syncOutbox', 'objectSyncStates'], 'readwrite')
       transaction.oncomplete = () => {
         db.close()
         resolve()
@@ -428,7 +568,9 @@ async function updateLocalTripVersion(
       tripRequest.onsuccess = () => {
         const trip = tripRequest.result
         if (trip) {
-          transaction.objectStore('trips').put({ ...trip, title, updatedAt: now })
+          const nextTrip = { ...trip, title, updatedAt: now }
+          transaction.objectStore('trips').put(nextTrip)
+          enqueueObject('trip', nextTrip.id, nextTrip.id, nextTrip, now)
         }
       }
       const itemIndex = transaction.objectStore('itineraryItems').index('tripId')
@@ -436,8 +578,38 @@ async function updateLocalTripVersion(
       itemsRequest.onsuccess = () => {
         const [item] = itemsRequest.result
         if (item) {
-          transaction.objectStore('itineraryItems').put({ ...item, title: itemTitle, updatedAt: now })
+          const nextItem = { ...item, title: itemTitle, updatedAt: now }
+          transaction.objectStore('itineraryItems').put(nextItem)
+          enqueueObject('item', nextItem.id, nextItem.tripId, nextItem, now)
         }
+      }
+
+      function enqueueObject(objectType: string, objectId: string, objectTripId: string, payload: Record<string, unknown>, updatedAtMs: number) {
+        const objectKey = `${objectType}:${objectId}`
+        const entry = {
+          attempts: 0,
+          createdAt: updatedAtMs,
+          deviceId: 'e2e-device',
+          id: `sync_outbox_${objectType}_${objectId}_${updatedAtMs}`,
+          objectId,
+          objectKey,
+          objectType,
+          operation: 'upsert',
+          opId: `op_${objectType}_${objectId}_${updatedAtMs}`,
+          payload,
+          status: 'pending',
+          tripId: objectTripId,
+          updatedAt: updatedAtMs,
+          updatedAtMs,
+        }
+        transaction.objectStore('syncOutbox').put(entry)
+        transaction.objectStore('objectSyncStates').put({
+          localUpdatedAtMs: updatedAtMs,
+          objectId,
+          objectKey,
+          objectType,
+          tripId: objectTripId,
+        })
       }
     })
   }, { itemTitle, title, tripId })
@@ -545,6 +717,23 @@ async function readLocalTripState(page: Page, tripId: string) {
       tripCount: trips.length,
     }
   }, tripId)
+}
+
+async function readLocalItemTitle(page: Page, itemId: string) {
+  return page.evaluate(async (targetItemId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    const item = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+      const request = db.transaction('itineraryItems', 'readonly').objectStore('itineraryItems').get(targetItemId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return typeof item?.title === 'string' ? item.title : null
+  }, itemId)
 }
 
 async function readCloudFixtureBackupTitle(page: Page, tripId: string) {

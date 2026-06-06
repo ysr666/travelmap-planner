@@ -8,6 +8,7 @@ import {
   listTicketsByTrip,
 } from '../db'
 import { db } from '../db/database'
+import { createId } from '../db/ids'
 import { safeFileName } from './backup'
 import { readBlobArrayBuffer } from './blobUtils'
 import {
@@ -22,23 +23,42 @@ import {
 import { emitTravelDataChanged } from './dataEvents'
 import {
   buildObjectSyncKey,
+  deletePendingObjectSyncConflictForKey,
+  enqueueObjectDelete,
+  enqueueObjectUpsert,
   getObjectSyncDeviceId,
   getTicketBlobSyncState,
+  listObjectSyncBasesByTrip,
+  listObjectSyncConflictsByTrip,
   listPendingObjectOutboxEntries,
   listTicketBlobSyncStatesByTrip,
   markObjectOutboxEntriesFailed,
+  markObjectOutboxEntriesPending,
   markObjectOutboxEntriesSynced,
   markObjectOutboxEntriesSyncing,
   markTicketBlobMissing,
+  putObjectSyncBaseFromPayload,
+  putObjectSyncConflict,
   putTicketBlobSyncState,
 } from './objectSyncLocal'
+import {
+  buildObjectConflictLabel,
+  mergeObjectPayloadFields,
+  resolveObjectSyncConflictPayload,
+  type ObjectConflictResolutionInput,
+} from './objectSyncMerge'
 import { requireSupabaseClient } from './supabaseClient'
 import { shouldExpectTicketBlob } from './tickets'
+import { recordTripWriteForSync } from './tripSyncQueue'
 import type {
   Day,
   ItineraryItem,
+  ObjectSyncBase,
+  ObjectSyncConflict,
+  ObjectSyncConflictField,
   SyncObjectType,
   SyncOutboxEntry,
+  SyncObjectPayload,
   TicketBlobSyncState,
   TicketMeta,
   Trip,
@@ -101,29 +121,37 @@ export async function syncTripObjectsToCloud(tripId: string): Promise<ObjectSync
   const nowIso = new Date().toISOString()
   const warnings: string[] = []
   const pendingEntries = await listPendingObjectOutboxEntries(tripId)
-  const currentRows = await buildCurrentTripCloudObjectRows(tripId, user.id)
+  const remoteRows = await fetchCloudObjectRows(tripId, user.id)
+  const plan = await buildObjectSyncPushPlan({ pendingEntries, remoteRows, tripId, userId: user.id })
 
-  if (currentRows.length > 0 || pendingEntries.length > 0) {
-    await markObjectOutboxEntriesSyncing(pendingEntries)
-    const rows = mergeCloudObjectRows([
-      ...currentRows,
-      ...pendingEntries.map((entry) => buildCloudObjectRow(user.id, entry)),
-    ])
-    const { error } = await client.from(CLOUD_SYNC_OBJECTS_TABLE).upsert(rows, {
+  if (plan.rowsToPush.length > 0) {
+    await markObjectOutboxEntriesSyncing(plan.entriesToMarkSynced)
+    const { error } = await client.from(CLOUD_SYNC_OBJECTS_TABLE).upsert(plan.rowsToPush, {
       onConflict: 'user_id,object_type,object_id',
     })
     if (error) {
-      await markObjectOutboxEntriesFailed(pendingEntries, error.message)
+      await markObjectOutboxEntriesFailed(plan.entriesToMarkSynced, error.message)
       if (isMissingObjectSyncTableError(error)) {
         throw new CloudObjectSyncUnavailableError(error.message)
       }
       throw new Error('对象同步写入失败：' + error.message)
     }
-    await markObjectOutboxEntriesSynced(pendingEntries, Date.now())
+    await markObjectOutboxEntriesSynced(plan.entriesToMarkSynced, Date.now())
+    await putObjectSyncBasesFromRows(plan.rowsToPush)
+    if (plan.rowsToApplyAfterPush.length > 0) {
+      await applyCloudObjectRows(plan.rowsToApplyAfterPush)
+    }
+  } else {
+    await markObjectOutboxEntriesSynced(plan.entriesToMarkSynced, Date.now())
+  }
+
+  if (plan.entriesToKeepPending.length > 0) {
+    await markObjectOutboxEntriesPending(plan.entriesToKeepPending)
+    warnings.push(`${plan.entriesToKeepPending.length} 个对象需要处理字段冲突后再同步。`)
   }
 
   await uploadPendingTicketBlobsToCloud({ tripId, userId: user.id })
-  await pullTripObjectsFromCloud({ tripId, userId: user.id })
+  await applyCloudTicketBlobRows(await fetchCloudTicketBlobRows(tripId, user.id))
   return { exportedAt: nowIso, warnings }
 }
 
@@ -219,6 +247,48 @@ export async function retryTicketBlobUpload(ticketId: string) {
   })
 }
 
+export async function listPendingObjectSyncConflicts(tripId?: string) {
+  return listObjectSyncConflictsByTrip(tripId)
+}
+
+export async function resolveObjectSyncConflict(conflictId: string, input: ObjectConflictResolutionInput) {
+  const conflict = await db.objectSyncConflicts.get(conflictId)
+  if (!conflict || conflict.status !== 'pending') {
+    throw new Error('没有找到待处理的同步冲突。')
+  }
+
+  const now = Date.now()
+  const resolution = resolveObjectSyncConflictPayload(conflict, input, now)
+  if (resolution.operation === 'delete') {
+    await applyResolvedDelete(conflict.objectType, conflict.objectId)
+    await enqueueObjectDelete({
+      deletedAtMs: now,
+      objectId: conflict.objectId,
+      objectType: conflict.objectType,
+      tripId: conflict.tripId,
+    })
+  } else {
+    await applyResolvedPayload(conflict.objectType, resolution.payload)
+    await enqueueResolvedPayload(conflict.objectType, resolution.payload)
+  }
+
+  await db.objectSyncConflicts.put({
+    ...conflict,
+    status: 'resolved',
+    updatedAt: now,
+  })
+  await db.objectSyncStates.put({
+    ...await db.objectSyncStates.get(conflict.objectKey),
+    conflictAt: undefined,
+    conflictReason: undefined,
+    objectId: conflict.objectId,
+    objectKey: conflict.objectKey,
+    objectType: conflict.objectType,
+    tripId: conflict.tripId,
+  })
+  recordTripWriteForSync(conflict.tripId, 'object-sync-conflict-resolved')
+}
+
 export async function getTicketBlobCacheSummary(tripId: string) {
   await ensureTicketBlobSyncStatesForTrip(tripId)
   const [states, tickets] = await Promise.all([
@@ -282,12 +352,12 @@ async function syncTripObjectsToE2eFixture(
   const pendingEntries = await listPendingObjectOutboxEntries(tripId)
   const now = Date.now()
   const nextObjectRows = [...(fixture.objectRows ?? [])]
-  const currentRows = await buildCurrentTripCloudObjectRows(tripId, userId)
+  const remoteRows = nextObjectRows
+    .filter((row) => row.user_id === userId && row.trip_id === tripId)
+    .map(mapFixtureObjectRow)
+  const plan = await buildObjectSyncPushPlan({ pendingEntries, remoteRows, tripId, userId })
 
-  for (const row of mergeCloudObjectRows([
-    ...currentRows,
-    ...pendingEntries.map((entry) => buildCloudObjectRow(userId, entry)),
-  ])) {
+  for (const row of plan.rowsToPush) {
     const index = nextObjectRows.findIndex((existing) =>
       existing.user_id === userId &&
       existing.object_type === row.object_type &&
@@ -300,13 +370,158 @@ async function syncTripObjectsToE2eFixture(
     }
   }
 
-  await markObjectOutboxEntriesSynced(pendingEntries, now)
+  await markObjectOutboxEntriesSynced(plan.entriesToMarkSynced, now)
+  await putObjectSyncBasesFromRows(plan.rowsToPush)
+  if (plan.rowsToApplyAfterPush.length > 0) {
+    await applyCloudObjectRows(plan.rowsToApplyAfterPush)
+  }
+  if (plan.entriesToKeepPending.length > 0) {
+    await markObjectOutboxEntriesPending(plan.entriesToKeepPending, now)
+  }
   const fixtureWithObjects = { ...fixture, objectRows: nextObjectRows }
   const uploadedFixture = await uploadPendingTicketBlobsToE2eFixture(fixtureWithObjects, tripId, userId)
   const nextFixture = await deleteRemovedTicketBlobsFromE2eFixture(uploadedFixture, tripId, userId)
   writeE2eCloudFixture(nextFixture)
-  await applyCloudObjectRows(nextObjectRows.filter((row) => row.user_id === userId && row.trip_id === tripId).map(mapFixtureObjectRow))
-  return { exportedAt: new Date(now).toISOString(), warnings: [] }
+  return {
+    exportedAt: new Date(now).toISOString(),
+    warnings: plan.entriesToKeepPending.length > 0
+      ? [`${plan.entriesToKeepPending.length} 个对象需要处理字段冲突后再同步。`]
+      : [],
+  }
+}
+
+type ObjectSyncPushPlan = {
+  entriesToKeepPending: SyncOutboxEntry[]
+  entriesToMarkSynced: SyncOutboxEntry[]
+  rowsToApplyAfterPush: CloudSyncObjectRow[]
+  rowsToPush: CloudSyncObjectRow[]
+}
+
+async function buildObjectSyncPushPlan({
+  pendingEntries,
+  remoteRows,
+  tripId,
+  userId,
+}: {
+  pendingEntries: SyncOutboxEntry[]
+  remoteRows: CloudSyncObjectRow[]
+  tripId: string
+  userId: string
+}): Promise<ObjectSyncPushPlan> {
+  const pendingConflicts = await listObjectSyncConflictsByTrip(tripId)
+  if (remoteRows.length === 0 && pendingConflicts.length === 0) {
+    const currentRows = await buildCurrentTripCloudObjectRows(tripId, userId)
+    return {
+      entriesToKeepPending: [],
+      entriesToMarkSynced: pendingEntries,
+      rowsToApplyAfterPush: [],
+      rowsToPush: mergeCloudObjectRows([
+        ...currentRows,
+        ...pendingEntries.map((entry) => buildCloudObjectRow(userId, entry)),
+      ]),
+    }
+  }
+
+  const bases = new Map((await listObjectSyncBasesByTrip(tripId)).map((base) => [base.objectKey, base]))
+  const remoteByKey = new Map(mergeCloudObjectRows(remoteRows).map((row) => [buildObjectSyncKey(row.object_type, row.object_id), row]))
+  const pendingByKey = groupPendingEntriesByObject(pendingEntries)
+  const keys = new Set([...remoteByKey.keys(), ...pendingByKey.keys()])
+  const plan: ObjectSyncPushPlan = {
+    entriesToKeepPending: [],
+    entriesToMarkSynced: [],
+    rowsToApplyAfterPush: [],
+    rowsToPush: [],
+  }
+  const remoteRowsToApply: CloudSyncObjectRow[] = []
+
+  for (const objectKey of keys) {
+    const remoteRow = remoteByKey.get(objectKey)
+    const entriesForObject = pendingByKey.get(objectKey) ?? []
+    const latestEntry = getLatestPendingEntry(entriesForObject)
+    const base = bases.get(objectKey)
+    const remoteChanged = remoteRow ? isRemoteRowChangedSinceBase(remoteRow, base) : false
+
+    if (remoteRow && !latestEntry) {
+      if (remoteChanged) {
+        remoteRowsToApply.push(remoteRow)
+      }
+      continue
+    }
+
+    if (latestEntry && !remoteRow) {
+      plan.rowsToPush.push(buildCloudObjectRow(userId, latestEntry))
+      plan.entriesToMarkSynced.push(...entriesForObject)
+      continue
+    }
+
+    if (!latestEntry || !remoteRow) {
+      continue
+    }
+
+    const localRow = buildCloudObjectRow(userId, latestEntry)
+    if (isSameCloudObjectValue(localRow, remoteRow)) {
+      plan.entriesToMarkSynced.push(...entriesForObject)
+      await putObjectSyncBaseFromCloudRow(remoteRow)
+      await deletePendingObjectSyncConflictForKey(objectKey)
+      continue
+    }
+
+    if (!remoteChanged) {
+      plan.rowsToPush.push(localRow)
+      plan.entriesToMarkSynced.push(...entriesForObject)
+      continue
+    }
+
+    if (localRow.deleted_at_ms && remoteRow.deleted_at_ms) {
+      if (localRow.updated_at_ms > remoteRow.updated_at_ms) {
+        plan.rowsToPush.push(localRow)
+      } else {
+        await putObjectSyncBaseFromCloudRow(remoteRow)
+      }
+      plan.entriesToMarkSynced.push(...entriesForObject)
+      continue
+    }
+
+    const conflict = buildObjectLevelConflict({ base, entriesForObject, localRow, remoteRow, tripId })
+    if (conflict) {
+      await putObjectSyncConflict(conflict)
+      plan.entriesToKeepPending.push(...entriesForObject)
+      continue
+    }
+
+    const mergeResult = buildMergedCloudObjectRow({
+      base,
+      localRow,
+      now: Date.now(),
+      remoteRow,
+      userId,
+    })
+    if (mergeResult.conflict) {
+      await putObjectSyncConflict(mergeResult.conflict)
+      plan.entriesToKeepPending.push(...entriesForObject)
+      continue
+    }
+    const mergedRow = mergeResult.row
+    if (!mergedRow) {
+      plan.entriesToKeepPending.push(...entriesForObject)
+      continue
+    }
+
+    plan.rowsToPush.push(mergedRow)
+    plan.rowsToApplyAfterPush.push(mergedRow)
+    plan.entriesToMarkSynced.push(...entriesForObject)
+  }
+
+  if (remoteRowsToApply.length > 0) {
+    await applyCloudObjectRows(remoteRowsToApply)
+  }
+
+  return {
+    ...plan,
+    entriesToKeepPending: dedupeOutboxEntries(plan.entriesToKeepPending),
+    entriesToMarkSynced: dedupeOutboxEntries(plan.entriesToMarkSynced),
+    rowsToPush: mergeCloudObjectRows(plan.rowsToPush),
+  }
 }
 
 async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): Promise<CloudSyncObjectRow[]> {
@@ -324,6 +539,197 @@ async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): 
     ...items.map((item) => buildCloudObjectUpsertRow({ object: item, objectType: 'item' as const, tripId, userId, deviceId })),
     ...tickets.map((ticket) => buildCloudObjectUpsertRow({ object: ticket, objectType: 'ticket_meta' as const, tripId, userId, deviceId })),
   ]
+}
+
+function groupPendingEntriesByObject(entries: SyncOutboxEntry[]) {
+  const byObject = new Map<string, SyncOutboxEntry[]>()
+  for (const entry of entries) {
+    byObject.set(entry.objectKey, [...(byObject.get(entry.objectKey) ?? []), entry])
+  }
+  for (const [key, group] of byObject) {
+    byObject.set(key, group.sort(compareOutboxEntryAscending))
+  }
+  return byObject
+}
+
+function getLatestPendingEntry(entries: SyncOutboxEntry[]) {
+  return [...entries].sort(compareOutboxEntryAscending).at(-1)
+}
+
+function compareOutboxEntryAscending(first: SyncOutboxEntry, second: SyncOutboxEntry) {
+  return first.updatedAtMs - second.updatedAtMs || first.createdAt - second.createdAt
+}
+
+function dedupeOutboxEntries(entries: SyncOutboxEntry[]) {
+  const byId = new Map<string, SyncOutboxEntry>()
+  for (const entry of entries) {
+    byId.set(entry.id, entry)
+  }
+  return [...byId.values()]
+}
+
+function isRemoteRowChangedSinceBase(row: CloudSyncObjectRow, base?: ObjectSyncBase) {
+  if (!base) return true
+  if (row.updated_at_ms > base.cloudUpdatedAtMs) return true
+  const rowDeletedAt = row.deleted_at_ms ?? undefined
+  if (rowDeletedAt !== base.deletedAtMs) return true
+  if (!isSameJsonRecord(row.payload, base.payload)) return true
+  return false
+}
+
+function isSameCloudObjectValue(left: CloudSyncObjectRow, right: CloudSyncObjectRow) {
+  return left.object_type === right.object_type &&
+    left.object_id === right.object_id &&
+    (left.deleted_at_ms ?? undefined) === (right.deleted_at_ms ?? undefined) &&
+    isSameJsonRecord(left.payload, right.payload)
+}
+
+function buildObjectLevelConflict({
+  base,
+  localRow,
+  remoteRow,
+  tripId,
+}: {
+  base?: ObjectSyncBase
+  entriesForObject: SyncOutboxEntry[]
+  localRow: CloudSyncObjectRow
+  remoteRow: CloudSyncObjectRow
+  tripId: string
+}) {
+  if (localRow.deleted_at_ms && !remoteRow.deleted_at_ms) {
+    return buildFieldConflict({
+      base,
+      fields: [],
+      localRow,
+      remoteRow,
+      tripId,
+      type: 'local_delete_remote_update',
+    })
+  }
+  if (!localRow.deleted_at_ms && remoteRow.deleted_at_ms) {
+    return buildFieldConflict({
+      base,
+      fields: [],
+      localRow,
+      remoteRow,
+      tripId,
+      type: 'remote_delete_local_update',
+    })
+  }
+  return null
+}
+
+function buildMergedCloudObjectRow({
+  base,
+  localRow,
+  now,
+  remoteRow,
+  userId,
+}: {
+  base?: ObjectSyncBase
+  localRow: CloudSyncObjectRow
+  now: number
+  remoteRow: CloudSyncObjectRow
+  userId: string
+}): { conflict?: ObjectSyncConflict; row: CloudSyncObjectRow } | { conflict: ObjectSyncConflict; row?: undefined } {
+  if (!localRow.payload || !remoteRow.payload) {
+    return {
+      conflict: buildFieldConflict({
+        base,
+        fields: [],
+        localRow,
+        remoteRow,
+        tripId: localRow.trip_id,
+        type: 'field_conflict',
+      }),
+    }
+  }
+  const merge = mergeObjectPayloadFields({
+    basePayload: base?.payload,
+    localPayload: localRow.payload as SyncObjectPayload,
+    now,
+    objectType: localRow.object_type,
+    remotePayload: remoteRow.payload as SyncObjectPayload,
+  })
+  if (merge.status === 'conflict') {
+    return {
+      conflict: buildFieldConflict({
+        base,
+        fields: merge.conflicts,
+        localRow,
+        remoteRow,
+        tripId: localRow.trip_id,
+        type: 'field_conflict',
+      }),
+    }
+  }
+  const payload = merge.payload
+  return {
+    row: {
+      deleted_at_ms: null,
+      device_id: getObjectSyncDeviceId(),
+      object_id: localRow.object_id,
+      object_type: localRow.object_type,
+      op_id: createStableObjectOpId(localRow.object_type, localRow.object_id, getPayloadUpdatedAt(localRow.object_type, payload)),
+      payload,
+      trip_id: localRow.trip_id,
+      updated_at_ms: getPayloadUpdatedAt(localRow.object_type, payload),
+      user_id: userId,
+    },
+  }
+}
+
+function buildFieldConflict({
+  base,
+  fields,
+  localRow,
+  remoteRow,
+  tripId,
+  type,
+}: {
+  base?: ObjectSyncBase
+  fields: ObjectSyncConflictField[]
+  localRow: CloudSyncObjectRow
+  remoteRow: CloudSyncObjectRow
+  tripId: string
+  type: ObjectSyncConflict['conflictType']
+}): ObjectSyncConflict {
+  const now = Date.now()
+  const localPayload = localRow.payload as SyncObjectPayload | undefined
+  const remotePayload = remoteRow.payload as SyncObjectPayload | undefined
+  return {
+    basePayload: base?.payload,
+    createdAt: now,
+    fields,
+    conflictType: type,
+    id: createId('object_conflict'),
+    localDeletedAtMs: localRow.deleted_at_ms ?? undefined,
+    localPayload,
+    objectId: localRow.object_id,
+    objectKey: buildObjectSyncKey(localRow.object_type, localRow.object_id),
+    objectLabel: buildObjectConflictLabel(localRow.object_type, localPayload ?? remotePayload ?? base?.payload),
+    objectType: localRow.object_type,
+    remoteDeletedAtMs: remoteRow.deleted_at_ms ?? undefined,
+    remotePayload,
+    status: 'pending',
+    tripId,
+    updatedAt: now,
+  }
+}
+
+async function putObjectSyncBaseFromCloudRow(row: CloudSyncObjectRow) {
+  await putObjectSyncBaseFromPayload({
+    cloudUpdatedAtMs: row.updated_at_ms,
+    deletedAtMs: row.deleted_at_ms ?? undefined,
+    objectId: row.object_id,
+    objectType: row.object_type,
+    payload: row.payload as SyncObjectPayload | undefined,
+    tripId: row.trip_id,
+  })
+}
+
+async function putObjectSyncBasesFromRows(rows: CloudSyncObjectRow[]) {
+  await Promise.all(rows.map(putObjectSyncBaseFromCloudRow))
 }
 
 async function uploadPendingTicketBlobsToE2eFixture(
@@ -470,12 +876,6 @@ async function deleteRemovedTicketBlobsFromCloud({ tripId, userId }: { tripId: s
   }))
 }
 
-async function pullTripObjectsFromCloud({ tripId, userId }: { tripId: string; userId: string }) {
-  const rows = await fetchCloudObjectRows(tripId, userId)
-  await applyCloudObjectRows(rows)
-  await applyCloudTicketBlobRows(await fetchCloudTicketBlobRows(tripId, userId))
-}
-
 async function fetchCloudObjectRows(tripId: string, userId: string) {
   const client = requireSupabaseClient()
   const { data, error } = await client
@@ -538,23 +938,20 @@ async function applyCloudObjectRows(rows: CloudSyncObjectRow[]) {
   let didApplyDataChange = false
   await db.transaction(
     'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.objectSyncStates],
+    [
+      db.trips,
+      db.days,
+      db.itineraryItems,
+      db.ticketMetas,
+      db.ticketBlobs,
+      db.objectSyncStates,
+      db.objectSyncBases,
+      db.objectSyncConflicts,
+    ],
     async () => {
       for (const row of orderedRows) {
         const objectKey = buildObjectSyncKey(row.object_type, row.object_id)
         const existingState = await db.objectSyncStates.get(objectKey)
-        if ((existingState?.localUpdatedAtMs ?? 0) > row.updated_at_ms && !existingState?.lastSyncedAt) {
-          await db.objectSyncStates.put({
-            ...existingState,
-            conflictAt: Date.now(),
-            conflictReason: '同一对象在此设备和账号中都有更新。',
-            objectId: row.object_id,
-            objectKey,
-            objectType: row.object_type,
-            tripId: row.trip_id,
-          })
-          continue
-        }
         if (row.deleted_at_ms) {
           didApplyDataChange = await applyRemoteDelete(row) || didApplyDataChange
         } else if (row.payload) {
@@ -564,12 +961,25 @@ async function applyCloudObjectRows(rows: CloudSyncObjectRow[]) {
           ...existingState,
           cloudDeletedAtMs: row.deleted_at_ms ?? existingState?.cloudDeletedAtMs,
           cloudUpdatedAtMs: row.updated_at_ms,
+          conflictAt: undefined,
+          conflictReason: undefined,
           lastSyncedAt: Date.now(),
           objectId: row.object_id,
           objectKey,
           objectType: row.object_type,
           tripId: row.trip_id,
         })
+        await db.objectSyncBases.put({
+          cloudUpdatedAtMs: row.updated_at_ms,
+          deletedAtMs: row.deleted_at_ms ?? undefined,
+          objectId: row.object_id,
+          objectKey,
+          objectType: row.object_type,
+          payload: row.deleted_at_ms ? undefined : row.payload as SyncObjectPayload | undefined,
+          tripId: row.trip_id,
+          updatedAt: Date.now(),
+        })
+        await db.objectSyncConflicts.where('objectKey').equals(objectKey).delete()
       }
     },
   )
@@ -595,6 +1005,35 @@ async function applyRemotePayload(row: CloudSyncObjectRow) {
   return true
 }
 
+async function applyResolvedPayload(objectType: SyncObjectType, payload: SyncObjectPayload) {
+  await db.transaction('rw', db.trips, db.days, db.itineraryItems, db.ticketMetas, async () => {
+    if (objectType === 'trip') {
+      await db.trips.put(payload as Trip)
+    } else {
+      await db.trips.update((payload as Day | ItineraryItem | TicketMeta).tripId, { updatedAt: Date.now() })
+      if (objectType === 'day') {
+        await db.days.put(payload as Day)
+      } else if (objectType === 'item') {
+        await db.itineraryItems.put(payload as ItineraryItem)
+      } else {
+        await db.ticketMetas.put(payload as TicketMeta)
+      }
+    }
+  })
+}
+
+async function enqueueResolvedPayload(objectType: SyncObjectType, payload: SyncObjectPayload) {
+  if (objectType === 'trip') {
+    await enqueueObjectUpsert({ object: payload as Trip, objectType: 'trip' })
+  } else if (objectType === 'day') {
+    await enqueueObjectUpsert({ object: payload as Day, objectType: 'day' })
+  } else if (objectType === 'item') {
+    await enqueueObjectUpsert({ object: payload as ItineraryItem, objectType: 'item' })
+  } else {
+    await enqueueObjectUpsert({ object: payload as TicketMeta, objectType: 'ticket_meta' })
+  }
+}
+
 async function applyRemoteDelete(row: CloudSyncObjectRow) {
   if (row.object_type === 'trip') {
     if (!await db.trips.get(row.object_id)) return false
@@ -611,6 +1050,27 @@ async function applyRemoteDelete(row: CloudSyncObjectRow) {
     await db.ticketBlobs.delete(row.object_id)
   }
   return true
+}
+
+async function applyResolvedDelete(objectType: SyncObjectType, objectId: string) {
+  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs], async () => {
+    if (objectType === 'trip') {
+      await db.trips.delete(objectId)
+    } else if (objectType === 'day') {
+      const day = await db.days.get(objectId)
+      if (day) await db.trips.update(day.tripId, { updatedAt: Date.now() })
+      await db.days.delete(objectId)
+    } else if (objectType === 'item') {
+      const item = await db.itineraryItems.get(objectId)
+      if (item) await db.trips.update(item.tripId, { updatedAt: Date.now() })
+      await db.itineraryItems.delete(objectId)
+    } else {
+      const ticket = await db.ticketMetas.get(objectId)
+      if (ticket) await db.trips.update(ticket.tripId, { updatedAt: Date.now() })
+      await db.ticketMetas.delete(objectId)
+      await db.ticketBlobs.delete(objectId)
+    }
+  })
 }
 
 async function buildUploadedTicketBlobState({

@@ -20,6 +20,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
 import { SectionHeader } from '../ui/SectionHeader'
 import { CloudSnapshotCheckPrompts } from './CloudSnapshotCheckPrompts'
+import { ObjectSyncConflictPanel } from './ObjectSyncConflictPanel'
 import {
   deleteCloudBackup,
   formatCloudBackupSize,
@@ -34,6 +35,8 @@ import {
   type CloudBackupSummary,
   type RestoreCloudBackupResult,
 } from '../../lib/cloudBackup'
+import { listPendingObjectSyncConflicts } from '../../lib/cloudObjectSync'
+import { subscribeTravelDataChanged } from '../../lib/dataEvents'
 import { getSupabaseClient, type User } from '../../lib/supabaseClient'
 import {
   type AutoSnapshotBackupEntry,
@@ -326,7 +329,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-on-surface">Supabase 云端同步</h3>
             <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-              登录后，旅行数据和票据文件会进入自动同步队列，方便跨设备延续同一旅行。此设备仍保留离线缓存；同步按最新版本覆盖另一端，不做字段级合并。
+              登录后，旅行数据和票据文件会进入自动同步队列，方便跨设备延续同一旅行。不同对象和不同字段会自动合并；同一字段冲突会先让你确认。
             </p>
           </div>
         </div>
@@ -357,9 +360,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
           configured={configStatus.configured}
           enabled={autoBackupEnabled}
           signedIn={Boolean(user)}
+          tripId={trip?.id}
         />
 
         <CloudSnapshotCheckPrompts maxItems={5} variant="settings" />
+        <ObjectSyncConflictPanel tripId={trip?.id} />
 
         {!configStatus.configured ? (
           <div
@@ -554,7 +559,7 @@ function AutoCloudBackupSetting({
   const helperText = !configured
     ? '配置 Supabase 后才能开启。'
     : signedIn
-      ? '打开 PWA 后自动检查账号数据；此设备关键修改会排队同步，版本较新的一端会自动覆盖另一端。'
+      ? '打开 PWA 后自动检查账号数据；此设备关键修改会排队同步，并先做对象级增量合并。'
       : '登录账号后，会自动检查账号数据并排队同步此设备关键修改。'
 
   return (
@@ -596,13 +601,16 @@ function CloudAutoSyncStatusPanel({
   configured,
   enabled,
   signedIn,
+  tripId,
 }: {
   configured: boolean
   enabled: boolean
   signedIn: boolean
+  tripId?: string
 }) {
   const [entries, setEntries] = useState<AutoSnapshotBackupEntry[]>(() => listAutoSnapshotBackupEntries())
   const [checkState, setCheckState] = useState(() => getCloudSnapshotCheckState())
+  const [objectConflictCount, setObjectConflictCount] = useState(0)
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine
   ))
@@ -614,6 +622,30 @@ function CloudAutoSyncStatusPanel({
   }, [])
 
   useEffect(() => subscribeCloudSnapshotChecks(setCheckState), [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function refreshObjectConflictCount() {
+      try {
+        const conflicts = await listPendingObjectSyncConflicts(tripId)
+        if (!cancelled) {
+          setObjectConflictCount(conflicts.length)
+        }
+      } catch {
+        if (!cancelled) {
+          setObjectConflictCount(0)
+        }
+      }
+    }
+    void refreshObjectConflictCount()
+    const unsubscribe = subscribeTravelDataChanged(() => {
+      void refreshObjectConflictCount()
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [tripId])
 
   useEffect(() => {
     const updateOnlineState = () => {
@@ -631,7 +663,7 @@ function CloudAutoSyncStatusPanel({
   const uploadingCount = entries.filter((entry) => entry.status === 'uploading').length
   const queuedCount = entries.filter((entry) => entry.status === 'dirty' && entry.dirtyAt).length
   const retryableEntries = errorEntries
-  const actionRequiredCount = checkState.results.length
+  const actionRequiredCount = checkState.results.length + objectConflictCount
   const view = getCloudAccountSyncStatusView({
     actionRequiredCount,
     configured,
@@ -673,7 +705,7 @@ function CloudAutoSyncStatusPanel({
           <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{view.title}</p>
           <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{view.detail}</p>
           <p className="mt-1 break-words text-xs leading-5 opacity-80 [overflow-wrap:anywhere]">
-            按最新版本自动覆盖，不做字段级合并，也不创建额外云端记录。
+            对象级增量同步会先检查账号数据；不同字段自动合并，同一字段冲突需确认。
           </p>
         </div>
       </div>
@@ -685,7 +717,7 @@ function CloudAutoSyncStatusPanel({
           onClick={handleShowSyncPrompts}
           variant="secondary"
         >
-          处理同步方向
+          处理冲突
         </Button>
       ) : null}
       {retryableEntries.length > 0 && enabled && signedIn && isOnline ? (
@@ -968,7 +1000,8 @@ function buildCloudBackupUploadConfirmBody() {
     '将用此设备版本立即同步到账号。',
     '账号中原有版本会被覆盖。',
     '不会创建新的云端记录列表。',
-    '不会自动合并账号中的修改。',
+    '当前方向操作不会自动合并账号中的未选修改。',
+    '对象同步仍会先做增量合并；这里处理的是整旅行方向选择。',
   ].join('\n')
 }
 
@@ -980,7 +1013,8 @@ function buildCloudBackupRestoreConfirmBody(backup: CloudBackupSummary | null) {
     '将用账号数据更新此设备旅行。',
     '此设备未同步的修改可能被覆盖。',
     '不会创建重复旅行。',
-    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
+    '当前方向操作不会自动合并此设备中的未选修改。',
+    '对象同步仍会先做增量合并；这里处理的是整旅行方向选择。',
     '建议确认方向后再继续。',
   ].join('\n') + versionLine
 }

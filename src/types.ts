@@ -127,6 +127,7 @@ export type TicketBlob = {
 export type SyncObjectType = 'trip' | 'day' | 'item' | 'ticket_meta'
 export type SyncOutboxOperation = 'upsert' | 'delete'
 export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
+export type SyncObjectPayload = Trip | Day | ItineraryItem | TicketMeta
 
 export type SyncOutboxEntry = {
   id: string
@@ -135,7 +136,7 @@ export type SyncOutboxEntry = {
   objectId: string
   objectKey: string
   operation: SyncOutboxOperation
-  payload?: Trip | Day | ItineraryItem | TicketMeta
+  payload?: SyncObjectPayload
   updatedAtMs: number
   deletedAtMs?: number
   deviceId: string
@@ -143,6 +144,53 @@ export type SyncOutboxEntry = {
   status: SyncOutboxStatus
   attempts: number
   lastError?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type ObjectSyncBase = {
+  objectKey: string
+  tripId: string
+  objectType: SyncObjectType
+  objectId: string
+  payload?: SyncObjectPayload
+  deletedAtMs?: number
+  cloudUpdatedAtMs: number
+  updatedAt: number
+}
+
+export type ObjectSyncConflictType =
+  | 'field_conflict'
+  | 'local_delete_remote_update'
+  | 'remote_delete_local_update'
+
+export type ObjectSyncConflictResolution = 'local' | 'remote' | 'merge_notes' | 'delete' | 'keep'
+
+export type ObjectSyncConflictField = {
+  fieldPath: string
+  label: string
+  baseValue?: unknown
+  localValue?: unknown
+  remoteValue?: unknown
+  defaultResolution: Exclude<ObjectSyncConflictResolution, 'delete' | 'keep'>
+  allowNotesMerge?: boolean
+}
+
+export type ObjectSyncConflict = {
+  id: string
+  tripId: string
+  objectKey: string
+  objectType: SyncObjectType
+  objectId: string
+  objectLabel: string
+  conflictType: ObjectSyncConflictType
+  basePayload?: SyncObjectPayload
+  localPayload?: SyncObjectPayload
+  remotePayload?: SyncObjectPayload
+  localDeletedAtMs?: number
+  remoteDeletedAtMs?: number
+  fields: ObjectSyncConflictField[]
+  status: 'pending' | 'resolved'
   createdAt: number
   updatedAt: number
 }

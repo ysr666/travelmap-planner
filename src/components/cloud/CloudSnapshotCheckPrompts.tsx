@@ -201,7 +201,7 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
           </p>
         ))}
         <p className="pt-1 leading-5 text-outline">
-          系统不会做字段级合并或自动删除账号数据；若此设备或账号数据变化，提醒可能再次出现。
+          这是整旅行方向提醒；对象同步会先做增量合并，但账号数据或此设备数据继续变化时，提醒可能再次出现。
         </p>
       </div>
     </details>
@@ -369,8 +369,8 @@ function buildCloudUploadConfirmBody(result: CloudSnapshotCheckResult | null) {
     '将用此设备版本立即同步到账号。',
     '账号中原有版本会被覆盖。',
     '不会创建新的云端记录列表。',
-    '不会自动合并账号中的修改。',
-    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
+    '当前方向操作不会自动合并账号中的未选修改。',
+    '对象同步仍会先做增量合并；这里处理的是整旅行方向选择。',
   ].join('\n') + buildVersionTimestampText(result)
 }
 
@@ -379,7 +379,8 @@ function buildCloudRestoreConfirmBody(result: CloudSnapshotCheckResult | null) {
     '将用账号数据更新此设备旅行。',
     '此设备未同步的修改可能被覆盖。',
     '不会创建重复旅行。',
-    '这是按方向覆盖，不会自动合并此设备和账号中的修改。',
+    '当前方向操作不会自动合并此设备中的未选修改。',
+    '对象同步仍会先做增量合并；这里处理的是整旅行方向选择。',
     '建议确认方向后再继续。',
   ].join('\n') + buildVersionTimestampText(result)
 }

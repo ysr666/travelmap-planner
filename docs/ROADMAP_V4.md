@@ -134,10 +134,10 @@
 - IndexedDB 仍是此设备离线缓存与首写层。
 - 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
 - Supabase 是账号数据同步，不是实时表同步；当前优先同步 Trip / Day / Item / TicketMeta 对象和 copy 票据 Blob。
-- 不同对象可自动合并；同一对象双边修改时提示用户确认方向，不做字段级自动合并。
+- 同步采用 pull-before-push 增量对象同步；不同对象和不同字段可自动合并，同一字段双边修改时提示用户选择字段版本。
 - 旧版多条云端记录、旧 `snapshot.json` 和旧版恢复出的离线缓存可能仍存在；保留为兼容与迁移路径。
 - zip 归档是可选离线归档能力。
-- 长期同步路线见 `docs/SUPABASE_CLOUD_BACKUP.md`：对象同步和票据 Blob 独立上传已进入主路径；后续仍需更细粒度冲突 UI、设备/操作审计、增量队列观测和协议迁移工具。
+- 长期同步路线见 `docs/SUPABASE_CLOUD_BACKUP.md`：对象同步、票据 Blob 独立上传和字段级冲突面板已进入主路径；后续仍需设备/操作审计、增量队列观测和协议迁移工具。
 - OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
 - 当前 AI 不联网搜索。`travel_search` 只是未来真实搜索的结构槽位，当前成功 runtime source 仅限 mock。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。

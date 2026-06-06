@@ -55,6 +55,14 @@ function createMockSupabaseClient() {
     }),
   }
   const unavailableObjectTable = {
+    select: vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(async () => ({
+          data: null,
+          error: { code: '42P01', message: 'cloud_sync_objects does not exist' },
+        })),
+      })),
+    })),
     upsert: vi.fn(async (...args: [unknown, unknown?]) => {
       void args
       return { error: { code: '42P01', message: 'cloud_sync_objects does not exist' } }

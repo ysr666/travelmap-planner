@@ -156,11 +156,59 @@ describe('getTicketCloudSyncView', () => {
     })
   })
 
+  it('shows copy tickets waiting for independent blob upload', () => {
+    expect(getTicketCloudSyncView(makeTicket({ storageMode: 'copy' }), {
+      ...baseContext,
+      blobSyncState: {
+        cacheStatus: 'cached',
+        uploadStatus: 'pending',
+      },
+    })).toMatchObject({
+      label: '等待上传',
+      tone: 'info',
+    })
+  })
+
+  it('shows synced copy tickets with cleared cache as recoverable', () => {
+    expect(getTicketCloudSyncView(makeTicket({ storageMode: 'copy' }), {
+      ...baseContext,
+      blobSyncState: {
+        cacheStatus: 'cleared',
+        cloudStoragePath: 'user/objects/trip/tickets/ticket/hash-order.pdf',
+        uploadStatus: 'synced',
+      },
+      hasOfflineCache: false,
+    })).toMatchObject({
+      detail: expect.stringContaining('可按需重新同步'),
+      label: '已清理',
+      tone: 'success',
+    })
+  })
+
+  it('shows missing copy tickets without cloud refs as needing reupload', () => {
+    expect(getTicketCloudSyncView(makeTicket({ storageMode: 'copy' }), {
+      ...baseContext,
+      blobSyncState: {
+        cacheStatus: 'missing',
+        uploadStatus: 'missing',
+      },
+      hasOfflineCache: false,
+    })).toMatchObject({
+      label: '需重新上传',
+      tone: 'danger',
+    })
+  })
+
   it('shows synced copy tickets when the trip sync entry is clean', () => {
     expect(getTicketCloudSyncView(makeTicket({ storageMode: 'copy' }), {
       ...baseContext,
       autoSyncEntry: {
         status: 'synced',
+      },
+      blobSyncState: {
+        cacheStatus: 'cached',
+        cloudStoragePath: 'user/objects/trip/tickets/ticket/hash-order.pdf',
+        uploadStatus: 'synced',
       },
     })).toMatchObject({
       detail: expect.stringContaining('此设备保留离线缓存'),

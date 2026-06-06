@@ -1,0 +1,279 @@
+import { db } from '../db/database'
+import { createId } from '../db/ids'
+import type {
+  Day,
+  ItineraryItem,
+  ObjectSyncState,
+  SyncObjectType,
+  SyncOutboxEntry,
+  TicketBlobSyncState,
+  TicketMeta,
+  Trip,
+} from '../types'
+
+const OBJECT_SYNC_DEVICE_ID_KEY = 'tripmap:object-sync:device-id'
+
+type SyncPayload = Trip | Day | ItineraryItem | TicketMeta
+
+export type ObjectSyncRecordInput =
+  | { object: Trip; objectType: 'trip'; operation?: 'upsert' }
+  | { object: Day; objectType: 'day'; operation?: 'upsert' }
+  | { object: ItineraryItem; objectType: 'item'; operation?: 'upsert' }
+  | { object: TicketMeta; objectType: 'ticket_meta'; operation?: 'upsert' }
+
+export type ObjectSyncDeleteInput = {
+  objectId: string
+  objectType: SyncObjectType
+  tripId: string
+  deletedAtMs?: number
+}
+
+export function buildObjectSyncKey(objectType: SyncObjectType, objectId: string) {
+  return `${objectType}:${objectId}`
+}
+
+export function getObjectSyncDeviceId() {
+  const existing = readStorageValue(OBJECT_SYNC_DEVICE_ID_KEY)
+  if (existing) {
+    return existing
+  }
+  const next = createId('device')
+  writeStorageValue(OBJECT_SYNC_DEVICE_ID_KEY, next)
+  return next
+}
+
+export async function enqueueObjectUpsert(input: ObjectSyncRecordInput) {
+  const object = input.object
+  const now = Date.now()
+  const objectId = object.id
+  const tripId = getObjectTripId(input.objectType, object)
+  const objectKey = buildObjectSyncKey(input.objectType, objectId)
+  const updatedAtMs = getObjectUpdatedAt(input.objectType, object)
+  const entry: SyncOutboxEntry = {
+    attempts: 0,
+    createdAt: now,
+    deviceId: getObjectSyncDeviceId(),
+    id: createId('sync_outbox'),
+    objectId,
+    objectKey,
+    objectType: input.objectType,
+    operation: 'upsert',
+    opId: createId('op'),
+    payload: object,
+    status: 'pending',
+    tripId,
+    updatedAt: now,
+    updatedAtMs,
+  }
+  const state: ObjectSyncState = {
+    objectId,
+    objectKey,
+    objectType: input.objectType,
+    localUpdatedAtMs: updatedAtMs,
+    tripId,
+  }
+  await db.transaction('rw', db.syncOutbox, db.objectSyncStates, async () => {
+    await db.syncOutbox.add(entry)
+    await db.objectSyncStates.put({
+      ...await db.objectSyncStates.get(objectKey),
+      ...state,
+    })
+  })
+  return entry
+}
+
+export async function enqueueObjectDelete({
+  deletedAtMs = Date.now(),
+  objectId,
+  objectType,
+  tripId,
+}: ObjectSyncDeleteInput) {
+  const now = Date.now()
+  const objectKey = buildObjectSyncKey(objectType, objectId)
+  const entry: SyncOutboxEntry = {
+    attempts: 0,
+    createdAt: now,
+    deletedAtMs,
+    deviceId: getObjectSyncDeviceId(),
+    id: createId('sync_outbox'),
+    objectId,
+    objectKey,
+    objectType,
+    operation: 'delete',
+    opId: createId('op'),
+    status: 'pending',
+    tripId,
+    updatedAt: now,
+    updatedAtMs: deletedAtMs,
+  }
+  await db.transaction('rw', db.syncOutbox, db.objectSyncStates, async () => {
+    await db.syncOutbox.add(entry)
+    await db.objectSyncStates.put({
+      ...await db.objectSyncStates.get(objectKey),
+      localDeletedAtMs: deletedAtMs,
+      objectId,
+      objectKey,
+      objectType,
+      tripId,
+    })
+  })
+  return entry
+}
+
+export async function listPendingObjectOutboxEntries(tripId: string) {
+  return db.syncOutbox
+    .where('[tripId+status]')
+    .equals([tripId, 'pending'])
+    .or('[tripId+status]')
+    .equals([tripId, 'error'])
+    .toArray()
+}
+
+export async function markObjectOutboxEntriesSyncing(entries: SyncOutboxEntry[], now = Date.now()) {
+  if (entries.length === 0) return
+  await db.syncOutbox.bulkPut(entries.map((entry) => ({
+    ...entry,
+    status: 'syncing',
+    updatedAt: now,
+  })))
+}
+
+export async function markObjectOutboxEntriesSynced(entries: SyncOutboxEntry[], cloudUpdatedAtMs: number, now = Date.now()) {
+  if (entries.length === 0) return
+  const ids = entries.map((entry) => entry.id)
+  await db.transaction('rw', db.syncOutbox, db.objectSyncStates, async () => {
+    await db.syncOutbox.bulkDelete(ids)
+    await Promise.all(entries.map(async (entry) => {
+      const existing = await db.objectSyncStates.get(entry.objectKey)
+      await db.objectSyncStates.put({
+        ...existing,
+        cloudDeletedAtMs: entry.operation === 'delete' ? entry.deletedAtMs ?? entry.updatedAtMs : existing?.cloudDeletedAtMs,
+        cloudUpdatedAtMs,
+        lastSyncedAt: now,
+        localDeletedAtMs: entry.operation === 'delete' ? entry.deletedAtMs ?? entry.updatedAtMs : existing?.localDeletedAtMs,
+        localUpdatedAtMs: entry.operation === 'upsert' ? entry.updatedAtMs : existing?.localUpdatedAtMs,
+        objectId: entry.objectId,
+        objectKey: entry.objectKey,
+        objectType: entry.objectType,
+        tripId: entry.tripId,
+      })
+    }))
+  })
+}
+
+export async function markObjectOutboxEntriesFailed(entries: SyncOutboxEntry[], error: string, now = Date.now()) {
+  if (entries.length === 0) return
+  await db.syncOutbox.bulkPut(entries.map((entry) => ({
+    ...entry,
+    attempts: entry.attempts + 1,
+    lastError: error,
+    status: 'error',
+    updatedAt: now,
+  })))
+}
+
+export async function getTicketBlobSyncState(ticketId: string) {
+  return db.ticketBlobSyncStates.get(ticketId)
+}
+
+export async function listTicketBlobSyncStatesByTrip(tripId: string) {
+  return db.ticketBlobSyncStates.where('tripId').equals(tripId).toArray()
+}
+
+export async function putTicketBlobSyncState(state: TicketBlobSyncState) {
+  await db.ticketBlobSyncStates.put(state)
+  return state
+}
+
+export async function markTicketBlobPendingUpload({
+  blob,
+  ticket,
+}: {
+  blob: Blob
+  ticket: TicketMeta
+}) {
+  const now = Date.now()
+  const state: TicketBlobSyncState = {
+    ...await db.ticketBlobSyncStates.get(ticket.id),
+    cacheStatus: 'cached',
+    fileName: ticket.fileName,
+    lastCacheCheckedAt: now,
+    lastError: undefined,
+    mimeType: ticket.mimeType || blob.type || 'application/octet-stream',
+    size: blob.size,
+    ticketId: ticket.id,
+    tripId: ticket.tripId,
+    updatedAt: now,
+    uploadStatus: 'pending',
+  }
+  await db.ticketBlobSyncStates.put(state)
+  return state
+}
+
+export async function markTicketBlobMissing(ticket: TicketMeta, now = Date.now()) {
+  const state: TicketBlobSyncState = {
+    ...await db.ticketBlobSyncStates.get(ticket.id),
+    cacheStatus: 'missing',
+    fileName: ticket.fileName,
+    lastCacheCheckedAt: now,
+    mimeType: ticket.mimeType,
+    size: ticket.size,
+    ticketId: ticket.id,
+    tripId: ticket.tripId,
+    updatedAt: now,
+    uploadStatus: 'missing',
+  }
+  await db.ticketBlobSyncStates.put(state)
+  return state
+}
+
+export async function markTicketBlobDeleted(ticket: TicketMeta, now = Date.now()) {
+  const existing = await db.ticketBlobSyncStates.get(ticket.id)
+  await db.ticketBlobSyncStates.put({
+    ...existing,
+    cacheStatus: existing?.cacheStatus ?? 'missing',
+    fileName: ticket.fileName,
+    mimeType: ticket.mimeType,
+    size: existing?.size ?? ticket.size,
+    ticketId: ticket.id,
+    tripId: ticket.tripId,
+    updatedAt: now,
+    uploadStatus: 'deleted',
+  })
+}
+
+function getObjectUpdatedAt(objectType: SyncObjectType, object: SyncPayload) {
+  if (objectType === 'day') {
+    return Date.now()
+  }
+  return (object as ItineraryItem | TicketMeta | Trip).updatedAt
+}
+
+function getObjectTripId(objectType: SyncObjectType, object: SyncPayload) {
+  if (objectType === 'trip') {
+    return object.id
+  }
+  return (object as Day | ItineraryItem | TicketMeta).tripId
+}
+
+function readStorageValue(key: string) {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+  try {
+    return window.localStorage.getItem(key) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeStorageValue(key: string, value: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Device ID persistence is best effort; a new one is still safe.
+  }
+}

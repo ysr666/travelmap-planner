@@ -124,6 +124,63 @@ export type TicketBlob = {
   blob: Blob
 }
 
+export type SyncObjectType = 'trip' | 'day' | 'item' | 'ticket_meta'
+export type SyncOutboxOperation = 'upsert' | 'delete'
+export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
+
+export type SyncOutboxEntry = {
+  id: string
+  tripId: string
+  objectType: SyncObjectType
+  objectId: string
+  objectKey: string
+  operation: SyncOutboxOperation
+  payload?: Trip | Day | ItineraryItem | TicketMeta
+  updatedAtMs: number
+  deletedAtMs?: number
+  deviceId: string
+  opId: string
+  status: SyncOutboxStatus
+  attempts: number
+  lastError?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type ObjectSyncState = {
+  objectKey: string
+  tripId: string
+  objectType: SyncObjectType
+  objectId: string
+  cloudUpdatedAtMs?: number
+  cloudDeletedAtMs?: number
+  localUpdatedAtMs?: number
+  localDeletedAtMs?: number
+  lastSyncedAt?: number
+  conflictAt?: number
+  conflictReason?: string
+}
+
+export type TicketBlobUploadStatus = 'pending' | 'uploading' | 'synced' | 'error' | 'missing' | 'deleted'
+export type TicketBlobCacheStatus = 'cached' | 'cleared' | 'missing'
+
+export type TicketBlobSyncState = {
+  ticketId: string
+  tripId: string
+  uploadStatus: TicketBlobUploadStatus
+  cacheStatus: TicketBlobCacheStatus
+  sha256?: string
+  cloudStoragePath?: string
+  mimeType?: string
+  size?: number
+  fileName?: string
+  lastUploadedAt?: number
+  lastDownloadedAt?: number
+  lastCacheCheckedAt?: number
+  lastError?: string
+  updatedAt: number
+}
+
 export type TicketFile = TicketMeta & {
   blob: Blob
 }

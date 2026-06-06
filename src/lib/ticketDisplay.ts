@@ -1,5 +1,6 @@
 import type { TicketMeta } from '../types'
 import type { AutoSnapshotBackupEntry } from './autoSnapshotBackup'
+import type { TicketBlobSyncState } from '../types'
 import { getTicketStorageMode } from './tickets'
 
 export type TicketDisplayIconKind = 'image' | 'pdf' | 'file' | 'reference' | 'external'
@@ -23,6 +24,10 @@ export type TicketCloudSyncView = {
 export type TicketCloudSyncContext = {
   autoSyncEnabled: boolean
   autoSyncEntry?: Pick<AutoSnapshotBackupEntry, 'dirtyAt' | 'lastError' | 'status'> | null
+  blobSyncState?: Pick<
+    TicketBlobSyncState,
+    'cacheStatus' | 'cloudStoragePath' | 'lastError' | 'uploadStatus'
+  > | null
   hasOfflineCache?: boolean | null
   isOnline: boolean
   signedIn: boolean
@@ -85,6 +90,7 @@ export function getTicketCloudSyncView(
   {
     autoSyncEnabled,
     autoSyncEntry,
+    blobSyncState,
     hasOfflineCache,
     isOnline,
     signedIn,
@@ -105,6 +111,52 @@ export function getTicketCloudSyncView(
       detail: '只记录文件位置，未保存文件内容；请按位置说明在文件 App、网盘或相册中查找。',
       label: '位置记录',
       tone: 'neutral',
+    }
+  }
+
+  if (blobSyncState?.uploadStatus === 'uploading') {
+    return {
+      detail: '票据文件正在上传到账号。',
+      label: '上传中',
+      tone: 'info',
+    }
+  }
+
+  if (blobSyncState?.uploadStatus === 'pending') {
+    return {
+      detail: '票据已保存为离线缓存，正在等待自动上传到账号。',
+      label: '等待上传',
+      tone: 'info',
+    }
+  }
+
+  if (blobSyncState?.uploadStatus === 'error') {
+    return {
+      detail: blobSyncState.lastError
+        ? `票据文件上传失败：${blobSyncState.lastError}`
+        : '票据文件上传失败，可稍后重试。',
+      label: '上传失败',
+      tone: 'danger',
+    }
+  }
+
+  if (
+    blobSyncState?.uploadStatus === 'synced' &&
+    blobSyncState.cloudStoragePath &&
+    blobSyncState.cacheStatus !== 'cached'
+  ) {
+    return {
+      detail: '账号中已有这个票据文件，此设备离线缓存已清理，可按需重新同步。',
+      label: blobSyncState.cacheStatus === 'cleared' ? '已清理' : '可重新同步',
+      tone: 'success',
+    }
+  }
+
+  if (blobSyncState?.uploadStatus === 'missing') {
+    return {
+      detail: '此设备没有可上传的票据文件，账号中也没有确认的长期来源。请重新上传票据。',
+      label: '需重新上传',
+      tone: 'danger',
     }
   }
 
@@ -179,7 +231,7 @@ export function getTicketCloudSyncView(
   if (autoSyncEntry?.status === 'synced') {
     return {
       detail: '已随旅行同步到账号，此设备保留离线缓存方便查看。',
-      label: '已同步',
+      label: blobSyncState?.uploadStatus === 'synced' ? '已同步' : '离线缓存可用',
       tone: 'success',
     }
   }

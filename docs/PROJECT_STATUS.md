@@ -52,7 +52,8 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
 - Provider proxy quota foundation：生产可绑定 Cloudflare D1 `TRIPMAP_PROVIDER_QUOTA_D1`，本地/dev 无 binding 时使用内存 fallback；route/search/place/AI buckets 保持隔离。
-- Supabase 云端同步 / 原地恢复。
+- Supabase 对象同步 / 原地恢复。
+- copy 票据 Blob 独立云端记录与此设备离线缓存管理。
 - 自动云端同步基础。
 - PWA 启动云端同步检查。
 - 冲突感知云端提示：本地较新、云端较新、可能冲突时只显示非阻塞提示。
@@ -89,15 +90,17 @@ Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_
 
 ## 云端与同步状态
 
-- Supabase 用于账号登录后的单旅行云端同步和恢复。
-- 从当前版本开始，一个本地 `trip.id` 对应一个云端同步记录；同一用户的同一 `trip.id` 使用稳定 `backupId`，同步会覆盖同一个云端同步记录，包含旅行结构化数据和已保存票据文件。
-- 自动云端同步默认开启，可由用户关闭；开启后在 Trip / Day / Item / Ticket / AI 应用 / 导入 / 内容补充 / 备注追加等写入成功后延迟同步同一个云端记录。
+- Supabase 用于账号登录后的旅行对象同步和恢复。
+- 当前版本优先同步 Trip / Day / Item / TicketMeta 对象；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
+- 旧 `cloud_trip_backups` / `snapshot.json` 路径保留为兼容与迁移路径；对象同步表不可用时会自动降级到旧 snapshot 同步。
+- 自动云端同步默认开启，可由用户关闭；开启后在 Trip / Day / Item / Ticket / AI 应用 / 导入 / 内容补充 / 备注追加等写入成功后延迟同步对应对象。
+- copy 票据 Blob 上传成功后，此设备离线缓存可被用户确认清理；清理不会删除 TicketMeta 或账号中的票据 Blob，可按需重新同步文件。
 - 启动、恢复在线或登录变化时会比较此设备版本信号与账号数据 metadata，并补偿此设备更新、缺失云端同步记录或遗留同步中状态。
-- 账号数据较新时会提示同步账号数据到此设备；此设备版本较新时会同步此设备版本并覆盖同一个云端同步记录；可能双向修改时要求用户选择同步方向。
+- 账号数据较新时会提示同步账号数据到此设备；此设备对象较新时会同步此设备版本到账号；同一对象可能双向修改时要求用户选择同步方向。
 - 旧版多条云端记录和旧版恢复出的离线缓存可能仍存在；当前版本不会自动迁移、合并、删除或清理这些历史数据。
 - 删除本地旅行不会删除云端同步记录；删除云端记录必须走手动确认。
-- 当前不是实时表同步，不做字段级合并、实时协作或云端删除同步。
-- 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；分对象同步、票据 blob 独立云端 id、本机缓存清理和对象级冲突合并仍是未来工作。
+- 当前不是实时表同步，不做字段级合并或实时协作；对象删除使用 tombstone 同步。
+- 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；未来仍需更细粒度增量同步、对象级冲突 UI 和 per-device 操作审计。
 
 ## 数据与缓存边界
 

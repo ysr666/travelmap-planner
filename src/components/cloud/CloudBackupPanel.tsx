@@ -63,6 +63,9 @@ type CloudBackupPanelProps = {
   trip: Trip | null
 }
 
+const CLOUD_PANEL_STATUS_MESSAGE_KEY = 'tripmap:cloud-panel-status-message'
+const CLOUD_PANEL_STATUS_MESSAGE_TTL_MS = 60_000
+
 export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const configStatus = getSupabaseConfigStatus()
   const [user, setUser] = useState<User | null>(null)
@@ -80,7 +83,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [restoreTarget, setRestoreTarget] = useState<CloudBackupSummary | null>(null)
   const [restoreResult, setRestoreResult] = useState<RestoreCloudBackupResult | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupSummary | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(() => readPersistedCloudPanelMessage(trip?.id))
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
@@ -244,10 +247,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       } else {
         markTripAutoSnapshotSynced(trip.id, Number.isFinite(exportedAt) ? exportedAt : Date.now())
       }
-      setMessage('此设备版本已同步到账号。')
       setUploadConfirmOpen(false)
       setWarnings(result.warnings)
+      persistCloudPanelMessage(trip.id, '此设备版本已同步到账号。')
       await refreshCloudBackups()
+      setMessage('此设备版本已同步到账号。')
     } catch (caught) {
       setUploadConfirmOpen(false)
       setError(caught instanceof Error ? caught.message : '立即同步失败。')
@@ -898,6 +902,38 @@ function CloudInfoPill({
       <span className="min-w-0 break-words [overflow-wrap:anywhere]">{text}</span>
     </div>
   )
+}
+
+function persistCloudPanelMessage(tripId: string, text: string) {
+  try {
+    window.localStorage.setItem(CLOUD_PANEL_STATUS_MESSAGE_KEY, JSON.stringify({
+      createdAt: Date.now(),
+      text,
+      tripId,
+    }))
+  } catch {
+    // The in-panel React state still shows the message when storage is unavailable.
+  }
+}
+
+function readPersistedCloudPanelMessage(tripId: string | undefined) {
+  if (!tripId) return null
+  try {
+    const raw = window.localStorage.getItem(CLOUD_PANEL_STATUS_MESSAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { createdAt?: unknown; text?: unknown; tripId?: unknown }
+    if (
+      parsed.tripId !== tripId ||
+      typeof parsed.text !== 'string' ||
+      typeof parsed.createdAt !== 'number' ||
+      Date.now() - parsed.createdAt > CLOUD_PANEL_STATUS_MESSAGE_TTL_MS
+    ) {
+      return null
+    }
+    return parsed.text
+  } catch {
+    return null
+  }
 }
 
 function CloudNotice({

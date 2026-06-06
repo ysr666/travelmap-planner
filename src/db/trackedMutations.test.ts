@@ -73,6 +73,41 @@ describe('tracked db mutations', () => {
     await saveTicketBlob(ticket.id, new Blob(['pdf'], { type: 'application/pdf' }))
     expect(await getTicketMeta(ticket.id)).toBeTruthy()
     expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('ticket-blob-saved')
+    await expect(db.syncOutbox.toArray()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'trip' }),
+      expect.objectContaining({ objectType: 'ticket_meta' }),
+    ]))
+    await expect(db.ticketBlobSyncStates.get(ticket.id)).resolves.toMatchObject({
+      cacheStatus: 'cached',
+      ticketId: ticket.id,
+      uploadStatus: 'pending',
+    })
+  })
+
+  it('queues object upserts for trip, day and item writes', async () => {
+    const trip = await createTrip({
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      startDate: '2026-04-01',
+      title: '东京',
+    })
+    const day = await createDay({
+      date: '2026-04-01',
+      sortOrder: 1,
+      title: '第一天',
+      tripId: trip.id,
+    })
+    await createItineraryItem({
+      dayId: day.id,
+      sortOrder: 1,
+      ticketIds: [],
+      title: '涩谷',
+      tripId: trip.id,
+    })
+
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox.map((entry) => entry.objectType).sort()).toEqual(['day', 'item', 'trip'])
+    expect(outbox.every((entry) => entry.status === 'pending')).toBe(true)
   })
 
   it('clears local auto backup state when a local trip is deleted', async () => {

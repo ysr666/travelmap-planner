@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileArchive, HardDrive, Link2, MapPinned, Trash2, Upload } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, RefreshCw, Trash2, Upload } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -55,8 +55,14 @@ import {
   getCurrentUser,
   getSupabaseConfigStatus,
 } from '../lib/cloudBackup'
+import {
+  clearSyncedTicketBlobCache,
+  restoreTicketBlobCacheFromCloud,
+  retryTicketBlobUpload,
+} from '../lib/cloudObjectSync'
+import { getTicketBlobSyncState } from '../lib/objectSyncLocal'
 import { getSupabaseClient } from '../lib/supabaseClient'
-import type { Day, ItineraryItem, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
+import type { Day, ItineraryItem, TicketBlobSyncState, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
@@ -65,6 +71,7 @@ type StorageEstimateState = {
   quota?: number
 }
 type TicketBlobPresenceState = Record<string, boolean | undefined>
+type TicketBlobSyncStateMap = Record<string, TicketBlobSyncState | undefined>
 
 const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -115,6 +122,7 @@ export function TicketLibraryPage() {
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
+  const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncStateMap>({})
   const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
   const [tripSyncEntry, setTripSyncEntry] = useState<AutoSnapshotBackupEntry | null>(() => getTripAutoSnapshotStatus(tripId))
   const [isCloudSignedIn, setIsCloudSignedIn] = useState(false)
@@ -125,6 +133,7 @@ export function TicketLibraryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
+  const [ticketBlobActionId, setTicketBlobActionId] = useState<string | null>(null)
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<TicketMeta | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -225,20 +234,25 @@ export function TicketLibraryPage() {
       if (copyTickets.length === 0) {
         if (isActive) {
           setTicketBlobPresence({})
+          setTicketBlobSyncStates({})
         }
         return
       }
 
       const nextPresence: TicketBlobPresenceState = {}
+      const nextSyncStates: TicketBlobSyncStateMap = {}
       await Promise.all(copyTickets.map(async (ticket) => {
         try {
           nextPresence[ticket.id] = Boolean(await getTicketBlob(ticket.id))
+          nextSyncStates[ticket.id] = await getTicketBlobSyncState(ticket.id)
         } catch {
           nextPresence[ticket.id] = false
+          nextSyncStates[ticket.id] = undefined
         }
       }))
       if (isActive) {
         setTicketBlobPresence(nextPresence)
+        setTicketBlobSyncStates(nextSyncStates)
       }
     }
 
@@ -247,7 +261,7 @@ export function TicketLibraryPage() {
     return () => {
       isActive = false
     }
-  }, [tickets])
+  }, [tickets, tripSyncEntry])
 
   useEffect(() => {
     const refreshTripSyncEntry = () => {
@@ -434,6 +448,60 @@ export function TicketLibraryPage() {
       setActionError(caught instanceof Error ? caught.message : '删除票据失败')
     } finally {
       setDeletingTicketId(null)
+    }
+  }
+
+  async function handleClearTicketCache(ticket: TicketMeta) {
+    if (!window.confirm(`清理「${getTicketDisplayTitle(ticket)}」的此设备离线缓存？账号中已同步的票据文件不会删除，可稍后重新同步。`)) {
+      return
+    }
+    setActionError(null)
+    setActionMessage(null)
+    setTicketBlobActionId(ticket.id)
+    try {
+      await clearSyncedTicketBlobCache(ticket.id)
+      await refreshLibrary()
+      setActionMessage('已清理此设备离线缓存，账号票据文件仍保留。')
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '清理离线缓存失败')
+    } finally {
+      setTicketBlobActionId(null)
+    }
+  }
+
+  async function handleRestoreTicketCache(ticket: TicketMeta) {
+    if (!window.confirm(`从账号重新同步「${getTicketDisplayTitle(ticket)}」到此设备离线缓存？`)) {
+      return
+    }
+    setActionError(null)
+    setActionMessage(null)
+    setTicketBlobActionId(ticket.id)
+    try {
+      await restoreTicketBlobCacheFromCloud(ticket.id)
+      await refreshLibrary()
+      setActionMessage('票据文件已重新同步到此设备，离线可用。')
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '重新同步票据文件失败')
+    } finally {
+      setTicketBlobActionId(null)
+    }
+  }
+
+  async function handleRetryTicketBlobUpload(ticket: TicketMeta) {
+    if (!window.confirm(`重试上传「${getTicketDisplayTitle(ticket)}」到账号？`)) {
+      return
+    }
+    setActionError(null)
+    setActionMessage(null)
+    setTicketBlobActionId(ticket.id)
+    try {
+      await retryTicketBlobUpload(ticket.id)
+      await refreshLibrary()
+      setActionMessage('已加入票据文件上传队列。')
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '重试上传失败')
+    } finally {
+      setTicketBlobActionId(null)
     }
   }
 
@@ -648,6 +716,7 @@ export function TicketLibraryPage() {
               const syncView = getTicketCloudSyncView(ticket, {
                 autoSyncEnabled,
                 autoSyncEntry: tripSyncEntry,
+                blobSyncState: ticketBlobSyncStates[ticket.id],
                 hasOfflineCache: ticketBlobPresence[ticket.id],
                 isOnline,
                 signedIn: isCloudSignedIn,
@@ -655,9 +724,14 @@ export function TicketLibraryPage() {
               return (
                 <TicketCard
                   bindingLabel={describeTicketBinding(ticket, itemById)}
+                  blobSyncState={ticketBlobSyncStates[ticket.id]}
+                  busy={ticketBlobActionId === ticket.id}
                   key={ticket.id}
+                  onClearCache={() => void handleClearTicketCache(ticket)}
                   onDelete={() => setPendingDeleteTicket(ticket)}
                   onPreview={() => setPreviewTicket(ticket)}
+                  onRestoreCache={() => void handleRestoreTicketCache(ticket)}
+                  onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
                   syncView={syncView}
                   ticket={ticket}
                 />
@@ -701,18 +775,31 @@ export function TicketLibraryPage() {
 function TicketCard({
   ticket,
   bindingLabel,
+  blobSyncState,
+  busy,
   syncView,
+  onClearCache,
   onPreview,
   onDelete,
+  onRestoreCache,
+  onRetryUpload,
 }: {
   ticket: TicketMeta
   bindingLabel: string
+  blobSyncState?: TicketBlobSyncState
+  busy: boolean
   syncView: TicketCloudSyncView
+  onClearCache: () => void
   onPreview: () => void
   onDelete: () => void
+  onRestoreCache: () => void
+  onRetryUpload: () => void
 }) {
   const displayTitle = getTicketDisplayTitle(ticket)
   const visual = getTicketDisplayMeta(ticket)
+  const canClearCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus === 'cached' && Boolean(blobSyncState.cloudStoragePath)
+  const canRestoreCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus !== 'cached' && Boolean(blobSyncState.cloudStoragePath)
+  const canRetryUpload = blobSyncState?.uploadStatus === 'error'
 
   return (
     <Card variant="grouped" className="flex flex-col overflow-hidden p-2.5" data-testid="ticket-card">
@@ -775,6 +862,44 @@ function TicketCard({
           删除
         </button>
       </div>
+
+      {canClearCache || canRestoreCache || canRetryUpload ? (
+        <div className="mt-2 flex flex-wrap gap-1.5 border-t tm-row pt-2">
+          {canClearCache ? (
+            <button
+              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
+              disabled={busy}
+              onClick={onClearCache}
+              type="button"
+            >
+              <HardDrive className="size-3.5" />
+              清理离线缓存
+            </button>
+          ) : null}
+          {canRestoreCache ? (
+            <button
+              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-sky-700 transition active:bg-sky-50 tm-focus disabled:opacity-60 dark:text-sky-300 dark:active:bg-sky-950/35"
+              disabled={busy}
+              onClick={onRestoreCache}
+              type="button"
+            >
+              <RefreshCw className="size-3.5" />
+              重新同步
+            </button>
+          ) : null}
+          {canRetryUpload ? (
+            <button
+              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-amber-800 transition active:bg-amber-50 tm-focus disabled:opacity-60 dark:text-amber-300 dark:active:bg-amber-950/35"
+              disabled={busy}
+              onClick={onRetryUpload}
+              type="button"
+            >
+              <RefreshCw className="size-3.5" />
+              重试上传
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </Card>
   )
 }

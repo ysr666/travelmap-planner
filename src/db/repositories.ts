@@ -259,6 +259,10 @@ export async function getTicketBlob(ticketId: string) {
   return db.ticketBlobs.get(ticketId)
 }
 
+export async function deleteTicketBlob(ticketId: string) {
+  await db.ticketBlobs.delete(ticketId)
+}
+
 export async function listTicketsByTrip(tripId: string) {
   const tickets = await db.ticketMetas.where('tripId').equals(tripId).toArray()
   return tickets.sort((first, second) => second.createdAt - first.createdAt)

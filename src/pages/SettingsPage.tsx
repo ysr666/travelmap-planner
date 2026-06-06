@@ -72,10 +72,23 @@ import {
 } from '../lib/travelProfile'
 import type { AppearanceMode } from '../lib/appearance'
 import { useAppearance } from '../lib/appearanceContext'
+import { listTrips } from '../db/repositories'
+import {
+  clearSyncedTicketBlobCachesForTrip,
+  getTicketBlobCacheSummary,
+} from '../lib/cloudObjectSync'
 
 type StorageEstimateState = {
   usage?: number
   quota?: number
+}
+
+type TicketCacheSummaryState = {
+  cachedCount: number
+  cachedSizeBytes: number
+  clearableCount: number
+  clearableSizeBytes: number
+  totalCopyTickets: number
 }
 
 type PersistentStorageManager = StorageManager & {
@@ -223,6 +236,10 @@ export function SettingsPage() {
   const [routeCacheStats, setRouteCacheStats] = useState<RouteCacheStats | null>(null)
   const [routeCacheError, setRouteCacheError] = useState<string | null>(null)
   const [isClearingRouteCache, setIsClearingRouteCache] = useState(false)
+  const [ticketCacheSummary, setTicketCacheSummary] = useState<TicketCacheSummaryState | null>(null)
+  const [ticketCacheMessage, setTicketCacheMessage] = useState<string | null>(null)
+  const [ticketCacheError, setTicketCacheError] = useState<string | null>(null)
+  const [isClearingTicketCache, setIsClearingTicketCache] = useState(false)
   const [isUpdatingRouteCacheLimit, setIsUpdatingRouteCacheLimit] = useState(false)
   const [travelProfile, setTravelProfile] = useState<TravelProfile>(() => getStoredTravelProfile())
   const [aiPrivacySettings, setAiPrivacySettings] = useState<AiPrivacySettings>(() => getStoredAiPrivacySettings())
@@ -269,10 +286,38 @@ export function SettingsPage() {
     }
   }, [])
 
+  const refreshTicketCacheSummary = useCallback(async () => {
+    try {
+      setTicketCacheError(null)
+      const trips = await listTrips()
+      const summaries = await Promise.all(trips.map((trip) => getTicketBlobCacheSummary(trip.id)))
+      setTicketCacheSummary(summaries.reduce<TicketCacheSummaryState>((total, summary) => ({
+        cachedCount: total.cachedCount + summary.cachedCount,
+        cachedSizeBytes: total.cachedSizeBytes + summary.cachedSizeBytes,
+        clearableCount: total.clearableCount + summary.clearableCount,
+        clearableSizeBytes: total.clearableSizeBytes + summary.clearableSizeBytes,
+        totalCopyTickets: total.totalCopyTickets + summary.totalCopyTickets,
+      }), {
+        cachedCount: 0,
+        cachedSizeBytes: 0,
+        clearableCount: 0,
+        clearableSizeBytes: 0,
+        totalCopyTickets: 0,
+      }))
+    } catch (caught) {
+      setTicketCacheError(caught instanceof Error ? caught.message : '读取票据缓存统计失败。')
+    }
+  }, [])
+
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshStorageStatus(), 0)
     return () => window.clearTimeout(timeout)
   }, [refreshStorageStatus])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void refreshTicketCacheSummary(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [refreshTicketCacheSummary])
 
   useEffect(() => {
     function updateOnlineStatus() {
@@ -335,6 +380,30 @@ export function SettingsPage() {
       setPersistenceMessage(caught instanceof Error ? caught.message : '请求持久化本地存储失败。')
     } finally {
       setIsRequestingPersistence(false)
+    }
+  }
+
+  async function handleClearSyncedTicketCaches() {
+    if (!ticketCacheSummary?.clearableCount) {
+      return
+    }
+    if (!window.confirm(`清理 ${ticketCacheSummary.clearableCount} 个已同步票据的此设备离线缓存？账号中的票据文件不会删除，可稍后重新同步。`)) {
+      return
+    }
+
+    setIsClearingTicketCache(true)
+    setTicketCacheError(null)
+    setTicketCacheMessage(null)
+    try {
+      const trips = await listTrips()
+      const results = await Promise.all(trips.map((trip) => clearSyncedTicketBlobCachesForTrip(trip.id)))
+      const clearedCount = results.reduce((sum, result) => sum + result.clearedCount, 0)
+      setTicketCacheMessage(`已清理 ${clearedCount} 个已同步票据离线缓存。`)
+      await Promise.all([refreshTicketCacheSummary(), refreshStorageStatus()])
+    } catch (caught) {
+      setTicketCacheError(caught instanceof Error ? caught.message : '清理票据离线缓存失败。')
+    } finally {
+      setIsClearingTicketCache(false)
     }
   }
 
@@ -756,7 +825,27 @@ export function SettingsPage() {
               icon={<Smartphone className="size-5" />}
               title="此设备离线缓存"
             />
+            <ListRow
+              detail={
+                ticketCacheSummary
+                  ? `${ticketCacheSummary.cachedCount} 个票据缓存，占用 ${formatStorageSize(ticketCacheSummary.cachedSizeBytes)}；其中 ${ticketCacheSummary.clearableCount} 个已同步可清理。`
+                  : ticketCacheError ?? '正在统计票据缓存'
+              }
+              icon={<FileJson className="size-5" />}
+              title="票据离线缓存"
+            />
           </div>
+
+          <Button
+            className="w-full"
+            disabled={!ticketCacheSummary?.clearableCount || isClearingTicketCache}
+            icon={<RefreshCw className="size-4" />}
+            loading={isClearingTicketCache}
+            onClick={() => void handleClearSyncedTicketCaches()}
+            variant="secondary"
+          >
+            清理已同步票据缓存
+          </Button>
 
           <Button
             className="w-full"
@@ -772,6 +861,16 @@ export function SettingsPage() {
           {persistenceMessage ? (
             <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
               {persistenceMessage}
+            </p>
+          ) : null}
+          {ticketCacheMessage ? (
+            <p className="rounded-xl bg-emerald-50/75 px-3 py-2 text-xs leading-5 text-emerald-800 ring-1 ring-emerald-100/70 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+              {ticketCacheMessage}
+            </p>
+          ) : null}
+          {ticketCacheError ? (
+            <p className="rounded-xl bg-red-50/75 px-3 py-2 text-xs leading-5 text-red-700 ring-1 ring-red-100/70 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
+              {ticketCacheError}
             </p>
           ) : null}
         </Card>

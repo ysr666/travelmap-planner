@@ -54,6 +54,12 @@ function createMockSupabaseClient() {
       return { error: null }
     }),
   }
+  const unavailableObjectTable = {
+    upsert: vi.fn(async (...args: [unknown, unknown?]) => {
+      void args
+      return { error: { code: '42P01', message: 'cloud_sync_objects does not exist' } }
+    }),
+  }
   const bucket = {
     list: vi.fn(async (...args: [string, unknown?]) => {
       void args
@@ -77,7 +83,7 @@ function createMockSupabaseClient() {
       })),
     },
     bucket,
-    from: vi.fn(() => table),
+    from: vi.fn((tableName: string) => tableName === 'cloud_trip_backups' ? table : unavailableObjectTable),
     storage: {
       from: vi.fn(() => bucket),
     },

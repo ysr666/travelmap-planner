@@ -8,6 +8,12 @@ import {
   replaceTripPlanRecords,
 } from '../db'
 import { safeFileName } from './backup'
+import { readBlobArrayBuffer } from './blobUtils'
+import {
+  isCloudObjectSyncUnavailableError,
+  restoreTripObjectsFromCloud,
+  syncTripObjectsToCloud,
+} from './cloudObjectSync'
 import { emitTravelDataChanged } from './dataEvents'
 import { requireSupabaseClient } from './supabaseClient'
 import { formatFileSize, shouldExpectTicketBlob } from './tickets'
@@ -106,7 +112,9 @@ export type BuildCloudSnapshotResult = {
 type E2eCloudFixture = {
   backups?: CloudBackupSummary[]
   files?: Record<string, E2eCloudStoredFile>
+  objectRows?: CloudObjectFixtureRow[]
   snapshots?: Record<string, CloudTripSnapshot>
+  ticketBlobRows?: CloudTicketBlobFixtureRow[]
   user?: {
     email?: string
     id: string
@@ -117,6 +125,31 @@ type E2eCloudStoredFile = {
   dataBase64: string
   mimeType: string
   size: number
+}
+
+export type CloudObjectFixtureRow = {
+  deleted_at_ms?: number | null
+  device_id: string
+  object_id: string
+  object_type: string
+  op_id: string
+  payload?: unknown
+  trip_id: string
+  updated_at_ms: number
+  user_id: string
+}
+
+export type CloudTicketBlobFixtureRow = {
+  deleted_at?: string | null
+  file_name: string
+  mime_type: string
+  sha256: string
+  size: number
+  storage_path: string
+  ticket_id: string
+  trip_id: string
+  uploaded_at: string
+  user_id: string
 }
 
 type CloudStorageListEntry = {
@@ -233,9 +266,21 @@ export async function listCloudBackups(): Promise<CloudBackupSummary[]> {
 }
 
 export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackupResult> {
+  const objectSyncWarnings: string[] = []
+  try {
+    const objectResult = await syncTripObjectsToCloud(tripId)
+    objectSyncWarnings.push(...objectResult.warnings)
+  } catch (caught) {
+    if (!isCloudObjectSyncUnavailableError(caught)) {
+      throw caught
+    }
+    objectSyncWarnings.push('对象同步表暂不可用，已使用兼容 snapshot 同步。')
+  }
+
   const fixture = readE2eCloudFixture()
   if (fixture?.user) {
-    return uploadTripCloudBackupToE2eFixture(fixture, tripId, fixture.user.id)
+    const result = await uploadTripCloudBackupToE2eFixture(fixture, tripId, fixture.user.id)
+    return { ...result, warnings: [...objectSyncWarnings, ...result.warnings] }
   }
 
   const client = requireSupabaseClient()
@@ -272,7 +317,7 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
     throw new Error('云端同步记录写入失败：' + upsertError.message)
   }
 
-  const warnings = [...snapshotResult.warnings]
+  const warnings = [...objectSyncWarnings, ...snapshotResult.warnings]
   try {
     await removeStaleCloudBackupObjects(
       bucket,
@@ -290,12 +335,43 @@ export async function uploadTripCloudBackup(tripId: string): Promise<CloudBackup
 export async function restoreCloudBackup(backupId: string): Promise<RestoreCloudBackupResult> {
   const fixture = readE2eCloudFixture()
   if (fixture?.user) {
+    const metadata = fixture.backups?.find((backup) => backup.id === backupId && backup.userId === fixture.user!.id)
+    if (metadata?.originalTripId) {
+      const objectResult = await restoreTripObjectsFromCloud(metadata.originalTripId)
+      if (objectResult) {
+        const trip = await getTrip(metadata.originalTripId)
+        return {
+          exportedAt: objectResult.exportedAt,
+          title: trip?.title ?? metadata.title,
+          tripId: metadata.originalTripId,
+          warnings: objectResult.warnings,
+        }
+      }
+    }
     return restoreCloudBackupFromE2eFixture(fixture, backupId, fixture.user.id)
   }
 
   const client = requireSupabaseClient()
   const user = await requireCurrentUser()
   const metadata = await getCloudBackupRow(backupId, user.id)
+  if (metadata.original_trip_id) {
+    try {
+      const objectResult = await restoreTripObjectsFromCloud(metadata.original_trip_id)
+      if (objectResult) {
+        const trip = await getTrip(metadata.original_trip_id)
+        return {
+          exportedAt: objectResult.exportedAt,
+          title: trip?.title ?? metadata.title,
+          tripId: metadata.original_trip_id,
+          warnings: objectResult.warnings,
+        }
+      }
+    } catch (caught) {
+      if (!isCloudObjectSyncUnavailableError(caught)) {
+        throw caught
+      }
+    }
+  }
   validateCloudBackupSnapshotPath(user.id, backupId, metadata.snapshot_path)
   const bucket = client.storage.from(CLOUD_BACKUP_BUCKET)
   const { data: snapshotBlob, error: snapshotError } = await bucket.download(metadata.snapshot_path)
@@ -888,7 +964,7 @@ function sortCloudBackupSummaries(backups: CloudBackupSummary[]) {
   return [...backups].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
 }
 
-function readE2eCloudFixture(): E2eCloudFixture | null {
+export function readE2eCloudFixture(): E2eCloudFixture | null {
   if (typeof window === 'undefined') {
     return null
   }
@@ -916,7 +992,7 @@ function readE2eCloudFixture(): E2eCloudFixture | null {
   }
 }
 
-function writeE2eCloudFixture(fixture: E2eCloudFixture) {
+export function writeE2eCloudFixture(fixture: E2eCloudFixture) {
   const currentFixture = readE2eCloudFixture()
   if (!currentFixture?.user) {
     throw new Error('测试云端同步 fixture 不可用。')
@@ -1151,8 +1227,8 @@ function throwCloudRestoreWriteVerificationError(label: string): never {
   throw new Error(`账号数据写入此设备后校验失败：${label} 未与云端同步一致。请重试同步，或先导出 zip 归档后再继续。`)
 }
 
-async function blobToBase64(blob: Blob) {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
+export async function blobToBase64(blob: Blob) {
+  const bytes = new Uint8Array(await readBlobArrayBuffer(blob))
   let binary = ''
   const chunkSize = 0x8000
   for (let index = 0; index < bytes.length; index += chunkSize) {
@@ -1161,7 +1237,7 @@ async function blobToBase64(blob: Blob) {
   return window.btoa(binary)
 }
 
-function base64ToBlob(dataBase64: string, mimeType: string) {
+export function base64ToBlob(dataBase64: string, mimeType: string) {
   const binary = window.atob(dataBase64)
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index += 1) {

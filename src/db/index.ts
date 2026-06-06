@@ -5,6 +5,7 @@ export {
   getTicketBlob,
   getTicketMeta,
   getTrip,
+  deleteTicketBlob,
   listDaysByTrip,
   listItemsByDay,
   listItemsByTrip,

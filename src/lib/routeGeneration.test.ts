@@ -81,6 +81,48 @@ describe('route preview generation', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('limits generation to requested days without refreshing the whole-trip preview cache', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { coordinates: number[][] }
+      return new Response(JSON.stringify(proxyRouteFixture(body)), { status: 200 })
+    }) as unknown as typeof fetch
+    const days = [day('day-1', 1), day('day-2', 2)]
+    const itemsByDay = {
+      'day-1': [item('a', 35.1, 139.1, 1), item('b', 35.2, 139.2, 2)],
+      'day-2': [
+        { ...item('c', 35.3, 139.3, 1), dayId: 'day-2' },
+        { ...item('d', 35.4, 139.4, 2), dayId: 'day-2' },
+      ],
+    }
+
+    const result = await generateRoutePreviewsForTrip({
+      config: orsConfig,
+      days,
+      fetcher,
+      itemsByDay,
+      targetDayIds: ['day-2'],
+      tripId: 'trip',
+    })
+    const skippedDayIdentity = buildCurrentRouteCacheIdentity({
+      dayId: 'day-1',
+      items: itemsByDay['day-1'],
+      provider: 'openrouteservice',
+      tripId: 'trip',
+    })
+    const generatedDayIdentity = buildCurrentRouteCacheIdentity({
+      dayId: 'day-2',
+      items: itemsByDay['day-2'],
+      provider: 'openrouteservice',
+      tripId: 'trip',
+    })
+
+    expect(result.generatedCount).toBe(1)
+    expect(result.previewCacheSaved).toBe(false)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(await peekRouteCache(skippedDayIdentity.signature)).toBeNull()
+    expect(await peekRouteCache(generatedDayIdentity.signature)).not.toBeNull()
+  })
+
   it('preserves successful days when a later day fails', async () => {
     const fetcher = vi
       .fn()

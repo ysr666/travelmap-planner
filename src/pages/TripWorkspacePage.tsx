@@ -6,6 +6,7 @@ import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenera
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TripDailyTravelTipCard } from '../components/trip/TripDailyTravelTipCard'
+import { TripReadinessCenterPanel } from '../components/trip/TripReadinessCenterPanel'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePanel'
@@ -27,11 +28,15 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
+import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
 import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../lib/routeGeneration'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
 import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
-import type { Day, TicketMeta } from '../types'
+import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/cloudSyncQueueSummary'
+import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
+import { buildTripReadinessModel } from '../lib/tripReadiness'
+import type { Day, TicketBlobSyncState, TicketMeta } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -57,10 +62,13 @@ export function TripWorkspacePage() {
   const [isGeneratingDays, setIsGeneratingDays] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
+  const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncState[]>([])
+  const [cloudSyncQueueSummary, setCloudSyncQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
   const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
+  const [readinessDataVersion, setReadinessDataVersion] = useState(0)
   const [routeGenerationConfirmOpen, setRouteGenerationConfirmOpen] = useState(false)
   const [routeGenerationLoading, setRouteGenerationLoading] = useState(false)
   const [routeGenerationResult, setRouteGenerationResult] = useState<RouteGenerationBatchResult | null>(null)
@@ -97,15 +105,21 @@ export function TripWorkspacePage() {
         }),
       ),
       listTicketsByTrip(trip.id),
-    ]).then(([entries, tickets]) => {
+      listTicketBlobSyncStatesByTrip(trip.id),
+      getCloudSyncQueueSummary(trip.id),
+    ]).then(([entries, tickets, blobSyncStates, syncSummary]) => {
       if (!cancelled) {
         setItemsByDay(Object.fromEntries(entries))
         setTicketMetas(tickets)
+        setTicketBlobSyncStates(blobSyncStates)
+        setCloudSyncQueueSummary(syncSummary)
         setLoadedTripContextKey(currentTripContextKey)
       }
     }).catch(() => {
       if (!cancelled) {
         setTicketMetas([])
+        setTicketBlobSyncStates([])
+        setCloudSyncQueueSummary(null)
         setLoadedTripContextKey('')
       }
       // Trip Home can still render without aggregate item counts.
@@ -114,7 +128,7 @@ export function TripWorkspacePage() {
     return () => {
       cancelled = true
     }
-  }, [days, isLoading, setItemsByDay, trip, tripContextKey])
+  }, [days, isLoading, readinessDataVersion, setItemsByDay, trip, tripContextKey])
 
   useEffect(() => {
     function refreshRoutePreparation() {
@@ -195,6 +209,50 @@ export function TripWorkspacePage() {
     return tripContext && tripCheckResult ? buildTripBrief(tripContext, tripCheckResult) : null
   }, [tripCheckResult, tripContext])
 
+  const dailyTipModel = useMemo(() => {
+    if (!trip || !tripCheckResult) {
+      return null
+    }
+    return buildTripDailyTravelTip({
+      days,
+      itemsByDay,
+      routePreparation,
+      trip,
+      tripCheck: tripCheckResult,
+    })
+  }, [days, itemsByDay, routePreparation, trip, tripCheckResult])
+
+  const readinessModel = useMemo(() => {
+    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
+      return null
+    }
+    return buildTripReadinessModel({
+      allItems,
+      cloudSummary: cloudSyncQueueSummary,
+      dailyTipModel,
+      days,
+      itemsByDay,
+      routePreparation,
+      ticketBlobSyncStates,
+      tickets: ticketMetas,
+      trip,
+      tripCheck: tripCheckResult,
+    })
+  }, [
+    allItems,
+    cloudSyncQueueSummary,
+    dailyTipModel,
+    days,
+    itemsByDay,
+    loadedTripContextKey,
+    routePreparation,
+    ticketBlobSyncStates,
+    ticketMetas,
+    trip,
+    tripCheckResult,
+    tripContextKey,
+  ])
+
   async function handleGenerateDays() {
     if (!trip) {
       return
@@ -258,6 +316,14 @@ export function TripWorkspacePage() {
     }
     if (hasPostImportRoutePrompt) {
       navigateTo('trip', { tripId: trip.id })
+    }
+  }
+
+  async function handleReadinessChanged(options: { refreshTripData?: boolean } = {}) {
+    setReadinessDataVersion((version) => version + 1)
+    setRoutePreparationVersion((version) => version + 1)
+    if (options.refreshTripData) {
+      await refresh()
     }
   }
 
@@ -386,6 +452,19 @@ export function TripWorkspacePage() {
               </div>
             </section>
 
+            {readinessModel ? (
+              <TripReadinessCenterPanel
+                allItems={allItems}
+                dailyTipModel={dailyTipModel}
+                days={days}
+                itemsByDay={itemsByDay}
+                key={trip.id}
+                model={readinessModel}
+                onChanged={handleReadinessChanged}
+                trip={trip}
+              />
+            ) : null}
+
             <DailyItineraryList
               days={days}
               itemsByDay={itemsByDay}
@@ -475,9 +554,11 @@ export function TripWorkspacePage() {
               </Card>
             ) : null}
 
-            <Collapsible title="同步与归档">
-              <TravelBackupPanel trip={trip} />
-            </Collapsible>
+            <div id="trip-sync-archive-section">
+              <Collapsible title="同步与归档">
+                <TravelBackupPanel trip={trip} />
+              </Collapsible>
+            </div>
           </div>
         </div>
       )}
@@ -589,7 +670,7 @@ function RoutePreparationPanel({
   const canGenerate = Boolean(preparation?.canGenerate && !submitting)
 
   return (
-    <Card className="space-y-3" data-testid="route-preparation-panel" variant="grouped">
+    <Card className="space-y-3" data-testid="route-preparation-panel" id="route-preparation-panel" variant="grouped">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

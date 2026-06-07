@@ -90,6 +90,45 @@ vi.mock('../lib/travelBrief', () => ({
   buildTripBrief: vi.fn(() => ''),
 }))
 
+vi.mock('../lib/cloudSyncQueueSummary', () => ({
+  getCloudSyncQueueSummary: vi.fn().mockResolvedValue({
+    conflictCount: 0,
+    dirtyTripCount: 0,
+    errorObjectCount: 0,
+    pendingObjectCount: 0,
+    syncItemCount: 0,
+    syncingObjectCount: 0,
+    ticketDeletedCount: 0,
+    ticketErrorCount: 0,
+    ticketPendingCount: 0,
+    ticketUploadingCount: 0,
+    tickets: [],
+  }),
+}))
+
+vi.mock('../lib/objectSyncLocal', () => ({
+  listTicketBlobSyncStatesByTrip: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('../lib/tripReadiness', () => ({
+  buildTripReadinessModel: vi.fn(() => ({
+    issues: [],
+    summary: {
+      fixableCount: 0,
+      highRiskCount: 0,
+      message: 'ok',
+      selectedCount: 0,
+      status: 'ready',
+      statusLabel: '可出行',
+      totalCount: 0,
+    },
+  })),
+}))
+
+vi.mock('../components/trip/TripReadinessCenterPanel', () => ({
+  TripReadinessCenterPanel: () => <div data-testid="trip-readiness-center-panel" />,
+}))
+
 vi.mock('../lib/routeGeneration', () => ({
   generateRoutePreviewsForTrip: vi.fn().mockResolvedValue({ results: [] }),
 }))

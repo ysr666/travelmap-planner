@@ -140,6 +140,7 @@ export async function generateRoutePreviewsForTrip({
   fetcher,
   itemsByDay,
   signal,
+  targetDayIds,
   tripId,
 }: {
   config: RoutingConfig
@@ -147,6 +148,7 @@ export async function generateRoutePreviewsForTrip({
   fetcher?: typeof fetch
   itemsByDay: Record<string, ItineraryItem[]>
   signal?: AbortSignal
+  targetDayIds?: string[]
   tripId: string
 }): Promise<RouteGenerationBatchResult> {
   const provider = getPersistentRouteProvider(config)
@@ -168,10 +170,15 @@ export async function generateRoutePreviewsForTrip({
     tripId,
   })
   const outcomes: RouteGenerationDayOutcome[] = []
+  const targetDayIdSet = targetDayIds ? new Set(targetDayIds) : null
 
   for (const routeDay of preparation.days) {
     if (signal?.aborted) {
       break
+    }
+
+    if (targetDayIdSet && !targetDayIdSet.has(routeDay.day.id)) {
+      continue
     }
 
     if (routeDay.status === 'cached' && routeDay.cacheEntry) {
@@ -205,7 +212,7 @@ export async function generateRoutePreviewsForTrip({
     }
   }
 
-  const previewCacheSaved = await saveTripPreviewCacheFromOutcomes({
+  const previewCacheSaved = targetDayIdSet ? false : await saveTripPreviewCacheFromOutcomes({
     days,
     itemsByDay,
     outcomes,

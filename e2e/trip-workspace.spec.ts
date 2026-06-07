@@ -1751,6 +1751,368 @@ test('Trip Home 智能整理分阶段失败后可单独重新生成路线顺序'
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 出行前检查先预览再批量修复低风险项', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => {
+    const fixedNow = new Date('2026-06-05T10:00:00+08:00').valueOf()
+    const RealDate = Date
+    class MockDate extends RealDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(fixedNow)
+        } else {
+          super(args[0] as string | number | Date)
+        }
+      }
+
+      static now() {
+        return fixedNow
+      }
+    }
+    Object.setPrototypeOf(MockDate, RealDate)
+    window.Date = MockDate as DateConstructor
+  })
+  await mockMapStyle(page)
+  await clearTravelDatabase(page)
+  await setRouteProxyConfig(page)
+  await forceSupabaseUnconfigured(page)
+
+  let routePreviewRequests = 0
+  let placeLookupRequests = 0
+  let placeDetailsRequests = 0
+  let travelSearchRequests = 0
+  let contentEnrichmentRequests = 0
+  let dailyTipRequests = 0
+  let cloudRequests = 0
+  let directAiRequests = 0
+
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation === 'route_preview') {
+      routePreviewRequests += 1
+      const coords = body.coordinates ?? [[120.16, 30.25], [121.55, 31.2]]
+      const segments = (body.segments ?? []).map((segment: Record<string, number>, index: number) => ({
+        coordinates: [coords[segment.fromCoordinateIndex] ?? coords[0], coords[segment.toCoordinateIndex] ?? coords[1]],
+        distanceMeters: 1500,
+        durationSeconds: 900,
+        fromItemId: segment.fromItemId,
+        segmentIndex: segment.segmentIndex ?? index,
+        toItemId: segment.toItemId,
+      }))
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'route_preview',
+          provider: 'openrouteservice',
+          route: {
+            lineStrings: segments.map((segment: { coordinates: unknown }) => segment.coordinates),
+            segments,
+            status: 'road',
+            warnings: [],
+          },
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'place_lookup') {
+      placeLookupRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('syncOutbox')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'place_lookup',
+          retrievedAt: '2026-06-05T02:00:00.000Z',
+          results: [{
+            displayName: body.query.includes('绍兴') ? '绍兴古镇' : '西湖风景名胜区',
+            formattedAddress: body.query.includes('绍兴') ? '绍兴古镇' : '杭州西湖',
+            location: body.query.includes('绍兴') ? { lat: 31.2, lng: 121.55 } : { lat: 30.25, lng: 120.16 },
+            placeId: body.query.includes('绍兴') ? 'place-shaoxing' : 'place-west-lake',
+            provider: 'google_places',
+            retrievedAt: '2026-06-05T02:00:00.000Z',
+          }],
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'place_details') {
+      placeDetailsRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          details: {
+            displayName: body.placeId === 'place-shaoxing' ? '绍兴古镇' : '西湖风景名胜区',
+            editorialSummary: '模拟地点简介。',
+            formattedAddress: body.placeId === 'place-shaoxing' ? '绍兴古镇' : '杭州西湖',
+            location: body.placeId === 'place-shaoxing' ? { lat: 31.2, lng: 121.55 } : { lat: 30.25, lng: 120.16 },
+            placeId: body.placeId,
+            provider: 'google_places',
+            regularOpeningHours: { weekdayDescriptions: ['周一至周日 09:00-18:00'] },
+            retrievedAt: '2026-06-05T02:00:00.000Z',
+            websiteUri: 'https://travel.example/place',
+          },
+          ok: true,
+          operation: 'place_details',
+          retrievedAt: '2026-06-05T02:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'travel_search') {
+      travelSearchRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('syncOutbox')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'travel_search',
+          query: body.query,
+          results: [{
+            confidence: 'high',
+            displayUrl: 'travel.example/readiness',
+            domain: 'travel.example',
+            retrievedAt: '2026-06-05T02:00:00.000Z',
+            snippet: '模拟来源：开放时间、票价和出行提示。',
+            sourceType: body.searchType === 'ticket_price' ? 'ticketing' : 'official',
+            title: '出行前检查模拟来源',
+            url: 'https://travel.example/readiness',
+          }],
+          retrievedAt: '2026-06-05T02:00:00.000Z',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'trip_content_enrichment') {
+      contentEnrichmentRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      await route.fulfill({
+        body: JSON.stringify({
+          items: body.items.map((item: { itemId: string; sources: Array<{ id: string }> }) => ({
+            introduction: { sourceIds: [item.sources[0]?.id].filter(Boolean), text: '模拟地点简介。' },
+            itemId: item.itemId,
+            openingHours: { sourceIds: [item.sources[0]?.id].filter(Boolean), text: '09:00-18:00。' },
+            recommendedStay: { basis: 'ai_estimate', durationMinutes: 90, reason: '模拟估算。', text: '建议停留约 1.5 小时' },
+            ticketPrice: { kind: 'admission', sourceIds: [item.sources[0]?.id].filter(Boolean), text: '以现场公告为准。' },
+          })),
+          ok: true,
+          operation: 'trip_content_enrichment',
+          source: 'mock',
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    if (body.operation === 'trip_daily_tip') {
+      dailyTipRequests += 1
+      expect(JSON.stringify(body)).not.toContain('ticketBlobs')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      expect(JSON.stringify(body)).not.toContain('syncOutbox')
+      await route.fulfill({
+        body: JSON.stringify({
+          ok: true,
+          operation: 'trip_daily_tip',
+          sections: [
+            { key: 'opening_hours', sourceIds: [body.sources[0]?.id].filter(Boolean), text: '出发前核对开放时间。', title: '开放时间' },
+            { key: 'ticket_price', sourceIds: [body.sources[0]?.id].filter(Boolean), text: '票价以现场公告为准。', title: '票价' },
+          ],
+          source: 'mock',
+          sourceIds: [body.sources[0]?.id].filter(Boolean),
+          summary: '出发前优先核对路线、票据和同步状态。',
+          warnings: [],
+        }),
+        contentType: 'application/json',
+      })
+      return
+    }
+    await route.fulfill({
+      body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+      contentType: 'application/json',
+      status: 501,
+    })
+  })
+  await page.route('**/*.supabase.co/**', (route) => {
+    cloudRequests += 1
+    return route.abort()
+  })
+  await page.route('https://api.deepseek.com/**', (route) => {
+    directAiRequests += 1
+    return route.abort()
+  })
+
+  const now = Date.now()
+  const trip = {
+    createdAt: now,
+    destination: '杭州',
+    endDate: '2026-06-11',
+    id: 'trip-readiness',
+    notes: '原始旅行备注',
+    startDate: '2026-06-10',
+    title: '杭州出行前检查',
+    updatedAt: now,
+  }
+  const pendingTicket = {
+    createdAt: now,
+    fileName: '高铁票.pdf',
+    fileType: 'pdf',
+    id: 'readiness_ticket_pending',
+    mimeType: 'application/pdf',
+    size: 128,
+    storageMode: 'copy',
+    ticketCategory: 'train_ticket',
+    title: '高铁票',
+    tripId: trip.id,
+    updatedAt: now,
+  }
+  const errorTicket = {
+    createdAt: now,
+    fileName: '酒店订单.pdf',
+    fileType: 'pdf',
+    id: 'readiness_ticket_error',
+    mimeType: 'application/pdf',
+    size: 128,
+    storageMode: 'copy',
+    ticketCategory: 'hotel_booking',
+    title: '酒店订单',
+    tripId: trip.id,
+    updatedAt: now,
+  }
+  await seedTravelRecords(page, {
+    trips: [trip],
+    days: [
+      { date: '2026-06-10', id: 'readiness_day_1', sortOrder: 1, title: '第一天', tripId: trip.id },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'readiness_day_1',
+        id: 'readiness_item_missing_coord',
+        locationName: '雷峰塔',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '雷峰塔门票',
+        tripId: trip.id,
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'readiness_day_1',
+        endTime: '09:30',
+        id: 'readiness_item_west_lake',
+        lat: 30.25,
+        lng: 120.16,
+        locationName: '西湖',
+        previousTransportMode: 'walk',
+        sortOrder: 2,
+        startTime: '09:00',
+        ticketIds: [],
+        title: '西湖',
+        tripId: trip.id,
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'readiness_day_1',
+        id: 'readiness_item_far',
+        lat: 31.2,
+        lng: 121.55,
+        locationName: '绍兴古镇',
+        previousTransportMode: 'car',
+        sortOrder: 3,
+        startTime: '09:40',
+        ticketIds: [],
+        title: '绍兴古镇',
+        tripId: trip.id,
+        updatedAt: now,
+      },
+    ],
+    ticketMetas: [pendingTicket, errorTicket],
+  })
+  await seedReadinessSyncState(page, { errorTicket, pendingTicket, trip })
+
+  await page.goto('/#/trip?tripId=trip-readiness&dayId=readiness_day_1', { waitUntil: 'domcontentloaded' })
+  const panel = page.getByTestId('trip-readiness-center-panel')
+  await expect(panel).toBeVisible()
+  await expect(panel.getByTestId('trip-readiness-status')).toContainText('高风险')
+  await expect(panel).toContainText('缺少地点坐标')
+  await expect(panel).toContainText('缺少路线预览')
+  await expect(panel).toContainText('可能缺少票据')
+  await expect(panel).toContainText('票据等待同步')
+  await expect(panel).toContainText('票据同步失败')
+  await expect(panel).toContainText('缺少出行信息')
+  await expect(panel).toContainText('路线距离高风险')
+  await expect(panel).toContainText(/行程间隔偏短|缺少交通耗时/)
+  await expect(panel).toContainText('缺少每日旅行提示')
+  await expect(panel).toContainText('云同步存在风险')
+  expect(await panel.getByTestId('trip-readiness-issue').evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-issue-type')),
+  )).toEqual(expect.arrayContaining([
+    'cloud_sync_pending',
+    'daily_tip_missing',
+    'missing_content',
+    'missing_coordinate',
+    'missing_route',
+    'missing_ticket',
+    'route_long_distance',
+    'ticket_unsynced',
+    'time_conflict',
+  ]))
+  expect(routePreviewRequests).toBe(0)
+  expect(placeLookupRequests).toBe(0)
+  expect(placeDetailsRequests).toBe(0)
+  expect(travelSearchRequests).toBe(0)
+  expect(contentEnrichmentRequests).toBe(0)
+  expect(dailyTipRequests).toBe(0)
+  expect(cloudRequests).toBe(0)
+  expect(directAiRequests).toBe(0)
+
+  await panel.getByTestId('trip-readiness-batch-button').click()
+  const confirmDialog = page.getByTestId('trip-readiness-repair-confirm-dialog')
+  await expect(confirmDialog).toContainText('确认前不会调用')
+  await confirmDialog.getByRole('button', { name: '暂不处理' }).click()
+  expect(routePreviewRequests).toBe(0)
+  expect(placeLookupRequests).toBe(0)
+  expect(contentEnrichmentRequests).toBe(0)
+  expect(dailyTipRequests).toBe(0)
+  expect(await readReadinessDbState(page, trip.id)).toMatchObject({
+    routeCacheCount: 0,
+    notes: '原始旅行备注',
+  })
+
+  await panel.getByTestId('trip-readiness-batch-button').click()
+  await page.getByTestId('trip-readiness-repair-confirm-dialog').getByRole('button', { name: '确认处理' }).click()
+  await expect(panel.getByTestId('trip-readiness-repair-result')).toContainText('已处理 1 天路线缓存')
+  await expect(panel.getByTestId('trip-readiness-content-preview')).toContainText('确认后才会写入')
+  await expect(panel.getByTestId('trip-readiness-daily-tip-preview')).toContainText('确认后写入旅行备注')
+
+  expect(routePreviewRequests).toBe(1)
+  expect(placeLookupRequests).toBeGreaterThan(0)
+  expect(placeDetailsRequests).toBeGreaterThan(0)
+  expect(travelSearchRequests).toBeGreaterThan(0)
+  expect(contentEnrichmentRequests).toBe(1)
+  expect(dailyTipRequests).toBe(1)
+  expect(cloudRequests).toBe(0)
+  expect(directAiRequests).toBe(0)
+
+  const state = await readReadinessDbState(page, trip.id)
+  expect(state.routeCacheCount).toBe(1)
+  expect(state.pendingTicketState?.uploadStatus).toBe('pending')
+  expect(state.pendingTicketState?.lastError).toBeUndefined()
+  expect(state.errorTicketState).toMatchObject({ uploadStatus: 'error' })
+  expect(state.notes).toBe('原始旅行备注')
+  expect(state.westLakeContentEnrichment).toBeUndefined()
+  expect(state.pendingOutboxTypes).toContain('trip')
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Trip Home 内容补充使用 Places 优先来源并在确认后写入结构化字段', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMapStyle(page)
@@ -2250,6 +2612,138 @@ async function readTripNotes(page: import('@playwright/test').Page, tripId: stri
     })
     db.close()
     return notes
+  }, tripId)
+}
+
+async function seedReadinessSyncState(
+  page: import('@playwright/test').Page,
+  input: {
+    errorTicket: { fileName: string; id: string; mimeType: string; size: number; tripId: string }
+    pendingTicket: { fileName: string; id: string; mimeType: string; size: number; tripId: string }
+    trip: { id: string; updatedAt: number }
+  },
+) {
+  await page.evaluate(async ({ errorTicket, pendingTicket, trip }) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['syncOutbox', 'objectSyncStates', 'ticketBlobSyncStates', 'ticketBlobs'], 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入出行前检查同步状态失败'))
+      transaction.onabort = () => reject(transaction.error ?? new Error('写入出行前检查同步状态中断'))
+      const objectKey = `trip:${trip.id}`
+      transaction.objectStore('syncOutbox').put({
+        attempts: 0,
+        createdAt: Date.now(),
+        deviceId: 'e2e-device',
+        id: 'sync_outbox_readiness',
+        objectId: trip.id,
+        objectKey,
+        objectType: 'trip',
+        operation: 'upsert',
+        opId: 'op_readiness',
+        payload: trip,
+        status: 'pending',
+        tripId: trip.id,
+        updatedAt: Date.now(),
+        updatedAtMs: trip.updatedAt,
+      })
+      transaction.objectStore('objectSyncStates').put({
+        localUpdatedAtMs: trip.updatedAt,
+        objectId: trip.id,
+        objectKey,
+        objectType: 'trip',
+        tripId: trip.id,
+      })
+      transaction.objectStore('ticketBlobs').put({
+        blob: new Blob(['pending ticket'], { type: pendingTicket.mimeType }),
+        ticketId: pendingTicket.id,
+      })
+      transaction.objectStore('ticketBlobSyncStates').put({
+        cacheStatus: 'cached',
+        fileName: pendingTicket.fileName,
+        lastError: '之前等待上传',
+        mimeType: pendingTicket.mimeType,
+        size: pendingTicket.size,
+        ticketId: pendingTicket.id,
+        tripId: pendingTicket.tripId,
+        updatedAt: Date.now(),
+        uploadStatus: 'pending',
+      })
+      transaction.objectStore('ticketBlobSyncStates').put({
+        cacheStatus: 'cached',
+        fileName: errorTicket.fileName,
+        lastError: '模拟上传失败',
+        mimeType: errorTicket.mimeType,
+        size: errorTicket.size,
+        ticketId: errorTicket.id,
+        tripId: errorTicket.tripId,
+        updatedAt: Date.now(),
+        uploadStatus: 'error',
+      })
+    })
+  }, input)
+}
+
+async function readReadinessDbState(page: import('@playwright/test').Page, tripId: string) {
+  return page.evaluate(async (currentTripId) => {
+    async function openDb(name: string) {
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(name)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    function get<T>(db: IDBDatabase, storeName: string, key: IDBValidKey) {
+      return new Promise<T | undefined>((resolve, reject) => {
+        const request = db.transaction([storeName], 'readonly').objectStore(storeName).get(key)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    function getAll<T>(db: IDBDatabase, storeName: string) {
+      return new Promise<T[]>((resolve, reject) => {
+        const request = db.transaction([storeName], 'readonly').objectStore(storeName).getAll()
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    function count(db: IDBDatabase, storeName: string) {
+      return new Promise<number>((resolve, reject) => {
+        if (!db.objectStoreNames.contains(storeName)) {
+          resolve(0)
+          return
+        }
+        const request = db.transaction([storeName], 'readonly').objectStore(storeName).count()
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    const travelDb = await openDb('TravelConsoleDB')
+    const databases = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : []
+    const hasRouteCacheDb = databases.some((database) => database.name === 'TripMapRouteCacheDB')
+    const trip = await get<{ notes?: string }>(travelDb, 'trips', currentTripId)
+    const westLake = await get<{ contentEnrichment?: unknown }>(travelDb, 'itineraryItems', 'readiness_item_west_lake')
+    const ticketStates = await getAll<{ lastError?: string; ticketId: string; uploadStatus: string }>(travelDb, 'ticketBlobSyncStates')
+    const outbox = await getAll<{ objectType: string; status: string }>(travelDb, 'syncOutbox')
+    const routeDb = hasRouteCacheDb ? await openDb('TripMapRouteCacheDB') : null
+    const routeCacheCount = routeDb ? await count(routeDb, 'routeCaches') : 0
+    travelDb.close()
+    routeDb?.close()
+    return {
+      errorTicketState: ticketStates.find((state) => state.ticketId === 'readiness_ticket_error'),
+      notes: trip?.notes,
+      pendingOutboxTypes: outbox.filter((entry) => entry.status === 'pending').map((entry) => entry.objectType),
+      pendingTicketState: ticketStates.find((state) => state.ticketId === 'readiness_ticket_pending'),
+      routeCacheCount,
+      westLakeContentEnrichment: westLake?.contentEnrichment,
+    }
   }, tripId)
 }
 

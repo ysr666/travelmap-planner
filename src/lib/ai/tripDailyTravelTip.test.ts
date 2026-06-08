@@ -34,21 +34,21 @@ describe('tripDailyTravelTip', () => {
     expect(selectTripDailyTravelTipTarget({
       days: [seed.day1, seed.day2],
       itemsByDay,
-      now: new Date('2026-06-09T10:00:00+08:00'),
+      now: makeLocalDate('2026-06-09', '10:00'),
       trip: seed.trip,
     }).mode).toBe('pre_trip')
 
     expect(selectTripDailyTravelTipTarget({
       days: [seed.day1, seed.day2],
       itemsByDay,
-      now: new Date('2026-06-10T12:00:00+08:00'),
+      now: makeLocalDate('2026-06-10', '12:00'),
       trip: seed.trip,
     }).mode).toBe('today')
 
     const tomorrow = selectTripDailyTravelTipTarget({
       days: [seed.day1, seed.day2],
       itemsByDay,
-      now: new Date('2026-06-10T20:00:00+08:00'),
+      now: makeLocalDate('2026-06-10', '20:00'),
       trip: seed.trip,
     })
     expect(tomorrow.mode).toBe('tomorrow')
@@ -57,7 +57,7 @@ describe('tripDailyTravelTip', () => {
     expect(selectTripDailyTravelTipTarget({
       days: [seed.day1, seed.day2],
       itemsByDay,
-      now: new Date('2026-06-12T10:00:00+08:00'),
+      now: makeLocalDate('2026-06-12', '10:00'),
       trip: seed.trip,
     }).mode).toBe('completed')
   })
@@ -258,6 +258,12 @@ function searchResponse(results: ProviderProxyTravelSearchSuccessResponse['resul
     retrievedAt: '2026-06-01T00:00:00.000Z',
     source: 'mock',
   }
+}
+
+function makeLocalDate(date: string, time: string) {
+  const [year, month, day] = date.split('-').map(Number)
+  const [hours, minutes] = time.split(':').map(Number)
+  return new Date(year, month - 1, day, hours, minutes)
 }
 
 function makePreview(tripId: string, updatedAt: number): TripDailyTravelTipEnhancedPreview {

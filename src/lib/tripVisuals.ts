@@ -1,4 +1,5 @@
 import type { Trip } from '../types'
+import { formatDateKey } from './dates'
 
 export type TripStatus = 'active' | 'planned' | 'ended' | 'draft'
 
@@ -80,7 +81,3 @@ export function getTripStatus(trip: Trip, now = new Date()): { label: string; st
   }
 }
 
-function formatDateKey(date: Date) {
-  const pad = (value: number) => value.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}

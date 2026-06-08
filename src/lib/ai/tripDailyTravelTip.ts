@@ -1,4 +1,4 @@
-import { formatDateKey, formatShortDateWithWeekday } from '../dates'
+import { formatDateKey, formatShortDateWithWeekday, parseTimeMinutes } from '../dates'
 import { sortItineraryItems } from '../itinerary'
 import { recordTripWriteForSync } from '../tripSyncQueue'
 import { db } from '../../db/database'
@@ -671,21 +671,6 @@ function isHotelEndItem(item: ItineraryItem) {
   ].filter(Boolean).join(' '))
 }
 
-function parseTimeMinutes(value: string | undefined) {
-  if (!value) {
-    return null
-  }
-  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim())
-  if (!match) {
-    return null
-  }
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-  if (hours > 23 || minutes > 59) {
-    return null
-  }
-  return hours * 60 + minutes
-}
 
 function sortDays(days: Day[]) {
   return [...days].sort((first, second) => first.sortOrder - second.sortOrder || first.date.localeCompare(second.date))

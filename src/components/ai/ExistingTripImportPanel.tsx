@@ -205,7 +205,7 @@ export function ExistingTripImportPanel({
   }
 
   return (
-    <Card className="space-y-4" data-testid="existing-trip-import-panel" variant="grouped">
+    <Card className="space-y-4" variant="grouped">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

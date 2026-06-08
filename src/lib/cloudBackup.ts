@@ -16,7 +16,7 @@ import {
 } from './cloudObjectSync'
 import { emitTravelDataChanged } from './dataEvents'
 import { requireSupabaseClient } from './supabaseClient'
-import { formatFileSize, shouldExpectTicketBlob } from './tickets'
+import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
 
 export { getSupabaseConfigStatus } from './supabaseClient'
@@ -858,10 +858,6 @@ export function parseCloudSnapshotText(text: string): CloudTripSnapshot {
 export function validateCloudSnapshotForRestore(snapshot: CloudTripSnapshot, userId: string, backupId: string) {
   validateSnapshotGraph(snapshot)
   validateCloudFileRefPaths(snapshot, userId, backupId)
-}
-
-export function formatCloudBackupSize(size: number) {
-  return formatFileSize(size)
 }
 
 async function buildCloudSnapshotForTrip(tripId: string, userId: string, backupId: string) {

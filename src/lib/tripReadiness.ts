@@ -1,5 +1,7 @@
 import type { TripDailyTravelTipModel } from './ai/tripDailyTravelTip'
 import type { CloudSyncQueueSummary } from './cloudSyncQueueSummary'
+import { parseTimeMinutes } from './dates'
+import { getDistanceMeters } from './dayMapViewport'
 import type { TripRoutePreparation } from './routePreparation'
 import type { TripCheckResult } from './tripCheck'
 import type { Day, ItineraryItem, TicketBlobSyncState, TicketMeta, Trip } from '../types'
@@ -458,7 +460,7 @@ function buildLongDistanceIssues(days: Day[], itemsByDay: Record<string, Itinera
       if (!hasValidCoordinate(previous) || !hasValidCoordinate(current)) {
         continue
       }
-      const distanceMeters = getDistanceMeters(previous.lat, previous.lng, current.lat, current.lng)
+      const distanceMeters = getDistanceMeters([previous.lng, previous.lat], [current.lng, current.lat])
       if (distanceMeters <= MEDIUM_ROUTE_DISTANCE_METERS) {
         continue
       }
@@ -582,22 +584,6 @@ function hasValidCoordinate(item: Pick<ItineraryItem, 'lat' | 'lng'>): item is P
     item.lng <= 180
 }
 
-function getDistanceMeters(
-  firstLat: number,
-  firstLng: number,
-  secondLat: number,
-  secondLng: number,
-) {
-  const radiusMeters = 6_371_000
-  const firstPhi = toRadians(firstLat)
-  const secondPhi = toRadians(secondLat)
-  const deltaPhi = toRadians(secondLat - firstLat)
-  const deltaLambda = toRadians(secondLng - firstLng)
-  const a = Math.sin(deltaPhi / 2) ** 2 +
-    Math.cos(firstPhi) * Math.cos(secondPhi) * Math.sin(deltaLambda / 2) ** 2
-  return radiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
 function hasObviousDistanceTimeConflict(previous: ItineraryItem, current: ItineraryItem, distanceMeters: number) {
   const previousEnd = parseTimeMinutes(previous.endTime)
   const currentStart = parseTimeMinutes(current.startTime)
@@ -630,18 +616,6 @@ function getGapMinutes(previous: ItineraryItem, current: ItineraryItem) {
   return currentStart - previousEnd
 }
 
-function parseTimeMinutes(value: string | undefined) {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value?.trim() ?? '')
-  if (!match) {
-    return null
-  }
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  if (hour > 23 || minute > 59) {
-    return null
-  }
-  return hour * 60 + minute
-}
 
 function sortDays(days: Day[]) {
   return [...days].sort((first, second) => first.sortOrder - second.sortOrder || first.date.localeCompare(second.date))
@@ -651,6 +625,3 @@ function sortItems(items: ItineraryItem[]) {
   return [...items].sort((first, second) => first.sortOrder - second.sortOrder || first.createdAt - second.createdAt)
 }
 
-function toRadians(value: number) {
-  return value * Math.PI / 180
-}

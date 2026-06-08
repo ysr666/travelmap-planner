@@ -1,4 +1,5 @@
 import type { TripContext, TripContextDay, TripContextItem } from './ai/aiTripContext'
+import { parseTimeMinutes } from './dates'
 import { getDenseDayItemLimit } from './travelProfile'
 
 export type TripCheckSeverity = 'info' | 'warning' | 'critical'
@@ -306,20 +307,6 @@ function addFinding(result: MutableTripCheckResult, input: FindingInput) {
   }
 }
 
-function parseTimeMinutes(value: string | undefined) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value?.trim() ?? '')
-  if (!match) {
-    return null
-  }
-
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  if (hour > 23 || minute > 59) {
-    return null
-  }
-
-  return hour * 60 + minute
-}
 
 function severityRank(severity: TripCheckSeverity) {
   if (severity === 'critical') {

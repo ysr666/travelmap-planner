@@ -58,7 +58,7 @@ export function groupCloudBackupsForDisplay(backups: CloudBackupSummary[]): Clou
   return groups.sort((first, second) => parseSnapshotTime(second.latestSnapshotAt) - parseSnapshotTime(first.latestSnapshotAt))
 }
 
-export function sortCloudBackupsBySnapshotTime(backups: CloudBackupSummary[]) {
+function sortCloudBackupsBySnapshotTime(backups: CloudBackupSummary[]) {
   return [...backups].sort((first, second) => getBackupSnapshotTime(second) - getBackupSnapshotTime(first))
 }
 

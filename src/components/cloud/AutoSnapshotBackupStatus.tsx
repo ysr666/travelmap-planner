@@ -40,7 +40,6 @@ export function AutoSnapshotBackupStatus({
   return (
     <p
       className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${view.className}`}
-      data-testid="auto-snapshot-status"
     >
       {view.icon}
       <span className="truncate">{view.text}</span>

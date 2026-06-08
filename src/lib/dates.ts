@@ -33,6 +33,22 @@ export function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+export function parseTimeMinutes(value: string | undefined) {
+  if (!value) {
+    return null
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim())
+  if (!match) {
+    return null
+  }
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) {
+    return null
+  }
+  return hours * 60 + minutes
+}
+
 export function listExpectedTripDates(trip: Trip) {
   return listPlainDateRangeInclusive(trip.startDate, trip.endDate)
 }

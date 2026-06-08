@@ -20,6 +20,7 @@ import {
 import { Button } from '../components/ui/Button'
 import { AppVersion } from '../components/AppVersion'
 import { Card } from '../components/ui/Card'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { CloudBackupPanel } from '../components/cloud/CloudBackupPanel'
 import { Collapsible } from '../components/ui/Collapsible'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
@@ -1648,6 +1649,3 @@ function formatStorageSize(size?: number) {
   return formatFileSize(size)
 }
 
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800 ${className}`} />
-}

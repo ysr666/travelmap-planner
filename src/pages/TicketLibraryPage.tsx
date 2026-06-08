@@ -27,6 +27,7 @@ import {
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
 import { SectionHeader } from '../components/ui/SectionHeader'
+import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { describeItemTime } from '../lib/itinerary'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
@@ -1144,6 +1145,3 @@ function formatStorageSize(size?: number) {
   return formatFileSize(size)
 }
 
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-surface-container dark:bg-surface-container-highest ${className}`} />
-}

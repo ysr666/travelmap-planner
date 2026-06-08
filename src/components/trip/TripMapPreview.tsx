@@ -572,7 +572,6 @@ function RouteOrderSuggestionPanel({
         </div>
         <button
           className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-on-surface ring-1 ring-outline-variant/30 active:scale-[0.98] disabled:opacity-60 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"
-          data-testid="trip-map-route-order-check"
           disabled={state.status === 'loading'}
           onClick={onCheck}
           type="button"
@@ -596,7 +595,6 @@ function RouteOrderSuggestionPanel({
           ) : null}
           <button
             className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white active:scale-[0.98] dark:bg-sky-500 tm-focus"
-            data-testid="trip-map-route-order-apply"
             onClick={onApply}
             type="button"
           >
@@ -606,7 +604,7 @@ function RouteOrderSuggestionPanel({
         </div>
       ) : null}
       {state.status === 'error' || state.status === 'applied' ? (
-        <p className="text-[11px] leading-5 tm-muted" data-testid="trip-map-route-order-message">{state.message}</p>
+        <p className="text-[11px] leading-5 tm-muted">{state.message}</p>
       ) : null}
     </div>
   )

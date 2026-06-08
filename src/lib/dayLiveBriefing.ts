@@ -1,4 +1,4 @@
-import { formatDateKey } from './dates'
+import { formatDateKey, parseTimeMinutes } from './dates'
 import { describeItemTime, sortItineraryItems } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
 import { isTicketLikeItem } from './tripCheck'
@@ -567,18 +567,3 @@ function formatMinutes(minutes: number) {
   return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`
 }
 
-function parseTimeMinutes(value: string | undefined) {
-  if (!value) {
-    return null
-  }
-  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim())
-  if (!match) {
-    return null
-  }
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-  if (hours > 23 || minutes > 59) {
-    return null
-  }
-  return hours * 60 + minutes
-}

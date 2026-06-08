@@ -723,7 +723,6 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       {showBaseLoading ? (
         <div
           className="pointer-events-none absolute left-3 right-3 top-3 z-10 rounded-2xl bg-white/88 px-4 py-3 text-sm font-medium text-slate-600 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80 backdrop-blur"
-          data-testid="map-base-loading"
         >
           正在加载地图底图，本地行程仍可查看。
         </div>

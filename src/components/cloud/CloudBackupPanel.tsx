@@ -19,12 +19,13 @@ import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
 import { SectionHeader } from '../ui/SectionHeader'
+import { SkeletonLine } from '../ui/SkeletonLine'
 import { CloudSnapshotCheckPrompts } from './CloudSnapshotCheckPrompts'
 import { ObjectSyncConflictPanel } from './ObjectSyncConflictPanel'
 import { listTrips } from '../../db'
+import { formatFileSize } from '../../lib/tickets'
 import {
   deleteCloudBackup,
-  formatCloudBackupSize,
   getCurrentUser,
   getSupabaseConfigStatus,
   listCloudBackups,
@@ -399,7 +400,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             </p>
           </div>
         ) : isLoading ? (
-          <div aria-busy="true" className="space-y-2" data-testid="cloud-loading-state" role="status">
+          <div aria-busy="true" className="space-y-2" role="status">
             <p className="text-sm font-semibold text-on-surface-variant">正在读取云端同步状态...</p>
             <SkeletonLine />
             <SkeletonLine className="w-2/3" />
@@ -410,7 +411,6 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             {restoreResult ? <CloudRestoreSuccessCard result={restoreResult} /> : null}
             <div
               className="rounded-xl bg-surface-container-low px-3 py-3 text-sm leading-6 text-on-surface-variant"
-              data-testid="cloud-current-user"
             >
               <p className="text-xs font-semibold text-outline">当前账号</p>
               <p className="break-words font-semibold text-on-surface [overflow-wrap:anywhere]">
@@ -460,7 +460,6 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
               <input
                 aria-label="Supabase 登录邮箱"
                 className="mt-2 h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-sky-200"
-                data-testid="cloud-email-input"
                 inputMode="email"
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
@@ -481,7 +480,6 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
               <input
                 aria-label="Supabase 登录验证码"
                 className="mt-2 h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-sky-200"
-                data-testid="cloud-otp-input"
                 inputMode="numeric"
                 onChange={(event) => setOtp(event.target.value)}
                 placeholder="邮箱中的验证码"
@@ -546,7 +544,6 @@ function CloudRestoreSuccessCard({ result }: { result: RestoreCloudBackupResult 
   return (
     <div
       className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-emerald-900 dark:text-emerald-300"
-      data-testid="cloud-restore-success"
     >
       <div>
         <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">已恢复：{result.title}</p>
@@ -578,7 +575,6 @@ function CloudLoginOnboardingNotice({ copy }: { copy: CloudLoginOnboardingCopy }
   return (
     <div
       className={`rounded-2xl border px-3 py-3 text-sm leading-6 ${toneClassName}`}
-      data-testid="cloud-login-onboarding"
     >
       <p className="font-semibold">{copy.title}</p>
       <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{copy.detail}</p>
@@ -761,7 +757,6 @@ function CloudAutoSyncStatusPanel({
       {view.status === 'conflict' ? (
         <Button
           className="mt-3 min-h-9 w-full text-xs"
-          data-testid="cloud-auto-sync-resolve-conflict"
           icon={<AlertTriangle className="size-4" />}
           onClick={handleShowSyncPrompts}
           variant="secondary"
@@ -932,7 +927,7 @@ function CloudBackupList({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <span className="shrink-0 font-semibold text-outline dark:text-on-surface-variant">附件数量</span>
                     <span className="min-w-0 text-right text-on-surface-variant dark:text-outline-variant">
-                      {backup.filesCount} 个附件 · {formatCloudBackupSize(backup.totalSizeBytes)}
+                      {backup.filesCount} 个附件 · {formatFileSize(backup.totalSizeBytes)}
                     </span>
                   </div>
                 </div>
@@ -1122,10 +1117,6 @@ function CloudNotice({
       <span className="min-w-0 break-words [overflow-wrap:anywhere]">{text}</span>
     </div>
   )
-}
-
-function SkeletonLine({ className = '' }: { className?: string }) {
-  return <div className={`h-4 animate-pulse rounded-full bg-surface-container ${className}`} />
 }
 
 function buildCloudBackupUploadConfirmBody() {

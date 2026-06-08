@@ -145,8 +145,8 @@ describe('DayMapView', () => {
 
   it('renders with items', async () => {
     const items = [
-      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', lat: 35.7148, lng: 139.7967, sortOrder: 1, createdAt: 100, updatedAt: 100 },
-      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', lat: 35.6586, lng: 139.7454, sortOrder: 2, createdAt: 100, updatedAt: 100 },
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', lat: 35.7148, lng: 139.7967, ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', lat: 35.6586, lng: 139.7454, ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
     ]
 
     await act(async () => {

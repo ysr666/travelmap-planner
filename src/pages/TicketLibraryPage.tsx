@@ -712,7 +712,7 @@ export function TicketLibraryPage() {
         <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
           {filterOptions.map((option) => (
             <button
-              className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-semibold ${
+              className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold ${
                 filter === option.value ? 'bg-primary text-white shadow-[0_4px_12px_var(--color-primary-shadow)]' : 'tm-chip'
               }`}
               key={option.value}
@@ -866,7 +866,7 @@ function TicketCard({
 
       <div className="mt-2 flex items-center justify-between gap-2 border-t tm-row pt-2">
         <button
-          className="min-h-8 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
+          className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
           type="button"
         >
@@ -874,7 +874,7 @@ function TicketCard({
         </button>
         <button
           aria-label={`删除${displayTitle}`}
-          className="flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-red-50 active:text-red-600 tm-focus dark:text-on-surface-variant dark:active:bg-red-950/35 dark:active:text-red-300"
+          className="flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-red-50 active:text-red-600 tm-focus dark:text-on-surface-variant dark:active:bg-red-950/35 dark:active:text-red-300"
           onClick={onDelete}
           type="button"
         >
@@ -887,7 +887,7 @@ function TicketCard({
         <div className="mt-2 flex flex-wrap gap-1.5 border-t tm-row pt-2">
           {canClearCache ? (
             <button
-              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
               disabled={busy}
               onClick={onClearCache}
               type="button"
@@ -909,7 +909,7 @@ function TicketCard({
           ) : null}
           {canRetryUpload ? (
             <button
-              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-amber-800 transition active:bg-amber-50 tm-focus disabled:opacity-60 dark:text-amber-300 dark:active:bg-amber-950/35"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-amber-800 transition active:bg-amber-50 tm-focus disabled:opacity-60 dark:text-amber-300 dark:active:bg-amber-950/35"
               disabled={busy}
               onClick={onRetryUpload}
               type="button"

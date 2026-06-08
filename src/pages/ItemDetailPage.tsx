@@ -165,7 +165,7 @@ export function ItemDetailPage() {
       <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl">
         <button
           aria-label="返回上一页"
-          className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          className="flex size-11 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
           onClick={goBackToDay}
           type="button"
         >
@@ -174,7 +174,7 @@ export function ItemDetailPage() {
         <div className="font-headline-md text-headline-md font-bold text-on-surface">详情</div>
         <button
           aria-label="编辑行程点"
-          className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          className="flex size-11 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
           onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
           type="button"
         >

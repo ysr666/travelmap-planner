@@ -454,7 +454,7 @@ export function TripMapPreview({
           </p>
         </div>
         <button
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-surface-container-highest/55 dark:text-outline-variant dark:ring-outline-variant/30/80 tm-focus"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-surface-container-highest/55 dark:text-outline-variant dark:ring-outline-variant/30/80 tm-focus"
           disabled={!data.targetDay}
           onClick={() => {
             if (data.targetDay) {
@@ -571,7 +571,7 @@ function RouteOrderSuggestionPanel({
           <p className="mt-0.5 truncate text-[11px] tm-muted">{day.title} · 仅提供排序建议</p>
         </div>
         <button
-          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-on-surface ring-1 ring-outline-variant/30 active:scale-[0.98] disabled:opacity-60 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-on-surface ring-1 ring-outline-variant/30 active:scale-[0.98] disabled:opacity-60 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"
           disabled={state.status === 'loading'}
           onClick={onCheck}
           type="button"
@@ -594,7 +594,7 @@ function RouteOrderSuggestionPanel({
             </p>
           ) : null}
           <button
-            className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white active:scale-[0.98] dark:bg-sky-500 tm-focus"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white active:scale-[0.98] dark:bg-sky-500 tm-focus"
             onClick={onApply}
             type="button"
           >

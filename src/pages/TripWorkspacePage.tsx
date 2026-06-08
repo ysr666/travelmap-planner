@@ -690,7 +690,7 @@ function RoutePreparationPanel({
           ) : null}
         </div>
         <Button
-          className="min-h-9 shrink-0 px-3 text-xs"
+          className="min-h-11 shrink-0 px-3 text-xs"
           disabled={!canGenerate}
           icon={submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Route className="size-3.5" />}
           loading={submitting}

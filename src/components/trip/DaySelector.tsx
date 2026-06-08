@@ -23,7 +23,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', getDayHr
       <div className={`flex min-w-max ${isCompact ? 'gap-1.5' : 'gap-2'}`}>
         {days.map((day, index) => {
           const active = day.id === selectedDayId
-          const className = `${isCompact ? 'min-h-8 rounded-xl px-2.5' : 'min-h-12 rounded-2xl px-3'} text-left transition active:scale-[0.98] ${
+          const className = `${isCompact ? 'min-h-11 rounded-xl px-2.5' : 'min-h-12 rounded-2xl px-3'} text-left transition active:scale-[0.98] ${
             active
               ? 'bg-primary text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
               : 'tm-surface text-on-surface-variant dark:text-outline-variant'

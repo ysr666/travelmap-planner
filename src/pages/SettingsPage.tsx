@@ -550,7 +550,7 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-section-gap px-4 pb-32 pt-24">
+    <div className="mx-auto max-w-3xl space-y-section-gap px-4 pb-32 pt-24">
       <div className="mb-2">
         <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
           设置
@@ -790,10 +790,10 @@ export function SettingsPage() {
             onCopyPrompt={() => void handleCopyAiPrompt()}
           />
 
-          <p className="pt-1 text-center text-sm">
+          <p className="pt-1 text-center">
             <button
               type="button"
-              className="text-sky-600 underline underline-offset-2 dark:text-sky-400"
+              className="min-h-[44px] px-4 py-2.5 text-sm font-semibold text-sky-600 underline underline-offset-2 dark:text-sky-400"
               onClick={() => navigateTo('ai-draft')}
             >
               打开 AI 生成行程 →
@@ -903,7 +903,7 @@ export function SettingsPage() {
           </div>
         </Card>
       </Collapsible>
-    </main>
+    </div>
   )
 }
 

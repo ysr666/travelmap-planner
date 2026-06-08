@@ -64,12 +64,12 @@ export function DayTimelineView({
         </div>
         <div className="flex shrink-0 gap-2">
           {onSwitchToMap ? (
-            <Button className="min-h-10 px-3 whitespace-nowrap" onClick={onSwitchToMap} variant="secondary">
+            <Button className="min-h-11 px-3 whitespace-nowrap" onClick={onSwitchToMap} variant="secondary">
               地图
             </Button>
           ) : null}
           <Button
-            className="min-h-10 px-3"
+            className="min-h-11 px-3"
             icon={<Plus className="size-4" />}
             onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id, view: sourceView })}
           >
@@ -137,14 +137,14 @@ export function DayTimelineView({
                         </span>
                         <div className="flex gap-2">
                           <Button
-                            className="min-h-9 rounded-xl px-3"
+                            className="min-h-11 rounded-xl px-3"
                             onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
                             variant="secondary"
                           >
                             编辑
                           </Button>
                           <Button
-                            className="min-h-9 rounded-xl px-3"
+                            className="min-h-11 rounded-xl px-3"
                             disabled={deletingItemId === item.id}
                             icon={<Trash2 className="size-4" />}
                             onClick={() => setPendingDeleteItem(item)}
@@ -204,7 +204,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
   return (
     <div className="mt-3 grid grid-cols-2 gap-2">
       <a
-        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-sky-50/80 px-2 text-xs font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-sky-50/80 px-2 text-xs font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
         href={appleUrl}
         rel="noreferrer"
         target="_blank"
@@ -213,7 +213,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
         Apple 路线
       </a>
       <a
-        className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-on-surface dark:text-outline-variant"
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-on-surface dark:text-outline-variant"
         href={googleUrl}
         rel="noreferrer"
         target="_blank"

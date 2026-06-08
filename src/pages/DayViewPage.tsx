@@ -329,7 +329,7 @@ export function DayViewPage() {
       <header className="absolute inset-x-0 top-0 z-50 flex h-14 items-center border-b border-outline-variant/30 bg-surface/80 px-4 backdrop-blur-md">
         <button
           aria-label="总览"
-          className="-ml-2 flex size-10 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
+          className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
           onClick={() => navigateTo('trip', { tripId: trip.id })}
           type="button"
         >
@@ -339,7 +339,7 @@ export function DayViewPage() {
         <button
           aria-expanded={isMoreMenuOpen}
           aria-label="更多操作"
-          className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
+          className="-mr-2 flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
           onClick={() => setIsMoreMenuOpen(true)}
           type="button"
         >
@@ -354,7 +354,7 @@ export function DayViewPage() {
       />
 
       {isMapView ? (
-        <main className="relative h-full min-h-0 w-full overflow-hidden bg-map-bg">
+        <div className="relative h-full min-h-0 w-full overflow-hidden bg-map-bg">
           {hasOpenedMap ? (
             <Suspense fallback={<MapLoadingFallback day={selectedDay} items={items} />}>
               <LazyDayMapView
@@ -389,9 +389,9 @@ export function DayViewPage() {
               selectedDayId={selectedDay.id}
             />
           </div>
-        </main>
+        </div>
       ) : (
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-28 pt-20 app-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-28 pt-20 app-scrollbar">
           <div className="mx-auto w-full max-w-3xl space-y-section-gap">
             <DaySelector
               days={days}
@@ -434,7 +434,7 @@ export function DayViewPage() {
               trip={trip}
             />
           </div>
-        </main>
+        </div>
       )}
     </div>
   )
@@ -508,7 +508,7 @@ function ViewSwitch({
     <div className={`${floating ? 'absolute left-4 top-[72px] z-30 shadow-lg' : 'relative'} rounded-full border border-outline-variant/30 bg-surface/90 p-1 backdrop-blur-xl`}>
       <div className="grid grid-cols-2 gap-1">
         <button
-          className={`flex min-h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
             activeView === 'map' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant'
           }`}
           data-testid="view-switch-map"
@@ -519,7 +519,7 @@ function ViewSwitch({
           地图
         </button>
         <button
-          className={`flex min-h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
             activeView === 'schedule' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant'
           }`}
           data-testid="view-switch-schedule"

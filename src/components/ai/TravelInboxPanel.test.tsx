@@ -117,9 +117,11 @@ const defaultDays = [
   { id: 'day_1', tripId: 'trip_1', date: '2026-04-01', title: '第 1 天', sortOrder: 1, createdAt: 100, updatedAt: 100 },
 ]
 
-const defaultItems = [
-  { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
+const defaultAllItems = [
+  { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
 ]
+
+const defaultTickets: never[] = []
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -151,7 +153,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -168,7 +170,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -185,7 +187,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -204,7 +206,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -225,7 +227,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -246,7 +248,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -267,7 +269,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )
@@ -294,7 +296,7 @@ describe('TravelInboxPanel', () => {
       root?.render(
         <TravelInboxPanel
           days={defaultDays}
-          items={defaultItems}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
           trip={defaultTrip}
         />,
       )

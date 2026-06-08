@@ -2,7 +2,7 @@
 
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SettingsMapsPage } from './SettingsMapsPage'
 
 let container: HTMLDivElement | null = null

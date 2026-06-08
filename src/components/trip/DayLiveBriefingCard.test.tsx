@@ -128,18 +128,18 @@ describe('DayLiveBriefingCard', () => {
     mocks.buildDayLiveBriefing.mockReturnValue({
       targetItem: null,
       currentTimeLabel: '10:00',
-      locationLine: { text: '东京', severity: 'info' },
+      locationLine: { text: '东京', severity: 'info' as const },
       noticeLines: [
-        { text: '10:00 浅草寺', severity: 'info' },
-        { text: '注意时间', severity: 'warning' },
-      ],
+        { text: '10:00 浅草寺', severity: 'info' as const },
+        { text: '注意时间', severity: 'warning' as const },
+      ] as never,
       openingHoursLine: defaultBriefingLine,
       routeRiskLines: [],
-      status: 'active',
+      status: 'active' as const,
       subtitle: '4月1日',
       ticketLine: defaultBriefingLine,
       ticketPriceLine: defaultBriefingLine,
-      timeLine: { text: '10:00 - 18:00', severity: 'info' },
+      timeLine: { text: '10:00 - 18:00', severity: 'info' as const },
       title: '第 1 天',
     })
 
@@ -199,7 +199,7 @@ describe('DayLiveBriefingCard', () => {
 
   it('renders with items', async () => {
     const items = [
-      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
     ]
 
     await act(async () => {
@@ -219,12 +219,6 @@ describe('DayLiveBriefingCard', () => {
   })
 
   it('renders with route day', async () => {
-    const routeDay = {
-      day: defaultDay,
-      status: 'ready' as const,
-      segments: [],
-    }
-
     await act(async () => {
       root?.render(
         <DayLiveBriefingCard
@@ -233,7 +227,6 @@ describe('DayLiveBriefingCard', () => {
           onOpenItem={vi.fn()}
           onOpenMap={vi.fn()}
           onOpenTickets={vi.fn()}
-          routeDay={routeDay}
           trip={defaultTrip}
         />,
       )

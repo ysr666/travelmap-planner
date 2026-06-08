@@ -5,8 +5,17 @@ import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TripDailyTravelTipCard } from './TripDailyTravelTipCard'
 
-const defaultModel = {
-  mode: 'today' as const,
+const defaultModel: {
+  mode: 'today' | 'pre_trip' | 'completed'
+  sections: never[]
+  warnings: string[]
+  title: string
+  subtitle: string
+  searchTargets: never[]
+  targetItems: never[]
+  localSourceSummaries: never[]
+} = {
+  mode: 'today',
   sections: [],
   warnings: [],
   title: '今日行程',

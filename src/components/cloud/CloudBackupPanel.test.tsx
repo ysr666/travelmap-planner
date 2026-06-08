@@ -264,7 +264,8 @@ describe('CloudBackupPanel', () => {
         isGrouped: false,
         latestSnapshotAt: '2026-04-01T10:00:00Z',
         title: '东京旅行',
-      },
+        destination: undefined,
+      } as never,
     ])
 
     await act(async () => {

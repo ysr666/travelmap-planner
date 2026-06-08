@@ -98,7 +98,7 @@ export function HomePage() {
           </div>
           <button
             aria-label="设置"
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors"
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors"
             onClick={() => navigateTo('settings')}
             type="button"
           >

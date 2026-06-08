@@ -614,7 +614,7 @@ function AutoCloudBackupSetting({
         <button
           aria-checked={enabled && configured}
           aria-label="云端自动同步"
-          className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition ${
+          className={`relative mt-0.5 h-11 w-12 shrink-0 rounded-full transition ${
             enabled && configured ? 'bg-sky-500' : 'bg-surface-container-high'
           } disabled:cursor-not-allowed disabled:opacity-60`}
           data-testid="auto-cloud-backup-toggle"
@@ -624,7 +624,7 @@ function AutoCloudBackupSetting({
           type="button"
         >
           <span
-            className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${
+            className={`absolute top-3 size-5 rounded-full bg-white shadow-sm transition ${
               enabled && configured ? 'left-6' : 'left-1'
             }`}
           />

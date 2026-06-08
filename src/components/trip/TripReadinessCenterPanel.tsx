@@ -410,7 +410,7 @@ export function TripReadinessCenterPanel({
                 </p>
               </div>
               <Button
-                className="min-h-9 shrink-0 px-3 text-xs"
+                className="min-h-11 shrink-0 px-3 text-xs"
                 data-testid="trip-readiness-apply-content-button"
                 disabled={contentPreview.items.length === 0 || isApplyingContent}
                 loading={isApplyingContent}
@@ -433,7 +433,7 @@ export function TripReadinessCenterPanel({
                 </p>
               </div>
               <Button
-                className="min-h-9 shrink-0 px-3 text-xs"
+                className="min-h-11 shrink-0 px-3 text-xs"
                 data-testid="trip-readiness-save-daily-tip-button"
                 disabled={isSavingDailyTip}
                 loading={isSavingDailyTip}
@@ -660,7 +660,7 @@ function IssueRow({
               ) : null}
             </div>
             <Button
-              className="min-h-8 shrink-0 px-2 text-xs"
+              className="min-h-11 shrink-0 px-2 text-xs"
               data-testid="trip-readiness-issue-action"
               icon={actionIcon(issue)}
               onClick={() => onAction(issue)}
@@ -719,7 +719,7 @@ function buildRepairConfirmBody(
 }
 
 function statusClassName(status: TripReadinessModel['summary']['status']) {
-  const base = 'inline-flex min-h-8 shrink-0 items-center justify-center rounded-full px-3 text-xs font-semibold'
+  const base = 'inline-flex min-h-11 shrink-0 items-center justify-center rounded-full px-3 text-xs font-semibold'
   if (status === 'ready') {
     return `${base} bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200`
   }

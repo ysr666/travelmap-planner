@@ -13,7 +13,7 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
     <>
       <button
         aria-label="更多"
-        className="flex size-10 items-center justify-center rounded-xl bg-white/88 text-on-surface ring-1 ring-outline-variant/30/80 backdrop-blur active:scale-[0.98]"
+        className="flex size-11 items-center justify-center rounded-xl bg-white/88 text-on-surface ring-1 ring-outline-variant/30/80 backdrop-blur active:scale-[0.98]"
         onClick={() => setOpen(true)}
         type="button"
       >

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getTrip, listDaysByTrip, listItemsByDay } from '../db'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
-import { formatDateKey } from '../lib/dates'
+import { getZonedPlainDate, resolveDayTimeZone } from '../lib/timeZone'
 import type { Day, ItineraryItem, Trip } from '../types'
 
 type UseTripDataOptions = {
@@ -26,7 +26,7 @@ type UseTripDataReturn = {
   refreshItems: () => Promise<void>
 }
 
-export function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null) {
+export function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string | null, now = new Date()) {
   if (days.length === 0) {
     return null
   }
@@ -36,15 +36,14 @@ export function pickSelectedDay(trip: Trip, days: Day[], requestedDayId: string 
     return requestedDay
   }
 
-  const today = formatDateKey(new Date())
-  if (today >= trip.startDate && today <= trip.endDate) {
-    const todayDay = days.find((day) => day.date === today)
-    if (todayDay) {
-      return todayDay
-    }
+  const sortedDays = [...days].sort((a, b) => a.sortOrder - b.sortOrder || a.date.localeCompare(b.date))
+  const todayDay = sortedDays.find((day) => day.date === getZonedPlainDate(now, resolveDayTimeZone(trip, day)))
+  if (todayDay) {
+    return todayDay
   }
 
-  return [...days].sort((a, b) => a.sortOrder - b.sortOrder)[0]
+  const firstFutureDay = sortedDays.find((day) => day.date > getZonedPlainDate(now, resolveDayTimeZone(trip, day)))
+  return firstFutureDay ?? sortedDays[0]
 }
 
 export async function loadTripDataBundle({

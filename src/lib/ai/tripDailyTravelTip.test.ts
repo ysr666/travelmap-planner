@@ -273,6 +273,7 @@ function makePreview(tripId: string, updatedAt: number): TripDailyTravelTipEnhan
       notes: '',
       startDate: '2026-06-10',
       targetDate: '2026-06-10',
+      timeZone: '',
       title: '杭州旅行',
       updatedAt,
     }),

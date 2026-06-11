@@ -856,6 +856,8 @@ export function AiDraftPage() {
         destination: importData.trip.destination,
         startDate: importData.trip.startDate,
         endDate: importData.trip.endDate,
+        timeZone: importData.trip.timeZone,
+        timeZoneSource: importData.trip.timeZone ? 'imported' : undefined,
         notes: dailyTipsNotes,
         createdAt: now,
         updatedAt: now,
@@ -871,6 +873,8 @@ export function AiDraftPage() {
           tripId,
           date: day.date,
           title: day.title ?? `第 ${dayIndex + 1} 天`,
+          timeZone: day.timeZone,
+          timeZoneSource: day.timeZone ? 'imported' : undefined,
           sortOrder: dayIndex,
         })
 
@@ -882,6 +886,9 @@ export function AiDraftPage() {
             title: item.title,
             startTime: item.startTime,
             endTime: item.endTime,
+            startTimeZone: item.startTimeZone,
+            endDate: item.endDate,
+            endTimeZone: item.endTimeZone,
             locationName: item.locationName,
             address: item.address,
             lat: item.lat,

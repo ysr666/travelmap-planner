@@ -1,5 +1,5 @@
 import type { Trip } from '../types'
-import { formatDateKey } from './dates'
+import { getZonedPlainDate, resolveTripTimeZone } from './timeZone'
 
 export type TripStatus = 'active' | 'planned' | 'ended' | 'draft'
 
@@ -57,7 +57,7 @@ export function getTripStatus(trip: Trip, now = new Date()): { label: string; st
     }
   }
 
-  const today = formatDateKey(now)
+  const today = getZonedPlainDate(now, resolveTripTimeZone(trip))
   if (today >= trip.startDate && today <= trip.endDate) {
     return {
       className: 'bg-emerald-50 text-emerald-700 dark:text-emerald-300',
@@ -80,4 +80,3 @@ export function getTripStatus(trip: Trip, now = new Date()): { label: string; st
     status: 'ended',
   }
 }
-

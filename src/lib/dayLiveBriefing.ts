@@ -1,6 +1,12 @@
-import { formatDateKey, parseTimeMinutes } from './dates'
+import { parseTimeMinutes } from './dates'
 import { describeItemTime, sortItineraryItems } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
+import {
+  formatZonedTimeLabel,
+  getZonedPlainDate,
+  resolveDayTimeZone,
+  resolveItemTimeRange,
+} from './timeZone'
 import { isTicketLikeItem } from './tripCheck'
 import type { RoutePreparationDay } from './routePreparation'
 import type { ContentEnrichmentFactSection, Day, ItineraryItem, Trip } from '../types'
@@ -58,7 +64,8 @@ export function buildDayLiveBriefing({
   trip: Trip
 }): DayLiveBriefingModel {
   const orderedItems = sortItineraryItems(items)
-  const currentTimeLabel = formatCurrentTime(now)
+  const dayTimeZone = resolveDayTimeZone(trip, day)
+  const currentTimeLabel = formatZonedTimeLabel(now, dayTimeZone)
   const baseSubtitle = '基于本地行程信息，不包含实时交通或实时开闭园。'
 
   if (orderedItems.length === 0) {
@@ -71,8 +78,27 @@ export function buildDayLiveBriefing({
     })
   }
 
-  const today = formatDateKey(now)
+  const today = getZonedPlainDate(now, dayTimeZone)
+  const selection = selectLiveTarget(orderedItems, now, day, trip)
   if (day.date < today) {
+    if (selection.status === 'in_progress' && selection.targetItem) {
+      return buildItemModel({
+        currentItem: selection.currentItem,
+        currentTimeLabel,
+        day,
+        items: orderedItems,
+        nextItem: selection.nextItem,
+        now,
+        previousItem: selection.previousItem,
+        routeDay,
+        status: selection.status,
+        subtitle: baseSubtitle,
+        targetItem: selection.targetItem,
+        timeText: selection.timeText,
+        title: buildLiveTitle(selection.status, selection.targetItem),
+        trip,
+      })
+    }
     return buildTerminalModel({
       currentTimeLabel,
       status: 'completed',
@@ -99,7 +125,6 @@ export function buildDayLiveBriefing({
     })
   }
 
-  const selection = selectLiveTarget(orderedItems, now)
   if (selection.status === 'completed' || !selection.targetItem) {
     return buildTerminalModel({
       currentTimeLabel,
@@ -128,7 +153,7 @@ export function buildDayLiveBriefing({
   })
 }
 
-function selectLiveTarget(items: ItineraryItem[], now: Date): {
+function selectLiveTarget(items: ItineraryItem[], now: Date, day: Day, trip: Trip): {
   currentItem?: ItineraryItem
   nextItem?: ItineraryItem
   previousItem?: ItineraryItem
@@ -136,40 +161,41 @@ function selectLiveTarget(items: ItineraryItem[], now: Date): {
   targetItem?: ItineraryItem
   timeText: string
 } {
-  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const nowEpochMs = now.getTime()
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]
-    const start = parseTimeMinutes(item.startTime)
-    const end = parseTimeMinutes(item.endTime)
+    const range = resolveItemTimeRange({ day, item, trip })
+    const start = range.startEpochMs
+    const end = range.endEpochMs
     const previousItem = index > 0 ? items[index - 1] : undefined
     const nextItem = items[index + 1]
 
-    if (start !== null && end !== null && start <= nowMinutes && nowMinutes <= end) {
+    if (start !== undefined && end !== undefined && start <= nowEpochMs && nowEpochMs <= end) {
       return {
         currentItem: item,
         nextItem,
         previousItem,
         status: 'in_progress',
         targetItem: item,
-        timeText: `进行中，预计还有 ${formatMinutes(end - nowMinutes)} 结束。`,
+        timeText: `进行中，预计还有 ${formatMinutes(epochMinutesUntil(end, nowEpochMs))} 结束。`,
       }
     }
 
-    if (start !== null && nowMinutes < start) {
+    if (start !== undefined && nowEpochMs < start) {
       return {
         nextItem: item,
         previousItem,
         status: index === 0 ? 'not_started' : 'next_up',
         targetItem: item,
-        timeText: `距离计划开始还有 ${formatMinutes(start - nowMinutes)}。`,
+        timeText: `距离计划开始还有 ${formatMinutes(epochMinutesUntil(start, nowEpochMs))}。`,
       }
     }
 
-    if (start !== null && end === null) {
-      const nextTimedStart = nextItem ? parseTimeMinutes(nextItem.startTime) : null
-      if (nowMinutes >= start && (nextTimedStart === null || nowMinutes < nextTimedStart)) {
-        const lateMinutes = nowMinutes - start
+    if (start !== undefined && end === undefined) {
+      const nextTimedStart = getNextTimedStartEpoch(items, index + 1, day, trip)
+      if (nowEpochMs >= start && (nextTimedStart === undefined || nowEpochMs < nextTimedStart)) {
+        const lateMinutes = Math.max(0, Math.floor((nowEpochMs - start) / 60_000))
         return {
           nextItem: item,
           previousItem,
@@ -199,6 +225,16 @@ function selectLiveTarget(items: ItineraryItem[], now: Date): {
     status: 'completed',
     timeText: '今日行程已结束，可以查看明日安排或回到旅行总览。',
   }
+}
+
+function getNextTimedStartEpoch(items: ItineraryItem[], startIndex: number, day: Day, trip: Trip) {
+  for (let index = startIndex; index < items.length; index += 1) {
+    const start = resolveItemTimeRange({ day, item: items[index], trip }).startEpochMs
+    if (start !== undefined) {
+      return start
+    }
+  }
+  return undefined
 }
 
 function buildItemModel({
@@ -482,7 +518,9 @@ function buildRouteStatusLine({
     return null
   }
 
-  const dayIsRelevant = trip.id === day.tripId && formatDateKey(now) <= day.date && items.length > 0
+  const dayIsRelevant = trip.id === day.tripId &&
+    getZonedPlainDate(now, resolveDayTimeZone(trip, day)) <= day.date &&
+    items.length > 0
   if (!dayIsRelevant) {
     return null
   }
@@ -552,12 +590,6 @@ function dedupeLines(lines: DayLiveBriefingLine[]) {
   })
 }
 
-function formatCurrentTime(now: Date) {
-  const hours = String(now.getHours()).padStart(2, '0')
-  const minutes = String(now.getMinutes()).padStart(2, '0')
-  return `${hours}:${minutes}`
-}
-
 function formatMinutes(minutes: number) {
   if (minutes < 60) {
     return `${minutes} 分钟`
@@ -567,3 +599,6 @@ function formatMinutes(minutes: number) {
   return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`
 }
 
+function epochMinutesUntil(targetEpochMs: number, nowEpochMs: number) {
+  return Math.max(0, Math.ceil((targetEpochMs - nowEpochMs) / 60_000))
+}

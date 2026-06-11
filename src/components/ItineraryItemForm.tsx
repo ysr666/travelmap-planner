@@ -3,15 +3,21 @@ import { ChevronDown, ChevronUp, LocateFixed } from 'lucide-react'
 import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
 import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
+import { isValidPlainDate } from '../lib/plainDate'
+import { getDeviceTimeZone, normalizeTimeZone } from '../lib/timeZone'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
 import { FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTAREA_CLASS, FormField } from './ui/FormField'
 import { PlaceSearchInput, type PlaceResult } from './ui/PlaceSearchInput'
+import { TimeZoneSelect } from './ui/TimeZoneSelect'
 
 export type ItineraryItemFormValue = {
   title: string
   startTime?: string
   endTime?: string
+  startTimeZone?: string
+  endDate?: string
+  endTimeZone?: string
   locationName?: string
   address?: string
   lat?: number
@@ -24,6 +30,8 @@ export type ItineraryItemFormValue = {
 }
 
 type ItineraryItemFormProps = {
+  dayDate?: string
+  defaultTimeZone?: string
   initialItem?: ItineraryItem
   submitLabel: string
   loading?: boolean
@@ -35,11 +43,14 @@ type FormState = {
   title: string
   startTime: string
   endTime: string
+  startTimeZone: string
+  endDate: string
+  endTimeZone: string
   locationName: string
   address: string
   lat: string
   lng: string
-  transportMode: TransportMode
+  transportMode: TransportMode | ''
   previousTransportMode: TransportMode | ''
   previousTransportDurationMinutes: string
   previousTransportNote: string
@@ -48,35 +59,43 @@ type FormState = {
 }
 
 export function ItineraryItemForm({
+  dayDate,
+  defaultTimeZone,
   initialItem,
   submitLabel,
   loading = false,
   onCancel,
   onSubmit,
 }: ItineraryItemFormProps) {
+  const inheritedTimeZone = normalizeTimeZone(defaultTimeZone) ?? getDeviceTimeZone()
   const initialState = useMemo<FormState>(
     () => ({
       title: initialItem?.title ?? '',
       startTime: initialItem?.startTime ?? '',
       endTime: initialItem?.endTime ?? '',
+      startTimeZone: initialItem?.startTimeZone ?? inheritedTimeZone,
+      endDate: initialItem?.endDate ?? dayDate ?? '',
+      endTimeZone: initialItem?.endTimeZone ?? initialItem?.startTimeZone ?? inheritedTimeZone,
       locationName: initialItem?.locationName ?? '',
       address: initialItem?.address ?? '',
       lat: initialItem?.lat?.toString() ?? '',
       lng: initialItem?.lng?.toString() ?? '',
-      transportMode: initialItem?.transportMode ?? 'other',
+      transportMode: initialItem?.transportMode ?? '',
       previousTransportMode: initialItem?.previousTransportMode ?? '',
       previousTransportDurationMinutes: initialItem?.previousTransportDurationMinutes?.toString() ?? '',
       previousTransportNote: initialItem?.previousTransportNote ?? '',
       notes: initialItem?.notes ?? '',
       mapLink: '',
     }),
-    [initialItem],
+    [dayDate, inheritedTimeZone, initialItem],
   )
   const [form, setForm] = useState<FormState>(initialState)
   const [error, setError] = useState<string | null>(null)
   const [parseMessage, setParseMessage] = useState<string | null>(null)
   const googleMapsKeyConfigured = isGoogleMapsConfigured()
   const [showManualCoords, setShowManualCoords] = useState(!googleMapsKeyConfigured)
+  const showTravelTimeZoneFields = isLongDistanceTransportMode(form.transportMode) ||
+    Boolean(initialItem?.startTimeZone || initialItem?.endDate || initialItem?.endTimeZone)
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     setForm((current) => ({
@@ -113,15 +132,36 @@ export function ItineraryItemForm({
       return
     }
 
+    const startTimeZone = normalizeOptional(form.startTimeZone)
+    const endDate = normalizeOptional(form.endDate)
+    const endTimeZone = normalizeOptional(form.endTimeZone)
+    if (showTravelTimeZoneFields) {
+      if (startTimeZone && !normalizeTimeZone(startTimeZone)) {
+        setError('出发时区无效，请使用 IANA 时区，例如 Europe/London')
+        return
+      }
+      if (endTimeZone && !normalizeTimeZone(endTimeZone)) {
+        setError('到达时区无效，请使用 IANA 时区，例如 Asia/Shanghai')
+        return
+      }
+      if (endDate && !isValidPlainDate(endDate)) {
+        setError('到达日期格式无效，请使用 YYYY-MM-DD')
+        return
+      }
+    }
+
     await onSubmit({
       title,
       startTime: normalizeOptional(form.startTime),
       endTime: normalizeOptional(form.endTime),
+      startTimeZone: showTravelTimeZoneFields ? normalizeTimeZone(startTimeZone) : undefined,
+      endDate: showTravelTimeZoneFields ? endDate : undefined,
+      endTimeZone: showTravelTimeZoneFields ? normalizeTimeZone(endTimeZone) : undefined,
       locationName: normalizeOptional(form.locationName),
       address: normalizeOptional(form.address),
       lat,
       lng,
-      transportMode: form.transportMode,
+      transportMode: form.transportMode || undefined,
       previousTransportMode: form.previousTransportMode || undefined,
       previousTransportDurationMinutes,
       previousTransportNote: normalizeOptional(form.previousTransportNote),
@@ -198,11 +238,15 @@ export function ItineraryItemForm({
           onChange={(event) =>
             setForm((current) => ({
               ...current,
-              transportMode: event.target.value as TransportMode,
+              endDate: current.endDate || dayDate || '',
+              endTimeZone: current.endTimeZone || inheritedTimeZone,
+              startTimeZone: current.startTimeZone || inheritedTimeZone,
+              transportMode: event.target.value as TransportMode | '',
             }))
           }
           value={form.transportMode}
         >
+          <option value="">未填写</option>
           {transportModeOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -210,6 +254,35 @@ export function ItineraryItemForm({
           ))}
         </select>
       </label>
+      {showTravelTimeZoneFields ? (
+        <section className="space-y-3 border-t tm-row pt-4">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">跨时区时间</h4>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <TimeZoneSelect
+              description="出发或开始时间所在时区"
+              label="出发时区"
+              onChange={(value) => setForm((current) => ({ ...current, startTimeZone: value }))}
+              source="manual"
+              value={form.startTimeZone}
+            />
+            <FormField
+              label="到达日期"
+              onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
+              type="date"
+              value={form.endDate}
+            />
+            <TimeZoneSelect
+              description="到达或结束时间所在时区"
+              label="到达时区"
+              onChange={(value) => setForm((current) => ({ ...current, endTimeZone: value }))}
+              source="manual"
+              value={form.endTimeZone}
+            />
+          </div>
+        </section>
+      ) : null}
       <section className="space-y-3 border-t tm-row pt-4">
         <div>
           <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">从上一站到此处</h4>
@@ -394,4 +467,8 @@ function validateCoordinates(lat?: number, lng?: number) {
 
 function validateDuration(duration?: number) {
   return duration === undefined || (Number.isFinite(duration) && duration >= 0)
+}
+
+function isLongDistanceTransportMode(mode: TransportMode | '') {
+  return mode === 'flight' || mode === 'train' || mode === 'other'
 }

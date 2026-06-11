@@ -54,6 +54,24 @@ describe('object sync field merge', () => {
     }
   })
 
+  it('tracks item time zone fields during conflict detection', () => {
+    const base = buildItem({ startTimeZone: 'Europe/London' })
+    const local = buildItem({ ...base, startTimeZone: 'Europe/Paris', endDate: '2026-06-11' })
+    const remote = buildItem({ ...base, startTimeZone: 'Asia/Shanghai' })
+
+    const result = mergeObjectPayloadFields({
+      basePayload: base,
+      localPayload: local,
+      objectType: 'item',
+      remotePayload: remote,
+    })
+
+    expect(result.status).toBe('conflict')
+    if (result.status === 'conflict') {
+      expect(result.conflicts.map((field) => field.fieldPath)).toEqual(['startTimeZone'])
+    }
+  })
+
   it('auto merges append-only notes', () => {
     const base: Trip = {
       createdAt: 1,

@@ -349,7 +349,12 @@ describe('parseTripPlanFile', () => {
 describe('buildTripPlanRecords', () => {
   it('keeps plain dates and local wall-clock times unchanged in records', () => {
     const pkg = basicPackage()
+    pkg.trip.timeZone = 'Asia/Tokyo'
+    pkg.days[0].timeZone = 'Europe/London'
     pkg.days[0].items[0].endTime = '16:30'
+    pkg.days[0].items[0].startTimeZone = 'Europe/London'
+    pkg.days[0].items[0].endDate = '2026-04-11'
+    pkg.days[0].items[0].endTimeZone = 'Asia/Shanghai'
 
     const records = buildTripPlanRecords(pkg, {
       createIdFn: makeIdFactory(),
@@ -360,8 +365,13 @@ describe('buildTripPlanRecords', () => {
     expect(records.trip.startDate).toBe('2026-04-10')
     expect(records.trip.endDate).toBe('2026-04-11')
     expect(records.days[0].date).toBe('2026-04-10')
+    expect(records.trip.timeZone).toBe('Asia/Tokyo')
+    expect(records.days[0].timeZone).toBe('Europe/London')
     expect(records.itineraryItems[0].startTime).toBe('15:00')
     expect(records.itineraryItems[0].endTime).toBe('16:30')
+    expect(records.itineraryItems[0].startTimeZone).toBe('Europe/London')
+    expect(records.itineraryItems[0].endDate).toBe('2026-04-11')
+    expect(records.itineraryItems[0].endTimeZone).toBe('Asia/Shanghai')
   })
 
   it('builds records with deterministic ids and resolves ticket bindings', () => {

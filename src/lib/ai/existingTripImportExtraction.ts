@@ -269,13 +269,13 @@ async function loadOcrLanguage(language: ExistingTripImportOcrLanguage): Promise
 
 async function resolveDefaultOcrLanguageUrl(language: ExistingTripImportOcrLanguage) {
   if (language === 'eng') {
-    return (await import('@tesseract.js-data/eng/4.0.0/eng.traineddata.gz?url')).default
+    return (await import('@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz?url')).default
   }
   if (language === 'chi_sim') {
-    return (await import('@tesseract.js-data/chi_sim/4.0.0/chi_sim.traineddata.gz?url')).default
+    return (await import('@tesseract.js-data/chi_sim/4.0.0_best_int/chi_sim.traineddata.gz?url')).default
   }
   if (language === 'chi_tra') {
-    return (await import('@tesseract.js-data/chi_tra/4.0.0/chi_tra.traineddata.gz?url')).default
+    return (await import('@tesseract.js-data/chi_tra/4.0.0_best_int/chi_tra.traineddata.gz?url')).default
   }
   return `https://tessdata.projectnaptha.com/4.0.0_fast/${language}.traineddata.gz`
 }

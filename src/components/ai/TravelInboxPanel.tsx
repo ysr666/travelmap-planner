@@ -790,6 +790,7 @@ function buildProviderRequest({
       date: day.date,
       id: day.id,
       sortOrder: day.sortOrder,
+      timeZone: day.timeZone,
       title: day.title,
     })),
     existingTicketSummaries: buildTravelInboxProviderTicketSummaries(ticketSummaries),
@@ -797,13 +798,16 @@ function buildProviderRequest({
       address: item.address,
       date: dayById.get(item.dayId)?.date ?? trip.startDate,
       dayId: item.dayId,
+      endDate: item.endDate,
       endTime: item.endTime,
+      endTimeZone: item.endTimeZone,
       id: item.id,
       locationName: item.locationName,
       previousTransportDurationMinutes: item.previousTransportDurationMinutes,
       previousTransportMode: item.previousTransportMode,
       previousTransportNote: item.previousTransportNote,
       startTime: item.startTime,
+      startTimeZone: item.startTimeZone,
       ticketCount: item.ticketIds.length,
       title: item.title,
       transportMode: item.transportMode,
@@ -816,6 +820,7 @@ function buildProviderRequest({
       endDate: trip.endDate,
       id: trip.id,
       startDate: trip.startDate,
+      timeZone: trip.timeZone,
       title: trip.title,
     },
   }
@@ -1051,7 +1056,7 @@ function needsReview(diff: ExistingTripImportDiff, preview: ExistingTripImportPr
 
 function buildMergePatchForPreview(target: ItineraryItem, fields: ExistingTripImportItemFields): ExistingTripImportItemPatch {
   const patch: ExistingTripImportItemPatch = {}
-  for (const key of ['address', 'endTime', 'locationName', 'notes', 'previousTransportMode', 'previousTransportDurationMinutes', 'previousTransportNote', 'startTime', 'transportMode'] as const) {
+  for (const key of ['address', 'endDate', 'endTime', 'endTimeZone', 'locationName', 'notes', 'previousTransportMode', 'previousTransportDurationMinutes', 'previousTransportNote', 'startTime', 'startTimeZone', 'transportMode'] as const) {
     if (fields[key] !== undefined && target[key] === undefined) {
       patch[key] = fields[key] as never
     }
@@ -1120,7 +1125,14 @@ function formatConfidence(confidence: ExistingTripImportDiff['confidence']) {
 
 function describeDiff(diff: ExistingTripImportDiff) {
   if (diff.type === 'create_item') {
-    return [diff.data.fields.startTime, diff.data.fields.title, diff.data.fields.locationName].filter(Boolean).join(' · ')
+    return [
+      diff.data.fields.startTime,
+      diff.data.fields.startTimeZone,
+      diff.data.fields.endDate,
+      diff.data.fields.endTimeZone,
+      diff.data.fields.title,
+      diff.data.fields.locationName,
+    ].filter(Boolean).join(' · ')
   }
   if (diff.type === 'merge_item_fields') {
     return `填补字段：${Object.keys(diff.data.patch).join('、') || '无'}`
@@ -1146,7 +1158,7 @@ function describeDiff(diff: ExistingTripImportDiff) {
     return `${diff.data.startDate} 至 ${diff.data.endDate}`
   }
   if (diff.type === 'create_day') {
-    return diff.data.date
+    return [diff.data.date, diff.data.timeZone].filter(Boolean).join(' · ')
   }
   return ''
 }

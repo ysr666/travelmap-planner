@@ -1,4 +1,5 @@
 export type TransportMode = 'walk' | 'transit' | 'bus' | 'car' | 'train' | 'flight' | 'other'
+export type TimeZoneSource = 'device' | 'provider' | 'manual' | 'imported'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
 export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticket' | 'hotel_booking' | 'restaurant_reservation' | 'transport_booking' | 'other'
@@ -62,6 +63,8 @@ export type Trip = {
   destination: string
   startDate: string
   endDate: string
+  timeZone?: string
+  timeZoneSource?: TimeZoneSource
   notes?: string
   restoredAt?: number
   restoredFromCloudBackupId?: string
@@ -76,6 +79,8 @@ export type Day = {
   tripId: string
   date: string
   title: string
+  timeZone?: string
+  timeZoneSource?: TimeZoneSource
   sortOrder: number
 }
 
@@ -86,6 +91,9 @@ export type ItineraryItem = {
   title: string
   startTime?: string
   endTime?: string
+  startTimeZone?: string
+  endDate?: string
+  endTimeZone?: string
   locationName?: string
   address?: string
   lat?: number

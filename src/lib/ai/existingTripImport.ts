@@ -2,6 +2,8 @@ import { createId } from '../../db/ids'
 import { db } from '../../db/database'
 import { safeFileName } from '../backup'
 import { enqueueObjectUpsert, markTicketBlobPendingUpload } from '../objectSyncLocal'
+import { isValidPlainDate } from '../plainDate'
+import { normalizeTimeZone } from '../timeZone'
 import { recordTripWriteForSync } from '../tripSyncQueue'
 import type { Day, ItineraryItem, TicketBlob, TicketCategory, TicketMeta, TicketScope, TransportMode, Trip } from '../../types'
 
@@ -40,7 +42,9 @@ export type ExistingTripImportProviderCandidateItem = {
   candidateId: string
   confidence?: ExistingTripImportConfidence
   date: string
+  endDate?: string
   endTime?: string
+  endTimeZone?: string
   locationName?: string
   note?: string
   previousTransportDurationMinutes?: number
@@ -49,6 +53,7 @@ export type ExistingTripImportProviderCandidateItem = {
   reason?: string
   sourceIds?: string[]
   startTime?: string
+  startTimeZone?: string
   targetItemId?: string
   title: string
   transportMode?: TransportMode
@@ -77,6 +82,7 @@ export type ExistingTripImportProviderCandidateDay = {
   reason?: string
   sourceIds?: string[]
   targetDayId?: string
+  timeZone?: string
   title?: string
 }
 
@@ -123,7 +129,7 @@ export type ExistingTripImportDiffBase = {
 }
 
 export type ExistingTripImportDiff =
-  | (ExistingTripImportDiffBase & { data: { date: string; tempDayKey: string; title: string }; type: 'create_day' })
+  | (ExistingTripImportDiffBase & { data: { date: string; tempDayKey: string; timeZone?: string; title: string }; type: 'create_day' })
   | (ExistingTripImportDiffBase & { data: { endDate: string; startDate: string }; type: 'update_trip_dates' })
   | (ExistingTripImportDiffBase & { data: { date: string; fields: ExistingTripImportItemFields; targetDayId?: string; tempDayKey?: string; tempItemKey: string }; type: 'create_item' })
   | (ExistingTripImportDiffBase & { data: { patch: ExistingTripImportItemPatch; targetItemId: string }; type: 'merge_item_fields' })
@@ -144,13 +150,16 @@ export type ExistingTripImportPreview = {
 
 export type ExistingTripImportItemFields = {
   address?: string
+  endDate?: string
   endTime?: string
+  endTimeZone?: string
   locationName?: string
   notes?: string
   previousTransportDurationMinutes?: number
   previousTransportMode?: TransportMode
   previousTransportNote?: string
   startTime?: string
+  startTimeZone?: string
   title: string
   transportMode?: TransportMode
 }
@@ -189,7 +198,7 @@ const mergeSimilarityThreshold = 0.58
 export function buildExistingTripImportBaselineFingerprint(context: ExistingTripImportContext) {
   const days = [...context.days]
     .sort((first, second) => first.sortOrder - second.sortOrder || first.date.localeCompare(second.date))
-    .map((day) => [day.id, day.date, day.title, day.sortOrder].join(':'))
+    .map((day) => [day.id, day.date, day.title, day.sortOrder, day.timeZone ?? '', day.timeZoneSource ?? ''].join(':'))
   const items = [...context.items]
     .sort((first, second) => first.dayId.localeCompare(second.dayId) || first.sortOrder - second.sortOrder)
     .map((item) => [
@@ -198,6 +207,9 @@ export function buildExistingTripImportBaselineFingerprint(context: ExistingTrip
       item.title,
       item.startTime ?? '',
       item.endTime ?? '',
+      item.startTimeZone ?? '',
+      item.endDate ?? '',
+      item.endTimeZone ?? '',
       item.locationName ?? '',
       item.address ?? '',
       item.ticketIds.length,
@@ -253,6 +265,9 @@ export function buildExistingTripImportPreview({
       warnings.push(`跳过无效日期建议：${candidate.date}`)
       continue
     }
+    if (candidate.timeZone && !normalizeTimeZone(candidate.timeZone)) {
+      warnings.push(`跳过无效日期时区建议：${candidate.timeZone}`)
+    }
     if (daysByDate.has(date)) continue
     const tempDayKey = `temp-day:${date}`
     tempDayByDate.set(date, tempDayKey)
@@ -263,6 +278,7 @@ export function buildExistingTripImportPreview({
       data: {
         date,
         tempDayKey,
+        timeZone: normalizeTimeZone(candidate.timeZone),
         title: normalizeText(candidate.title) ?? `导入 ${date}`,
       },
       id: `create-day:${candidate.candidateId}`,
@@ -300,6 +316,15 @@ export function buildExistingTripImportPreview({
     const targetDay = daysByDate.get(date)
     const targetItem = resolveTargetItem({ candidate, context, date, itemsById })
     const fields = normalizeItemFields(candidate)
+    if (candidate.startTimeZone && !fields.startTimeZone) {
+      warnings.push(`跳过「${title}」无效出发时区：${candidate.startTimeZone}`)
+    }
+    if (candidate.endDate && !fields.endDate) {
+      warnings.push(`跳过「${title}」无效到达日期：${candidate.endDate}`)
+    }
+    if (candidate.endTimeZone && !fields.endTimeZone) {
+      warnings.push(`跳过「${title}」无效到达时区：${candidate.endTimeZone}`)
+    }
     const sourceIdList = filterSourceIds(candidate.sourceIds, sourceIds)
     const confidence = normalizeConfidence(candidate.confidence)
     const reason = normalizeText(candidate.reason) ?? 'AI 从导入内容中识别到该行程点。'
@@ -529,6 +554,8 @@ export async function applyExistingTripImportPreview({
           date: diff.data.date,
           id,
           sortOrder: Math.max(0, ...days.map((day) => day.sortOrder), ...newDays.map((day) => day.sortOrder)) + 1,
+          timeZone: diff.data.timeZone,
+          timeZoneSource: diff.data.timeZone ? 'imported' : undefined,
           title: diff.data.title,
           tripId,
         })
@@ -854,13 +881,16 @@ function baselineFingerprintIncludesTicketSummaries(fingerprint: string) {
 function normalizeItemFields(candidate: ExistingTripImportProviderCandidateItem): ExistingTripImportItemFields {
   return {
     address: normalizeText(candidate.address),
+    endDate: isValidPlainDate(candidate.endDate) ? candidate.endDate : undefined,
     endTime: normalizeTime(candidate.endTime),
+    endTimeZone: normalizeTimeZone(candidate.endTimeZone),
     locationName: normalizeText(candidate.locationName),
     notes: normalizeText(candidate.note),
     previousTransportDurationMinutes: normalizePositiveInteger(candidate.previousTransportDurationMinutes),
     previousTransportMode: normalizeTransportMode(candidate.previousTransportMode),
     previousTransportNote: normalizeText(candidate.previousTransportNote),
     startTime: normalizeTime(candidate.startTime),
+    startTimeZone: normalizeTimeZone(candidate.startTimeZone),
     title: normalizeText(candidate.title) ?? '未命名行程点',
     transportMode: normalizeTransportMode(candidate.transportMode),
   }
@@ -868,7 +898,7 @@ function normalizeItemFields(candidate: ExistingTripImportProviderCandidateItem)
 
 function buildMergePatch(target: ItineraryItem, fields: ExistingTripImportItemFields): ExistingTripImportItemPatch {
   const patch: ExistingTripImportItemPatch = {}
-  for (const key of ['address', 'endTime', 'locationName', 'previousTransportMode', 'previousTransportDurationMinutes', 'previousTransportNote', 'startTime', 'transportMode'] as const) {
+  for (const key of ['address', 'endDate', 'endTime', 'endTimeZone', 'locationName', 'previousTransportMode', 'previousTransportDurationMinutes', 'previousTransportNote', 'startTime', 'startTimeZone', 'transportMode'] as const) {
     if (fields[key] !== undefined && target[key] === undefined) {
       patch[key] = fields[key] as never
     }

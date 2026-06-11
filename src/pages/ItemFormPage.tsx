@@ -3,7 +3,8 @@ import { ArrowLeft } from 'lucide-react'
 import { createItineraryItem, getDay, getItineraryItem, getTrip, listItemsByDay, updateItineraryItem } from '../db'
 import { ItineraryItemForm, type ItineraryItemFormValue } from '../components/ItineraryItemForm'
 import { getRouteParams, navigateTo, routeFromHash } from '../lib/routes'
-import type { ItineraryItem } from '../types'
+import { resolveDayTimeZone } from '../lib/timeZone'
+import type { Day, ItineraryItem, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 
@@ -17,6 +18,8 @@ export function ItemFormPage() {
   const sourceView = params.get('view') === 'map' ? 'map' : 'schedule'
 
   const [existingItem, setExistingItem] = useState<ItineraryItem | null>(null)
+  const [trip, setTrip] = useState<Trip | null>(null)
+  const [day, setDay] = useState<Day | null>(null)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -56,6 +59,8 @@ export function ItemFormPage() {
       }
 
       setDayItems(items)
+      setTrip(foundTrip)
+      setDay(foundDay)
 
       if (isEdit) {
         if (!itemId) {
@@ -173,6 +178,8 @@ export function ItemFormPage() {
         <div className="page-transition">
           <Card variant="grouped">
             <ItineraryItemForm
+              dayDate={day?.date}
+              defaultTimeZone={trip && day ? resolveDayTimeZone(trip, day) : undefined}
               initialItem={isEdit ? existingItem ?? undefined : undefined}
               loading={isSubmitting}
               onCancel={handleCancel}

@@ -1,5 +1,6 @@
 import type { TransportMode } from '../../types'
 import { isValidPlainDate } from '../plainDate'
+import { normalizeTimeZone } from '../timeZone'
 
 export type AiTripDraftInput = {
   title?: unknown
@@ -14,12 +15,14 @@ export type AiTripDraft = {
   destination: string
   startDate: string
   endDate: string
+  timeZone?: string
   days: AiTripDraftDay[]
 }
 
 export type AiTripDraftDay = {
   date: string
   title?: string
+  timeZone?: string
   tips?: string[]
   items: AiTripDraftItem[]
 }
@@ -32,6 +35,9 @@ export type AiTripDraftItem = {
   lng?: number
   startTime?: string
   endTime?: string
+  startTimeZone?: string
+  endDate?: string
+  endTimeZone?: string
   previousTransportMode?: TransportMode
   previousTransportDurationMinutes?: number
   previousTransportNote?: string
@@ -188,10 +194,12 @@ export function convertAiTripDraftToImportData(draft: AiTripDraft) {
       destination: draft.destination,
       startDate: draft.startDate,
       endDate: draft.endDate,
+      timeZone: draft.timeZone,
     },
     days: draft.days.map((day) => ({
       date: day.date,
       title: day.title,
+      timeZone: day.timeZone,
       items: day.items.map((item) => ({
         title: item.title,
         locationName: item.locationName,
@@ -200,6 +208,9 @@ export function convertAiTripDraftToImportData(draft: AiTripDraft) {
         lng: item.lng,
         startTime: item.startTime,
         endTime: item.endTime,
+        startTimeZone: item.startTimeZone,
+        endDate: item.endDate,
+        endTimeZone: item.endTimeZone,
         previousTransportMode: item.previousTransportMode,
         previousTransportDurationMinutes: item.previousTransportDurationMinutes,
         previousTransportNote: item.previousTransportNote,
@@ -287,14 +298,19 @@ function buildDraft(input: Record<string, unknown>): AiTripDraft {
     destination: normalizeText(input.destination) ?? '',
     startDate: normalizeText(input.startDate) ?? '',
     endDate: normalizeText(input.endDate) ?? '',
+    timeZone: normalizeTimeZone(input.timeZone),
     days: (input.days as unknown[]).map((day) => {
       const d = day as Record<string, unknown>
       return {
         date: normalizeText(d.date) ?? '',
         title: normalizeText(d.title),
+        timeZone: normalizeTimeZone(d.timeZone),
         tips: normalizeStringArray(d.tips),
         items: (d.items as unknown[]).map((item) => {
           const i = item as Record<string, unknown>
+          const endDate = typeof i.endDate === 'string' && isValidPlainDate(i.endDate)
+            ? i.endDate
+            : undefined
           return {
             title: normalizeText(i.title) ?? '',
             locationName: normalizeText(i.locationName),
@@ -303,6 +319,9 @@ function buildDraft(input: Record<string, unknown>): AiTripDraft {
             lng: normalizeNumber(i.lng),
             startTime: normalizeText(i.startTime),
             endTime: normalizeText(i.endTime),
+            startTimeZone: normalizeTimeZone(i.startTimeZone),
+            endDate,
+            endTimeZone: normalizeTimeZone(i.endTimeZone),
             previousTransportMode: isTransportMode(i.previousTransportMode) ? i.previousTransportMode : undefined,
             previousTransportDurationMinutes: normalizeTransportDurationMinutes(i.previousTransportDurationMinutes),
             previousTransportNote: normalizeText(i.previousTransportNote),

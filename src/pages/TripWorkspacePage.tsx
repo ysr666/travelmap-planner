@@ -22,7 +22,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
-import { ensureDaysForTrip, formatDate, formatDateKey, formatDateRange } from '../lib/dates'
+import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
@@ -36,6 +36,7 @@ import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/cloudSyncQueueSummary'
 import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
 import { buildTripReadinessModel } from '../lib/tripReadiness'
+import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
 import type { Day, TicketBlobSyncState, TicketMeta } from '../types'
 
 export function TripWorkspacePage() {
@@ -193,13 +194,16 @@ export function TripWorkspacePage() {
     return buildTripContext({
       days,
       items: allItems,
-      nowPlainDate: formatDateKey(new Date()),
+      nowPlainDate: getZonedPlainDate(
+        new Date(),
+        selectedDay ? resolveDayTimeZone(trip, selectedDay) : resolveTripTimeZone(trip),
+      ),
       profile: getStoredTravelProfile(),
       selectedDayId: selectedDay?.id,
       tickets: ticketMetas,
       trip,
     })
-  }, [allItems, days, loadedTripContextKey, selectedDay?.id, ticketMetas, trip, tripContextKey])
+  }, [allItems, days, loadedTripContextKey, selectedDay, ticketMetas, trip, tripContextKey])
 
   const tripCheckResult = useMemo(() => {
     return tripContext ? analyzeTripContext(tripContext) : null

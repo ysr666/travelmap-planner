@@ -1,6 +1,6 @@
 import { ArrowLeft, CalendarDays, Home, Map as MapIcon, MoreHorizontal, Route, Settings, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { listItemsByDay } from '../db'
+import { listItemsByDay, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { DayLiveBriefingCard } from '../components/trip/DayLiveBriefingCard'
 import { DaySelector } from '../components/trip/DaySelector'
@@ -18,11 +18,13 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildDayBrief } from '../lib/travelBrief'
-import { formatDateKey, formatShortDate } from '../lib/dates'
+import { formatShortDate } from '../lib/dates'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
 import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
-import type { Day, ItineraryItem } from '../types'
+import { getZonedPlainDate, normalizeTimeZone, resolveDayTimeZone } from '../lib/timeZone'
+import { TimeZoneSelect } from '../components/ui/TimeZoneSelect'
+import type { Day, ItineraryItem, Trip } from '../types'
 
 type DayWorkspaceView = 'schedule' | 'map'
 
@@ -63,6 +65,7 @@ export function DayViewPage() {
     isLoading,
     error,
     setItemsByDay,
+    refresh,
     refreshItems,
   } = useTripData({ tripId, dayId: requestedDayId })
 
@@ -301,25 +304,18 @@ export function DayViewPage() {
   const dayDateStr = formatShortWorkspaceDate(selectedDay.date)
   const isMapView = view === 'map'
   const selectedRouteDay = routePreparation?.days.find((routeDay) => routeDay.day.id === selectedDay.id) ?? null
+  const tripContextForDay = buildTripContext({
+    days,
+    items: allItems.length > 0 ? allItems : items,
+    nowPlainDate: getZonedPlainDate(new Date(), resolveDayTimeZone(trip, selectedDay)),
+    profile: getStoredTravelProfile(),
+    selectedDayId: selectedDay.id,
+    tickets: [],
+    trip,
+  })
   const dayBrief = buildDayBrief(
-    buildTripContext({
-      days,
-      items: allItems.length > 0 ? allItems : items,
-      nowPlainDate: formatDateKey(new Date()),
-      profile: getStoredTravelProfile(),
-      selectedDayId: selectedDay.id,
-      tickets: [],
-      trip,
-    }),
-    analyzeTripContext(buildTripContext({
-      days,
-      items: allItems.length > 0 ? allItems : items,
-      nowPlainDate: formatDateKey(new Date()),
-      profile: getStoredTravelProfile(),
-      selectedDayId: selectedDay.id,
-      tickets: [],
-      trip,
-    })),
+    tripContextForDay,
+    analyzeTripContext(tripContextForDay),
     selectedDay.id,
   )
 
@@ -348,8 +344,12 @@ export function DayViewPage() {
       </header>
 
       <DayMoreMenu
+        day={selectedDay}
+        key={`${selectedDay.id}:${selectedDay.timeZone ?? ''}`}
+        onDayUpdated={() => void refresh()}
         onClose={() => setIsMoreMenuOpen(false)}
         open={isMoreMenuOpen}
+        trip={trip}
         tripId={trip.id}
       />
 
@@ -440,9 +440,33 @@ export function DayViewPage() {
   )
 }
 
-function DayMoreMenu({ onClose, open, tripId }: { onClose: () => void; open: boolean; tripId: string }) {
+function DayMoreMenu({
+  day,
+  onClose,
+  onDayUpdated,
+  open,
+  trip,
+  tripId,
+}: {
+  day: Day
+  onClose: () => void
+  onDayUpdated: () => void
+  open: boolean
+  trip: Trip
+  tripId: string
+}) {
+  const [timeZone, setTimeZone] = useState(() => resolveDayTimeZone(trip, day))
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
   function goToTrip() {
     navigateTo('trip', { tripId })
+  }
+
+  function handleClose() {
+    setTimeZone(resolveDayTimeZone(trip, day))
+    setSaveError(null)
+    onClose()
   }
 
   function goToTickets() {
@@ -457,9 +481,44 @@ function DayMoreMenu({ onClose, open, tripId }: { onClose: () => void; open: boo
     navigateTo('home')
   }
 
+  async function handleSaveTimeZone() {
+    const normalized = normalizeTimeZone(timeZone)
+    if (!normalized) {
+      setSaveError('请输入有效 IANA 时区，例如 Europe/Paris')
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await updateDay(day.id, {
+        timeZone: normalized,
+        timeZoneSource: 'manual',
+      })
+      onDayUpdated()
+      handleClose()
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : '保存当天时区失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <BottomSheet maxHeight="min(25rem, calc(100dvh - 2rem))" onClose={onClose} open={open} title="更多操作">
+    <BottomSheet maxHeight="min(25rem, calc(100dvh - 2rem))" onClose={handleClose} open={open} title="更多操作">
       <div className="space-y-1 pb-2" data-testid="day-more-menu">
+        <div className="space-y-3 rounded-xl bg-surface-container-low p-3">
+          <TimeZoneSelect
+            description="默认继承旅行时区，可单独覆盖"
+            label="当天时区"
+            onChange={setTimeZone}
+            source={day.timeZoneSource ?? trip.timeZoneSource}
+            value={timeZone}
+          />
+          {saveError ? <p className="text-xs font-medium text-red-600 dark:text-red-300">{saveError}</p> : null}
+          <Button className="w-full" loading={saving} onClick={() => void handleSaveTimeZone()} variant="secondary">
+            保存当天时区
+          </Button>
+        </div>
         <DayMoreMenuItem icon={<Route className="size-4" />} label="旅行总览" onClick={goToTrip} />
         <DayMoreMenuItem icon={<Ticket className="size-4" />} label="票据库" onClick={goToTickets} />
         <DayMoreMenuItem icon={<Settings className="size-4" />} label="设置" onClick={goToSettings} />

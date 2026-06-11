@@ -3,25 +3,34 @@ import { ArrowLeft } from 'lucide-react'
 import { createTrip, getTrip, updateTrip } from '../db'
 import { ensureDaysForTrip } from '../lib/dates'
 import { getRouteParams, navigateTo, routeFromHash } from '../lib/routes'
-import type { Trip } from '../types'
+import { inferTimeZoneFromPlaceQuery } from '../lib/timeZoneInference'
+import { getDeviceTimeZone, normalizeTimeZone } from '../lib/timeZone'
+import type { TimeZoneSource, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { FIELD_LABEL_CLASS, FIELD_TEXTAREA_CLASS, FormField } from '../components/ui/FormField'
+import { TimeZoneSelect } from '../components/ui/TimeZoneSelect'
 
 type TripFormState = {
   title: string
   destination: string
   startDate: string
   endDate: string
+  timeZone: string
+  timeZoneSource: TimeZoneSource
   notes: string
 }
 
-const initialFormState: TripFormState = {
-  title: '',
-  destination: '',
-  startDate: '',
-  endDate: '',
-  notes: '',
+function createInitialFormState(): TripFormState {
+  return {
+    destination: '',
+    endDate: '',
+    notes: '',
+    startDate: '',
+    timeZone: getDeviceTimeZone(),
+    timeZoneSource: 'device',
+    title: '',
+  }
 }
 
 export function TripFormPage() {
@@ -30,11 +39,13 @@ export function TripFormPage() {
   const isEdit = route === 'trip/edit'
   const tripId = params.get('tripId')
 
-  const [form, setForm] = useState<TripFormState>(initialFormState)
+  const [form, setForm] = useState<TripFormState>(() => createInitialFormState())
   const [isLoading, setIsLoading] = useState(isEdit)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [timeZoneMessage, setTimeZoneMessage] = useState<string | null>(null)
+  const [timeZoneManuallyEdited, setTimeZoneManuallyEdited] = useState(false)
   const [trip, setTrip] = useState<Trip | null>(null)
 
   useEffect(() => {
@@ -54,13 +65,45 @@ export function TripFormPage() {
         destination: found.destination,
         startDate: found.startDate,
         endDate: found.endDate,
+        timeZone: normalizeTimeZone(found.timeZone) ?? getDeviceTimeZone(),
+        timeZoneSource: found.timeZoneSource ?? (found.timeZone ? 'imported' : 'device'),
         notes: found.notes ?? '',
       })
+      setTimeZoneManuallyEdited(found.timeZoneSource === 'manual')
       setIsLoading(false)
     })
 
     return () => { cancelled = true }
   }, [isEdit, tripId])
+
+  useEffect(() => {
+    if (timeZoneManuallyEdited) return
+    const destination = form.destination.trim()
+    if (!destination) return
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      void inferTimeZoneFromPlaceQuery(destination, { signal: controller.signal }).then((result) => {
+        if (controller.signal.aborted) return
+        setForm((current) => {
+          if (current.destination.trim() !== destination) {
+            return current
+          }
+          return {
+            ...current,
+            timeZone: result.timeZone,
+            timeZoneSource: result.source,
+          }
+        })
+        setTimeZoneMessage(result.warning ?? `已按目的地自动设置为 ${result.timeZone}`)
+      })
+    }, 650)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [form.destination, timeZoneManuallyEdited])
 
   if (isEdit && !tripId) {
     return (
@@ -128,6 +171,12 @@ export function TripFormPage() {
       return
     }
 
+    const timeZone = normalizeTimeZone(form.timeZone)
+    if (!timeZone) {
+      setFormError('请填写有效 IANA 时区，例如 Europe/London')
+      return
+    }
+
     setIsSubmitting(true)
     try {
       if (isEdit && tripId && trip) {
@@ -136,6 +185,8 @@ export function TripFormPage() {
           destination: destination || '未填写目的地',
           startDate: form.startDate,
           endDate: form.endDate,
+          timeZone,
+          timeZoneSource: form.timeZoneSource,
           notes: notes || undefined,
         })
         navigateTo('trip', { tripId })
@@ -145,6 +196,8 @@ export function TripFormPage() {
           destination: destination || '未填写目的地',
           startDate: form.startDate,
           endDate: form.endDate,
+          timeZone,
+          timeZoneSource: form.timeZoneSource,
           notes: notes || undefined,
         })
         await ensureDaysForTrip(created)
@@ -198,6 +251,17 @@ export function TripFormPage() {
                 onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
                 placeholder="例如：日本东京"
                 value={form.destination}
+              />
+              <TimeZoneSelect
+                description={timeZoneMessage ?? '用于判断旅行当地的今天和当前时间'}
+                label="默认时区"
+                onChange={(value) => {
+                  setTimeZoneManuallyEdited(true)
+                  setTimeZoneMessage('已手动设置，目的地变化不会自动覆盖。')
+                  setForm((current) => ({ ...current, timeZone: value, timeZoneSource: 'manual' }))
+                }}
+                source={form.timeZoneSource}
+                value={form.timeZone}
               />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField

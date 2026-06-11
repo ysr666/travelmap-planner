@@ -4,6 +4,7 @@ import { importTripPlanRecords } from '../db'
 import { safeFileName } from './backup'
 import { isValidPlainDate } from './plainDate'
 import { isValidExternalUrl } from './tickets'
+import { normalizeTimeZone } from './timeZone'
 import type { Day, ItineraryItem, TicketBlob, TicketMeta, TicketStorageMode, TransportMode, Trip } from '../types'
 
 const SCHEMA_VERSION = 1
@@ -28,6 +29,7 @@ export type TripPlanImportPackage = {
     destination?: string
     startDate: string
     endDate: string
+    timeZone?: string
     notes?: string
   }
   days: TripPlanImportDay[]
@@ -37,6 +39,7 @@ export type TripPlanImportPackage = {
 export type TripPlanImportDay = {
   date: string
   title?: string
+  timeZone?: string
   items: TripPlanImportItem[]
 }
 
@@ -44,6 +47,9 @@ export type TripPlanImportItem = {
   title: string
   startTime?: string
   endTime?: string
+  startTimeZone?: string
+  endDate?: string
+  endTimeZone?: string
   locationName?: string
   address?: string
   lat?: number
@@ -199,6 +205,9 @@ export function validateTripPlanPackage(
     ) {
       errors.push('trip.endDate 不能早于 startDate。')
     }
+    if (pkg.trip.timeZone && !normalizeTimeZone(pkg.trip.timeZone)) {
+      warnings.push(`trip.timeZone 无效，已忽略：${pkg.trip.timeZone}`)
+    }
   }
 
   if (!Array.isArray(pkg.days)) {
@@ -272,6 +281,8 @@ export function buildTripPlanRecords(
     id: tripId,
     notes: normalizeText(pkg.trip.notes),
     startDate: pkg.trip.startDate,
+    timeZone: normalizeTimeZone(pkg.trip.timeZone),
+    timeZoneSource: normalizeTimeZone(pkg.trip.timeZone) ? 'imported' : undefined,
     title: normalizeText(pkg.trip.title) ?? '未命名旅行',
     updatedAt: now,
   }
@@ -286,6 +297,8 @@ export function buildTripPlanRecords(
       date: inputDay.date,
       id: dayId,
       sortOrder: dayIndex + 1,
+      timeZone: normalizeTimeZone(inputDay.timeZone),
+      timeZoneSource: normalizeTimeZone(inputDay.timeZone) ? 'imported' : undefined,
       title: normalizeText(inputDay.title) ?? `第 ${dayIndex + 1} 天`,
       tripId,
     }
@@ -296,7 +309,9 @@ export function buildTripPlanRecords(
         address: normalizeText(inputItem.address),
         createdAt: now,
         dayId,
+        endDate: isValidDateString(inputItem.endDate) ? inputItem.endDate : undefined,
         endTime: normalizeText(inputItem.endTime),
+        endTimeZone: normalizeTimeZone(inputItem.endTimeZone),
         id: createIdFn('item'),
         lat: normalizeNumber(inputItem.lat),
         lng: normalizeNumber(inputItem.lng),
@@ -307,6 +322,7 @@ export function buildTripPlanRecords(
         previousTransportNote: normalizeText(inputItem.previousTransportNote),
         sortOrder: itemIndex + 1,
         startTime: normalizeText(inputItem.startTime),
+        startTimeZone: normalizeTimeZone(inputItem.startTimeZone),
         ticketIds: [],
         title: normalizeText(inputItem.title) ?? '未命名行程点',
         transportMode: inputItem.transportMode,
@@ -616,6 +632,9 @@ function validateDays(
       errors.push(`days[${dayIndex}].items 必须是数组。`)
       return
     }
+    if (day.timeZone && !normalizeTimeZone(day.timeZone)) {
+      warnings.push(`days[${dayIndex}].timeZone 无效，已忽略：${day.timeZone}`)
+    }
 
     summary.itemsCount += day.items.length
     day.items.forEach((item, itemIndex) => {
@@ -652,6 +671,15 @@ function validateItem(
   }
   if (item.endTime && !isValidTimeString(item.endTime)) {
     errors.push(`${prefix}.endTime 应为 HH:mm。`)
+  }
+  if (item.startTimeZone && !normalizeTimeZone(item.startTimeZone)) {
+    warnings.push(`${prefix}.startTimeZone 无效，已忽略：${item.startTimeZone}`)
+  }
+  if (item.endDate && !isValidDateString(item.endDate)) {
+    warnings.push(`${prefix}.endDate 无效，已忽略：${item.endDate}`)
+  }
+  if (item.endTimeZone && !normalizeTimeZone(item.endTimeZone)) {
+    warnings.push(`${prefix}.endTimeZone 无效，已忽略：${item.endTimeZone}`)
   }
   if (item.transportMode && !isTransportMode(item.transportMode)) {
     errors.push(`${prefix}.transportMode 不在允许范围内。`)

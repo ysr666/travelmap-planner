@@ -62,6 +62,32 @@ describe('buildDayLiveBriefing', () => {
     expect(briefing.timeLine.text).toContain('45 分钟')
   })
 
+  it('keeps cross-time-zone transport in progress after the departure day rolls over', () => {
+    const londonTrip: Trip = { ...trip, endDate: '2026-06-11', startDate: '2026-06-10', timeZone: 'Europe/London' }
+    const londonDay: Day = { ...day, date: '2026-06-10' }
+    const flight = makeItem({
+      dayId: londonDay.id,
+      endDate: '2026-06-11',
+      endTime: '17:20',
+      endTimeZone: 'Asia/Shanghai',
+      startTime: '22:30',
+      startTimeZone: 'Europe/London',
+      title: '伦敦飞上海',
+      transportMode: 'flight',
+    })
+
+    const briefing = buildDayLiveBriefing({
+      day: londonDay,
+      items: [flight],
+      now: new Date('2026-06-10T23:00:00.000Z'),
+      trip: londonTrip,
+    })
+
+    expect(briefing.status).toBe('in_progress')
+    expect(briefing.currentItem?.title).toBe('伦敦飞上海')
+    expect(briefing.timeLine.text).toContain('10 小时 20 分钟')
+  })
+
   it('selects the next item between scheduled stops', () => {
     const first = makeItem({ endTime: '09:30', id: 'first', startTime: '08:30', title: '酒店早餐' })
     const second = makeItem({ id: 'second', sortOrder: 2, startTime: '10:00', title: '灵隐寺' })

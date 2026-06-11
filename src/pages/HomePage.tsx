@@ -9,8 +9,9 @@ import {
   listTrips,
 } from '../db'
 import { navigateTo } from '../lib/routes'
-import { formatDateKey, formatDateRange } from '../lib/dates'
+import { formatDateRange } from '../lib/dates'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
+import { getZonedPlainDate, resolveTripTimeZone } from '../lib/timeZone'
 import type { Trip } from '../types'
 import { AppVersion } from '../components/AppVersion'
 import { Button } from '../components/ui/Button'
@@ -257,7 +258,7 @@ function getTripEmoji(trip: Trip): string {
 }
 
 function getTripStatus(trip: Trip): { label: string; className: string } {
-  const today = formatDateKey(new Date())
+  const today = getZonedPlainDate(new Date(), resolveTripTimeZone(trip))
   if (today > trip.endDate) return { label: '已完成', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' }
   if (today >= trip.startDate) return { label: '进行中', className: 'bg-primary/20 text-primary' }
   return { label: '计划中', className: 'bg-surface-container-high text-on-surface-variant' }

@@ -340,6 +340,7 @@ export type ProviderProxyExistingTripImportTripSummary = {
   endDate: string
   id: string
   startDate: string
+  timeZone?: string
   title: string
 }
 
@@ -347,6 +348,7 @@ export type ProviderProxyExistingTripImportDaySummary = {
   date: string
   id: string
   sortOrder?: number
+  timeZone?: string
   title?: string
 }
 
@@ -354,13 +356,16 @@ export type ProviderProxyExistingTripImportItemSummary = {
   address?: string
   date: string
   dayId: string
+  endDate?: string
   endTime?: string
+  endTimeZone?: string
   id: string
   locationName?: string
   previousTransportDurationMinutes?: number
   previousTransportMode?: string
   previousTransportNote?: string
   startTime?: string
+  startTimeZone?: string
   ticketCount?: number
   title: string
   transportMode?: string
@@ -1339,6 +1344,19 @@ function readOptionalString(value: unknown, maxLength: number) {
   return trimmed ? trimmed.slice(0, maxLength) : undefined
 }
 
+function readOptionalTimeZone(value: unknown) {
+  const timeZone = readOptionalString(value, 128)
+  if (!timeZone) {
+    return undefined
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date(0))
+    return timeZone
+  } catch {
+    return undefined
+  }
+}
+
 function readRequiredTrimmedString(value: unknown, maxLength: number) {
   return readOptionalString(value, maxLength) ?? ''
 }
@@ -2267,6 +2285,7 @@ function readExistingTripImportTrip(input: unknown): ProviderProxyExistingTripIm
     endDate,
     id,
     startDate,
+    timeZone: readOptionalTimeZone(record.timeZone),
     title,
   }
 }
@@ -2281,6 +2300,7 @@ function readExistingTripImportDay(input: unknown): ProviderProxyExistingTripImp
     date,
     id,
     sortOrder,
+    timeZone: readOptionalTimeZone(record.timeZone),
     title: readOptionalString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
   }
 }
@@ -2297,18 +2317,25 @@ function readExistingTripImportItem(input: unknown, dayIds: Set<string>): Provid
   if ((startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) || (endTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime))) {
     return null
   }
+  const endDate = readOptionalString(record.endDate, 10)
+  if (endDate && !isValidPlainDate(endDate)) {
+    return null
+  }
   const duration = readOptionalPositiveInteger(record.previousTransportDurationMinutes)
   return {
     address: readOptionalString(record.address, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
     date,
     dayId,
+    endDate,
     endTime,
+    endTimeZone: readOptionalTimeZone(record.endTimeZone),
     id,
     locationName: readOptionalString(record.locationName, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
     previousTransportDurationMinutes: duration !== undefined && duration <= 24 * 60 ? duration : undefined,
     previousTransportMode: readOptionalString(record.previousTransportMode, 40),
     previousTransportNote: readOptionalString(record.previousTransportNote, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD),
     startTime,
+    startTimeZone: readOptionalTimeZone(record.startTimeZone),
     ticketCount: readOptionalPositiveInteger(record.ticketCount),
     title,
     transportMode: readOptionalString(record.transportMode, 40),

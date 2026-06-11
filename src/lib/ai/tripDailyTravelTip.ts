@@ -1,5 +1,10 @@
-import { formatDateKey, formatShortDateWithWeekday, parseTimeMinutes } from '../dates'
+import { formatShortDateWithWeekday } from '../dates'
 import { sortItineraryItems } from '../itinerary'
+import {
+  getZonedPlainDate,
+  resolveDayTimeZone,
+  resolveItemTimeRange,
+} from '../timeZone'
 import { recordTripWriteForSync } from '../tripSyncQueue'
 import { db } from '../../db/database'
 import {
@@ -179,24 +184,21 @@ export function selectTripDailyTravelTipTarget({
   if (sortedDays.length === 0) {
     return { mode: 'completed' }
   }
-  const today = formatDateKey(now)
-  if (today < trip.startDate) {
-    return { mode: 'pre_trip', targetDay: sortedDays[0] }
-  }
-  if (today > trip.endDate) {
-    return { mode: 'completed' }
-  }
-
-  const todayIndex = sortedDays.findIndex((day) => day.date === today)
+  const todayIndex = sortedDays.findIndex((day) => day.date === getZonedPlainDate(now, resolveDayTimeZone(trip, day)))
   if (todayIndex < 0) {
-    const futureDay = sortedDays.find((day) => day.date > today)
-    return futureDay ? { mode: 'tomorrow', targetDay: futureDay } : { mode: 'completed' }
+    const futureDay = sortedDays.find((day) => day.date > getZonedPlainDate(now, resolveDayTimeZone(trip, day)))
+    if (!futureDay) {
+      return { mode: 'completed' }
+    }
+    return futureDay.id === sortedDays[0].id
+      ? { mode: 'pre_trip', targetDay: futureDay }
+      : { mode: 'tomorrow', targetDay: futureDay }
   }
 
   const todayDay = sortedDays[todayIndex]
   const tomorrowDay = sortedDays[todayIndex + 1]
   const todayItems = sortItineraryItems(itemsByDay[todayDay.id] ?? [])
-  if (tomorrowDay && shouldSwitchToTomorrow(todayItems, now)) {
+  if (tomorrowDay && shouldSwitchToTomorrow(todayItems, now, todayDay, trip)) {
     return {
       mode: 'tomorrow',
       targetDay: tomorrowDay,
@@ -218,6 +220,7 @@ export function buildTripDailyTipBaselineFingerprint({
     notes: trip.notes ?? '',
     startDate: trip.startDate,
     targetDate: targetDate ?? '',
+    timeZone: trip.timeZone ?? '',
     title: trip.title,
     updatedAt: trip.updatedAt,
   })
@@ -642,17 +645,14 @@ function getScopedTripCheckFindings(
     .slice(0, MAX_SECTION_LINES)
 }
 
-function shouldSwitchToTomorrow(items: ItineraryItem[], now: Date) {
+function shouldSwitchToTomorrow(items: ItineraryItem[], now: Date, day: Day, trip: Trip) {
   const lastTimedItem = [...items].reverse().find((item) => item.endTime || item.startTime)
   if (!lastTimedItem) {
     return false
   }
-  const time = parseTimeMinutes(lastTimedItem.endTime ?? lastTimedItem.startTime)
-  if (time === null) {
-    return false
-  }
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
-  if (currentMinutes <= time) {
+  const range = resolveItemTimeRange({ day, item: lastTimedItem, trip })
+  const finishEpochMs = range.endEpochMs ?? range.startEpochMs
+  if (finishEpochMs === undefined || now.getTime() <= finishEpochMs) {
     return false
   }
   const lastItem = items[items.length - 1]

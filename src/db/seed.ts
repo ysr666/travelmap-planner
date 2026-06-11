@@ -14,6 +14,8 @@ export async function createDemoTrip() {
     destination: '日本东京',
     startDate: '2026-04-12',
     endDate: '2026-04-17',
+    timeZone: 'Asia/Tokyo',
+    timeZoneSource: 'imported',
     notes: '示例数据只保存在本机 IndexedDB，可用于后续地图和时间轴测试。',
     createdAt: now,
     updatedAt: now,

@@ -41,6 +41,8 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
   day: [
     { label: '日期', path: 'date' },
     { label: '标题', path: 'title' },
+    { label: '当天时区', path: 'timeZone' },
+    { label: '当天时区来源', path: 'timeZoneSource' },
     { label: '排序', path: 'sortOrder' },
   ],
   item: [
@@ -48,6 +50,9 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '标题', path: 'title' },
     { label: '开始时间', path: 'startTime' },
     { label: '结束时间', path: 'endTime' },
+    { label: '开始时区', path: 'startTimeZone' },
+    { label: '结束日期', path: 'endDate' },
+    { label: '结束时区', path: 'endTimeZone' },
     { label: '地点名', path: 'locationName' },
     { label: '地址', path: 'address' },
     { label: '纬度', path: 'lat' },
@@ -80,6 +85,8 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '目的地', path: 'destination' },
     { label: '开始日期', path: 'startDate' },
     { label: '结束日期', path: 'endDate' },
+    { label: '默认时区', path: 'timeZone' },
+    { label: '默认时区来源', path: 'timeZoneSource' },
     { label: '备注', notes: true, path: 'notes' },
   ],
 }

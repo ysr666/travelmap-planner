@@ -62,7 +62,7 @@ describe('BottomTabBar', () => {
     })
     const searchButton = container?.querySelector('button[aria-label="搜索"]')
     await act(async () => {
-      searchButton?.click()
+      searchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     expect(mocks.navigateTo).toHaveBeenCalledWith('search')
   })
@@ -110,7 +110,7 @@ describe('ErrorBoundary', () => {
   it('renders error state when child throws', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    function ThrowingComponent() {
+    const ThrowingComponent = (): React.ReactNode => {
       throw new Error('测试错误')
     }
 
@@ -132,7 +132,7 @@ describe('ErrorBoundary', () => {
   it('renders reload button', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    function ThrowingComponent() {
+    const ThrowingComponent = (): React.ReactNode => {
       throw new Error('测试错误')
     }
 

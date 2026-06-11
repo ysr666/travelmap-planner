@@ -7,3 +7,6 @@ extra_search_path = ["public", "extensions"]
 
 [db]
 major_version = 15
+
+[functions.push-reminders]
+verify_jwt = false

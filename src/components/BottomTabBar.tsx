@@ -1,4 +1,4 @@
-import { Compass, Home, Search, Settings } from 'lucide-react'
+import { Compass, Home, Inbox, Search, Settings } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 
@@ -9,6 +9,7 @@ type BottomTabBarProps = {
 const tabs = [
   { id: 'home' as RouteId, label: '首页', icon: Home },
   { id: 'trip' as RouteId, label: '行程', icon: Compass },
+  { id: 'inbox' as RouteId, label: '收件箱', icon: Inbox },
   { id: 'search' as RouteId, label: '搜索', icon: Search },
   { id: 'settings' as RouteId, label: '设置', icon: Settings },
 ]
@@ -41,7 +42,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
 }
 
 function getActiveTab(activeRoute: RouteId): RouteId {
-  if (activeRoute === 'day' || activeRoute === 'tickets') {
+  if (activeRoute === 'day' || activeRoute === 'tickets' || activeRoute === 'documents') {
     return 'trip'
   }
   if (activeRoute === 'ai-draft') {

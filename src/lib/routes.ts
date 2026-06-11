@@ -2,10 +2,12 @@ import type { RouteId } from '../types'
 
 const routeIds: RouteId[] = [
   'home',
+  'inbox',
   'trip',
   'day',
   'item',
   'tickets',
+  'documents',
   'search',
   'settings',
   'settings/privacy',
@@ -44,6 +46,11 @@ export function routeFromHash(hash = window.location.hash): RouteId {
 export function getCanonicalHashRedirect(hash = window.location.hash) {
   const [rawPath, rawQuery = ''] = hash.replace(/^#\/?/, '').split('?')
   const params = new URLSearchParams(rawQuery)
+
+  if (rawPath === 'tickets') {
+    if (!params.has('tab')) params.set('tab', 'attachments')
+    return buildHash('documents', params)
+  }
 
   if (rawPath === 'overview') {
     return buildHash('trip', params)

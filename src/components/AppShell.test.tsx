@@ -72,7 +72,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
     const buttons = container?.querySelectorAll('button') ?? []
-    expect(buttons.length).toBe(4)
+    expect(buttons.length).toBe(5)
     Array.from(buttons).forEach((button) => {
       expect(button.getAttribute('aria-label')).toBeTruthy()
     })

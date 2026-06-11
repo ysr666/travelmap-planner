@@ -541,6 +541,9 @@ export function TripWorkspacePage() {
             <div id="trip-content-enrichment-panel">
               <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             </div>
+            <div className="flex justify-end">
+              <Button onClick={() => navigateTo('inbox')} variant="ghost">查看账号旅行收件箱</Button>
+            </div>
             <TravelInboxPanel allItems={allItems} days={days} key={trip.id} onApplied={async () => { await refresh() }} tickets={ticketMetas} trip={trip} />
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />

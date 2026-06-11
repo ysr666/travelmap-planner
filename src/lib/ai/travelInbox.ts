@@ -8,9 +8,12 @@ import {
   type ExistingTripImportSourceSummary,
 } from './existingTripImport'
 import { buildExistingTripImportRequestSources, type ExistingTripImportExtractionResult } from './existingTripImportExtraction'
-import type { ProviderProxyExistingTripImportTicketSummary } from './providerProxyContract'
+import { PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION, type ProviderProxyExistingTripImportRequest, type ProviderProxyExistingTripImportTicketSummary } from './providerProxyContract'
 import type {
+  Day,
+  ItineraryItem,
   TicketMeta,
+  Trip,
   TravelInboxEntry,
   TravelInboxEntryCategory,
   TravelInboxPreviewRecord,
@@ -210,11 +213,13 @@ export async function buildTravelInboxApplyFiles(entryIds: string[]) {
 }
 
 export async function saveTravelInboxPreview({
+  cloudSourceId,
   checkedDiffIds,
   entryIds,
   preview,
   tripId,
 }: {
+  cloudSourceId?: string
   checkedDiffIds: string[]
   entryIds: string[]
   preview: ExistingTripImportPreview
@@ -223,6 +228,7 @@ export async function saveTravelInboxPreview({
   const now = Date.now()
   const record: TravelInboxPreviewRecord = {
     checkedDiffIds,
+    cloudSourceId,
     createdAt: now,
     entryIds,
     id: createId('inbox_preview'),
@@ -232,13 +238,57 @@ export async function saveTravelInboxPreview({
     updatedAt: now,
   }
   await db.transaction('rw', db.travelInboxPreviews, db.travelInboxEntries, async () => {
-    await db.travelInboxPreviews.where('tripId').equals(tripId).delete()
+    const existing = await db.travelInboxPreviews.where('tripId').equals(tripId).toArray()
+    const replaceIds = existing.filter((item) => item.status === 'ready' && item.cloudSourceId === cloudSourceId).map((item) => item.id)
+    if (replaceIds.length > 0) await db.travelInboxPreviews.bulkDelete(replaceIds)
     await db.travelInboxPreviews.add(record)
     await db.travelInboxEntries.bulkPut((await db.travelInboxEntries.bulkGet(entryIds))
       .filter((entry): entry is TravelInboxEntry => Boolean(entry))
       .map((entry) => ({ ...entry, status: 'previewed', updatedAt: now })))
   })
   return record
+}
+
+export function buildTravelInboxProviderRequest({
+  allItems,
+  days,
+  sourceSummaries,
+  ticketSummaries,
+  trip,
+}: {
+  allItems: ItineraryItem[]
+  days: Day[]
+  sourceSummaries: ExistingTripImportSourceSummary[]
+  ticketSummaries: ExistingTripImportTicketSummary[]
+  trip: Trip
+}): ProviderProxyExistingTripImportRequest {
+  const dayById = new Map(days.map((day) => [day.id, day]))
+  return {
+    days: days.map((day) => ({ date: day.date, id: day.id, sortOrder: day.sortOrder, timeZone: day.timeZone, title: day.title })),
+    existingTicketSummaries: buildTravelInboxProviderTicketSummaries(ticketSummaries),
+    items: allItems.map((item) => ({
+      address: item.address,
+      date: dayById.get(item.dayId)?.date ?? trip.startDate,
+      dayId: item.dayId,
+      endDate: item.endDate,
+      endTime: item.endTime,
+      endTimeZone: item.endTimeZone,
+      id: item.id,
+      locationName: item.locationName,
+      previousTransportDurationMinutes: item.previousTransportDurationMinutes,
+      previousTransportMode: item.previousTransportMode,
+      previousTransportNote: item.previousTransportNote,
+      startTime: item.startTime,
+      startTimeZone: item.startTimeZone,
+      ticketCount: item.ticketIds.length,
+      title: item.title,
+      transportMode: item.transportMode,
+    })),
+    locale: 'zh-CN',
+    operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+    sources: buildExistingTripImportRequestSources(sourceSummaries),
+    trip: { destination: trip.destination, endDate: trip.endDate, id: trip.id, startDate: trip.startDate, timeZone: trip.timeZone, title: trip.title },
+  }
 }
 
 export async function updateTravelInboxPreviewRecord(record: TravelInboxPreviewRecord) {

@@ -3,6 +3,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
+  PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION,
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
@@ -18,6 +19,7 @@ import {
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyExistingTripImportRequest,
+  validateProviderProxyTravelInboxClassifyRequest,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlaceLookupRequest,
@@ -30,6 +32,7 @@ import {
   type ProviderProxyAiTripDraftRefineRequest,
   type ProviderProxyAiTripDraftRefineScope,
   type ProviderProxyExistingTripImportRequest,
+  type ProviderProxyTravelInboxClassifyRequest,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
@@ -137,6 +140,12 @@ import {
   type ExistingTripImportProvider,
   type ExistingTripImportProviderErrorCode,
 } from './existingTripImportProvider'
+import {
+  createMockTravelInboxClassifyProvider,
+  createOpenAiCompatibleTravelInboxClassifyProvider,
+  createUnavailableTravelInboxClassifyProvider,
+  type TravelInboxClassifyProvider,
+} from './travelInboxClassifyProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -250,6 +259,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION) {
     return handleExistingTripImportRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION) {
+    return handleTravelInboxClassifyRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
@@ -826,6 +839,67 @@ function mapExistingTripImportErrorCodeToStatus(code: ExistingTripImportProvider
     case 'provider_error': return 502
     default: return 502
   }
+}
+
+async function handleTravelInboxClassifyRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyTravelInboxClassifyRequest(body)
+  if (!validation.ok) return jsonResponse(validation.error, 400, corsHeaders)
+  const classifyRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: classifyRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: classifyRequest.requestId,
+  })
+  if (quotaResponse) return quotaResponse
+  try {
+    const result = await selectTravelInboxClassifyProvider(env, classifyRequest, fetcher).classify(classifyRequest)
+    if (!result.ok) throw new ProviderProxyServerError(result.errorCode, result.errorCode === 'provider_unavailable' ? 503 : 502)
+    return jsonResponse({
+      classification: result.classification,
+      ok: true,
+      operation: PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION,
+      requestId: classifyRequest.requestId,
+      source: result.source,
+      warnings: result.warnings,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION, classifyRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectTravelInboxClassifyProvider(
+  env: ProviderProxyHandlerEnv,
+  _request: ProviderProxyTravelInboxClassifyRequest,
+  fetcher: typeof fetch,
+): TravelInboxClassifyProvider {
+  if (isMockMode(env)) return createMockTravelInboxClassifyProvider()
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') return createOpenAiCompatibleTravelInboxClassifyProvider(env, fetcher)
+  return createUnavailableTravelInboxClassifyProvider()
 }
 
 async function handleTravelSearchRequest({

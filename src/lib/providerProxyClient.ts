@@ -7,6 +7,8 @@ import {
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
   validateProviderProxyExistingTripImportRequest,
+  validateProviderProxyTravelInboxClassifyRequest,
+  validateTravelInboxClassification,
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
@@ -22,6 +24,9 @@ import {
   type ProviderProxyExistingTripImportRequest,
   type ProviderProxyExistingTripImportResponse,
   type ProviderProxyExistingTripImportSuccessResponse,
+  type ProviderProxyTravelInboxClassifyRequest,
+  type ProviderProxyTravelInboxClassifyResponse,
+  type ProviderProxyTravelInboxClassifySuccessResponse,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyAiTripEditPlanResponse,
   type ProviderProxyAiTripEditPlanSuccessResponse,
@@ -623,6 +628,39 @@ export async function fetchProviderProxyExistingTripImport(
   return parsed
 }
 
+export async function fetchProviderProxyTravelInboxClassify(
+  request: ProviderProxyTravelInboxClassifyRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyTravelInboxClassifySuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyTravelInboxClassifyRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+  let response: Response
+  try {
+    response = await (options.fetcher ?? fetch)(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_inbox_classify' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_inbox_classify' }), response.status)
+  }
+  const parsed = parseProviderProxyTravelInboxClassifyResponse(body, validation.request)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
+  return parsed
+}
+
 export function getProviderProxySessionId(storage = getBrowserStorage()) {
   const existing = readStorageValue(storage, PROVIDER_PROXY_SESSION_STORAGE_KEY)
   if (existing) {
@@ -823,6 +861,37 @@ function parseProviderProxyExistingTripImportResponse(input: unknown): ProviderP
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_existing_trip_import' })
+}
+
+function parseProviderProxyTravelInboxClassifyResponse(
+  input: unknown,
+  request: ProviderProxyTravelInboxClassifyRequest,
+): ProviderProxyTravelInboxClassifyResponse {
+  const record = readRecord(input)
+  if (record.ok === true && record.operation === 'travel_inbox_classify' && (record.source === 'mock' || record.source === 'future_ai')) {
+    const classification = validateTravelInboxClassification(record.classification, new Set(request.trips.map((trip) => trip.id)))
+    if (classification) {
+      return {
+        classification,
+        ok: true,
+        operation: 'travel_inbox_classify',
+        requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+        source: record.source,
+        warnings: Array.isArray(record.warnings) ? record.warnings.filter((item): item is string => typeof item === 'string').slice(0, 5) : undefined,
+      }
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'travel_inbox_classify' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: typeof record.message === 'string' ? record.message : defaultProviderProxyErrorMessage(code, 'travel_inbox_classify'),
+      operation: 'travel_inbox_classify',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'travel_inbox_classify' })
 }
 
 function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTravelSearchResponse {

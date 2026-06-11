@@ -249,6 +249,16 @@ describe('travel inbox local queue', () => {
 
     await expect(getActiveTravelInboxPreview('trip_inbox')).resolves.toBeUndefined()
   })
+
+  it('keeps independent active previews for different account sources', async () => {
+    const first = await addTravelInboxErrorEntry({ error: 'pending', fileName: 'one.txt', tripId: 'trip_inbox' })
+    const second = await addTravelInboxErrorEntry({ error: 'pending', fileName: 'two.txt', tripId: 'trip_inbox' })
+    const preview: ExistingTripImportPreview = { baselineFingerprint: 'baseline', diffs: [], generatedAt: new Date(0).toISOString(), sourceSummaries: [], warnings: [] }
+    await saveTravelInboxPreview({ checkedDiffIds: [], cloudSourceId: 'cloud:first', entryIds: [first.id], preview, tripId: 'trip_inbox' })
+    await saveTravelInboxPreview({ checkedDiffIds: [], cloudSourceId: 'cloud:second', entryIds: [second.id], preview, tripId: 'trip_inbox' })
+
+    await expect(db.travelInboxPreviews.where('tripId').equals('trip_inbox').count()).resolves.toBe(2)
+  })
 })
 
 function createMemoryStorage(): Storage {

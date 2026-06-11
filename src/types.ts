@@ -114,6 +114,7 @@ export type TicketMeta = {
   id: string
   tripId: string
   itemId?: string
+  bookingId?: string
   scope?: TicketScope
   title?: string
   storageMode?: TicketStorageMode
@@ -243,6 +244,57 @@ export type TravelInboxSourceKind = 'pasted_text' | 'text_file' | 'email' | 'htm
 export type TravelInboxEntryStatus = 'ready' | 'recognizing' | 'previewed' | 'error'
 export type TravelInboxEntryCategory = 'unclassified' | 'itinerary' | 'ticket' | 'note' | 'mixed'
 export type TravelInboxPreviewStatus = 'ready' | 'applying' | 'applied' | 'discarded'
+export type TravelInboxConnectorKind = 'gmail' | 'imap' | 'local_folder'
+export type TravelInboxConnectorStatus = 'active' | 'paused' | 'reauth_required' | 'error'
+export type TravelInboxSourceStatus = 'queued' | 'extracting' | 'classifying' | 'needs_assignment' | 'building_preview' | 'preview_ready' | 'error'
+export type TravelInboxClassificationConfidence = 'low' | 'medium' | 'high'
+
+export type TravelInboxClassification = {
+  targetTripId?: string
+  category: TravelInboxEntryCategory
+  confidence: TravelInboxClassificationConfidence
+  reason: string
+}
+
+export type TravelInboxAccountSource = {
+  id: string
+  cloudSourceId?: string
+  connectorId?: string
+  connectorKind: TravelInboxConnectorKind
+  status: TravelInboxSourceStatus
+  sourceKind: TravelInboxSourceKind
+  label: string
+  fileName?: string
+  mimeType?: string
+  size?: number
+  extractedText?: string
+  targetTripId?: string
+  classification?: TravelInboxClassification
+  warnings: string[]
+  error?: string
+  receivedAt: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type TravelInboxAccountSourceBlob = {
+  sourceId: string
+  blob: Blob
+}
+
+export type TravelInboxLocalConnector = {
+  id: string
+  kind: 'local_folder'
+  name: string
+  status: TravelInboxConnectorStatus
+  deviceId: string
+  directoryHandle: FileSystemDirectoryHandle
+  fileFingerprints: Record<string, string>
+  autoAiEnabled: boolean
+  lastScannedAt?: number
+  createdAt: number
+  updatedAt: number
+}
 
 export type TravelInboxEntry = {
   id: string
@@ -269,6 +321,7 @@ export type TravelInboxBlob = {
 export type TravelInboxPreviewRecord = {
   id: string
   tripId: string
+  cloudSourceId?: string
   entryIds: string[]
   preview: unknown
   checkedDiffIds: string[]
@@ -277,16 +330,256 @@ export type TravelInboxPreviewRecord = {
   updatedAt: number
 }
 
+export type TravelerRole = 'self' | 'companion' | 'child' | 'other'
+export type TravelDocumentKind =
+  | 'passport'
+  | 'visa'
+  | 'entry_permit'
+  | 'residence_permit'
+  | 'insurance'
+  | 'discount_card'
+  | 'loyalty_card'
+  | 'other'
+export type TravelDocumentFormat = 'paper' | 'electronic' | 'both'
+export type TravelDocumentStatus = 'draft' | 'applied' | 'approved' | 'rejected' | 'active' | 'expired' | 'cancelled'
+export type TravelDocumentEntryCount = 'single' | 'double' | 'multiple' | 'unlimited' | 'unknown'
+
+export type TravelerProfileData = {
+  displayName: string
+  role: TravelerRole
+  dateOfBirth?: string
+  nationality?: string
+  passportName?: string
+  notes?: string
+}
+
+export type TravelDocumentData = {
+  title: string
+  kind: TravelDocumentKind
+  format: TravelDocumentFormat
+  status: TravelDocumentStatus
+  travelerIds: string[]
+  issuingCountry?: string
+  destinationCountry?: string
+  documentNumber?: string
+  applicationNumber?: string
+  validFrom?: string
+  validUntil?: string
+  entryCount?: TravelDocumentEntryCount
+  maxStayDays?: number
+  physicalLocation?: string
+  officialUrl?: string
+  notes?: string
+  attachmentIds: string[]
+}
+
+export type DocumentTripLinkData = {
+  documentId: string
+  tripId: string
+  notes?: string
+}
+
+export type BookingSecretData = {
+  bookingId: string
+  travelerIds: string[]
+  pnr?: string
+  orderNumber?: string
+  ticketNumbers?: string[]
+  seatAssignments?: Array<{ segmentId: string; travelerId: string; seat: string }>
+  privateLinks?: ExternalAction[]
+  notes?: string
+}
+
+export type BookingTravelerLinkData = {
+  bookingId: string
+  travelerId: string
+}
+
+export type VaultAttachmentMetadataData = {
+  blobId: string
+  objectId: string
+  fileName: string
+  mimeType: string
+  size: number
+}
+
+export type VaultObjectType = 'traveler' | 'document' | 'document_trip_link' | 'booking_secret' | 'booking_traveler_link' | 'attachment_metadata'
+export type VaultObjectPayload =
+  | TravelerProfileData
+  | TravelDocumentData
+  | DocumentTripLinkData
+  | BookingSecretData
+  | BookingTravelerLinkData
+  | VaultAttachmentMetadataData
+
+export type VaultObjectRecord = {
+  id: string
+  vaultId: string
+  objectType: VaultObjectType
+  keyVersion: number
+  schemaVersion: number
+  aadVersion: number
+  iv: string
+  ciphertext: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type VaultBlobRecord = {
+  id: string
+  vaultId: string
+  objectId: string
+  keyVersion: number
+  schemaVersion: number
+  aadVersion: number
+  iv: string
+  ciphertext: Blob
+  fileName: string
+  mimeType: string
+  size: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type VaultKeyState = {
+  vaultId: string
+  ownerId: string
+  keyVersion: number
+  schemaVersion: number
+  salt: string
+  wrapIv: string
+  wrappedKey: string
+  pbkdf2Iterations: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type TransportBookingKind = 'flight' | 'train' | 'cruise' | 'ferry' | 'bus' | 'other'
+export type TransportBookingStatus = 'draft' | 'confirmed' | 'changed' | 'cancelled' | 'completed'
+export type TransportSegmentStatus = 'scheduled' | 'delayed' | 'cancelled' | 'departed' | 'arrived' | 'unknown'
+export type ExternalActionKind = 'official' | 'check_in' | 'manage_booking' | 'railway' | 'hanglv' | 'other'
+
+export type ExternalAction = {
+  id: string
+  kind: ExternalActionKind
+  label: string
+  url: string
+}
+
+export type TransportBooking = {
+  id: string
+  tripId: string
+  title: string
+  kind: TransportBookingKind
+  status: TransportBookingStatus
+  providerName?: string
+  sourceLabel?: string
+  secretObjectId?: string
+  externalActions: ExternalAction[]
+  createdAt: number
+  updatedAt: number
+}
+
+export type TransportSegment = {
+  id: string
+  bookingId: string
+  tripId: string
+  kind: TransportBookingKind
+  sortOrder: number
+  carrier?: string
+  serviceNumber?: string
+  departurePlace: string
+  arrivalPlace: string
+  departureDate: string
+  departureTime?: string
+  departureTimeZone: string
+  arrivalDate: string
+  arrivalTime?: string
+  arrivalTimeZone: string
+  terminal?: string
+  gate?: string
+  arrivalTerminal?: string
+  arrivalGate?: string
+  status: TransportSegmentStatus
+  createdAt: number
+  updatedAt: number
+}
+
+export type ReminderKind = 'document_expiry' | 'check_in' | 'departure' | 'transfer'
+export type ReminderScheduleStatus = 'pending' | 'sent' | 'cancelled'
+
+export type ReminderSchedule = {
+  id: string
+  occurrenceId: string
+  vaultId?: string
+  tripId?: string
+  objectType: 'document' | 'transport'
+  objectId: string
+  kind: ReminderKind
+  triggerAt: string
+  timeZone: string
+  status: ReminderScheduleStatus
+  sentAt?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type TravelCenterSyncState = {
+  objectKey: string
+  objectType: 'transport_booking' | 'transport_segment' | 'vault_object' | 'vault_blob' | 'vault_key' | 'reminder'
+  objectId: string
+  syncedLocalUpdatedAt: number
+  syncedCloudUpdatedAt: number
+  lastSyncedAt: number
+}
+
+export type TravelCenterSyncConflict = {
+  id: string
+  objectKey: string
+  objectType: TravelCenterSyncState['objectType']
+  objectId: string
+  localUpdatedAt: number
+  cloudUpdatedAt: number
+  remoteRecord: unknown
+  status: 'pending' | 'resolved'
+  createdAt: number
+  updatedAt: number
+}
+
+export type TravelCenterTombstone = {
+  objectKey: string
+  objectType: TravelCenterSyncState['objectType']
+  objectId: string
+  vaultId?: string
+  tripId?: string
+  deletedAt: number
+}
+
+export type FlightStatusProviderName = 'disabled' | 'mock'
+export type FlightStatusSnapshot = {
+  provider: FlightStatusProviderName
+  status: TransportSegmentStatus
+  fetchedAt: string
+  expiresAt: string
+  departureTime?: string
+  arrivalTime?: string
+  terminal?: string
+  gate?: string
+  warnings: string[]
+}
+
 export type TicketFile = TicketMeta & {
   blob: Blob
 }
 
 export type RouteId =
   | 'home'
+  | 'inbox'
   | 'trip'
   | 'day'
   | 'item'
   | 'tickets'
+  | 'documents'
   | 'search'
   | 'settings'
   | 'settings/privacy'

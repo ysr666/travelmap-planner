@@ -22,6 +22,11 @@ describe('routeFromHash', () => {
     expect(routeFromHash()).toBe('day')
   })
 
+  it('parses the travel document center route', () => {
+    window.location.hash = '#/documents?tab=transport'
+    expect(routeFromHash()).toBe('documents')
+  })
+
   it('parses legacy map route without rewriting', () => {
     window.location.hash = '#/map?tripId=abc&dayId=def'
     expect(routeFromHash()).toBe('day')
@@ -52,6 +57,9 @@ describe('routeFromHash', () => {
 })
 
 describe('getCanonicalHashRedirect', () => {
+  it('redirects the legacy ticket library to the attachment tab', () => {
+    expect(getCanonicalHashRedirect('#/tickets?tripId=abc')).toBe('#/documents?tripId=abc&tab=attachments')
+  })
   it('canonicalizes legacy overview route', () => {
     expect(getCanonicalHashRedirect('#/overview?tripId=abc')).toBe('#/trip?tripId=abc')
   })

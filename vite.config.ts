@@ -59,7 +59,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'push-handler.js'],
       manifest: {
         name: '旅图 TripMap',
         short_name: '旅图',
@@ -93,6 +93,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
         navigateFallback: 'index.html',
         runtimeCaching: [],
+        importScripts: ['/push-handler.js'],
       },
     }),
   ],

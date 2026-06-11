@@ -16,7 +16,7 @@ import type {
   ExistingTripImportProviderResult,
   ExistingTripImportSourceKind,
 } from './existingTripImport'
-import type { TicketCategory, TicketScope } from '../../types'
+import type { TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -29,6 +29,7 @@ export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
+export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_classify' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
@@ -38,11 +39,12 @@ export const PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_DRAFT_REPAIR_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW = 5
+export const PROVIDER_PROXY_MAX_TRAVEL_INBOX_CLASSIFY_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -417,6 +419,36 @@ export type ProviderProxyExistingTripImportResponse =
 
 export type ProviderProxyExistingTripImportValidationResult =
   | { ok: true; request: ProviderProxyExistingTripImportRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyTravelInboxTripSummary = {
+  id: string
+  title: string
+  destination: string
+  startDate: string
+  endDate: string
+}
+
+export type ProviderProxyTravelInboxClassifyRequest = {
+  operation: typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION
+  source: ProviderProxyExistingTripImportSourceSummary
+  trips: ProviderProxyTravelInboxTripSummary[]
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyTravelInboxClassifySuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION
+  requestId?: string
+  classification: TravelInboxClassification
+  source: 'mock' | 'future_ai'
+  warnings?: string[]
+}
+
+export type ProviderProxyTravelInboxClassifyResponse = ProviderProxyTravelInboxClassifySuccessResponse | ProviderProxyErrorResponse
+export type ProviderProxyTravelInboxClassifyValidationResult =
+  | { ok: true; request: ProviderProxyTravelInboxClassifyRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyTravelSearchLocale = 'zh-CN' | 'en-US'
@@ -952,6 +984,8 @@ const MAX_EXISTING_TRIP_IMPORT_SOURCES = 12
 const MAX_EXISTING_TRIP_IMPORT_SOURCE_TEXT_LENGTH = 4000
 const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 24000
 const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
+const MAX_TRAVEL_INBOX_CLASSIFY_TRIPS = 30
+const VALID_TRAVEL_INBOX_CATEGORIES = new Set<TravelInboxEntryCategory>(['unclassified', 'itinerary', 'ticket', 'note', 'mixed'])
 const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'summaryId', 'ticketCategory', 'title'])
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
@@ -2268,6 +2302,93 @@ export function validateProviderProxyExistingTripImportRequest(
       sources,
       trip,
     },
+  }
+}
+
+export function validateProviderProxyTravelInboxClassifyRequest(
+  input: unknown,
+): ProviderProxyTravelInboxClassifyValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (record.operation !== PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION) {
+    return travelInboxClassifyInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_EXISTING_TRIP_IMPORT_FIELDS)
+  if (forbiddenFieldPath) {
+    return travelInboxClassifyInvalidRequest('旅行收件箱分类请求包含不允许的敏感字段。', requestId)
+  }
+  const source = readExistingTripImportSource(record.source)
+  if (!source) {
+    return travelInboxClassifyInvalidRequest('待分类来源摘要无效。', requestId)
+  }
+  if (!Array.isArray(record.trips) || record.trips.length > MAX_TRAVEL_INBOX_CLASSIFY_TRIPS) {
+    return travelInboxClassifyInvalidRequest(`旅行摘要不能超过 ${MAX_TRAVEL_INBOX_CLASSIFY_TRIPS} 个。`, requestId)
+  }
+  const trips: ProviderProxyTravelInboxTripSummary[] = []
+  const ids = new Set<string>()
+  for (const inputTrip of record.trips) {
+    const trip = readTravelInboxTripSummary(inputTrip)
+    if (!trip || ids.has(trip.id)) {
+      return travelInboxClassifyInvalidRequest('旅行摘要无效。', requestId)
+    }
+    ids.add(trip.id)
+    trips.push(trip)
+  }
+  return {
+    ok: true,
+    request: {
+      operation: PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      source,
+      trips,
+    },
+  }
+}
+
+function readTravelInboxTripSummary(input: unknown): ProviderProxyTravelInboxTripSummary | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 128)
+  const title = readRequiredTrimmedString(record.title, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+  const destination = readRequiredTrimmedString(record.destination, MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD)
+  const startDate = readRequiredTrimmedString(record.startDate, 10)
+  const endDate = readRequiredTrimmedString(record.endDate, 10)
+  if (!id || !title || !destination || !isValidPlainDate(startDate) || !isValidPlainDate(endDate) || endDate < startDate) return null
+  return { destination, endDate, id, startDate, title }
+}
+
+export function validateTravelInboxClassification(
+  input: unknown,
+  validTripIds: Set<string>,
+): TravelInboxClassification | null {
+  const record = readRecord(input)
+  const targetTripId = readOptionalString(record.targetTripId, 128)
+  const category = record.category
+  const confidence = record.confidence
+  const reason = readRequiredTrimmedString(record.reason, 300)
+  if (
+    (targetTripId && !validTripIds.has(targetTripId)) ||
+    !VALID_TRAVEL_INBOX_CATEGORIES.has(category as TravelInboxEntryCategory) ||
+    (confidence !== 'low' && confidence !== 'medium' && confidence !== 'high') ||
+    !reason
+  ) return null
+  return {
+    category: category as TravelInboxEntryCategory,
+    confidence,
+    reason,
+    targetTripId,
+  }
+}
+
+function travelInboxClassifyInvalidRequest(message: string, requestId?: string): ProviderProxyTravelInboxClassifyValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION,
+      requestId,
+    }),
+    ok: false,
   }
 }
 

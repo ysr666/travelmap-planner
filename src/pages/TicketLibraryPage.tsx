@@ -104,9 +104,9 @@ const storageOptions: Array<{ value: TicketStorageMode; label: string; descripti
   },
 ]
 
-export function TicketLibraryPage() {
+export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedded?: boolean; tripIdOverride?: string | null } = {}) {
   const params = getRouteParams()
-  const tripId = params.get('tripId')
+  const tripId = tripIdOverride ?? params.get('tripId')
   const initialItemId = params.get('itemId')
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
@@ -549,7 +549,7 @@ export function TicketLibraryPage() {
 
   return (
     <div className="space-y-5">
-      <Card variant="grouped" className="space-y-3">
+      {!embedded ? <Card variant="grouped" className="space-y-3">
         <div>
           <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
           <h2 className="mt-1 text-xl font-semibold text-on-surface dark:text-on-surface">票据和订单</h2>
@@ -570,9 +570,9 @@ export function TicketLibraryPage() {
             </span>
           </div>
         ) : null}
-      </Card>
+      </Card> : null}
 
-      <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} />
+      {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-2">
@@ -1144,4 +1144,3 @@ function formatStorageSize(size?: number) {
 
   return formatFileSize(size)
 }
-

@@ -111,6 +111,7 @@ describe('provider proxy quota guard', () => {
       maxAiTripEditRequestsPerWindow: 1,
       maxPlaceLookupRequestsPerWindow: 1,
       maxRouteRequestsPerWindow: 1,
+      maxTravelInboxClassifyRequestsPerWindow: 1,
       maxTravelSearchRequestsPerWindow: 1,
       windowMs: 1000,
     }
@@ -123,6 +124,7 @@ describe('provider proxy quota guard', () => {
       'ai_trip_edit_plan',
       'trip_content_enrichment',
       'trip_daily_tip',
+      'travel_inbox_classify',
       'travel_search',
       'place_lookup',
     ]
@@ -149,6 +151,7 @@ describe('provider proxy quota guard', () => {
       'place|same-hash',
       'route|same-hash',
       'search|same-hash',
+      'travel_inbox_classify|same-hash',
     ])
     expect(await consumeProviderProxyQuota({
       coordinateCount: 0,

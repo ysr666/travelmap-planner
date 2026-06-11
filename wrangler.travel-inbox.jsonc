@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tripmap-travel-inbox",
+  "main": "workers/travel-inbox/index.ts",
+  "compatibility_date": "2026-06-11",
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "vars": {
+    "TRAVEL_INBOX_APP_URL": "https://travelmap-planner.pages.dev"
+  }
+}

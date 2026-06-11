@@ -1,5 +1,18 @@
 /// <reference types="vite/client" />
 
+interface FileSystemPermissionDescriptor {
+  mode?: 'read' | 'readwrite'
+}
+
+interface FileSystemDirectoryHandle {
+  queryPermission(descriptor?: FileSystemPermissionDescriptor): Promise<PermissionState>
+  requestPermission(descriptor?: FileSystemPermissionDescriptor): Promise<PermissionState>
+}
+
+interface Window {
+  showDirectoryPicker(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>
+}
+
 declare const __APP_VERSION__: string
 
 interface ImportMetaEnv {

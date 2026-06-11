@@ -201,6 +201,21 @@ function validRouteOrderRequest() {
   }
 }
 
+function validTravelInboxClassifyRequest() {
+  return {
+    operation: 'travel_inbox_classify',
+    quotaSessionId: 'session-a',
+    requestId: 'travel-inbox-classify-request-1',
+    source: {
+      id: 'source-1',
+      kind: 'email',
+      label: '东京酒店订单',
+      text: '东京旅行 2026-07-10 酒店订单',
+    },
+    trips: [{ destination: '东京', endDate: '2026-07-12', id: 'trip-tokyo', startDate: '2026-07-10', title: '东京旅行' }],
+  }
+}
+
 describe('provider proxy handler quota routing', () => {
   it('uses the expected isolated quota bucket for every operation', async () => {
     const cases = [
@@ -211,6 +226,7 @@ describe('provider proxy handler quota routing', () => {
       { bucket: 'ai_draft|', request: validAiDraftRequest() },
       { bucket: 'ai_draft_repair|', request: validRepairRequest() },
       { bucket: 'ai_trip_edit|', request: validEditRequest() },
+      { bucket: 'travel_inbox_classify|', request: validTravelInboxClassifyRequest() },
     ]
 
     for (const testCase of cases) {

@@ -13,7 +13,6 @@ import {
   type ExistingTripImportPreview,
 } from '../../lib/ai/existingTripImport'
 import {
-  buildExistingTripImportRequestSources,
   DEFAULT_EXISTING_TRIP_IMPORT_OCR_LANGUAGES,
   extractExistingTripImportSources,
   OPTIONAL_EXISTING_TRIP_IMPORT_OCR_LANGUAGES,
@@ -24,8 +23,8 @@ import {
   addTravelInboxErrorEntry,
   addTravelInboxExtraction,
   buildTravelInboxApplyFiles,
+  buildTravelInboxProviderRequest,
   buildTravelInboxSourceSummaries,
-  buildTravelInboxProviderTicketSummaries,
   buildTravelInboxTicketSummaries,
   deleteTravelInboxEntries,
   deleteTravelInboxPreview,
@@ -44,7 +43,6 @@ import {
 } from '../../lib/ai/travelInbox'
 import {
   PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
-  type ProviderProxyExistingTripImportRequest,
 } from '../../lib/ai/providerProxyContract'
 import {
   fetchProviderProxyExistingTripImport,
@@ -56,6 +54,7 @@ import { navigateTo } from '../../lib/routes'
 import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import { ticketCategoryOptions, ticketCategoryLabels } from '../../lib/tickets'
 import type { Day, ItineraryItem, TicketCategory, TicketMeta, TravelInboxEntry, TravelInboxPreviewRecord, Trip } from '../../types'
+import { completeTravelInboxAccountSource, resetTravelInboxAccountSourcePreview } from '../../lib/ai/travelInboxOrganization'
 
 type TravelInboxPanelProps = {
   allItems: ItineraryItem[]
@@ -247,6 +246,13 @@ export function TravelInboxPanel({
     }
   }
 
+  async function cancelPreview() {
+    if (!previewRecord) return
+    await deleteTravelInboxPreview(previewRecord.id)
+    if (previewRecord.cloudSourceId) await resetTravelInboxAccountSourcePreview(previewRecord.cloudSourceId)
+    await loadInbox()
+  }
+
   async function recognizeEntries(targetEntries: TravelInboxEntry[]) {
     const sourceEntries = targetEntries.filter((entry) => entry.extractedText.trim())
     if (!sourceEntries.length) {
@@ -265,7 +271,7 @@ export function TravelInboxPanel({
       const sourceSummaries = buildTravelInboxSourceSummaries(sourceEntries)
       const ticketSummaries = buildTravelInboxTicketSummaries(tickets)
       const response = await fetchProviderProxyExistingTripImport(
-        buildProviderRequest({ allItems, days, sourceSummaries, ticketSummaries, trip }),
+        buildTravelInboxProviderRequest({ allItems, days, sourceSummaries, ticketSummaries, trip }),
         providerConfig.proxyUrl,
       )
       const nextPreview = buildExistingTripImportPreview({
@@ -324,6 +330,9 @@ export function TravelInboxPanel({
       }
       setConfirmApplyOpen(false)
       if (result.appliedCount > 0) {
+        if (previewRecord.cloudSourceId) {
+          await completeTravelInboxAccountSource(previewRecord.cloudSourceId, result.appliedChanges)
+        }
         await deleteTravelInboxEntries(previewRecord.entryIds)
         persistTravelInboxAppliedChanges(trip.id, result.appliedChanges)
         setAppliedChanges(result.appliedChanges)
@@ -676,7 +685,7 @@ export function TravelInboxPanel({
               <Button
                 disabled={isApplying}
                 icon={<Trash2 className="size-4" />}
-                onClick={() => previewRecord && void deleteTravelInboxPreview(previewRecord.id).then(loadInbox)}
+                onClick={() => void cancelPreview()}
                 variant="ghost"
               >
                 取消预览
@@ -769,61 +778,6 @@ export function TravelInboxPanel({
       />
     </Card>
   )
-}
-
-function buildProviderRequest({
-  allItems,
-  days,
-  sourceSummaries,
-  ticketSummaries,
-  trip,
-}: {
-  allItems: ItineraryItem[]
-  days: Day[]
-  sourceSummaries: ReturnType<typeof buildTravelInboxSourceSummaries>
-  ticketSummaries: ReturnType<typeof buildTravelInboxTicketSummaries>
-  trip: Trip
-}): ProviderProxyExistingTripImportRequest {
-  const dayById = new Map(days.map((day) => [day.id, day]))
-  return {
-    days: days.map((day) => ({
-      date: day.date,
-      id: day.id,
-      sortOrder: day.sortOrder,
-      timeZone: day.timeZone,
-      title: day.title,
-    })),
-    existingTicketSummaries: buildTravelInboxProviderTicketSummaries(ticketSummaries),
-    items: allItems.map((item) => ({
-      address: item.address,
-      date: dayById.get(item.dayId)?.date ?? trip.startDate,
-      dayId: item.dayId,
-      endDate: item.endDate,
-      endTime: item.endTime,
-      endTimeZone: item.endTimeZone,
-      id: item.id,
-      locationName: item.locationName,
-      previousTransportDurationMinutes: item.previousTransportDurationMinutes,
-      previousTransportMode: item.previousTransportMode,
-      previousTransportNote: item.previousTransportNote,
-      startTime: item.startTime,
-      startTimeZone: item.startTimeZone,
-      ticketCount: item.ticketIds.length,
-      title: item.title,
-      transportMode: item.transportMode,
-    })),
-    locale: 'zh-CN',
-    operation: PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
-    sources: buildExistingTripImportRequestSources(sourceSummaries),
-    trip: {
-      destination: trip.destination,
-      endDate: trip.endDate,
-      id: trip.id,
-      startDate: trip.startDate,
-      timeZone: trip.timeZone,
-      title: trip.title,
-    },
-  }
 }
 
 function SuggestionSection({

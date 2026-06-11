@@ -9,10 +9,22 @@ import type {
   TicketBlob,
   TicketBlobSyncState,
   TicketMeta,
+  TransportBooking,
+  TransportSegment,
   Trip,
   TravelInboxBlob,
+  TravelInboxAccountSource,
+  TravelInboxAccountSourceBlob,
   TravelInboxEntry,
+  TravelInboxLocalConnector,
   TravelInboxPreviewRecord,
+  ReminderSchedule,
+  TravelCenterSyncConflict,
+  TravelCenterSyncState,
+  TravelCenterTombstone,
+  VaultBlobRecord,
+  VaultKeyState,
+  VaultObjectRecord,
 } from '../types'
 
 class TravelConsoleDatabase extends Dexie {
@@ -27,8 +39,20 @@ class TravelConsoleDatabase extends Dexie {
   objectSyncStates!: Table<ObjectSyncState, string>
   ticketBlobSyncStates!: Table<TicketBlobSyncState, string>
   travelInboxBlobs!: Table<TravelInboxBlob, string>
+  travelInboxAccountSourceBlobs!: Table<TravelInboxAccountSourceBlob, string>
+  travelInboxAccountSources!: Table<TravelInboxAccountSource, string>
   travelInboxEntries!: Table<TravelInboxEntry, string>
+  travelInboxLocalConnectors!: Table<TravelInboxLocalConnector, string>
   travelInboxPreviews!: Table<TravelInboxPreviewRecord, string>
+  transportBookings!: Table<TransportBooking, string>
+  transportSegments!: Table<TransportSegment, string>
+  vaultObjects!: Table<VaultObjectRecord, string>
+  vaultBlobs!: Table<VaultBlobRecord, string>
+  vaultKeyState!: Table<VaultKeyState, string>
+  reminderSchedules!: Table<ReminderSchedule, string>
+  travelCenterSyncStates!: Table<TravelCenterSyncState, string>
+  travelCenterSyncConflicts!: Table<TravelCenterSyncConflict, string>
+  travelCenterTombstones!: Table<TravelCenterTombstone, string>
 
   constructor() {
     super('TravelConsoleDB')
@@ -171,6 +195,53 @@ class TravelConsoleDatabase extends Dexie {
       travelInboxBlobs: 'entryId',
       travelInboxEntries: 'id, tripId, [tripId+status], sourceKind, category, createdAt',
       travelInboxPreviews: 'id, tripId, status, createdAt',
+    })
+
+    this.version(5).stores({
+      trips: 'id, updatedAt',
+      days: 'id, tripId, [tripId+sortOrder], date',
+      itineraryItems: 'id, tripId, dayId, [dayId+sortOrder], [dayId+startTime]',
+      ticketMetas: 'id, tripId, itemId, createdAt',
+      ticketBlobs: 'ticketId',
+      syncOutbox: 'id, tripId, objectKey, [tripId+status], [objectType+objectId], updatedAt',
+      objectSyncBases: 'objectKey, tripId, [objectType+objectId], cloudUpdatedAtMs, updatedAt',
+      objectSyncConflicts: 'id, tripId, objectKey, status, [tripId+status], [objectType+objectId], createdAt',
+      objectSyncStates: 'objectKey, tripId, [objectType+objectId], conflictAt',
+      ticketBlobSyncStates: 'ticketId, tripId, [tripId+uploadStatus], [tripId+cacheStatus], updatedAt',
+      travelInboxBlobs: 'entryId',
+      travelInboxEntries: 'id, tripId, [tripId+status], sourceKind, category, createdAt',
+      travelInboxPreviews: 'id, tripId, cloudSourceId, status, createdAt',
+      travelInboxAccountSourceBlobs: 'sourceId',
+      travelInboxAccountSources: 'id, cloudSourceId, connectorId, status, targetTripId, receivedAt',
+      travelInboxLocalConnectors: 'id, status, updatedAt',
+    })
+
+    this.version(6).stores({
+      trips: 'id, updatedAt',
+      days: 'id, tripId, [tripId+sortOrder], date',
+      itineraryItems: 'id, tripId, dayId, [dayId+sortOrder], [dayId+startTime]',
+      ticketMetas: 'id, tripId, itemId, bookingId, createdAt',
+      ticketBlobs: 'ticketId',
+      syncOutbox: 'id, tripId, objectKey, [tripId+status], [objectType+objectId], updatedAt',
+      objectSyncBases: 'objectKey, tripId, [objectType+objectId], cloudUpdatedAtMs, updatedAt',
+      objectSyncConflicts: 'id, tripId, objectKey, status, [tripId+status], [objectType+objectId], createdAt',
+      objectSyncStates: 'objectKey, tripId, [objectType+objectId], conflictAt',
+      ticketBlobSyncStates: 'ticketId, tripId, [tripId+uploadStatus], [tripId+cacheStatus], updatedAt',
+      travelInboxBlobs: 'entryId',
+      travelInboxEntries: 'id, tripId, [tripId+status], sourceKind, category, createdAt',
+      travelInboxPreviews: 'id, tripId, cloudSourceId, status, createdAt',
+      travelInboxAccountSourceBlobs: 'sourceId',
+      travelInboxAccountSources: 'id, cloudSourceId, connectorId, status, targetTripId, receivedAt',
+      travelInboxLocalConnectors: 'id, status, updatedAt',
+      transportBookings: 'id, tripId, kind, status, updatedAt',
+      transportSegments: 'id, bookingId, tripId, [bookingId+sortOrder], departureDate',
+      vaultObjects: 'id, vaultId, objectType, [vaultId+objectType], updatedAt',
+      vaultBlobs: 'id, vaultId, objectId, [vaultId+objectId], updatedAt',
+      vaultKeyState: 'vaultId, ownerId, updatedAt',
+      reminderSchedules: 'id, occurrenceId, status, triggerAt, objectId, [status+triggerAt]',
+      travelCenterSyncStates: 'objectKey, objectType, objectId, lastSyncedAt',
+      travelCenterSyncConflicts: 'id, objectKey, status, objectType, createdAt',
+      travelCenterTombstones: 'objectKey, objectType, objectId, deletedAt',
     })
   }
 }

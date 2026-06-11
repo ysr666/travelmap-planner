@@ -24,6 +24,12 @@ const ItemDetailPage = lazy(() =>
 const TicketLibraryPage = lazy(() =>
   import('./pages/TicketLibraryPage').then((module) => ({ default: module.TicketLibraryPage })),
 )
+const TravelDocumentCenterPage = lazy(() =>
+  import('./pages/TravelDocumentCenterPage').then((module) => ({ default: module.TravelDocumentCenterPage })),
+)
+const TravelInboxPage = lazy(() =>
+  import('./pages/TravelInboxPage').then((module) => ({ default: module.TravelInboxPage })),
+)
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
 )
@@ -123,6 +129,8 @@ function App() {
             {activeRoute === 'trip/new' || activeRoute === 'trip/edit' ? <TripFormPage /> : null}
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
+            {activeRoute === 'documents' ? <TravelDocumentCenterPage /> : null}
+            {activeRoute === 'inbox' ? <TravelInboxPage /> : null}
             {activeRoute === 'search' ? <SearchPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
             {activeRoute === 'settings/privacy' ? <SettingsPrivacyPage /> : null}

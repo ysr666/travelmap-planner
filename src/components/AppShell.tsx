@@ -3,7 +3,7 @@ import {
   Home,
   Map,
   Route,
-  Ticket,
+  FolderLock,
   User,
 } from 'lucide-react'
 import type { RouteId } from '../types'
@@ -20,6 +20,7 @@ type AppShellProps = {
 
 export function AppShell({ activeRoute, children, title }: AppShellProps) {
   const ownsCanvas = activeRoute === 'home'
+    || activeRoute === 'inbox'
     || activeRoute === 'settings'
     || activeRoute === 'settings/privacy'
     || activeRoute === 'settings/maps'
@@ -30,9 +31,11 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
     || activeRoute === 'item/new' || activeRoute === 'item/edit'
   const showTopAppBar = !fullScreen
   const showTabBar = activeRoute === 'home'
+    || activeRoute === 'inbox'
     || activeRoute === 'trip'
     || activeRoute === 'day'
     || activeRoute === 'tickets'
+    || activeRoute === 'documents'
     || activeRoute === 'search'
     || activeRoute === 'settings'
     || activeRoute === 'settings/privacy'
@@ -148,11 +151,11 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
       },
     },
     {
-      id: 'tickets',
-      label: '票据',
-      icon: Ticket,
-      active: activeRoute === 'tickets',
-      onClick: () => navigateTo('tickets', { tripId }),
+      id: 'documents',
+      label: '资料',
+      icon: FolderLock,
+      active: activeRoute === 'tickets' || activeRoute === 'documents',
+      onClick: () => navigateTo('documents', { tripId }),
     },
   ]
 

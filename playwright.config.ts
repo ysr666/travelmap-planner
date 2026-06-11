@@ -35,7 +35,6 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
         isMobile: true,
         hasTouch: true,
-        timezoneId: 'Asia/Shanghai',
       },
     },
   ],

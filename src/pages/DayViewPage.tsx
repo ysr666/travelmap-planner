@@ -18,7 +18,7 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildDayBrief } from '../lib/travelBrief'
-import { formatDateKey } from '../lib/dates'
+import { formatDateKey, formatShortDate } from '../lib/dates'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
 import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
@@ -535,12 +535,7 @@ function ViewSwitch({
 }
 
 function formatShortWorkspaceDate(date: string): string {
-  try {
-    const d = new Date(date + 'T00:00:00')
-    return `${d.getMonth() + 1}月${d.getDate()}日`
-  } catch {
-    return date
-  }
+  return formatShortDate(date)
 }
 
 function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }) {

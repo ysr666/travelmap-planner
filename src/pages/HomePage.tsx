@@ -9,7 +9,7 @@ import {
   listTrips,
 } from '../db'
 import { navigateTo } from '../lib/routes'
-import { formatDateRange } from '../lib/dates'
+import { formatDateKey, formatDateRange } from '../lib/dates'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import type { Trip } from '../types'
 import { AppVersion } from '../components/AppVersion'
@@ -257,11 +257,9 @@ function getTripEmoji(trip: Trip): string {
 }
 
 function getTripStatus(trip: Trip): { label: string; className: string } {
-  const now = new Date()
-  const start = new Date(trip.startDate)
-  const end = new Date(trip.endDate)
-  if (now > end) return { label: '已完成', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' }
-  if (now >= start) return { label: '进行中', className: 'bg-primary/20 text-primary' }
+  const today = formatDateKey(new Date())
+  if (today > trip.endDate) return { label: '已完成', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' }
+  if (today >= trip.startDate) return { label: '进行中', className: 'bg-primary/20 text-primary' }
   return { label: '计划中', className: 'bg-surface-container-high text-on-surface-variant' }
 }
 

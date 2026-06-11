@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getStoredTravelProfile: vi.fn(() => null),
   buildDayBrief: vi.fn(() => null),
   formatDateKey: vi.fn(() => '2026-04-01'),
+  formatShortDate: vi.fn((date: string) => date === '2026-04-01' ? '4月1日' : date),
   loadTripRoutePreparation: vi.fn().mockResolvedValue(null),
   getPersistentRouteProvider: vi.fn(() => null),
   getRoutingConfig: vi.fn(() => ({})),
@@ -86,6 +87,7 @@ vi.mock('../lib/travelBrief', () => ({
 
 vi.mock('../lib/dates', () => ({
   formatDateKey: mocks.formatDateKey,
+  formatShortDate: mocks.formatShortDate,
 }))
 
 vi.mock('../lib/routePreparation', () => ({

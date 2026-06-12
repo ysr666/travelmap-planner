@@ -137,7 +137,7 @@ export function PlaceSearchInput({
         />
       </div>
       {!ready ? (
-        <span className="mt-1 block text-xs text-outline">正在加载 Google Maps...</span>
+        <span className="mt-1 block text-xs tm-muted">正在加载 Google Maps...</span>
       ) : null}
     </label>
   )

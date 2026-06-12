@@ -568,7 +568,7 @@ function RouteOrderSuggestionPanel({
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-on-surface dark:text-on-surface">路线顺序建议</p>
-          <p className="mt-0.5 truncate text-[11px] tm-muted">{day.title} · 仅提供排序建议</p>
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-5 tm-muted">{day.title} · 仅提供排序建议</p>
         </div>
         <button
           className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-semibold text-on-surface ring-1 ring-outline-variant/30 active:scale-[0.98] disabled:opacity-60 dark:bg-surface-dim/60 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"

@@ -53,19 +53,30 @@ function PrivacyToggle({ icon, title, detail, checked, onChange, separator = tru
 }) {
   return (
     <>
-      <div className="flex items-center justify-between p-4 bg-surface-container">
+      <button
+        aria-checked={checked}
+        aria-label={`${title}：${detail}`}
+        className="flex w-full items-center justify-between gap-3 bg-surface-container p-4 text-left transition active:scale-[0.99] tm-focus"
+        onClick={() => onChange(!checked)}
+        role="switch"
+        type="button"
+      >
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center">{icon}</div>
-          <div className="flex flex-col">
+          <div aria-hidden="true" className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center">{icon}</div>
+          <div className="flex min-w-0 flex-col">
             <span className="font-body-lg text-body-lg text-on-surface">{title}</span>
             <span className="font-label-sm text-label-sm text-on-surface-variant">{detail}</span>
           </div>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input checked={checked} className="sr-only peer" onChange={(e) => onChange(e.target.checked)} type="checkbox" />
-          <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-        </label>
-      </div>
+        <span
+          aria-hidden="true"
+          className={`relative flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
+            checked ? 'justify-end bg-primary' : 'justify-start bg-surface-container-highest'
+          }`}
+        >
+          <span className="size-5 rounded-full border border-gray-300 bg-white transition-all" />
+        </span>
+      </button>
       {separator ? <div className="h-[1px] bg-outline-variant/30 ml-[60px]" /> : null}
     </>
   )

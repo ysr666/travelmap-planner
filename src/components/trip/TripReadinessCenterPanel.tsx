@@ -370,7 +370,7 @@ export function TripReadinessCenterPanel({
               已选择 {selectedLowFixableCount} 项低风险修复，高风险不会进入批量静默处理。
             </p>
             <Button
-              className="min-h-10 px-3 text-xs"
+              className="min-h-11 px-3 text-xs"
               data-testid="trip-readiness-batch-button"
               disabled={selectedLowFixableCount === 0 || isRepairing}
               icon={isRepairing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
@@ -632,51 +632,53 @@ function IssueRow({
       data-issue-type={issue.type}
       data-testid="trip-readiness-issue"
     >
-      <div className="flex items-start gap-3">
-        <input
-          aria-label={`选择 ${issue.title}`}
-          checked={selectable && checked}
-          className="mt-1 size-4 rounded border-outline-variant text-primary disabled:opacity-40"
-          data-testid="trip-readiness-issue-checkbox"
-          disabled={!selectable}
-          onChange={() => onToggle(issue)}
-          type="checkbox"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {issueIcon(issue)}
-                <p className="break-words text-xs font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
-                  {issue.title}
+      <div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <label className={`flex min-h-11 min-w-0 flex-1 items-start gap-3 rounded-lg ${selectable ? 'cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#3895ff]' : ''}`}>
+            <input
+              aria-label={`选择 ${issue.title}`}
+              checked={selectable && checked}
+              className="mt-1 size-4 rounded border-outline-variant text-primary disabled:opacity-40"
+              data-testid="trip-readiness-issue-checkbox"
+              disabled={!selectable}
+              onChange={() => onToggle(issue)}
+              type="checkbox"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {issueIcon(issue)}
+                  <p className="break-words text-xs font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
+                    {issue.title}
+                  </p>
+                  <span className={severityBadgeClassName(issue.severity)}>{severityLabel(issue.severity)}</span>
+                </div>
+                <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
+                  {issue.message}
                 </p>
-                <span className={severityBadgeClassName(issue.severity)}>{severityLabel(issue.severity)}</span>
-              </div>
-              <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">
-                {issue.message}
-              </p>
-              {day ? (
-                <p className="mt-0.5 text-[11px] leading-5 tm-muted">{day.title}</p>
-              ) : null}
-            </div>
-            <Button
-              className="min-h-11 shrink-0 px-2 text-xs"
-              data-testid="trip-readiness-issue-action"
-              icon={actionIcon(issue)}
-              onClick={() => onAction(issue)}
-              variant="secondary"
-            >
-              {issue.actionLabel}
-            </Button>
-          </div>
-          {issue.evidence.length > 0 ? (
-            <ul className="mt-2 space-y-1 text-[11px] leading-5 tm-muted" data-testid="trip-readiness-issue-evidence">
-              {issue.evidence.slice(0, 2).map((line) => (
-                <li className="break-words [overflow-wrap:anywhere]" key={line}>{line}</li>
-              ))}
-            </ul>
-          ) : null}
+                {day ? (
+                  <p className="mt-0.5 text-[11px] leading-5 tm-muted">{day.title}</p>
+                ) : null}
+              </span>
+            </span>
+          </label>
+          <Button
+            className="min-h-11 shrink-0 px-2 text-xs"
+            data-testid="trip-readiness-issue-action"
+            icon={actionIcon(issue)}
+            onClick={() => onAction(issue)}
+            variant="secondary"
+          >
+            {issue.actionLabel}
+          </Button>
         </div>
+        {issue.evidence.length > 0 ? (
+          <ul className="mt-2 space-y-1 text-[11px] leading-5 tm-muted" data-testid="trip-readiness-issue-evidence">
+            {issue.evidence.slice(0, 2).map((line) => (
+              <li className="break-words [overflow-wrap:anywhere]" key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </div>
   )

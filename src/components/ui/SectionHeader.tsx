@@ -20,7 +20,7 @@ export function SectionHeader({ eyebrow, title, action, onAction }: SectionHeade
       </div>
       {action ? (
         <button
-          className="rounded-xl px-3 py-1.5 text-sm font-semibold text-sky-600 transition hover:bg-sky-50/80 active:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/10 dark:active:bg-sky-500/10 tm-focus"
+          className="min-h-11 rounded-xl px-3 py-2 text-sm font-semibold text-sky-600 transition hover:bg-sky-50/80 active:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/10 dark:active:bg-sky-500/10 tm-focus"
           onClick={onAction}
           type="button"
         >

@@ -219,7 +219,7 @@ export function HomePage() {
             AI 生成行程
           </button>
           <button
-            className="w-full py-4 rounded-xl bg-[#0A84FF] text-white font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#0A84FF]/90 transition-colors active:scale-[0.98]"
+            className="w-full py-4 rounded-xl bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-[0.98]"
             onClick={() => navigateTo('trip/new')}
             type="button"
           >
@@ -227,7 +227,7 @@ export function HomePage() {
             新建旅行
           </button>
           <button
-            className="w-full py-4 rounded-xl bg-[#2C2C2E] text-[#0A84FF] font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-[#2C2C2E]/80 transition-colors active:scale-[0.98]"
+            className="w-full py-4 rounded-xl bg-inverse-surface text-inverse-on-surface font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-inverse-surface/90 transition-colors active:scale-[0.98]"
             onClick={() => navigateTo('settings')}
             type="button"
           >

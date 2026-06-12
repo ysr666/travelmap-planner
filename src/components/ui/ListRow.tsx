@@ -38,7 +38,7 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
           {title}
         </span>
         {detail ? (
-          <span className="block truncate text-[12px] tm-muted">{detail}</span>
+          <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 tm-muted">{detail}</span>
         ) : null}
       </span>
       {meta ? <span className="text-xs font-medium tm-muted">{meta}</span> : null}

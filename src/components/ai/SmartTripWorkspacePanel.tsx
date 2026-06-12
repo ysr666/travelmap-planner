@@ -342,7 +342,7 @@ export function SmartTripWorkspacePanel({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          className="min-h-10 px-3 text-xs"
+          className="min-h-11 px-3 text-xs"
           data-testid="smart-trip-workspace-generate"
           disabled={!canGenerate}
           icon={<Sparkles className="size-3.5" />}
@@ -390,7 +390,7 @@ export function SmartTripWorkspacePanel({
               <p className="mt-0.5 text-[11px] leading-5 tm-muted">已选择 {selectedWriteCount} 项可写入修改。</p>
             </div>
             <Button
-              className="min-h-9 shrink-0 px-3 text-xs"
+              className="min-h-11 shrink-0 px-3 text-xs"
               disabled={!canApply}
               loading={isApplying}
               onClick={() => setConfirmApplyOpen(true)}

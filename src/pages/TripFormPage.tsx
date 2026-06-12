@@ -219,7 +219,7 @@ export function TripFormPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label={isEdit ? '返回旅行工作台' : '返回首页'}
-            className="flex size-10 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
             onClick={handleCancel}
             type="button"
           >
@@ -228,7 +228,7 @@ export function TripFormPage() {
           <h1 className="min-w-0 flex-1 truncate text-xl font-semibold leading-tight text-on-surface dark:text-on-surface">
             {isEdit ? '编辑旅行' : '新建旅行'}
           </h1>
-          <div className="size-10" />
+          <div className="size-11" />
         </div>
       </header>
 

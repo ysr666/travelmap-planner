@@ -4,7 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Button } from './Button'
+import { BottomSheet } from './BottomSheet'
 import { Card } from './Card'
+import { ConfirmDialog } from './ConfirmDialog'
 import { EmptyState } from './EmptyState'
 import { ListRow } from './ListRow'
 import { SectionHeader } from './SectionHeader'
@@ -14,6 +16,12 @@ vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+
+async function waitForModalFocus() {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 25))
+  })
+}
 
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -114,6 +122,104 @@ describe('Button', () => {
     })
     const button = container?.querySelector('button')
     expect(button?.className).toContain('min-h-12')
+  })
+})
+
+describe('ConfirmDialog', () => {
+  it('has an accessible name and focuses the cancel action', async () => {
+    await act(async () => {
+      root?.render(
+        <ConfirmDialog
+          body="删除后不可恢复。"
+          onCancel={() => {}}
+          onConfirm={() => {}}
+          open
+          title="确认删除"
+        />,
+      )
+    })
+    await waitForModalFocus()
+
+    const dialog = document.body.querySelector('[role="dialog"]')
+    expect(dialog?.getAttribute('aria-labelledby')).toBeTruthy()
+    expect(dialog?.getAttribute('aria-describedby')).toBeTruthy()
+    expect(document.activeElement?.textContent).toContain('取消')
+  })
+
+  it('traps tab focus and closes with Escape', async () => {
+    const onCancel = vi.fn()
+    await act(async () => {
+      root?.render(
+        <ConfirmDialog
+          body="删除后不可恢复。"
+          confirmLabel="删除"
+          onCancel={onCancel}
+          onConfirm={() => {}}
+          open
+          title="确认删除"
+        />,
+      )
+    })
+    await waitForModalFocus()
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Tab', shiftKey: true }))
+    expect(document.activeElement?.textContent).toContain('删除')
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Tab' }))
+    expect(document.activeElement?.textContent).toContain('取消')
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }))
+    expect(onCancel).toHaveBeenCalled()
+  })
+
+  it('restores focus to the opener when closed', async () => {
+    const opener = document.createElement('button')
+    opener.textContent = '打开弹窗'
+    document.body.appendChild(opener)
+    opener.focus()
+
+    await act(async () => {
+      root?.render(
+        <ConfirmDialog
+          body="删除后不可恢复。"
+          onCancel={() => {}}
+          onConfirm={() => {}}
+          open
+          title="确认删除"
+        />,
+      )
+    })
+    await waitForModalFocus()
+
+    await act(async () => {
+      root?.render(
+        <ConfirmDialog
+          body="删除后不可恢复。"
+          onCancel={() => {}}
+          onConfirm={() => {}}
+          open={false}
+          title="确认删除"
+        />,
+      )
+    })
+
+    expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
+})
+
+describe('BottomSheet', () => {
+  it('requires an accessible name and focuses close', async () => {
+    await act(async () => {
+      root?.render(
+        <BottomSheet ariaLabel="更多操作" onClose={() => {}} open>
+          <button type="button">旅行总览</button>
+        </BottomSheet>,
+      )
+    })
+    await waitForModalFocus()
+
+    const dialog = document.body.querySelector('[role="dialog"]')
+    expect(dialog?.getAttribute('aria-label')).toBe('更多操作')
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('关闭')
   })
 })
 

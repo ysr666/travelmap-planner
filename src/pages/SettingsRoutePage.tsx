@@ -17,7 +17,7 @@ export function SettingsRoutePage() {
 
       <section>
         <h3 className="font-label-sm text-label-sm text-on-surface-variant mb-stack-gap uppercase tracking-wider px-4">路线策略</h3>
-        <div className="bg-surface-container rounded-xl overflow-hidden border-[0.5px] border-outline-variant/30 flex flex-col">
+        <div aria-label="路线策略" className="bg-surface-container rounded-xl overflow-hidden border-[0.5px] border-outline-variant/30 flex flex-col" role="radiogroup">
           <RouteOption icon={<Car className="size-4" />} title="最快路线" detail="优先选择速度最快的道路" selected={preference === 'fastest'} onClick={() => setPreference('fastest')} />
           <RouteOption icon={<Footprints className="size-4" />} title="最短路线" detail="优先选择距离最短的道路" selected={preference === 'shortest'} onClick={() => setPreference('shortest')} />
           <RouteOption icon={<Train className="size-4" />} title="风景路线" detail="优先选择沿途风景好的道路" selected={preference === 'scenic'} onClick={() => setPreference('scenic')} separator={false} />
@@ -45,17 +45,25 @@ function RouteOption({ icon, title, detail, selected, onClick, separator = true 
 }) {
   return (
     <>
-      <div
-        className={`flex items-center justify-between p-4 bg-surface-container hover:bg-surface-container-high/50 transition-colors cursor-pointer active:scale-[0.98] ${selected ? 'ring-2 ring-primary/30' : ''}`}
+      <button
+        aria-checked={selected}
+        aria-label={`${title}：${detail}`}
+        className={`flex w-full items-center justify-between gap-3 p-4 bg-surface-container text-left hover:bg-surface-container-high/50 transition-colors active:scale-[0.98] tm-focus ${selected ? 'ring-2 ring-primary/30' : ''}`}
         onClick={onClick}
-        role="button"
-        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onClick()
+          }
+        }}
+        role="radio"
+        type="button"
       >
         <div className="flex items-center gap-4">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selected ? 'bg-primary/20 text-primary' : 'bg-surface-container-highest text-on-surface-variant'}`}>
+          <div aria-hidden="true" className={`w-8 h-8 rounded-full flex items-center justify-center ${selected ? 'bg-primary/20 text-primary' : 'bg-surface-container-highest text-on-surface-variant'}`}>
             {icon}
           </div>
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="font-body-lg text-body-lg text-on-surface">{title}</span>
             <span className="font-label-sm text-label-sm text-on-surface-variant">{detail}</span>
           </div>
@@ -67,7 +75,7 @@ function RouteOption({ icon, title, detail, selected, onClick, separator = true 
         ) : (
           <div className="w-5 h-5 rounded-full border-2 border-outline-variant" />
         )}
-      </div>
+      </button>
       {separator ? <div className="h-[1px] bg-outline-variant/30 ml-[60px]" /> : null}
     </>
   )
@@ -82,16 +90,27 @@ function ToggleRow({ icon, title, checked, onChange, separator = true }: {
 }) {
   return (
     <>
-      <div className="flex items-center justify-between p-4 bg-surface-container">
+      <button
+        aria-checked={checked}
+        aria-label={title}
+        className="flex w-full items-center justify-between gap-3 bg-surface-container p-4 text-left transition active:scale-[0.99] tm-focus"
+        onClick={() => onChange(!checked)}
+        role="switch"
+        type="button"
+      >
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center">{icon}</div>
+          <div aria-hidden="true" className="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center">{icon}</div>
           <span className="font-body-lg text-body-lg text-on-surface">{title}</span>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input checked={checked} className="sr-only peer" onChange={(e) => onChange(e.target.checked)} type="checkbox" />
-          <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-        </label>
-      </div>
+        <span
+          aria-hidden="true"
+          className={`relative flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
+            checked ? 'justify-end bg-primary' : 'justify-start bg-surface-container-highest'
+          }`}
+        >
+          <span className="size-5 rounded-full border border-gray-300 bg-white transition-all" />
+        </span>
+      </button>
       {separator ? <div className="h-[1px] bg-outline-variant/30 ml-[60px]" /> : null}
     </>
   )

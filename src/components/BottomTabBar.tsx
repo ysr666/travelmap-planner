@@ -16,7 +16,7 @@ const tabs = [
 
 export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-16 items-center justify-around border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+    <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-16 items-center justify-between border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
       {tabs.map((tab) => {
         const Icon = tab.icon
         const isActive = getActiveTab(activeRoute) === tab.id
@@ -24,7 +24,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
           <button
             key={tab.id}
             aria-label={tab.label}
-            className={`flex flex-col items-center justify-center rounded-xl px-3 py-1 transition active:scale-90 ${
+            className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1 py-1 transition active:scale-90 tm-focus ${
               isActive
                 ? 'text-primary bg-primary-container/10'
                 : 'text-on-surface-variant hover:text-on-surface'
@@ -33,7 +33,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
             type="button"
           >
             <Icon className="size-5 mb-1" />
-            <span className="font-label-sm text-label-sm">{tab.label}</span>
+            <span className="max-w-full truncate text-[11px] font-semibold leading-4">{tab.label}</span>
           </button>
         )
       })}

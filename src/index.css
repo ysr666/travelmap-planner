@@ -3,10 +3,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #0058bc;
-  --color-primary-shadow: rgba(0, 88, 188, 0.18);
-  --color-primary-shadow-lg: rgba(0, 88, 188, 0.22);
-  --color-primary-container: #0070eb;
+  --color-primary: #004a9f;
+  --color-primary-shadow: rgba(0, 74, 159, 0.18);
+  --color-primary-shadow-lg: rgba(0, 74, 159, 0.22);
+  --color-primary-container: #0058bc;
   --color-primary-fixed: #d8e2ff;
   --color-primary-fixed-dim: #adc6ff;
   --color-inverse-primary: #adc6ff;
@@ -22,7 +22,7 @@
   --color-surface: #f5f6f8;
   --color-surface-dim: #d9dadc;
   --color-surface-bright: #f8f9fb;
-  --color-surface-tint: #005bc1;
+  --color-surface-tint: #004a9f;
   --color-surface-variant: #e1e2e4;
   --color-surface-container-lowest: #ffffff;
   --color-surface-container-low: #f3f4f6;
@@ -30,7 +30,7 @@
   --color-surface-container-high: #e7e8ea;
   --color-surface-container-highest: #e1e2e4;
   --color-on-surface: #191c1e;
-  --color-on-surface-variant: #414755;
+  --color-on-surface-variant: #303846;
   --color-on-background: #191c1e;
   --color-on-primary-container: #fefcff;
   --color-on-secondary: #ffffff;

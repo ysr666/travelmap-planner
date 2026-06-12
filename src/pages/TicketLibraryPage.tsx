@@ -712,7 +712,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
           {filterOptions.map((option) => (
             <button
-              className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold ${
+              className={`min-h-11 min-w-11 shrink-0 rounded-full px-3 text-xs font-semibold tm-focus ${
                 filter === option.value ? 'bg-primary text-white shadow-[0_4px_12px_var(--color-primary-shadow)]' : 'tm-chip'
               }`}
               key={option.value}
@@ -825,7 +825,7 @@ function TicketCard({
     <Card variant="grouped" className="flex flex-col overflow-hidden p-2.5" data-testid="ticket-card">
       <button
         aria-label={`查看${displayTitle}`}
-        className="flex min-h-0 flex-1 flex-col text-left transition active:scale-[0.99]"
+        className="flex min-h-0 flex-1 flex-col text-left transition active:scale-[0.99] tm-focus"
         onClick={onPreview}
         type="button"
       >
@@ -836,7 +836,7 @@ function TicketCard({
 
         <span className="mt-2 min-w-0 px-0.5">
           <span className="flex items-center gap-1.5">
-            <span className="block min-w-0 truncate text-sm font-semibold text-on-surface dark:text-on-surface">
+            <span className="block min-w-0 line-clamp-2 text-sm font-semibold leading-5 text-on-surface dark:text-on-surface" title={displayTitle}>
               {displayTitle}
             </span>
             <span
@@ -846,7 +846,7 @@ function TicketCard({
               {syncView.label}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-[11px] leading-4 tm-muted">
+          <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 tm-muted" title={visual.secondaryLine}>
             {visual.secondaryLine}
           </span>
           <span className="mt-1 line-clamp-2 block text-[11px] leading-4 tm-muted">
@@ -855,7 +855,7 @@ function TicketCard({
         </span>
 
         <span className="mt-auto pt-2 px-0.5">
-          <span className="block truncate text-[11px] font-semibold tm-muted">
+          <span className="block truncate text-[11px] font-semibold tm-muted" title={bindingLabel}>
             {bindingLabel}
           </span>
           <span className="mt-0.5 block text-[11px] tm-muted">

@@ -1,12 +1,12 @@
-export const FIELD_LABEL_CLASS = 'text-sm font-semibold text-on-surface dark:text-outline-variant'
+export const FIELD_LABEL_CLASS = 'text-sm font-semibold text-on-surface'
 
 export const FIELD_INPUT_CLASS =
-  'mt-2 h-11 w-full min-w-0 tm-field px-3 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:text-on-surface dark:placeholder:text-on-surface-variant dark:focus:border-sky-500 dark:focus:ring-sky-500/15'
+  'mt-2 h-11 w-full min-w-0 tm-field px-3 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-sky-400 focus:ring-4 focus:ring-sky-100'
 
 export const FIELD_SELECT_CLASS = FIELD_INPUT_CLASS
 
 export const FIELD_TEXTAREA_CLASS =
-  'mt-2 w-full min-w-0 tm-field px-3 py-2.5 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:text-on-surface dark:placeholder:text-on-surface-variant dark:focus:border-sky-500 dark:focus:ring-sky-500/15'
+  'mt-2 w-full min-w-0 tm-field px-3 py-2.5 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-sky-400 focus:ring-4 focus:ring-sky-100'
 
 type FormFieldProps = {
   label: string

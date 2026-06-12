@@ -158,7 +158,7 @@ export function TravelInboxPage() {
               <span><strong className="block text-on-surface">允许持续拉取并自动 AI 整理</strong><span className="mt-1 block text-xs tm-muted">原文件私有暂存；应用打开后本地提取，只把文本发送给 AI。最终写入仍需确认。</span></span>
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold text-on-surface">首次同步<select className="mt-1 min-h-10 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm font-normal" onChange={(event) => setBackfillDays(Number(event.target.value) as 0 | 7 | 30)} value={backfillDays}><option value={0}>从连接时刻开始</option><option value={7}>回捞最近 7 天</option><option value={30}>回捞最近 30 天</option></select></label>
+              <label className="text-xs font-semibold text-on-surface">首次同步<select className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm font-normal" onChange={(event) => setBackfillDays(Number(event.target.value) as 0 | 7 | 30)} value={backfillDays}><option value={0}>从连接时刻开始</option><option value={7}>回捞最近 7 天</option><option value={30}>回捞最近 30 天</option></select></label>
               <Input label="Gmail 标签 ID" placeholder="INBOX" value={gmailLabelId} onChange={setGmailLabelId} />
             </div>
           </div>
@@ -185,9 +185,9 @@ export function TravelInboxPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-container-high p-3" key={connector.id}>
             <div className="min-w-0"><p className="truncate text-sm font-semibold text-on-surface">{connector.name}</p><p className="text-xs tm-muted">{connector.kind === 'local_folder' ? '本地文件夹' : connector.kind === 'gmail' ? 'Gmail' : 'IMAP'} · {connector.status}</p></div>
             <div className="flex gap-1">
-              {'last_synced_at' in connector ? <button aria-label="立即同步" className="p-2 text-primary" onClick={() => void run(`sync:${connector.id}`, async () => { const result = await syncTravelInboxConnector(connector.id); setMessage(`同步完成：新增 ${result.imported}，跳过 ${result.skipped}。`) })} type="button"><RefreshCw className="size-4" /></button> : null}
-              {'mailbox_folder' in connector ? <button aria-label={connector.status === 'paused' ? '恢复' : '暂停'} className="p-2 text-on-surface-variant" onClick={() => void run(`toggle:${connector.id}`, async () => { await updateTravelInboxConnector(connector.id, connector.status === 'paused' ? 'active' : 'paused') })} type="button">{connector.status === 'paused' ? <Play className="size-4" /> : <Pause className="size-4" />}</button> : null}
-              <button aria-label="删除连接器" className="p-2 text-red-600" onClick={() => void run(`delete:${connector.id}`, async () => { if (connector.kind === 'local_folder') await deleteTravelInboxLocalFolderConnector(connector.id); else await deleteTravelInboxConnector(connector.id) })} type="button"><Trash2 className="size-4" /></button>
+              {'last_synced_at' in connector ? <button aria-label="立即同步" className="flex size-11 items-center justify-center rounded-xl text-primary tm-focus" onClick={() => void run(`sync:${connector.id}`, async () => { const result = await syncTravelInboxConnector(connector.id); setMessage(`同步完成：新增 ${result.imported}，跳过 ${result.skipped}。`) })} type="button"><RefreshCw className="size-4" /></button> : null}
+              {'mailbox_folder' in connector ? <button aria-label={connector.status === 'paused' ? '恢复' : '暂停'} className="flex size-11 items-center justify-center rounded-xl text-on-surface-variant tm-focus" onClick={() => void run(`toggle:${connector.id}`, async () => { await updateTravelInboxConnector(connector.id, connector.status === 'paused' ? 'active' : 'paused') })} type="button">{connector.status === 'paused' ? <Play className="size-4" /> : <Pause className="size-4" />}</button> : null}
+              <button aria-label="删除连接器" className="flex size-11 items-center justify-center rounded-xl text-red-600 tm-focus" onClick={() => void run(`delete:${connector.id}`, async () => { if (connector.kind === 'local_folder') await deleteTravelInboxLocalFolderConnector(connector.id); else await deleteTravelInboxConnector(connector.id) })} type="button"><Trash2 className="size-4" /></button>
             </div>
           </div>
         ))}
@@ -220,13 +220,13 @@ function SourceRow({ busy, onAssign, onDiscard, onOpen, onRetry, source, trips }
     <div className="space-y-2 rounded-xl bg-surface-container-high p-3" data-testid="travel-inbox-source">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0"><p className="break-words text-sm font-semibold text-on-surface">{source.label}</p><p className="text-xs tm-muted">{source.connectorKind === 'local_folder' ? '本地文件夹' : source.connectorKind.toUpperCase()} · {statusLabel(source.status)}</p></div>
-        {busy ? <Loader2 className="size-4 animate-spin text-primary" /> : <button aria-label="丢弃来源" className="p-1 text-red-600" onClick={onDiscard} type="button"><Trash2 className="size-4" /></button>}
+        {busy ? <Loader2 className="size-4 animate-spin text-primary" /> : <button aria-label="丢弃来源" className="flex size-11 shrink-0 items-center justify-center rounded-xl text-red-600 tm-focus" onClick={onDiscard} type="button"><Trash2 className="size-4" /></button>}
       </div>
       {source.classification ? <p className="text-xs tm-muted">{source.classification.reason} · {source.classification.confidence}</p> : null}
       {source.error ? <p className="text-xs text-red-600">{source.error}</p> : null}
       {source.status === 'needs_assignment' || source.status === 'error' ? (
         <div className="flex flex-wrap gap-2">
-          <select aria-label="目标旅行" className="min-h-10 flex-1 rounded-lg border border-outline-variant/40 bg-surface px-2 text-sm" defaultValue="" onChange={(event) => event.target.value && onAssign(event.target.value)}>
+          <select aria-label="目标旅行" className="min-h-11 flex-1 rounded-lg border border-outline-variant/40 bg-surface px-2 text-sm" defaultValue="" onChange={(event) => event.target.value && onAssign(event.target.value)}>
             <option value="">选择目标旅行</option>{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
           </select>
           {source.status === 'error' ? <Button onClick={onRetry} variant="ghost">重试</Button> : null}
@@ -238,5 +238,5 @@ function SourceRow({ busy, onAssign, onDiscard, onOpen, onRetry, source, trips }
 }
 
 function Summary({ label, value }: { label: string; value: number }) { return <div className="rounded-xl bg-surface-container-high p-2 text-center"><p className="text-xl font-bold text-on-surface">{value}</p><p className="text-[11px] tm-muted">{label}</p></div> }
-function Input({ label, onChange, placeholder, type = 'text', value }: { label: string; onChange: (value: string) => void; placeholder?: string; type?: string; value: string }) { return <label className="text-xs font-semibold text-on-surface">{label}<input className="mt-1 min-h-10 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm font-normal" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} /></label> }
+function Input({ label, onChange, placeholder, type = 'text', value }: { label: string; onChange: (value: string) => void; placeholder?: string; type?: string; value: string }) { return <label className="text-xs font-semibold text-on-surface">{label}<input className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm font-normal" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} /></label> }
 function statusLabel(status: TravelInboxAccountSource['status']) { return ({ queued: '等待处理', extracting: '本地提取中', classifying: 'AI 分类中', needs_assignment: '待分配', building_preview: '生成预览中', preview_ready: '预览就绪', error: '需要处理' })[status] }

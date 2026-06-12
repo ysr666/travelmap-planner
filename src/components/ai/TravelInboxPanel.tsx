@@ -543,6 +543,7 @@ export function TravelInboxPanel({
         <div className="min-w-0 rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-high p-3">
           <input
             ref={fileInputRef}
+            aria-label="上传收件箱文件"
             accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip"
             className="sr-only"
             multiple
@@ -554,7 +555,7 @@ export function TravelInboxPanel({
             type="file"
           />
           <button
-            className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-primary tm-focus"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-primary tm-focus"
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
@@ -586,7 +587,7 @@ export function TravelInboxPanel({
         <p className="text-xs font-semibold tm-muted">OCR 语言</p>
         <div className="flex flex-wrap gap-2">
           {[...DEFAULT_EXISTING_TRIP_IMPORT_OCR_LANGUAGES, ...OPTIONAL_EXISTING_TRIP_IMPORT_OCR_LANGUAGES].map((language) => (
-            <label className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-outline-variant/30 bg-surface-container-high px-3 text-xs font-medium text-on-surface" key={language}>
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-outline-variant/30 bg-surface-container-high px-3 text-xs font-medium text-on-surface" key={language}>
               <input
                 checked={languages.includes(language)}
                 className="size-4"
@@ -625,12 +626,12 @@ export function TravelInboxPanel({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {entry.status === 'error' ? (
-                      <button className="inline-flex items-center gap-1 text-xs font-semibold text-primary" onClick={() => void retryEntry(entry)} type="button">
+                      <button className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => void retryEntry(entry)} type="button">
                         <RefreshCw className="size-3" />
                         重试 OCR
                       </button>
                     ) : null}
-                    <button className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-300" onClick={() => void deleteTravelInboxEntries([entry.id]).then(loadInbox)} type="button">
+                    <button className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-red-600 dark:text-red-300 tm-focus" onClick={() => void deleteTravelInboxEntries([entry.id]).then(loadInbox)} type="button">
                       <Trash2 className="size-3" />
                       删除
                     </button>
@@ -745,7 +746,7 @@ export function TravelInboxPanel({
                   <p className="text-xs tm-muted">{change.title}</p>
                 </div>
                 {canOpenAppliedChange(change) ? (
-                  <button className="inline-flex items-center gap-1 text-xs font-semibold text-primary" onClick={() => openAppliedChange(trip.id, change)} type="button">
+                  <button className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => openAppliedChange(trip.id, change)} type="button">
                     查看
                     <ArrowRight className="size-3" />
                   </button>

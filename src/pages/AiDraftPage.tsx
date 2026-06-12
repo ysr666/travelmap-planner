@@ -1295,7 +1295,7 @@ export function AiDraftPage() {
               const selected = requestInterestTags.includes(tag)
               return (
                 <button
-                  className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
+                  className={`min-h-11 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
                     selected
                       ? 'border-primary/40 bg-primary-container text-on-primary-container'
                       : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
@@ -1554,7 +1554,7 @@ export function AiDraftPage() {
               {repairableQualityFindings.length > 0 && (
                 <div className="flex shrink-0 gap-2">
                   <Button
-                    className="min-h-9 px-3 text-xs"
+                    className="min-h-11 px-3 text-xs"
                     data-testid="ai-draft-quality-select-all"
                     onClick={selectAllRepairableQualityFindings}
                     variant="ghost"
@@ -1562,7 +1562,7 @@ export function AiDraftPage() {
                     全选
                   </Button>
                   <Button
-                    className="min-h-9 px-3 text-xs"
+                    className="min-h-11 px-3 text-xs"
                     data-testid="ai-draft-quality-clear-selection"
                     onClick={clearSelectedQualityFindings}
                     variant="ghost"
@@ -1737,7 +1737,7 @@ export function AiDraftPage() {
                   const selected = rangeRefineInterestTags.includes(tag)
                   return (
                     <button
-                      className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
+                      className={`min-h-11 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
                         selected
                           ? 'border-primary/40 bg-primary-container text-on-primary-container'
                           : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
@@ -1841,7 +1841,7 @@ export function AiDraftPage() {
                       <span className="ml-2 text-xs font-normal tm-muted">{day.date}</span>
                     </p>
                     <Button
-                      className="min-h-9 px-3 text-xs"
+                      className="min-h-11 px-3 text-xs"
                       data-testid="ai-draft-day-regenerate-button"
                       disabled={!proxyConfig.configured || refineGenerating}
                       loading={refineGenerating && pendingDayRefine?.date === day.date}
@@ -1867,7 +1867,7 @@ export function AiDraftPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-on-surface dark:text-on-surface">每日提示</p>
-                      <Button className="min-h-8 px-2 text-xs" onClick={() => addDraftDayTip(dayIndex)} variant="secondary">
+                      <Button className="min-h-11 px-2 text-xs" onClick={() => addDraftDayTip(dayIndex)} variant="secondary">
                         添加提示
                       </Button>
                     </div>
@@ -1888,7 +1888,7 @@ export function AiDraftPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-on-surface dark:text-on-surface">行程点</p>
-                      <Button className="min-h-8 px-2 text-xs" onClick={() => addDraftItem(dayIndex)} variant="secondary">
+                      <Button className="min-h-11 px-2 text-xs" onClick={() => addDraftItem(dayIndex)} variant="secondary">
                         添加行程点
                       </Button>
                     </div>
@@ -1897,13 +1897,13 @@ export function AiDraftPage() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-semibold text-on-surface-variant">#{itemIndex + 1}</p>
                           <div className="flex gap-1">
-                            <Button className="min-h-8 px-2 text-xs" disabled={itemIndex === 0} onClick={() => moveDraftItem(dayIndex, itemIndex, -1)} variant="ghost">
+                            <Button className="min-h-11 px-2 text-xs" disabled={itemIndex === 0} onClick={() => moveDraftItem(dayIndex, itemIndex, -1)} variant="ghost">
                               上移
                             </Button>
-                            <Button className="min-h-8 px-2 text-xs" disabled={itemIndex === day.items.length - 1} onClick={() => moveDraftItem(dayIndex, itemIndex, 1)} variant="ghost">
+                            <Button className="min-h-11 px-2 text-xs" disabled={itemIndex === day.items.length - 1} onClick={() => moveDraftItem(dayIndex, itemIndex, 1)} variant="ghost">
                               下移
                             </Button>
-                            <Button className="min-h-8 px-2 text-xs" onClick={() => removeDraftItem(dayIndex, itemIndex)} variant="ghost">
+                            <Button className="min-h-11 px-2 text-xs" onClick={() => removeDraftItem(dayIndex, itemIndex)} variant="ghost">
                               删除
                             </Button>
                           </div>
@@ -2324,7 +2324,7 @@ function AiDraftMapPreviewCard({
                       </p>
                     </div>
                     <Button
-                      className="min-h-9 shrink-0 px-3 text-xs"
+                      className="min-h-11 shrink-0 px-3 text-xs"
                       data-testid="ai-draft-place-lookup-search"
                       disabled={!lookupItem.query || state?.loading}
                       icon={<Search className="size-4" />}
@@ -2386,7 +2386,7 @@ function AiDraftMapPreviewCard({
                               ) : null}
                             </div>
                             <Button
-                              className="min-h-9 w-full text-xs"
+                              className="min-h-11 w-full text-xs"
                               data-testid="ai-draft-place-lookup-use-result"
                               onClick={() => onSelectPlaceCandidate(lookupItem, candidate)}
                               variant="secondary"
@@ -2758,7 +2758,7 @@ function AiDraftVariantCard({
             {state.error}
           </p>
           <Button
-            className="min-h-9 px-3 text-xs"
+            className="min-h-11 px-3 text-xs"
             data-testid="ai-draft-variant-retry"
             disabled={disabled}
             onClick={onRetry}

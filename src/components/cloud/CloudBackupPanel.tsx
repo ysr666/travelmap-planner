@@ -819,7 +819,7 @@ function CloudSyncQueueSummaryPanel({ summary }: { summary: CloudSyncQueueSummar
       </div>
       {hasDetails ? (
         <details className="group">
-          <summary className="cursor-pointer text-xs font-semibold text-on-surface-variant marker:text-outline">
+          <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-on-surface-variant marker:text-outline tm-focus">
             查看同步明细
           </summary>
           <div className="mt-2 space-y-2">

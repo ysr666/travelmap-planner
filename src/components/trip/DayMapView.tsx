@@ -563,7 +563,7 @@ function MapHeader({
       <div className="pointer-events-auto mx-auto flex items-center gap-2 rounded-2xl p-2 backdrop-blur-xl tm-surface">
         <button
           aria-label="返回日程"
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
           onClick={onBackToSchedule}
           type="button"
         >

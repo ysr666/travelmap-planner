@@ -386,7 +386,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           {/* Place Lookup Toggle */}
           <div className="p-4 border-t border-outline-variant/30">
             <Button
-              className="w-full min-h-10"
+              className="w-full min-h-11"
               data-testid="item-place-lookup-toggle"
               icon={<Search className="size-4" />}
               onClick={() => {
@@ -503,7 +503,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 <div className="font-body-md text-body-md text-on-surface-variant mt-0.5">{transportDescription}</div>
               </div>
               {hasCoordinates ? (
-                <a className="font-body-md text-body-md text-primary" href={buildGoogleMapsUrl(item)} rel="noreferrer" target="_blank">导航</a>
+                <a className="inline-flex min-h-11 items-center rounded-xl px-3 font-body-md text-body-md text-primary tm-focus" href={buildGoogleMapsUrl(item)} rel="noreferrer" target="_blank">导航</a>
               ) : null}
             </div>
           </div>
@@ -520,7 +520,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             ) : null}
           </div>
           <button
-            className="text-primary font-label-sm text-label-sm flex items-center gap-1 active:opacity-70 transition-opacity"
+            className="flex min-h-11 items-center gap-1 rounded-xl px-3 text-primary font-label-sm text-label-sm transition-opacity active:opacity-70 tm-focus"
             data-testid="item-ticket-view-all"
             onClick={() => navigateTo('tickets', { tripId: trip.id })}
             type="button"

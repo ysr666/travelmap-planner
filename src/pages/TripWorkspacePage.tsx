@@ -447,6 +447,7 @@ export function TripWorkspacePage() {
                 </button>
                 <button
                   className="flex-1 bg-surface-container-high text-primary py-3.5 px-4 rounded-xl border border-outline-variant/50 font-label-sm text-label-sm flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95"
+                  data-testid="trip-action-ticket-library"
                   onClick={() => navigateTo('tickets', { tripId: trip.id })}
                   type="button"
                 >

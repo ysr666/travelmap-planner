@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'subtle'
@@ -18,7 +18,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   subtle: 'bg-surface-container-high text-on-surface border border-outline-variant/20',
 }
 
-export function Button({
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
   children,
   icon,
   variant = 'primary',
@@ -26,12 +26,13 @@ export function Button({
   className = '',
   disabled,
   ...props
-}: ButtonProps) {
+}: ButtonProps, ref) {
   return (
     <button
       className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 tm-focus ${variantClasses[variant]} ${className}`}
       aria-busy={loading || undefined}
       disabled={disabled || loading}
+      ref={ref}
       type="button"
       {...props}
     >
@@ -39,4 +40,4 @@ export function Button({
       <span>{children}</span>
     </button>
   )
-}
+})

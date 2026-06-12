@@ -151,7 +151,8 @@ function SearchResultRow({ record, separator }: { record: SearchRecord; separato
   const view = getRecordView(record)
   return (
     <button
-      className="flex w-full items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99]"
+      aria-label={`打开${view.title}`}
+      className="flex w-full items-center gap-4 p-4 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus"
       data-testid="search-result-item"
       onClick={view.onClick}
       type="button"
@@ -160,8 +161,8 @@ function SearchResultRow({ record, separator }: { record: SearchRecord; separato
         {view.icon}
       </span>
       <span className={`min-w-0 flex-1 ${separator ? 'border-b border-outline-variant/30 pb-4' : ''}`}>
-        <span className="block truncate font-body-lg text-body-lg text-on-surface">{view.title}</span>
-        <span className="mt-0.5 block truncate font-label-sm text-label-sm text-on-surface-variant">{view.detail}</span>
+        <span className="block line-clamp-2 font-body-lg text-body-lg text-on-surface" title={view.title}>{view.title}</span>
+        <span className="mt-0.5 block line-clamp-2 font-label-sm text-label-sm text-on-surface-variant" title={view.detail}>{view.detail}</span>
       </span>
       <ChevronRight className={`size-5 shrink-0 text-on-surface-variant ${separator ? 'mb-4' : ''}`} />
     </button>

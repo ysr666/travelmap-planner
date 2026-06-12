@@ -1,18 +1,24 @@
-import { useEffect, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useModalAccessibility } from './useModalAccessibility'
 
-type BottomSheetProps = {
+type BottomSheetBaseProps = {
   open: boolean
   onClose: () => void
-  title?: string
   children: ReactNode
   maxHeight?: string
   showHandle?: boolean
   zIndex?: number
 }
 
+type BottomSheetProps = BottomSheetBaseProps & (
+  | { title: string; ariaLabel?: string }
+  | { title?: undefined; ariaLabel: string }
+)
+
 export function BottomSheet({
+  ariaLabel,
   open,
   onClose,
   title,
@@ -21,29 +27,16 @@ export function BottomSheet({
   showHandle = true,
   zIndex = 50,
 }: BottomSheetProps) {
-  useEffect(() => {
-    if (!open) return undefined
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return undefined
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  useModalAccessibility({
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose,
+    open,
+  })
 
   if (!open) {
     return null
@@ -51,10 +44,14 @@ export function BottomSheet({
 
   return createPortal(
     <div
+      aria-label={title ? undefined : ariaLabel}
+      aria-labelledby={title ? titleId : undefined}
       aria-modal="true"
       className="fixed inset-0 flex items-end justify-center bg-surface-dim/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm dark:bg-surface-dim/60"
+      ref={dialogRef}
       role="dialog"
       style={{ zIndex }}
+      tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose()
@@ -73,13 +70,14 @@ export function BottomSheet({
 
         {title ? (
           <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3">
-            <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-on-surface dark:text-on-surface">
+            <h3 className="min-w-0 flex-1 break-words text-base font-semibold text-on-surface dark:text-on-surface" id={titleId}>
               {title}
             </h3>
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
+              ref={closeButtonRef}
               type="button"
             >
               <X className="size-5" />
@@ -89,8 +87,9 @@ export function BottomSheet({
           <div className="shrink-0 px-4 pb-2 text-right">
             <button
               aria-label="关闭"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
+              ref={closeButtonRef}
               type="button"
             >
               <X className="size-5" />

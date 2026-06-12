@@ -63,12 +63,27 @@ describe('SettingsPrivacyPage', () => {
     expect(container?.textContent).toContain('localStorage')
   })
 
-  it('renders toggle checkboxes', async () => {
+  it('renders named switch controls', async () => {
     await act(async () => {
       root?.render(<SettingsPrivacyPage />)
     })
 
-    const checkboxes = container?.querySelectorAll('input[type="checkbox"]') ?? []
-    expect(checkboxes.length).toBe(6)
+    const switches = container?.querySelectorAll('[role="switch"]') ?? []
+    expect(switches.length).toBe(6)
+    expect(switches[0].getAttribute('aria-label')).toContain('行程基础信息')
+    expect(switches[0].getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('toggles switches with the full row target', async () => {
+    await act(async () => {
+      root?.render(<SettingsPrivacyPage />)
+    })
+
+    const firstSwitch = container?.querySelector('[role="switch"]') as HTMLButtonElement | null
+    expect(firstSwitch).toBeTruthy()
+    await act(async () => {
+      firstSwitch?.click()
+    })
+    expect(firstSwitch?.getAttribute('aria-checked')).toBe('false')
   })
 })

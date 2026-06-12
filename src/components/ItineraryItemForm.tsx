@@ -336,7 +336,7 @@ export function ItineraryItemForm({
       {googleMapsKeyConfigured ? (
         <section className="space-y-3 border-t tm-row pt-4">
           <button
-            className="flex w-full items-center justify-between rounded-xl px-0 py-1 text-left text-sm font-semibold text-slate-700 transition active:scale-[0.99] dark:text-slate-200"
+            className="flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition active:scale-[0.99] tm-focus dark:text-slate-200"
             onClick={() => setShowManualCoords((current) => !current)}
             type="button"
           >

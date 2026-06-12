@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { Archive, Home, MoreHorizontal, Settings, Ticket, X } from 'lucide-react'
 import { navigateTo } from '../../lib/routes'
+import { useModalAccessibility } from '../ui/useModalAccessibility'
 
 type TripMoreMenuProps = {
   tripId: string
@@ -8,6 +9,16 @@ type TripMoreMenuProps = {
 
 export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
   const [open, setOpen] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+
+  useModalAccessibility({
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose: () => setOpen(false),
+    open,
+  })
 
   return (
     <>
@@ -21,11 +32,24 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] items-end bg-surface-dim/24 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
+        <div
+          aria-labelledby={titleId}
+          aria-modal="true"
+          className="fixed inset-0 z-50 mx-auto flex max-w-[430px] items-end bg-surface-dim/24 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setOpen(false)
+          }}
+          ref={dialogRef}
+          role="dialog"
+          tabIndex={-1}
+        >
           <div className="w-full rounded-2xl border border-white/80 bg-white p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]" data-testid="trip-more-menu">
+            <h2 className="sr-only" id={titleId}>更多操作</h2>
             <button
-              className="mb-1 flex min-h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-on-surface-variant active:bg-surface-container-low"
+              aria-label="关闭更多操作菜单"
+              className="mb-1 flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-on-surface-variant active:bg-surface-container-low tm-focus"
               onClick={() => setOpen(false)}
+              ref={closeButtonRef}
               type="button"
             >
               更多

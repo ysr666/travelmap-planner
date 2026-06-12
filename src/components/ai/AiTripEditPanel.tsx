@@ -206,7 +206,7 @@ export function AiTripEditPanel({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          className="min-h-10 px-3 text-xs"
+          className="min-h-11 px-3 text-xs"
           disabled={!canGenerate}
           icon={<Wand2 className="size-3.5" />}
           loading={isGenerating}
@@ -265,7 +265,7 @@ export function AiTripEditPanel({
           ) : null}
           <div className="grid grid-cols-2 gap-2">
             <Button
-              className="min-h-10 px-3 text-xs"
+              className="min-h-11 px-3 text-xs"
               onClick={() => {
                 setPatchPlan(null)
                 setPreview(null)
@@ -277,7 +277,7 @@ export function AiTripEditPanel({
               放弃
             </Button>
             <Button
-              className="min-h-10 px-3 text-xs"
+              className="min-h-11 px-3 text-xs"
               disabled={!preview.hasWritePayload}
               loading={isApplying}
               onClick={() => setConfirmApplyOpen(true)}

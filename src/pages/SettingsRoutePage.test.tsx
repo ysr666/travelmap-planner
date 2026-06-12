@@ -53,13 +53,14 @@ describe('SettingsRoutePage', () => {
     expect(container?.textContent).toContain('避开高速公路')
   })
 
-  it('renders toggle checkboxes for avoidance', async () => {
+  it('renders named switch controls for avoidance', async () => {
     await act(async () => {
       root?.render(<SettingsRoutePage />)
     })
 
-    const checkboxes = container?.querySelectorAll('input[type="checkbox"]') ?? []
-    expect(checkboxes.length).toBe(2)
+    const switches = container?.querySelectorAll('[role="switch"]') ?? []
+    expect(switches.length).toBe(2)
+    expect(switches[0].getAttribute('aria-label')).toBe('避开收费站')
   })
 
   it('renders route strategy section', async () => {
@@ -68,5 +69,21 @@ describe('SettingsRoutePage', () => {
     })
 
     expect(container?.textContent).toContain('路线策略')
+  })
+
+  it('renders route strategy as keyboard-operable radio buttons', async () => {
+    await act(async () => {
+      root?.render(<SettingsRoutePage />)
+    })
+
+    const radios = Array.from(container?.querySelectorAll('[role="radio"]') ?? []) as HTMLButtonElement[]
+    expect(radios.length).toBe(3)
+    expect(radios[0].getAttribute('aria-checked')).toBe('true')
+
+    await act(async () => {
+      radios[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }))
+    })
+
+    expect(radios[1].getAttribute('aria-checked')).toBe('true')
   })
 })

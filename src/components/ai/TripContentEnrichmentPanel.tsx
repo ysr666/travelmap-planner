@@ -174,7 +174,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
               <p className="text-xs font-semibold text-on-surface dark:text-on-surface">内容预览</p>
               <p className="mt-0.5 text-[11px] leading-5 tm-muted">已选择 {selectedCount} 个行程点写入。</p>
             </div>
-            <Button className="min-h-9 shrink-0 px-3 text-xs" disabled={!canApply} loading={isApplying} onClick={() => setConfirmApplyOpen(true)}>
+            <Button className="min-h-11 shrink-0 px-3 text-xs" disabled={!canApply} loading={isApplying} onClick={() => setConfirmApplyOpen(true)}>
               应用内容
             </Button>
           </div>
@@ -361,7 +361,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
       <div className="flex items-center justify-between gap-3 pl-1">
         <h2 className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">景点内容</h2>
         <Button
-          className="min-h-9 shrink-0 px-3 text-xs"
+          className="min-h-11 shrink-0 px-3 text-xs"
           disabled={!providerConfig.proxyUrl || isGenerating || isApplying}
           icon={<WandSparkles className="size-3.5" />}
           loading={isGenerating}
@@ -381,7 +381,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
         )}
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
           <Button
-            className="min-h-9 px-3 text-xs"
+            className="min-h-11 px-3 text-xs"
             data-testid="item-content-source-refresh"
             disabled={!canRefreshSources}
             icon={<RefreshCw className="size-3.5" />}
@@ -414,7 +414,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
               <p className="text-xs font-semibold text-on-surface">来源更新预览</p>
               <p className="mt-0.5 text-[11px] leading-5 tm-muted">只更新开放时间、票价和官网来源。</p>
             </div>
-            <Button className="min-h-9 shrink-0 px-3 text-xs" loading={isApplyingSourceRefresh} onClick={() => setConfirmSourceRefreshApplyOpen(true)}>
+            <Button className="min-h-11 shrink-0 px-3 text-xs" loading={isApplyingSourceRefresh} onClick={() => setConfirmSourceRefreshApplyOpen(true)}>
               更新来源
             </Button>
           </div>

@@ -1,7 +1,8 @@
-import { useEffect, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from './Button'
+import { useModalAccessibility } from './useModalAccessibility'
 
 type ConfirmDialogProps = {
   open: boolean
@@ -30,26 +31,17 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
-  useEffect(() => {
-    if (!open) {
-      return undefined
-    }
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+  const bodyId = useId()
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onCancel()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, onCancel])
+  useModalAccessibility({
+    containerRef: dialogRef,
+    initialFocusRef: cancelButtonRef,
+    onClose: onCancel,
+    open,
+  })
 
   if (!open) {
     return null
@@ -57,10 +49,14 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
+      aria-describedby={bodyId}
+      aria-labelledby={titleId}
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-surface-dim/60"
       data-testid={testId}
+      ref={dialogRef}
       role="dialog"
+      tabIndex={-1}
     >
       <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl tm-surface">
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -69,10 +65,10 @@ export function ConfirmDialog({
               {icon || <AlertTriangle className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="break-words text-base font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface">
+              <h2 className="break-words text-base font-semibold text-on-surface [overflow-wrap:anywhere] dark:text-on-surface" id={titleId}>
                 {title}
               </h2>
-              <p className="mt-1 break-words whitespace-pre-line text-sm leading-6 tm-muted [overflow-wrap:anywhere]">
+              <p className="mt-1 break-words whitespace-pre-line text-sm leading-6 tm-muted [overflow-wrap:anywhere]" id={bodyId}>
                 {body}
               </p>
               {children && (
@@ -84,11 +80,11 @@ export function ConfirmDialog({
           </div>
         </div>
         <div className="grid shrink-0 grid-cols-2 gap-3 border-t tm-row bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-surface-container-highest/95">
-          <Button disabled={loading} onClick={onCancel} variant="secondary">
+          <Button disabled={loading} onClick={onCancel} ref={cancelButtonRef} variant="secondary">
             {cancelLabel}
           </Button>
           <Button
-            className="text-red-600 dark:text-red-300 ring-red-100"
+            className="text-error dark:text-red-300 ring-red-100"
             loading={loading}
             onClick={onConfirm}
             variant="secondary"

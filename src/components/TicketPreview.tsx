@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
@@ -11,6 +11,7 @@ import {
 } from '../lib/tickets'
 import type { TicketMeta } from '../types'
 import { TicketThumbnail } from './tickets/TicketThumbnail'
+import { useModalAccessibility } from './ui/useModalAccessibility'
 
 type TicketPreviewProps = {
   ticket: TicketMeta
@@ -64,6 +65,10 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
     typeof navigator.share === 'function' &&
     typeof navigator.canShare === 'function' &&
     navigator.canShare({ files: shareFile ? [shareFile] : [] })
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
 
   // --- Swipe ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -86,11 +91,12 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
   )
 
   // --- Body scroll lock ---
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
+  useModalAccessibility({
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose,
+    open: true,
+  })
 
   // --- Blob loading ---
   useEffect(() => {
@@ -128,7 +134,6 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
   // --- Keyboard ---
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
       if (!hasNavigation || !onChangeTicket) return
       if (event.key === 'ArrowLeft' && previousTicket) { event.preventDefault(); onChangeTicket(previousTicket) }
       if (event.key === 'ArrowRight' && nextTicket) { event.preventDefault(); onChangeTicket(nextTicket) }
@@ -160,25 +165,30 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
 
   return createPortal(
     <div
+      aria-describedby={descriptionId}
+      aria-labelledby={titleId}
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
       data-testid="ticket-preview"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      ref={dialogRef}
       role="dialog"
+      tabIndex={-1}
     >
       <div className="flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-slate-950 text-white shadow-[0_0_36px_rgba(15,23,42,0.35)]">
         {/* ── Top bar ── */}
         <div className="flex shrink-0 items-center justify-between px-4 pt-[max(0.9rem,env(safe-area-inset-top))] pb-2">
           <button
             aria-label="关闭预览"
-            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 active:scale-[0.98]"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 active:scale-[0.98] tm-focus"
             data-testid="ticket-preview-close"
             onClick={onClose}
+            ref={closeButtonRef}
             type="button"
           >
             <X className="size-5" />
           </button>
-          <h3 className="min-w-0 flex-1 truncate px-3 text-center text-base font-semibold text-white">
+          <h3 className="min-w-0 flex-1 break-words px-3 text-center text-base font-semibold text-white" id={titleId}>
             {displayTitle}
           </h3>
           {hasNavigation && tickets ? (
@@ -189,12 +199,12 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
               {contextIndex + 1} / {tickets.length}
             </span>
           ) : (
-            <div className="size-10 shrink-0" />
+            <div className="size-11 shrink-0" />
           )}
         </div>
 
         {/* ── Metadata row ── */}
-        <div className="shrink-0 truncate px-4 pb-2 text-xs text-slate-400">
+        <div className="shrink-0 break-words px-4 pb-2 text-xs leading-5 text-slate-400 [overflow-wrap:anywhere]" id={descriptionId}>
           {ticketStorageModeLabels[storageMode]} · {ticket.fileName} · {describeTicketMetaLine(ticket)}
         </div>
 
@@ -208,7 +218,7 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
           {hasNavigation ? (
             <button
               aria-label="上一张票据"
-              className="absolute left-1 top-1/2 z-10 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur ring-1 ring-white/10 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+              className="absolute left-1 top-1/2 z-10 -translate-y-1/2 flex size-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur ring-1 ring-white/10 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 tm-focus"
               data-testid="ticket-preview-previous"
               disabled={!previousTicket}
               onClick={handlePrevious}
@@ -222,7 +232,7 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
           {hasNavigation ? (
             <button
               aria-label="下一张票据"
-              className="absolute right-1 top-1/2 z-10 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur ring-1 ring-white/10 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+              className="absolute right-1 top-1/2 z-10 -translate-y-1/2 flex size-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur ring-1 ring-white/10 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 tm-focus"
               data-testid="ticket-preview-next"
               disabled={!nextTicket}
               onClick={handleNext}
@@ -304,7 +314,7 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
               <button
                 key={t.id}
                 aria-label={`切换到第 ${idx + 1} 张`}
-                className={`flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium transition ${
+                className={`flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition tm-focus ${
                   t.id === ticket.id
                     ? 'bg-white/15 text-white ring-2 ring-white/60'
                     : 'text-slate-400 ring-1 ring-white/10 opacity-60 hover:opacity-100'

@@ -1125,7 +1125,7 @@ function OptionButton({
       type="button"
     >
       <span>{label}</span>
-      {detail ? <span className="text-[11px] font-medium opacity-80">{detail}</span> : null}
+      {detail ? <span className={`text-[11px] font-medium ${active ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{detail}</span> : null}
     </button>
   )
 }
@@ -1365,6 +1365,7 @@ function TripPlanGuide({
       <div className="space-y-2">
         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">可复制给外部 AI 的简化提示词</p>
         <textarea
+          aria-label="可复制给外部 AI 的简化提示词"
           className={`${FIELD_TEXTAREA_CLASS} min-h-40 resize-y border-violet-100 font-mono text-xs leading-5 dark:border-violet-900/50`}
           data-testid="ai-trip-plan-prompt-text"
           readOnly
@@ -1592,7 +1593,7 @@ function ValidationList({
   return (
     <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${styles}`} data-testid={testId}>
       <p className="font-semibold">{title}</p>
-      <p className="mt-1 text-xs leading-5 opacity-80">{description}</p>
+      <p className="mt-1 text-xs leading-5">{description}</p>
       <ul className="mt-2 list-outside list-disc space-y-1 pl-5">
         {items.map((item) => (
           <li className="break-words [overflow-wrap:anywhere]" key={item}>{item}</li>
@@ -1648,4 +1649,3 @@ function formatStorageSize(size?: number) {
 
   return formatFileSize(size)
 }
-

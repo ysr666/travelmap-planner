@@ -17,14 +17,14 @@ export function Collapsible({ title, subtitle, defaultOpen = false, children }: 
       open={defaultOpen}
       ref={detailsRef}
     >
-      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 select-none marker:hidden [&::-webkit-details-marker]:hidden tm-focus">
+      <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-3 select-none marker:hidden [&::-webkit-details-marker]:hidden tm-focus">
         <ChevronRight className="size-4 shrink-0 text-outline transition-transform group-open:rotate-90 dark:text-on-surface-variant" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-on-surface dark:text-on-surface">
             {title}
           </p>
           {subtitle ? (
-            <p className="mt-0.5 truncate text-xs tm-muted">{subtitle}</p>
+            <p className="mt-0.5 line-clamp-2 text-xs leading-5 tm-muted">{subtitle}</p>
           ) : null}
         </div>
       </summary>

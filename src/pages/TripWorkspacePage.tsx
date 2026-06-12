@@ -6,6 +6,7 @@ import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenera
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TripDailyTravelTipCard } from '../components/trip/TripDailyTravelTipCard'
+import { TripOperationsPanel } from '../components/trip/TripOperationsPanel'
 import { TripReadinessCenterPanel } from '../components/trip/TripReadinessCenterPanel'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
@@ -36,8 +37,11 @@ import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/cloudSyncQueueSummary'
 import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
 import { buildTripReadinessModel } from '../lib/tripReadiness'
+import { buildTripOperationsModel, type TripOperationsInboxSummary } from '../lib/tripOperationsAgent'
 import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
-import type { Day, TicketBlobSyncState, TicketMeta } from '../types'
+import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../lib/ai/travelInbox'
+import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
+import type { Day, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -65,6 +69,7 @@ export function TripWorkspacePage() {
   const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
   const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncState[]>([])
   const [cloudSyncQueueSummary, setCloudSyncQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
+  const [tripOperationsInboxSummary, setTripOperationsInboxSummary] = useState<TripOperationsInboxSummary | null>(null)
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
@@ -108,12 +113,22 @@ export function TripWorkspacePage() {
       listTicketsByTrip(trip.id),
       listTicketBlobSyncStatesByTrip(trip.id),
       getCloudSyncQueueSummary(trip.id),
-    ]).then(([entries, tickets, blobSyncStates, syncSummary]) => {
+      listTravelInboxEntriesByTrip(trip.id),
+      getActiveTravelInboxPreview(trip.id),
+      listTravelInboxAccountSources(),
+    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources]) => {
       if (!cancelled) {
         setItemsByDay(Object.fromEntries(entries))
         setTicketMetas(tickets)
         setTicketBlobSyncStates(blobSyncStates)
         setCloudSyncQueueSummary(syncSummary)
+        setTripOperationsInboxSummary(buildTripOperationsInboxSummary({
+          accountSources,
+          errorEntryCount: inboxEntries.filter((entry) => entry.status === 'error').length,
+          previewCheckedCount: inboxPreview?.checkedDiffIds.length ?? 0,
+          readyEntryCount: inboxEntries.filter((entry) => entry.status === 'ready' || entry.status === 'previewed').length,
+          tripId: trip.id,
+        }))
         setLoadedTripContextKey(currentTripContextKey)
       }
     }).catch(() => {
@@ -121,6 +136,7 @@ export function TripWorkspacePage() {
         setTicketMetas([])
         setTicketBlobSyncStates([])
         setCloudSyncQueueSummary(null)
+        setTripOperationsInboxSummary(null)
         setLoadedTripContextKey('')
       }
       // Trip Home can still render without aggregate item counts.
@@ -255,6 +271,37 @@ export function TripWorkspacePage() {
     trip,
     tripCheckResult,
     tripContextKey,
+  ])
+
+  const tripOperationsModel = useMemo(() => {
+    if (!trip || !readinessModel) {
+      return null
+    }
+    return buildTripOperationsModel({
+      allItems,
+      cloudSummary: cloudSyncQueueSummary,
+      dailyTipModel,
+      days,
+      inboxSummary: tripOperationsInboxSummary,
+      itemsByDay,
+      readinessModel,
+      routePreparation,
+      ticketBlobSyncStates,
+      tickets: ticketMetas,
+      trip,
+    })
+  }, [
+    allItems,
+    cloudSyncQueueSummary,
+    dailyTipModel,
+    days,
+    itemsByDay,
+    readinessModel,
+    routePreparation,
+    ticketBlobSyncStates,
+    ticketMetas,
+    trip,
+    tripOperationsInboxSummary,
   ])
 
   async function handleGenerateDays() {
@@ -457,6 +504,19 @@ export function TripWorkspacePage() {
               </div>
             </section>
 
+            {readinessModel && tripOperationsModel ? (
+              <TripOperationsPanel
+                allItems={allItems}
+                dailyTipModel={dailyTipModel}
+                days={days}
+                itemsByDay={itemsByDay}
+                model={tripOperationsModel}
+                onChanged={handleReadinessChanged}
+                readinessModel={readinessModel}
+                trip={trip}
+              />
+            ) : null}
+
             {readinessModel ? (
               <TripReadinessCenterPanel
                 allItems={allItems}
@@ -545,7 +605,9 @@ export function TripWorkspacePage() {
             <div className="flex justify-end">
               <Button onClick={() => navigateTo('inbox')} variant="ghost">查看账号旅行收件箱</Button>
             </div>
-            <TravelInboxPanel allItems={allItems} days={days} key={trip.id} onApplied={async () => { await refresh() }} tickets={ticketMetas} trip={trip} />
+            <div id="trip-travel-inbox-panel">
+              <TravelInboxPanel allItems={allItems} days={days} key={trip.id} onApplied={async () => { await refresh() }} tickets={ticketMetas} trip={trip} />
+            </div>
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
             <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
@@ -589,6 +651,30 @@ export function TripWorkspacePage() {
       />
     </>
   )
+}
+
+function buildTripOperationsInboxSummary({
+  accountSources,
+  errorEntryCount,
+  previewCheckedCount,
+  readyEntryCount,
+  tripId,
+}: {
+  accountSources: TravelInboxAccountSource[]
+  errorEntryCount: number
+  previewCheckedCount: number
+  readyEntryCount: number
+  tripId: string
+}): TripOperationsInboxSummary {
+  const scopedAccountSources = accountSources.filter((source) => source.targetTripId === tripId || source.classification?.targetTripId === tripId)
+  return {
+    accountErrorCount: scopedAccountSources.filter((source) => source.status === 'error').length,
+    accountNeedsAssignmentCount: scopedAccountSources.filter((source) => source.status === 'needs_assignment').length,
+    accountPreviewCount: scopedAccountSources.filter((source) => source.status === 'preview_ready').length,
+    errorEntryCount,
+    readyEntryCount,
+    selectedPreviewDiffCount: previewCheckedCount,
+  }
 }
 
 function DailyItineraryList({

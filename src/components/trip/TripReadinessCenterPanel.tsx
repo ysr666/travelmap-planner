@@ -19,25 +19,21 @@ import {
   TRIP_CONTENT_ENRICHMENT_MAX_ITEMS,
   applyTripContentEnrichmentPreviewsToDb,
   estimateTripContentEnrichmentRequestCounts,
-  generateTripContentEnrichmentPreview,
   type TripContentEnrichmentPreview,
 } from '../../lib/ai/tripContentEnrichment'
 import {
-  generateEnhancedTripDailyTravelTip,
   saveTripDailyTravelTipPreviewToNotes,
   type TripDailyTravelTipEnhancedPreview,
   type TripDailyTravelTipModel,
 } from '../../lib/ai/tripDailyTravelTip'
-import { retryTicketBlobUpload } from '../../lib/cloudObjectSync'
 import { getProviderProxyConfig } from '../../lib/providerProxyClient'
-import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../../lib/routeGeneration'
-import { getRoutingConfig } from '../../lib/routing'
 import {
   buildTripReadinessRepairPreview,
   type TripReadinessIssue,
   type TripReadinessModel,
   type TripReadinessRepairPreview,
 } from '../../lib/tripReadiness'
+import { executeTripReadinessRepairPreview, type TripReadinessRepairExecutionResult } from '../../lib/tripReadinessRepair'
 import { navigateTo } from '../../lib/routes'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
@@ -51,12 +47,7 @@ type TripReadinessCenterPanelProps = {
   trip: Trip
 }
 
-type RepairResult = {
-  messages: string[]
-  routeResult?: RouteGenerationBatchResult
-  ticketErrors: string[]
-  ticketRetryCount: number
-}
+type RepairResult = Omit<TripReadinessRepairExecutionResult, 'contentPreview' | 'dailyTipPreview'>
 
 type StoredPanelState = {
   applySuccess: string | null
@@ -78,7 +69,6 @@ export function TripReadinessCenterPanel({
 }: TripReadinessCenterPanelProps) {
   const providerConfig = useMemo(() => getProviderProxyConfig(), [])
   const storedPanelState = getStoredPanelState(trip.id)
-  const itemById = useMemo(() => new Map(allItems.map((item) => [item.id, item])), [allItems])
   const dayById = useMemo(() => new Map(days.map((day) => [day.id, day])), [days])
   const [selectionOverrides, setSelectionOverrides] = useState<Record<string, boolean>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -178,71 +168,22 @@ export function TripReadinessCenterPanel({
     setStoredContentPreview(trip.id, null, setContentPreviewState)
     setStoredDailyTipPreview(trip.id, null, setDailyTipPreviewState)
     try {
-      const result: RepairResult = {
-        messages: [],
-        ticketErrors: [],
-        ticketRetryCount: 0,
+      const result = await executeTripReadinessRepairPreview({
+        allItems,
+        dailyTipModel,
+        days,
+        itemsByDay,
+        preview,
+        providerConfig,
+        trip,
+      })
+      if (result.contentPreview) {
+        setStoredContentPreview(trip.id, result.contentPreview, setContentPreviewState)
       }
-
-      if (preview.routeDayIds.length > 0) {
-        result.routeResult = await generateRoutePreviewsForTrip({
-          config: getRoutingConfig(),
-          days,
-          itemsByDay,
-          targetDayIds: preview.routeDayIds,
-          tripId: trip.id,
-        })
-        result.messages.push(`已处理 ${result.routeResult.generatedCount} 天路线缓存。`)
-        setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
+      if (result.dailyTipPreview) {
+        setStoredDailyTipPreview(trip.id, result.dailyTipPreview, setDailyTipPreviewState)
       }
-
-      if (preview.ticketIds.length > 0) {
-        const settled = await Promise.allSettled(preview.ticketIds.map((ticketId) => retryTicketBlobUpload(ticketId)))
-        result.ticketRetryCount = settled.filter((entry) => entry.status === 'fulfilled').length
-        result.ticketErrors = settled
-          .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
-          .map((entry) => entry.reason instanceof Error ? entry.reason.message : '票据重试失败。')
-        result.messages.push(`已将 ${result.ticketRetryCount} 张票据置为待上传。`)
-        setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
-      }
-
-      if (preview.contentItemIds.length > 0) {
-        const targets = preview.contentItemIds
-          .map((itemId) => itemById.get(itemId))
-          .filter((item): item is ItineraryItem => Boolean(item))
-          .slice(0, TRIP_CONTENT_ENRICHMENT_MAX_ITEMS)
-        if (!providerConfig.proxyUrl) {
-          result.messages.push('内容补充预览需要 provider proxy，当前已跳过。')
-        } else if (targets.length > 0) {
-          const preview = await generateTripContentEnrichmentPreview({
-            days,
-            items: allItems,
-            proxyUrl: providerConfig.proxyUrl,
-            targets,
-            trip,
-          })
-          setStoredContentPreview(trip.id, preview, setContentPreviewState)
-          result.messages.push(`已生成 ${preview.items.length} 个内容补充待应用预览。`)
-          setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
-        }
-      }
-
-      if (preview.dailyTipRequested) {
-        if (!providerConfig.proxyUrl) {
-          result.messages.push('每日提示预览需要 provider proxy，当前已跳过。')
-        } else if (!dailyTipModel) {
-          result.messages.push('当前没有可生成每日提示的目标日期。')
-        } else {
-          const preview = await generateEnhancedTripDailyTravelTip({
-            model: dailyTipModel,
-            proxyUrl: providerConfig.proxyUrl,
-            trip,
-          })
-          setStoredDailyTipPreview(trip.id, preview, setDailyTipPreviewState)
-          result.messages.push('已生成每日旅行提示待保存预览。')
-          setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
-        }
-      }
+      setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
 
       setPendingPreview(null)
     } catch (caught) {
@@ -305,7 +246,7 @@ export function TripReadinessCenterPanel({
 
   return (
     <>
-      <Card className="space-y-4" data-testid="trip-readiness-center-panel" variant="grouped">
+      <Card className="space-y-4" data-testid="trip-readiness-center-panel" id="trip-readiness-center-panel" variant="grouped">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">

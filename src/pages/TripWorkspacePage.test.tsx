@@ -90,6 +90,15 @@ vi.mock('../lib/travelBrief', () => ({
   buildTripBrief: vi.fn(() => ''),
 }))
 
+vi.mock('../lib/ai/travelInbox', () => ({
+  getActiveTravelInboxPreview: vi.fn().mockResolvedValue(null),
+  listTravelInboxEntriesByTrip: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('../lib/ai/travelInboxOrganization', () => ({
+  listTravelInboxAccountSources: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('../lib/cloudSyncQueueSummary', () => ({
   getCloudSyncQueueSummary: vi.fn().mockResolvedValue({
     conflictCount: 0,
@@ -127,6 +136,61 @@ vi.mock('../lib/tripReadiness', () => ({
 
 vi.mock('../components/trip/TripReadinessCenterPanel', () => ({
   TripReadinessCenterPanel: () => <div data-testid="trip-readiness-center-panel" />,
+}))
+
+vi.mock('../components/trip/TripOperationsPanel', () => ({
+  TripOperationsPanel: () => <div data-testid="trip-operations-panel" />,
+}))
+
+vi.mock('../components/trip/TripMapPreview', () => ({
+  TripMapPreview: () => <div data-testid="trip-map-overview" />,
+}))
+
+vi.mock('../components/trip/TripDailyTravelTipCard', () => ({
+  TripDailyTravelTipCard: () => <div data-testid="trip-daily-tip-card" />,
+}))
+
+vi.mock('../components/trip/TripContentEnrichmentPanel', () => ({
+  TripContentEnrichmentPanel: () => <div data-testid="trip-content-enrichment-panel" />,
+}))
+
+vi.mock('../components/ai/TravelInboxPanel', () => ({
+  TravelInboxPanel: () => <div data-testid="travel-inbox-panel" />,
+}))
+
+vi.mock('../components/ai/SmartTripWorkspacePanel', () => ({
+  SmartTripWorkspacePanel: () => <div data-testid="smart-trip-workspace-panel" />,
+}))
+
+vi.mock('../components/ai/AiTripEditPanel', () => ({
+  AiTripEditPanel: () => <div data-testid="ai-trip-edit-panel" />,
+}))
+
+vi.mock('../components/ai/TripBriefCard', () => ({
+  TripBriefCard: () => <div data-testid="trip-brief-card" />,
+}))
+
+vi.mock('../components/cloud/CloudSnapshotCheckPrompts', () => ({
+  CloudSnapshotCheckPrompts: () => <div data-testid="cloud-snapshot-check-prompts" />,
+}))
+
+vi.mock('../components/cloud/AutoSnapshotBackupStatus', () => ({
+  AutoSnapshotBackupStatus: () => <div data-testid="auto-snapshot-backup-status" />,
+}))
+
+vi.mock('../lib/tripOperationsAgent', () => ({
+  buildTripOperationsModel: vi.fn(() => ({
+    allRecommendations: [],
+    batchableCount: 0,
+    phase: 'pre_trip',
+    phaseLabel: '出发前',
+    recommendations: [],
+    summary: {
+      highRiskCount: 0,
+      message: 'ok',
+      totalCount: 0,
+    },
+  })),
 }))
 
 vi.mock('../lib/routeGeneration', () => ({
@@ -183,7 +247,7 @@ afterEach(() => {
 
 describe('TripWorkspacePage', () => {
   it('renders trip title', async () => {
-    await act(async () => {
+    act(() => {
       root?.render(<TripWorkspacePage />)
     })
 
@@ -191,7 +255,7 @@ describe('TripWorkspacePage', () => {
   })
 
   it('renders day information', async () => {
-    await act(async () => {
+    act(() => {
       root?.render(<TripWorkspacePage />)
     })
 
@@ -214,7 +278,7 @@ describe('TripWorkspacePage', () => {
       refresh: vi.fn(),
     } as unknown as ReturnType<typeof mocks.useTripData>)
 
-    await act(async () => {
+    act(() => {
       root?.render(<TripWorkspacePage />)
     })
 

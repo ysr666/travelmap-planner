@@ -15,6 +15,7 @@ import {
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
+  validateProviderProxyTripOperationsSummaryRequest,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -223,6 +224,51 @@ describe('provider proxy trip_daily_tip contract', () => {
   })
 })
 
+describe('provider proxy trip_operations_summary contract', () => {
+  it('accepts sanitized recommendation summaries', () => {
+    const result = validateProviderProxyTripOperationsSummaryRequest(validTripOperationsSummaryRequest())
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request.phase).toBe('traveling')
+      expect(result.request.recommendations[0]).toMatchObject({
+        actionKind: 'generate_routes',
+        severity: 'low',
+        title: '2 天缺路线',
+      })
+      expect(JSON.stringify(result.request)).not.toContain('ticketIds')
+      expect(JSON.stringify(result.request)).not.toContain('routeCache')
+      expect(JSON.stringify(result.request)).not.toContain('private notes')
+    }
+  })
+
+  it('rejects sensitive fields and oversized recommendation batches', () => {
+    expect(validateProviderProxyTripOperationsSummaryRequest({
+      ...validTripOperationsSummaryRequest(),
+      notes: 'private notes',
+    }).ok).toBe(false)
+    expect(validateProviderProxyTripOperationsSummaryRequest({
+      ...validTripOperationsSummaryRequest(),
+      recommendations: [{
+        ...validTripOperationsSummaryRequest().recommendations[0],
+        ticketIds: ['ticket'],
+      }],
+    }).ok).toBe(false)
+    expect(validateProviderProxyTripOperationsSummaryRequest({
+      ...validTripOperationsSummaryRequest(),
+      recommendations: Array.from({ length: 6 }, (_, index) => ({
+        ...validTripOperationsSummaryRequest().recommendations[0],
+        title: `建议 ${index}`,
+      })),
+    }).ok).toBe(false)
+  })
+
+  it('returns non-empty error message for trip_operations_summary operation', () => {
+    const message = defaultProviderProxyErrorMessage('provider_unavailable', 'trip_operations_summary')
+    expect(message).toContain('执行建议摘要')
+  })
+})
+
 function validRequest() {
   return {
     coordinates: [[139.1, 35.1], [139.2, 35.2]],
@@ -242,6 +288,25 @@ function validRequest() {
       },
     ],
     tripId: 'trip',
+  }
+}
+
+function validTripOperationsSummaryRequest() {
+  return {
+    destination: '杭州',
+    generatedAt: '2026-06-12T00:00:00.000Z',
+    operation: 'trip_operations_summary',
+    phase: 'traveling',
+    recommendations: [{
+      actionKind: 'generate_routes',
+      actionLabel: '生成路线',
+      message: '明天 2 个地点缺路线。',
+      severity: 'low',
+      title: '2 天缺路线',
+      type: 'missing_route',
+    }],
+    requestId: 'ops-summary-1',
+    tripTitle: '杭州三日',
   }
 }
 

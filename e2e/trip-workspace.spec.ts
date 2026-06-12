@@ -137,6 +137,63 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
+test('Trip Home 现在建议做什么面板只本地生成并把执行动作保持在确认后', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => {
+    const fixedNow = new Date(2026, 3, 13, 8, 30, 0).valueOf()
+    const RealDate = Date
+    class MockDate extends RealDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(fixedNow)
+        } else {
+          super(args[0] as string | number | Date)
+        }
+      }
+
+      static now() {
+        return fixedNow
+      }
+    }
+    Object.setPrototypeOf(MockDate, RealDate)
+    window.Date = MockDate as DateConstructor
+  })
+  await mockMapStyle(page)
+
+  let providerProxyRequests = 0
+  await page.route('**/api/provider-proxy', async (route) => {
+    providerProxyRequests += 1
+    await route.fulfill({
+      body: JSON.stringify({ error: 'unexpected provider call before Trip Operations confirmation', ok: false }),
+      contentType: 'application/json',
+      status: 500,
+    })
+  })
+
+  await createDemoTripViaUi(page)
+  await forceSupabaseUnconfigured(page)
+  await page.getByRole('button', { name: '总览' }).click()
+  await expect(page).toHaveURL(/#\/trip\?/)
+
+  const panel = page.getByTestId('trip-operations-panel')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('现在建议做什么')
+  await expect(panel.getByTestId('trip-operations-summary')).toContainText(/优先处理|可以继续按计划推进/)
+  expect(await panel.getByTestId('trip-operations-recommendation').count()).toBeLessThanOrEqual(5)
+  await expect(panel.getByRole('button', { name: '生成摘要' })).toBeDisabled()
+  expect(providerProxyRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+
+  const routeAction = panel.getByRole('button', { name: '生成路线' })
+  expect(await routeAction.count()).toBeGreaterThan(0)
+  await routeAction.first().click()
+  const confirmDialog = page.getByTestId('trip-operations-confirm-dialog')
+  await expect(confirmDialog).toBeVisible()
+  await expect(confirmDialog).toContainText('确认处理')
+  expect(providerProxyRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Day View 下一站提醒只做本地计算并提供详情地图票据入口', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.addInitScript(() => {

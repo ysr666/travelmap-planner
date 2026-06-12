@@ -10,6 +10,7 @@ import {
   fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyPlaceLookup,
   fetchProviderProxyTravelSearch,
+  fetchProviderProxyTripOperationsSummary,
   getProviderProxyConfig,
 } from './providerProxyClient'
 
@@ -167,6 +168,51 @@ describe('provider proxy route_order_suggestion client', () => {
       code: 'invalid_response',
       status: 200,
     })
+  })
+})
+
+describe('provider proxy trip_operations_summary client', () => {
+  it('sends only sanitized recommendations and parses summary response', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      expect(body).toMatchObject({
+        operation: 'trip_operations_summary',
+        phase: 'traveling',
+        quotaSessionId: 'session-ops',
+      })
+      expect(JSON.stringify(body)).not.toContain('secret-ai-key')
+      expect(JSON.stringify(body)).not.toContain('ticketIds')
+      expect(JSON.stringify(body)).not.toContain('routeCache')
+      return new Response(JSON.stringify({
+        highlights: ['先生成路线'],
+        ok: true,
+        operation: 'trip_operations_summary',
+        source: 'mock',
+        summary: '先处理路线，再检查票据。',
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyTripOperationsSummary({
+      operation: 'trip_operations_summary',
+      phase: 'traveling',
+      quotaSessionId: 'session-ops',
+      recommendations: [{
+        actionKind: 'generate_routes',
+        actionLabel: '生成路线',
+        message: '2 天缺少路线。',
+        severity: 'low',
+        title: '2 天缺路线',
+        type: 'missing_route',
+      }],
+      tripTitle: '杭州三日',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({ unrelated: 'secret-ai-key' }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.summary).toContain('路线')
+    expect(result.highlights).toEqual(['先生成路线'])
   })
 })
 

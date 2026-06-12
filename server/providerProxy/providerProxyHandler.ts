@@ -11,6 +11,7 @@ import {
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+  PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
@@ -25,6 +26,7 @@ import {
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
+  validateProviderProxyTripOperationsSummaryRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   type ProviderProxyAiTripDraftRequest,
@@ -131,6 +133,15 @@ import {
   type TripDailyTipProvider,
   type TripDailyTipProviderErrorCode,
 } from './tripDailyTipProvider'
+import {
+  buildTripOperationsSummaryProviderInput,
+  createDisabledTripOperationsSummaryProvider,
+  createMockTripOperationsSummaryProvider,
+  createOpenAiCompatibleTripOperationsSummaryProvider,
+  createUnavailableTripOperationsSummaryProvider,
+  type TripOperationsSummaryProvider,
+  type TripOperationsSummaryProviderErrorCode,
+} from './tripOperationsSummaryProvider'
 import {
   buildExistingTripImportProviderInput,
   createDisabledExistingTripImportProvider,
@@ -283,6 +294,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
     return handleTripDailyTipRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
+    return handleTripOperationsSummaryRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
@@ -1324,6 +1339,92 @@ function selectTripDailyTipProvider(env: ProviderProxyHandlerEnv, fetcher: typeo
 }
 
 function mapTripDailyTipErrorCodeToStatus(code: TripDailyTipProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'invalid_response': return 502
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleTripOperationsSummaryRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyTripOperationsSummaryRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const summaryRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: summaryRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: summaryRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectTripOperationsSummaryProvider(env, fetcher)
+    const providerInput = buildTripOperationsSummaryProviderInput(summaryRequest, summaryRequest.requestId)
+    const result = await provider.summarize(summaryRequest, providerInput)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapTripOperationsSummaryErrorCodeToStatus(result.errorCode))
+    }
+    return jsonResponse({
+      highlights: result.response.highlights,
+      ok: true,
+      operation: PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
+      requestId: summaryRequest.requestId,
+      source: result.response.source,
+      summary: result.response.summary,
+      warnings: result.response.warnings,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION, summaryRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectTripOperationsSummaryProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): TripOperationsSummaryProvider {
+  if (isMockMode(env)) {
+    return createMockTripOperationsSummaryProvider()
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleTripOperationsSummaryProvider(env, fetcher)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableTripOperationsSummaryProvider()
+  }
+  return createDisabledTripOperationsSummaryProvider()
+}
+
+function mapTripOperationsSummaryErrorCodeToStatus(code: TripOperationsSummaryProviderErrorCode): number {
   switch (code) {
     case 'provider_unavailable': return 503
     case 'unsupported': return 501

@@ -28,6 +28,7 @@ export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
+export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
 export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
 export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_classify' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
@@ -43,8 +44,9 @@ export const PROVIDER_PROXY_MAX_TRAVEL_INBOX_CLASSIFY_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
+export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -750,6 +752,47 @@ export type ProviderProxyTripDailyTipValidationResult =
   | { ok: true; request: ProviderProxyTripDailyTipRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyTripOperationsPhase = 'pre_trip' | 'travel_morning' | 'traveling' | 'travel_evening' | 'post_trip'
+export type ProviderProxyTripOperationsSeverity = 'low' | 'medium' | 'high'
+
+export type ProviderProxyTripOperationsRecommendationInput = {
+  actionKind: string
+  actionLabel: string
+  message: string
+  severity: ProviderProxyTripOperationsSeverity
+  title: string
+  type: string
+}
+
+export type ProviderProxyTripOperationsSummaryRequest = {
+  destination?: string
+  generatedAt?: string
+  operation: typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION
+  phase: ProviderProxyTripOperationsPhase
+  quotaSessionId?: string
+  recommendations: ProviderProxyTripOperationsRecommendationInput[]
+  requestId?: string
+  tripTitle: string
+}
+
+export type ProviderProxyTripOperationsSummarySuccessResponse = {
+  highlights: string[]
+  ok: true
+  operation: typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  summary: string
+  warnings?: string[]
+}
+
+export type ProviderProxyTripOperationsSummaryResponse =
+  | ProviderProxyTripOperationsSummarySuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyTripOperationsSummaryValidationResult =
+  | { ok: true; request: ProviderProxyTripOperationsSummaryRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -774,6 +817,8 @@ const VALID_CONTENT_ENRICHMENT_CONFIDENCES = new Set<ContentEnrichmentConfidence
 const VALID_TRIP_DAILY_TIP_MODES = new Set<ProviderProxyTripDailyTipMode>(['pre_trip', 'today', 'tomorrow', 'completed'])
 const VALID_TRIP_DAILY_TIP_SECTION_KEYS = new Set<ProviderProxyTripDailyTipSectionKey>(['opening_hours', 'ticket_price', 'notices', 'route_risk'])
 const VALID_TRIP_DAILY_TIP_ROUTE_STATUSES = new Set<NonNullable<ProviderProxyTripDailyTipRequest['routeStatus']>>(['no_coordinates', 'not_enough_points', 'ready_to_generate', 'cached', 'stale_if_cache_key_changed'])
+const VALID_TRIP_OPERATIONS_PHASES = new Set<ProviderProxyTripOperationsPhase>(['pre_trip', 'travel_morning', 'traveling', 'travel_evening', 'post_trip'])
+const VALID_TRIP_OPERATIONS_SEVERITIES = new Set<ProviderProxyTripOperationsSeverity>(['low', 'medium', 'high'])
 const VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS = new Set<ExistingTripImportSourceKind>(['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'trip_plan', 'ticket_file'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
@@ -973,6 +1018,8 @@ const MAX_TRIP_DAILY_TIP_LOCAL_SECTIONS = 4
 const MAX_TRIP_DAILY_TIP_LOCAL_SECTION_ITEMS = 5
 const MAX_TRIP_DAILY_TIP_SOURCES = 12
 const MAX_TRIP_DAILY_TIP_TEXT = 700
+const MAX_TRIP_OPERATIONS_RECOMMENDATIONS = 5
+const MAX_TRIP_OPERATIONS_TEXT = 220
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -1283,6 +1330,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前今日旅行提示暂不支持。'
     if (code === 'invalid_response') return '今日旅行提示服务返回的内容无法解析。'
     return '今日旅行提示服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
+    if (code === 'quota_exceeded') return '今日执行建议摘要次数已达上限。'
+    if (code === 'invalid_request') return '执行建议摘要请求无效。'
+    if (code === 'provider_error') return '执行建议摘要服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前执行建议摘要暂不支持。'
+    if (code === 'invalid_response') return '执行建议摘要服务返回的内容无法解析。'
+    return '执行建议摘要服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
     if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
@@ -1728,6 +1784,21 @@ function tripDailyTipInvalidRequest(
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function tripOperationsSummaryInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyTripOperationsSummaryValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
       requestId,
     }),
     ok: false,
@@ -2813,6 +2884,82 @@ export function validateProviderProxyTripDailyTipRequest(input: unknown): Provid
       sources: sourcesResult.sources,
       targetDate: readOptionalString(record.targetDate, 32),
       tripTitle,
+    },
+  }
+}
+
+export function validateProviderProxyTripOperationsSummaryRequest(input: unknown): ProviderProxyTripOperationsSummaryValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
+    return tripOperationsSummaryInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS)
+  if (forbiddenFieldPath) {
+    return tripOperationsSummaryInvalidRequest('执行建议摘要请求包含不允许的敏感字段。', requestId)
+  }
+
+  const tripTitle = readRequiredTrimmedString(record.tripTitle, 160)
+  if (!tripTitle) {
+    return tripOperationsSummaryInvalidRequest('执行建议摘要缺少旅行标题。', requestId)
+  }
+  if (!VALID_TRIP_OPERATIONS_PHASES.has(record.phase as ProviderProxyTripOperationsPhase)) {
+    return tripOperationsSummaryInvalidRequest('执行建议摘要阶段无效。', requestId)
+  }
+  if (!Array.isArray(record.recommendations) || record.recommendations.length < 1 || record.recommendations.length > MAX_TRIP_OPERATIONS_RECOMMENDATIONS) {
+    return tripOperationsSummaryInvalidRequest(`执行建议摘要最多支持 ${MAX_TRIP_OPERATIONS_RECOMMENDATIONS} 条建议。`, requestId)
+  }
+
+  const recommendations: ProviderProxyTripOperationsRecommendationInput[] = []
+  for (const rawRecommendation of record.recommendations) {
+    const recommendation = readTripOperationsRecommendation(rawRecommendation)
+    if (!recommendation.ok) {
+      return tripOperationsSummaryInvalidRequest(recommendation.message, requestId)
+    }
+    recommendations.push(recommendation.recommendation)
+  }
+
+  return {
+    ok: true,
+    request: {
+      destination: readOptionalString(record.destination, 160),
+      generatedAt: readOptionalString(record.generatedAt, 80),
+      operation: PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
+      phase: record.phase as ProviderProxyTripOperationsPhase,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      recommendations,
+      requestId,
+      tripTitle,
+    },
+  }
+}
+
+function readTripOperationsRecommendation(
+  input: unknown,
+): { ok: true; recommendation: ProviderProxyTripOperationsRecommendationInput } | { message: string; ok: false } {
+  const record = readRecord(input)
+  const title = readRequiredTrimmedString(record.title, MAX_TRIP_OPERATIONS_TEXT)
+  const message = readRequiredTrimmedString(record.message, MAX_TRIP_OPERATIONS_TEXT)
+  const actionLabel = readRequiredTrimmedString(record.actionLabel, 80)
+  const type = readRequiredTrimmedString(record.type, 80)
+  const actionKind = readRequiredTrimmedString(record.actionKind, 80)
+  if (!title || !message || !actionLabel || !type || !actionKind) {
+    return { message: '执行建议摘要包含空建议字段。', ok: false }
+  }
+  if (!VALID_TRIP_OPERATIONS_SEVERITIES.has(record.severity as ProviderProxyTripOperationsSeverity)) {
+    return { message: '执行建议摘要严重级别无效。', ok: false }
+  }
+  return {
+    ok: true,
+    recommendation: {
+      actionKind,
+      actionLabel,
+      message,
+      severity: record.severity as ProviderProxyTripOperationsSeverity,
+      title,
+      type,
     },
   }
 }

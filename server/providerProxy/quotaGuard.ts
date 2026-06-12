@@ -13,11 +13,13 @@ import {
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
+  PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   type ProviderProxyOperation,
 } from '../../src/lib/ai/providerProxyContract'
@@ -33,6 +35,7 @@ export type ProviderProxyQuotaBucket =
   | 'travel_inbox_classify|'
   | 'ai_trip_content|'
   | 'ai_trip_daily_tip|'
+  | 'ai_trip_operations|'
   | 'ai_trip_edit|'
 
 export type ProviderProxyQuotaLimits = {
@@ -41,6 +44,7 @@ export type ProviderProxyQuotaLimits = {
   maxAiExistingTripImportRequestsPerWindow: number
   maxTravelInboxClassifyRequestsPerWindow: number
   maxAiTripContentEnrichmentRequestsPerWindow: number
+  maxAiTripOperationsSummaryRequestsPerWindow: number
   maxAiTripEditRequestsPerWindow: number
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
@@ -128,6 +132,7 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxAiExistingTripImportRequestsPerWindow: PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW,
   maxTravelInboxClassifyRequestsPerWindow: PROVIDER_PROXY_MAX_TRAVEL_INBOX_CLASSIFY_REQUESTS_PER_WINDOW,
   maxAiTripContentEnrichmentRequestsPerWindow: PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW,
+  maxAiTripOperationsSummaryRequestsPerWindow: PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW,
   maxAiTripEditRequestsPerWindow: PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
@@ -333,6 +338,9 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION) {
     return { bucket: 'ai_trip_daily_tip|', maxRequests: limits.maxAiTripContentEnrichmentRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
+    return { bucket: 'ai_trip_operations|', maxRequests: limits.maxAiTripOperationsSummaryRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
     return { bucket: 'place|', maxRequests: limits.maxPlaceLookupRequestsPerWindow }

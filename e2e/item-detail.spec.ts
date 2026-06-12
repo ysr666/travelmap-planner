@@ -783,9 +783,11 @@ test('票据区显示现场卡片、预览和查看全部入口', async ({ page 
   await expect(page.getByTestId('ticket-preview')).toHaveCount(0)
 
   await page.getByTestId('item-ticket-view-all').click()
-  await expect(page).toHaveURL(/#\/tickets\?/)
-  expect(new URL(page.url()).hash).toContain(`tripId=${tripId}`)
-  expect(new URL(page.url()).hash).not.toContain('itemId=')
+  await expect(page).toHaveURL(/#\/documents\?/)
+  const hash = new URL(page.url()).hash
+  expect(hash).toContain(`tripId=${tripId}`)
+  expect(hash).toContain('tab=attachments')
+  expect(hash).not.toContain('itemId=')
   await expectNoHorizontalOverflow(page)
 })
 

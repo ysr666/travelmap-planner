@@ -227,6 +227,7 @@ describe('provider proxy handler quota routing', () => {
       { bucket: 'ai_draft_repair|', request: validRepairRequest() },
       { bucket: 'ai_trip_edit|', request: validEditRequest() },
       { bucket: 'travel_inbox_classify|', request: validTravelInboxClassifyRequest() },
+      { bucket: 'ai_trip_operations|', request: validTripOperationsSummaryRequest() },
     ]
 
     for (const testCase of cases) {
@@ -1791,6 +1792,31 @@ describe('provider proxy handler trip_daily_tip', () => {
   })
 })
 
+describe('provider proxy handler trip_operations_summary', () => {
+  it('returns deterministic mock operations summary without provider calls or secret leakage', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_API_KEY: 'server-secret', TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validTripOperationsSummaryRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-secret')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    const body = JSON.parse(text)
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'trip_operations_summary',
+      source: 'mock',
+    })
+    expect(body.summary).toContain('先处理')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
 function validEditRequest(command = '第二天太满了，帮我放松一点') {
   return {
     command,
@@ -1817,6 +1843,25 @@ function validEditRequest(command = '第二天太满了，帮我放松一点') {
     operation: 'ai_trip_edit_plan',
     quotaSessionId: 'session-edit-1',
     requestId: 'edit-1',
+  }
+}
+
+function validTripOperationsSummaryRequest() {
+  return {
+    destination: '杭州',
+    operation: 'trip_operations_summary',
+    phase: 'traveling',
+    quotaSessionId: 'session-ops-summary',
+    recommendations: [{
+      actionKind: 'generate_routes',
+      actionLabel: '生成路线',
+      message: '2 天缺少路线。',
+      severity: 'low',
+      title: '2 天缺路线',
+      type: 'missing_route',
+    }],
+    requestId: 'ops-summary-1',
+    tripTitle: '杭州三日',
   }
 }
 

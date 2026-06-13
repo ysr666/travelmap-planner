@@ -27,8 +27,21 @@ export type BuildAiTripEditApplyPayloadResult =
   | { ok: false; errors: string[] }
 
 export type ApplyAiTripEditPatchResult =
-  | { ok: true; appliedOperationCount: number }
+  | {
+      affectedDayIds: string[]
+      affectedItemIds: string[]
+      appliedChanges: AiTripEditAppliedChange[]
+      appliedOperationCount: number
+      ok: true
+    }
   | { ok: false; errors: string[] }
+
+export type AiTripEditAppliedChange = {
+  action: 'created' | 'removed' | 'reordered' | 'updated'
+  dayId?: string
+  itemId?: string
+  title: string
+}
 
 export function buildAiTripEditApplyPayload(
   plan: AiTripEditPatchPlan,
@@ -148,7 +161,13 @@ export async function applyAiTripEditPatchPlanToDb(
         return { errors: payloadResult.errors, ok: false as const }
       }
       if (payloadResult.payload.writeOperationCount === 0) {
-        return { appliedOperationCount: 0, ok: true as const }
+        return {
+          affectedDayIds: [],
+          affectedItemIds: [],
+          appliedChanges: [],
+          appliedOperationCount: 0,
+          ok: true as const,
+        }
       }
 
       const itemMap = new Map(items.map((item) => [item.id, { ...item }]))
@@ -161,6 +180,9 @@ export async function applyAiTripEditPatchPlanToDb(
           .map((item) => item.id),
       ]))
       const affectedDayIds = new Set<string>()
+      const reportedDayIds = new Set<string>()
+      const affectedItemIds = new Set<string>()
+      const appliedChanges: AiTripEditAppliedChange[] = []
       const deletedItemIds: string[] = []
       const changedItems = new Map<string, ItineraryItem>()
       const changedDays = new Map<string, Day>()
@@ -171,6 +193,7 @@ export async function applyAiTripEditPatchPlanToDb(
           const updated = { ...item, title: operation.title, updatedAt: now }
           itemMap.set(item.id, updated)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
           continue
         }
 
@@ -184,6 +207,7 @@ export async function applyAiTripEditPatchPlanToDb(
           }
           itemMap.set(item.id, updated)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
           continue
         }
 
@@ -197,6 +221,7 @@ export async function applyAiTripEditPatchPlanToDb(
           }
           itemMap.set(item.id, updated)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
           continue
         }
 
@@ -205,6 +230,7 @@ export async function applyAiTripEditPatchPlanToDb(
           const updated = { ...item, notes: operation.note, updatedAt: now }
           itemMap.set(item.id, updated)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
           continue
         }
 
@@ -218,6 +244,7 @@ export async function applyAiTripEditPatchPlanToDb(
           }
           itemMap.set(item.id, updated)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
           continue
         }
 
@@ -234,6 +261,7 @@ export async function applyAiTripEditPatchPlanToDb(
           itemMap.delete(item.id)
           changedItems.delete(item.id)
           deletedItemIds.push(item.id)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, item, 'removed')
           continue
         }
 
@@ -252,6 +280,8 @@ export async function applyAiTripEditPatchPlanToDb(
           insertIntoDayOrder(dayOrder, operation.targetDayId, item.id, operation.targetSortOrder)
           affectedDayIds.add(operation.targetDayId)
           changedItems.set(item.id, updated)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, updated, 'updated')
+          reportedDayIds.add(item.dayId)
           continue
         }
 
@@ -277,12 +307,16 @@ export async function applyAiTripEditPatchPlanToDb(
           insertIntoDayOrder(dayOrder, operation.targetDayId, item.id, operation.targetSortOrder)
           affectedDayIds.add(operation.targetDayId)
           changedItems.set(item.id, item)
+          recordItemChange(appliedChanges, affectedItemIds, reportedDayIds, item, 'created')
           continue
         }
 
         if (operation.type === 'reorder_day_items') {
           dayOrder.set(operation.dayId, [...operation.orderedItemIds])
           affectedDayIds.add(operation.dayId)
+          reportedDayIds.add(operation.dayId)
+          operation.orderedItemIds.forEach((itemId) => affectedItemIds.add(itemId))
+          appliedChanges.push({ action: 'reordered', dayId: operation.dayId, title: '调整当天行程顺序' })
           continue
         }
 
@@ -293,6 +327,8 @@ export async function applyAiTripEditPatchPlanToDb(
         const updated = { ...day, title: operation.title }
         dayMap.set(day.id, updated)
         changedDays.set(day.id, updated)
+        reportedDayIds.add(day.id)
+        appliedChanges.push({ action: 'updated', dayId: day.id, title: updated.title })
       }
 
       for (const dayId of affectedDayIds) {
@@ -321,7 +357,13 @@ export async function applyAiTripEditPatchPlanToDb(
       }
       await db.trips.update(tripId, { updatedAt: now })
 
-      return { appliedOperationCount: payloadResult.payload.writeOperationCount, ok: true as const }
+      return {
+        affectedDayIds: [...reportedDayIds],
+        affectedItemIds: [...affectedItemIds],
+        appliedChanges,
+        appliedOperationCount: payloadResult.payload.writeOperationCount,
+        ok: true as const,
+      }
     })
 
     if (result.ok && result.appliedOperationCount > 0) {
@@ -331,6 +373,18 @@ export async function applyAiTripEditPatchPlanToDb(
   } catch {
     return { errors: ['应用 AI 修改方案失败，旅行未完成写入。'], ok: false }
   }
+}
+
+function recordItemChange(
+  changes: AiTripEditAppliedChange[],
+  itemIds: Set<string>,
+  dayIds: Set<string>,
+  item: ItineraryItem,
+  action: AiTripEditAppliedChange['action'],
+) {
+  itemIds.add(item.id)
+  dayIds.add(item.dayId)
+  changes.push({ action, dayId: item.dayId, itemId: item.id, title: item.title })
 }
 
 function requireItem(itemMap: Map<string, ItineraryItem>, itemId: string) {

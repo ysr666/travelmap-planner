@@ -4,7 +4,6 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import {
-  applyExistingTripImportPreview,
   buildExistingTripImportPreview,
   type ExistingTripImportDiff,
   type ExistingTripImportItemFields,
@@ -22,7 +21,6 @@ import {
 import {
   addTravelInboxErrorEntry,
   addTravelInboxExtraction,
-  buildTravelInboxApplyFiles,
   buildTravelInboxProviderRequest,
   buildTravelInboxSourceSummaries,
   buildTravelInboxTicketSummaries,
@@ -41,6 +39,7 @@ import {
   summarizeTravelInboxPreview,
   updateTravelInboxPreviewRecord,
 } from '../../lib/ai/travelInbox'
+import { applyTravelInboxPreviewRecord } from '../../lib/ai/travelInboxApply'
 import {
   PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
 } from '../../lib/ai/providerProxyContract'
@@ -54,12 +53,14 @@ import { navigateTo } from '../../lib/routes'
 import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import { ticketCategoryOptions, ticketCategoryLabels } from '../../lib/tickets'
 import type { Day, ItineraryItem, TicketCategory, TicketMeta, TravelInboxEntry, TravelInboxPreviewRecord, Trip } from '../../types'
-import { completeTravelInboxAccountSource, resetTravelInboxAccountSourcePreview } from '../../lib/ai/travelInboxOrganization'
+import { resetTravelInboxAccountSourcePreview } from '../../lib/ai/travelInboxOrganization'
 
 type TravelInboxPanelProps = {
   allItems: ItineraryItem[]
   days: Day[]
   onApplied: () => Promise<void>
+  onPreviewChanged?: () => Promise<void>
+  refreshVersion?: number
   tickets: TicketMeta[]
   trip: Trip
 }
@@ -84,6 +85,8 @@ export function TravelInboxPanel({
   allItems,
   days,
   onApplied,
+  onPreviewChanged,
+  refreshVersion,
   tickets,
   trip,
 }: TravelInboxPanelProps) {
@@ -132,7 +135,7 @@ export function TravelInboxPanel({
 
   useEffect(() => {
     queueMicrotask(() => void loadInbox())
-  }, [loadInbox])
+  }, [loadInbox, refreshVersion])
 
   async function processPastedText() {
     if (!pastedText.trim()) return
@@ -316,13 +319,9 @@ export function TravelInboxPanel({
     setIsApplying(true)
     setError(null)
     try {
-      const filesBySourceId = await buildTravelInboxApplyFiles(previewRecord.entryIds)
-      const result = await applyExistingTripImportPreview({
-        checkedDiffIds: new Set(checkedDiffIds),
-        expectedBaselineFingerprint: preview.baselineFingerprint,
-        filesBySourceId,
-        preview,
-        tripId: trip.id,
+      const result = await applyTravelInboxPreviewRecord({
+        checkedDiffIds,
+        record: previewRecord,
       })
       if (!result.ok) {
         setError(result.errors.join('\n'))
@@ -330,10 +329,6 @@ export function TravelInboxPanel({
       }
       setConfirmApplyOpen(false)
       if (result.appliedCount > 0) {
-        if (previewRecord.cloudSourceId) {
-          await completeTravelInboxAccountSource(previewRecord.cloudSourceId, result.appliedChanges)
-        }
-        await deleteTravelInboxEntries(previewRecord.entryIds)
         persistTravelInboxAppliedChanges(trip.id, result.appliedChanges)
         setAppliedChanges(result.appliedChanges)
         setSuccessMessage(`已应用 ${result.appliedCount} 项收件箱建议。${SYNC_QUEUE_SUCCESS_COPY}`)
@@ -373,6 +368,7 @@ export function TravelInboxPanel({
     setCheckedDiffIds(nextCheckedDiffIds)
     if (previewRecord) {
       await updateTravelInboxPreviewRecord({ ...previewRecord, checkedDiffIds: nextCheckedDiffIds })
+      await onPreviewChanged?.()
     }
   }
 
@@ -381,6 +377,7 @@ export function TravelInboxPanel({
     const nextRecord = { ...previewRecord, preview: nextPreview }
     setPreviewRecord(nextRecord)
     await updateTravelInboxPreviewRecord(nextRecord)
+    await onPreviewChanged?.()
   }
 
   function updateCreateItemDate(diffId: string, value: string) {

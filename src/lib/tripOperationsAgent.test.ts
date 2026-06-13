@@ -109,6 +109,181 @@ describe('tripOperationsAgent', () => {
     expect(model.recommendations).toEqual([])
     expect(model.summary.message).toContain('当前没有明显阻塞项')
   })
+
+  it('keeps fingerprints stable and reopens a completed recommendation when scoped data changes', () => {
+    const seed = buildSeed()
+    const input = {
+      allItems: seed.items,
+      days: seed.days,
+      inboxSummary: inboxSummary(),
+      itemsByDay: { day_1: seed.items },
+      now: new Date('2026-06-10T14:30:00+08:00'),
+      readinessModel: readinessModelFixture(),
+      ticketBlobSyncStates: [] as TicketBlobSyncState[],
+      tickets: [seed.ticket],
+      trip: seed.trip,
+    }
+    const first = buildTripOperationsModel(input)
+    const route = first.allRecommendations.find((recommendation) => recommendation.type === 'missing_route')!
+    const repeated = buildTripOperationsModel(input)
+      .allRecommendations.find((recommendation) => recommendation.type === 'missing_route')!
+    expect(repeated.scopeKey).toBe(route.scopeKey)
+    expect(repeated.fingerprint).toBe(route.fingerprint)
+
+    const hidden = buildTripOperationsModel({
+      ...input,
+      dispositions: [{
+        createdAt: 1,
+        fingerprint: route.fingerprint,
+        phase: first.phase,
+        scopeKey: route.scopeKey,
+        status: 'completed',
+        zonedDate: '2026-06-10',
+      }],
+    })
+    expect(hidden.recommendations.some((recommendation) => recommendation.fingerprint === route.fingerprint)).toBe(false)
+    expect(hidden.hiddenRecommendations).toHaveLength(1)
+
+    const changedItems = [{ ...seed.items[0], updatedAt: 2 }]
+    const reopened = buildTripOperationsModel({
+      ...input,
+      allItems: changedItems,
+      dispositions: hidden.hiddenRecommendations.map(({ disposition }) => disposition),
+      itemsByDay: { day_1: changedItems },
+    })
+    const changedRoute = reopened.allRecommendations.find((recommendation) => recommendation.type === 'missing_route')!
+    expect(changedRoute.scopeKey).toBe(route.scopeKey)
+    expect(changedRoute.fingerprint).not.toBe(route.fingerprint)
+    expect(reopened.recommendations.some((recommendation) => recommendation.fingerprint === changedRoute.fingerprint)).toBe(true)
+  })
+
+  it('restores snoozed recommendations when the destination date or phase changes', () => {
+    const seed = buildSeed()
+    const morningInput = {
+      allItems: seed.items,
+      days: seed.days,
+      inboxSummary: inboxSummary({ readyEntryCount: 1 }),
+      itemsByDay: { day_1: seed.items },
+      now: new Date('2026-06-10T08:30:00+08:00'),
+      readinessModel: { issues: [], summary: emptySummary() },
+      ticketBlobSyncStates: [] as TicketBlobSyncState[],
+      tickets: [] as TicketMeta[],
+      trip: seed.trip,
+    }
+    const first = buildTripOperationsModel(morningInput)
+    const recommendation = first.recommendations[0]
+    const dispositions = [{
+      createdAt: 1,
+      fingerprint: recommendation.fingerprint,
+      phase: first.phase,
+      scopeKey: recommendation.scopeKey,
+      status: 'snoozed' as const,
+      zonedDate: '2026-06-10',
+    }]
+    expect(buildTripOperationsModel({ ...morningInput, dispositions }).recommendations).toEqual([])
+    expect(buildTripOperationsModel({
+      ...morningInput,
+      dispositions,
+      now: new Date('2026-06-10T14:30:00+08:00'),
+    }).recommendations).toHaveLength(1)
+    expect(buildTripOperationsModel({
+      ...morningInput,
+      dispositions,
+      now: new Date('2026-06-11T08:30:00+08:00'),
+    }).recommendations).toHaveLength(1)
+  })
+
+  it('fills the visible top five after filtering hidden recommendations', () => {
+    const seed = buildSeed()
+    const input = {
+      allItems: seed.items,
+      cloudSummary: cloudSummary({ conflictCount: 1, syncItemCount: 1 }),
+      dailyTipModel: dailyTipModel(seed.days[1]),
+      days: seed.days,
+      inboxSummary: inboxSummary({ readyEntryCount: 2, selectedPreviewDiffCount: 3 }),
+      itemsByDay: { day_1: seed.items },
+      now: new Date('2026-06-10T14:30:00+08:00'),
+      readinessModel: readinessModelFixture(),
+      ticketBlobSyncStates: [syncedCacheState(seed.ticket)],
+      tickets: [seed.ticket],
+      trip: seed.trip,
+    }
+    const first = buildTripOperationsModel(input)
+    const top = first.recommendations[0]
+    const filtered = buildTripOperationsModel({
+      ...input,
+      dispositions: [{
+        createdAt: 1,
+        fingerprint: top.fingerprint,
+        phase: first.phase,
+        scopeKey: top.scopeKey,
+        status: 'ignored',
+        zonedDate: '2026-06-10',
+      }],
+    })
+    expect(filtered.recommendations).toHaveLength(5)
+    expect(filtered.recommendations).not.toContainEqual(expect.objectContaining({ fingerprint: top.fingerprint }))
+  })
+
+  it('maps the active inbox preview to a confirmation-gated recommendation fingerprint', () => {
+    const seed = buildSeed()
+    const activeInboxPreview = {
+      checkedDiffIds: ['diff_1'],
+      id: 'preview_1',
+      preview: {
+        baselineFingerprint: 'baseline_1',
+        diffs: [{
+          category: 'items' as const,
+          checked: true,
+          confidence: 'high' as const,
+          data: { patch: { startTime: '10:30' }, targetItemId: seed.items[0].id },
+          id: 'diff_1',
+          reason: '时间冲突',
+          sourceIds: ['source_1'],
+          summary: '调整西湖时间',
+          type: 'merge_item_fields' as const,
+        }],
+        generatedAt: '2026-06-10T00:00:00.000Z',
+        sourceSummaries: [],
+        warnings: [],
+      },
+    }
+    const model = buildTripOperationsModel({
+      activeInboxPreview,
+      allItems: seed.items,
+      days: seed.days,
+      inboxSummary: inboxSummary({ selectedPreviewDiffCount: 1 }),
+      itemsByDay: { day_1: seed.items },
+      now: new Date('2026-06-10T14:30:00+08:00'),
+      readinessModel: { issues: [], summary: emptySummary() },
+      tickets: [],
+      trip: seed.trip,
+    })
+    const recommendation = model.recommendations[0]
+    expect(recommendation).toEqual(expect.objectContaining({
+      actionKind: 'apply_inbox_preview',
+      executionMode: 'inbox_preview',
+      requiresConfirm: true,
+      severity: 'high',
+    }))
+
+    const changed = buildTripOperationsModel({
+      activeInboxPreview: {
+        ...activeInboxPreview,
+        preview: { ...activeInboxPreview.preview, baselineFingerprint: 'baseline_2' },
+      },
+      allItems: seed.items,
+      days: seed.days,
+      inboxSummary: inboxSummary({ selectedPreviewDiffCount: 1 }),
+      itemsByDay: { day_1: seed.items },
+      now: new Date('2026-06-10T14:30:00+08:00'),
+      readinessModel: { issues: [], summary: emptySummary() },
+      tickets: [],
+      trip: seed.trip,
+    }).recommendations[0]
+    expect(changed.scopeKey).toBe(recommendation.scopeKey)
+    expect(changed.fingerprint).not.toBe(recommendation.fingerprint)
+  })
 })
 
 function buildSeed() {

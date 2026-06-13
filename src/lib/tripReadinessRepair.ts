@@ -20,6 +20,7 @@ export type TripReadinessRepairExecutionResult = {
   dailyTipPreview: TripDailyTravelTipEnhancedPreview | null
   messages: string[]
   routeResult?: RouteGenerationBatchResult
+  retriedTicketIds: string[]
   ticketErrors: string[]
   ticketRetryCount: number
 }
@@ -48,6 +49,7 @@ export async function executeTripReadinessRepairPreview({
     contentPreview: null,
     dailyTipPreview: null,
     messages: [],
+    retriedTicketIds: [],
     ticketErrors: [],
     ticketRetryCount: 0,
   }
@@ -65,7 +67,10 @@ export async function executeTripReadinessRepairPreview({
 
   if (preview.ticketIds.length > 0) {
     const settled = await Promise.allSettled(preview.ticketIds.map((ticketId) => retryTicketBlobUpload(ticketId)))
-    result.ticketRetryCount = settled.filter((entry) => entry.status === 'fulfilled').length
+    result.retriedTicketIds = settled.flatMap((entry, index) =>
+      entry.status === 'fulfilled' ? [preview.ticketIds[index]] : [],
+    )
+    result.ticketRetryCount = result.retriedTicketIds.length
     result.ticketErrors = settled
       .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
       .map((entry) => entry.reason instanceof Error ? entry.reason.message : '票据重试失败。')

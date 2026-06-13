@@ -38,10 +38,17 @@ import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/clo
 import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
 import { buildTripReadinessModel } from '../lib/tripReadiness'
 import { buildTripOperationsModel, type TripOperationsInboxSummary } from '../lib/tripOperationsAgent'
+import type { ExistingTripImportPreview } from '../lib/ai/existingTripImport'
+import {
+  createEmptyTripOperationsLocalState,
+  readTripOperationsLocalState,
+  writeTripOperationsLocalState,
+  type TripOperationsLocalState,
+} from '../lib/tripOperationsState'
 import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
 import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../lib/ai/travelInbox'
 import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
-import type { Day, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource } from '../types'
+import type { Day, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -70,11 +77,14 @@ export function TripWorkspacePage() {
   const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncState[]>([])
   const [cloudSyncQueueSummary, setCloudSyncQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
   const [tripOperationsInboxSummary, setTripOperationsInboxSummary] = useState<TripOperationsInboxSummary | null>(null)
+  const [tripOperationsInboxPreview, setTripOperationsInboxPreview] = useState<TravelInboxPreviewRecord | null>(null)
+  const [tripOperationsLocalStates, setTripOperationsLocalStates] = useState<Record<string, TripOperationsLocalState>>({})
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
   const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
   const [readinessDataVersion, setReadinessDataVersion] = useState(0)
+  const [travelInboxRefreshVersion, setTravelInboxRefreshVersion] = useState(0)
   const [routeGenerationConfirmOpen, setRouteGenerationConfirmOpen] = useState(false)
   const [routeGenerationLoading, setRouteGenerationLoading] = useState(false)
   const [routeGenerationResult, setRouteGenerationResult] = useState<RouteGenerationBatchResult | null>(null)
@@ -89,6 +99,17 @@ export function TripWorkspacePage() {
 
     return `${trip.id}:${days.map((day) => day.id).join('|')}`
   }, [days, trip])
+
+  const tripOperationsStateTripId = trip?.id
+  const storedTripOperationsLocalState = useMemo(
+    () => tripOperationsStateTripId
+      ? readTripOperationsLocalState(tripOperationsStateTripId)
+      : createEmptyTripOperationsLocalState(),
+    [tripOperationsStateTripId],
+  )
+  const tripOperationsLocalState = trip
+    ? tripOperationsLocalStates[trip.id] ?? storedTripOperationsLocalState
+    : storedTripOperationsLocalState
 
   useEffect(() => {
     if (!isLoading && trip && selectedDay && (requestedView === 'schedule' || requestedView === 'map')) {
@@ -122,6 +143,7 @@ export function TripWorkspacePage() {
         setTicketMetas(tickets)
         setTicketBlobSyncStates(blobSyncStates)
         setCloudSyncQueueSummary(syncSummary)
+        setTripOperationsInboxPreview(inboxPreview ?? null)
         setTripOperationsInboxSummary(buildTripOperationsInboxSummary({
           accountSources,
           errorEntryCount: inboxEntries.filter((entry) => entry.status === 'error').length,
@@ -137,6 +159,7 @@ export function TripWorkspacePage() {
         setTicketBlobSyncStates([])
         setCloudSyncQueueSummary(null)
         setTripOperationsInboxSummary(null)
+        setTripOperationsInboxPreview(null)
         setLoadedTripContextKey('')
       }
       // Trip Home can still render without aggregate item counts.
@@ -278,10 +301,16 @@ export function TripWorkspacePage() {
       return null
     }
     return buildTripOperationsModel({
+      activeInboxPreview: tripOperationsInboxPreview ? {
+        checkedDiffIds: tripOperationsInboxPreview.checkedDiffIds,
+        id: tripOperationsInboxPreview.id,
+        preview: tripOperationsInboxPreview.preview as ExistingTripImportPreview,
+      } : null,
       allItems,
       cloudSummary: cloudSyncQueueSummary,
       dailyTipModel,
       days,
+      dispositions: tripOperationsLocalState.dispositions,
       inboxSummary: tripOperationsInboxSummary,
       itemsByDay,
       readinessModel,
@@ -302,7 +331,15 @@ export function TripWorkspacePage() {
     ticketMetas,
     trip,
     tripOperationsInboxSummary,
+    tripOperationsInboxPreview,
+    tripOperationsLocalState.dispositions,
   ])
+
+  function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
+    if (!trip) return
+    const stored = writeTripOperationsLocalState(trip.id, nextState)
+    setTripOperationsLocalStates((current) => ({ ...current, [trip.id]: stored }))
+  }
 
   async function handleGenerateDays() {
     if (!trip) {
@@ -376,6 +413,11 @@ export function TripWorkspacePage() {
     if (options.refreshTripData) {
       await refresh()
     }
+  }
+
+  async function handleTripOperationsChanged(options: { refreshTripData?: boolean } = {}) {
+    setTravelInboxRefreshVersion((version) => version + 1)
+    await handleReadinessChanged(options)
   }
 
   if (isLoading) {
@@ -506,13 +548,17 @@ export function TripWorkspacePage() {
 
             {readinessModel && tripOperationsModel ? (
               <TripOperationsPanel
+                activeInboxPreview={tripOperationsInboxPreview}
                 allItems={allItems}
                 dailyTipModel={dailyTipModel}
                 days={days}
                 itemsByDay={itemsByDay}
                 model={tripOperationsModel}
-                onChanged={handleReadinessChanged}
+                localState={tripOperationsLocalState}
+                onChanged={handleTripOperationsChanged}
+                onLocalStateChange={handleTripOperationsLocalStateChange}
                 readinessModel={readinessModel}
+                tickets={ticketMetas}
                 trip={trip}
               />
             ) : null}
@@ -606,7 +652,16 @@ export function TripWorkspacePage() {
               <Button onClick={() => navigateTo('inbox')} variant="ghost">查看账号旅行收件箱</Button>
             </div>
             <div id="trip-travel-inbox-panel">
-              <TravelInboxPanel allItems={allItems} days={days} key={trip.id} onApplied={async () => { await refresh() }} tickets={ticketMetas} trip={trip} />
+              <TravelInboxPanel
+                allItems={allItems}
+                days={days}
+                key={trip.id}
+                onApplied={async () => { await refresh() }}
+                onPreviewChanged={async () => { await handleReadinessChanged({ refreshTripData: false }) }}
+                refreshVersion={travelInboxRefreshVersion}
+                tickets={ticketMetas}
+                trip={trip}
+              />
             </div>
             <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
             <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />

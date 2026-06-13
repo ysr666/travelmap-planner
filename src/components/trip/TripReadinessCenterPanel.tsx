@@ -494,6 +494,7 @@ function IssueGroup({
 function cloneRepairResult(result: RepairResult): RepairResult {
   return {
     messages: [...result.messages],
+    retriedTicketIds: [...result.retriedTicketIds],
     routeResult: result.routeResult,
     ticketErrors: [...result.ticketErrors],
     ticketRetryCount: result.ticketRetryCount,

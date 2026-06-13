@@ -72,6 +72,31 @@ describe('object sync field merge', () => {
     }
   })
 
+  it('treats execution state and its timestamp as one atomic conflict field', () => {
+    const base = buildItem()
+    const local = buildItem({ executionState: { status: 'completed', updatedAt: 200 } })
+    const remote = buildItem({ executionState: { status: 'skipped', updatedAt: 300 } })
+    const result = mergeObjectPayloadFields({ basePayload: base, localPayload: local, objectType: 'item', remotePayload: remote })
+
+    expect(result.status).toBe('conflict')
+    if (result.status === 'conflict') {
+      expect(result.conflicts).toEqual([expect.objectContaining({ fieldPath: 'executionState', label: '旅行执行状态' })])
+    }
+  })
+
+  it('clears execution state when a remote merge moves an item to another day', () => {
+    const base = buildItem({ executionState: { status: 'completed', updatedAt: 100 } })
+    const local = buildItem({ ...base })
+    const remote = buildItem({ ...base, dayId: 'day_2' })
+    const result = mergeObjectPayloadFields({ basePayload: base, localPayload: local, objectType: 'item', remotePayload: remote })
+
+    expect(result.status).toBe('merged')
+    if (result.status === 'merged') {
+      expect((result.payload as ItineraryItem).dayId).toBe('day_2')
+      expect((result.payload as ItineraryItem).executionState).toBeUndefined()
+    }
+  })
+
   it('auto merges append-only notes', () => {
     const base: Trip = {
       createdAt: 1,

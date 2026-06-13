@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   navigateTo: vi.fn(),
   useTripData: vi.fn(),
   listItemsByDay: vi.fn().mockResolvedValue([]),
+  listTicketsByTrip: vi.fn().mockResolvedValue([]),
   buildTripContext: vi.fn(() => ({})),
   analyzeTripContext: vi.fn(() => ({
     evidence: [],
@@ -19,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   })),
   getStoredTravelProfile: vi.fn(() => null),
   buildDayBrief: vi.fn(() => null),
+  buildTripDailyTravelTip: vi.fn(() => ({ mode: 'today', targetDay: null })),
+  buildTripReadinessModel: vi.fn(() => ({ issues: [], summary: {} })),
+  buildTripOperationsModel: vi.fn(() => ({ activeRecommendations: [] })),
+  readTripOperationsLocalState: vi.fn(() => ({ dispositions: [], history: [], version: 2 })),
   formatDateKey: vi.fn(() => '2026-04-01'),
   formatShortDate: vi.fn((date: string) => date === '2026-04-01' ? '4月1日' : date),
   loadTripRoutePreparation: vi.fn().mockResolvedValue(null),
@@ -54,6 +59,7 @@ const defaultTripData = {
   error: null,
   setItemsByDay: vi.fn(),
   refreshItems: vi.fn(),
+  refresh: vi.fn(),
 }
 
 vi.mock('../lib/routes', () => ({
@@ -67,6 +73,8 @@ vi.mock('../hooks/useTripData', () => ({
 
 vi.mock('../db', () => ({
   listItemsByDay: mocks.listItemsByDay,
+  listTicketsByTrip: mocks.listTicketsByTrip,
+  updateDay: vi.fn(),
 }))
 
 vi.mock('../lib/ai/aiTripContext', () => ({
@@ -84,6 +92,12 @@ vi.mock('../lib/travelProfile', () => ({
 vi.mock('../lib/travelBrief', () => ({
   buildDayBrief: mocks.buildDayBrief,
 }))
+
+vi.mock('../lib/ai/tripDailyTravelTip', () => ({ buildTripDailyTravelTip: mocks.buildTripDailyTravelTip }))
+vi.mock('../lib/tripReadiness', () => ({ buildTripReadinessModel: mocks.buildTripReadinessModel }))
+vi.mock('../lib/tripOperationsAgent', () => ({ buildTripOperationsModel: mocks.buildTripOperationsModel }))
+vi.mock('../lib/tripOperationsState', () => ({ readTripOperationsLocalState: mocks.readTripOperationsLocalState }))
+vi.mock('../lib/tripOperationsNavigation', () => ({ navigateToTripOperationsRecommendation: vi.fn() }))
 
 vi.mock('../lib/dates', () => ({
   formatDateKey: mocks.formatDateKey,
@@ -113,8 +127,8 @@ vi.mock('../lib/mapStartupMetrics', () => ({
   resetMapStartupTrace: mocks.resetMapStartupTrace,
 }))
 
-vi.mock('../components/trip/DayLiveBriefingCard', () => ({
-  DayLiveBriefingCard: () => <div data-testid="day-live-briefing-card" />,
+vi.mock('../components/trip/TripLiveModeCard', () => ({
+  TripLiveModeCard: () => <div data-testid="trip-live-mode-card" />,
 }))
 
 vi.mock('../components/ai/DayBriefCard', () => ({
@@ -241,7 +255,7 @@ describe('DayViewPage', () => {
       root?.render(<DayViewPage />)
     })
 
-    expect(container?.querySelector('[data-testid="day-live-briefing-card"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="trip-live-mode-card"]')).toBeTruthy()
   })
 
   it('navigates to trip overview on back button click', async () => {

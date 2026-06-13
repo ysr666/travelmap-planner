@@ -144,6 +144,31 @@ describe('applyAiTripEditPatchPlanToDb', () => {
     expect(getTripAutoSnapshotStatus(seed.trip.id)).toBeNull()
   })
 
+  it('invalidates an AI preview when live execution state changes', async () => {
+    const seed = await seedTrip()
+    const beforeFingerprint = buildAiTripEditLocalStateFingerprint({ days: await listDaysByTrip(seed.trip.id), items: await listItemsByTrip(seed.trip.id), trip: seed.trip })
+    await updateItineraryItem(seed.item1.id, { executionState: { status: 'completed', updatedAt: 500 } })
+
+    const result = await applyAiTripEditPatchPlanToDb(seed.trip.id, {
+      operations: [{ itemId: seed.item1.id, reason: '调整标题。', title: 'AI 修改', type: 'update_item_title' }],
+      summary: '调整标题',
+    }, { expectedBaselineFingerprint: beforeFingerprint })
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('clears execution state when an item moves to another day', async () => {
+    const seed = await seedTrip()
+    await updateItineraryItem(seed.item2.id, { executionState: { status: 'completed', updatedAt: 500 } })
+    const result = await applyAiTripEditPatchPlanToDb(seed.trip.id, {
+      operations: [{ itemId: seed.item2.id, reason: '改到第二天。', targetDayId: seed.day2.id, type: 'move_item' }],
+      summary: '移动行程点',
+    })
+
+    expect(result.ok).toBe(true)
+    expect((await getItineraryItem(seed.item2.id))?.executionState).toBeUndefined()
+  })
+
   it('builds zero-write payload for valid no-op plans', async () => {
     const seed = await seedTrip()
     const contextResult = buildAiTripEditContext({

@@ -142,6 +142,12 @@ vi.mock('../components/trip/TripOperationsPanel', () => ({
   TripOperationsPanel: () => <div data-testid="trip-operations-panel" />,
 }))
 
+vi.mock('../components/trip/TripLiveModeCard', () => ({
+  TripLiveModeCard: () => <div data-testid="trip-live-mode-card" />,
+}))
+
+vi.mock('../lib/tripOperationsNavigation', () => ({ navigateToTripOperationsRecommendation: vi.fn() }))
+
 vi.mock('../components/trip/TripMapPreview', () => ({
   TripMapPreview: () => <div data-testid="trip-map-overview" />,
 }))

@@ -184,7 +184,7 @@ describe('supabase cloud backup helpers', () => {
       backupId: 'backup-id',
       days,
       exportedAt: '2026-04-01T00:00:00.000Z',
-      itineraryItems: items,
+      itineraryItems: items.map((item) => ({ ...item, executionState: { status: 'completed' as const, updatedAt: 123 } })),
       ticketBlobs: [{ blob, ticketId: copyTicket.id }],
       ticketMetas: [copyTicket],
       trip,
@@ -201,6 +201,7 @@ describe('supabase cloud backup helpers', () => {
     expect(records.ticketMetas[0].id).toBe(copyTicket.id)
     expect(records.ticketMetas[0].itemId).toBe(items[0].id)
     expect(records.itineraryItems[0].ticketIds).toEqual([copyTicket.id])
+    expect(records.itineraryItems[0].executionState).toEqual({ status: 'completed', updatedAt: 123 })
     expect(records.ticketBlobs[0].ticketId).toBe(copyTicket.id)
   })
 

@@ -1,8 +1,8 @@
 import { ArrowLeft, CalendarDays, Home, Map as MapIcon, MoreHorizontal, Route, Settings, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { listItemsByDay, updateDay } from '../db'
+import { listItemsByDay, listTicketsByTrip, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
-import { DayLiveBriefingCard } from '../components/trip/DayLiveBriefingCard'
+import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
 import { DaySelector } from '../components/trip/DaySelector'
 import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -11,6 +11,7 @@ import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
+import { useLiveClock } from '../hooks/useLiveClock'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { buildTripContext } from '../lib/ai/aiTripContext'
@@ -18,13 +19,18 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildDayBrief } from '../lib/travelBrief'
+import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
+import { buildTripReadinessModel } from '../lib/tripReadiness'
+import { buildTripOperationsModel } from '../lib/tripOperationsAgent'
+import { readTripOperationsLocalState } from '../lib/tripOperationsState'
+import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
 import { formatShortDate } from '../lib/dates'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
 import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import { getZonedPlainDate, normalizeTimeZone, resolveDayTimeZone } from '../lib/timeZone'
 import { TimeZoneSelect } from '../components/ui/TimeZoneSelect'
-import type { Day, ItineraryItem, Trip } from '../types'
+import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
 
 type DayWorkspaceView = 'schedule' | 'map'
 
@@ -74,6 +80,8 @@ export function DayViewPage() {
   const [mapResizeToken, setMapResizeToken] = useState(0)
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
+  const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const liveNow = useLiveClock()
   const mapPreloadStartedRef = useRef(false)
   const backgroundMapWarmupStartedRef = useRef(false)
 
@@ -188,6 +196,22 @@ export function DayViewPage() {
       cancelIdle()
     }
   }, [days, daysKey, isLoading, setItemsByDay, trip])
+
+  useEffect(() => {
+    if (!trip) {
+      queueMicrotask(() => setTickets([]))
+      return
+    }
+    let cancelled = false
+    void listTicketsByTrip(trip.id).then((records) => {
+      if (!cancelled) setTickets(records)
+    }).catch(() => {
+      if (!cancelled) setTickets([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [trip])
 
   useEffect(() => {
     if (view !== 'map' || !hasOpenedMap) {
@@ -310,14 +334,41 @@ export function DayViewPage() {
     nowPlainDate: getZonedPlainDate(new Date(), resolveDayTimeZone(trip, selectedDay)),
     profile: getStoredTravelProfile(),
     selectedDayId: selectedDay.id,
-    tickets: [],
+    tickets,
     trip,
   })
-  const dayBrief = buildDayBrief(
-    tripContextForDay,
-    analyzeTripContext(tripContextForDay),
-    selectedDay.id,
-  )
+  const tripCheckForDay = analyzeTripContext(tripContextForDay)
+  const dayBrief = buildDayBrief(tripContextForDay, tripCheckForDay, selectedDay.id)
+  const dailyTipModel = buildTripDailyTravelTip({
+    days,
+    itemsByDay,
+    now: liveNow,
+    routePreparation,
+    trip,
+    tripCheck: tripCheckForDay,
+  })
+  const readinessModel = buildTripReadinessModel({
+    allItems: allItems.length > 0 ? allItems : items,
+    dailyTipModel,
+    days,
+    itemsByDay,
+    routePreparation,
+    tickets,
+    trip,
+    tripCheck: tripCheckForDay,
+  })
+  const tripOperationsModel = buildTripOperationsModel({
+    allItems: allItems.length > 0 ? allItems : items,
+    dailyTipModel,
+    days,
+    dispositions: readTripOperationsLocalState(trip.id).dispositions,
+    itemsByDay,
+    now: liveNow,
+    readinessModel,
+    routePreparation,
+    tickets,
+    trip,
+  })
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -412,13 +463,20 @@ export function DayViewPage() {
               />
             </section>
 
-            <DayLiveBriefingCard
+            <TripLiveModeCard
+              allItems={allItems.length > 0 ? allItems : items}
               day={selectedDay}
+              days={days}
               items={items}
+              now={liveNow}
+              onChanged={async () => { await refresh() }}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
               onOpenMap={() => handleSwitchView('map')}
-              onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+              onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
+              onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
+              operationsRecommendations={tripOperationsModel.activeRecommendations}
               routeDay={selectedRouteDay}
+              tickets={tickets}
               trip={trip}
             />
 

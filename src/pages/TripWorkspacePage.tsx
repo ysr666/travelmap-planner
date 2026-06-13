@@ -7,6 +7,7 @@ import { TripMoreMenu } from '../components/trip/TripMoreMenu'
 import { TripMapPreview } from '../components/trip/TripMapPreview'
 import { TripDailyTravelTipCard } from '../components/trip/TripDailyTravelTipCard'
 import { TripOperationsPanel } from '../components/trip/TripOperationsPanel'
+import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
 import { TripReadinessCenterPanel } from '../components/trip/TripReadinessCenterPanel'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
@@ -23,6 +24,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
+import { useLiveClock } from '../hooks/useLiveClock'
 import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -48,6 +50,7 @@ import {
 import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
 import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../lib/ai/travelInbox'
 import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
+import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
 import type { Day, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord } from '../types'
 
 export function TripWorkspacePage() {
@@ -91,6 +94,7 @@ export function TripWorkspacePage() {
   const [routeGenerationError, setRouteGenerationError] = useState<string | null>(null)
   const [dismissedImportRoutePromptTripId, setDismissedImportRoutePromptTripId] = useState<string | null>(null)
   const [completedImportRoutePromptTripId, setCompletedImportRoutePromptTripId] = useState<string | null>(null)
+  const liveNow = useLiveClock()
 
   const tripContextKey = useMemo(() => {
     if (!trip || days.length === 0) {
@@ -335,6 +339,14 @@ export function TripWorkspacePage() {
     tripOperationsLocalState.dispositions,
   ])
 
+  const liveDay = useMemo(() => {
+    if (!trip) return null
+    return days.find((day) => day.date === getZonedPlainDate(liveNow, resolveDayTimeZone(trip, day))) ?? null
+  }, [days, liveNow, trip])
+  const liveRouteDay = liveDay
+    ? routePreparation?.days.find((routeDay) => routeDay.day.id === liveDay.id) ?? null
+    : null
+
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
     if (!trip) return
     const stored = writeTripOperationsLocalState(trip.id, nextState)
@@ -524,6 +536,25 @@ export function TripWorkspacePage() {
                 trip={trip}
                 tripCheck={tripCheckResult}
               />
+              {liveDay && tripOperationsModel ? (
+                <TripLiveModeCard
+                  allItems={allItems}
+                  compact
+                  day={liveDay}
+                  days={days}
+                  items={itemsByDay[liveDay.id] ?? []}
+                  now={liveNow}
+                  onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
+                  onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
+                  onOpenMap={() => openDay(liveDay, 'map')}
+                  onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
+                  onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
+                  operationsRecommendations={tripOperationsModel.activeRecommendations}
+                  routeDay={liveRouteDay}
+                  tickets={ticketMetas}
+                  trip={trip}
+                />
+              ) : null}
               {/* Action Buttons */}
               <div className="flex gap-3 mt-2">
                 <button

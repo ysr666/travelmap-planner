@@ -10,6 +10,7 @@ import {
   getTicketMeta,
   importTripPlanRecords,
   saveTicketBlob,
+  setItineraryItemExecutionState,
   updateItineraryItem,
 } from './index'
 import {
@@ -108,6 +109,30 @@ describe('tracked db mutations', () => {
     const outbox = await db.syncOutbox.toArray()
     expect(outbox.map((entry) => entry.objectType).sort()).toEqual(['day', 'item', 'trip'])
     expect(outbox.every((entry) => entry.status === 'pending')).toBe(true)
+  })
+
+  it('persists live execution state and queues an item upsert', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-06-13', startDate: '2026-06-13', title: '东京' })
+    const day = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const item = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: '浅草寺', tripId: trip.id })
+    await db.syncOutbox.clear()
+
+    const updated = await setItineraryItemExecutionState(item.id, 'completed', 123)
+
+    expect(updated?.executionState).toEqual({ status: 'completed', updatedAt: 123 })
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox).toHaveLength(1)
+    expect(outbox[0]).toMatchObject({ objectId: item.id, objectType: 'item', operation: 'upsert' })
+    expect(outbox[0].payload).toMatchObject({ executionState: { status: 'completed', updatedAt: 123 } })
+  })
+
+  it('clears live execution state when restoring an item', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-06-13', startDate: '2026-06-13', title: '东京' })
+    const day = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const item = await createItineraryItem({ dayId: day.id, executionState: { status: 'skipped', updatedAt: 100 }, sortOrder: 1, ticketIds: [], title: '浅草寺', tripId: trip.id })
+
+    const restored = await setItineraryItemExecutionState(item.id, null, 200)
+    expect(restored?.executionState).toBeUndefined()
   })
 
   it('clears local auto backup state when a local trip is deleted', async () => {

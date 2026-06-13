@@ -262,6 +262,9 @@ function validatePayload(payload: BackupPayload) {
     if (!Array.isArray(item.ticketIds)) {
       item.ticketIds = []
     }
+    if (item.executionState && !isValidExecutionState(item.executionState)) {
+      throw new Error('归档中的行程点执行状态格式不正确。')
+    }
   }
 
   for (const ticket of payload.ticketMetas) {
@@ -269,6 +272,14 @@ function validatePayload(payload: BackupPayload) {
       throw new Error('归档中的票据元数据不完整。')
     }
   }
+}
+
+function isValidExecutionState(value: unknown) {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return (record.status === 'completed' || record.status === 'skipped')
+    && typeof record.updatedAt === 'number'
+    && Number.isFinite(record.updatedAt)
 }
 
 function formatBackupTimestamp(date: Date) {

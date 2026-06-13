@@ -99,6 +99,7 @@ export function buildAiTripEditLocalStateFingerprint({
         address: item.address ?? '',
         dayId: item.dayId,
         endTime: item.endTime ?? '',
+        executionState: item.executionState ?? null,
         id: item.id,
         lat: finiteNumberOrNull(item.lat),
         lng: finiteNumberOrNull(item.lng),
@@ -272,6 +273,7 @@ export async function applyAiTripEditPatchPlanToDb(
           const updated: ItineraryItem = {
             ...item,
             dayId: operation.targetDayId,
+            executionState: operation.targetDayId === item.dayId ? item.executionState : undefined,
             sortOrder: operation.targetSortOrder ?? item.sortOrder,
             startTime: operation.targetStartTime ?? item.startTime,
             updatedAt: now,

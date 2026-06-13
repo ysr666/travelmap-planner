@@ -5,6 +5,12 @@ export type TicketStorageMode = 'copy' | 'reference' | 'external'
 export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticket' | 'hotel_booking' | 'restaurant_reservation' | 'transport_booking' | 'other'
 export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
 export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
+export type ItineraryExecutionStatus = 'completed' | 'skipped'
+
+export type ItineraryExecutionState = {
+  status: ItineraryExecutionStatus
+  updatedAt: number
+}
 
 export type ContentEnrichmentSource = {
   id: string
@@ -104,6 +110,7 @@ export type ItineraryItem = {
   previousTransportNote?: string
   notes?: string
   contentEnrichment?: ItemContentEnrichment
+  executionState?: ItineraryExecutionState
   ticketIds: string[]
   sortOrder: number
   createdAt: number

@@ -87,6 +87,16 @@ export async function updateItineraryItem(
   return item
 }
 
+export async function setItineraryItemExecutionState(
+  itemId: string,
+  status: 'completed' | 'skipped' | null,
+  now = Date.now(),
+) {
+  return updateItineraryItem(itemId, {
+    executionState: status ? { status, updatedAt: now } : undefined,
+  })
+}
+
 export async function deleteItineraryItemCascade(itemId: string) {
   const item = await repo.getItineraryItem(itemId)
   await repo.deleteItineraryItemCascade(itemId)

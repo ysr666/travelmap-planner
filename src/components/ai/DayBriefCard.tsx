@@ -12,7 +12,7 @@ export function DayBriefCard({ brief }: { brief: DayBrief }) {
             <ListChecks className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{brief.eyebrow}</p>
+            <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">{brief.eyebrow}</p>
             <h3 className="mt-0.5 text-sm font-semibold text-slate-950 dark:text-slate-100">{brief.title}</h3>
           </div>
         </div>

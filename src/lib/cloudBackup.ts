@@ -1024,6 +1024,9 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
     if (!Array.isArray(item.ticketIds)) {
       throw new Error('云端同步中的行程点票据列表格式不正确。')
     }
+    if (item.executionState && !isValidItineraryExecutionState(item.executionState)) {
+      throw new Error('云端同步中的行程点执行状态格式不正确。')
+    }
     itemIds.add(item.id)
   }
 
@@ -1069,6 +1072,14 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
       throw new Error('云端同步中的文件引用只能绑定 copy 模式票据。')
     }
   }
+}
+
+function isValidItineraryExecutionState(value: unknown) {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return (record.status === 'completed' || record.status === 'skipped')
+    && typeof record.updatedAt === 'number'
+    && Number.isFinite(record.updatedAt)
 }
 
 function validateCloudFileRefPaths(snapshot: CloudTripSnapshot, userId: string, backupId: string) {

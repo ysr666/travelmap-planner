@@ -63,6 +63,7 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '前序交通备注', path: 'previousTransportNote' },
     { label: '备注', notes: true, path: 'notes' },
     { label: '景点内容', path: 'contentEnrichment' },
+    { label: '旅行执行状态', path: 'executionState' },
     { label: '绑定票据', path: 'ticketIds' },
     { label: '排序', path: 'sortOrder' },
   ],
@@ -154,6 +155,15 @@ export function mergeObjectPayloadFields({
     return { conflicts, status: 'conflict' }
   }
 
+  if (objectType === 'item') {
+    const localItem = localPayload as ItineraryItem
+    const nextItem = next as ItineraryItem
+    if (nextItem.dayId !== localItem.dayId && nextItem.executionState) {
+      nextItem.executionState = undefined
+      changed = true
+    }
+  }
+
   if (changed) {
     touchPayload(next, objectType, now)
   }
@@ -192,6 +202,14 @@ export function resolveObjectSyncConflictPayload(
       setFieldValue(payload, field.fieldPath, merged)
     } else {
       setFieldValue(payload, field.fieldPath, field.localValue)
+    }
+  }
+
+  if (conflict.objectType === 'item') {
+    const localItem = conflict.localPayload as ItineraryItem | undefined
+    const nextItem = payload as ItineraryItem
+    if (localItem && nextItem.dayId !== localItem.dayId) {
+      nextItem.executionState = undefined
     }
   }
 

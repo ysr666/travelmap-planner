@@ -27,6 +27,7 @@ export {
   importTripPlanRecords,
   replaceTripPlanRecords,
   saveTicketBlob,
+  setItineraryItemExecutionState,
   updateDay,
   updateItineraryItem,
   updateTrip,

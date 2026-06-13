@@ -19,17 +19,16 @@ import {
   Ticket,
   Trash2,
 } from 'lucide-react'
-import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/ai/aiTripEditContext'
+import type { AiTripEditContext } from '../../lib/ai/aiTripEditContext'
 import {
   applyAiTripEditPatchPlanToDb,
-  buildAiTripEditLocalStateFingerprint,
 } from '../../lib/ai/aiTripEditApply'
 import {
   buildAiTripEditPatchPreview,
   type AiTripEditPatchPlan,
   type AiTripEditPatchPreview,
 } from '../../lib/ai/aiTripEditPatch'
-import { getStoredAiPrivacySettings } from '../../lib/ai/aiPrivacy'
+import { prepareAiTripEditExecution } from '../../lib/ai/aiTripEditExecution'
 import {
   applyTripContentEnrichmentPreviewsToDb,
   type TripContentEnrichmentPreview,
@@ -62,6 +61,7 @@ import {
   type TripOperationsLocalState,
 } from '../../lib/tripOperationsState'
 import { navigateTo } from '../../lib/routes'
+import { navigateToTripOperationsRecommendation } from '../../lib/tripOperationsNavigation'
 import type { TripReadinessModel } from '../../lib/tripReadiness'
 import { getZonedPlainDate, resolveTripTimeZone } from '../../lib/timeZone'
 import { Button } from '../ui/Button'
@@ -149,7 +149,7 @@ export function TripOperationsPanel({
     }
     if (recommendation.executionMode === 'inbox_preview') {
       if (!activeInboxPreview) {
-        runNavigationAction(recommendation, trip.id)
+        navigateToTripOperationsRecommendation(recommendation, trip.id)
         return
       }
       setInboxRecommendation(recommendation)
@@ -159,7 +159,7 @@ export function TripOperationsPanel({
       prepareAiPatch(recommendation)
       return
     }
-    runNavigationAction(recommendation, trip.id)
+    navigateToTripOperationsRecommendation(recommendation, trip.id)
   }
 
   function hideRecommendation(recommendation: TripOperationsRecommendation, status: 'ignored' | 'snoozed') {
@@ -339,22 +339,17 @@ export function TripOperationsPanel({
 
   function prepareAiPatch(recommendation: TripOperationsRecommendation) {
     if (!providerConfig.configured || !providerConfig.proxyUrl) {
-      runNavigationAction({ ...recommendation, actionKind: 'open_day' }, trip.id)
+      navigateToTripOperationsRecommendation({ ...recommendation, actionKind: 'open_day' }, trip.id)
       return
     }
-    const contextResult = buildAiTripEditContext({
-      days,
-      items: allItems,
-      privacy: getStoredAiPrivacySettings(),
-      trip,
-    })
+    const contextResult = prepareAiTripEditExecution({ days, items: allItems, trip })
     if (!contextResult.ok) {
       setOperationError(contextResult.errors.join(' '))
       return
     }
     setAiRecommendation(recommendation)
     setAiContext(contextResult.context)
-    setAiBaselineFingerprint(buildAiTripEditLocalStateFingerprint({ days, items: allItems, trip }))
+    setAiBaselineFingerprint(contextResult.baselineFingerprint)
     setAiPatchWarnings(contextResult.warnings)
     setAiSendConfirmOpen(true)
   }
@@ -865,38 +860,6 @@ function inboxActionLabel(action: ExistingTripImportAppliedChange['action']) {
   if (action === 'merged') return '已合并'
   if (action === 'appended') return '已追加'
   return '已更新'
-}
-
-function runNavigationAction(recommendation: TripOperationsRecommendation, tripId: string) {
-  if (recommendation.actionKind === 'open_item' && recommendation.itemId && recommendation.dayId) {
-    navigateTo('item', { dayId: recommendation.dayId, itemId: recommendation.itemId, tripId })
-    return
-  }
-  if (recommendation.actionKind === 'open_tickets') {
-    navigateTo('tickets', recommendation.itemId ? { itemId: recommendation.itemId, tripId } : { tripId })
-    return
-  }
-  if ((recommendation.actionKind === 'open_day' || recommendation.actionKind === 'review_tomorrow' || recommendation.actionKind === 'generate_ai_patch') && recommendation.dayId) {
-    navigateTo('day', { dayId: recommendation.dayId, tripId, view: 'schedule' })
-    return
-  }
-  if (recommendation.actionKind === 'open_inbox' || recommendation.actionKind === 'apply_inbox_preview') {
-    document.getElementById('trip-travel-inbox-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  if (recommendation.actionKind === 'open_sync') {
-    document.getElementById('trip-sync-archive-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  if (recommendation.actionKind === 'open_route_panel') {
-    document.getElementById('route-preparation-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  if (recommendation.actionKind === 'open_content_enrichment') {
-    document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  document.getElementById('trip-readiness-center-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function navigateToAppliedChange(change: TripOperationsAppliedChange, tripId: string) {

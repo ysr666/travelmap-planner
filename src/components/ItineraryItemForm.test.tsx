@@ -124,4 +124,57 @@ describe('ItineraryItemForm', () => {
 
     expect(container?.textContent).toContain('保存')
   })
+
+  it('rejects cross-time-zone arrival dates before the day date', async () => {
+    const onSubmit = vi.fn()
+    const onCancel = vi.fn()
+
+    await act(async () => {
+      root?.render(
+        <ItineraryItemForm
+          dayDate="2026-06-10"
+          defaultTimeZone="Europe/London"
+          submitLabel="添加"
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+        />,
+      )
+    })
+
+    await act(async () => {
+      changeControl(getControlByLabel('行程标题'), '伦敦飞上海')
+      changeControl(getControlByLabel('交通方式'), 'flight')
+    })
+    await act(async () => {
+      changeControl(getControlByLabel('到达日期'), '2026-06-09')
+      submitForm()
+    })
+
+    expect(container?.textContent).toContain('到达日期不能早于当前日程日期')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })
+
+function getControlByLabel(labelText: string, index = 0) {
+  const labels = Array.from(container?.querySelectorAll('label') ?? [])
+    .filter((label) => label.textContent?.includes(labelText))
+  const control = labels[index]?.querySelector('input, select, textarea')
+  if (!control) throw new Error(`Control not found: ${labelText}`)
+  return control as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+}
+
+function changeControl(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string) {
+  const prototype = control instanceof HTMLSelectElement
+    ? HTMLSelectElement.prototype
+    : control instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(control, value)
+  control.dispatchEvent(new Event(control instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+}
+
+function submitForm() {
+  const form = container?.querySelector('form')
+  if (!form) throw new Error('Form not found')
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+}

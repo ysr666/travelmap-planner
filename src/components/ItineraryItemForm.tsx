@@ -148,6 +148,10 @@ export function ItineraryItemForm({
         setError('到达日期格式无效，请使用 YYYY-MM-DD')
         return
       }
+      if (endDate && dayDate && isValidPlainDate(dayDate) && endDate < dayDate) {
+        setError('到达日期不能早于当前日程日期')
+        return
+      }
     }
 
     await onSubmit({

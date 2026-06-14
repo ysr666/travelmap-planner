@@ -5,17 +5,21 @@ import {
   importTripBackupRecords,
   listDaysByTrip,
   listItemsByTrip,
+  getLedgerSettingsByTrip,
+  listLedgerBudgets,
+  listLedgerExpenses,
+  listLedgerParticipants,
   listTicketsByTrip,
 } from '../db'
 import { shouldExpectTicketBlob } from './tickets'
-import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketBlob, TicketMeta, Trip } from '../types'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const APP_NAME = '旅图 TripMap'
 const JSON_SPACE = 2
 
 export type BackupManifest = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   appName: string
   exportedAt: string
   tripId: string
@@ -35,6 +39,10 @@ type BackupPayload = {
   days: Day[]
   itineraryItems: ItineraryItem[]
   ticketMetas: TicketMeta[]
+  ledgerSettings: LedgerSettings[]
+  ledgerParticipants: LedgerParticipant[]
+  ledgerBudgets: LedgerBudget[]
+  ledgerExpenses: LedgerExpense[]
 }
 
 export async function exportTripBackup(tripId: string): Promise<Blob> {
@@ -44,10 +52,14 @@ export async function exportTripBackup(tripId: string): Promise<Blob> {
     throw new Error('没有找到要导出的旅行。')
   }
 
-  const [days, itineraryItems, ticketMetas] = await Promise.all([
+  const [days, itineraryItems, ticketMetas, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses] = await Promise.all([
     listDaysByTrip(tripId),
     listItemsByTrip(tripId),
     listTicketsByTrip(tripId),
+    getLedgerSettingsByTrip(tripId),
+    listLedgerParticipants(tripId),
+    listLedgerBudgets(tripId),
+    listLedgerExpenses(tripId),
   ])
   const zip = new JSZip()
   const fileMap: Record<string, string> = {}
@@ -57,6 +69,10 @@ export async function exportTripBackup(tripId: string): Promise<Blob> {
   zip.file('data/days.json', stringifyJson(days))
   zip.file('data/itineraryItems.json', stringifyJson(itineraryItems))
   zip.file('data/ticketMetas.json', stringifyJson(ticketMetas))
+  zip.file('data/ledgerSettings.json', stringifyJson(ledgerSettings ? [ledgerSettings] : []))
+  zip.file('data/ledgerParticipants.json', stringifyJson(ledgerParticipants))
+  zip.file('data/ledgerBudgets.json', stringifyJson(ledgerBudgets))
+  zip.file('data/ledgerExpenses.json', stringifyJson(ledgerExpenses))
 
   for (const ticket of ticketMetas) {
     if (!shouldExpectTicketBlob(ticket)) {
@@ -97,11 +113,16 @@ export async function importTripBackup(file: File): Promise<ImportTripBackupResu
   const manifest = await readJsonFile<BackupManifest>(zip, 'manifest.json')
   validateManifest(manifest)
 
+  const isVersionTwo = manifest.schemaVersion === 2
   const payload: BackupPayload = {
     trip: await readJsonFile<Trip>(zip, 'data/trip.json'),
     days: await readJsonFile<Day[]>(zip, 'data/days.json'),
     itineraryItems: await readJsonFile<ItineraryItem[]>(zip, 'data/itineraryItems.json'),
     ticketMetas: await readJsonFile<TicketMeta[]>(zip, 'data/ticketMetas.json'),
+    ledgerSettings: isVersionTwo ? await readOptionalJsonFile<LedgerSettings[]>(zip, 'data/ledgerSettings.json', []) : [],
+    ledgerParticipants: isVersionTwo ? await readOptionalJsonFile<LedgerParticipant[]>(zip, 'data/ledgerParticipants.json', []) : [],
+    ledgerBudgets: isVersionTwo ? await readOptionalJsonFile<LedgerBudget[]>(zip, 'data/ledgerBudgets.json', []) : [],
+    ledgerExpenses: isVersionTwo ? await readOptionalJsonFile<LedgerExpense[]>(zip, 'data/ledgerExpenses.json', []) : [],
   }
   validatePayload(payload)
 
@@ -139,6 +160,10 @@ export async function importTripBackup(file: File): Promise<ImportTripBackupResu
     itineraryItems: payload.itineraryItems,
     ticketBlobs,
     ticketMetas: payload.ticketMetas,
+    ledgerSettings: payload.ledgerSettings,
+    ledgerParticipants: payload.ledgerParticipants,
+    ledgerBudgets: payload.ledgerBudgets,
+    ledgerExpenses: payload.ledgerExpenses,
     trip: payload.trip,
   })
 
@@ -222,12 +247,22 @@ async function readJsonFile<T>(zip: JSZip, path: string): Promise<T> {
   }
 }
 
+async function readOptionalJsonFile<T>(zip: JSZip, path: string, fallback: T): Promise<T> {
+  const file = zip.file(path)
+  if (!file) return fallback
+  try {
+    return JSON.parse(await file.async('string')) as T
+  } catch {
+    throw new Error(`归档文件无法解析：${path}`)
+  }
+}
+
 function validateManifest(manifest: BackupManifest) {
   if (!manifest || typeof manifest !== 'object') {
     throw new Error('manifest.json 格式不正确。')
   }
 
-  if (manifest.schemaVersion !== SCHEMA_VERSION) {
+  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== SCHEMA_VERSION) {
     throw new Error(`不支持的归档版本：${String(manifest.schemaVersion)}`)
   }
 
@@ -244,7 +279,11 @@ function validatePayload(payload: BackupPayload) {
   if (
     !Array.isArray(payload.days) ||
     !Array.isArray(payload.itineraryItems) ||
-    !Array.isArray(payload.ticketMetas)
+    !Array.isArray(payload.ticketMetas) ||
+    !Array.isArray(payload.ledgerSettings) ||
+    !Array.isArray(payload.ledgerParticipants) ||
+    !Array.isArray(payload.ledgerBudgets) ||
+    !Array.isArray(payload.ledgerExpenses)
   ) {
     throw new Error('归档中的结构化数据格式不正确。')
   }
@@ -271,6 +310,22 @@ function validatePayload(payload: BackupPayload) {
     if (!ticket.id || !ticket.tripId || !ticket.fileName) {
       throw new Error('归档中的票据元数据不完整。')
     }
+  }
+
+  const participantIds = new Set(payload.ledgerParticipants.map((participant) => participant.id))
+  for (const settings of payload.ledgerSettings) {
+    if (!settings.id || settings.tripId !== payload.trip.id) throw new Error('归档中的账本设置数据不完整。')
+  }
+  for (const participant of payload.ledgerParticipants) {
+    if (!participant.id || participant.tripId !== payload.trip.id || !participant.displayName) throw new Error('归档中的账本参与人数据不完整。')
+  }
+  for (const budget of payload.ledgerBudgets) {
+    if (!budget.id || budget.tripId !== payload.trip.id) throw new Error('归档中的预算数据不完整。')
+  }
+  for (const expense of payload.ledgerExpenses) {
+    if (!expense.id || expense.tripId !== payload.trip.id || !Array.isArray(expense.splitShares)) throw new Error('归档中的费用数据不完整。')
+    if (expense.payerParticipantId && !participantIds.has(expense.payerParticipantId)) throw new Error('归档中的费用付款人引用不存在。')
+    if (expense.splitShares.some((share) => !participantIds.has(share.participantId))) throw new Error('归档中的费用分摊参与人引用不存在。')
   }
 }
 

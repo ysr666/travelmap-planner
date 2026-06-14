@@ -4,6 +4,10 @@ import { db } from './database'
 import {
   createDay,
   createItineraryItem,
+  createLedgerBudget,
+  createLedgerExpense,
+  createLedgerParticipant,
+  createLedgerSettings,
   createTicketMeta,
   createTrip,
   deleteTripCascade,
@@ -124,6 +128,31 @@ describe('tracked db mutations', () => {
     expect(outbox).toHaveLength(1)
     expect(outbox[0]).toMatchObject({ objectId: item.id, objectType: 'item', operation: 'upsert' })
     expect(outbox[0].payload).toMatchObject({ executionState: { status: 'completed', updatedAt: 123 } })
+  })
+
+  it('tracks every owner-only ledger object and cascades it with the trip', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京账本' })
+    await db.syncOutbox.clear()
+    const settings = await createLedgerSettings({ homeCurrency: 'CNY', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id })
+    const participant = await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
+    const budget = await createLedgerBudget({ amountMinor: 100000, currency: 'JPY', scope: 'trip', tripId: trip.id })
+    const expense = await createLedgerExpense({ amountMinor: 1200, category: 'food', currency: 'JPY', date: '2026-04-01', payerParticipantId: participant.id, source: { kind: 'manual' }, splitMode: 'equal', splitShares: [{ participantId: participant.id, weight: 1 }], status: 'confirmed', title: '晚餐', tripId: trip.id })
+
+    expect((await db.syncOutbox.toArray()).map((entry) => entry.objectType).sort()).toEqual([
+      'ledger_budget',
+      'ledger_expense',
+      'ledger_participant',
+      'ledger_settings',
+    ])
+    expect(settings.tripId).toBe(trip.id)
+    expect(budget.tripId).toBe(trip.id)
+    expect(expense.tripId).toBe(trip.id)
+
+    await deleteTripCascade(trip.id)
+    await expect(db.ledgerSettings.where('tripId').equals(trip.id).count()).resolves.toBe(0)
+    await expect(db.ledgerParticipants.where('tripId').equals(trip.id).count()).resolves.toBe(0)
+    await expect(db.ledgerBudgets.where('tripId').equals(trip.id).count()).resolves.toBe(0)
+    await expect(db.ledgerExpenses.where('tripId').equals(trip.id).count()).resolves.toBe(0)
   })
 
   it('clears live execution state when restoring an item', async () => {

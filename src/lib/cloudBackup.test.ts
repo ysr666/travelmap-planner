@@ -12,7 +12,7 @@ import {
   validateCloudSnapshotForRestore,
 } from './cloudBackup'
 import { getSupabaseConfigStatus } from './supabaseClient'
-import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketMeta, Trip } from '../types'
 
 const trip: Trip = {
   createdAt: 100,
@@ -95,6 +95,11 @@ const externalTicket: TicketMeta = {
   tripId: trip.id,
   updatedAt: 142,
 }
+
+const ledgerSettings: LedgerSettings = { createdAt: 100, homeCurrency: 'CNY', id: 'ledger_settings', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id, updatedAt: 100 }
+const ledgerParticipant: LedgerParticipant = { createdAt: 100, displayName: '我', id: 'ledger_person', isSelf: true, source: 'manual', tripId: trip.id, updatedAt: 100 }
+const ledgerBudget: LedgerBudget = { amountMinor: 10000, createdAt: 100, currency: 'JPY', id: 'ledger_budget', scope: 'trip', tripId: trip.id, updatedAt: 100 }
+const ledgerExpense: LedgerExpense = { amountMinor: 1200, category: 'food', createdAt: 100, currency: 'JPY', date: '2026-04-01', id: 'ledger_expense', payerParticipantId: ledgerParticipant.id, source: { kind: 'manual' }, splitMode: 'equal', splitShares: [{ participantId: ledgerParticipant.id, weight: 1 }], status: 'confirmed', title: '晚餐', tripId: trip.id, updatedAt: 100 }
 
 describe('supabase cloud backup helpers', () => {
   it('reports unconfigured Supabase without throwing', () => {
@@ -205,6 +210,22 @@ describe('supabase cloud backup helpers', () => {
     expect(records.ticketBlobs[0].ticketId).toBe(copyTicket.id)
   })
 
+  it('round-trips owner ledger records and still accepts v1 snapshots without them', () => {
+    const snapshot = buildCloudSnapshotFromRecords({
+      appVersion: '0.3.0', backupId: 'backup-ledger', days, exportedAt: '2026-04-01T00:00:00.000Z', itineraryItems: items.map((item) => ({ ...item, ticketIds: [] })),
+      ledgerBudgets: [ledgerBudget], ledgerExpenses: [ledgerExpense], ledgerParticipants: [ledgerParticipant], ledgerSettings: [ledgerSettings], ticketBlobs: [], ticketMetas: [], trip, userId: 'user-id',
+    }).snapshot
+    const records = buildCloudRestoreRecords(snapshot, [])
+    expect(records.ledgerSettings).toEqual([ledgerSettings])
+    expect(records.ledgerParticipants).toEqual([ledgerParticipant])
+    expect(records.ledgerBudgets).toEqual([ledgerBudget])
+    expect(records.ledgerExpenses).toEqual([ledgerExpense])
+
+    const legacy = parseCloudSnapshot({ ...snapshot, ledgerBudgets: undefined, ledgerExpenses: undefined, ledgerParticipants: undefined, ledgerSettings: undefined, schemaVersion: 1 })
+    expect(legacy.ledgerSettings).toEqual([])
+    expect(legacy.ledgerExpenses).toEqual([])
+  })
+
   it('removes legacy restore lineage metadata when restoring into the same trip identity', async () => {
     const snapshot = buildCloudSnapshotFromRecords({
       appVersion: '0.2.0.2',
@@ -257,11 +278,11 @@ describe('supabase cloud backup helpers', () => {
     expect(result.snapshot.originalTripId).toBe(restoredTrip.id)
     expect(result.metadata.original_trip_id).toBe(restoredTrip.id)
     expect(result.snapshot.trip.restoredFromCloudBackupId).toBe('backup_original')
-    expect(result.snapshot.schemaVersion).toBe(1)
+    expect(result.snapshot.schemaVersion).toBe(2)
   })
 
   it('rejects unsupported cloud snapshot schema and broken references', () => {
-    expect(() => parseCloudSnapshot({ schemaVersion: 2, type: 'cloud-trip-backup' })).toThrow(
+    expect(() => parseCloudSnapshot({ schemaVersion: 3, type: 'cloud-trip-backup' })).toThrow(
       '不支持的云端同步版本',
     )
 

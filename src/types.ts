@@ -142,6 +142,112 @@ export type TicketBlob = {
   blob: Blob
 }
 
+export type LedgerExpenseCategory =
+  | 'lodging'
+  | 'transport'
+  | 'admission'
+  | 'food'
+  | 'shopping'
+  | 'insurance'
+  | 'connectivity'
+  | 'other'
+
+export type LedgerExpenseStatus = 'draft' | 'confirmed' | 'void'
+export type LedgerSplitMode = 'equal' | 'exclude' | 'weights'
+export type LedgerBudgetScope = 'trip' | 'category' | 'date'
+export type LedgerSourceKind = 'manual' | 'ticket' | 'inbox' | 'transport_booking' | 'itinerary_note'
+
+export type LedgerSettings = {
+  id: string
+  tripId: string
+  homeCurrency: string
+  tripCurrency: string
+  settlementCurrency: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type LedgerParticipant = {
+  id: string
+  tripId: string
+  displayName: string
+  isSelf?: boolean
+  source?: 'manual' | 'shared_trip' | 'traveler_profile'
+  sourceId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type LedgerBudget = {
+  id: string
+  tripId: string
+  scope: LedgerBudgetScope
+  amountMinor: number
+  currency: string
+  category?: LedgerExpenseCategory
+  date?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type LedgerExpenseSplitShare = {
+  participantId: string
+  weight: number
+}
+
+export type LedgerExpenseSource = {
+  kind: LedgerSourceKind
+  sourceId?: string
+  label?: string
+  fingerprint?: string
+}
+
+export type LedgerExchangeRateSnapshot = {
+  requestedDate: string
+  effectiveDate: string
+  baseCurrency: string
+  tripCurrency: string
+  homeCurrency: string
+  rateToTrip: string
+  rateToHome: string
+  provider: 'frankfurter' | 'manual'
+  sourceUrl?: string
+  fetchedAt: string
+}
+
+export type LedgerExpense = {
+  id: string
+  tripId: string
+  title: string
+  date: string
+  category: LedgerExpenseCategory
+  status: LedgerExpenseStatus
+  amountMinor?: number
+  currency?: string
+  payerParticipantId?: string
+  splitMode: LedgerSplitMode
+  splitShares: LedgerExpenseSplitShare[]
+  source: LedgerExpenseSource
+  exchangeRate?: LedgerExchangeRateSnapshot
+  duplicateAcknowledged?: boolean
+  notes?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type ExchangeRateCache = {
+  id: string
+  requestedDate: string
+  effectiveDate: string
+  baseCurrency: string
+  quoteCurrency: string
+  rate: string
+  provider: 'frankfurter'
+  sourceUrl: string
+  fetchedAt: string
+  updatedAt: number
+}
+
 export type CompanionPermission = 'read' | 'comment' | 'collaborate'
 export type CompanionInviteStatus = 'active' | 'revoked' | 'expired'
 export type CompanionActivityType =
@@ -269,10 +375,26 @@ export type SharedTripMutation = {
   rejectedReason?: string
 }
 
-export type SyncObjectType = 'trip' | 'day' | 'item' | 'ticket_meta'
+export type SyncObjectType =
+  | 'trip'
+  | 'day'
+  | 'item'
+  | 'ticket_meta'
+  | 'ledger_settings'
+  | 'ledger_participant'
+  | 'ledger_budget'
+  | 'ledger_expense'
 export type SyncOutboxOperation = 'upsert' | 'delete'
 export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
-export type SyncObjectPayload = Trip | Day | ItineraryItem | TicketMeta
+export type SyncObjectPayload =
+  | Trip
+  | Day
+  | ItineraryItem
+  | TicketMeta
+  | LedgerSettings
+  | LedgerParticipant
+  | LedgerBudget
+  | LedgerExpense
 
 export type SyncOutboxEntry = {
   id: string
@@ -714,6 +836,7 @@ export type RouteId =
   | 'item'
   | 'tickets'
   | 'documents'
+  | 'ledger'
   | 'shared-trip'
   | 'search'
   | 'settings'

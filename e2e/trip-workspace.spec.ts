@@ -379,7 +379,8 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
 
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '票据' }).click()
-  await expect(page).toHaveURL(/#\/tickets\?/)
+  await expect(page).toHaveURL(/#\/documents\?/)
+  await expect(page).toHaveURL(/tab=attachments/)
   await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
   expect(providerProxyRequests).toBe(0)
   await expectNoHorizontalOverflow(page)

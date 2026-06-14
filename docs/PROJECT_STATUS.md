@@ -1,6 +1,6 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-05-27
+更新时间：2026-06-14
 基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、Tavily search adapter、Google Places item lookup foundation、durable provider quota foundation、route order suggestion proxy、server provider key separation、cloud save wording 和 E2E locator hardening 均已完成。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
@@ -24,6 +24,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 #/item/new?tripId=...&dayId=...
 #/item/edit?tripId=...&dayId=...&itemId=...
 #/tickets
+#/ledger?tripId=...
 #/settings
 #/ai-draft
 ```
@@ -34,6 +35,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - `#/day`：Day View，承载 schedule / map 切换和当前 Day 的日程、地图。
 - `#/item`：Item Detail 独立页面。
 - `#/tickets`：票据库。
+- `#/ledger`：主人个人旅行账本，包含明细、预算、参与人和结算。
 - `#/settings`：设置、同步、归档导入与 provider 配置。
 
 ## 已完成能力
@@ -59,6 +61,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - PWA 启动云端同步检查。
 - 冲突感知云端提示：本地较新、云端较新、可能冲突时只显示非阻塞提示。
 - Playwright 移动端 E2E 与 Vitest 单元测试。
+- Trip Home 旅行账本：双币种、整数最小货币单位、费用草稿、预算提醒、同行分摊、历史汇率快照、重复提醒和净额结算。
 
 ## 已完成阶段
 
@@ -92,7 +95,8 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 云端与同步状态
 
 - Supabase 用于账号登录后的旅行对象同步和恢复。
-- 当前版本优先同步 Trip / Day / Item / TicketMeta 对象；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
+- 当前版本同步 Trip / Day / Item / TicketMeta 与主人账本对象；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
+- 账本对象为 `ledger_settings`、`ledger_participant`、`ledger_budget`、`ledger_expense`，仍受主人账号 RLS 约束，不进入 Companion 共享投影。
 - 旧 `cloud_trip_backups` / `snapshot.json` 路径保留为兼容与迁移路径；对象同步表不可用时会自动降级到旧 snapshot 同步。
 - 自动云端同步默认开启，可由用户关闭；开启后在 Trip / Day / Item / Ticket / AI 应用 / 导入 / 内容补充 / 备注追加等写入成功后延迟同步对应对象。
 - copy 票据 Blob 上传成功后，此设备离线缓存可被用户确认清理；清理不会删除 TicketMeta 或账号中的票据 Blob，可按需重新同步文件。
@@ -108,7 +112,8 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 - IndexedDB 是此设备离线缓存与首写层。
 - 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
-- 完整 zip 归档包含旅行、Day、Item、票据元数据和 copy 文件内容。
+- 完整 zip schema v2 归档包含旅行、Day、Item、票据元数据、copy 文件内容和账本数据；继续接受无账本的 v1 归档。
+- 汇率缓存只在本机使用，不进入 zip 或云同步；每笔费用保存自己的历史汇率快照，保证跨设备统计稳定。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
 - Server-only OpenRouteService / Google Routes / Google Maps Platform shared server key / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。若 Maps JS、Google Routes 和 Google Places 使用同一个实际 key 值，后端仍通过 `GOOGLE_MAPS_PLATFORM_API_KEY` 读取。
 - Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。D1 binding 缺失时仅本地/dev 内存 fallback；binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。

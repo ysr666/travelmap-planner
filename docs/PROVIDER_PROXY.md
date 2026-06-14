@@ -90,6 +90,12 @@ Limits and boundaries:
 - Google route order requests use `optimizeWaypointOrder: true`, `TRAFFIC_UNAWARE`, `DRIVE`, and exact `X-Goog-FieldMask: routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex`.
 - The Google request body contains only origin/destination/intermediate coordinates; it does not include trip/day IDs, item IDs, titles, addresses, notes, route cache, tickets, cloud state, or provider secrets.
 
+Ledger operations:
+
+- `exchange_rate` sends a date, one base currency, and one or more quote currencies to Frankfurter v2. The response records the requested date, latest effective date not after it, source URL, and retrieval time. It is a daily reference rate, not a live bank or card rate.
+- `ai_expense_extract` is optional and confirmation-gated. It accepts only locally extracted, redacted text plus participant display names represented by request-local aliases. It never accepts files, blobs, email addresses, user IDs, cloud state, encrypted documents, route cache, or provider keys.
+- AI expense extraction returns editable suggestions only. It never writes ledger records; the user must confirm the preview locally.
+
 ## Response Contract
 
 Success:
@@ -169,6 +175,8 @@ Current bucket limits:
 - `ai_draft|`: 10 requests per 60 seconds.
 - `ai_draft_repair|`: 5 requests per 60 seconds.
 - `ai_trip_edit|`: 10 requests per 60 seconds.
+- `fx|`: 30 requests per 60 seconds.
+- `ai_expense_extract|`: 5 requests per 60 seconds.
 
 `route_preview` and `route_order_suggestion` both use the `route|` bucket. Quota is consumed before any mock or real provider call; over-limit and durable-storage-failure paths return normalized HTTP 429 `quota_exceeded`.
 
@@ -226,6 +234,8 @@ Now:
 - AI Trip Edit may call `travel_search` once after send confirmation when explicit search intent is detected, then attach compact source summaries to the edit-plan request.
 - `travel_search` can use mock/disabled mode or the server-side Tavily adapter when `TRIPMAP_SEARCH_PROVIDER=tavily` and `TRIPMAP_SEARCH_API_KEY` are configured.
 - Item Detail can manually call `place_lookup` when the user opens the lookup panel and clicks search; selecting a candidate still requires a confirmation before updating that single item.
+- Travel Ledger can call `exchange_rate` while saving an expense, with local date/currency-pair caching and manual-rate fallback.
+- Travel Ledger can call `ai_expense_extract` at most once per confirmed batch preview; the response remains a preview until the user creates drafts.
 
 Later:
 

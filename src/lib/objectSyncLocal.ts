@@ -3,6 +3,10 @@ import { createId } from '../db/ids'
 import type {
   Day,
   ItineraryItem,
+  LedgerBudget,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
   ObjectSyncBase,
   ObjectSyncConflict,
   ObjectSyncState,
@@ -23,6 +27,10 @@ export type ObjectSyncRecordInput =
   | { object: Day; objectType: 'day'; operation?: 'upsert' }
   | { object: ItineraryItem; objectType: 'item'; operation?: 'upsert' }
   | { object: TicketMeta; objectType: 'ticket_meta'; operation?: 'upsert' }
+  | { object: LedgerSettings; objectType: 'ledger_settings'; operation?: 'upsert' }
+  | { object: LedgerParticipant; objectType: 'ledger_participant'; operation?: 'upsert' }
+  | { object: LedgerBudget; objectType: 'ledger_budget'; operation?: 'upsert' }
+  | { object: LedgerExpense; objectType: 'ledger_expense'; operation?: 'upsert' }
 
 export type ObjectSyncDeleteInput = {
   objectId: string
@@ -395,14 +403,14 @@ function getObjectUpdatedAt(objectType: SyncObjectType, object: SyncPayload) {
   if (objectType === 'day') {
     return Date.now()
   }
-  return (object as ItineraryItem | TicketMeta | Trip).updatedAt
+  return (object as Exclude<SyncPayload, Day>).updatedAt
 }
 
 function getObjectTripId(objectType: SyncObjectType, object: SyncPayload) {
   if (objectType === 'trip') {
     return object.id
   }
-  return (object as Day | ItineraryItem | TicketMeta).tripId
+  return (object as Exclude<SyncPayload, Trip>).tripId
 }
 
 function readStorageValue(key: string) {

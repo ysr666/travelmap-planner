@@ -36,6 +36,7 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
     || activeRoute === 'day'
     || activeRoute === 'tickets'
     || activeRoute === 'documents'
+    || activeRoute === 'ledger'
     || activeRoute === 'search'
     || activeRoute === 'settings'
     || activeRoute === 'settings/privacy'

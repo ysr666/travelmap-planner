@@ -37,6 +37,10 @@ const tripId = `trip_${smokeId}`
 const dayId = `day_${smokeId}`
 const itemId = `item_${smokeId}`
 const ticketId = `ticket_${smokeId}`
+const ledgerSettingsId = `ledger_settings_${smokeId}`
+const ledgerParticipantId = `ledger_person_${smokeId}`
+const ledgerBudgetId = `ledger_budget_${smokeId}`
+const ledgerExpenseId = `ledger_expense_${smokeId}`
 const backupId = randomUUID()
 const snapshotPath = `${userId}/${backupId}/snapshot.json`
 const ticketPath = `${userId}/objects/${tripId}/tickets/${ticketId}/smoke-${smokeId}.txt`
@@ -148,13 +152,33 @@ try {
       updated_at_ms: now,
       user_id: userId,
     },
+    {
+      device_id: 'smoke-device', object_id: ledgerSettingsId, object_type: 'ledger_settings', op_id: `op_${smokeId}_ledger_settings`,
+      payload: { createdAt: now, homeCurrency: 'CNY', id: ledgerSettingsId, settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId, updatedAt: now },
+      trip_id: tripId, updated_at_ms: now, user_id: userId,
+    },
+    {
+      device_id: 'smoke-device', object_id: ledgerParticipantId, object_type: 'ledger_participant', op_id: `op_${smokeId}_ledger_participant`,
+      payload: { createdAt: now, displayName: 'Smoke owner', id: ledgerParticipantId, isSelf: true, source: 'manual', tripId, updatedAt: now },
+      trip_id: tripId, updated_at_ms: now, user_id: userId,
+    },
+    {
+      device_id: 'smoke-device', object_id: ledgerBudgetId, object_type: 'ledger_budget', op_id: `op_${smokeId}_ledger_budget`,
+      payload: { amountMinor: 100000, createdAt: now, currency: 'JPY', id: ledgerBudgetId, scope: 'trip', tripId, updatedAt: now },
+      trip_id: tripId, updated_at_ms: now, user_id: userId,
+    },
+    {
+      device_id: 'smoke-device', object_id: ledgerExpenseId, object_type: 'ledger_expense', op_id: `op_${smokeId}_ledger_expense`,
+      payload: { amountMinor: 1200, category: 'food', createdAt: now, currency: 'JPY', date: '2026-01-01', id: ledgerExpenseId, payerParticipantId: ledgerParticipantId, source: { kind: 'manual' }, splitMode: 'equal', splitShares: [{ participantId: ledgerParticipantId, weight: 1 }], status: 'confirmed', title: 'Smoke expense', tripId, updatedAt: now },
+      trip_id: tripId, updated_at_ms: now, user_id: userId,
+    },
   ]), 'cloud_sync_objects upsert')
   cleanup.push(() => supabase.from('cloud_sync_objects').delete().eq('trip_id', tripId))
 
   const objectsRead = await supabase.from('cloud_sync_objects').select('object_type').eq('trip_id', tripId)
   await assertOk(objectsRead, 'cloud_sync_objects select')
-  if ((objectsRead.data ?? []).length !== 4) {
-    fail(`Expected 4 object rows, got ${(objectsRead.data ?? []).length}.`)
+  if ((objectsRead.data ?? []).length !== 8) {
+    fail(`Expected 8 object rows, got ${(objectsRead.data ?? []).length}.`)
   }
 
   log('Checking ticket blob Storage path and cloud_ticket_blobs RLS.')

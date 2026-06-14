@@ -49,6 +49,26 @@ describe('provider proxy client config', () => {
       provider: 'google',
     })
   })
+
+  it('lets explicit empty local override disable env proxy config', () => {
+    const storage = memoryStorage({
+      [PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY]: '',
+      [PROVIDER_PROXY_DEV_URL_STORAGE_KEY]: '',
+    })
+
+    expect(getProviderProxyConfig({
+      env: {
+        VITE_ROUTE_PROXY_PROVIDER: 'openrouteservice',
+        VITE_ROUTE_PROXY_URL: '/api/provider-proxy',
+      },
+      storage,
+    })).toMatchObject({
+      configured: false,
+      provider: null,
+      proxyUrl: null,
+      source: 'none',
+    })
+  })
 })
 
 describe('provider proxy client request', () => {

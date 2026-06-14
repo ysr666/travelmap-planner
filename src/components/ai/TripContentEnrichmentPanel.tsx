@@ -140,7 +140,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
           补充景点内容
         </Button>
         {!providerConfig.configured ? (
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-300">当前未配置 provider proxy</span>
+          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</span>
         ) : null}
         {targets.length > TRIP_CONTENT_ENRICHMENT_MAX_ITEMS ? (
           <span className="text-xs tm-muted">本次最多处理 {TRIP_CONTENT_ENRICHMENT_MAX_ITEMS} 个</span>
@@ -393,7 +393,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
           </Button>
         </div>
         {!providerConfig.configured ? (
-          <p className="mt-3 text-xs font-medium text-amber-600 dark:text-amber-300">当前未配置 provider proxy</p>
+          <p className="mt-3 text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</p>
         ) : null}
       </div>
 

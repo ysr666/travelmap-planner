@@ -16,7 +16,7 @@ test('账号旅行收件箱在连接器后端未配置时保留本地能力', as
 
 test('Trip Home 保留手动收件箱并可进入账号总收件箱', async ({ page }) => {
   await createDemoTripViaUi(page)
-  await page.getByRole('button', { name: '总览' }).click()
+  await page.getByTestId('day-back-to-trip').click()
 
   await expect(page.getByTestId('travel-inbox-panel')).toBeVisible()
   await page.getByRole('button', { name: '查看账号旅行收件箱' }).click()

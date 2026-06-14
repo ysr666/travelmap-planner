@@ -1746,7 +1746,7 @@ function normalizeErrorCode(value: string): ProviderProxyErrorCode {
 
 function readStorageValue(storage: Storage | null | undefined, key: string) {
   try {
-    return storage?.getItem(key) || null
+    return storage?.getItem(key) ?? null
   } catch {
     return null
   }

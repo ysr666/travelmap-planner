@@ -215,7 +215,7 @@ export function AiTripEditPanel({
           生成修改方案
         </Button>
         {!providerConfig.configured ? (
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-300">当前未配置 AI 修改服务</span>
+          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 AI 修改服务</span>
         ) : null}
       </div>
 

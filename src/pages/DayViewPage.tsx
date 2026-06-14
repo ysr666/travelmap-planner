@@ -377,6 +377,7 @@ export function DayViewPage() {
         <button
           aria-label="总览"
           className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
+          data-testid="day-back-to-trip"
           onClick={() => navigateTo('trip', { tripId: trip.id })}
           type="button"
         >

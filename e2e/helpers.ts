@@ -6,8 +6,8 @@ export async function clearTravelDatabase(page: Page) {
     window.localStorage.removeItem('tripmap:e2e:cloud-fixture')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:enabled')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:state')
-    window.localStorage.removeItem('tripmap:dev:route-proxy-provider')
-    window.localStorage.removeItem('tripmap:dev:route-proxy-url')
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', '')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '')
     window.localStorage.removeItem('tripmap:provider-proxy:session-id')
     window.sessionStorage.removeItem('tripmap:cloud-snapshot-check:dismissed')
     function deleteDatabase(name: string) {

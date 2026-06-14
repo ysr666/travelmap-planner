@@ -352,7 +352,7 @@ export function SmartTripWorkspacePanel({
           智能整理此行程
         </Button>
         {!providerConfig.configured ? (
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-300">当前未配置 provider proxy</span>
+          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</span>
         ) : null}
       </div>
 

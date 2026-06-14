@@ -86,7 +86,6 @@ export function DayMapView({
     dayId: string
     itemId: string
   } | null>(null)
-  const [markerCardDismissedDayId, setMarkerCardDismissedDayId] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<LngLat | null>(null)
   const [userLocationStatus, setUserLocationStatus] = useState<UserLocationStatus>('idle')
   const [mapControlNotice, setMapControlNotice] = useState<{
@@ -115,10 +114,10 @@ export function DayMapView({
   const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
   const markerCardItem = useMemo(() => {
     if (!markerCardItemId) {
-      return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? items[0] ?? null)
+      return null
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [day.id, items, mappedItems, markerCardDismissedDayId, markerCardItemId])
+  }, [mappedItems, markerCardItemId])
   const markerCardVisible = Boolean(
     isVisible
     && markerCardItem
@@ -321,7 +320,6 @@ export function DayMapView({
   }, [applyMapRecenterNotice, day.id, getCurrentMapPadding, mapReadyToken, markerCardVisible, userLocation])
 
   const handleSelectItem = useCallback((item: ItineraryItem) => {
-    setMarkerCardDismissedDayId(null)
     setSelectedItemSelection({
       dayId: day.id,
       itemId: item.id,
@@ -454,7 +452,7 @@ export function DayMapView({
             item={markerCardItem}
             onClose={() => {
               setMarkerCardSelection(null)
-              setMarkerCardDismissedDayId(day.id)
+              setSelectedItemSelection(null)
             }}
             onOpenItem={onOpenItem}
           />

@@ -66,11 +66,35 @@ vi.mock('../../lib/dayMapViewport', () => ({
 }))
 
 vi.mock('../DayMap', () => ({
-  DayMap: ({ onMarkerSelect }: { onMarkerSelect?: (item: unknown) => void }) => (
+  DayMap: ({
+    items,
+    onBaseLoadingChange,
+    onMapReady,
+    onSelectItem,
+  }: {
+    items: Array<{ id: string; title: string }>
+    onBaseLoadingChange?: (loading: boolean) => void
+    onMapReady?: () => void
+    onSelectItem?: (item: unknown) => void
+  }) => (
     <div data-testid="day-map">
       <button
+        data-testid="mock-map-ready"
+        onClick={() => {
+          onBaseLoadingChange?.(false)
+          onMapReady?.()
+        }}
+        type="button"
+      >
+        Ready
+      </button>
+      <button
         data-testid="mock-marker"
-        onClick={() => onMarkerSelect?.({ id: 'item_1', title: '浅草寺' })}
+        onClick={() => {
+          onBaseLoadingChange?.(false)
+          onMapReady?.()
+          onSelectItem?.(items[0])
+        }}
         type="button"
       >
         Marker
@@ -230,4 +254,74 @@ describe('DayMapView', () => {
 
     expect(container?.textContent).toBeTruthy()
   })
+
+  it('shows the marker card only after selecting a marker', async () => {
+    const items = [
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', startTime: '10:00', lat: 35.7148, lng: 139.7967, ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', lat: 35.6586, lng: 139.7454, ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
+    ]
+
+    await act(async () => {
+      root?.render(
+        <DayMapView
+          day={defaultDay}
+          items={items}
+          onOpenItem={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+
+    await act(async () => {
+      clickTestButton('mock-map-ready')
+    })
+
+    expect(container?.querySelector('[data-testid="map-marker-card"]')).toBeNull()
+
+    await act(async () => {
+      clickTestButton('mock-marker')
+    })
+
+    expect(container?.querySelector('[data-testid="map-marker-card"]')).toBeTruthy()
+    expect(container?.textContent).toContain('浅草寺')
+  })
+
+  it('opens item detail from the marker card and clears the card on close', async () => {
+    const onOpenItem = vi.fn()
+    const items = [
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', startTime: '10:00', lat: 35.7148, lng: 139.7967, ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+    ]
+
+    await act(async () => {
+      root?.render(
+        <DayMapView
+          day={defaultDay}
+          items={items}
+          onOpenItem={onOpenItem}
+          trip={defaultTrip}
+        />,
+      )
+    })
+    await act(async () => {
+      clickTestButton('mock-marker')
+    })
+
+    await act(async () => {
+      clickTestButton('map-marker-card-open')
+    })
+
+    expect(onOpenItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'item_1' }))
+
+    await act(async () => {
+      clickTestButton('map-marker-card-close')
+    })
+
+    expect(container?.querySelector('[data-testid="map-marker-card"]')).toBeNull()
+  })
 })
+
+function clickTestButton(testId: string) {
+  const button = container?.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement | null
+  if (!button) throw new Error(`Button not found: ${testId}`)
+  button.click()
+}

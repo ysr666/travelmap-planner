@@ -60,3 +60,66 @@ Validation:
 - `npm run lint` passed.
 - `npm run test:unit` passed: 141 files, 1195 tests.
 - `npm run test:e2e -- e2e/full-page-forms.spec.ts` passed: 6 tests.
+
+## 2026-06-14 - Phase 13B-mini: Marker-triggered Day Map Card
+
+Status: completed
+
+Goal:
+
+- Move Day View map interaction closer to the roadmap target: marker click opens a lightweight item card, and the card opens Item Detail.
+- Add focused test coverage for the marker-card interaction path.
+
+Scope:
+
+- Keep DayMapView marker card hidden until a marker is selected.
+- Close marker card without leaving stale selected-card state.
+- Fix the DayMapView unit-test mock so it uses the real `onSelectItem` prop.
+- Add tests for no automatic card, marker-triggered card display, close, and open-item behavior.
+
+No-go:
+
+- No MapLibre lifecycle rewrite.
+- No route cache signature or route-generation behavior changes.
+- No real map, route, provider, search, AI, cloud, or browser geolocation calls.
+- No visual redesign beyond the interaction state.
+
+Likely files:
+
+- `src/components/trip/DayMapView.tsx`
+- `src/components/trip/DayMapView.test.tsx`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `npm run test:unit -- src/components/trip/DayMapView.test.tsx`
+- `npm run build`
+- `npm run lint`
+- `npm run test:unit`
+- Relevant Day View E2E only if unit coverage exposes broader behavior changes.
+
+Risk level: low-medium
+
+Stop conditions:
+
+- Fix requires MapLibre adapter lifecycle changes.
+- Fix requires route cache/provider behavior changes.
+- Validation failure points outside local marker-card interaction.
+
+Result:
+
+- Day Map marker card no longer appears automatically when the map becomes ready.
+- Selecting a marker opens the lightweight item card; closing the card also clears the selected marker state.
+- DayMapView unit tests now mock the real `onSelectItem` prop and cover marker-triggered card display, item-detail open, and close behavior.
+- Map floating-info E2E now matches the marker-triggered product flow by explicitly selecting markers before asserting card content.
+
+Validation:
+
+- `npm run test:unit -- src/components/trip/DayMapView.test.tsx` passed: 8 tests.
+- `npm run build` passed with existing bundle size warning.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 141 files, 1197 tests.
+- Initial `npm run test:e2e -- e2e/map-floating-info.spec.ts` failed because old assertions expected an automatic marker card.
+- Updated E2E expectations to the new marker-triggered behavior.
+- Re-run `npm run test:e2e -- e2e/map-floating-info.spec.ts` passed: 7 tests.
+- Final `npm run lint` after E2E edits passed.

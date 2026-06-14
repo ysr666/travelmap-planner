@@ -19,7 +19,11 @@ test('地图视图只保留浮动信息栏，不渲染底部抽屉', async ({ pa
   await expect(page.getByTestId('day-selector')).toBeVisible()
   await expectDaySelectorShadowBreathingRoom(page)
 
+  const hotelMarker = page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ })
   const markerCard = page.getByTestId('map-marker-card')
+  await expect(hotelMarker).toBeVisible({ timeout: 15000 })
+  await expect(markerCard).toHaveCount(0)
+  await hotelMarker.click()
   await expect(markerCard).toBeVisible({ timeout: 15000 })
   await expect(markerCard).toContainText('Hotel Metropolitan Tokyo 入住')
   await expect(markerCard).toContainText('15:00')
@@ -40,9 +44,10 @@ test('点击地图 marker 更新浮动信息栏并可进入详情', async ({ pag
   const shibuyaSkyMarker = page.getByRole('button', { name: /选择 Shibuya Sky 夜景/ })
   const markerCard = page.getByTestId('map-marker-card')
 
-  await expect(markerCard).toBeVisible({ timeout: 15000 })
   await expect(shibuyaSkyMarker).toBeVisible()
+  await expect(markerCard).toHaveCount(0)
   await shibuyaSkyMarker.click()
+  await expect(markerCard).toBeVisible({ timeout: 15000 })
   await expect(markerCard).toContainText('Shibuya Sky 夜景')
   await expectMarkerAndCardInUsableMapArea(page, shibuyaSkyMarker, markerCard)
 
@@ -77,6 +82,9 @@ test('地图重定位不会生成路线且保留浮动信息栏', async ({ page 
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
   await expect(page.getByTestId('map-recenter-button')).toBeVisible({ timeout: 15000 })
+  const hotelMarker = page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ })
+  await expect(hotelMarker).toBeVisible()
+  await hotelMarker.click()
   await expect(page.getByTestId('map-marker-card')).toBeVisible()
 
   await page.getByTestId('map-recenter-button').click()
@@ -89,7 +97,7 @@ test('地图重定位不会生成路线且保留浮动信息栏', async ({ page 
 test('地图日期条真实点击可以在 Day 1 和 Day 2 间切换', async ({ page }) => {
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ })).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('day-selector').getByRole('button', { name: /Day 2/ }).click()
   await expect(page.getByRole('heading', { name: '第 2 天 · 4月13日' })).toBeVisible()

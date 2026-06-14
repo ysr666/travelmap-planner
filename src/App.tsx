@@ -27,6 +27,9 @@ const TicketLibraryPage = lazy(() =>
 const TravelDocumentCenterPage = lazy(() =>
   import('./pages/TravelDocumentCenterPage').then((module) => ({ default: module.TravelDocumentCenterPage })),
 )
+const SharedTripPage = lazy(() =>
+  import('./pages/SharedTripPage').then((module) => ({ default: module.SharedTripPage })),
+)
 const TravelInboxPage = lazy(() =>
   import('./pages/TravelInboxPage').then((module) => ({ default: module.TravelInboxPage })),
 )
@@ -130,6 +133,7 @@ function App() {
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}
             {activeRoute === 'tickets' ? <TicketLibraryPage /> : null}
             {activeRoute === 'documents' ? <TravelDocumentCenterPage /> : null}
+            {activeRoute === 'shared-trip' ? <SharedTripPage /> : null}
             {activeRoute === 'inbox' ? <TravelInboxPage /> : null}
             {activeRoute === 'search' ? <SearchPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}

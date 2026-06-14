@@ -142,6 +142,133 @@ export type TicketBlob = {
   blob: Blob
 }
 
+export type CompanionPermission = 'read' | 'comment' | 'collaborate'
+export type CompanionInviteStatus = 'active' | 'revoked' | 'expired'
+export type CompanionActivityType =
+  | 'viewed'
+  | 'joined'
+  | 'commented'
+  | 'confirmed_meeting'
+  | 'submitted_change'
+  | 'applied_change'
+  | 'rejected_change'
+  | 'published'
+
+export type SharedTicketSummary = {
+  id: string
+  itemId?: string
+  scope?: TicketScope
+  ticketCategory?: TicketCategory
+  title: string
+  fileType: TicketMeta['fileType']
+  storageMode: TicketStorageMode
+}
+
+export type SharedItineraryItem = Omit<ItineraryItem, 'contentEnrichment' | 'ticketIds'> & {
+  ticketSummaryIds: string[]
+}
+
+export type SharedTripProjection = {
+  schemaVersion: 1
+  publishedAt: string
+  trip: Trip
+  days: Day[]
+  items: SharedItineraryItem[]
+  ticketSummaries: SharedTicketSummary[]
+  warnings: string[]
+}
+
+export type SharedTrip = {
+  id: string
+  ownerId: string
+  tripId: string
+  title: string
+  projection: SharedTripProjection
+  projectionUpdatedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type SharedTripInvite = {
+  id: string
+  ownerId: string
+  sharedTripId: string
+  tokenHash: string
+  permission: CompanionPermission
+  status: CompanionInviteStatus
+  expiresAt?: string
+  createdAt: string
+  updatedAt: string
+  revokedAt?: string
+}
+
+export type SharedTripMember = {
+  ownerId: string
+  sharedTripId: string
+  userId: string
+  displayName?: string
+  email?: string
+  permission: CompanionPermission
+  joinedAt: string
+  updatedAt: string
+  removedAt?: string
+}
+
+export type SharedTripComment = {
+  id: string
+  sharedTripId: string
+  itemId: string
+  userId: string
+  displayName?: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+export type SharedTripMeetingConfirmation = {
+  sharedTripId: string
+  itemId: string
+  userId: string
+  displayName?: string
+  note?: string
+  confirmedAt: string
+  updatedAt: string
+}
+
+export type SharedTripActivity = {
+  id: string
+  sharedTripId: string
+  userId?: string
+  displayName?: string
+  activityType: CompanionActivityType
+  itemId?: string
+  body?: string
+  createdAt: string
+}
+
+export type SharedTripMutationStatus = 'pending' | 'applied' | 'rejected' | 'conflict'
+export type SharedTripMutationType =
+  | 'update_item'
+  | 'create_item'
+  | 'delete_item'
+  | 'reorder_day_items'
+  | 'update_item_execution_state'
+
+export type SharedTripMutation = {
+  id: string
+  sharedTripId: string
+  userId: string
+  displayName?: string
+  mutationType: SharedTripMutationType
+  payload: unknown
+  status: SharedTripMutationStatus
+  createdAt: string
+  updatedAt: string
+  appliedAt?: string
+  rejectedReason?: string
+}
+
 export type SyncObjectType = 'trip' | 'day' | 'item' | 'ticket_meta'
 export type SyncOutboxOperation = 'upsert' | 'delete'
 export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
@@ -587,6 +714,7 @@ export type RouteId =
   | 'item'
   | 'tickets'
   | 'documents'
+  | 'shared-trip'
   | 'search'
   | 'settings'
   | 'settings/privacy'

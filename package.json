@@ -16,7 +16,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "typecheck:travel-inbox-worker": "tsc --ignoreConfig --noEmit --target ES2023 --lib ES2023,WebWorker --module ESNext --moduleResolution Bundler --skipLibCheck workers/travel-inbox/*.ts",
-    "smoke:supabase": "node scripts/supabase-staging-smoke.mjs"
+    "smoke:supabase": "node scripts/supabase-staging-smoke.mjs",
+    "smoke:supabase:companion": "node scripts/companion-shared-trip-smoke.mjs"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",

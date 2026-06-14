@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
-import { Archive, Home, MoreHorizontal, Settings, Ticket, X } from 'lucide-react'
+import { Archive, Home, MoreHorizontal, Settings, Ticket, UsersRound, X } from 'lucide-react'
 import { navigateTo } from '../../lib/routes'
 import { useModalAccessibility } from '../ui/useModalAccessibility'
 
@@ -55,6 +55,10 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
               更多
               <X className="size-4" />
             </button>
+            <MenuItem icon={<UsersRound className="size-4" />} label="同行共享" onClick={() => {
+              setOpen(false)
+              document.getElementById('shared-trip-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }} />
             <MenuItem icon={<Ticket className="size-4" />} label="全部票据" onClick={() => navigateTo('tickets', { tripId })} />
             <MenuItem icon={<Archive className="size-4" />} label="同步与归档" onClick={() => navigateTo('trip', { tripId, view: 'overview' })} />
             <MenuItem icon={<Settings className="size-4" />} label="设置" onClick={() => navigateTo('settings')} />

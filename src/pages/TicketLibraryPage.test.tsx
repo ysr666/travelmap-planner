@@ -34,8 +34,8 @@ const mocks = vi.hoisted(() => ({
   formatTicketCreatedAt: vi.fn(() => '2026-04-01'),
   getTicketDisplayTitle: vi.fn(() => '票据'),
   getTicketFileType: vi.fn(() => 'image'),
-  getTicketScope: vi.fn(() => 'trip'),
-  getTicketStorageMode: vi.fn(() => 'reference'),
+  getTicketScope: vi.fn((ticket: { scope?: string } | undefined) => ticket?.scope ?? 'trip'),
+  getTicketStorageMode: vi.fn((ticket: { storageMode?: string } | undefined) => ticket?.storageMode ?? 'reference'),
   isValidExternalUrl: vi.fn(() => false),
   normalizeTicketFileName: vi.fn((name: string) => name),
   ticketCategoryOptions: [],
@@ -161,6 +161,8 @@ beforeEach(() => {
     { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
   ])
   mocks.listTicketsByTrip.mockResolvedValue([])
+  mocks.getTicketScope.mockImplementation((ticket: { scope?: string } | undefined) => ticket?.scope ?? 'trip')
+  mocks.getTicketStorageMode.mockImplementation((ticket: { storageMode?: string } | undefined) => ticket?.storageMode ?? 'reference')
 })
 
 afterEach(() => {
@@ -245,6 +247,70 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('全部')
   })
 
+  it('shows filter counts and updates the visible ticket summary', async () => {
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_image',
+        tripId: 'trip_1',
+        title: '二维码截图',
+        fileName: 'qr.png',
+        fileType: 'image',
+        storageMode: 'reference',
+        scope: 'item',
+        createdAt: 300,
+        updatedAt: 300,
+      },
+      {
+        id: 'ticket_pdf',
+        tripId: 'trip_1',
+        title: '酒店订单 PDF',
+        fileName: 'hotel.pdf',
+        fileType: 'pdf',
+        storageMode: 'reference',
+        scope: 'trip',
+        createdAt: 200,
+        updatedAt: 200,
+      },
+      {
+        id: 'ticket_other',
+        tripId: 'trip_1',
+        title: '外部订单',
+        fileName: 'booking.url',
+        fileType: 'other',
+        storageMode: 'external',
+        scope: 'unassigned',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('显示 3 / 3 张')
+    expect(container?.querySelector('[data-testid="ticket-filter-all"]')?.textContent).toContain('3')
+    expect(container?.querySelector('[data-testid="ticket-filter-pdf"]')?.textContent).toContain('1')
+    expect(container?.querySelector('[data-testid="ticket-filter-unassigned"]')?.textContent).toContain('1')
+
+    await act(async () => {
+      clickTestButton('ticket-filter-pdf')
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('显示 1 / 3 张')
+    expect(container?.querySelectorAll('[data-testid="ticket-card"]')).toHaveLength(1)
+
+    await act(async () => {
+      clickTestButton('ticket-filter-unassigned')
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('显示 1 / 3 张')
+    expect(container?.querySelectorAll('[data-testid="ticket-card"]')).toHaveLength(1)
+  })
+
   it('renders navigation', async () => {
     await act(async () => {
       root?.render(<TicketLibraryPage />)
@@ -269,3 +335,9 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('db error')
   })
 })
+
+function clickTestButton(testId: string) {
+  const button = container?.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement | null
+  if (!button) throw new Error(`Button not found: ${testId}`)
+  button.click()
+}

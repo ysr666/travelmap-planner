@@ -172,3 +172,60 @@ Result:
 Validation:
 
 - `git diff --check` passed.
+
+## 2026-06-14 - Phase 16A-mini: Ticket Gallery Filter Feedback
+
+Status: completed
+
+Goal:
+
+- Make Ticket Library 2.0 gallery filtering easier to scan by showing counts per filter and current visible ticket count.
+- Add focused unit coverage for filter count behavior.
+
+Scope:
+
+- Add local derived counts for all / image / PDF / other / unassigned filters.
+- Show a compact gallery summary: visible count / total count.
+- Keep storage, ticket blob, cloud sync, preview, delete, and binding behavior unchanged.
+
+No-go:
+
+- No ticket schema changes.
+- No blob upload/download/cache behavior changes.
+- No Supabase/cloud sync changes.
+- No full-screen preview redesign.
+
+Likely files:
+
+- `src/pages/TicketLibraryPage.tsx`
+- `src/pages/TicketLibraryPage.test.tsx`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `npm run test:unit -- src/pages/TicketLibraryPage.test.tsx`
+- `npm run build`
+- `npm run lint`
+- `npm run test:unit`
+
+Risk level: low
+
+Stop conditions:
+
+- A change requires ticket/blob/cloud semantics.
+- Filter count behavior conflicts with existing E2E expectations.
+
+Result:
+
+- Ticket Library filter chips now show derived counts for all, image, PDF, other, and unassigned tickets.
+- Ticket Library shows a compact visible / total ticket summary above the gallery.
+- Added unit coverage for filter counts and visible summary changes.
+
+Validation:
+
+- `npm run test:unit -- src/pages/TicketLibraryPage.test.tsx` passed: 8 tests.
+- Initial `npm run build` failed because the test mock type was inferred as a no-arg function; fixed the mock signature to accept a ticket argument.
+- Re-run `npm run build` passed with existing bundle size warning.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 141 files, 1198 tests.
+- `npm run test:e2e -- e2e/ticket-library.spec.ts` passed: 5 tests.

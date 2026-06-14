@@ -170,6 +170,13 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       return ticket.fileType === filter
     })
   }, [filter, tickets])
+  const filterCounts = useMemo<Record<TicketFilter, number>>(() => ({
+    all: tickets.length,
+    image: tickets.filter((ticket) => ticket.fileType === 'image').length,
+    other: tickets.filter((ticket) => ticket.fileType === 'other').length,
+    pdf: tickets.filter((ticket) => ticket.fileType === 'pdf').length,
+    unassigned: tickets.filter((ticket) => getTicketScope(ticket) === 'unassigned').length,
+  }), [tickets])
 
   const defaultBindingTarget = useCallback(
     (loadedItems: ItineraryItem[]) => {
@@ -708,18 +715,28 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       </Card>
 
       <section className="space-y-3">
-        <SectionHeader title="票据库" />
+        <div className="flex items-end justify-between gap-3">
+          <SectionHeader title="票据库" />
+          <p className="shrink-0 text-xs font-semibold tm-muted" data-testid="ticket-filter-summary">
+            显示 {filteredTickets.length} / {tickets.length} 张
+          </p>
+        </div>
         <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
           {filterOptions.map((option) => (
             <button
-              className={`min-h-11 min-w-11 shrink-0 rounded-full px-3 text-xs font-semibold tm-focus ${
+              aria-label={`${option.label}，${filterCounts[option.value]} 张`}
+              className={`inline-flex min-h-11 min-w-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold tm-focus ${
                 filter === option.value ? 'bg-primary text-white shadow-[0_4px_12px_var(--color-primary-shadow)]' : 'tm-chip'
               }`}
+              data-testid={`ticket-filter-${option.value}`}
               key={option.value}
               onClick={() => setFilter(option.value)}
               type="button"
             >
-              {option.label}
+              <span>{option.label}</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${filter === option.value ? 'bg-white/20 text-white' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                {filterCounts[option.value]}
+              </span>
             </button>
           ))}
         </div>

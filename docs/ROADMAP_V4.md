@@ -66,7 +66,7 @@
 
 ### 2. SwiftUI-like design system
 
-- Phase 15A：建立 `docs/DESIGN_SYSTEM.md`。
+- Phase 15A：建立 `docs/DESIGN_SYSTEM.md`。✅ 已完成。
 - 方向：iOS / SwiftUI grouped list、自然 section header、少卡片套卡片、少装饰 chip、按钮层级清楚。
 - 目标：去 AI 味，让后续页面有一致的 spacing、radius、shadow、warning、sheet 和 form 规范。
 

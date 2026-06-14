@@ -123,3 +123,52 @@ Validation:
 - Updated E2E expectations to the new marker-triggered behavior.
 - Re-run `npm run test:e2e -- e2e/map-floating-info.spec.ts` passed: 7 tests.
 - Final `npm run lint` after E2E edits passed.
+
+## 2026-06-14 - Phase 15A: SwiftUI-like Design System Baseline
+
+Status: completed
+
+Goal:
+
+- Establish `docs/DESIGN_SYSTEM.md` so future UX phases have a shared visual and interaction baseline.
+- Capture the current grouped-list, surface, sheet, form, map, and mobile QA rules without changing runtime code.
+
+Scope:
+
+- Document existing tokens and component conventions from `src/index.css` and `src/components/ui`.
+- Define page composition rules for Trip Home, Day View, Item Detail, Ticket Library, Settings, and AI/provider surfaces.
+- Update roadmap/status docs to mark Phase 15A complete.
+
+No-go:
+
+- No code, schema, cloud, provider, AI privacy, route cache, or ticket/blob behavior changes.
+- No screenshots or visual assets.
+- No broad copy rewrite outside docs.
+
+Likely files:
+
+- `docs/DESIGN_SYSTEM.md`
+- `docs/ROADMAP_V4.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `git diff --check`
+
+Risk level: low
+
+Stop conditions:
+
+- Documentation requires product decisions that conflict with implemented UI.
+- Documentation would imply protected schema/provider/cloud changes.
+
+Result:
+
+- Added `docs/DESIGN_SYSTEM.md` with the SwiftUI-like grouped-list, surface, button, form, sheet, map, Trip Home, Day View, Item Detail, Ticket Library, AI/provider, and visual QA rules.
+- Updated `docs/ROADMAP_V4.md` to mark Phase 15A complete.
+- Updated `docs/PROJECT_STATUS.md` to include the design system baseline in completed project status.
+
+Validation:
+
+- `git diff --check` passed.

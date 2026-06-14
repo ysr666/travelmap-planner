@@ -1,6 +1,10 @@
 import type {
   Day,
   ItineraryItem,
+  LedgerBudget,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
   ObjectSyncConflict,
   ObjectSyncConflictField,
   ObjectSyncConflictResolution,
@@ -66,6 +70,39 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '旅行执行状态', path: 'executionState' },
     { label: '绑定票据', path: 'ticketIds' },
     { label: '排序', path: 'sortOrder' },
+  ],
+  ledger_budget: [
+    { label: '预算范围', path: 'scope' },
+    { label: '预算金额', path: 'amountMinor' },
+    { label: '预算币种', path: 'currency' },
+    { label: '费用类别', path: 'category' },
+    { label: '预算日期', path: 'date' },
+  ],
+  ledger_expense: [
+    { label: '费用名称', path: 'title' },
+    { label: '发生日期', path: 'date' },
+    { label: '费用类别', path: 'category' },
+    { label: '确认状态', path: 'status' },
+    { label: '金额', path: 'amountMinor' },
+    { label: '币种', path: 'currency' },
+    { label: '付款人', path: 'payerParticipantId' },
+    { label: '分摊方式', path: 'splitMode' },
+    { label: '分摊参与人', path: 'splitShares' },
+    { label: '费用来源', path: 'source' },
+    { label: '汇率快照', path: 'exchangeRate' },
+    { label: '重复确认', path: 'duplicateAcknowledged' },
+    { label: '备注', notes: true, path: 'notes' },
+  ],
+  ledger_participant: [
+    { label: '姓名', path: 'displayName' },
+    { label: '本人', path: 'isSelf' },
+    { label: '来源', path: 'source' },
+    { label: '来源标识', path: 'sourceId' },
+  ],
+  ledger_settings: [
+    { label: '常住地币种', path: 'homeCurrency' },
+    { label: '旅行币种', path: 'tripCurrency' },
+    { label: '结算币种', path: 'settlementCurrency' },
   ],
   ticket_meta: [
     { label: '绑定行程点', path: 'itemId' },
@@ -232,6 +269,10 @@ export function buildObjectConflictLabel(objectType: SyncObjectType, payload?: S
     const item = payload as ItineraryItem
     return item.title || item.locationName || '行程点'
   }
+  if (objectType === 'ledger_settings') return '旅行账本设置'
+  if (objectType === 'ledger_participant') return (payload as LedgerParticipant).displayName || '账本参与人'
+  if (objectType === 'ledger_budget') return '旅行预算'
+  if (objectType === 'ledger_expense') return (payload as LedgerExpense).title || '旅行费用'
   const ticket = payload as TicketMeta
   return ticket.title || ticket.fileName || '票据'
 }
@@ -240,6 +281,10 @@ export function getObjectTypeLabel(objectType: SyncObjectType) {
   if (objectType === 'trip') return '旅行'
   if (objectType === 'day') return '日期'
   if (objectType === 'item') return '行程点'
+  if (objectType === 'ledger_settings') return '账本设置'
+  if (objectType === 'ledger_participant') return '账本参与人'
+  if (objectType === 'ledger_budget') return '旅行预算'
+  if (objectType === 'ledger_expense') return '旅行费用'
   return '票据'
 }
 
@@ -308,7 +353,7 @@ function clonePayload<T extends SyncObjectPayload | undefined>(payload: T): T {
 
 function touchPayload(payload: SyncObjectPayload, objectType: SyncObjectType, now: number) {
   if (objectType !== 'day') {
-    ;(payload as Trip | ItineraryItem | TicketMeta).updatedAt = now
+    ;(payload as Trip | ItineraryItem | TicketMeta | LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense).updatedAt = now
   }
 }
 

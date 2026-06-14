@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import JSZip from 'jszip'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createDay, createItineraryItem, createTrip, db, setItineraryItemExecutionState } from '../db'
+import { createDay, createItineraryItem, createLedgerBudget, createLedgerExpense, createLedgerParticipant, createLedgerSettings, createTrip, db, setItineraryItemExecutionState } from '../db'
 import { exportTripBackup } from './backup'
 
 beforeEach(async () => {
@@ -27,7 +27,7 @@ describe('zip backup serialization', () => {
     const exportedTrip = JSON.parse(await zip.file('data/trip.json')!.async('string')) as typeof trip
     const manifest = JSON.parse(await zip.file('manifest.json')!.async('string')) as { schemaVersion: number }
 
-    expect(manifest.schemaVersion).toBe(1)
+    expect(manifest.schemaVersion).toBe(2)
     expect(exportedTrip.restoredAt).toBe(Date.parse('2026-04-02T12:30:00.000Z'))
     expect(exportedTrip.restoredFromCloudBackupId).toBe('backup_1')
     expect(exportedTrip.restoredFromCloudOriginalTripId).toBe('trip_original')
@@ -42,7 +42,22 @@ describe('zip backup serialization', () => {
     const zip = await JSZip.loadAsync(await (await exportTripBackup(trip.id)).arrayBuffer())
     const exportedItems = JSON.parse(await zip.file('data/itineraryItems.json')!.async('string')) as Array<{ executionState?: unknown }>
     const manifest = JSON.parse(await zip.file('manifest.json')!.async('string')) as { schemaVersion: number }
-    expect(manifest.schemaVersion).toBe(1)
+    expect(manifest.schemaVersion).toBe(2)
     expect(exportedItems[0].executionState).toEqual({ status: 'completed', updatedAt: 123 })
+  })
+
+  it('exports ledger records in schema v2 without local exchange-rate cache', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-04-01', startDate: '2026-04-01', title: '东京账本' })
+    await createLedgerSettings({ homeCurrency: 'CNY', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id })
+    const participant = await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
+    await createLedgerBudget({ amountMinor: 10000, currency: 'JPY', scope: 'trip', tripId: trip.id })
+    await createLedgerExpense({ amountMinor: 1200, category: 'food', currency: 'JPY', date: '2026-04-01', payerParticipantId: participant.id, source: { kind: 'manual' }, splitMode: 'equal', splitShares: [{ participantId: participant.id, weight: 1 }], status: 'confirmed', title: '晚餐', tripId: trip.id })
+
+    const zip = await JSZip.loadAsync(await (await exportTripBackup(trip.id)).arrayBuffer())
+    expect(JSON.parse(await zip.file('data/ledgerSettings.json')!.async('string'))).toHaveLength(1)
+    expect(JSON.parse(await zip.file('data/ledgerParticipants.json')!.async('string'))).toHaveLength(1)
+    expect(JSON.parse(await zip.file('data/ledgerBudgets.json')!.async('string'))).toHaveLength(1)
+    expect(JSON.parse(await zip.file('data/ledgerExpenses.json')!.async('string'))).toHaveLength(1)
+    expect(zip.file('data/exchangeRateCache.json')).toBeNull()
   })
 })

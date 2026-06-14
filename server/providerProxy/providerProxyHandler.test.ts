@@ -216,6 +216,14 @@ function validTravelInboxClassifyRequest() {
   }
 }
 
+function validExchangeRateRequest() {
+  return { baseCurrency: 'JPY', operation: 'exchange_rate', quoteCurrencies: ['CNY'], quotaSessionId: 'session-a', requestId: 'exchange-request-1', requestedDate: '2026-04-05' }
+}
+
+function validAiExpenseExtractRequest() {
+  return { candidates: [{ candidateId: 'candidate-1', text: '晚餐 JPY 1200', title: '晚餐' }], defaultCurrency: 'JPY', operation: 'ai_expense_extract', participants: [{ alias: 'p1', displayName: '我' }], quotaSessionId: 'session-a', requestId: 'expense-request-1' }
+}
+
 describe('provider proxy handler quota routing', () => {
   it('uses the expected isolated quota bucket for every operation', async () => {
     const cases = [
@@ -228,12 +236,15 @@ describe('provider proxy handler quota routing', () => {
       { bucket: 'ai_trip_edit|', request: validEditRequest() },
       { bucket: 'travel_inbox_classify|', request: validTravelInboxClassifyRequest() },
       { bucket: 'ai_trip_operations|', request: validTripOperationsSummaryRequest() },
+      { bucket: 'fx|', fetcher: vi.fn(async () => new Response(JSON.stringify([{ base: 'JPY', date: '2026-04-03', quote: 'CNY', rate: 0.05 }]), { status: 200 })) as unknown as typeof fetch, request: validExchangeRateRequest() },
+      { bucket: 'ai_expense_extract|', request: validAiExpenseExtractRequest() },
     ]
 
     for (const testCase of cases) {
       const consume = vi.fn(async () => ({ allowed: true as const, remaining: 1, resetAt: Date.now() + 60_000 }))
       const response = await handleProviderProxyRequest({
         env: { TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+        fetcher: testCase.fetcher,
         quotaHasher: () => 'identity-hash',
         quotaStorage: { consume },
         request: jsonRequest(testCase.request),

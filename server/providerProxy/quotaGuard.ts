@@ -15,6 +15,10 @@ import {
   PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
+  PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
+  PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
@@ -37,6 +41,8 @@ export type ProviderProxyQuotaBucket =
   | 'ai_trip_daily_tip|'
   | 'ai_trip_operations|'
   | 'ai_trip_edit|'
+  | 'fx|'
+  | 'ai_expense_extract|'
 
 export type ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: number
@@ -51,6 +57,8 @@ export type ProviderProxyQuotaLimits = {
   maxPlaceLookupRequestsPerWindow: number
   maxRouteRequestsPerWindow: number
   maxTravelSearchRequestsPerWindow: number
+  maxExchangeRateRequestsPerWindow: number
+  maxAiExpenseExtractRequestsPerWindow: number
   windowMs: number
 }
 
@@ -139,6 +147,8 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxPlaceLookupRequestsPerWindow: PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
   maxRouteRequestsPerWindow: 60,
   maxTravelSearchRequestsPerWindow: PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
+  maxExchangeRateRequestsPerWindow: PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW,
+  maxAiExpenseExtractRequestsPerWindow: PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW,
   windowMs: 60_000,
 }
 
@@ -347,6 +357,12 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
     return { bucket: 'search|', maxRequests: limits.maxTravelSearchRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_EXCHANGE_RATE_OPERATION) {
+    return { bucket: 'fx|', maxRequests: limits.maxExchangeRateRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION) {
+    return { bucket: 'ai_expense_extract|', maxRequests: limits.maxAiExpenseExtractRequestsPerWindow }
   }
   return { bucket: 'route|', maxRequests: limits.maxRouteRequestsPerWindow }
 }

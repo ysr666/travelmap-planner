@@ -2,7 +2,17 @@ import { db } from './database'
 import Dexie from 'dexie'
 import { createId } from './ids'
 import { sortItineraryItems } from '../lib/itinerary'
-import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
+import type {
+  Day,
+  ItineraryItem,
+  LedgerBudget,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
+  TicketBlob,
+  TicketMeta,
+  Trip,
+} from '../types'
 
 type CreateTripInput = Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripPatch = Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
@@ -23,6 +33,10 @@ export type ImportTripBackupRecordsInput = {
   itineraryItems: ItineraryItem[]
   ticketMetas: TicketMeta[]
   ticketBlobs: TicketBlob[]
+  ledgerSettings?: LedgerSettings[]
+  ledgerParticipants?: LedgerParticipant[]
+  ledgerBudgets?: LedgerBudget[]
+  ledgerExpenses?: LedgerExpense[]
   importedTitleSuffix: string
 }
 
@@ -32,6 +46,10 @@ export type ImportTripPlanRecordsInput = {
   itineraryItems: ItineraryItem[]
   ticketMetas: TicketMeta[]
   ticketBlobs: TicketBlob[]
+  ledgerSettings?: LedgerSettings[]
+  ledgerParticipants?: LedgerParticipant[]
+  ledgerBudgets?: LedgerBudget[]
+  ledgerExpenses?: LedgerExpense[]
 }
 
 export async function createTrip(input: CreateTripInput) {
@@ -66,7 +84,17 @@ export async function updateTrip(tripId: string, patch: UpdateTripPatch) {
 export async function deleteTripCascade(tripId: string) {
   await db.transaction(
     'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    [
+      db.trips,
+      db.days,
+      db.itineraryItems,
+      db.ticketMetas,
+      db.ticketBlobs,
+      db.ledgerSettings,
+      db.ledgerParticipants,
+      db.ledgerBudgets,
+      db.ledgerExpenses,
+    ],
     async () => {
       const [items, ticketMetas] = await Promise.all([
         db.itineraryItems.where('tripId').equals(tripId).toArray(),
@@ -81,6 +109,10 @@ export async function deleteTripCascade(tripId: string) {
         itemIds.length > 0 ? db.itineraryItems.bulkDelete(itemIds) : Promise.resolve(),
         ticketIds.length > 0 ? db.ticketMetas.bulkDelete(ticketIds) : Promise.resolve(),
         ticketIds.length > 0 ? db.ticketBlobs.bulkDelete(ticketIds) : Promise.resolve(),
+        db.ledgerSettings.where('tripId').equals(tripId).delete(),
+        db.ledgerParticipants.where('tripId').equals(tripId).delete(),
+        db.ledgerBudgets.where('tripId').equals(tripId).delete(),
+        db.ledgerExpenses.where('tripId').equals(tripId).delete(),
       ])
     },
   )
@@ -313,27 +345,41 @@ export async function importTripBackupRecords({
   itineraryItems,
   ticketMetas,
   ticketBlobs,
+  ledgerSettings = [],
+  ledgerParticipants = [],
+  ledgerBudgets = [],
+  ledgerExpenses = [],
   importedTitleSuffix,
 }: ImportTripBackupRecordsInput): Promise<{ remapped: boolean; title: string; tripId: string }> {
   assertUniqueIds('Day', days.map((day) => day.id))
   assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
   assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+  assertUniqueIds('LedgerParticipant', ledgerParticipants.map((participant) => participant.id))
+  assertUniqueIds('LedgerBudget', ledgerBudgets.map((budget) => budget.id))
+  assertUniqueIds('LedgerExpense', ledgerExpenses.map((expense) => expense.id))
 
   const result = await db.transaction(
     'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses],
     async () => {
       const dayIds = days.map((day) => day.id)
       const itemIds = itineraryItems.map((item) => item.id)
       const ticketIds = ticketMetas.map((ticket) => ticket.id)
+      const participantIds = ledgerParticipants.map((participant) => participant.id)
+      const budgetIds = ledgerBudgets.map((budget) => budget.id)
+      const expenseIds = ledgerExpenses.map((expense) => expense.id)
 
-      const [existingTrip, existingDays, existingItems, existingTicketMetas, existingTicketBlobs] =
+      const [existingTrip, existingDays, existingItems, existingTicketMetas, existingTicketBlobs, existingSettings, existingParticipants, existingBudgets, existingExpenses] =
         await Promise.all([
           db.trips.get(trip.id),
           dayIds.length > 0 ? db.days.bulkGet(dayIds) : Promise.resolve([]),
           itemIds.length > 0 ? db.itineraryItems.bulkGet(itemIds) : Promise.resolve([]),
           ticketIds.length > 0 ? db.ticketMetas.bulkGet(ticketIds) : Promise.resolve([]),
           ticketIds.length > 0 ? db.ticketBlobs.bulkGet(ticketIds) : Promise.resolve([]),
+          ledgerSettings.length > 0 ? db.ledgerSettings.bulkGet(ledgerSettings.map((settings) => settings.id)) : Promise.resolve([]),
+          participantIds.length > 0 ? db.ledgerParticipants.bulkGet(participantIds) : Promise.resolve([]),
+          budgetIds.length > 0 ? db.ledgerBudgets.bulkGet(budgetIds) : Promise.resolve([]),
+          expenseIds.length > 0 ? db.ledgerExpenses.bulkGet(expenseIds) : Promise.resolve([]),
         ])
 
       const hasConflict =
@@ -341,7 +387,11 @@ export async function importTripBackupRecords({
         existingDays.some(Boolean) ||
         existingItems.some(Boolean) ||
         existingTicketMetas.some(Boolean) ||
-        existingTicketBlobs.some(Boolean)
+        existingTicketBlobs.some(Boolean) ||
+        existingSettings.some(Boolean) ||
+        existingParticipants.some(Boolean) ||
+        existingBudgets.some(Boolean) ||
+        existingExpenses.some(Boolean)
 
       const nextTripId = hasConflict ? createId('trip') : trip.id
       const dayIdMap = new Map(days.map((day) => [day.id, hasConflict ? createId('day') : day.id]))
@@ -350,6 +400,9 @@ export async function importTripBackupRecords({
       )
       const ticketIdMap = new Map(
         ticketMetas.map((ticket) => [ticket.id, hasConflict ? createId('ticket') : ticket.id]),
+      )
+      const participantIdMap = new Map(
+        ledgerParticipants.map((participant) => [participant.id, hasConflict ? createId('ledger_person') : participant.id]),
       )
 
       const nextTrip: Trip = {
@@ -383,6 +436,30 @@ export async function importTripBackupRecords({
           return nextTicketId ? { ...ticketBlob, ticketId: nextTicketId } : undefined
         })
         .filter((ticketBlob): ticketBlob is TicketBlob => Boolean(ticketBlob))
+      const nextLedgerSettings = ledgerSettings.map((settings) => ({
+        ...settings,
+        id: hasConflict ? createId('ledger_settings') : settings.id,
+        tripId: nextTripId,
+      }))
+      const nextLedgerParticipants = ledgerParticipants.map((participant) => ({
+        ...participant,
+        id: requireMappedId(participantIdMap, participant.id),
+        tripId: nextTripId,
+      }))
+      const nextLedgerBudgets = ledgerBudgets.map((budget) => ({
+        ...budget,
+        id: hasConflict ? createId('ledger_budget') : budget.id,
+        tripId: nextTripId,
+      }))
+      const nextLedgerExpenses = ledgerExpenses.map((expense) => ({
+        ...expense,
+        id: hasConflict ? createId('ledger_expense') : expense.id,
+        payerParticipantId: expense.payerParticipantId ? participantIdMap.get(expense.payerParticipantId) : undefined,
+        splitShares: expense.splitShares
+          .map((share) => ({ ...share, participantId: participantIdMap.get(share.participantId) }))
+          .filter((share): share is { participantId: string; weight: number } => Boolean(share.participantId)),
+        tripId: nextTripId,
+      }))
 
       await db.trips.add(nextTrip)
       if (nextDays.length > 0) {
@@ -397,6 +474,10 @@ export async function importTripBackupRecords({
       if (nextTicketBlobs.length > 0) {
         await db.ticketBlobs.bulkAdd(nextTicketBlobs)
       }
+      if (nextLedgerSettings.length > 0) await db.ledgerSettings.bulkAdd(nextLedgerSettings)
+      if (nextLedgerParticipants.length > 0) await db.ledgerParticipants.bulkAdd(nextLedgerParticipants)
+      if (nextLedgerBudgets.length > 0) await db.ledgerBudgets.bulkAdd(nextLedgerBudgets)
+      if (nextLedgerExpenses.length > 0) await db.ledgerExpenses.bulkAdd(nextLedgerExpenses)
 
       return { remapped: hasConflict, title: nextTrip.title, tripId: nextTrip.id }
     },
@@ -411,6 +492,10 @@ export async function importTripPlanRecords({
   itineraryItems,
   ticketMetas,
   ticketBlobs,
+  ledgerSettings = [],
+  ledgerParticipants = [],
+  ledgerBudgets = [],
+  ledgerExpenses = [],
 }: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
   assertUniqueIds('Day', days.map((day) => day.id))
   assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
@@ -418,7 +503,7 @@ export async function importTripPlanRecords({
 
   return db.transaction(
     'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses],
     async () => {
       await db.trips.add(trip)
       if (days.length > 0) {
@@ -433,6 +518,10 @@ export async function importTripPlanRecords({
       if (ticketBlobs.length > 0) {
         await db.ticketBlobs.bulkAdd(ticketBlobs)
       }
+      if (ledgerSettings.length > 0) await db.ledgerSettings.bulkAdd(ledgerSettings)
+      if (ledgerParticipants.length > 0) await db.ledgerParticipants.bulkAdd(ledgerParticipants)
+      if (ledgerBudgets.length > 0) await db.ledgerBudgets.bulkAdd(ledgerBudgets)
+      if (ledgerExpenses.length > 0) await db.ledgerExpenses.bulkAdd(ledgerExpenses)
 
       return { title: trip.title, tripId: trip.id }
     },
@@ -445,6 +534,10 @@ export async function replaceTripPlanRecords({
   itineraryItems,
   ticketMetas,
   ticketBlobs,
+  ledgerSettings = [],
+  ledgerParticipants = [],
+  ledgerBudgets = [],
+  ledgerExpenses = [],
 }: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
   assertUniqueIds('Day', days.map((day) => day.id))
   assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
@@ -452,7 +545,7 @@ export async function replaceTripPlanRecords({
 
   return db.transaction(
     'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs],
+    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses],
     async () => {
       await assertIncomingRecordsBelongToTrip({
         days,
@@ -474,6 +567,10 @@ export async function replaceTripPlanRecords({
         existingItems.length > 0 ? db.itineraryItems.bulkDelete(existingItems.map((item) => item.id)) : Promise.resolve(),
         existingTicketIds.length > 0 ? db.ticketMetas.bulkDelete(existingTicketIds) : Promise.resolve(),
         existingTicketIds.length > 0 ? db.ticketBlobs.bulkDelete(existingTicketIds) : Promise.resolve(),
+        db.ledgerSettings.where('tripId').equals(trip.id).delete(),
+        db.ledgerParticipants.where('tripId').equals(trip.id).delete(),
+        db.ledgerBudgets.where('tripId').equals(trip.id).delete(),
+        db.ledgerExpenses.where('tripId').equals(trip.id).delete(),
       ])
 
       await db.trips.put(trip)
@@ -489,6 +586,10 @@ export async function replaceTripPlanRecords({
       if (ticketBlobs.length > 0) {
         await db.ticketBlobs.bulkPut(ticketBlobs)
       }
+      if (ledgerSettings.length > 0) await db.ledgerSettings.bulkPut(ledgerSettings)
+      if (ledgerParticipants.length > 0) await db.ledgerParticipants.bulkPut(ledgerParticipants)
+      if (ledgerBudgets.length > 0) await db.ledgerBudgets.bulkPut(ledgerBudgets)
+      if (ledgerExpenses.length > 0) await db.ledgerExpenses.bulkPut(ledgerExpenses)
 
       return { title: trip.title, tripId: trip.id }
     },

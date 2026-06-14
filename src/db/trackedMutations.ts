@@ -10,6 +10,7 @@ import {
 } from '../lib/objectSyncLocal'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
+import * as ledgerRepo from './ledgerRepositories'
 import { createDemoTrip as createSeedDemoTrip } from './seed'
 
 type MarkDirtyOptions = {
@@ -169,11 +170,15 @@ export async function replaceTripPlanRecords(
 }
 
 async function enqueueTripGraph(tripId: string) {
-  const [trip, days, items, tickets] = await Promise.all([
+  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses] = await Promise.all([
     repo.getTrip(tripId),
     repo.listDaysByTrip(tripId),
     repo.listItemsByTrip(tripId),
     repo.listTicketsByTrip(tripId),
+    ledgerRepo.getLedgerSettingsByTrip(tripId),
+    ledgerRepo.listLedgerParticipants(tripId),
+    ledgerRepo.listLedgerBudgets(tripId),
+    ledgerRepo.listLedgerExpenses(tripId),
   ])
   if (trip) {
     await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
@@ -182,6 +187,10 @@ async function enqueueTripGraph(tripId: string) {
     ...days.map((day) => enqueueObjectUpsert({ object: day, objectType: 'day' as const })),
     ...items.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' as const })),
     ...tickets.map((ticket) => enqueueObjectUpsert({ object: ticket, objectType: 'ticket_meta' as const })),
+    ...(ledgerSettings ? [enqueueObjectUpsert({ object: ledgerSettings, objectType: 'ledger_settings' as const })] : []),
+    ...ledgerParticipants.map((participant) => enqueueObjectUpsert({ object: participant, objectType: 'ledger_participant' as const })),
+    ...ledgerBudgets.map((budget) => enqueueObjectUpsert({ object: budget, objectType: 'ledger_budget' as const })),
+    ...ledgerExpenses.map((expense) => enqueueObjectUpsert({ object: expense, objectType: 'ledger_expense' as const })),
     ...tickets
       .filter((ticket) => (ticket.storageMode ?? 'copy') === 'copy')
       .map(async (ticket) => {

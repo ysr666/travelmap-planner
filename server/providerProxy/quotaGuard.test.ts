@@ -107,10 +107,12 @@ describe('provider proxy quota guard', () => {
     const limits = {
       maxAiDraftRepairRequestsPerWindow: 1,
       maxAiDraftRequestsPerWindow: 1,
+      maxAiExpenseExtractRequestsPerWindow: 1,
       maxAiTripContentEnrichmentRequestsPerWindow: 1,
       maxAiTripEditRequestsPerWindow: 1,
       maxPlaceLookupRequestsPerWindow: 1,
       maxRouteRequestsPerWindow: 1,
+      maxExchangeRateRequestsPerWindow: 1,
       maxTravelInboxClassifyRequestsPerWindow: 1,
       maxTravelSearchRequestsPerWindow: 1,
       windowMs: 1000,
@@ -127,6 +129,8 @@ describe('provider proxy quota guard', () => {
       'travel_inbox_classify',
       'travel_search',
       'place_lookup',
+      'exchange_rate',
+      'ai_expense_extract',
     ]
 
     for (const [index, operation] of operations.entries()) {
@@ -145,9 +149,11 @@ describe('provider proxy quota guard', () => {
       'ai_draft_refine|same-hash',
       'ai_draft_repair|same-hash',
       'ai_draft|same-hash',
+      'ai_expense_extract|same-hash',
       'ai_trip_content|same-hash',
       'ai_trip_daily_tip|same-hash',
       'ai_trip_edit|same-hash',
+      'fx|same-hash',
       'place|same-hash',
       'route|same-hash',
       'search|same-hash',

@@ -125,5 +125,13 @@ describe('TravelConsoleDB migrations', () => {
     await expect(db.travelInboxEntries.toArray()).resolves.toEqual([])
     await expect(db.travelInboxBlobs.toArray()).resolves.toEqual([])
     await expect(db.travelInboxPreviews.toArray()).resolves.toEqual([])
+    expect(db.tables.map((table) => table.name)).toEqual(expect.arrayContaining([
+      'ledgerSettings',
+      'ledgerParticipants',
+      'ledgerBudgets',
+      'ledgerExpenses',
+      'exchangeRateCache',
+    ]))
+    await expect(db.ledgerExpenses.toArray()).resolves.toEqual([])
   })
 })

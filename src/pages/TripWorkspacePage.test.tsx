@@ -52,6 +52,10 @@ vi.mock('../lib/routes', () => ({
 }))
 
 vi.mock('../db', () => ({
+  getLedgerSettingsByTrip: vi.fn().mockResolvedValue(null),
+  listLedgerBudgets: vi.fn().mockResolvedValue([]),
+  listLedgerExpenses: vi.fn().mockResolvedValue([]),
+  listLedgerParticipants: vi.fn().mockResolvedValue([]),
   listItemsByDay: mocks.listItemsByDay,
   listTicketsByTrip: mocks.listTicketsByTrip,
   getTrip: mocks.getTrip,

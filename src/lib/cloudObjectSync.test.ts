@@ -5,12 +5,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createDay,
   createItineraryItem,
+  createLedgerBudget,
+  createLedgerExpense,
+  createLedgerParticipant,
+  createLedgerSettings,
   createTicketMeta,
   createTrip,
   getTicketBlob,
   getItineraryItem,
+  getLedgerExpense,
   saveTicketBlob,
   updateItineraryItem,
+  updateLedgerExpense,
 } from '../db'
 import { db } from '../db/database'
 import { resetAutoSnapshotBackupForTests } from './autoSnapshotBackup'
@@ -103,6 +109,24 @@ describe('cloud object sync ticket blob cache', () => {
     await expect(listPendingObjectSyncConflicts(trip.id)).resolves.toHaveLength(0)
   })
 
+  it('uploads and merges owner-only ledger objects through the cloud object fixture', async () => {
+    const trip = await createTrip({ destination: '日本东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京账本' })
+    await createLedgerSettings({ homeCurrency: 'CNY', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id })
+    const participant = await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
+    await createLedgerBudget({ amountMinor: 10000, currency: 'JPY', scope: 'trip', tripId: trip.id })
+    const expense = await createLedgerExpense({ amountMinor: 1200, category: 'food', currency: 'JPY', date: '2026-04-01', payerParticipantId: participant.id, source: { kind: 'manual' }, splitMode: 'equal', splitShares: [{ participantId: participant.id, weight: 1 }], status: 'confirmed', title: '晚餐', tripId: trip.id })
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+
+    await uploadTripCloudBackup(trip.id)
+    const firstFixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as { objectRows?: Array<{ object_id: string; object_type: string }> }
+    expect(firstFixture.objectRows?.map((row) => row.object_type)).toEqual(expect.arrayContaining(['ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense']))
+
+    await updateLedgerExpense(expense.id, { title: '此设备晚餐' })
+    mutateFixtureObjectRow('ledger_expense', expense.id, { category: 'other' }, 50_000)
+    await uploadTripCloudBackup(trip.id)
+    await expect(getLedgerExpense(expense.id)).resolves.toMatchObject({ category: 'other', title: '此设备晚餐' })
+  })
+
   it('keeps same-field conflicts pending until the user resolves them', async () => {
     const { item, trip } = await seedTripWithItem()
     window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
@@ -174,6 +198,10 @@ async function seedTripWithItem() {
 }
 
 function mutateFixtureItemRow(itemId: string, patch: Record<string, unknown>, timestamp: number) {
+  mutateFixtureObjectRow('item', itemId, patch, timestamp)
+}
+
+function mutateFixtureObjectRow(objectType: string, objectId: string, patch: Record<string, unknown>, timestamp: number) {
   const fixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as {
     objectRows?: Array<{
       object_id: string
@@ -182,9 +210,9 @@ function mutateFixtureItemRow(itemId: string, patch: Record<string, unknown>, ti
       updated_at_ms: number
     }>
   }
-  const row = fixture.objectRows?.find((candidate) => candidate.object_type === 'item' && candidate.object_id === itemId)
+  const row = fixture.objectRows?.find((candidate) => candidate.object_type === objectType && candidate.object_id === objectId)
   if (!row || !row.payload) {
-    throw new Error('fixture item row not found')
+    throw new Error('fixture object row not found')
   }
   row.payload = {
     ...row.payload,

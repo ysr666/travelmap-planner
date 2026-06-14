@@ -3,6 +3,8 @@ import {
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
   validateProviderProxyRoutePreviewRequest,
+  validateProviderProxyExchangeRateRequest,
+  validateProviderProxyAiExpenseExtractRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
@@ -33,6 +35,12 @@ import {
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyErrorResponse,
+  type ProviderProxyExchangeRateRequest,
+  type ProviderProxyExchangeRateResponse,
+  type ProviderProxyExchangeRateSuccessResponse,
+  type ProviderProxyAiExpenseExtractRequest,
+  type ProviderProxyAiExpenseExtractResponse,
+  type ProviderProxyAiExpenseExtractSuccessResponse,
   type ProviderProxyPlaceLookupRequest,
   type ProviderProxyPlaceLookupResponse,
   type ProviderProxyPlaceLookupSuccessResponse,
@@ -156,6 +164,71 @@ export async function fetchProviderProxyRoutePreview(
   if (!parsed.ok) {
     throw new ProviderProxyClientError(parsed, response.status)
   }
+  return parsed
+}
+
+export async function fetchProviderProxyExchangeRate(
+  request: ProviderProxyExchangeRateRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyExchangeRateSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyExchangeRateRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'exchange_rate' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'exchange_rate' }), response.status)
+  }
+  const parsed = parseProviderProxyExchangeRateResponse(body)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
+  return parsed
+}
+
+export async function fetchProviderProxyAiExpenseExtract(
+  request: ProviderProxyAiExpenseExtractRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiExpenseExtractSuccessResponse> {
+  const requestWithSession = { ...request, quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage) }
+  const validation = validateProviderProxyAiExpenseExtractRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' }), response.status)
+  }
+  const parsed = parseProviderProxyAiExpenseExtractResponse(body)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
   return parsed
 }
 
@@ -761,6 +834,56 @@ function parseProviderProxyResponse(input: unknown): ProviderProxyRoutePreviewRe
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error' })
+}
+
+function parseProviderProxyExchangeRateResponse(input: unknown): ProviderProxyExchangeRateResponse {
+  const record = readRecord(input)
+  if (record.ok === true && record.operation === 'exchange_rate') {
+    const rates = Array.isArray(record.rates) ? record.rates : []
+    const validRates = rates.every((rate) => {
+      const item = readRecord(rate)
+      return typeof item.quoteCurrency === 'string' && /^[A-Z]{3}$/.test(item.quoteCurrency) && typeof item.rate === 'string' && /^\d+(?:\.\d+)?$/.test(item.rate)
+    })
+    if (
+      record.provider === 'frankfurter' &&
+      typeof record.requestedDate === 'string' &&
+      typeof record.effectiveDate === 'string' &&
+      typeof record.baseCurrency === 'string' &&
+      typeof record.sourceUrl === 'string' &&
+      typeof record.fetchedAt === 'string' &&
+      rates.length > 0 &&
+      validRates
+    ) {
+      return record as unknown as ProviderProxyExchangeRateSuccessResponse
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'exchange_rate' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'exchange_rate'),
+      operation: 'exchange_rate',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'exchange_rate' })
+}
+
+function parseProviderProxyAiExpenseExtractResponse(input: unknown): ProviderProxyAiExpenseExtractResponse {
+  const record = readRecord(input)
+  if (record.ok === true && record.operation === 'ai_expense_extract' && (record.source === 'mock' || record.source === 'ai') && Array.isArray(record.suggestions)) {
+    const suggestions = record.suggestions.map((value) => readRecord(value))
+    if (suggestions.every((suggestion) => typeof suggestion.candidateId === 'string')) {
+      return record as unknown as ProviderProxyAiExpenseExtractSuccessResponse
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'ai_expense_extract' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({ code, operation: 'ai_expense_extract' })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' })
 }
 
 function parseProviderProxyRouteOrderSuggestionResponse(

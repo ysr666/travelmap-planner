@@ -13,6 +13,8 @@ import {
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+  PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
+  PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
   buildProviderProxyErrorResponse,
   defaultProviderProxyErrorMessage,
   isProviderProxyConcreteProvider,
@@ -29,6 +31,8 @@ import {
   validateProviderProxyTripOperationsSummaryRequest,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
+  validateProviderProxyExchangeRateRequest,
+  validateProviderProxyAiExpenseExtractRequest,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRefineRequest,
@@ -157,6 +161,8 @@ import {
   createUnavailableTravelInboxClassifyProvider,
   type TravelInboxClassifyProvider,
 } from './travelInboxClassifyProvider'
+import { fetchFrankfurterExchangeRates } from './exchangeRateProvider'
+import { extractExpensesWithProvider } from './expenseExtractProvider'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -280,6 +286,14 @@ export async function handleProviderProxyRequest({
     return handleTravelSearchRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
+  if (operation === PROVIDER_PROXY_EXCHANGE_RATE_OPERATION) {
+    return handleExchangeRateRequest({ body, corsHeaders, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION) {
+    return handleAiExpenseExtractRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
   if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION) {
     return handlePlaceLookupRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
@@ -305,6 +319,104 @@ export async function handleProviderProxyRequest({
   }
 
   return handleRoutePreviewRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+}
+
+async function handleExchangeRateRequest({
+  body,
+  corsHeaders,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyExchangeRateRequest(body)
+  if (!validation.ok) return jsonResponse(validation.error, 400, corsHeaders)
+  const exchangeRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: exchangeRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: exchangeRequest.requestId,
+  })
+  if (quotaResponse) return quotaResponse
+  try {
+    const result = await fetchFrankfurterExchangeRates(exchangeRequest, fetcher)
+    if (!result.ok) {
+      const status = result.errorCode === 'provider_unavailable' ? 503 : 502
+      throw new ProviderProxyServerError(result.errorCode, status)
+    }
+    return jsonResponse(result.response, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_EXCHANGE_RATE_OPERATION, exchangeRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+async function handleAiExpenseExtractRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiExpenseExtractRequest(body)
+  if (!validation.ok) return jsonResponse(validation.error, 400, corsHeaders)
+  const expenseRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: expenseRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: expenseRequest.requestId,
+  })
+  if (quotaResponse) return quotaResponse
+  try {
+    const result = await extractExpensesWithProvider(env, expenseRequest, fetcher, isMockMode(env))
+    if (!result.ok) {
+      const status = result.errorCode === 'provider_unavailable' ? 503 : 502
+      throw new ProviderProxyServerError(result.errorCode, status)
+    }
+    return jsonResponse({
+      ok: true,
+      operation: PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
+      requestId: expenseRequest.requestId,
+      source: result.source,
+      suggestions: result.suggestions,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION, expenseRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
 }
 
 async function handleAiTripDraftRequest({

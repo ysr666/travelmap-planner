@@ -16,7 +16,7 @@ import type {
   ExistingTripImportProviderResult,
   ExistingTripImportSourceKind,
 } from './existingTripImport'
-import type { TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
+import type { LedgerExpenseCategory, TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -32,6 +32,8 @@ export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations
 export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
 export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_classify' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
+export const PROVIDER_PROXY_EXCHANGE_RATE_OPERATION = 'exchange_rate' as const
+export const PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION = 'ai_expense_extract' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS = 10
@@ -45,8 +47,10 @@ export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
+export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
+export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -124,6 +128,67 @@ export type ProviderProxyErrorResponse = {
 export type ProviderProxyRoutePreviewResponse =
   | ProviderProxyRoutePreviewSuccessResponse
   | ProviderProxyErrorResponse
+
+export type ProviderProxyExchangeRateRequest = {
+  operation: typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION
+  requestedDate: string
+  baseCurrency: string
+  quoteCurrencies: string[]
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyExchangeRateSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION
+  provider: 'frankfurter'
+  requestedDate: string
+  effectiveDate: string
+  baseCurrency: string
+  rates: Array<{ quoteCurrency: string; rate: string }>
+  sourceUrl: string
+  fetchedAt: string
+  requestId?: string
+}
+
+export type ProviderProxyExchangeRateResponse = ProviderProxyExchangeRateSuccessResponse | ProviderProxyErrorResponse
+export type ProviderProxyExchangeRateValidationResult =
+  | { ok: true; request: ProviderProxyExchangeRateRequest }
+  | { ok: false; error: ProviderProxyErrorResponse }
+
+export type ProviderProxyAiExpenseExtractRequest = {
+  operation: typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION
+  candidates: Array<{
+    candidateId: string
+    title: string
+    text: string
+  }>
+  participants: Array<{ alias: string; displayName: string }>
+  defaultCurrency: string
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyAiExpenseExtractSuggestion = {
+  candidateId: string
+  amount?: string
+  currency?: string
+  category?: LedgerExpenseCategory
+  payerAlias?: string
+}
+
+export type ProviderProxyAiExpenseExtractSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION
+  source: 'mock' | 'ai'
+  suggestions: ProviderProxyAiExpenseExtractSuggestion[]
+  requestId?: string
+}
+
+export type ProviderProxyAiExpenseExtractResponse = ProviderProxyAiExpenseExtractSuccessResponse | ProviderProxyErrorResponse
+export type ProviderProxyAiExpenseExtractValidationResult =
+  | { ok: true; request: ProviderProxyAiExpenseExtractRequest }
+  | { ok: false; error: ProviderProxyErrorResponse }
 
 export type ProviderProxyValidationResult =
   | { ok: true; request: ProviderProxyRoutePreviewRequest }
@@ -2615,6 +2680,93 @@ function readExistingTripImportSource(input: unknown): ProviderProxyExistingTrip
       ? record.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim().length > 0).slice(0, 5)
       : undefined,
   }
+}
+
+export function validateProviderProxyExchangeRateRequest(input: unknown): ProviderProxyExchangeRateValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (record.operation !== PROVIDER_PROXY_EXCHANGE_RATE_OPERATION) {
+    return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', operation: PROVIDER_PROXY_EXCHANGE_RATE_OPERATION, requestId }), ok: false }
+  }
+  const requestedDate = typeof record.requestedDate === 'string' ? record.requestedDate.trim() : ''
+  const baseCurrency = normalizeCurrency(record.baseCurrency)
+  const quoteCurrencies = Array.isArray(record.quoteCurrencies)
+    ? [...new Set(record.quoteCurrencies.map(normalizeCurrency).filter((value): value is string => Boolean(value)))]
+    : []
+  if (!isValidPlainDate(requestedDate) || !baseCurrency || quoteCurrencies.length < 1 || quoteCurrencies.length > 2 || quoteCurrencies.includes(baseCurrency)) {
+    return {
+      error: buildProviderProxyErrorResponse({
+        code: 'invalid_request',
+        message: '汇率请求必须包含有效日期、基础币种和 1 至 2 个不同目标币种。',
+        operation: PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
+        requestId,
+      }),
+      ok: false,
+    }
+  }
+  return {
+    ok: true,
+    request: {
+      baseCurrency,
+      operation: PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
+      quoteCurrencies,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestedDate,
+      requestId,
+    },
+  }
+}
+
+export function validateProviderProxyAiExpenseExtractRequest(input: unknown): ProviderProxyAiExpenseExtractValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (record.operation !== PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION) {
+    return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', operation: PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION, requestId }), ok: false }
+  }
+  const defaultCurrency = normalizeCurrency(record.defaultCurrency)
+  const rawCandidates = Array.isArray(record.candidates) ? record.candidates.slice(0, 20) : []
+  const candidates = rawCandidates.map((value) => {
+    const candidate = readRecord(value)
+    const candidateId = readOptionalString(candidate.candidateId, 120)
+    const title = readOptionalString(candidate.title, 240)
+    const text = readOptionalString(candidate.text, 8_000)
+    return candidateId && title && text ? { candidateId, text, title } : undefined
+  }).filter((value): value is { candidateId: string; text: string; title: string } => Boolean(value))
+  const rawParticipants = Array.isArray(record.participants) ? record.participants.slice(0, 30) : []
+  const participants = rawParticipants.map((value) => {
+    const participant = readRecord(value)
+    const alias = readOptionalString(participant.alias, 40)
+    const displayName = readOptionalString(participant.displayName, 120)
+    return alias && displayName ? { alias, displayName } : undefined
+  }).filter((value): value is { alias: string; displayName: string } => Boolean(value))
+  if (!defaultCurrency || candidates.length === 0 || candidates.length !== rawCandidates.length || participants.length !== rawParticipants.length) {
+    return {
+      error: buildProviderProxyErrorResponse({
+        code: 'invalid_request',
+        message: '费用识别请求格式不正确。',
+        operation: PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
+        requestId,
+      }),
+      ok: false,
+    }
+  }
+  return {
+    ok: true,
+    request: {
+      candidates,
+      defaultCurrency,
+      operation: PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
+      participants,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+    },
+  }
+}
+
+function normalizeCurrency(value: unknown) {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toUpperCase()
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : undefined
 }
 
 export function validateProviderProxyTravelSearchRequest(input: unknown): ProviderProxyTravelSearchValidationResult {

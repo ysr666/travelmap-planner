@@ -1,9 +1,13 @@
 import type { Session, User } from '@supabase/supabase-js'
 import {
   getTicketBlob,
+  getLedgerSettingsByTrip,
   getTrip,
   listDaysByTrip,
   listItemsByTrip,
+  listLedgerBudgets,
+  listLedgerExpenses,
+  listLedgerParticipants,
   listTicketsByTrip,
   replaceTripPlanRecords,
 } from '../db'
@@ -17,13 +21,13 @@ import {
 import { emitTravelDataChanged } from './dataEvents'
 import { requireSupabaseClient } from './supabaseClient'
 import { shouldExpectTicketBlob } from './tickets'
-import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketBlob, TicketMeta, Trip } from '../types'
 
 export { getSupabaseConfigStatus } from './supabaseClient'
 
 const CLOUD_BACKUP_BUCKET = 'trip-backups'
 const CLOUD_BACKUP_TABLE = 'cloud_trip_backups'
-const CLOUD_BACKUP_SCHEMA_VERSION = 1
+const CLOUD_BACKUP_SCHEMA_VERSION = 2
 const CLOUD_BACKUP_TYPE = 'cloud-trip-backup'
 const CLOUD_APP_NAME = '旅图'
 const E2E_CLOUD_FIXTURE_KEY = 'tripmap:e2e:cloud-fixture'
@@ -37,7 +41,7 @@ export type CloudFileRef = {
 }
 
 export type CloudTripSnapshot = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   type: 'cloud-trip-backup'
   appName: string
   exportedAt: string
@@ -47,6 +51,10 @@ export type CloudTripSnapshot = {
   days: Day[]
   itineraryItems: ItineraryItem[]
   ticketMetas: TicketMeta[]
+  ledgerSettings?: LedgerSettings[]
+  ledgerParticipants?: LedgerParticipant[]
+  ledgerBudgets?: LedgerBudget[]
+  ledgerExpenses?: LedgerExpense[]
   fileRefs: CloudFileRef[]
   warnings: string[]
 }
@@ -100,6 +108,10 @@ export type BuildCloudSnapshotInput = {
   itineraryItems: ItineraryItem[]
   ticketMetas: TicketMeta[]
   ticketBlobs: TicketBlob[]
+  ledgerSettings?: LedgerSettings[]
+  ledgerParticipants?: LedgerParticipant[]
+  ledgerBudgets?: LedgerBudget[]
+  ledgerExpenses?: LedgerExpense[]
 }
 
 export type BuildCloudSnapshotResult = {
@@ -613,6 +625,10 @@ export function buildCloudSnapshotFromRecords({
   itineraryItems,
   ticketBlobs,
   ticketMetas,
+  ledgerSettings = [],
+  ledgerParticipants = [],
+  ledgerBudgets = [],
+  ledgerExpenses = [],
   trip,
   userId,
 }: BuildCloudSnapshotInput): BuildCloudSnapshotResult {
@@ -655,6 +671,10 @@ export function buildCloudSnapshotFromRecords({
     fileRefs,
     itineraryItems,
     originalTripId: trip.id,
+    ledgerBudgets,
+    ledgerExpenses,
+    ledgerParticipants,
+    ledgerSettings,
     schemaVersion: CLOUD_BACKUP_SCHEMA_VERSION,
     ticketMetas,
     trip,
@@ -712,6 +732,10 @@ export function buildCloudRestoreRecords(
     ...ticket,
     tripId: snapshot.trip.id,
   }))
+  const ledgerSettings = (snapshot.ledgerSettings ?? []).map((settings) => ({ ...settings, tripId: snapshot.trip.id }))
+  const ledgerParticipants = (snapshot.ledgerParticipants ?? []).map((participant) => ({ ...participant, tripId: snapshot.trip.id }))
+  const ledgerBudgets = (snapshot.ledgerBudgets ?? []).map((budget) => ({ ...budget, tripId: snapshot.trip.id }))
+  const ledgerExpenses = (snapshot.ledgerExpenses ?? []).map((expense) => ({ ...expense, tripId: snapshot.trip.id }))
   const copyTicketIds = new Set(
     snapshot.ticketMetas.filter(shouldExpectTicketBlob).map((ticket) => ticket.id),
   )
@@ -727,13 +751,27 @@ export function buildCloudRestoreRecords(
   return {
     days,
     itineraryItems,
+    ledgerBudgets,
+    ledgerExpenses,
+    ledgerParticipants,
+    ledgerSettings,
     ticketBlobs: nextTicketBlobs,
     ticketMetas,
     trip,
   }
 }
 
-type CloudRestoreRecords = ReturnType<typeof buildCloudRestoreRecords>
+type CloudRestoreRecords = {
+  trip: Trip
+  days: Day[]
+  itineraryItems: ItineraryItem[]
+  ticketMetas: TicketMeta[]
+  ticketBlobs: TicketBlob[]
+  ledgerSettings?: LedgerSettings[]
+  ledgerParticipants?: LedgerParticipant[]
+  ledgerBudgets?: LedgerBudget[]
+  ledgerExpenses?: LedgerExpense[]
+}
 
 export async function verifyRestoredCloudRecords(records: CloudRestoreRecords) {
   const [restoredTrip, restoredDays, restoredItems, restoredTickets] = await Promise.all([
@@ -810,7 +848,7 @@ export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
   if (!isRecord(value)) {
     throw new Error('云端同步 snapshot.json 格式不正确。')
   }
-  if (value.schemaVersion !== CLOUD_BACKUP_SCHEMA_VERSION) {
+  if (value.schemaVersion !== 1 && value.schemaVersion !== CLOUD_BACKUP_SCHEMA_VERSION) {
     throw new Error(`不支持的云端同步版本：${String(value.schemaVersion)}`)
   }
   if (value.type !== CLOUD_BACKUP_TYPE) {
@@ -830,13 +868,17 @@ export function parseCloudSnapshot(value: unknown): CloudTripSnapshot {
     exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : '',
     fileRefs: value.fileRefs as CloudFileRef[],
     itineraryItems: value.itineraryItems as ItineraryItem[],
+    ledgerBudgets: Array.isArray(value.ledgerBudgets) ? value.ledgerBudgets as LedgerBudget[] : [],
+    ledgerExpenses: Array.isArray(value.ledgerExpenses) ? value.ledgerExpenses as LedgerExpense[] : [],
+    ledgerParticipants: Array.isArray(value.ledgerParticipants) ? value.ledgerParticipants as LedgerParticipant[] : [],
+    ledgerSettings: Array.isArray(value.ledgerSettings) ? value.ledgerSettings as LedgerSettings[] : [],
     originalTripId:
       typeof value.originalTripId === 'string'
         ? value.originalTripId
         : typeof value.trip.id === 'string'
           ? value.trip.id
           : '',
-    schemaVersion: CLOUD_BACKUP_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     ticketMetas: value.ticketMetas as TicketMeta[],
     trip: value.trip as Trip,
     type: CLOUD_BACKUP_TYPE,
@@ -866,10 +908,14 @@ async function buildCloudSnapshotForTrip(tripId: string, userId: string, backupI
     throw new Error('没有找到要上传的旅行。')
   }
 
-  const [days, itineraryItems, ticketMetas] = await Promise.all([
+  const [days, itineraryItems, ticketMetas, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses] = await Promise.all([
     listDaysByTrip(tripId),
     listItemsByTrip(tripId),
     listTicketsByTrip(tripId),
+    getLedgerSettingsByTrip(tripId),
+    listLedgerParticipants(tripId),
+    listLedgerBudgets(tripId),
+    listLedgerExpenses(tripId),
   ])
   const ticketBlobs = (
     await Promise.all(
@@ -883,6 +929,10 @@ async function buildCloudSnapshotForTrip(tripId: string, userId: string, backupI
     days,
     exportedAt: new Date().toISOString(),
     itineraryItems,
+    ledgerBudgets,
+    ledgerExpenses,
+    ledgerParticipants,
+    ledgerSettings: ledgerSettings ? [ledgerSettings] : [],
     ticketBlobs,
     ticketMetas,
     trip,
@@ -1071,6 +1121,22 @@ function validateSnapshotGraph(snapshot: CloudTripSnapshot) {
     if (!ticket || !shouldExpectTicketBlob(ticket)) {
       throw new Error('云端同步中的文件引用只能绑定 copy 模式票据。')
     }
+  }
+
+  const participantIds = new Set((snapshot.ledgerParticipants ?? []).map((participant) => participant.id))
+  for (const settings of snapshot.ledgerSettings ?? []) {
+    if (!settings.id || settings.tripId !== snapshot.trip.id) throw new Error('云端同步中的账本设置引用不正确。')
+  }
+  for (const participant of snapshot.ledgerParticipants ?? []) {
+    if (!participant.id || participant.tripId !== snapshot.trip.id || !participant.displayName) throw new Error('云端同步中的账本参与人引用不正确。')
+  }
+  for (const budget of snapshot.ledgerBudgets ?? []) {
+    if (!budget.id || budget.tripId !== snapshot.trip.id) throw new Error('云端同步中的预算引用不正确。')
+  }
+  for (const expense of snapshot.ledgerExpenses ?? []) {
+    if (!expense.id || expense.tripId !== snapshot.trip.id || !Array.isArray(expense.splitShares)) throw new Error('云端同步中的费用引用不正确。')
+    if (expense.payerParticipantId && !participantIds.has(expense.payerParticipantId)) throw new Error('云端同步中的费用付款人不存在。')
+    if (expense.splitShares.some((share) => !participantIds.has(share.participantId))) throw new Error('云端同步中的费用分摊参与人不存在。')
   }
 }
 

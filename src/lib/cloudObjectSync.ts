@@ -3,8 +3,12 @@ import {
   getTicketBlob,
   getTicketMeta,
   getTrip,
+  getLedgerSettingsByTrip,
   listDaysByTrip,
   listItemsByTrip,
+  listLedgerBudgets,
+  listLedgerExpenses,
+  listLedgerParticipants,
   listTicketsByTrip,
 } from '../db'
 import { db } from '../db/database'
@@ -53,6 +57,10 @@ import { recordTripWriteForSync } from './tripSyncQueue'
 import type {
   Day,
   ItineraryItem,
+  LedgerBudget,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
   ObjectSyncBase,
   ObjectSyncConflict,
   ObjectSyncConflictField,
@@ -525,11 +533,15 @@ async function buildObjectSyncPushPlan({
 }
 
 async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): Promise<CloudSyncObjectRow[]> {
-  const [trip, days, items, tickets] = await Promise.all([
+  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses] = await Promise.all([
     getTrip(tripId),
     listDaysByTrip(tripId),
     listItemsByTrip(tripId),
     listTicketsByTrip(tripId),
+    getLedgerSettingsByTrip(tripId),
+    listLedgerParticipants(tripId),
+    listLedgerBudgets(tripId),
+    listLedgerExpenses(tripId),
   ])
   if (!trip) return []
   const deviceId = getObjectSyncDeviceId()
@@ -538,6 +550,10 @@ async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): 
     ...days.map((day) => buildCloudObjectUpsertRow({ object: day, objectType: 'day' as const, tripId, userId, deviceId })),
     ...items.map((item) => buildCloudObjectUpsertRow({ object: item, objectType: 'item' as const, tripId, userId, deviceId })),
     ...tickets.map((ticket) => buildCloudObjectUpsertRow({ object: ticket, objectType: 'ticket_meta' as const, tripId, userId, deviceId })),
+    ...(ledgerSettings ? [buildCloudObjectUpsertRow({ object: ledgerSettings, objectType: 'ledger_settings' as const, tripId, userId, deviceId })] : []),
+    ...ledgerParticipants.map((participant) => buildCloudObjectUpsertRow({ object: participant, objectType: 'ledger_participant' as const, tripId, userId, deviceId })),
+    ...ledgerBudgets.map((budget) => buildCloudObjectUpsertRow({ object: budget, objectType: 'ledger_budget' as const, tripId, userId, deviceId })),
+    ...ledgerExpenses.map((expense) => buildCloudObjectUpsertRow({ object: expense, objectType: 'ledger_expense' as const, tripId, userId, deviceId })),
   ]
 }
 
@@ -944,6 +960,10 @@ async function applyCloudObjectRows(rows: CloudSyncObjectRow[]) {
       db.itineraryItems,
       db.ticketMetas,
       db.ticketBlobs,
+      db.ledgerSettings,
+      db.ledgerParticipants,
+      db.ledgerBudgets,
+      db.ledgerExpenses,
       db.objectSyncStates,
       db.objectSyncBases,
       db.objectSyncConflicts,
@@ -1001,22 +1021,42 @@ async function applyRemotePayload(row: CloudSyncObjectRow) {
   } else if (row.object_type === 'ticket_meta') {
     if (isSameJsonRecord(await db.ticketMetas.get(row.object_id), row.payload)) return false
     await db.ticketMetas.put(row.payload as TicketMeta)
+  } else if (row.object_type === 'ledger_settings') {
+    if (isSameJsonRecord(await db.ledgerSettings.get(row.object_id), row.payload)) return false
+    await db.ledgerSettings.put(row.payload as LedgerSettings)
+  } else if (row.object_type === 'ledger_participant') {
+    if (isSameJsonRecord(await db.ledgerParticipants.get(row.object_id), row.payload)) return false
+    await db.ledgerParticipants.put(row.payload as LedgerParticipant)
+  } else if (row.object_type === 'ledger_budget') {
+    if (isSameJsonRecord(await db.ledgerBudgets.get(row.object_id), row.payload)) return false
+    await db.ledgerBudgets.put(row.payload as LedgerBudget)
+  } else if (row.object_type === 'ledger_expense') {
+    if (isSameJsonRecord(await db.ledgerExpenses.get(row.object_id), row.payload)) return false
+    await db.ledgerExpenses.put(row.payload as LedgerExpense)
   }
   return true
 }
 
 async function applyResolvedPayload(objectType: SyncObjectType, payload: SyncObjectPayload) {
-  await db.transaction('rw', db.trips, db.days, db.itineraryItems, db.ticketMetas, async () => {
+  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses], async () => {
     if (objectType === 'trip') {
       await db.trips.put(payload as Trip)
     } else {
-      await db.trips.update((payload as Day | ItineraryItem | TicketMeta).tripId, { updatedAt: Date.now() })
+      await db.trips.update((payload as Exclude<SyncObjectPayload, Trip>).tripId, { updatedAt: Date.now() })
       if (objectType === 'day') {
         await db.days.put(payload as Day)
       } else if (objectType === 'item') {
         await db.itineraryItems.put(payload as ItineraryItem)
-      } else {
+      } else if (objectType === 'ticket_meta') {
         await db.ticketMetas.put(payload as TicketMeta)
+      } else if (objectType === 'ledger_settings') {
+        await db.ledgerSettings.put(payload as LedgerSettings)
+      } else if (objectType === 'ledger_participant') {
+        await db.ledgerParticipants.put(payload as LedgerParticipant)
+      } else if (objectType === 'ledger_budget') {
+        await db.ledgerBudgets.put(payload as LedgerBudget)
+      } else {
+        await db.ledgerExpenses.put(payload as LedgerExpense)
       }
     }
   })
@@ -1029,8 +1069,16 @@ async function enqueueResolvedPayload(objectType: SyncObjectType, payload: SyncO
     await enqueueObjectUpsert({ object: payload as Day, objectType: 'day' })
   } else if (objectType === 'item') {
     await enqueueObjectUpsert({ object: payload as ItineraryItem, objectType: 'item' })
-  } else {
+  } else if (objectType === 'ticket_meta') {
     await enqueueObjectUpsert({ object: payload as TicketMeta, objectType: 'ticket_meta' })
+  } else if (objectType === 'ledger_settings') {
+    await enqueueObjectUpsert({ object: payload as LedgerSettings, objectType: 'ledger_settings' })
+  } else if (objectType === 'ledger_participant') {
+    await enqueueObjectUpsert({ object: payload as LedgerParticipant, objectType: 'ledger_participant' })
+  } else if (objectType === 'ledger_budget') {
+    await enqueueObjectUpsert({ object: payload as LedgerBudget, objectType: 'ledger_budget' })
+  } else {
+    await enqueueObjectUpsert({ object: payload as LedgerExpense, objectType: 'ledger_expense' })
   }
 }
 
@@ -1048,12 +1096,24 @@ async function applyRemoteDelete(row: CloudSyncObjectRow) {
     if (!await db.ticketMetas.get(row.object_id)) return false
     await db.ticketMetas.delete(row.object_id)
     await db.ticketBlobs.delete(row.object_id)
+  } else if (row.object_type === 'ledger_settings') {
+    if (!await db.ledgerSettings.get(row.object_id)) return false
+    await db.ledgerSettings.delete(row.object_id)
+  } else if (row.object_type === 'ledger_participant') {
+    if (!await db.ledgerParticipants.get(row.object_id)) return false
+    await db.ledgerParticipants.delete(row.object_id)
+  } else if (row.object_type === 'ledger_budget') {
+    if (!await db.ledgerBudgets.get(row.object_id)) return false
+    await db.ledgerBudgets.delete(row.object_id)
+  } else if (row.object_type === 'ledger_expense') {
+    if (!await db.ledgerExpenses.get(row.object_id)) return false
+    await db.ledgerExpenses.delete(row.object_id)
   }
   return true
 }
 
 async function applyResolvedDelete(objectType: SyncObjectType, objectId: string) {
-  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs], async () => {
+  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses], async () => {
     if (objectType === 'trip') {
       await db.trips.delete(objectId)
     } else if (objectType === 'day') {
@@ -1064,11 +1124,27 @@ async function applyResolvedDelete(objectType: SyncObjectType, objectId: string)
       const item = await db.itineraryItems.get(objectId)
       if (item) await db.trips.update(item.tripId, { updatedAt: Date.now() })
       await db.itineraryItems.delete(objectId)
-    } else {
+    } else if (objectType === 'ticket_meta') {
       const ticket = await db.ticketMetas.get(objectId)
       if (ticket) await db.trips.update(ticket.tripId, { updatedAt: Date.now() })
       await db.ticketMetas.delete(objectId)
       await db.ticketBlobs.delete(objectId)
+    } else if (objectType === 'ledger_settings') {
+      const record = await db.ledgerSettings.get(objectId)
+      if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
+      await db.ledgerSettings.delete(objectId)
+    } else if (objectType === 'ledger_participant') {
+      const record = await db.ledgerParticipants.get(objectId)
+      if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
+      await db.ledgerParticipants.delete(objectId)
+    } else if (objectType === 'ledger_budget') {
+      const record = await db.ledgerBudgets.get(objectId)
+      if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
+      await db.ledgerBudgets.delete(objectId)
+    } else {
+      const record = await db.ledgerExpenses.get(objectId)
+      if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
+      await db.ledgerExpenses.delete(objectId)
     }
   })
 }
@@ -1124,7 +1200,7 @@ function buildCloudObjectUpsertRow({
   userId,
 }: {
   deviceId: string
-  object: Day | ItineraryItem | TicketMeta | Trip
+  object: SyncObjectPayload
   objectType: SyncObjectType
   tripId: string
   userId: string
@@ -1158,9 +1234,9 @@ function createStableObjectOpId(objectType: SyncObjectType, objectId: string, up
   return `op:${objectType}:${objectId}:${updatedAtMs}`
 }
 
-function getPayloadUpdatedAt(objectType: SyncObjectType, object: Day | ItineraryItem | TicketMeta | Trip) {
+function getPayloadUpdatedAt(objectType: SyncObjectType, object: SyncObjectPayload) {
   if (objectType === 'day') return Date.now()
-  return (object as ItineraryItem | TicketMeta | Trip).updatedAt
+  return (object as Exclude<SyncObjectPayload, Day>).updatedAt
 }
 
 function buildCloudTicketBlobRow(userId: string, state: TicketBlobSyncState): CloudTicketBlobRow {

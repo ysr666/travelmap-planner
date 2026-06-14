@@ -10,6 +10,7 @@ import { TripOperationsPanel } from '../components/trip/TripOperationsPanel'
 import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
 import { TripReadinessCenterPanel } from '../components/trip/TripReadinessCenterPanel'
 import { SharedTripPanel } from '../components/trip/SharedTripPanel'
+import { LedgerSummaryCard } from '../components/trip/LedgerSummaryCard'
 import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
 import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
 import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePanel'
@@ -594,6 +595,8 @@ export function TripWorkspacePage() {
                 trip={trip}
               />
             ) : null}
+
+            <LedgerSummaryCard trip={trip} />
 
             <SharedTripPanel
               days={days}

@@ -4,6 +4,7 @@ import { cpus } from 'node:os'
 const playwrightProxy = process.env.PLAYWRIGHT_PROXY?.trim()
 const playwrightChannel = process.env.PLAYWRIGHT_CHANNEL?.trim()
 const playwrightWorkers = resolveWorkerCount()
+const reuseExistingServer = !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER === '1'
 
 export default defineConfig({
   testDir: './e2e',
@@ -22,9 +23,9 @@ export default defineConfig({
     } : {}),
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1',
+    command: 'npm run build && npm run preview -- --host 127.0.0.1',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer,
     timeout: 120_000,
   },
   projects: [

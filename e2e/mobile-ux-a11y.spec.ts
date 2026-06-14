@@ -5,6 +5,7 @@ import { clearTravelDatabase, clickTripCard, getHashParam } from './helpers'
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 const SHORT_MOBILE_VIEWPORT = { width: 390, height: 667 }
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost'])
+type BrowserIssueTracker = ReturnType<typeof createBrowserIssueTracker>
 
 test.describe('390px mobile UX and accessibility', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,44 +14,39 @@ test.describe('390px mobile UX and accessibility', () => {
   })
 
   test('primary user paths avoid overflow, inaccessible controls, and serious axe issues', async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (message) => {
-      if (message.type() === 'error') {
-        consoleErrors.push(message.text())
-      }
-    })
+    const browserIssues = createBrowserIssueTracker(page)
 
     await clearTravelDatabase(page)
     await page.evaluate(() => window.localStorage.setItem('tripmap:appearance', 'light'))
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await auditMobilePage(page, 'home-empty')
+    await auditMobilePage(page, 'home-empty', browserIssues)
 
     await page.getByRole('button', { name: '创建示例旅行' }).click()
     await expect(page.getByTestId('trip-card')).toBeVisible()
-    await auditMobilePage(page, 'home-demo')
+    await auditMobilePage(page, 'home-demo', browserIssues)
 
     const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
     await clickTripCard(tripCard)
     await expect(page).toHaveURL(/#\/trip\?tripId=/)
     const tripId = getHashParam(page.url(), 'tripId')
     expect(tripId).toBeTruthy()
-    await auditMobilePage(page, 'trip-workspace')
+    await auditMobilePage(page, 'trip-workspace', browserIssues)
 
     await page.getByRole('button', { name: /抵达与涩谷/ }).click()
     await expect(page).toHaveURL(/#\/day\?/)
     const dayId = getHashParam(page.url(), 'dayId')
     expect(dayId).toBeTruthy()
-    await auditMobilePage(page, 'day-schedule')
+    await auditMobilePage(page, 'day-schedule', browserIssues)
 
     await page.getByTestId('view-switch-map').click()
-    await auditMobilePage(page, 'day-map')
+    await auditMobilePage(page, 'day-map', browserIssues)
     await page.getByTestId('view-switch-schedule').click()
 
     await page.getByRole('button', { name: /明治神宫散步/ }).click()
     await expect(page).toHaveURL(/#\/item\?/)
     const itemId = getHashParam(page.url(), 'itemId')
     expect(itemId).toBeTruthy()
-    await auditMobilePage(page, 'item-detail')
+    await auditMobilePage(page, 'item-detail', browserIssues)
 
     await page.getByRole('button', { name: '删除行程点' }).click()
     const dialog = page.getByRole('dialog')
@@ -65,33 +61,33 @@ test.describe('390px mobile UX and accessibility', () => {
     await expect(dialog).toHaveCount(0)
 
     await page.goto(`/#/item/edit?tripId=${tripId}&dayId=${dayId}&itemId=${itemId}&view=schedule`)
-    await auditMobilePage(page, 'item-edit')
+    await auditMobilePage(page, 'item-edit', browserIssues)
     await page.goto(`/#/item/new?tripId=${tripId}&dayId=${dayId}&view=schedule`)
-    await auditMobilePage(page, 'item-new')
+    await auditMobilePage(page, 'item-new', browserIssues)
 
     await page.goto(`/#/trip/edit?tripId=${tripId}`)
-    await auditMobilePage(page, 'trip-edit')
+    await auditMobilePage(page, 'trip-edit', browserIssues)
     await page.goto('/#/trip/new')
-    await auditMobilePage(page, 'trip-new')
+    await auditMobilePage(page, 'trip-new', browserIssues)
 
     await page.goto(`/#/tickets?tripId=${tripId}`)
-    await auditMobilePage(page, 'ticket-library')
+    await auditMobilePage(page, 'ticket-library', browserIssues)
     await page.goto(`/#/documents?tripId=${tripId}`)
-    await auditMobilePage(page, 'travel-document-center')
+    await auditMobilePage(page, 'travel-document-center', browserIssues)
     await page.goto('/#/inbox')
-    await auditMobilePage(page, 'travel-inbox')
+    await auditMobilePage(page, 'travel-inbox', browserIssues)
     await page.goto('/#/search')
-    await auditMobilePage(page, 'search')
+    await auditMobilePage(page, 'search', browserIssues)
     await page.goto('/#/settings')
-    await auditMobilePage(page, 'settings')
+    await auditMobilePage(page, 'settings', browserIssues)
     await page.goto('/#/settings/privacy')
-    await auditMobilePage(page, 'settings-privacy')
+    await auditMobilePage(page, 'settings-privacy', browserIssues)
     await page.goto('/#/settings/maps')
-    await auditMobilePage(page, 'settings-maps')
+    await auditMobilePage(page, 'settings-maps', browserIssues)
     await page.goto('/#/settings/route')
-    await auditMobilePage(page, 'settings-route')
+    await auditMobilePage(page, 'settings-route', browserIssues)
     await page.goto('/#/ai-draft')
-    await auditMobilePage(page, 'ai-draft')
+    await auditMobilePage(page, 'ai-draft', browserIssues)
 
     await page.setViewportSize(SHORT_MOBILE_VIEWPORT)
     await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${itemId}&view=schedule`)
@@ -102,21 +98,74 @@ test.describe('390px mobile UX and accessibility', () => {
     await expect(shortDialog).toBeVisible()
     await expect(shortDialog).toHaveAccessibleName(/确认删除/)
     await expect(shortDialog.getByRole('button', { name: '取消' })).toBeFocused()
-    await auditMobilePage(page, 'short-confirm-dialog')
+    await auditMobilePage(page, 'short-confirm-dialog', browserIssues)
 
-    expect(
-      consoleErrors.filter((message) => !message.includes('Auth session missing')),
-    ).toEqual([])
+    expect(browserIssues.collectUnexpectedIssues()).toEqual([])
   })
 })
 
-async function auditMobilePage(page: Page, label: string) {
+async function auditMobilePage(page: Page, label: string, browserIssues?: BrowserIssueTracker) {
+  browserIssues?.setLabel(label)
   await page.waitForLoadState('domcontentloaded')
   await waitForStableMobilePage(page)
   await expectNoHorizontalOverflow(page, label)
   await expectNoUnnamedControls(page, label)
   await expectNoSmallTouchTargets(page, label)
   await expectNoSeriousAxeViolations(page, label)
+}
+
+function createBrowserIssueTracker(page: Page) {
+  const consoleErrors: string[] = []
+  const failedLocalResponses: string[] = []
+  const failedLocalRequests: string[] = []
+  let currentLabel = 'setup'
+
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(`${currentLabel}: ${message.text()}`)
+    }
+  })
+  page.on('response', (response) => {
+    if (response.status() < 400 || !isLocalUrl(response.url())) return
+    failedLocalResponses.push(`${currentLabel}: ${response.status()} ${formatUrlForDiagnostics(response.url())}`)
+  })
+  page.on('requestfailed', (request) => {
+    if (!isLocalUrl(request.url())) return
+    failedLocalRequests.push(`${currentLabel}: ${request.failure()?.errorText ?? 'request failed'} ${formatUrlForDiagnostics(request.url())}`)
+  })
+
+  return {
+    collectUnexpectedIssues() {
+      return [
+        ...consoleErrors
+          .filter((message) => !message.includes('Auth session missing'))
+          .map((message) => `console error: ${message}`),
+        ...failedLocalResponses.map((message) => `local response: ${message}`),
+        ...failedLocalRequests.map((message) => `local request: ${message}`),
+      ]
+    },
+    setLabel(label: string) {
+      currentLabel = label
+    },
+  }
+}
+
+function isLocalUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return LOCAL_HOSTS.has(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function formatUrlForDiagnostics(value: string) {
+  try {
+    const url = new URL(value)
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return value
+  }
 }
 
 async function waitForStableMobilePage(page: Page) {

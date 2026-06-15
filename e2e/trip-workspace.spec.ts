@@ -121,6 +121,9 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await page.goto(`/#/trip?tripId=${tripId}&dayId=${currentDayId}&view=map`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
+  expect(getHashParam(page.url(), 'dayId')).toBe(currentDayId)
+  await expect(page.getByTestId('day-selector')).toBeVisible()
+  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('day-back-to-trip').click()
   await expect(page).toHaveURL(/#\/trip\?/)

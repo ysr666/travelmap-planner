@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import JSZip from 'jszip'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createDay, createItineraryItem, createLedgerBudget, createLedgerExpense, createLedgerParticipant, createLedgerSettings, createTrip, db, setItineraryItemExecutionState } from '../db'
-import { exportTripBackup } from './backup'
+import { exportTripBackup, importTripBackup } from './backup'
 
 beforeEach(async () => {
   await db.delete()
@@ -27,7 +27,7 @@ describe('zip backup serialization', () => {
     const exportedTrip = JSON.parse(await zip.file('data/trip.json')!.async('string')) as typeof trip
     const manifest = JSON.parse(await zip.file('manifest.json')!.async('string')) as { schemaVersion: number }
 
-    expect(manifest.schemaVersion).toBe(2)
+    expect(manifest.schemaVersion).toBe(3)
     expect(exportedTrip.restoredAt).toBe(Date.parse('2026-04-02T12:30:00.000Z'))
     expect(exportedTrip.restoredFromCloudBackupId).toBe('backup_1')
     expect(exportedTrip.restoredFromCloudOriginalTripId).toBe('trip_original')
@@ -42,11 +42,11 @@ describe('zip backup serialization', () => {
     const zip = await JSZip.loadAsync(await (await exportTripBackup(trip.id)).arrayBuffer())
     const exportedItems = JSON.parse(await zip.file('data/itineraryItems.json')!.async('string')) as Array<{ executionState?: unknown }>
     const manifest = JSON.parse(await zip.file('manifest.json')!.async('string')) as { schemaVersion: number }
-    expect(manifest.schemaVersion).toBe(2)
+    expect(manifest.schemaVersion).toBe(3)
     expect(exportedItems[0].executionState).toEqual({ status: 'completed', updatedAt: 123 })
   })
 
-  it('exports ledger records in schema v2 without local exchange-rate cache', async () => {
+  it('exports ledger records in schema v3 without local exchange-rate cache', async () => {
     const trip = await createTrip({ destination: '东京', endDate: '2026-04-01', startDate: '2026-04-01', title: '东京账本' })
     await createLedgerSettings({ homeCurrency: 'CNY', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id })
     const participant = await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
@@ -59,5 +59,20 @@ describe('zip backup serialization', () => {
     expect(JSON.parse(await zip.file('data/ledgerBudgets.json')!.async('string'))).toHaveLength(1)
     expect(JSON.parse(await zip.file('data/ledgerExpenses.json')!.async('string'))).toHaveLength(1)
     expect(zip.file('data/exchangeRateCache.json')).toBeNull()
+  })
+
+  it('continues to import schema v2 ledger archives', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-04-01', startDate: '2026-04-01', title: '东京旧账本' })
+    await createLedgerSettings({ homeCurrency: 'CNY', settlementCurrency: 'CNY', tripCurrency: 'JPY', tripId: trip.id })
+    const zip = await JSZip.loadAsync(await (await exportTripBackup(trip.id)).arrayBuffer())
+    const manifest = JSON.parse(await zip.file('manifest.json')!.async('string'))
+    zip.file('manifest.json', JSON.stringify({ ...manifest, schemaVersion: 2 }))
+    const archive = await zip.generateAsync({ type: 'uint8array' })
+    await db.delete()
+    await db.open()
+
+    const arrayBuffer = archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength) as ArrayBuffer
+    const result = await importTripBackup(new File([arrayBuffer], 'ledger-v2.zip', { type: 'application/zip' }))
+    await expect(db.ledgerSettings.where('tripId').equals(result.tripId).count()).resolves.toBe(1)
   })
 })

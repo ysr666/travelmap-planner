@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { clearTravelDatabase, expectNoHorizontalOverflow, seedTravelRecords } from './helpers'
 
-test('旅行账本支持双币种、费用草稿、分摊预算和结算', async ({ page }) => {
+test('旅行账单档案支持后台归档、时间线、完整性、查询和结算', async ({ page }) => {
   const now = Date.now()
   const trip = {
     createdAt: now,
@@ -72,36 +72,48 @@ test('旅行账本支持双币种、费用草稿、分摊预算和结算', async
   await setup.getByRole('button', { name: '创建账本' }).click()
 
   await expect(page.getByTestId('ledger-summary')).toBeVisible()
-  await page.getByRole('button', { name: '同行人' }).click()
+  await expect(page.getByTestId('ledger-expense-row').filter({ hasText: '浅草晚餐订单' })).toBeVisible({ timeout: 10_000 })
+
+  await page.getByRole('button', { name: '报告' }).click()
+  await page.getByRole('button', { name: '同行人管理' }).click()
   await page.getByLabel('同行人姓名').fill('小林')
   await page.getByRole('button', { name: '添加同行人' }).click()
   await expect(page.getByLabel('小林 姓名')).toBeVisible()
 
-  await page.getByRole('button', { name: '明细' }).click()
-  await page.getByRole('button', { name: '整理费用' }).click()
-  const preview = page.getByTestId('ledger-scan-preview')
-  await expect(preview).toContainText('浅草晚餐订单')
-  await expect(preview).toContainText('JP¥3,600')
-  await preview.getByRole('button', { name: '生成待确认费用' }).click()
-  await expect(page.getByTestId('ledger-expense-row')).toContainText('浅草晚餐订单')
-
+  await page.getByRole('button', { name: '账单' }).click()
   await page.getByRole('button', { name: '记一笔' }).click()
   const editor = page.getByTestId('ledger-expense-editor')
   await editor.getByLabel('费用名称').fill('东京酒店')
   await editor.getByLabel('金额').fill('3000')
   await editor.getByLabel('类别').selectOption('lodging')
+  await editor.getByLabel('商户 / 服务商').fill('Tokyo Stay')
+  await editor.getByLabel('完整订单号').fill('HOTEL-12345')
+  await editor.getByLabel('预订时间').fill('2026-03-01T10:00')
+  await editor.getByLabel('付款时间').fill('2026-03-02T10:00')
+  await editor.getByLabel('使用开始').fill('2026-04-01T15:00')
   await editor.getByLabel('付款人').selectOption({ label: '我' })
   await editor.getByRole('button', { name: '保存' }).click()
   await expect(page.getByTestId('ledger-expense-row').filter({ hasText: '东京酒店' })).toBeVisible()
-  await expect(page.getByTestId('ledger-summary')).toContainText('JP¥3,000')
+  await expect(page.getByTestId('ledger-summary')).toContainText('JP¥6,600')
   await expect(page.getByTestId('ledger-summary')).toContainText('已超预算')
 
-  await page.getByRole('button', { name: '结算' }).click()
+  await page.getByRole('button', { name: '时间线' }).click()
+  await page.getByRole('button', { name: '预订' }).click()
+  await expect(page.getByText('东京酒店')).toBeVisible()
+
+  await page.getByRole('button', { name: '完整性' }).click()
+  await expect(page.getByText(/尚未关联行程/).first()).toBeVisible()
+
+  await page.getByRole('button', { name: '报告' }).click()
+  await page.getByPlaceholder('例如：东京酒店一共多少钱？').fill('酒店一共多少钱？')
+  await page.getByRole('button', { name: '查询' }).click()
+  await expect(page.getByText(/找到 1 笔账单/)).toBeVisible()
+  await page.getByRole('button', { name: '查看结算' }).click()
   await expect(page.getByText('小林 → 我')).toBeVisible()
   await expect(page.getByText('¥75.00')).toBeVisible()
   await expect(page.getByText(/未纳入结算/)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.getByRole('button', { name: '返回旅行总览' }).click()
-  await expect(page.getByTestId('trip-ledger-summary')).toContainText('JP¥3,000')
+  await expect(page.getByTestId('trip-ledger-summary')).toContainText('JP¥6,600')
 })

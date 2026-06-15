@@ -156,6 +156,18 @@ export type LedgerExpenseStatus = 'draft' | 'confirmed' | 'void'
 export type LedgerSplitMode = 'equal' | 'exclude' | 'weights'
 export type LedgerBudgetScope = 'trip' | 'category' | 'date'
 export type LedgerSourceKind = 'manual' | 'ticket' | 'inbox' | 'transport_booking' | 'itinerary_note'
+export type LedgerSourceRole =
+  | 'order_confirmation'
+  | 'payment_receipt'
+  | 'invoice'
+  | 'credit_card_notice'
+  | 'cancellation_notice'
+  | 'refund_notice'
+  | 'other'
+export type LedgerLineItemKind = 'base' | 'tax' | 'tip' | 'discount' | 'refund' | 'other'
+export type LedgerPaymentStatus = 'unknown' | 'unpaid' | 'paid' | 'partially_refunded' | 'refunded'
+export type LedgerOrderStatus = 'active' | 'cancelled'
+export type LedgerReviewStatus = 'unreviewed' | 'auto_confirmed' | 'reviewed' | 'needs_review'
 
 export type LedgerSettings = {
   id: string
@@ -202,6 +214,23 @@ export type LedgerExpenseSource = {
   fingerprint?: string
 }
 
+export type LedgerExpenseSourceLink = LedgerExpenseSource & {
+  id: string
+  role: LedgerSourceRole
+  title?: string
+  capturedAt?: string
+  available?: boolean
+}
+
+export type LedgerExpenseLineItem = {
+  id: string
+  title: string
+  kind: LedgerLineItemKind
+  category: LedgerExpenseCategory
+  amountMinor: number
+  currency: string
+}
+
 export type LedgerExchangeRateSnapshot = {
   requestedDate: string
   effectiveDate: string
@@ -228,11 +257,48 @@ export type LedgerExpense = {
   splitMode: LedgerSplitMode
   splitShares: LedgerExpenseSplitShare[]
   source: LedgerExpenseSource
+  sourceLinks?: LedgerExpenseSourceLink[]
+  lineItems?: LedgerExpenseLineItem[]
+  merchant?: string
+  city?: string
+  orderNumber?: string
+  itemIds?: string[]
+  bookedAt?: string
+  paidAt?: string
+  serviceStartAt?: string
+  serviceEndAt?: string
+  cancelledAt?: string
+  refundedAt?: string
+  paymentStatus?: LedgerPaymentStatus
+  orderStatus?: LedgerOrderStatus
+  reviewStatus?: LedgerReviewStatus
+  recognitionConfidence?: number
+  autoConfirmReason?: string
+  originalExpenseId?: string
   exchangeRate?: LedgerExchangeRateSnapshot
   duplicateAcknowledged?: boolean
   notes?: string
   createdAt: number
   updatedAt: number
+}
+
+export type LedgerArchiveQueueEntry = {
+  id: string
+  tripId: string
+  sourceKey: string
+  fingerprint: string
+  status: 'pending' | 'processing' | 'done' | 'error'
+  attempts: number
+  nextAttemptAt?: number
+  lastError?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type AccountAiPreferences = {
+  autoExpenseAiEnabled: boolean
+  consentedAt?: string
+  privacyVersion: number
 }
 
 export type ExchangeRateCache = {

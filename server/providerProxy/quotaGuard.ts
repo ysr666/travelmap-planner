@@ -19,6 +19,8 @@ import {
   PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
   PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
   PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION,
+  PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
@@ -43,6 +45,7 @@ export type ProviderProxyQuotaBucket =
   | 'ai_trip_edit|'
   | 'fx|'
   | 'ai_expense_extract|'
+  | 'ai_expense_query|'
 
 export type ProviderProxyQuotaLimits = {
   maxAiDraftRepairRequestsPerWindow: number
@@ -59,6 +62,7 @@ export type ProviderProxyQuotaLimits = {
   maxTravelSearchRequestsPerWindow: number
   maxExchangeRateRequestsPerWindow: number
   maxAiExpenseExtractRequestsPerWindow: number
+  maxAiExpenseQueryRequestsPerWindow: number
   windowMs: number
 }
 
@@ -149,6 +153,7 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxTravelSearchRequestsPerWindow: PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
   maxExchangeRateRequestsPerWindow: PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW,
   maxAiExpenseExtractRequestsPerWindow: PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW,
+  maxAiExpenseQueryRequestsPerWindow: PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW,
   windowMs: 60_000,
 }
 
@@ -363,6 +368,9 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION) {
     return { bucket: 'ai_expense_extract|', maxRequests: limits.maxAiExpenseExtractRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION) {
+    return { bucket: 'ai_expense_query|', maxRequests: limits.maxAiExpenseQueryRequestsPerWindow }
   }
   return { bucket: 'route|', maxRequests: limits.maxRouteRequestsPerWindow }
 }

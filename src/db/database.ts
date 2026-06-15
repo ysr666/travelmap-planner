@@ -4,6 +4,7 @@ import type {
   ItineraryItem,
   ExchangeRateCache,
   LedgerBudget,
+  LedgerArchiveQueueEntry,
   LedgerExpense,
   LedgerParticipant,
   LedgerSettings,
@@ -63,6 +64,7 @@ class TravelConsoleDatabase extends Dexie {
   ledgerBudgets!: Table<LedgerBudget, string>
   ledgerExpenses!: Table<LedgerExpense, string>
   exchangeRateCache!: Table<ExchangeRateCache, string>
+  ledgerArchiveQueue!: Table<LedgerArchiveQueueEntry, string>
 
   constructor() {
     super('TravelConsoleDB')
@@ -285,6 +287,55 @@ class TravelConsoleDatabase extends Dexie {
       ledgerBudgets: 'id, tripId, scope, [tripId+scope], updatedAt',
       ledgerExpenses: 'id, tripId, status, date, category, [tripId+date], [tripId+status], updatedAt',
       exchangeRateCache: 'id, requestedDate, [baseCurrency+quoteCurrency], updatedAt',
+    })
+
+    this.version(8).stores({
+      trips: 'id, updatedAt',
+      days: 'id, tripId, [tripId+sortOrder], date',
+      itineraryItems: 'id, tripId, dayId, [dayId+sortOrder], [dayId+startTime]',
+      ticketMetas: 'id, tripId, itemId, bookingId, createdAt',
+      ticketBlobs: 'ticketId',
+      syncOutbox: 'id, tripId, objectKey, [tripId+status], [objectType+objectId], updatedAt',
+      objectSyncBases: 'objectKey, tripId, [objectType+objectId], cloudUpdatedAtMs, updatedAt',
+      objectSyncConflicts: 'id, tripId, objectKey, status, [tripId+status], [objectType+objectId], createdAt',
+      objectSyncStates: 'objectKey, tripId, [objectType+objectId], conflictAt',
+      ticketBlobSyncStates: 'ticketId, tripId, [tripId+uploadStatus], [tripId+cacheStatus], updatedAt',
+      travelInboxBlobs: 'entryId',
+      travelInboxEntries: 'id, tripId, [tripId+status], sourceKind, category, createdAt',
+      travelInboxPreviews: 'id, tripId, cloudSourceId, status, createdAt',
+      travelInboxAccountSourceBlobs: 'sourceId',
+      travelInboxAccountSources: 'id, cloudSourceId, connectorId, status, targetTripId, receivedAt',
+      travelInboxLocalConnectors: 'id, status, updatedAt',
+      transportBookings: 'id, tripId, kind, status, updatedAt',
+      transportSegments: 'id, bookingId, tripId, [bookingId+sortOrder], departureDate',
+      vaultObjects: 'id, vaultId, objectType, [vaultId+objectType], updatedAt',
+      vaultBlobs: 'id, vaultId, objectId, [vaultId+objectId], updatedAt',
+      vaultKeyState: 'vaultId, ownerId, updatedAt',
+      reminderSchedules: 'id, occurrenceId, status, triggerAt, objectId, [status+triggerAt]',
+      travelCenterSyncStates: 'objectKey, objectType, objectId, lastSyncedAt',
+      travelCenterSyncConflicts: 'id, objectKey, status, objectType, createdAt',
+      travelCenterTombstones: 'objectKey, objectType, objectId, deletedAt',
+      ledgerSettings: 'id, &tripId, updatedAt',
+      ledgerParticipants: 'id, tripId, [tripId+updatedAt], sourceId',
+      ledgerBudgets: 'id, tripId, scope, [tripId+scope], updatedAt',
+      ledgerExpenses: 'id, tripId, status, date, category, orderNumber, merchant, [tripId+date], [tripId+status], updatedAt',
+      exchangeRateCache: 'id, requestedDate, [baseCurrency+quoteCurrency], updatedAt',
+      ledgerArchiveQueue: 'id, tripId, sourceKey, status, [tripId+status], nextAttemptAt, updatedAt',
+    }).upgrade(async (transaction) => {
+      const ledgerExpenses = transaction.table<LedgerExpense, string>('ledgerExpenses')
+      await ledgerExpenses.toCollection().modify((expense) => {
+        expense.sourceLinks ??= [{
+          available: true,
+          id: `legacy:${expense.source.kind}:${expense.source.sourceId ?? expense.id}`,
+          role: 'other',
+          ...expense.source,
+        }]
+        expense.itemIds ??= []
+        expense.lineItems ??= []
+        expense.orderStatus ??= expense.status === 'void' ? 'cancelled' : 'active'
+        expense.paymentStatus ??= expense.status === 'confirmed' ? 'paid' : 'unknown'
+        expense.reviewStatus ??= expense.status === 'confirmed' ? 'reviewed' : 'unreviewed'
+      })
     })
   }
 }

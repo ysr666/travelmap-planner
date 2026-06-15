@@ -14,12 +14,12 @@ import {
 import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketBlob, TicketMeta, Trip } from '../types'
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 const APP_NAME = '旅图 TripMap'
 const JSON_SPACE = 2
 
 export type BackupManifest = {
-  schemaVersion: 1 | 2
+  schemaVersion: 1 | 2 | 3
   appName: string
   exportedAt: string
   tripId: string
@@ -109,20 +109,20 @@ export async function exportTripBackup(tripId: string): Promise<Blob> {
 export async function importTripBackup(file: File): Promise<ImportTripBackupResult> {
   const warnings = validateImportFile(file)
   const JSZip = (await import('jszip')).default
-  const zip = await JSZip.loadAsync(file)
+  const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const manifest = await readJsonFile<BackupManifest>(zip, 'manifest.json')
   validateManifest(manifest)
 
-  const isVersionTwo = manifest.schemaVersion === 2
+  const includesLedger = manifest.schemaVersion === 2 || manifest.schemaVersion === 3
   const payload: BackupPayload = {
     trip: await readJsonFile<Trip>(zip, 'data/trip.json'),
     days: await readJsonFile<Day[]>(zip, 'data/days.json'),
     itineraryItems: await readJsonFile<ItineraryItem[]>(zip, 'data/itineraryItems.json'),
     ticketMetas: await readJsonFile<TicketMeta[]>(zip, 'data/ticketMetas.json'),
-    ledgerSettings: isVersionTwo ? await readOptionalJsonFile<LedgerSettings[]>(zip, 'data/ledgerSettings.json', []) : [],
-    ledgerParticipants: isVersionTwo ? await readOptionalJsonFile<LedgerParticipant[]>(zip, 'data/ledgerParticipants.json', []) : [],
-    ledgerBudgets: isVersionTwo ? await readOptionalJsonFile<LedgerBudget[]>(zip, 'data/ledgerBudgets.json', []) : [],
-    ledgerExpenses: isVersionTwo ? await readOptionalJsonFile<LedgerExpense[]>(zip, 'data/ledgerExpenses.json', []) : [],
+    ledgerSettings: includesLedger ? await readOptionalJsonFile<LedgerSettings[]>(zip, 'data/ledgerSettings.json', []) : [],
+    ledgerParticipants: includesLedger ? await readOptionalJsonFile<LedgerParticipant[]>(zip, 'data/ledgerParticipants.json', []) : [],
+    ledgerBudgets: includesLedger ? await readOptionalJsonFile<LedgerBudget[]>(zip, 'data/ledgerBudgets.json', []) : [],
+    ledgerExpenses: includesLedger ? await readOptionalJsonFile<LedgerExpense[]>(zip, 'data/ledgerExpenses.json', []) : [],
   }
   validatePayload(payload)
 
@@ -262,7 +262,7 @@ function validateManifest(manifest: BackupManifest) {
     throw new Error('manifest.json 格式不正确。')
   }
 
-  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== SCHEMA_VERSION) {
+  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2 && manifest.schemaVersion !== SCHEMA_VERSION) {
     throw new Error(`不支持的归档版本：${String(manifest.schemaVersion)}`)
   }
 

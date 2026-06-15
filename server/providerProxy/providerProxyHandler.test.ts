@@ -224,6 +224,17 @@ function validAiExpenseExtractRequest() {
   return { candidates: [{ candidateId: 'candidate-1', text: '晚餐 JPY 1200', title: '晚餐' }], defaultCurrency: 'JPY', operation: 'ai_expense_extract', participants: [{ alias: 'p1', displayName: '我' }], quotaSessionId: 'session-a', requestId: 'expense-request-1' }
 }
 
+function validAiExpenseQueryRequest() {
+  return {
+    deterministicAnswer: '找到 1 笔账单，合计 ¥100.00。',
+    operation: 'ai_expense_query',
+    question: '东京酒店一共多少钱？',
+    quotaSessionId: 'session-a',
+    requestId: 'expense-query-1',
+    rows: [{ amountMinor: 10000, category: 'lodging', currency: 'CNY', date: '2026-06-02', id: 'expense-1', itemLinked: true, sourceRefs: [{ id: 'source-1', kind: 'ticket', role: 'payment_receipt' }], status: 'confirmed', title: '东京酒店' }],
+  }
+}
+
 describe('provider proxy handler quota routing', () => {
   it('uses the expected isolated quota bucket for every operation', async () => {
     const cases = [
@@ -238,6 +249,7 @@ describe('provider proxy handler quota routing', () => {
       { bucket: 'ai_trip_operations|', request: validTripOperationsSummaryRequest() },
       { bucket: 'fx|', fetcher: vi.fn(async () => new Response(JSON.stringify([{ base: 'JPY', date: '2026-04-03', quote: 'CNY', rate: 0.05 }]), { status: 200 })) as unknown as typeof fetch, request: validExchangeRateRequest() },
       { bucket: 'ai_expense_extract|', request: validAiExpenseExtractRequest() },
+      { bucket: 'ai_expense_query|', request: validAiExpenseQueryRequest() },
     ]
 
     for (const testCase of cases) {

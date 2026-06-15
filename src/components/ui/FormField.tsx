@@ -13,7 +13,7 @@ type FormFieldProps = {
   value: string
   onChange: (value: string) => void
   placeholder?: string
-  type?: 'text' | 'date' | 'time' | 'number'
+  type?: 'text' | 'date' | 'time' | 'datetime-local' | 'number'
   required?: boolean
 }
 

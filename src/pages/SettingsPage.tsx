@@ -38,6 +38,11 @@ import {
   type AiPrivacySettings,
 } from '../lib/ai/aiPrivacy'
 import {
+  getAccountAiPreferences,
+  getStoredAccountAiPreferences,
+  saveAccountAiPreferences,
+} from '../lib/accountAiPreferences'
+import {
   isTravelInboxAutoRecognizeEnabled,
   setTravelInboxAutoRecognizeEnabled,
 } from '../lib/ai/travelInbox'
@@ -249,6 +254,9 @@ export function SettingsPage() {
   const [travelProfile, setTravelProfile] = useState<TravelProfile>(() => getStoredTravelProfile())
   const [aiPrivacySettings, setAiPrivacySettings] = useState<AiPrivacySettings>(() => getStoredAiPrivacySettings())
   const [travelInboxAutoRecognize, setTravelInboxAutoRecognize] = useState(() => isTravelInboxAutoRecognizeEnabled())
+  const [autoExpenseAiEnabled, setAutoExpenseAiEnabled] = useState(() => getStoredAccountAiPreferences().autoExpenseAiEnabled)
+  const [autoExpenseAiBusy, setAutoExpenseAiBusy] = useState(false)
+  const [autoExpenseAiMessage, setAutoExpenseAiMessage] = useState('')
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -319,6 +327,16 @@ export function SettingsPage() {
     const timeout = window.setTimeout(() => void refreshStorageStatus(), 0)
     return () => window.clearTimeout(timeout)
   }, [refreshStorageStatus])
+
+  useEffect(() => {
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      void getAccountAiPreferences().then((preferences) => {
+        if (!cancelled) setAutoExpenseAiEnabled(preferences.autoExpenseAiEnabled)
+      })
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(timeout) }
+  }, [])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshTicketCacheSummary(), 0)
@@ -523,6 +541,20 @@ export function SettingsPage() {
     setTravelInboxAutoRecognizeEnabled(value)
   }
 
+  async function updateAutoExpenseAi(value: boolean) {
+    setAutoExpenseAiBusy(true)
+    setAutoExpenseAiMessage('')
+    try {
+      const preferences = await saveAccountAiPreferences(value)
+      setAutoExpenseAiEnabled(preferences.autoExpenseAiEnabled)
+      setAutoExpenseAiMessage(value ? '已开启账号级账单 AI 自动补全。' : '已关闭账单 AI 自动补全。')
+    } catch (caught) {
+      setAutoExpenseAiMessage(caught instanceof Error ? caught.message : '保存设置失败。')
+    } finally {
+      setAutoExpenseAiBusy(false)
+    }
+  }
+
   async function handleRouteCacheMaxBytesChange(bytes: number) {
     setIsUpdatingRouteCacheLimit(true)
     setRouteCacheError(null)
@@ -623,7 +655,11 @@ export function SettingsPage() {
 
       <Collapsible defaultOpen subtitle="控制 AI 行程生成和修复时可发送的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
+          autoExpenseAiBusy={autoExpenseAiBusy}
+          autoExpenseAiEnabled={autoExpenseAiEnabled}
+          autoExpenseAiMessage={autoExpenseAiMessage}
           onChange={updateAiPrivacySetting}
+          onAutoExpenseAiChange={(value) => void updateAutoExpenseAi(value)}
           onTravelInboxAutoRecognizeChange={updateTravelInboxAutoRecognize}
           settings={aiPrivacySettings}
           travelInboxAutoRecognize={travelInboxAutoRecognize}
@@ -1023,13 +1059,21 @@ function TravelProfileSettings({
 }
 
 function AiPrivacySettingsPanel({
+  autoExpenseAiBusy,
+  autoExpenseAiEnabled,
+  autoExpenseAiMessage,
   settings,
   onChange,
+  onAutoExpenseAiChange,
   onTravelInboxAutoRecognizeChange,
   travelInboxAutoRecognize,
 }: {
+  autoExpenseAiBusy: boolean
+  autoExpenseAiEnabled: boolean
+  autoExpenseAiMessage: string
   settings: AiPrivacySettings
   onChange: (key: keyof AiPrivacySettings, value: boolean) => void
+  onAutoExpenseAiChange: (value: boolean) => void
   onTravelInboxAutoRecognizeChange: (value: boolean) => void
   travelInboxAutoRecognize: boolean
 }) {
@@ -1091,8 +1135,21 @@ function AiPrivacySettingsPanel({
           />
         </div>
 
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行账单档案</p>
+          <ToggleRow
+            checked={autoExpenseAiEnabled}
+            description="本地规则无法完整识别时，自动发送已脱敏的提取文本补全候选字段。不会发送票据文件、订单号、邮箱、用户 ID 或云数据；AI 不能单独确认费用。"
+            disabled={autoExpenseAiBusy}
+            onChange={onAutoExpenseAiChange}
+            testId="ledger-auto-ai-setting"
+            title="账号级自动 AI 识别"
+          />
+          {autoExpenseAiMessage ? <p className="text-xs tm-muted">{autoExpenseAiMessage}</p> : null}
+        </div>
+
         <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          这些设置只保存在当前浏览器 localStorage，不会进入 IndexedDB、zip 归档或 Supabase 云端同步。
+          行程隐私和收件箱开关保存在当前浏览器；账单自动 AI 授权会在登录后同步到账号设置，不进入旅行备份或同行共享。
         </p>
       </Card>
     </section>

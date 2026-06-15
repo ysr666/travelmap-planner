@@ -34,6 +34,7 @@ export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_clas
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
 export const PROVIDER_PROXY_EXCHANGE_RATE_OPERATION = 'exchange_rate' as const
 export const PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION = 'ai_expense_extract' as const
+export const PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION = 'ai_expense_query' as const
 export const PROVIDER_PROXY_MAX_COORDINATES = 25
 export const PROVIDER_PROXY_MAX_SEGMENTS = PROVIDER_PROXY_MAX_COORDINATES - 1
 export const PROVIDER_PROXY_MAX_ROUTE_ORDER_ITEMS = 10
@@ -49,8 +50,9 @@ export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
+export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -188,6 +190,44 @@ export type ProviderProxyAiExpenseExtractSuccessResponse = {
 export type ProviderProxyAiExpenseExtractResponse = ProviderProxyAiExpenseExtractSuccessResponse | ProviderProxyErrorResponse
 export type ProviderProxyAiExpenseExtractValidationResult =
   | { ok: true; request: ProviderProxyAiExpenseExtractRequest }
+  | { ok: false; error: ProviderProxyErrorResponse }
+
+export type ProviderProxyAiExpenseQueryRow = {
+  id: string
+  title: string
+  date: string
+  category: LedgerExpenseCategory
+  amountMinor?: number
+  currency?: string
+  city?: string
+  merchant?: string
+  status: 'draft' | 'confirmed' | 'void'
+  paymentStatus?: string
+  itemLinked: boolean
+  sourceRefs: Array<{ id: string; kind: string; role: string }>
+}
+
+export type ProviderProxyAiExpenseQueryRequest = {
+  operation: typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+  question: string
+  deterministicAnswer: string
+  rows: ProviderProxyAiExpenseQueryRow[]
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyAiExpenseQuerySuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+  source: 'mock' | 'ai'
+  answer: string
+  citationExpenseIds: string[]
+  requestId?: string
+}
+
+export type ProviderProxyAiExpenseQueryResponse = ProviderProxyAiExpenseQuerySuccessResponse | ProviderProxyErrorResponse
+export type ProviderProxyAiExpenseQueryValidationResult =
+  | { ok: true; request: ProviderProxyAiExpenseQueryRequest }
   | { ok: false; error: ProviderProxyErrorResponse }
 
 export type ProviderProxyValidationResult =
@@ -2761,6 +2801,58 @@ export function validateProviderProxyAiExpenseExtractRequest(input: unknown): Pr
       requestId,
     },
   }
+}
+
+export function validateProviderProxyAiExpenseQueryRequest(input: unknown): ProviderProxyAiExpenseQueryValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (record.operation !== PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION) {
+    return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, requestId }), ok: false }
+  }
+  const question = readOptionalString(record.question, 500)
+  const deterministicAnswer = readOptionalString(record.deterministicAnswer, 2_000)
+  const rawRows = Array.isArray(record.rows) ? record.rows.slice(0, 80) : []
+  const categories = new Set<LedgerExpenseCategory>(['lodging', 'transport', 'admission', 'food', 'shopping', 'insurance', 'connectivity', 'other'])
+  const statuses = new Set(['draft', 'confirmed', 'void'])
+  const rows = rawRows.flatMap<ProviderProxyAiExpenseQueryRow>((value) => {
+    const row = readRecord(value)
+    const id = readOptionalString(row.id, 120)
+    const title = readOptionalString(row.title, 240)
+    const date = readOptionalString(row.date, 32)
+    const category = typeof row.category === 'string' && categories.has(row.category as LedgerExpenseCategory) ? row.category as LedgerExpenseCategory : undefined
+    const status = typeof row.status === 'string' && statuses.has(row.status) ? row.status as ProviderProxyAiExpenseQueryRow['status'] : undefined
+    const sourceRefs = Array.isArray(row.sourceRefs) ? row.sourceRefs.slice(0, 12).map((source) => {
+      const sourceRecord = readRecord(source)
+      const sourceId = readOptionalString(sourceRecord.id, 160)
+      const kind = readOptionalString(sourceRecord.kind, 40)
+      const role = readOptionalString(sourceRecord.role, 40)
+      return sourceId && kind && role ? { id: sourceId, kind, role } : undefined
+    }).filter((source): source is { id: string; kind: string; role: string } => Boolean(source)) : []
+    if (!id || !title || !date || !category || !status || typeof row.itemLinked !== 'boolean') return []
+    const amountMinor = Number.isSafeInteger(row.amountMinor) ? Number(row.amountMinor) : undefined
+    const city = readOptionalString(row.city, 120)
+    const currency = normalizeCurrency(row.currency)
+    const merchant = readOptionalString(row.merchant, 160)
+    const paymentStatus = readOptionalString(row.paymentStatus, 40)
+    return [{
+      ...(amountMinor !== undefined ? { amountMinor } : {}),
+      category,
+      ...(city ? { city } : {}),
+      ...(currency ? { currency } : {}),
+      date,
+      id,
+      itemLinked: row.itemLinked,
+      ...(merchant ? { merchant } : {}),
+      ...(paymentStatus ? { paymentStatus } : {}),
+      sourceRefs,
+      status,
+      title,
+    }]
+  })
+  if (!question || !deterministicAnswer || rows.length !== rawRows.length) {
+    return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', message: '账单问答请求格式不正确。', operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, requestId }), ok: false }
+  }
+  return { ok: true, request: { deterministicAnswer, operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, question, quotaSessionId: readOptionalString(record.quotaSessionId, 160), requestId, rows } }
 }
 
 function normalizeCurrency(value: unknown) {

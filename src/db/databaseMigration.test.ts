@@ -3,7 +3,7 @@ import { Blob as NodeBlob } from 'node:buffer'
 import Dexie from 'dexie'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './database'
-import type { Day, ItineraryItem, TicketBlob, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, LedgerExpense, TicketBlob, TicketMeta, Trip } from '../types'
 
 const legacyStores = {
   days: 'id, tripId, [tripId+sortOrder], date',
@@ -19,6 +19,44 @@ beforeEach(async () => {
 })
 
 describe('TravelConsoleDB migrations', () => {
+  it('upgrades v7 ledger expenses to canonical v8 bill defaults', async () => {
+    const legacyDb = new Dexie('TravelConsoleDB')
+    legacyDb.version(7).stores({
+      ledgerExpenses: 'id, tripId, status, date, category, [tripId+date], [tripId+status], updatedAt',
+      trips: 'id, updatedAt',
+    })
+    await legacyDb.open()
+    const trip: Trip = { createdAt: 1, destination: '东京', endDate: '2026-06-02', id: 'trip-v7', startDate: '2026-06-01', title: '东京', updatedAt: 1 }
+    const expense: LedgerExpense = {
+      amountMinor: 10000,
+      category: 'lodging',
+      createdAt: 1,
+      currency: 'CNY',
+      date: '2026-06-01',
+      id: 'expense-v7',
+      source: { kind: 'ticket', sourceId: 'ticket-v7' },
+      splitMode: 'equal',
+      splitShares: [],
+      status: 'confirmed',
+      title: '旧酒店费用',
+      tripId: trip.id,
+      updatedAt: 1,
+    }
+    await legacyDb.table<Trip, string>('trips').put(trip)
+    await legacyDb.table<LedgerExpense, string>('ledgerExpenses').put(expense)
+    legacyDb.close()
+
+    await db.open()
+    await expect(db.ledgerExpenses.get(expense.id)).resolves.toMatchObject({
+      itemIds: [],
+      lineItems: [],
+      orderStatus: 'active',
+      paymentStatus: 'paid',
+      reviewStatus: 'reviewed',
+      sourceLinks: [expect.objectContaining({ role: 'other', sourceId: 'ticket-v7' })],
+    })
+  })
+
   it('creates ticket blob sync states and object bases for legacy data', async () => {
     const legacyDb = new Dexie('TravelConsoleDB')
     legacyDb.version(1).stores(legacyStores)
@@ -131,6 +169,7 @@ describe('TravelConsoleDB migrations', () => {
       'ledgerBudgets',
       'ledgerExpenses',
       'exchangeRateCache',
+      'ledgerArchiveQueue',
     ]))
     await expect(db.ledgerExpenses.toArray()).resolves.toEqual([])
   })

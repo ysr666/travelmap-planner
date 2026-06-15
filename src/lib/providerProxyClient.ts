@@ -5,6 +5,7 @@ import {
   validateProviderProxyRoutePreviewRequest,
   validateProviderProxyExchangeRateRequest,
   validateProviderProxyAiExpenseExtractRequest,
+  validateProviderProxyAiExpenseQueryRequest,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
@@ -41,6 +42,9 @@ import {
   type ProviderProxyAiExpenseExtractRequest,
   type ProviderProxyAiExpenseExtractResponse,
   type ProviderProxyAiExpenseExtractSuccessResponse,
+  type ProviderProxyAiExpenseQueryRequest,
+  type ProviderProxyAiExpenseQueryResponse,
+  type ProviderProxyAiExpenseQuerySuccessResponse,
   type ProviderProxyPlaceLookupRequest,
   type ProviderProxyPlaceLookupResponse,
   type ProviderProxyPlaceLookupSuccessResponse,
@@ -228,6 +232,37 @@ export async function fetchProviderProxyAiExpenseExtract(
     throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' }), response.status)
   }
   const parsed = parseProviderProxyAiExpenseExtractResponse(body)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
+  return parsed
+}
+
+export async function fetchProviderProxyAiExpenseQuery(
+  request: ProviderProxyAiExpenseQueryRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAiExpenseQuerySuccessResponse> {
+  const requestWithSession = { ...request, quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage) }
+  const validation = validateProviderProxyAiExpenseQueryRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_query' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_query' }), response.status)
+  }
+  const parsed = parseProviderProxyAiExpenseQueryResponse(body, validation.request.rows.map((row) => row.id))
   if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
   return parsed
 }
@@ -884,6 +919,22 @@ function parseProviderProxyAiExpenseExtractResponse(input: unknown): ProviderPro
     return buildProviderProxyErrorResponse({ code, operation: 'ai_expense_extract' })
   }
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' })
+}
+
+function parseProviderProxyAiExpenseQueryResponse(input: unknown, allowedExpenseIds: string[]): ProviderProxyAiExpenseQueryResponse {
+  const record = readRecord(input)
+  if (record.ok === true && record.operation === 'ai_expense_query' && (record.source === 'mock' || record.source === 'ai') && typeof record.answer === 'string' && Array.isArray(record.citationExpenseIds)) {
+    const allowed = new Set(allowedExpenseIds)
+    if (record.answer.trim() && record.answer.length <= 4_000 && record.citationExpenseIds.every((id) => typeof id === 'string' && allowed.has(id))) {
+      return record as unknown as ProviderProxyAiExpenseQuerySuccessResponse
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'ai_expense_query' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({ code, operation: 'ai_expense_query' })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_query' })
 }
 
 function parseProviderProxyRouteOrderSuggestionResponse(

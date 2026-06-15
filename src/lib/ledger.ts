@@ -21,7 +21,7 @@ export const ledgerCategoryLabels: Record<LedgerExpenseCategory, string> = {
 export type LedgerWarning = {
   expenseId?: string
   budgetId?: string
-  kind: 'over_budget' | 'pending' | 'missing_amount' | 'missing_payer' | 'unsplit' | 'missing_rate' | 'duplicate'
+  kind: 'over_budget' | 'pending' | 'missing_amount' | 'missing_payer' | 'unsplit' | 'missing_rate' | 'duplicate' | 'paid_without_receipt' | 'unlinked_itinerary' | 'cancelled_not_reversed' | 'source_missing' | 'line_item_mismatch'
   message: string
 }
 
@@ -75,7 +75,7 @@ export function getCurrencyMinorDigits(currency: string) {
   }
 }
 
-export function parseMoneyInput(value: string, currency: string) {
+export function parseMoneyInput(value: string, currency: string, allowNegative = false) {
   const cleaned = value.trim().replace(/\s/g, '').replace(/[^\d,.-]/g, '')
   if (!cleaned) return undefined
   const lastComma = cleaned.lastIndexOf(',')
@@ -94,7 +94,7 @@ export function parseMoneyInput(value: string, currency: string) {
     normalized = cleaned.replace(/,/g, '')
   }
   const amount = Number(normalized)
-  if (!Number.isFinite(amount) || amount < 0) return undefined
+  if (!Number.isFinite(amount) || (!allowNegative && amount < 0)) return undefined
   const factor = 10 ** getCurrencyMinorDigits(currency)
   return Math.round(amount * factor)
 }
@@ -122,37 +122,40 @@ export function convertMinorByRate(
   if (!parsedRate || parsedRate.numerator <= 0n) return undefined
   const baseFactor = 10n ** BigInt(getCurrencyMinorDigits(baseCurrency))
   const quoteFactor = 10n ** BigInt(getCurrencyMinorDigits(quoteCurrency))
-  const numerator = BigInt(amountMinor) * parsedRate.numerator * quoteFactor
+  const sign = amountMinor < 0 ? -1n : 1n
+  const numerator = BigInt(Math.abs(amountMinor)) * parsedRate.numerator * quoteFactor
   const denominator = parsedRate.denominator * baseFactor
   const rounded = divideRoundHalfUp(numerator, denominator)
-  const value = Number(rounded)
+  const value = Number(rounded * sign)
   return Number.isSafeInteger(value) ? value : undefined
 }
 
 export function allocateLargestRemainder(amountMinor: number, shares: LedgerExpenseSplitShare[]) {
   const validShares = shares.filter((share) => share.weight > 0 && Number.isFinite(share.weight))
-  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0 || validShares.length === 0) {
+  if (!Number.isSafeInteger(amountMinor) || validShares.length === 0) {
     return new Map<string, number>()
   }
+  const sign = amountMinor < 0 ? -1 : 1
+  const absoluteAmount = Math.abs(amountMinor)
   const scaledWeights = validShares.map((share) => ({
     participantId: share.participantId,
     weight: Math.max(1, Math.round(share.weight * 1_000_000)),
   }))
   const totalWeight = scaledWeights.reduce((total, share) => total + share.weight, 0)
   const rows = scaledWeights.map((share) => {
-    const exactNumerator = amountMinor * share.weight
+    const exactNumerator = absoluteAmount * share.weight
     return {
       amount: Math.floor(exactNumerator / totalWeight),
       participantId: share.participantId,
       remainder: exactNumerator % totalWeight,
     }
   })
-  let remaining = amountMinor - rows.reduce((total, row) => total + row.amount, 0)
+  let remaining = absoluteAmount - rows.reduce((total, row) => total + row.amount, 0)
   rows.sort((first, second) => second.remainder - first.remainder || first.participantId.localeCompare(second.participantId))
   for (let index = 0; index < rows.length && remaining > 0; index += 1, remaining -= 1) {
     rows[index].amount += 1
   }
-  return new Map(rows.map((row) => [row.participantId, row.amount]))
+  return new Map(rows.map((row) => [row.participantId, row.amount * sign]))
 }
 
 export function convertExpenseMinor(expense: LedgerExpense, targetCurrency: string) {
@@ -245,6 +248,12 @@ export function buildLedgerWarnings({
       warnings.push({ expenseId: expense.id, kind: 'missing_rate', message: `「${expense.title}」缺少历史汇率` })
     }
     if (!expense.duplicateAcknowledged && duplicateIds.has(expense.id)) warnings.push({ expenseId: expense.id, kind: 'duplicate', message: `「${expense.title}」可能与其他费用重复` })
+    const sourceLinks = expense.sourceLinks ?? [{ ...expense.source, id: 'legacy', role: 'other' as const }]
+    if (expense.paymentStatus === 'paid' && !sourceLinks.some((link) => link.role === 'payment_receipt' || link.role === 'invoice')) warnings.push({ expenseId: expense.id, kind: 'paid_without_receipt', message: `「${expense.title}」已付款但缺少票据` })
+    if (!(expense.itemIds?.length)) warnings.push({ expenseId: expense.id, kind: 'unlinked_itinerary', message: `「${expense.title}」尚未关联行程` })
+    if (expense.orderStatus === 'cancelled' && expense.paymentStatus === 'paid') warnings.push({ expenseId: expense.id, kind: 'cancelled_not_reversed', message: `「${expense.title}」已取消但尚未退款冲正` })
+    if (sourceLinks.some((link) => link.available === false)) warnings.push({ expenseId: expense.id, kind: 'source_missing', message: `「${expense.title}」有原始来源已不可用` })
+    if (expense.lineItems?.length && expense.lineItems.reduce((sum, item) => sum + item.amountMinor, 0) !== expense.amountMinor) warnings.push({ expenseId: expense.id, kind: 'line_item_mismatch', message: `「${expense.title}」账单明细与总额不一致` })
   }
   return warnings
 }

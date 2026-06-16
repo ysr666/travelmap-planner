@@ -56,8 +56,8 @@ export function buildProviderProxyDiagnosticsResponse(
     hasTripmapGooglePlacesApiKey: hasSecret(env.TRIPMAP_GOOGLE_PLACES_API_KEY),
     hasViteGoogleMapsApiKey: hasSecret(env.VITE_GOOGLE_MAPS_API_KEY),
   }
-  const hasGoogleRoutesKey = googleMaps.hasViteGoogleMapsApiKey || googleMaps.hasGoogleMapsPlatformApiKey || googleMaps.hasGoogleRoutesApiKey
-  const hasGooglePlacesKey = googleMaps.hasViteGoogleMapsApiKey || googleMaps.hasGoogleMapsPlatformApiKey || googleMaps.hasTripmapGooglePlacesApiKey
+  const hasGoogleRoutesKey = googleMaps.hasGoogleMapsPlatformApiKey || googleMaps.hasGoogleRoutesApiKey
+  const hasGooglePlacesKey = googleMaps.hasGoogleMapsPlatformApiKey || googleMaps.hasTripmapGooglePlacesApiKey
   const placeProvider = normalizePlaceProvider(env.TRIPMAP_PLACE_PROVIDER)
   const searchProvider = normalizeSearchProvider(env.TRIPMAP_SEARCH_PROVIDER)
   const aiProvider = normalizeAiProvider(env.TRIPMAP_AI_PROVIDER)

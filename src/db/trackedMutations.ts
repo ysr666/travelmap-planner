@@ -134,6 +134,44 @@ export async function deleteTicket(ticketId: string) {
   }
 }
 
+export async function createTripDisruptionEvent(input: Parameters<typeof repo.createTripDisruptionEvent>[0]) {
+  const event = await repo.createTripDisruptionEvent(input)
+  await enqueueObjectUpsert({ object: event, objectType: 'replan_event' })
+  recordTripWriteForSync(event.tripId, 'replan-event-created', { emitChangeEvent: false })
+  return event
+}
+
+export async function updateTripDisruptionEvent(
+  eventId: string,
+  patch: Parameters<typeof repo.updateTripDisruptionEvent>[1],
+) {
+  const event = await repo.updateTripDisruptionEvent(eventId, patch)
+  if (event) {
+    await enqueueObjectUpsert({ object: event, objectType: 'replan_event' })
+    recordTripWriteForSync(event.tripId, 'replan-event-updated', { emitChangeEvent: false })
+  }
+  return event
+}
+
+export async function createTripReplanRecord(input: Parameters<typeof repo.createTripReplanRecord>[0]) {
+  const record = await repo.createTripReplanRecord(input)
+  await enqueueObjectUpsert({ object: record, objectType: 'replan_record' })
+  recordTripWriteForSync(record.tripId, 'replan-record-created', { emitChangeEvent: false })
+  return record
+}
+
+export async function updateTripReplanRecord(
+  recordId: string,
+  patch: Parameters<typeof repo.updateTripReplanRecord>[1],
+) {
+  const record = await repo.updateTripReplanRecord(recordId, patch)
+  if (record) {
+    await enqueueObjectUpsert({ object: record, objectType: 'replan_record' })
+    recordTripWriteForSync(record.tripId, 'replan-record-updated', { emitChangeEvent: false })
+  }
+  return record
+}
+
 export async function importTripBackupRecords(
   input: Parameters<typeof repo.importTripBackupRecords>[0],
   options: MarkDirtyOptions = {},
@@ -170,7 +208,7 @@ export async function replaceTripPlanRecords(
 }
 
 async function enqueueTripGraph(tripId: string) {
-  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses] = await Promise.all([
+  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses, replanEvents, replanRecords] = await Promise.all([
     repo.getTrip(tripId),
     repo.listDaysByTrip(tripId),
     repo.listItemsByTrip(tripId),
@@ -179,6 +217,8 @@ async function enqueueTripGraph(tripId: string) {
     ledgerRepo.listLedgerParticipants(tripId),
     ledgerRepo.listLedgerBudgets(tripId),
     ledgerRepo.listLedgerExpenses(tripId),
+    repo.listTripDisruptionEventsByTrip(tripId),
+    repo.listTripReplanRecordsByTrip(tripId),
   ])
   if (trip) {
     await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
@@ -191,6 +231,8 @@ async function enqueueTripGraph(tripId: string) {
     ...ledgerParticipants.map((participant) => enqueueObjectUpsert({ object: participant, objectType: 'ledger_participant' as const })),
     ...ledgerBudgets.map((budget) => enqueueObjectUpsert({ object: budget, objectType: 'ledger_budget' as const })),
     ...ledgerExpenses.map((expense) => enqueueObjectUpsert({ object: expense, objectType: 'ledger_expense' as const })),
+    ...replanEvents.map((event) => enqueueObjectUpsert({ object: event, objectType: 'replan_event' as const })),
+    ...replanRecords.map((record) => enqueueObjectUpsert({ object: record, objectType: 'replan_record' as const })),
     ...tickets
       .filter((ticket) => (ticket.storageMode ?? 'copy') === 'copy')
       .map(async (ticket) => {

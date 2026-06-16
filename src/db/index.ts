@@ -5,6 +5,8 @@ export {
   getTicketBlob,
   getTicketMeta,
   getTrip,
+  getTripDisruptionEvent,
+  getTripReplanRecord,
   deleteTicketBlob,
   listDaysByTrip,
   listItemsByDay,
@@ -12,6 +14,10 @@ export {
   listTicketsByItem,
   listTicketsByTrip,
   listTrips,
+  listTripDisruptionEventsByStatus,
+  listTripDisruptionEventsByTrip,
+  listTripReplanRecordsByEvent,
+  listTripReplanRecordsByTrip,
 } from './repositories'
 export {
   getExchangeRateCache,
@@ -26,6 +32,8 @@ export {
   createDay,
   createDemoTrip,
   createItineraryItem,
+  createTripDisruptionEvent,
+  createTripReplanRecord,
   createTicketMeta,
   createTrip,
   deleteDayCascade,
@@ -40,6 +48,8 @@ export {
   updateDay,
   updateItineraryItem,
   updateTrip,
+  updateTripDisruptionEvent,
+  updateTripReplanRecord,
 } from './trackedMutations'
 export {
   createLedgerBudget,

@@ -33,5 +33,9 @@ export function navigateToTripOperationsRecommendation(
     document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     return
   }
+  if (recommendation.actionKind === 'open_adaptive_replan') {
+    document.getElementById('trip-live-mode-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
   document.getElementById('trip-readiness-center-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }

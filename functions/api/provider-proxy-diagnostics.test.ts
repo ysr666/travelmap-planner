@@ -22,8 +22,8 @@ describe('provider proxy diagnostics function', () => {
       ok: true,
       operation: 'provider_env_diagnostics',
       providers: {
-        placeLookup: { configured: true, provider: 'google_places' },
-        routeOrder: { configured: true, provider: 'google' },
+        placeLookup: { configured: false, provider: 'unconfigured' },
+        routeOrder: { configured: false, provider: 'unconfigured' },
       },
     })
   })

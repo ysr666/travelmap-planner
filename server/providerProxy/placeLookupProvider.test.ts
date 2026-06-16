@@ -141,7 +141,7 @@ describe('place lookup provider foundation', () => {
     expect(JSON.stringify(result)).not.toContain('shared-google-platform-secret')
   })
 
-  it('uses the Vite Google Maps key as the first shared Places key', async () => {
+  it('prefers the dedicated Places key over shared or browser-visible keys', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       places: [
         {
@@ -167,9 +167,11 @@ describe('place lookup provider foundation', () => {
     expect(result.ok).toBe(true)
     const [, init] = vi.mocked(fetcher).mock.calls[0]
     expect(init?.headers).toMatchObject({
-      'X-Goog-Api-Key': 'vite-google-maps-secret',
+      'X-Goog-Api-Key': 'dedicated-place-secret',
       'X-Goog-FieldMask': GOOGLE_PLACES_FIELD_MASK,
     })
+    expect(JSON.stringify(result)).not.toContain('dedicated-place-secret')
+    expect(JSON.stringify(result)).not.toContain('shared-google-platform-secret')
     expect(JSON.stringify(result)).not.toContain('vite-google-maps-secret')
   })
 

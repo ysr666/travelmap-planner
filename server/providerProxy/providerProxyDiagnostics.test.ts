@@ -55,20 +55,20 @@ describe('provider proxy diagnostics', () => {
     expect(response.providers.ai).toMatchObject({ configured: false, hasApiKey: false, provider: 'unconfigured' })
   })
 
-  it('detects the shared Vite Google Maps key for Places and Routes', () => {
+  it('reports a Vite Google Maps key without treating it as a server provider key', () => {
     const response = buildProviderProxyDiagnosticsResponse({
       VITE_GOOGLE_MAPS_API_KEY: 'vite-google-secret-value',
     }, '2026-06-02T01:02:03.000Z')
 
     expect(response.googleMaps.hasViteGoogleMapsApiKey).toBe(true)
     expect(response.providers.placeLookup).toMatchObject({
-      configured: true,
-      defaultedToGooglePlaces: true,
-      provider: 'google_places',
+      configured: false,
+      defaultedToGooglePlaces: false,
+      provider: 'unconfigured',
     })
     expect(response.providers.routeOrder).toMatchObject({
-      configured: true,
-      provider: 'google',
+      configured: false,
+      provider: 'unconfigured',
     })
   })
 

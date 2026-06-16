@@ -312,10 +312,13 @@ describe('provider proxy handler route_order_suggestion', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('returns provider_unavailable without Google Routes env and without leaking server details', async () => {
+  it('returns provider_unavailable without server-side Google Routes env and without leaking server details', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch
     const response = await handleProviderProxyRequest({
-      env: { OPENROUTESERVICE_API_KEY: 'server-ors-secret' },
+      env: {
+        OPENROUTESERVICE_API_KEY: 'server-ors-secret',
+        VITE_GOOGLE_MAPS_API_KEY: 'browser-google-maps-key',
+      },
       fetcher,
       request: jsonRequest(validRouteOrderRequest()),
     })
@@ -323,6 +326,7 @@ describe('provider proxy handler route_order_suggestion', () => {
     expect(response.status).toBe(503)
     const text = await response.text()
     expect(text).not.toContain('server-ors-secret')
+    expect(text).not.toContain('browser-google-maps-key')
     expect(JSON.parse(text)).toMatchObject({
       code: 'provider_unavailable',
       ok: false,
@@ -410,10 +414,10 @@ describe('provider proxy handler route_order_suggestion', () => {
     })
   })
 
-  it('uses the Vite Google Maps key as the first shared route_order_suggestion key', async () => {
+  it('prefers the dedicated Google Routes key over shared or browser-visible keys', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string>
-      expect(headers['X-Goog-Api-Key']).toBe('vite-google-maps-secret')
+      expect(headers['X-Goog-Api-Key']).toBe('dedicated-routes-secret')
       return new Response(JSON.stringify({
         routes: [
           {
@@ -438,6 +442,8 @@ describe('provider proxy handler route_order_suggestion', () => {
 
     expect(response.status).toBe(200)
     const text = await response.text()
+    expect(text).not.toContain('dedicated-routes-secret')
+    expect(text).not.toContain('shared-google-platform-secret')
     expect(text).not.toContain('vite-google-maps-secret')
     expect(JSON.parse(text)).toMatchObject({
       ok: true,
@@ -876,9 +882,9 @@ describe('provider proxy handler place_lookup', () => {
     })
   })
 
-  it('uses the Vite Google Maps key as the first shared place_lookup key', async () => {
+  it('prefers the dedicated Places key over shared or browser-visible keys', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('vite-google-maps-secret')
+      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('dedicated-place-secret')
       return new Response(JSON.stringify({
         places: [
           {
@@ -903,6 +909,8 @@ describe('provider proxy handler place_lookup', () => {
 
     expect(response.status).toBe(200)
     const text = await response.text()
+    expect(text).not.toContain('dedicated-place-secret')
+    expect(text).not.toContain('shared-google-platform-secret')
     expect(text).not.toContain('vite-google-maps-secret')
     expect(JSON.parse(text)).toMatchObject({
       ok: true,
@@ -913,7 +921,7 @@ describe('provider proxy handler place_lookup', () => {
 
   it('defaults place_lookup to Google Places when a shared Google key exists', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('vite-google-maps-secret')
+      expect((init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe('shared-google-platform-secret')
       return new Response(JSON.stringify({
         places: [
           {
@@ -926,19 +934,38 @@ describe('provider proxy handler place_lookup', () => {
       }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
     }) as unknown as typeof fetch
     const response = await handleProviderProxyRequest({
-      env: { VITE_GOOGLE_MAPS_API_KEY: 'vite-google-maps-secret' },
+      env: { GOOGLE_MAPS_PLATFORM_API_KEY: 'shared-google-platform-secret' },
       fetcher,
       request: jsonRequest(validPlaceLookupRequest()),
     })
 
     expect(response.status).toBe(200)
     const text = await response.text()
-    expect(text).not.toContain('vite-google-maps-secret')
+    expect(text).not.toContain('shared-google-platform-secret')
     expect(JSON.parse(text)).toMatchObject({
       ok: true,
       operation: 'place_lookup',
       source: 'google_places',
     })
+  })
+
+  it('does not default place_lookup to Google Places from a browser-visible key only', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { VITE_GOOGLE_MAPS_API_KEY: 'vite-google-maps-secret' },
+      fetcher,
+      request: jsonRequest(validPlaceLookupRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    const text = await response.text()
+    expect(text).not.toContain('vite-google-maps-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'provider_unavailable',
+      ok: false,
+      operation: 'place_lookup',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('does not leak Google provider body, headers, stack traces, or secrets', async () => {

@@ -30,7 +30,7 @@ describe('place details provider', () => {
     }
   })
 
-  it('calls Google Places Details with exact field mask and shared Vite key', async () => {
+  it('calls Google Places Details with exact field mask and server-side key', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       displayName: { text: '西湖风景名胜区' },
       editorialSummary: { text: '西湖是杭州代表性湖泊景观。' },
@@ -48,6 +48,7 @@ describe('place details provider', () => {
     const provider = createGooglePlacesDetailsProvider(
       {
         GOOGLE_MAPS_PLATFORM_API_KEY: 'platform-secret',
+        TRIPMAP_GOOGLE_PLACES_API_KEY: 'dedicated-place-secret',
         VITE_GOOGLE_MAPS_API_KEY: 'vite-shared-secret',
       },
       fetcher,
@@ -64,10 +65,12 @@ describe('place details provider', () => {
     expect(String(url)).toContain('languageCode=zh-CN')
     expect(init?.method).toBe('GET')
     expect(init?.headers).toMatchObject({
-      'X-Goog-Api-Key': 'vite-shared-secret',
+      'X-Goog-Api-Key': 'dedicated-place-secret',
       'X-Goog-FieldMask': GOOGLE_PLACES_DETAILS_FIELD_MASK,
     })
     expect((init?.headers as Record<string, string>)['X-Goog-FieldMask']).not.toContain('*')
+    expect(JSON.stringify(result)).not.toContain('dedicated-place-secret')
+    expect(JSON.stringify(result)).not.toContain('platform-secret')
     expect(JSON.stringify(result)).not.toContain('vite-shared-secret')
     if (result.ok) {
       expect(result.response.details).toMatchObject({

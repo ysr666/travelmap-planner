@@ -11,6 +11,8 @@ import type {
   SyncObjectPayload,
   SyncObjectType,
   TicketMeta,
+  TripDisruptionEvent,
+  TripReplanRecord,
   Trip,
 } from '../types'
 
@@ -68,6 +70,7 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '备注', notes: true, path: 'notes' },
     { label: '景点内容', path: 'contentEnrichment' },
     { label: '旅行执行状态', path: 'executionState' },
+    { label: '重排偏好', path: 'replanPreference' },
     { label: '绑定票据', path: 'ticketIds' },
     { label: '排序', path: 'sortOrder' },
   ],
@@ -121,6 +124,31 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '常住地币种', path: 'homeCurrency' },
     { label: '旅行币种', path: 'tripCurrency' },
     { label: '结算币种', path: 'settlementCurrency' },
+  ],
+  replan_event: [
+    { label: '日期', path: 'dayId' },
+    { label: '行程点', path: 'itemId' },
+    { label: '交通段', path: 'segmentId' },
+    { label: '事件类型', path: 'kind' },
+    { label: '状态', path: 'status' },
+    { label: '报告人角色', path: 'reportedByRole' },
+    { label: '发生时间', path: 'occurredAt' },
+    { label: '延误分钟', path: 'delayMinutes' },
+    { label: '备注', notes: true, path: 'notes' },
+    { label: '来源证据', path: 'evidence' },
+  ],
+  replan_record: [
+    { label: '事件', path: 'eventId' },
+    { label: '方案', path: 'selectedOptionId' },
+    { label: '状态', path: 'status' },
+    { label: '基线指纹', path: 'baselineFingerprint' },
+    { label: '应用指纹', path: 'appliedFingerprint' },
+    { label: '撤销时间', path: 'undoneAt' },
+    { label: '方案列表', path: 'options' },
+    { label: '选中差异', path: 'selectedDiff' },
+    { label: '撤销快照', path: 'beforeSnapshot' },
+    { label: '应用快照', path: 'afterSnapshot' },
+    { label: '来源证据', path: 'evidence' },
   ],
   ticket_meta: [
     { label: '绑定行程点', path: 'itemId' },
@@ -291,6 +319,8 @@ export function buildObjectConflictLabel(objectType: SyncObjectType, payload?: S
   if (objectType === 'ledger_participant') return (payload as LedgerParticipant).displayName || '账本参与人'
   if (objectType === 'ledger_budget') return '旅行预算'
   if (objectType === 'ledger_expense') return (payload as LedgerExpense).title || '旅行费用'
+  if (objectType === 'replan_event') return `突发事件：${(payload as TripDisruptionEvent).kind}`
+  if (objectType === 'replan_record') return `重排记录：${(payload as TripReplanRecord).selectedOptionId ?? (payload as TripReplanRecord).status}`
   const ticket = payload as TicketMeta
   return ticket.title || ticket.fileName || '票据'
 }
@@ -303,6 +333,8 @@ export function getObjectTypeLabel(objectType: SyncObjectType) {
   if (objectType === 'ledger_participant') return '账本参与人'
   if (objectType === 'ledger_budget') return '旅行预算'
   if (objectType === 'ledger_expense') return '旅行费用'
+  if (objectType === 'replan_event') return '突发事件'
+  if (objectType === 'replan_record') return '重排记录'
   return '票据'
 }
 
@@ -371,7 +403,7 @@ function clonePayload<T extends SyncObjectPayload | undefined>(payload: T): T {
 
 function touchPayload(payload: SyncObjectPayload, objectType: SyncObjectType, now: number) {
   if (objectType !== 'day') {
-    ;(payload as Trip | ItineraryItem | TicketMeta | LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense).updatedAt = now
+    ;(payload as Trip | ItineraryItem | TicketMeta | LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense | TripDisruptionEvent | TripReplanRecord).updatedAt = now
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   createItineraryItem,
+  createTripDisruptionEvent,
   deleteItineraryItemCascade,
   getItineraryItem,
   getTrip,
@@ -7,6 +8,8 @@ import {
   listItemsByDay,
   listItemsByTrip,
   listTicketsByTrip,
+  listTripDisruptionEventsByTrip,
+  listTripReplanRecordsByTrip,
   setItineraryItemExecutionState,
   updateItineraryItem,
 } from '../db'
@@ -21,6 +24,7 @@ import type {
   Day,
   ItineraryExecutionStatus,
   ItineraryItem,
+  TripDisruptionEvent,
   SharedItineraryItem,
   SharedTicketSummary,
   SharedTrip,
@@ -34,6 +38,7 @@ import type {
   SharedTripMutationType,
   SharedTripProjection,
   TicketMeta,
+  TripReplanRecord,
   Trip,
 } from '../types'
 
@@ -145,6 +150,25 @@ export type SharedTripMutationDraft =
       payload: {
         itemId: string
         status: ItineraryExecutionStatus | null
+      }
+    }
+  | {
+      mutationType: 'report_disruption'
+      payload: {
+        dayId?: string
+        delayMinutes?: number
+        itemId?: string
+        kind: TripDisruptionEvent['kind']
+        notes?: string
+        occurredAt?: string
+        segmentId?: string
+      }
+    }
+  | {
+      mutationType: 'request_replan_undo'
+      payload: {
+        notes?: string
+        recordId: string
       }
     }
 
@@ -270,24 +294,40 @@ export function buildSharedTripProjection({
   days,
   items,
   now = new Date(),
+  replanEvents = [],
+  replanRecords = [],
   tickets,
   trip,
 }: {
   days: Day[]
   items: ItineraryItem[]
   now?: Date
+  replanEvents?: TripDisruptionEvent[]
+  replanRecords?: TripReplanRecord[]
   tickets: TicketMeta[]
   trip: Trip
 }): SharedTripProjection {
   const ticketSummaries = buildSharedTicketSummaries(tickets)
   const ticketIds = new Set(ticketSummaries.map((ticket) => ticket.id))
   const sharedItems = items.map((item) => sanitizeSharedItem(item, ticketIds))
+  const eventById = new Map(replanEvents.map((event) => [event.id, event]))
+  const latestReplan = [...replanRecords]
+    .filter((record) => record.status === 'applied' && record.selectedDiff)
+    .sort((first, second) => second.updatedAt - first.updatedAt)[0]
+  const latestReplanEvent = latestReplan ? eventById.get(latestReplan.eventId) : undefined
 
   return {
     days: days.map((day) => ({ ...day })),
     items: sharedItems,
+    latestReplanSummary: latestReplan ? {
+      appliedAt: new Date(latestReplan.updatedAt).toISOString(),
+      eventKind: latestReplanEvent?.kind ?? 'late',
+      recordId: latestReplan.id,
+      summary: latestReplan.options.find((option) => option.id === latestReplan.selectedOptionId)?.summary ?? '行程已根据突发情况更新。',
+    } : undefined,
+    meetingChangeSummaries: latestReplan?.selectedDiff?.companionImpacts ?? [],
     publishedAt: now.toISOString(),
-    schemaVersion: 1,
+    schemaVersion: 2,
     ticketSummaries,
     trip: { ...trip },
     warnings: [
@@ -345,18 +385,20 @@ export async function hasCompanionSession() {
 }
 
 export async function publishSharedTripFromLocal(tripId: string) {
-  const [trip, days, items, tickets] = await Promise.all([
+  const [trip, days, items, tickets, replanEvents, replanRecords] = await Promise.all([
     getTrip(tripId),
     listDaysByTrip(tripId),
     listItemsByTrip(tripId),
     listTicketsByTrip(tripId),
+    listTripDisruptionEventsByTrip(tripId),
+    listTripReplanRecordsByTrip(tripId),
   ])
   if (!trip) {
     throw new Error('没有找到要共享的旅行。')
   }
 
   const user = await requireCompanionUser()
-  const projection = buildSharedTripProjection({ days, items, tickets, trip })
+  const projection = buildSharedTripProjection({ days, items, replanEvents, replanRecords, tickets, trip })
   const now = new Date().toISOString()
   const fixture = readCompanionFixture()
   if (fixture?.user) {
@@ -812,6 +854,37 @@ export function validateSharedTripMutationDraft(draft: SharedTripMutationDraft) 
     if (!draft.payload.dayId || draft.payload.orderedItemIds.length === 0) return { message: '缺少排序信息。', ok: false as const }
     return { ok: true as const, payload: draft.payload }
   }
+  if (draft.mutationType === 'report_disruption') {
+    const kind = readDisruptionKind(asRecord(draft.payload).kind)
+    if (!kind) return { message: '突发情况类型无效。', ok: false as const }
+    const payload = asRecord(draft.payload)
+    return {
+      ok: true as const,
+      payload: {
+        dayId: readOptionalShortString(payload.dayId),
+        delayMinutes: typeof payload.delayMinutes === 'number' && Number.isFinite(payload.delayMinutes)
+          ? Math.max(0, Math.min(24 * 60, Math.round(payload.delayMinutes)))
+          : undefined,
+        itemId: readOptionalShortString(payload.itemId),
+        kind,
+        notes: readOptionalLimitedText(payload.notes, MAX_COMMENT_LENGTH),
+        occurredAt: readOptionalShortString(payload.occurredAt),
+        segmentId: readOptionalShortString(payload.segmentId),
+      },
+    }
+  }
+  if (draft.mutationType === 'request_replan_undo') {
+    const payload = asRecord(draft.payload)
+    const recordId = readString(payload.recordId).trim()
+    if (!recordId) return { message: '缺少要撤销的重排记录。', ok: false as const }
+    return {
+      ok: true as const,
+      payload: {
+        notes: readOptionalLimitedText(payload.notes, MAX_COMMENT_LENGTH),
+        recordId,
+      },
+    }
+  }
   if (!draft.payload.itemId) return { message: '缺少行程点。', ok: false as const }
   if (draft.payload.status !== null && draft.payload.status !== 'completed' && draft.payload.status !== 'skipped') {
     return { message: '执行状态无效。', ok: false as const }
@@ -826,7 +899,12 @@ export async function submitSharedTripMutation(sharedTripId: string, draft: Shar
   const fixture = readCompanionFixture()
   if (fixture?.user) {
     const member = requireFixtureMember(fixture, sharedTripId, user.id)
-    if (!canCompanionCollaborate(member.permission)) throw new Error('当前权限不能协作修改行程。')
+    const canSubmit = draft.mutationType === 'report_disruption'
+      ? canCompanionComment(member.permission)
+      : canCompanionCollaborate(member.permission)
+    if (!canSubmit) {
+      throw new Error(draft.mutationType === 'report_disruption' ? '当前权限不能报告突发情况。' : '当前权限不能协作修改行程。')
+    }
     const now = new Date().toISOString()
     const mutation: SharedTripMutation = {
       createdAt: now,
@@ -866,7 +944,7 @@ export async function syncSharedTripForOwner(tripId: string) {
 
   let applied = 0
   let conflicts = 0
-  for (const mutation of state.mutations.filter((item) => item.status === 'pending').reverse()) {
+  for (const mutation of state.mutations.filter((item) => item.status === 'pending' && item.mutationType !== 'request_replan_undo').reverse()) {
     const result = await applySharedTripMutationToLocal(tripId, mutation)
     if (result.status === 'applied') applied += 1
     if (result.status === 'conflict' || result.status === 'rejected') conflicts += 1
@@ -954,6 +1032,38 @@ async function applyMutationPayload(tripId: string, mutation: SharedTripMutation
     if (!orderedItemIds.every((id) => itemIds.has(id))) throw new Error('排序列表包含无效行程点。')
     await Promise.all(orderedItemIds.map((id, index) => updateItineraryItem(id, { sortOrder: index + 1 })))
     return
+  }
+
+  if (mutation.mutationType === 'report_disruption') {
+    const kind = readDisruptionKind(payload.kind)
+    if (!kind) throw new Error('突发情况类型无效。')
+    const dayId = readOptionalShortString(payload.dayId)
+    const itemId = readOptionalShortString(payload.itemId)
+    if (itemId) {
+      const item = await getItineraryItem(itemId)
+      if (!item || item.tripId !== tripId) throw new Error('行程点不存在。')
+    }
+    await createTripDisruptionEvent({
+      dayId,
+      delayMinutes: typeof payload.delayMinutes === 'number' ? payload.delayMinutes : undefined,
+      evidence: [],
+      itemId,
+      kind,
+      notes: readOptionalLimitedText(payload.notes, MAX_COMMENT_LENGTH),
+      occurredAt: readOptionalShortString(payload.occurredAt) ?? new Date().toISOString(),
+      reportedByDisplayName: mutation.displayName,
+      reportedByRole: 'companion',
+      reportedByUserId: mutation.userId,
+      segmentId: readOptionalShortString(payload.segmentId),
+      sharedMutationId: mutation.id,
+      status: 'reported',
+      tripId,
+    })
+    return
+  }
+
+  if (mutation.mutationType === 'request_replan_undo') {
+    throw new Error('撤销请求需要主人在重排面板中确认。')
   }
 
   const itemId = readString(payload.itemId)
@@ -1270,6 +1380,29 @@ function readString(value: unknown) {
     throw new Error('缺少必要字段。')
   }
   return value.trim()
+}
+
+function readOptionalShortString(value: unknown) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 && trimmed.length <= MAX_MUTATION_TEXT_LENGTH ? trimmed : undefined
+}
+
+function readOptionalLimitedText(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed.slice(0, maxLength) : undefined
+}
+
+function readDisruptionKind(value: unknown): TripDisruptionEvent['kind'] | null {
+  return value === 'delay' ||
+    value === 'closure' ||
+    value === 'weather_unsuitable' ||
+    value === 'late' ||
+    value === 'cancelled' ||
+    value === 'skip'
+    ? value
+    : null
 }
 
 function base64UrlEncode(bytes: Uint8Array) {

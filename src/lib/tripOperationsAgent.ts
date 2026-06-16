@@ -9,7 +9,7 @@ import { getZonedMinuteOfDay, getZonedPlainDate, resolveTripTimeZone } from './t
 import type { TripReadinessIssue, TripReadinessIssueType, TripReadinessModel, TripReadinessSeverity } from './tripReadiness'
 import { getTicketDisplayTitle, getTicketStorageMode } from './tickets'
 import type { TripRoutePreparation } from './routePreparation'
-import type { Day, ItineraryItem, TicketBlobSyncState, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, SharedTripMutation, TicketBlobSyncState, TicketMeta, Trip, TripDisruptionEvent } from '../types'
 
 export type TripOperationsPhase =
   | 'pre_trip'
@@ -25,6 +25,7 @@ export type TripOperationsActionKind =
   | 'generate_routes'
   | 'apply_inbox_preview'
   | 'generate_ai_patch'
+  | 'open_adaptive_replan'
   | 'open_content_enrichment'
   | 'open_day'
   | 'open_inbox'
@@ -45,9 +46,12 @@ export type TripOperationsExecutionMode =
 
 export type TripOperationsRecommendationType =
   | TripReadinessIssueType
+  | 'cloud_sync_pending'
   | 'inbox_needs_attention'
   | 'synced_ticket_cache'
   | 'tomorrow_review'
+  | 'adaptive_replan'
+  | 'replan_undo_request'
 
 export type TripOperationsRecommendation = {
   actionKind: TripOperationsActionKind
@@ -123,9 +127,11 @@ export type BuildTripOperationsModelInput = {
   now?: Date
   readinessModel?: TripReadinessModel | null
   routePreparation?: TripRoutePreparation | null
+  sharedMutations?: SharedTripMutation[]
   ticketBlobSyncStates?: TicketBlobSyncState[]
   tickets: TicketMeta[]
   trip: Trip
+  tripDisruptionEvents?: TripDisruptionEvent[]
 }
 
 type RecommendationDraft = Omit<
@@ -153,9 +159,11 @@ export function buildTripOperationsModel({
   now = new Date(),
   readinessModel,
   routePreparation,
+  sharedMutations = [],
   ticketBlobSyncStates = [],
   tickets,
   trip,
+  tripDisruptionEvents = [],
 }: BuildTripOperationsModelInput): TripOperationsModel {
   const phase = resolveTripOperationsPhase({ days, now, trip })
   const timeZone = resolveTripTimeZone(trip)
@@ -166,6 +174,7 @@ export function buildTripOperationsModel({
     ...buildTicketCacheRecommendations(tickets, ticketBlobSyncStates),
     ...buildTomorrowRecommendations({ dailyTipModel, phase }),
     ...buildPostTripSyncRecommendation({ cloudSummary, phase }),
+    ...buildAdaptiveReplanRecommendations(tripDisruptionEvents, sharedMutations),
   ].map((recommendation) => addRecommendationIdentity(recommendation, {
     activeInboxPreview,
     allItems,
@@ -664,6 +673,70 @@ function buildPostTripSyncRecommendation({
     title: '结束后确认同步状态',
     type: 'cloud_sync_pending',
   })]
+}
+
+function buildAdaptiveReplanRecommendations(
+  events: TripDisruptionEvent[],
+  sharedMutations: SharedTripMutation[],
+): TripOperationsRecommendation[] {
+  const reportedEvents = events
+    .filter((event) => event.status === 'reported' || event.status === 'planned')
+    .sort((first, second) => second.updatedAt - first.updatedAt)
+  const undoRequests = sharedMutations
+    .filter((mutation) => mutation.status === 'pending' && mutation.mutationType === 'request_replan_undo')
+    .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+
+  return [
+    ...reportedEvents.slice(0, 3).map((event) => buildRecommendation({
+      actionKind: 'open_adaptive_replan',
+      actionLabel: '生成方案',
+      affectedDayIds: event.dayId ? [event.dayId] : [],
+      affectedItemIds: event.itemId ? [event.itemId] : [],
+      canBatch: false,
+      dayId: event.dayId,
+      detail: event.notes || getDisruptionKindLabel(event.kind),
+      evidence: event.evidence.length > 0
+        ? event.evidence.slice(0, 2).map((source) => `${source.label}${source.url ? ` · ${source.displayUrl ?? source.url}` : ''}`)
+        : ['来自用户或同行人的报告，尚未应用到行程。'],
+      id: `ops-adaptive-replan-${event.id}`,
+      itemId: event.itemId,
+      message: '进入 Live Mode 预览多个重排方案，确认后才写入。',
+      readinessIssueIds: [],
+      requiresConfirm: true,
+      requiresPreview: true,
+      severity: 'high',
+      ticketIds: [],
+      title: `${getDisruptionKindLabel(event.kind)}待处理`,
+      type: 'adaptive_replan',
+    })),
+    ...undoRequests.slice(0, 3).map((mutation) => buildRecommendation({
+      actionKind: 'open_adaptive_replan',
+      actionLabel: '查看请求',
+      canBatch: false,
+      detail: typeof (mutation.payload as { notes?: unknown }).notes === 'string'
+        ? (mutation.payload as { notes: string }).notes
+        : '同行人请求撤销一次重排。',
+      evidence: [`${mutation.displayName ?? '同行人'} 提交于 ${new Date(mutation.createdAt).toLocaleString('zh-CN')}`],
+      id: `ops-replan-undo-${mutation.id}`,
+      message: '撤销请求不会自动执行，需要负责人检查当前行程后确认。',
+      readinessIssueIds: [],
+      requiresConfirm: true,
+      requiresPreview: true,
+      severity: 'high',
+      ticketIds: [],
+      title: '同行人请求撤销重排',
+      type: 'replan_undo_request',
+    })),
+  ]
+}
+
+function getDisruptionKindLabel(kind: TripDisruptionEvent['kind']) {
+  if (kind === 'delay') return '延误'
+  if (kind === 'closure') return '地点关闭'
+  if (kind === 'weather_unsuitable') return '天气不适合'
+  if (kind === 'late') return '迟到'
+  if (kind === 'cancelled') return '取消'
+  return '临时跳过'
 }
 
 function buildRecommendation(input: RecommendationDraft): TripOperationsRecommendation {

@@ -11,6 +11,8 @@ import type {
   LedgerSettings,
   TicketBlob,
   TicketMeta,
+  TripDisruptionEvent,
+  TripReplanRecord,
   Trip,
 } from '../types'
 
@@ -26,6 +28,10 @@ type UpdateItineraryItemPatch = Partial<
 >
 
 type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
+type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
+type CreateTripReplanRecordInput = Omit<TripReplanRecord, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateTripReplanRecordPatch = Partial<Omit<TripReplanRecord, 'id' | 'tripId' | 'eventId' | 'createdAt' | 'updatedAt'>>
 
 export type ImportTripBackupRecordsInput = {
   trip: Trip
@@ -94,6 +100,8 @@ export async function deleteTripCascade(tripId: string) {
       db.ledgerParticipants,
       db.ledgerBudgets,
       db.ledgerExpenses,
+      db.tripReplanEvents,
+      db.tripReplanRecords,
     ],
     async () => {
       const [items, ticketMetas] = await Promise.all([
@@ -113,6 +121,8 @@ export async function deleteTripCascade(tripId: string) {
         db.ledgerParticipants.where('tripId').equals(tripId).delete(),
         db.ledgerBudgets.where('tripId').equals(tripId).delete(),
         db.ledgerExpenses.where('tripId').equals(tripId).delete(),
+        db.tripReplanEvents.where('tripId').equals(tripId).delete(),
+        db.tripReplanRecords.where('tripId').equals(tripId).delete(),
       ])
     },
   )
@@ -337,6 +347,84 @@ export async function deleteTicket(ticketId: string) {
       }
     },
   )
+}
+
+export async function createTripDisruptionEvent(input: CreateTripDisruptionEventInput) {
+  const now = Date.now()
+  const event: TripDisruptionEvent = {
+    ...input,
+    id: createId('replan_event'),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.transaction('rw', db.tripReplanEvents, db.trips, async () => {
+    await db.tripReplanEvents.add(event)
+    await db.trips.update(event.tripId, { updatedAt: now })
+  })
+  return event
+}
+
+export async function getTripDisruptionEvent(eventId: string) {
+  return db.tripReplanEvents.get(eventId)
+}
+
+export async function listTripDisruptionEventsByTrip(tripId: string) {
+  return db.tripReplanEvents.where('tripId').equals(tripId).reverse().sortBy('createdAt')
+}
+
+export async function listTripDisruptionEventsByStatus(tripId: string, status: TripDisruptionEvent['status']) {
+  return db.tripReplanEvents.where('[tripId+status]').equals([tripId, status]).reverse().sortBy('createdAt')
+}
+
+export async function updateTripDisruptionEvent(eventId: string, patch: UpdateTripDisruptionEventPatch) {
+  const event = await db.tripReplanEvents.get(eventId)
+  if (!event) return undefined
+  const updatedAt = Date.now()
+  await db.transaction('rw', db.tripReplanEvents, db.trips, async () => {
+    await db.tripReplanEvents.update(eventId, { ...patch, updatedAt })
+    await db.trips.update(event.tripId, { updatedAt })
+  })
+  return getTripDisruptionEvent(eventId)
+}
+
+export async function createTripReplanRecord(input: CreateTripReplanRecordInput) {
+  const now = Date.now()
+  const record: TripReplanRecord = {
+    ...input,
+    id: createId('replan_record'),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.transaction('rw', db.tripReplanRecords, db.trips, async () => {
+    await db.tripReplanRecords.add(record)
+    await db.trips.update(record.tripId, { updatedAt: now })
+  })
+  return record
+}
+
+export async function getTripReplanRecord(recordId: string) {
+  return db.tripReplanRecords.get(recordId)
+}
+
+export async function listTripReplanRecordsByTrip(tripId: string) {
+  return db.tripReplanRecords.where('tripId').equals(tripId).reverse().sortBy('createdAt')
+}
+
+export async function listTripReplanRecordsByEvent(eventId: string) {
+  return db.tripReplanRecords.where('eventId').equals(eventId).reverse().sortBy('createdAt')
+}
+
+export async function updateTripReplanRecord(recordId: string, patch: UpdateTripReplanRecordPatch) {
+  const record = await db.tripReplanRecords.get(recordId)
+  if (!record) return undefined
+  const updatedAt = Date.now()
+  await db.transaction('rw', db.tripReplanRecords, db.trips, async () => {
+    await db.tripReplanRecords.update(recordId, { ...patch, updatedAt })
+    await db.trips.update(record.tripId, { updatedAt })
+  })
+  return getTripReplanRecord(recordId)
 }
 
 export async function importTripBackupRecords({

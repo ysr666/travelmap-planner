@@ -15,6 +15,8 @@ import type {
   SyncOutboxEntry,
   TicketBlobSyncState,
   TicketMeta,
+  TripDisruptionEvent,
+  TripReplanRecord,
   Trip,
 } from '../types'
 
@@ -31,6 +33,8 @@ export type ObjectSyncRecordInput =
   | { object: LedgerParticipant; objectType: 'ledger_participant'; operation?: 'upsert' }
   | { object: LedgerBudget; objectType: 'ledger_budget'; operation?: 'upsert' }
   | { object: LedgerExpense; objectType: 'ledger_expense'; operation?: 'upsert' }
+  | { object: TripDisruptionEvent; objectType: 'replan_event'; operation?: 'upsert' }
+  | { object: TripReplanRecord; objectType: 'replan_record'; operation?: 'upsert' }
 
 export type ObjectSyncDeleteInput = {
   objectId: string

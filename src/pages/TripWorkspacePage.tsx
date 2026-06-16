@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
-import { listItemsByDay, listTicketsByTrip } from '../db'
+import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -53,7 +53,8 @@ import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../l
 import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../lib/ai/travelInbox'
 import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
 import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
-import type { Day, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord } from '../types'
+import { loadOwnerSharedTripState } from '../lib/companion'
+import type { Day, SharedTripMutation, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord, TripDisruptionEvent } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -83,6 +84,8 @@ export function TripWorkspacePage() {
   const [cloudSyncQueueSummary, setCloudSyncQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
   const [tripOperationsInboxSummary, setTripOperationsInboxSummary] = useState<TripOperationsInboxSummary | null>(null)
   const [tripOperationsInboxPreview, setTripOperationsInboxPreview] = useState<TravelInboxPreviewRecord | null>(null)
+  const [tripDisruptionEvents, setTripDisruptionEvents] = useState<TripDisruptionEvent[]>([])
+  const [sharedTripMutations, setSharedTripMutations] = useState<SharedTripMutation[]>([])
   const [tripOperationsLocalStates, setTripOperationsLocalStates] = useState<Record<string, TripOperationsLocalState>>({})
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
@@ -143,12 +146,16 @@ export function TripWorkspacePage() {
       listTravelInboxEntriesByTrip(trip.id),
       getActiveTravelInboxPreview(trip.id),
       listTravelInboxAccountSources(),
-    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources]) => {
+      listTripDisruptionEventsByTrip(trip.id),
+      loadOwnerSharedTripState(trip.id).catch(() => null),
+    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources, replanEvents, sharedState]) => {
       if (!cancelled) {
         setItemsByDay(Object.fromEntries(entries))
         setTicketMetas(tickets)
         setTicketBlobSyncStates(blobSyncStates)
         setCloudSyncQueueSummary(syncSummary)
+        setTripDisruptionEvents(replanEvents)
+        setSharedTripMutations(sharedState && sharedState.configured && sharedState.signedIn ? sharedState.mutations : [])
         setTripOperationsInboxPreview(inboxPreview ?? null)
         setTripOperationsInboxSummary(buildTripOperationsInboxSummary({
           accountSources,
@@ -166,6 +173,8 @@ export function TripWorkspacePage() {
         setCloudSyncQueueSummary(null)
         setTripOperationsInboxSummary(null)
         setTripOperationsInboxPreview(null)
+        setTripDisruptionEvents([])
+        setSharedTripMutations([])
         setLoadedTripContextKey('')
       }
       // Trip Home can still render without aggregate item counts.
@@ -321,9 +330,11 @@ export function TripWorkspacePage() {
       itemsByDay,
       readinessModel,
       routePreparation,
+      sharedMutations: sharedTripMutations,
       ticketBlobSyncStates,
       tickets: ticketMetas,
       trip,
+      tripDisruptionEvents,
     })
   }, [
     allItems,
@@ -333,9 +344,11 @@ export function TripWorkspacePage() {
     itemsByDay,
     readinessModel,
     routePreparation,
+    sharedTripMutations,
     ticketBlobSyncStates,
     ticketMetas,
     trip,
+    tripDisruptionEvents,
     tripOperationsInboxSummary,
     tripOperationsInboxPreview,
     tripOperationsLocalState.dispositions,

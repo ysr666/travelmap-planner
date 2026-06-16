@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -15,17 +15,18 @@ import {
   Sparkles,
   Ticket,
 } from 'lucide-react'
-import { setItineraryItemExecutionState } from '../../db'
+import { createTripDisruptionEvent, listTripReplanRecordsByTrip, setItineraryItemExecutionState } from '../../db'
 import { prepareAiTripEditExecution } from '../../lib/ai/aiTripEditExecution'
 import { applyAiTripEditPatchPlanToDb } from '../../lib/ai/aiTripEditApply'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/ai/aiTripEditPatch'
-import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION } from '../../lib/ai/providerProxyContract'
-import { fetchProviderProxyAiTripEditPlan, getProviderProxyConfig, ProviderProxyClientError } from '../../lib/providerProxyClient'
+import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION } from '../../lib/ai/providerProxyContract'
+import { applyTripReplanOption, createTripReplanPreviewForEvent, undoTripReplan } from '../../lib/adaptiveReplanning'
+import { fetchProviderProxyAiTripEditPlan, fetchProviderProxyTravelSearch, getProviderProxyConfig, ProviderProxyClientError } from '../../lib/providerProxyClient'
 import { buildAppleMapsDirectionsUrl, buildGoogleMapsDirectionsUrl } from '../../lib/mapLinks'
 import type { RoutePreparationDay } from '../../lib/routePreparation'
 import { buildTripLiveModel, type TripLiveRisk, type TripLiveStage } from '../../lib/tripLiveMode'
 import type { TripOperationsRecommendation } from '../../lib/tripOperationsAgent'
-import type { Day, ItineraryItem, TicketMeta, Trip } from '../../types'
+import type { Day, ItineraryItem, TicketMeta, Trip, TripDisruptionKind, TripReplanRecord, TripReplanSourceEvidence } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
@@ -50,6 +51,7 @@ type TripLiveModeCardProps = {
 }
 
 type AdjustmentKind = 'compress' | 'adjust'
+type ReportKind = TripDisruptionKind
 
 export function TripLiveModeCard({
   allItems,
@@ -89,6 +91,14 @@ export function TripLiveModeCard({
   const [applying, setApplying] = useState(false)
   const [patchPlan, setPatchPlan] = useState<AiTripEditPatchPlan | null>(null)
   const [patchPreview, setPatchPreview] = useState<AiTripEditPatchPreview | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportKind, setReportKind] = useState<ReportKind>('late')
+  const [reportDelayMinutes, setReportDelayMinutes] = useState(30)
+  const [reportNotes, setReportNotes] = useState('')
+  const [replanRecord, setReplanRecord] = useState<TripReplanRecord | null>(null)
+  const [selectedReplanOptionId, setSelectedReplanOptionId] = useState<string | null>(null)
+  const [replanApplyOpen, setReplanApplyOpen] = useState(false)
+  const [replanBusy, setReplanBusy] = useState(false)
   const hasCriticalTimeRisk = model.risks.some((risk) => risk.kind === 'late' && risk.severity === 'critical')
   const targetItem = model.targetItem
   const appleDirectionsUrl = model.previousItem && targetItem
@@ -97,6 +107,24 @@ export function TripLiveModeCard({
   const googleDirectionsUrl = model.previousItem && targetItem
     ? buildGoogleMapsDirectionsUrl(model.previousItem, targetItem, targetItem.previousTransportMode)
     : null
+
+  useEffect(() => {
+    let cancelled = false
+    void listTripReplanRecordsByTrip(trip.id).then((records) => {
+      if (cancelled) return
+      const activeRecord = selectLatestActiveReplanRecord(records, day.id)
+      setReplanRecord(activeRecord)
+      setSelectedReplanOptionId(activeRecord?.selectedOptionId ?? activeRecord?.options[0]?.id ?? null)
+    }).catch(() => {
+      if (!cancelled) {
+        setReplanRecord(null)
+        setSelectedReplanOptionId(null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [day.id, trip.id])
 
   async function setExecutionState(item: ItineraryItem, state: 'completed' | 'skipped' | null) {
     setBusyItemId(item.id)
@@ -128,6 +156,76 @@ export function TripLiveModeCard({
     setAdjustmentKind(kind)
     setAiContext(prepared)
     setSendConfirmOpen(true)
+  }
+
+  async function submitDisruptionReport() {
+    setReplanBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const evidence = await fetchDisruptionEvidence({
+        day,
+        kind: reportKind,
+        notes: reportNotes,
+        providerConfig,
+        targetItem: targetItem ?? null,
+        trip,
+      })
+      const event = await createTripDisruptionEvent({
+        dayId: day.id,
+        delayMinutes: reportKind === 'delay' || reportKind === 'late' ? reportDelayMinutes : undefined,
+        evidence,
+        itemId: targetItem?.id,
+        kind: reportKind,
+        notes: reportNotes.trim() || undefined,
+        occurredAt: new Date().toISOString(),
+        reportedByRole: 'owner',
+        status: 'reported',
+        tripId: trip.id,
+      })
+      const record = await createTripReplanPreviewForEvent(event.id)
+      setReplanRecord(record)
+      setSelectedReplanOptionId(record.options[0]?.id ?? null)
+      setReportOpen(false)
+      setMessage('已生成 3 个当天重排方案，确认前不会写入。')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '生成重排方案失败。')
+    } finally {
+      setReplanBusy(false)
+    }
+  }
+
+  async function applySelectedReplan() {
+    if (!replanRecord || !selectedReplanOptionId) return
+    setReplanBusy(true)
+    setError(null)
+    try {
+      const applied = await applyTripReplanOption(replanRecord.id, selectedReplanOptionId)
+      setReplanRecord(applied)
+      setReplanApplyOpen(false)
+      setMessage('已应用重排方案，同行人会在共享行程发布后看到新的集合时间。')
+      await onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '应用重排方案失败。')
+    } finally {
+      setReplanBusy(false)
+    }
+  }
+
+  async function undoAppliedReplan() {
+    if (!replanRecord) return
+    setReplanBusy(true)
+    setError(null)
+    try {
+      const undone = await undoTripReplan(replanRecord.id)
+      setReplanRecord(undone)
+      setMessage('已撤销整次重排。')
+      await onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '撤销重排失败。')
+    } finally {
+      setReplanBusy(false)
+    }
   }
 
   async function generatePatch() {
@@ -182,7 +280,7 @@ export function TripLiveModeCard({
 
   return (
     <>
-      <Card className="space-y-4" data-testid="trip-live-mode-card" variant="grouped">
+      <Card className="space-y-4" data-testid="trip-live-mode-card" id="trip-live-mode-card" variant="grouped">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -228,8 +326,56 @@ export function TripLiveModeCard({
             <Button icon={<ExternalLink className="size-4" />} onClick={() => onOpenItem(targetItem)} variant="secondary">详情</Button>
             <Button icon={<Map className="size-4" />} onClick={onOpenMap} variant="secondary">地图</Button>
             <Button disabled={model.ticketIds.length === 0} icon={<Ticket className="size-4" />} onClick={() => onOpenTickets(targetItem)} variant="secondary">票据</Button>
+            <Button icon={<AlertTriangle className="size-4" />} onClick={() => setReportOpen((open) => !open)} variant="secondary">报告突发情况</Button>
             {appleDirectionsUrl ? <a className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-outline-variant/40 px-3 text-sm font-semibold text-on-surface-variant tm-focus" href={appleDirectionsUrl} rel="noreferrer" target="_blank"><Navigation className="size-4" />Apple 路线</a> : null}
             {googleDirectionsUrl ? <a className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-outline-variant/40 px-3 text-sm font-semibold text-on-surface-variant tm-focus" href={googleDirectionsUrl} rel="noreferrer" target="_blank"><ExternalLink className="size-4" />Google 路线</a> : null}
+          </div>
+        ) : null}
+
+        {reportOpen ? (
+          <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-high/45 p-3" data-testid="trip-live-disruption-report">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <label className="min-w-0 text-xs font-semibold text-on-surface-variant">
+                类型
+                <select
+                  className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/50 bg-surface px-3 text-sm text-on-surface"
+                  onChange={(event) => setReportKind(event.currentTarget.value as ReportKind)}
+                  value={reportKind}
+                >
+                  <option value="late">迟到</option>
+                  <option value="delay">航班/火车延误</option>
+                  <option value="closure">地点关闭</option>
+                  <option value="weather_unsuitable">天气不适合</option>
+                  <option value="cancelled">取消</option>
+                  <option value="skip">临时跳过</option>
+                </select>
+              </label>
+              <label className="min-w-0 text-xs font-semibold text-on-surface-variant">
+                延误分钟
+                <input
+                  className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/50 bg-surface px-3 text-sm text-on-surface"
+                  disabled={reportKind !== 'delay' && reportKind !== 'late'}
+                  min={0}
+                  onChange={(event) => setReportDelayMinutes(Number(event.currentTarget.value) || 0)}
+                  type="number"
+                  value={reportDelayMinutes}
+                />
+              </label>
+            </div>
+            <label className="block text-xs font-semibold text-on-surface-variant">
+              备注
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-lg border border-outline-variant/50 bg-surface px-3 py-2 text-sm text-on-surface"
+                maxLength={500}
+                onChange={(event) => setReportNotes(event.currentTarget.value)}
+                placeholder="例如：同行人还在路上，预计 30 分钟后到。"
+                value={reportNotes}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={replanBusy} icon={replanBusy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />} onClick={() => void submitDisruptionReport()}>生成重排方案</Button>
+              <Button disabled={replanBusy} onClick={() => setReportOpen(false)} variant="ghost">取消</Button>
+            </div>
           </div>
         ) : null}
 
@@ -257,6 +403,42 @@ export function TripLiveModeCard({
             <p className="text-xs leading-5 tm-muted">影响 {patchPreview.affectedDayCount} 天、{patchPreview.affectedItemCount} 个行程点，尚未写入。</p>
             {!compact ? <ul className="space-y-1 text-xs leading-5 text-on-surface-variant">{patchPreview.lines.map((line) => <li key={line}>{line}</li>)}</ul> : null}
             <Button icon={<ShieldCheck className="size-4" />} onClick={() => setApplyConfirmOpen(true)} variant="secondary">应用修改</Button>
+          </div>
+        ) : null}
+
+        {replanRecord ? (
+          <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-high/45 p-3" data-testid="trip-live-replan-preview">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-on-surface">Trip Disruption & Adaptive Replanning</p>
+                <p className="mt-1 text-xs leading-5 tm-muted">{replanRecord.status === 'applied' ? '已应用，可整次撤销。' : replanRecord.status === 'undone' ? '这次重排已撤销。' : '选择一个方案后再确认写入。'}</p>
+              </div>
+              {replanRecord.status === 'applied' ? (
+                <Button disabled={replanBusy} icon={<RotateCcw className="size-4" />} onClick={() => void undoAppliedReplan()} variant="secondary">撤销重排</Button>
+              ) : null}
+            </div>
+            {replanRecord.status === 'preview' ? (
+              <div className="grid gap-2 md:grid-cols-3">
+                {replanRecord.options.map((option) => (
+                  <button
+                    className={`min-h-28 rounded-lg border p-3 text-left text-xs transition ${selectedReplanOptionId === option.id ? 'border-primary bg-primary/10 text-on-surface' : 'border-outline-variant/40 bg-surface text-on-surface-variant'}`}
+                    key={option.id}
+                    onClick={() => setSelectedReplanOptionId(option.id)}
+                    type="button"
+                  >
+                    <span className="block font-semibold text-on-surface">{option.title}</span>
+                    <span className="mt-1 block leading-5">{option.summary}</span>
+                    <span className="mt-2 block font-semibold">影响 {option.diff.itemChanges.length} 项</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {selectedReplanOptionId ? (
+              <ReplanDiffPreview record={replanRecord} selectedOptionId={selectedReplanOptionId} />
+            ) : null}
+            {replanRecord.status === 'preview' ? (
+              <Button disabled={!selectedReplanOptionId || replanBusy} icon={<ShieldCheck className="size-4" />} onClick={() => setReplanApplyOpen(true)} variant="secondary">确认应用重排</Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -301,7 +483,59 @@ export function TripLiveModeCard({
         testId="trip-live-ai-apply-confirm-dialog"
         title="应用行程调整？"
       />
+      <ConfirmDialog
+        body="将写入所选重排方案，并保存整次重排的撤销快照。票据、账本和交通订单不会自动取消或退款。"
+        cancelLabel="暂不应用"
+        confirmLabel="确认应用"
+        icon={<ShieldCheck className="size-5" />}
+        loading={replanBusy}
+        onCancel={() => !replanBusy && setReplanApplyOpen(false)}
+        onConfirm={() => void applySelectedReplan()}
+        open={replanApplyOpen}
+        testId="trip-live-replan-apply-confirm-dialog"
+        title="应用自适应重排？"
+      />
     </>
+  )
+}
+
+const ACTIVE_REPLAN_RECORD_STATUSES = new Set<TripReplanRecord['status']>(['preview', 'applied', 'conflict'])
+
+function selectLatestActiveReplanRecord(records: TripReplanRecord[], dayId: string) {
+  return records
+    .filter((record) => ACTIVE_REPLAN_RECORD_STATUSES.has(record.status) && replanRecordTouchesDay(record, dayId))
+    .sort((left, right) => (right.updatedAt - left.updatedAt) || (right.createdAt - left.createdAt))[0] ?? null
+}
+
+function replanRecordTouchesDay(record: TripReplanRecord, dayId: string) {
+  return record.beforeSnapshot.days.some((snapshotDay) => snapshotDay.id === dayId)
+    || record.beforeSnapshot.items.some((item) => item.dayId === dayId)
+    || Boolean(record.afterSnapshot?.days.some((snapshotDay) => snapshotDay.id === dayId))
+    || Boolean(record.afterSnapshot?.items.some((item) => item.dayId === dayId))
+}
+
+function ReplanDiffPreview({ record, selectedOptionId }: { record: TripReplanRecord; selectedOptionId: string }) {
+  const option = record.options.find((candidate) => candidate.id === selectedOptionId)
+  const diff = record.status === 'applied' || record.status === 'undone'
+    ? record.selectedDiff ?? option?.diff
+    : option?.diff
+  if (!option || !diff) return null
+  return (
+    <div className="space-y-2 text-xs leading-5" data-testid="trip-live-replan-diff">
+      <div className="grid gap-2 md:grid-cols-2">
+        {diff.itemChanges.slice(0, 6).map((change) => (
+          <div className="rounded-lg bg-surface px-3 py-2" key={change.itemId}>
+            <p className="font-semibold text-on-surface">{change.title}</p>
+            <p className="tm-muted">{formatItemChange(change)}</p>
+            <p className="text-on-surface-variant">{change.reason}</p>
+          </div>
+        ))}
+      </div>
+      {diff.ticketImpacts.length > 0 ? <p className="text-amber-700 dark:text-amber-200">{diff.ticketImpacts.map((impact) => impact.summary).join(' ')}</p> : null}
+      {diff.ledgerImpacts.length > 0 ? <p className="text-amber-700 dark:text-amber-200">{diff.ledgerImpacts.map((impact) => impact.summary).join(' ')}</p> : null}
+      {diff.companionImpacts.length > 0 ? <p className="text-primary">{diff.companionImpacts.map((impact) => impact.summary).join(' ')}</p> : null}
+      {diff.warnings.length > 0 ? <ul className="space-y-1 text-on-surface-variant">{diff.warnings.slice(0, 5).map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+    </div>
   )
 }
 
@@ -335,4 +569,79 @@ function buildAdjustmentCommand(kind: AdjustmentKind, day: Day, item: ItineraryI
     return `今天时间明显不足。请仅针对日期 ID ${day.id} 压缩「${item.title}」及其后续安排的时间，优先调整开始和结束时间，不删除地点，不添加新地点。`
   }
   return `今天时间明显不足。请仅针对日期 ID ${day.id} 和下一站「${item.title}」提出最小结构化调整，可修改时间或顺序，不添加新地点。`
+}
+
+function formatItemChange(change: TripReplanRecord['options'][number]['diff']['itemChanges'][number]) {
+  const beforeTime = [change.before.startTime, change.before.endTime].filter(Boolean).join('-') || '未定'
+  const afterTime = [change.after.startTime, change.after.endTime].filter(Boolean).join('-') || '未定'
+  if (change.changeType === 'skipped') return '改为跳过'
+  if (change.changeType === 'day_changed') return `移动日期：${change.before.dayId} -> ${change.after.dayId}`
+  if (change.changeType === 'reordered') return `顺序：${change.before.sortOrder} -> ${change.after.sortOrder}`
+  if (change.changeType === 'time_changed') return `时间：${beforeTime} -> ${afterTime}`
+  return '无变化'
+}
+
+async function fetchDisruptionEvidence({
+  day,
+  kind,
+  notes,
+  providerConfig,
+  targetItem,
+  trip,
+}: {
+  day: Day
+  kind: ReportKind
+  notes: string
+  providerConfig: ReturnType<typeof getProviderProxyConfig>
+  targetItem: ItineraryItem | null
+  trip: Trip
+}): Promise<TripReplanSourceEvidence[]> {
+  if (!providerConfig.configured || !providerConfig.proxyUrl) return []
+  const query = buildDisruptionSearchQuery({ day, kind, notes, targetItem, trip })
+  if (!query) return []
+  try {
+    const response = await fetchProviderProxyTravelSearch({
+      locale: 'zh-CN',
+      maxResults: 3,
+      operation: PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
+      query,
+      region: trip.destination,
+      searchType: kind === 'closure' ? 'opening_hours' : kind === 'weather_unsuitable' ? 'general' : 'transport',
+    }, providerConfig.proxyUrl)
+    return response.results.map((result, index) => ({
+      confidence: result.confidence,
+      displayUrl: result.displayUrl,
+      domain: result.domain,
+      id: `travel-search:${response.retrievedAt}:${index}`,
+      kind: 'travel_search',
+      label: result.title,
+      retrievedAt: result.retrievedAt,
+      snippet: result.snippet,
+      sourceType: result.sourceType,
+      url: result.url,
+      warning: response.source === 'mock' ? '当前为模拟搜索结果，不代表实时网页信息。' : undefined,
+    }))
+  } catch {
+    return []
+  }
+}
+
+function buildDisruptionSearchQuery({
+  day,
+  kind,
+  notes,
+  targetItem,
+  trip,
+}: {
+  day: Day
+  kind: ReportKind
+  notes: string
+  targetItem: ItineraryItem | null
+  trip: Trip
+}) {
+  const place = targetItem?.locationName || targetItem?.title || trip.destination
+  if (kind === 'closure') return `${place} ${day.date} 开放时间 临时关闭 官方`
+  if (kind === 'weather_unsuitable') return `${trip.destination} ${day.date} 天气 预警 官方`
+  if (kind === 'delay') return `${notes || place} 航班 火车 延误 官方`
+  return ''
 }

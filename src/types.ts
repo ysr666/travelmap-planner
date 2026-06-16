@@ -6,10 +6,17 @@ export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticke
 export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
 export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type ItineraryExecutionStatus = 'completed' | 'skipped'
+export type ReplanFlexibility = 'fixed' | 'movable' | 'optional'
+export type ReplanPriority = 'must_keep' | 'high' | 'normal' | 'low'
 
 export type ItineraryExecutionState = {
   status: ItineraryExecutionStatus
   updatedAt: number
+}
+
+export type ItineraryReplanPreference = {
+  flexibility?: ReplanFlexibility
+  priority?: ReplanPriority
 }
 
 export type ContentEnrichmentSource = {
@@ -111,8 +118,138 @@ export type ItineraryItem = {
   notes?: string
   contentEnrichment?: ItemContentEnrichment
   executionState?: ItineraryExecutionState
+  replanPreference?: ItineraryReplanPreference
   ticketIds: string[]
   sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type TripDisruptionKind = 'delay' | 'closure' | 'weather_unsuitable' | 'late' | 'cancelled' | 'skip'
+export type TripDisruptionEventStatus = 'reported' | 'planned' | 'applied' | 'dismissed'
+export type TripDisruptionReporterRole = 'owner' | 'companion' | 'system'
+export type TripReplanStrategy = 'least_change' | 'preserve_most' | 'shortest_route'
+export type TripReplanRecordStatus = 'preview' | 'applied' | 'undone' | 'conflict'
+export type TripReplanSourceKind = 'user_report' | 'travel_search' | 'place_details' | 'route_preview' | 'route_order_suggestion' | 'transport_segment'
+
+export type TripReplanSourceEvidence = {
+  id: string
+  kind: TripReplanSourceKind
+  label: string
+  retrievedAt: string
+  sourceType?: ContentEnrichmentSourceType | 'transport' | 'weather' | 'unknown'
+  confidence?: ContentEnrichmentConfidence
+  url?: string
+  displayUrl?: string
+  domain?: string
+  snippet?: string
+  warning?: string
+}
+
+export type TripDisruptionEvent = {
+  id: string
+  tripId: string
+  dayId?: string
+  itemId?: string
+  segmentId?: string
+  sharedMutationId?: string
+  kind: TripDisruptionKind
+  status: TripDisruptionEventStatus
+  reportedByRole: TripDisruptionReporterRole
+  reportedByUserId?: string
+  reportedByDisplayName?: string
+  occurredAt: string
+  delayMinutes?: number
+  notes?: string
+  affectedCompanionIds?: string[]
+  evidence: TripReplanSourceEvidence[]
+  createdAt: number
+  updatedAt: number
+}
+
+export type TripReplanItemChange = {
+  itemId: string
+  title: string
+  changeType: 'time_changed' | 'day_changed' | 'reordered' | 'skipped' | 'unchanged'
+  before: Pick<ItineraryItem, 'dayId' | 'startTime' | 'endTime' | 'sortOrder' | 'executionState'>
+  after: Pick<ItineraryItem, 'dayId' | 'startTime' | 'endTime' | 'sortOrder' | 'executionState'>
+  reason: string
+}
+
+export type TripReplanRouteImpact = {
+  dayId: string
+  itemIds: string[]
+  beforeTravelMinutes?: number
+  afterTravelMinutes?: number
+  deltaMinutes?: number
+  staleRouteCache: boolean
+  summary: string
+}
+
+export type TripReplanTicketImpact = {
+  ticketId: string
+  itemId?: string
+  title: string
+  impact: 'fixed' | 'time_warning' | 'skip_warning' | 'unaffected'
+  summary: string
+}
+
+export type TripReplanLedgerImpact = {
+  expenseId: string
+  itemIds: string[]
+  title: string
+  impact: 'review_needed' | 'possible_refund' | 'unaffected'
+  summary: string
+}
+
+export type TripReplanCompanionImpact = {
+  itemId?: string
+  title: string
+  summary: string
+  meetingTime?: string
+}
+
+export type TripReplanDiff = {
+  itemChanges: TripReplanItemChange[]
+  routeImpacts: TripReplanRouteImpact[]
+  ticketImpacts: TripReplanTicketImpact[]
+  ledgerImpacts: TripReplanLedgerImpact[]
+  companionImpacts: TripReplanCompanionImpact[]
+  warnings: string[]
+}
+
+export type TripReplanOption = {
+  id: string
+  strategy: TripReplanStrategy
+  title: string
+  summary: string
+  score: number
+  itemPatches: Array<{
+    itemId: string
+    patch: Partial<Pick<ItineraryItem, 'dayId' | 'startTime' | 'endTime' | 'sortOrder' | 'executionState' | 'previousTransportDurationMinutes' | 'previousTransportMode' | 'previousTransportNote'>>
+  }>
+  diff: TripReplanDiff
+}
+
+export type TripReplanSnapshot = {
+  days: Day[]
+  items: ItineraryItem[]
+}
+
+export type TripReplanRecord = {
+  id: string
+  tripId: string
+  eventId: string
+  selectedOptionId?: string
+  status: TripReplanRecordStatus
+  baselineFingerprint: string
+  appliedFingerprint?: string
+  undoneAt?: number
+  options: TripReplanOption[]
+  selectedDiff?: TripReplanDiff
+  beforeSnapshot: TripReplanSnapshot
+  afterSnapshot?: TripReplanSnapshot
+  evidence: TripReplanSourceEvidence[]
   createdAt: number
   updatedAt: number
 }
@@ -341,12 +478,19 @@ export type SharedItineraryItem = Omit<ItineraryItem, 'contentEnrichment' | 'tic
 }
 
 export type SharedTripProjection = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   publishedAt: string
   trip: Trip
   days: Day[]
   items: SharedItineraryItem[]
   ticketSummaries: SharedTicketSummary[]
+  latestReplanSummary?: {
+    appliedAt?: string
+    eventKind: TripDisruptionKind
+    recordId: string
+    summary: string
+  }
+  meetingChangeSummaries?: TripReplanCompanionImpact[]
   warnings: string[]
 }
 
@@ -426,6 +570,8 @@ export type SharedTripMutationType =
   | 'delete_item'
   | 'reorder_day_items'
   | 'update_item_execution_state'
+  | 'report_disruption'
+  | 'request_replan_undo'
 
 export type SharedTripMutation = {
   id: string
@@ -450,6 +596,8 @@ export type SyncObjectType =
   | 'ledger_participant'
   | 'ledger_budget'
   | 'ledger_expense'
+  | 'replan_event'
+  | 'replan_record'
 export type SyncOutboxOperation = 'upsert' | 'delete'
 export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
 export type SyncObjectPayload =
@@ -461,6 +609,8 @@ export type SyncObjectPayload =
   | LedgerParticipant
   | LedgerBudget
   | LedgerExpense
+  | TripDisruptionEvent
+  | TripReplanRecord
 
 export type SyncOutboxEntry = {
   id: string

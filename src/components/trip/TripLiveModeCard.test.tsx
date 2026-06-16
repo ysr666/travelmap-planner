@@ -10,10 +10,14 @@ const mocks = vi.hoisted(() => ({
   applyPatch: vi.fn(),
   providerConfigured: false,
   fetchPlan: vi.fn(),
+  listTripReplanRecordsByTrip: vi.fn().mockResolvedValue([]),
   setExecutionState: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('../../db', () => ({ setItineraryItemExecutionState: mocks.setExecutionState }))
+vi.mock('../../db', () => ({
+  listTripReplanRecordsByTrip: mocks.listTripReplanRecordsByTrip,
+  setItineraryItemExecutionState: mocks.setExecutionState,
+}))
 vi.mock('../../lib/ai/aiTripEditApply', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../lib/ai/aiTripEditApply')>(),
   applyAiTripEditPatchPlanToDb: mocks.applyPatch,
@@ -40,6 +44,7 @@ beforeEach(() => {
   root = createRoot(container)
   vi.clearAllMocks()
   mocks.providerConfigured = false
+  mocks.listTripReplanRecordsByTrip.mockResolvedValue([])
   mocks.applyPatch.mockResolvedValue({ affectedDayIds: [day.id], affectedItemIds: [item.id], appliedChanges: [{ action: 'updated', dayId: day.id, itemId: item.id, title: item.title }], appliedOperationCount: 1, ok: true })
   mocks.fetchPlan.mockResolvedValue({ patchPlan: { operations: [{ endTime: '09:30', itemId: item.id, reason: '压缩安排。', type: 'update_item_time' }], summary: '压缩下一站' }, warnings: [] })
 })

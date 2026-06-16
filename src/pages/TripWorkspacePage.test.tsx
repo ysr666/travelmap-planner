@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   navigateTo: vi.fn(),
   listItemsByDay: vi.fn().mockResolvedValue([]),
   listTicketsByTrip: vi.fn().mockResolvedValue([]),
+  listTripDisruptionEventsByTrip: vi.fn().mockResolvedValue([]),
   getTrip: vi.fn().mockResolvedValue({
     id: 'trip_1',
     title: '东京旅行',
@@ -58,6 +59,7 @@ vi.mock('../db', () => ({
   listLedgerParticipants: vi.fn().mockResolvedValue([]),
   listItemsByDay: mocks.listItemsByDay,
   listTicketsByTrip: mocks.listTicketsByTrip,
+  listTripDisruptionEventsByTrip: mocks.listTripDisruptionEventsByTrip,
   getTrip: mocks.getTrip,
   listDaysByTrip: mocks.listDaysByTrip,
 }))
@@ -121,6 +123,18 @@ vi.mock('../lib/cloudSyncQueueSummary', () => ({
 
 vi.mock('../lib/objectSyncLocal', () => ({
   listTicketBlobSyncStatesByTrip: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('../lib/companion', () => ({
+  loadOwnerSharedTripState: vi.fn().mockResolvedValue({
+    configured: true,
+    invites: [],
+    activities: [],
+    members: [],
+    mutations: [],
+    sharedTrip: null,
+    signedIn: true,
+  }),
 }))
 
 vi.mock('../lib/tripReadiness', () => ({

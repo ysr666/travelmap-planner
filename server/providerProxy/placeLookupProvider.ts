@@ -130,7 +130,7 @@ export function createGooglePlacesLookupProvider(
 }
 
 export function getGooglePlacesApiKey(env: GooglePlacesEnv) {
-  return env.VITE_GOOGLE_MAPS_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim() || env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim()
+  return env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim()
 }
 
 function buildGooglePlacesTextSearchBody(request: ProviderProxyValidatedPlaceLookupRequest) {

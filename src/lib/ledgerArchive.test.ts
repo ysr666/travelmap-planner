@@ -8,7 +8,9 @@ import {
   buildLedgerForecast,
   buildLedgerIntegrityIssues,
   buildLedgerTimeline,
+  executeLedgerQueryPlan,
   findLedgerCandidateMatch,
+  parseLedgerQueryLocally,
   queryLedgerLocally,
 } from './ledgerArchive'
 import { buildCandidate, canAutoConfirmLedgerCandidate, sanitizeLedgerExtractionTextForAi } from './ledgerExtraction'
@@ -138,7 +140,26 @@ describe('ledger archive v2', () => {
     const record = expense({ orderNumber: 'SECRET-ORDER-123' })
     const result = queryLedgerLocally('东京酒店一共多少钱？', [record], settings)
     expect(result.totalMinor).toBe(10000)
-    expect(JSON.stringify(buildLedgerAiQueryContext([record], result))).not.toContain('SECRET-ORDER-123')
+    expect(JSON.stringify(buildLedgerAiQueryContext([record]))).not.toContain('SECRET-ORDER-123')
     expect(sanitizeLedgerExtractionTextForAi('订单号 SECRET-ORDER-123 支付成功')).not.toContain('SECRET-ORDER-123')
+  })
+
+  it('parses combined local filters and groups amounts locally', () => {
+    const records = [
+      expense({ category: 'food', city: '东京', id: 'food-tokyo', title: '东京晚餐' }),
+      expense({ amountMinor: 5000, category: 'food', city: '大阪', id: 'food-osaka', title: '大阪午餐' }),
+      expense({ category: 'lodging', city: '东京', id: 'hotel', title: '东京酒店' }),
+    ]
+    const parsed = parseLedgerQueryLocally('按城市统计餐饮费用', records)
+    expect(parsed).toMatchObject({ needsAi: false, plan: { aggregation: 'group', categories: ['food'], groupBy: 'city' } })
+    expect(executeLedgerQueryPlan(parsed.plan, records, settings).groups).toEqual([
+      expect.objectContaining({ amountMinor: 10000, label: '东京' }),
+      expect.objectContaining({ amountMinor: 5000, label: '大阪' }),
+    ])
+  })
+
+  it('keeps unavailable source citations linked to their bill detail', () => {
+    const result = executeLedgerQueryPlan({ aggregation: 'list', itemLinked: false }, [expense({ itemIds: [], sourceLinks: [{ available: false, id: 'gone', kind: 'ticket', role: 'invoice', sourceId: 'ticket-gone' }] })], settings)
+    expect(result.citations[0]).toMatchObject({ available: false, expenseId: 'expense-1', sourceId: 'ticket-gone' })
   })
 })

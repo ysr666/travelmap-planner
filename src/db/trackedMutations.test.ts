@@ -6,6 +6,7 @@ import {
   createItineraryItem,
   createLedgerBudget,
   createLedgerExpense,
+  bulkReviewLedgerExpenses,
   createLedgerParticipant,
   createLedgerSettings,
   createTicketMeta,
@@ -153,6 +154,38 @@ describe('tracked db mutations', () => {
     await expect(db.ledgerParticipants.where('tripId').equals(trip.id).count()).resolves.toBe(0)
     await expect(db.ledgerBudgets.where('tripId').equals(trip.id).count()).resolves.toBe(0)
     await expect(db.ledgerExpenses.where('tripId').equals(trip.id).count()).resolves.toBe(0)
+  })
+
+  it('bulk confirms eligible ledger expenses atomically and rejects stale records', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京账本' })
+    const participant = await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
+    const first = await createLedgerExpense({
+      amountMinor: 1200,
+      category: 'food',
+      currency: 'JPY',
+      date: '2026-04-01',
+      itemIds: [],
+      paymentStatus: 'paid',
+      reviewStatus: 'needs_review',
+      source: { kind: 'inbox', sourceId: 'source-1' },
+      sourceLinks: [{ available: true, id: 'inbox:source-1', kind: 'inbox', role: 'payment_receipt', sourceId: 'source-1' }],
+      splitMode: 'equal',
+      splitShares: [{ participantId: participant.id, weight: 1 }],
+      status: 'draft',
+      title: '晚餐',
+      tripId: trip.id,
+    })
+    await db.syncOutbox.clear()
+
+    const updated = await bulkReviewLedgerExpenses({ action: 'confirm', records: [{ expectedUpdatedAt: first.updatedAt, id: first.id }], tripId: trip.id })
+    expect(updated[0]).toMatchObject({ reviewStatus: 'reviewed', status: 'confirmed' })
+    await expect(db.syncOutbox.toArray()).resolves.toEqual([
+      expect.objectContaining({ objectId: first.id, objectType: 'ledger_expense' }),
+    ])
+
+    await expect(bulkReviewLedgerExpenses({ action: 'mark_reviewed', records: [{ expectedUpdatedAt: first.updatedAt, id: first.id }], tripId: trip.id })).rejects.toThrow('已在其他位置更新')
+    await expect(bulkReviewLedgerExpenses({ action: 'mark_reviewed', records: [{ expectedUpdatedAt: updated[0].updatedAt, id: first.id }, { expectedUpdatedAt: updated[0].updatedAt, id: first.id }], tripId: trip.id })).rejects.toThrow('重复账单')
+    await expect(db.ledgerExpenses.get(first.id)).resolves.toMatchObject({ status: 'confirmed' })
   })
 
   it('clears live execution state when restoring an item', async () => {

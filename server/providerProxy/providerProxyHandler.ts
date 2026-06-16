@@ -464,10 +464,10 @@ async function handleAiExpenseQueryRequest({
     const result = await answerExpenseQueryWithProvider(env, queryRequest, fetcher, isMockMode(env))
     if (!result.ok) throw new ProviderProxyServerError(result.errorCode, result.errorCode === 'provider_unavailable' ? 503 : 502)
     return jsonResponse({
-      answer: result.answer,
-      citationExpenseIds: result.citationExpenseIds,
       ok: true,
       operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION,
+      plan: result.plan,
+      presentation: result.presentation,
       requestId: queryRequest.requestId,
       source: result.source,
     }, 200, corsHeaders)

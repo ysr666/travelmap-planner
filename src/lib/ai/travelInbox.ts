@@ -37,6 +37,10 @@ export async function listTravelInboxEntriesByTrip(tripId: string) {
     .sortBy('createdAt')
 }
 
+export async function getTravelInboxEntry(entryId: string) {
+  return db.travelInboxEntries.get(entryId)
+}
+
 export async function getActiveTravelInboxPreview(tripId: string) {
   const previews = await db.travelInboxPreviews
     .where('tripId')

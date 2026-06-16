@@ -1,6 +1,15 @@
 import { enqueueObjectDelete, enqueueObjectUpsert } from '../lib/objectSyncLocal'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
+import { buildLedgerReviewEntries } from '../lib/ledgerReview'
+import type { LedgerExchangeRateSnapshot } from '../types'
+import { db } from './database'
 import * as repo from './ledgerRepositories'
+
+export type BulkLedgerReviewRecord = {
+  exchangeRate?: LedgerExchangeRateSnapshot
+  expectedUpdatedAt: number
+  id: string
+}
 
 export async function createLedgerSettings(input: repo.CreateLedgerSettingsInput) {
   const record = await repo.createLedgerSettings(input)
@@ -88,6 +97,47 @@ export async function deleteLedgerExpense(id: string) {
     await enqueueObjectDelete({ objectId: record.id, objectType: 'ledger_expense', tripId: record.tripId })
     markLedgerChanged(record.tripId, 'ledger-expense-deleted')
   }
+}
+
+export async function bulkReviewLedgerExpenses({
+  action,
+  records,
+  tripId,
+}: {
+  action: 'confirm' | 'mark_reviewed'
+  records: BulkLedgerReviewRecord[]
+  tripId: string
+}) {
+  if (records.length === 0) return []
+  if (new Set(records.map((record) => record.id)).size !== records.length) throw new Error('批量审核包含重复账单，请刷新后重试。')
+  const now = Date.now()
+  const updated = await db.transaction('rw', db.ledgerExpenses, db.trips, async () => {
+    const current = await db.ledgerExpenses.where('tripId').equals(tripId).toArray()
+    const reviewById = new Map(buildLedgerReviewEntries(current).map((entry) => [entry.expense.id, entry]))
+    const selected = records.map((record) => {
+      const expense = current.find((candidate) => candidate.id === record.id)
+      if (!expense || expense.updatedAt !== record.expectedUpdatedAt) throw new Error('账单已在其他位置更新，请刷新后重试。')
+      const review = reviewById.get(record.id)
+      if (action === 'confirm' && !review?.canBulkConfirm) throw new Error(`「${expense.title}」仍有阻塞问题，不能批量确认。`)
+      if (action === 'mark_reviewed' && !review?.canMarkReviewed) throw new Error(`「${expense.title}」不属于待阅自动归档。`)
+      return { expense, record }
+    })
+    const next = selected.map(({ expense, record }, index) => ({
+      ...expense,
+      ...(action === 'confirm' ? {
+        ...(record.exchangeRate ? { exchangeRate: record.exchangeRate } : {}),
+        reviewStatus: 'reviewed' as const,
+        status: 'confirmed' as const,
+      } : { reviewStatus: 'reviewed' as const }),
+      updatedAt: Math.max(now + index, expense.updatedAt + 1),
+    }))
+    await db.ledgerExpenses.bulkPut(next)
+    await db.trips.update(tripId, { updatedAt: now })
+    return next
+  })
+  for (const expense of updated) await enqueueObjectUpsert({ object: expense, objectType: 'ledger_expense' })
+  recordTripWriteForSync(tripId, `ledger-expenses-bulk-${action}`, { emitChangeEvent: true, now })
+  return updated
 }
 
 function markLedgerChanged(tripId: string, reason: string) {

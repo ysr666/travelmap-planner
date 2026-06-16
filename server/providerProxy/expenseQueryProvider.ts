@@ -1,4 +1,5 @@
-import type { ProviderProxyAiExpenseQueryRequest } from '../../src/lib/ai/providerProxyContract'
+import { validateProviderProxyAiExpenseQueryResponsePlan, type ProviderProxyAiExpenseQueryRequest } from '../../src/lib/ai/providerProxyContract'
+import type { LedgerQueryPlan } from '../../src/lib/ledgerArchive'
 import { extractJsonFromAiText } from './aiJson'
 
 type Env = {
@@ -8,7 +9,7 @@ type Env = {
 }
 
 export type ExpenseQueryProviderResult =
-  | { ok: true; answer: string; citationExpenseIds: string[]; source: 'mock' | 'ai' }
+  | { ok: true; plan: LedgerQueryPlan; presentation: 'summary' | 'list' | 'grouped'; source: 'mock' | 'ai' }
   | { ok: false; errorCode: 'provider_unavailable' | 'provider_error' | 'network_error' | 'invalid_response' }
 
 export async function answerExpenseQueryWithProvider(
@@ -17,7 +18,7 @@ export async function answerExpenseQueryWithProvider(
   fetcher: typeof fetch,
   mock: boolean,
 ): Promise<ExpenseQueryProviderResult> {
-  if (mock) return { answer: request.deterministicAnswer, citationExpenseIds: request.rows.slice(0, 3).map((row) => row.id), ok: true, source: 'mock' }
+  if (mock) return { ok: true, plan: { aggregation: 'list', limit: 20 }, presentation: 'list', source: 'mock' }
   const apiKey = env.TRIPMAP_AI_API_KEY?.trim()
   const baseUrl = env.TRIPMAP_AI_BASE_URL?.trim()
   const model = env.TRIPMAP_AI_MODEL?.trim()
@@ -41,7 +42,7 @@ export async function answerExpenseQueryWithProvider(
     if (!response.ok) return { errorCode: 'provider_error', ok: false }
     const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
     const parsed = extractJsonFromAiText(body.choices?.[0]?.message?.content ?? '')
-    return validateResponse(parsed, request) ?? { errorCode: 'invalid_response', ok: false }
+    return validateResponse(parsed) ?? { errorCode: 'invalid_response', ok: false }
   } catch {
     return { errorCode: 'network_error', ok: false }
   } finally {
@@ -51,20 +52,17 @@ export async function answerExpenseQueryWithProvider(
 
 function buildPrompt(request: ProviderProxyAiExpenseQueryRequest) {
   return [
-    '你是 TripMap 旅行账单问答组织器，只输出 JSON。',
-    '本地程序已经完成筛选和金额计算。不得重新计算、修改、推断或补充金额；必须保留 deterministicAnswer 中的数字结论。',
-    '只根据 rows 组织简洁中文答案，不得声称看过原始票据。citationExpenseIds 只能使用 rows.id。',
-    '输出 {"answer":"...","citationExpenseIds":["..."]}。',
+    '你是 TripMap 旅行账单查询计划解析器，只输出 JSON。',
+    '不得计算金额，不得返回金额结论，不得声称看过原始票据。只把问题转换成白名单查询计划。',
+    'plan 仅可使用 aggregation(list/count/sum/max/group)、categories、cities、merchants、statuses、reviewStatuses、reviewBuckets、paymentStatuses、orderStatuses、refundState、itemLinked、sourceRoles、dateRange、groupBy、sort、limit。',
+    'presentation 只能是 summary、list 或 grouped。输出 {"plan":{...},"presentation":"..."}。',
     JSON.stringify(request),
   ].join('\n')
 }
 
-function validateResponse(value: unknown, request: ProviderProxyAiExpenseQueryRequest): ExpenseQueryProviderResult | undefined {
+function validateResponse(value: unknown): ExpenseQueryProviderResult | undefined {
   if (!value || typeof value !== 'object') return undefined
-  const record = value as Record<string, unknown>
-  const allowed = new Set(request.rows.map((row) => row.id))
-  if (typeof record.answer !== 'string' || !record.answer.trim() || record.answer.length > 4_000 || !Array.isArray(record.citationExpenseIds)) return undefined
-  if (!record.answer.includes(request.deterministicAnswer)) return undefined
-  if (!record.citationExpenseIds.every((id) => typeof id === 'string' && allowed.has(id))) return undefined
-  return { answer: record.answer.trim(), citationExpenseIds: [...new Set(record.citationExpenseIds as string[])], ok: true, source: 'ai' }
+  const validated = validateProviderProxyAiExpenseQueryResponsePlan(value)
+  if (!validated) return undefined
+  return { ...validated, ok: true, source: 'ai' }
 }

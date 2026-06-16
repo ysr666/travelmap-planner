@@ -226,7 +226,6 @@ function validAiExpenseExtractRequest() {
 
 function validAiExpenseQueryRequest() {
   return {
-    deterministicAnswer: '找到 1 笔账单，合计 ¥100.00。',
     operation: 'ai_expense_query',
     question: '东京酒店一共多少钱？',
     quotaSessionId: 'session-a',

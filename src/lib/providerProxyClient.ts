@@ -6,6 +6,7 @@ import {
   validateProviderProxyExchangeRateRequest,
   validateProviderProxyAiExpenseExtractRequest,
   validateProviderProxyAiExpenseQueryRequest,
+  validateProviderProxyAiExpenseQueryResponsePlan,
   validateProviderProxyAiTripDraftRequest,
   validateProviderProxyAiTripDraftRepairRequest,
   validateProviderProxyAiTripDraftRefineRequest,
@@ -262,7 +263,7 @@ export async function fetchProviderProxyAiExpenseQuery(
   } catch {
     throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_query' }), response.status)
   }
-  const parsed = parseProviderProxyAiExpenseQueryResponse(body, validation.request.rows.map((row) => row.id))
+  const parsed = parseProviderProxyAiExpenseQueryResponse(body)
   if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
   return parsed
 }
@@ -921,13 +922,11 @@ function parseProviderProxyAiExpenseExtractResponse(input: unknown): ProviderPro
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'ai_expense_extract' })
 }
 
-function parseProviderProxyAiExpenseQueryResponse(input: unknown, allowedExpenseIds: string[]): ProviderProxyAiExpenseQueryResponse {
+function parseProviderProxyAiExpenseQueryResponse(input: unknown): ProviderProxyAiExpenseQueryResponse {
   const record = readRecord(input)
-  if (record.ok === true && record.operation === 'ai_expense_query' && (record.source === 'mock' || record.source === 'ai') && typeof record.answer === 'string' && Array.isArray(record.citationExpenseIds)) {
-    const allowed = new Set(allowedExpenseIds)
-    if (record.answer.trim() && record.answer.length <= 4_000 && record.citationExpenseIds.every((id) => typeof id === 'string' && allowed.has(id))) {
-      return record as unknown as ProviderProxyAiExpenseQuerySuccessResponse
-    }
+  if (record.ok === true && record.operation === 'ai_expense_query' && (record.source === 'mock' || record.source === 'ai')) {
+    const validated = validateProviderProxyAiExpenseQueryResponsePlan(record)
+    if (validated) return { ...validated, ok: true, operation: 'ai_expense_query', requestId: typeof record.requestId === 'string' ? record.requestId : undefined, source: record.source } as ProviderProxyAiExpenseQuerySuccessResponse
     return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'ai_expense_query' })
   }
   if (record.ok === false && typeof record.code === 'string') {

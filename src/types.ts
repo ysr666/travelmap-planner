@@ -903,6 +903,7 @@ export type RouteId =
   | 'tickets'
   | 'documents'
   | 'ledger'
+  | 'ledger/expense'
   | 'shared-trip'
   | 'search'
   | 'settings'

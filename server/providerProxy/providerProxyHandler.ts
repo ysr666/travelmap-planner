@@ -2074,7 +2074,7 @@ function getProviderSecret(provider: ProviderProxyConcreteProvider, env: Provide
 }
 
 function getGoogleRoutesApiKey(env: ProviderProxyHandlerEnv) {
-  return env.GOOGLE_ROUTES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim()
+  return env.GOOGLE_ROUTES_API_KEY?.trim() || env.GOOGLE_MAPS_PLATFORM_API_KEY?.trim() || env.TRIPMAP_GOOGLE_PLACES_API_KEY?.trim()
 }
 
 function normalizeProviderProxyHandlerError(

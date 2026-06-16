@@ -414,6 +414,38 @@ describe('provider proxy handler route_order_suggestion', () => {
     })
   })
 
+  it('uses the server-side TripMap Google Places key for route_order_suggestion when Routes keys are absent', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string>
+      expect(headers['X-Goog-Api-Key']).toBe('server-google-places-secret')
+      return new Response(JSON.stringify({
+        routes: [
+          {
+            distanceMeters: 1800,
+            duration: '900s',
+            optimizedIntermediateWaypointIndex: [1, 0],
+            polyline: { encodedPolyline: 'raw-polyline-should-not-return' },
+          },
+        ],
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_GOOGLE_PLACES_API_KEY: 'server-google-places-secret' },
+      fetcher,
+      request: jsonRequest(validRouteOrderRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-google-places-secret')
+    expect(JSON.parse(text)).toMatchObject({
+      ok: true,
+      operation: 'route_order_suggestion',
+      provider: 'google',
+    })
+  })
+
   it('prefers the dedicated Google Routes key over shared or browser-visible keys', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string>

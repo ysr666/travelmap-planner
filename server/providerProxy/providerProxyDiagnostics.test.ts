@@ -72,6 +72,24 @@ describe('provider proxy diagnostics', () => {
     })
   })
 
+  it('allows the server-side TripMap Google Places key to back Google route order', () => {
+    const response = buildProviderProxyDiagnosticsResponse({
+      TRIPMAP_GOOGLE_PLACES_API_KEY: 'server-google-places-secret-value',
+    }, '2026-06-02T01:02:03.000Z')
+
+    expect(response.providers.placeLookup).toMatchObject({
+      configured: true,
+      defaultedToGooglePlaces: true,
+      provider: 'google_places',
+    })
+    expect(response.providers.routeOrder).toMatchObject({
+      configured: true,
+      hasGoogleRoutesKey: true,
+      provider: 'google',
+    })
+    expect(JSON.stringify(response)).not.toContain('server-google-places-secret-value')
+  })
+
   it('reports search and AI keys without implying full configuration', () => {
     const response = buildProviderProxyDiagnosticsResponse({
       TRIPMAP_AI_API_KEY: 'ai-secret-value',

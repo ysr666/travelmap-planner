@@ -40,6 +40,7 @@ import {
   updateLedgerParticipant,
 } from '../db'
 import { Button } from '../components/ui/Button'
+import { LedgerReviewQueue } from '../components/ledger/LedgerReviewQueue'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -68,11 +69,12 @@ import {
   buildLedgerForecast,
   buildLedgerIntegrityIssues,
   buildLedgerTimeline,
-  buildLedgerQueryCitations,
+  executeLedgerQueryPlan,
   queryLedgerLocally,
   type LedgerTimelineKind,
 } from '../lib/ledgerArchive'
-import { downloadLedgerArchive, openLedgerPrintReport } from '../lib/ledgerReport'
+import { buildLedgerReviewEntries } from '../lib/ledgerReview'
+import { buildLedgerReportModel, downloadLedgerArchive, openLedgerPrintReport } from '../lib/ledgerReport'
 import { fetchProviderProxyAiExpenseExtract, fetchProviderProxyAiExpenseQuery, getProviderProxyConfig } from '../lib/providerProxyClient'
 import { getAccountAiPreferences } from '../lib/accountAiPreferences'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -170,7 +172,7 @@ export function LedgerPage() {
 
       {activeTab === 'bills' ? <ExpensesView expenses={expenses} items={items} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
       {activeTab === 'timeline' ? <TimelineView expenses={expenses} settings={settings} /> : null}
-      {activeTab === 'integrity' ? <IntegrityView expenses={expenses} onEdit={(expense) => { setActiveTab('bills'); window.setTimeout(() => document.getElementById(`ledger-expense-${expense.id}`)?.scrollIntoView({ behavior: 'smooth' }), 0) }} /> : null}
+      {activeTab === 'integrity' ? <IntegrityView expenses={expenses} onEdit={(expense) => navigateTo('ledger/expense', { expenseId: expense.id, tripId: trip.id })} /> : null}
       {activeTab === 'budget' ? <BudgetAndForecastView budgets={budgets} expenses={expenses} settings={settings} trip={trip} onChanged={refresh} /> : null}
       {activeTab === 'report' ? <ReportView budgets={budgets} expenses={expenses} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
     </div>
@@ -237,6 +239,7 @@ function LedgerSetup({ trip, onCreated }: { trip: Trip; onCreated: () => Promise
 
 function ExpensesView({ expenses, items, participants, settings, trip, onChanged }: { expenses: LedgerExpense[]; items: ItineraryItem[]; participants: LedgerParticipant[]; settings: LedgerSettings; trip: Trip; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState<LedgerExpense | 'new' | null>(null)
+  const [billView, setBillView] = useState<'review' | 'all'>(() => buildLedgerReviewEntries(expenses).length > 0 ? 'review' : 'all')
   const [scanCandidates, setScanCandidates] = useState<ScanCandidate[]>([])
   const [scanning, setScanning] = useState(false)
   const [aiConfirm, setAiConfirm] = useState(false)
@@ -306,6 +309,10 @@ function ExpensesView({ expenses, items, participants, settings, trip, onChanged
 
   return (
     <section className="space-y-4">
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-container p-1" aria-label="账单范围">
+        <button className={`min-h-11 rounded-lg text-sm font-semibold ${billView === 'review' ? 'bg-surface shadow-sm' : 'tm-muted'}`} onClick={() => setBillView('review')} type="button">待审核 {buildLedgerReviewEntries(expenses).length}</button>
+        <button className={`min-h-11 rounded-lg text-sm font-semibold ${billView === 'all' ? 'bg-surface shadow-sm' : 'tm-muted'}`} onClick={() => setBillView('all')} type="button">全部账单 {expenses.length}</button>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>记一笔</Button>
         <Button icon={<FileSearch className="size-4" />} loading={scanning} onClick={() => void scanSources()} variant="secondary">整理费用</Button>
@@ -328,10 +335,12 @@ function ExpensesView({ expenses, items, participants, settings, trip, onChanged
           <Button className="w-full" disabled={!scanCandidates.some((candidate) => candidate.selected)} onClick={() => void applyCandidates()}>生成待确认费用</Button>
         </section>
       ) : null}
-      <div className="space-y-2">
-        {expenses.length === 0 ? <EmptyState body="手动记一笔，或从票据、订单和备注整理费用草稿。" icon={<WalletCards className="size-6" />} title="账本还是空的" /> : null}
-        {expenses.map((expense) => <ExpenseRow expense={expense} key={expense.id} participants={participants} settings={settings} onEdit={() => setEditing(expense)} onDelete={async () => { await deleteLedgerExpense(expense.id); await onChanged() }} />)}
-      </div>
+      {billView === 'review' ? <LedgerReviewQueue expenses={expenses} onChanged={onChanged} onEdit={(expense) => setEditing(expense)} settings={settings} trip={trip} /> : (
+        <div className="space-y-2">
+          {expenses.length === 0 ? <EmptyState body="手动记一笔，或从票据、订单和备注整理费用草稿。" icon={<WalletCards className="size-6" />} title="账本还是空的" /> : null}
+          {expenses.map((expense) => <ExpenseRow expense={expense} key={expense.id} participants={participants} settings={settings} tripId={trip.id} onEdit={() => setEditing(expense)} onDelete={async () => { await deleteLedgerExpense(expense.id); await onChanged() }} />)}
+        </div>
+      )}
       <ConfirmDialog body={`将发送 ${scanCandidates.length} 条本地提取文本和同行人显示名给 AI。不会发送票据文件、邮箱、用户 ID、云数据或加密资料；返回内容只更新当前预览。`} confirmLabel="确认发送" loading={aiBusy} onCancel={() => setAiConfirm(false)} onConfirm={() => void fillWithAi()} open={aiConfirm} title="使用 AI 补全费用字段" />
     </section>
   )
@@ -443,12 +452,12 @@ function ExpenseEditor({ expense, expenses, items, participants, settings, trip,
   )
 }
 
-function ExpenseRow({ expense, participants, settings, onEdit, onDelete }: { expense: LedgerExpense; participants: LedgerParticipant[]; settings: LedgerSettings; onEdit: () => void; onDelete: () => Promise<void> }) {
+function ExpenseRow({ expense, participants, settings, tripId, onEdit, onDelete }: { expense: LedgerExpense; participants: LedgerParticipant[]; settings: LedgerSettings; tripId: string; onEdit: () => void; onDelete: () => Promise<void> }) {
   const payer = participants.find((participant) => participant.id === expense.payerParticipantId)
   return (
     <Card className="space-y-2" data-testid="ledger-expense-row" id={`ledger-expense-${expense.id}`} variant="grouped">
-      <button className="w-full text-left" onClick={onEdit} type="button"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{expense.title}</p><p className="mt-1 text-xs tm-muted">{expense.date} · {ledgerCategoryLabels[expense.category]} · {payer?.displayName ?? '付款人待补充'}</p>{expense.merchant || expense.city ? <p className="mt-1 truncate text-xs tm-muted">{[expense.merchant, expense.city].filter(Boolean).join(' · ')}</p> : null}</div><div className="text-right"><p className="font-bold">{formatLedgerMoney(expense.amountMinor, expense.currency ?? settings.tripCurrency)}</p><p className="mt-1 text-xs tm-muted">{expense.status === 'confirmed' ? '已确认' : expense.status === 'draft' ? '待确认' : '已取消'}</p></div></div></button>
-      <div className="flex justify-end"><button aria-label={`删除 ${expense.title}`} className="flex size-10 items-center justify-center rounded-lg text-red-600" onClick={() => void onDelete()} type="button"><Trash2 className="size-4" /></button></div>
+      <button className="w-full text-left" onClick={() => navigateTo('ledger/expense', { expenseId: expense.id, tripId })} type="button"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{expense.title}</p><p className="mt-1 text-xs tm-muted">{expense.date} · {ledgerCategoryLabels[expense.category]} · {payer?.displayName ?? '付款人待补充'}</p>{expense.merchant || expense.city ? <p className="mt-1 truncate text-xs tm-muted">{[expense.merchant, expense.city].filter(Boolean).join(' · ')}</p> : null}</div><div className="text-right"><p className="font-bold">{formatLedgerMoney(expense.amountMinor, expense.currency ?? settings.tripCurrency)}</p><p className="mt-1 text-xs tm-muted">{expense.status === 'confirmed' ? '已确认' : expense.status === 'draft' ? '待确认' : '已取消'}</p></div></div></button>
+      <div className="flex justify-end gap-1"><Button onClick={onEdit} variant="ghost">编辑</Button><button aria-label={`删除 ${expense.title}`} className="flex size-10 items-center justify-center rounded-lg text-red-600" onClick={() => void onDelete()} type="button"><Trash2 className="size-4" /></button></div>
     </Card>
   )
 }
@@ -511,50 +520,54 @@ function ReportView({ budgets, expenses, participants, settings, trip, onChanged
   const [aiBusy, setAiBusy] = useState(false)
   const [aiAnswer, setAiAnswer] = useState('')
   const [aiError, setAiError] = useState('')
-  const reportInput = { budgets, expenses, participants, settings, trip }
-  function openSource(sourceKind: string | undefined, sourceId: string | undefined) {
-    if (sourceKind === 'ticket') return navigateTo('documents', { tab: 'attachments', tripId: trip.id })
-    if (sourceKind === 'transport_booking') return navigateTo('documents', { tab: 'transport', tripId: trip.id })
-    if (sourceKind === 'itinerary_note' && sourceId) return navigateTo('item', { itemId: sourceId, tripId: trip.id })
-    navigateTo('inbox', { tripId: trip.id })
-  }
-  function runLocalQuery() {
+  const reportInput = useMemo(() => ({ budgets, expenses, participants, settings, trip }), [budgets, expenses, participants, settings, trip])
+  const report = useMemo(() => buildLedgerReportModel(reportInput), [reportInput])
+  async function runLocalQuery() {
     setAiAnswer('')
     setAiError('')
-    setResult(queryLedgerLocally(query, expenses, settings))
-  }
-  async function organizeWithAi() {
-    if (!result) return
-    setAiBusy(true); setAiError('')
+    const localResult = queryLedgerLocally(query, expenses, settings)
+    setResult(localResult)
+    if (!localResult.needsAi) return
+    setAiBusy(true)
     try {
       const preferences = await getAccountAiPreferences()
-      if (!preferences.autoExpenseAiEnabled) throw new Error('请先在“设置 > AI 与隐私”开启账号级账单 AI。')
-      const rows = buildLedgerAiQueryContext(expenses, result)
+      if (!preferences.autoExpenseAiEnabled) {
+        setAiError('复杂语义未自动解析；账号级账单 AI 当前关闭，以上为本地回退结果。')
+        return
+      }
       const response = await fetchProviderProxyAiExpenseQuery({
-        deterministicAnswer: result.answer,
         operation: 'ai_expense_query',
         question: query,
-        rows,
+        rows: buildLedgerAiQueryContext(expenses),
       }, getProviderProxyConfig().proxyUrl ?? '/api/provider-proxy')
-      const allowed = new Set(response.citationExpenseIds)
-      setResult({ ...result, citations: buildLedgerQueryCitations(expenses.filter((expense) => allowed.has(expense.id))) })
-      setAiAnswer(response.answer)
+      setResult(executeLedgerQueryPlan(response.plan, expenses, settings))
+      setAiAnswer('复杂语义由 AI 转成查询计划；筛选、金额和分组已在本机重新执行。')
     } catch (caught) {
-      setAiError(getErrorMessage(caught))
+      setAiError(`${getErrorMessage(caught)} 已保留本地回退结果。`)
     } finally {
       setAiBusy(false)
     }
   }
   return (
     <section className="space-y-4">
-      <div className="space-y-2"><h3 className="font-semibold">查询旅行账单</h3><div className="flex gap-2"><input className={FIELD_INPUT_CLASS} onChange={(event) => setQuery(event.target.value)} placeholder="例如：东京酒店一共多少钱？" value={query} /><Button icon={<Search className="size-4" />} onClick={runLocalQuery}>查询</Button></div></div>
-      {result ? <Card className="space-y-3" variant="grouped"><p className="font-semibold">{aiAnswer || result.answer}</p>{result.needsAi && !aiAnswer ? <Button icon={<Sparkles className="size-4" />} loading={aiBusy} onClick={() => void organizeWithAi()} variant="secondary">AI 组织答案</Button> : null}{aiError ? <p className="text-xs text-red-600">{aiError}</p> : null}<div className="flex flex-wrap gap-2">{result.citations.map((citation) => <button className="rounded-lg border border-outline-variant/40 px-2.5 py-1.5 text-xs font-semibold" disabled={!citation.available} key={`${citation.expenseId}:${citation.sourceId}`} onClick={() => openSource(citation.sourceKind, citation.sourceId)} type="button">{citation.title}{citation.available ? '' : '（来源缺失）'}</button>)}</div></Card> : null}
-      <div className="grid grid-cols-2 gap-2"><Button icon={<ReceiptText className="size-4" />} onClick={() => openLedgerPrintReport(reportInput)} variant="secondary">生成 PDF</Button><Button icon={<Download className="size-4" />} onClick={() => void downloadLedgerArchive(reportInput)}>导出档案</Button></div>
+      <div className="space-y-2"><h3 className="font-semibold">查询旅行账单</h3><div className="flex gap-2"><input className={FIELD_INPUT_CLASS} onChange={(event) => setQuery(event.target.value)} placeholder="例如：东京酒店一共多少钱？" value={query} /><Button icon={<Search className="size-4" />} loading={aiBusy} onClick={() => void runLocalQuery()}>查询</Button></div></div>
+      {result ? <Card className="space-y-3" variant="grouped"><p className="font-semibold">{result.answer}</p>{aiAnswer ? <p className="text-xs text-emerald-700">{aiAnswer}</p> : null}{aiError ? <p className="text-xs text-amber-700">{aiError}</p> : null}<div className="flex flex-wrap gap-2">{result.citations.map((citation) => <button className="rounded-lg border border-outline-variant/40 px-2.5 py-1.5 text-xs font-semibold" key={`${citation.expenseId}:${citation.sourceId}`} onClick={() => navigateTo('ledger/expense', { expenseId: citation.expenseId, tripId: trip.id })} type="button">{citation.title}{citation.available ? '' : '（来源缺失）'}</button>)}</div></Card> : null}
+      <Card className="space-y-4" variant="grouped">
+        <div><p className="text-xs font-semibold text-primary">{report.title}</p><h3 className="mt-1 font-semibold">旅行消费概览</h3></div>
+        <div className="grid grid-cols-2 gap-2"><ReportMetric label="已确认净支出" value={formatLedgerMoney(report.confirmedNetMinor, settings.tripCurrency)} /><ReportMetric label="预计最终支出" value={formatLedgerMoney(report.projectedMinor, settings.tripCurrency)} /><ReportMetric label="待确认" value={formatLedgerMoney(report.pendingMinor, settings.tripCurrency)} /><ReportMetric label="完整性问题" value={`${report.issues.length} 项`} /></div>
+        {report.byCity.length ? <div><p className="text-xs font-semibold tm-muted">城市摘要</p><div className="mt-2 flex flex-wrap gap-2">{report.byCity.slice(0, 5).map((row) => <span className="rounded-lg bg-surface-container-high px-2.5 py-1.5 text-xs" key={row.key}>{row.label} · {formatLedgerMoney(row.amountMinor, settings.tripCurrency)}</span>)}</div></div> : null}
+        {report.missingExchangeRate.length ? <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{report.missingExchangeRate.length} 笔已确认费用缺汇率，未纳入折算汇总。</p> : null}
+      </Card>
+      <div className="grid grid-cols-2 gap-2"><Button icon={<ReceiptText className="size-4" />} onClick={() => openLedgerPrintReport(reportInput)} variant="secondary">打印报告</Button><Button icon={<Download className="size-4" />} onClick={() => { openLedgerPrintReport(reportInput); void downloadLedgerArchive(reportInput) }}>导出旅行档案</Button></div>
       <div className="grid grid-cols-2 gap-2"><Button onClick={() => setManage(manage === 'participants' ? null : 'participants')} variant="secondary">同行人管理</Button><Button onClick={() => setManage(manage === 'settlement' ? null : 'settlement')} variant="secondary">查看结算</Button></div>
       {manage === 'participants' ? <ParticipantsView participants={participants} tripId={trip.id} onChanged={onChanged} /> : null}
       {manage === 'settlement' ? <SettlementView expenses={expenses} participants={participants} settings={settings} /> : null}
     </section>
   )
+}
+
+function ReportMetric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg bg-surface-container-high p-3"><p className="text-xs tm-muted">{label}</p><p className="mt-1 text-sm font-bold text-on-surface">{value}</p></div>
 }
 
 function BudgetsView({ budgets, settings, trip, onChanged }: { budgets: LedgerBudget[]; settings: LedgerSettings; trip: Trip; onChanged: () => Promise<void> }) {

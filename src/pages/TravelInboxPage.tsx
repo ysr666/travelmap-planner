@@ -28,11 +28,14 @@ import {
   scanTravelInboxLocalFolder,
   supportsTravelInboxLocalFolders,
 } from '../lib/travelInboxLocalFolders'
-import { navigateTo } from '../lib/routes'
-import type { TravelInboxAccountSource, TravelInboxLocalConnector, Trip } from '../types'
+import { getTravelInboxEntry } from '../lib/ai/travelInbox'
+import { getRouteParams, navigateTo } from '../lib/routes'
+import type { TravelInboxAccountSource, TravelInboxEntry, TravelInboxLocalConnector, Trip } from '../types'
 
 export function TravelInboxPage() {
   const connectorConfig = getTravelInboxConnectorConfig()
+  const params = getRouteParams()
+  const focusedEntryId = params.get('inboxEntryId')
   const [sources, setSources] = useState<TravelInboxAccountSource[]>([])
   const [connectors, setConnectors] = useState<CloudTravelInboxConnector[]>([])
   const [localConnectors, setLocalConnectors] = useState<TravelInboxLocalConnector[]>([])
@@ -45,6 +48,8 @@ export function TravelInboxPage() {
   const [gmailLabelId, setGmailLabelId] = useState('INBOX')
   const [backfillDays, setBackfillDays] = useState<0 | 7 | 30>(0)
   const [autoAiConsent, setAutoAiConsent] = useState(false)
+  const [focusedEntry, setFocusedEntry] = useState<TravelInboxEntry | null>(null)
+  const [focusedEntryMissing, setFocusedEntryMissing] = useState(false)
   const processing = useRef(new Set<string>())
 
   const load = useCallback(async () => {
@@ -68,6 +73,17 @@ export function TravelInboxPage() {
     const timeout = window.setTimeout(() => void load(), 0)
     return () => window.clearTimeout(timeout)
   }, [load])
+
+  useEffect(() => {
+    if (!focusedEntryId) return
+    let cancelled = false
+    void getTravelInboxEntry(focusedEntryId).then((entry) => {
+      if (cancelled) return
+      setFocusedEntry(entry ?? null)
+      setFocusedEntryMissing(!entry)
+    })
+    return () => { cancelled = true }
+  }, [focusedEntryId])
 
   useEffect(() => {
     const scan = async () => {
@@ -137,6 +153,14 @@ export function TravelInboxPage() {
         <h2 className="mt-1 text-2xl font-bold text-on-surface">旅行收件箱</h2>
         <p className="mt-2 text-sm leading-6 tm-muted">把订单邮件、PDF、截图和票据集中到待整理来源。本地提取后只发送文本给 AI，写入旅行前仍需确认。</p>
       </section>
+
+      {focusedEntryId ? (
+        <Card className="space-y-3 border-primary/40" data-testid="travel-inbox-focused-entry" variant="grouped">
+          <div><p className="text-xs font-semibold text-primary">账单原始来源</p><h3 className="mt-1 font-semibold text-on-surface">{focusedEntry?.label ?? '来源已不可用'}</h3></div>
+          {focusedEntry ? <><p className="text-xs tm-muted">{focusedEntry.fileName || focusedEntry.sourceKind} · {new Date(focusedEntry.createdAt).toLocaleString('zh-CN')}</p><pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-container-high p-3 text-xs leading-5 text-on-surface">{focusedEntry.extractedText || '该来源没有可显示的提取文本。'}</pre></> : null}
+          {focusedEntryMissing ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">原始来源已经删除，账单仍保留来源摘要。</p> : null}
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-4 gap-2">
         <Summary value={counts.processing} label="处理中" />

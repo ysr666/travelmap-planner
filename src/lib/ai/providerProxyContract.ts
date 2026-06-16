@@ -17,6 +17,7 @@ import type {
   ExistingTripImportSourceKind,
 } from './existingTripImport'
 import type { LedgerExpenseCategory, TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
+import { validateLedgerQueryPlan, type LedgerQueryPlan } from '../ledgerArchive'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -203,6 +204,8 @@ export type ProviderProxyAiExpenseQueryRow = {
   merchant?: string
   status: 'draft' | 'confirmed' | 'void'
   paymentStatus?: string
+  orderStatus?: string
+  reviewStatus?: string
   itemLinked: boolean
   sourceRefs: Array<{ id: string; kind: string; role: string }>
 }
@@ -210,7 +213,6 @@ export type ProviderProxyAiExpenseQueryRow = {
 export type ProviderProxyAiExpenseQueryRequest = {
   operation: typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
   question: string
-  deterministicAnswer: string
   rows: ProviderProxyAiExpenseQueryRow[]
   quotaSessionId?: string
   requestId?: string
@@ -220,8 +222,8 @@ export type ProviderProxyAiExpenseQuerySuccessResponse = {
   ok: true
   operation: typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
   source: 'mock' | 'ai'
-  answer: string
-  citationExpenseIds: string[]
+  plan: LedgerQueryPlan
+  presentation: 'summary' | 'list' | 'grouped'
   requestId?: string
 }
 
@@ -2810,8 +2812,8 @@ export function validateProviderProxyAiExpenseQueryRequest(input: unknown): Prov
     return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, requestId }), ok: false }
   }
   const question = readOptionalString(record.question, 500)
-  const deterministicAnswer = readOptionalString(record.deterministicAnswer, 2_000)
-  const rawRows = Array.isArray(record.rows) ? record.rows.slice(0, 80) : []
+  const allRows = Array.isArray(record.rows) ? record.rows : []
+  const rawRows = allRows.slice(0, 80)
   const categories = new Set<LedgerExpenseCategory>(['lodging', 'transport', 'admission', 'food', 'shopping', 'insurance', 'connectivity', 'other'])
   const statuses = new Set(['draft', 'confirmed', 'void'])
   const rows = rawRows.flatMap<ProviderProxyAiExpenseQueryRow>((value) => {
@@ -2833,7 +2835,9 @@ export function validateProviderProxyAiExpenseQueryRequest(input: unknown): Prov
     const city = readOptionalString(row.city, 120)
     const currency = normalizeCurrency(row.currency)
     const merchant = readOptionalString(row.merchant, 160)
+    const orderStatus = readOptionalString(row.orderStatus, 40)
     const paymentStatus = readOptionalString(row.paymentStatus, 40)
+    const reviewStatus = readOptionalString(row.reviewStatus, 40)
     return [{
       ...(amountMinor !== undefined ? { amountMinor } : {}),
       category,
@@ -2843,16 +2847,28 @@ export function validateProviderProxyAiExpenseQueryRequest(input: unknown): Prov
       id,
       itemLinked: row.itemLinked,
       ...(merchant ? { merchant } : {}),
+      ...(orderStatus ? { orderStatus } : {}),
       ...(paymentStatus ? { paymentStatus } : {}),
+      ...(reviewStatus ? { reviewStatus } : {}),
       sourceRefs,
       status,
       title,
     }]
   })
-  if (!question || !deterministicAnswer || rows.length !== rawRows.length) {
+  if (!question || allRows.length === 0 || allRows.length > 80 || rows.length !== rawRows.length) {
     return { error: buildProviderProxyErrorResponse({ code: 'invalid_request', message: '账单问答请求格式不正确。', operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, requestId }), ok: false }
   }
-  return { ok: true, request: { deterministicAnswer, operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, question, quotaSessionId: readOptionalString(record.quotaSessionId, 160), requestId, rows } }
+  return { ok: true, request: { operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, question, quotaSessionId: readOptionalString(record.quotaSessionId, 160), requestId, rows } }
+}
+
+export function validateProviderProxyAiExpenseQueryResponsePlan(input: unknown) {
+  const record = readRecord(input)
+  const allowedKeys = new Set(['ok', 'operation', 'source', 'requestId', 'plan', 'presentation'])
+  if (Object.keys(record).some((key) => !allowedKeys.has(key))) return undefined
+  const plan = validateLedgerQueryPlan(record.plan)
+  const presentation = record.presentation
+  if (!plan || (presentation !== 'summary' && presentation !== 'list' && presentation !== 'grouped')) return undefined
+  return { plan, presentation }
 }
 
 function normalizeCurrency(value: unknown) {

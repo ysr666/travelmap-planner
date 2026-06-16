@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileArchive, HardDrive, Link2, MapPinned, RefreshCw, Trash2, Upload } from 'lucide-react'
 import {
   createTicketMeta,
@@ -108,6 +108,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const params = getRouteParams()
   const tripId = tripIdOverride ?? params.get('tripId')
   const initialItemId = params.get('itemId')
+  const initialTicketId = params.get('ticketId')
+  const openedInitialTicket = useRef<string | null>(null)
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
   const [items, setItems] = useState<ItineraryItem[]>([])
@@ -228,6 +230,17 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     const timeout = window.setTimeout(() => void refreshLibrary(), 0)
     return () => window.clearTimeout(timeout)
   }, [refreshLibrary])
+
+  useEffect(() => {
+    if (!initialTicketId || openedInitialTicket.current === initialTicketId) return
+    const ticket = tickets.find((candidate) => candidate.id === initialTicketId)
+    if (!ticket) return
+    const timeout = window.setTimeout(() => {
+      openedInitialTicket.current = initialTicketId
+      setPreviewTicket(ticket)
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [initialTicketId, tickets])
 
   useEffect(() => {
     let isActive = true

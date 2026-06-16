@@ -9,6 +9,7 @@ const routeIds: RouteId[] = [
   'tickets',
   'documents',
   'ledger',
+  'ledger/expense',
   'shared-trip',
   'search',
   'settings',

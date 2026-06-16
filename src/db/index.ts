@@ -46,6 +46,7 @@ export {
   createLedgerExpense,
   createLedgerParticipant,
   createLedgerSettings,
+  bulkReviewLedgerExpenses,
   deleteLedgerBudget,
   deleteLedgerExpense,
   deleteLedgerParticipant,

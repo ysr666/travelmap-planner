@@ -51,6 +51,56 @@ Validation:
 - `npm run build` passed.
 - `git diff --check` passed.
 
+## 2026-06-17 Phase 4 - Ticket Library Gallery
+
+Status: completed
+
+Goal: make Ticket Library feel like a ticket gallery rather than a flat file list, with useful local status overview and binding-based sections.
+
+Scope:
+
+- Add local ticket stats for total, copy/reference/external, unassigned, and cached copy tickets.
+- Group filtered tickets by binding context while preserving existing upload, preview, delete, and cache actions.
+- Improve tests around gallery summary and sections.
+
+No-go:
+
+- No ticket blob storage, cloud sync, Supabase, auto-sync, upload queue, schema, or provider contract changes.
+- No real cloud, provider, map, route, search, or AI calls.
+
+Likely files:
+
+- `src/pages/TicketLibraryPage.tsx`
+- `src/pages/TicketLibraryPage.test.tsx`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `npm run test:unit -- src/pages/TicketLibraryPage.test.tsx`
+- `npm run lint -- src/pages/TicketLibraryPage.tsx src/pages/TicketLibraryPage.test.tsx`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because Ticket Library combines upload, preview, delete, and cache controls, but this phase keeps behavior and storage untouched.
+
+Stop conditions:
+
+- Stop or split if changes require altering ticket blob/cache/cloud semantics.
+- Repair within phase if Ticket Library tests, lint, or build fail due to this change.
+
+Result:
+
+- Added a ticket-library overview card with total, storage-mode, offline-cache, and unassigned counts.
+- Replaced the flat gallery with binding-based sections for item-bound, trip-level, and unassigned tickets.
+- Preserved existing upload, preview, delete, cache clear/restore, retry, and sync-display behavior.
+
+Validation:
+
+- `npm run test:unit -- src/pages/TicketLibraryPage.test.tsx` passed.
+- `npm run lint -- src/pages/TicketLibraryPage.tsx src/pages/TicketLibraryPage.test.tsx` passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+
 ## 2026-06-17 Phase 3 - Item Detail Onsite View
 
 Status: completed

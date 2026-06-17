@@ -50,3 +50,54 @@ Validation:
 - `npm run lint -- src/pages/TripWorkspacePage.tsx src/pages/TripWorkspacePage.test.tsx` passed.
 - `npm run build` passed.
 - `git diff --check` passed.
+
+## 2026-06-17 Phase 2 - Day Map Marker Card
+
+Status: completed
+
+Goal: complete the Day View marker-card interaction so a map marker opens a lightweight place card with nearby navigation and a clear path into Item Detail.
+
+Scope:
+
+- Keep changes inside `DayMapView` and focused tests.
+- Make marker cards appear from explicit marker selection rather than defaulting to the first item.
+- Add previous/next mappable item controls and richer place context using existing item fields.
+
+No-go:
+
+- No MapLibre lifecycle rewrite.
+- No route cache, routing provider, provider proxy, cloud sync, schema, or AI privacy changes.
+- No real map, route, search, AI, Cloudflare, Supabase, or provider calls.
+
+Likely files:
+
+- `src/components/trip/DayMapView.tsx`
+- `src/components/trip/DayMapView.test.tsx`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `npm run test:unit -- src/components/trip/DayMapView.test.tsx`
+- `npm run lint -- src/components/trip/DayMapView.tsx src/components/trip/DayMapView.test.tsx`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because map overlay padding and selection behavior are user-facing but local to the day map view.
+
+Stop conditions:
+
+- Stop or split scope if the work requires changing map adapter contracts or route-cache/provider behavior.
+- Repair within phase if marker-card tests, lint, or build fail due to this change.
+
+Result:
+
+- Changed Day Map marker cards to open only after explicit marker selection instead of defaulting to the first place.
+- Added richer lightweight card context: stop index, ticket count, time, location/address, detail action, and previous/next mappable-place navigation.
+- Preserved existing map adapter, route cache, provider, and viewport-padding contracts.
+
+Validation:
+
+- `npm run test:unit -- src/components/trip/DayMapView.test.tsx` passed.
+- `npm run lint -- src/components/trip/DayMapView.tsx src/components/trip/DayMapView.test.tsx` passed.
+- `npm run build` passed.
+- `git diff --check` passed.

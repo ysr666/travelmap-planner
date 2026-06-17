@@ -65,19 +65,44 @@ vi.mock('../../lib/dayMapViewport', () => ({
   normalizeEdgeInsets: mocks.normalizeEdgeInsets,
 }))
 
-vi.mock('../DayMap', () => ({
-  DayMap: ({ onMarkerSelect }: { onMarkerSelect?: (item: unknown) => void }) => (
-    <div data-testid="day-map">
-      <button
-        data-testid="mock-marker"
-        onClick={() => onMarkerSelect?.({ id: 'item_1', title: '浅草寺' })}
-        type="button"
-      >
-        Marker
-      </button>
-    </div>
-  ),
-}))
+vi.mock('../DayMap', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return {
+    DayMap: ({
+      items,
+      onBaseLoadingChange,
+      onMapReady,
+      onSelectItem,
+    }: {
+      items: unknown[]
+      onBaseLoadingChange?: (loading: boolean) => void
+      onMapReady?: () => void
+      onSelectItem?: (item: unknown) => void
+    }) => {
+      const didNotifyReadyRef = React.useRef(false)
+      React.useEffect(() => {
+        if (didNotifyReadyRef.current) {
+          return
+        }
+        didNotifyReadyRef.current = true
+        onBaseLoadingChange?.(false)
+        onMapReady?.()
+      }, [onBaseLoadingChange, onMapReady])
+
+      return (
+        <div data-testid="day-map">
+          <button
+            data-testid="mock-marker"
+            onClick={() => onSelectItem?.(items[0])}
+            type="button"
+          >
+            Marker
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
@@ -229,5 +254,63 @@ describe('DayMapView', () => {
     })
 
     expect(container?.textContent).toBeTruthy()
+  })
+
+  it('opens marker card from marker selection and moves to next place', async () => {
+    const items = [
+      {
+        id: 'item_1',
+        dayId: 'day_1',
+        tripId: 'trip_1',
+        title: '浅草寺',
+        locationName: '台东区',
+        lat: 35.7148,
+        lng: 139.7967,
+        ticketIds: [],
+        sortOrder: 1,
+        createdAt: 100,
+        updatedAt: 100,
+      },
+      {
+        id: 'item_2',
+        dayId: 'day_1',
+        tripId: 'trip_1',
+        title: '东京塔',
+        locationName: '芝公园',
+        lat: 35.6586,
+        lng: 139.7454,
+        ticketIds: ['ticket_1'],
+        sortOrder: 2,
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ]
+
+    await act(async () => {
+      root?.render(
+        <DayMapView
+          day={defaultDay}
+          items={items}
+          onOpenItem={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+
+    expect(container?.querySelector('[data-testid="map-marker-card"]')).toBeNull()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="mock-marker"]')?.click()
+    })
+
+    expect(container?.textContent).toContain('浅草寺')
+    expect(container?.textContent).toContain('第 1/2 站')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="map-marker-card-next"]')?.click()
+    })
+
+    expect(container?.textContent).toContain('东京塔')
+    expect(container?.textContent).toContain('1 张票据')
   })
 })

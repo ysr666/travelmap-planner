@@ -51,6 +51,57 @@ Validation:
 - `npm run build` passed.
 - `git diff --check` passed.
 
+## 2026-06-17 Phase 3 - Item Detail Onsite View
+
+Status: completed
+
+Goal: turn Item Detail into a field-ready onsite page with immediate time/location/ticket context and safer external navigation from the current or previous stop.
+
+Scope:
+
+- Improve `ItemDetailPage` information hierarchy and local derived relation display.
+- Reuse existing map-link helpers, ticket preview, previous/next item relations, and place lookup confirmation flow.
+- Keep all actions user-triggered and local/browser-only except existing explicit place lookup search.
+
+No-go:
+
+- No schema, ticket blob, cloud sync, route cache, provider proxy contract, AI privacy, or search changes.
+- No automatic place lookup, route generation, AI, cloud, Supabase, Cloudflare, or real provider calls.
+
+Likely files:
+
+- `src/pages/ItemDetailPage.tsx`
+- `src/pages/ItemDetailPage.test.tsx`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- `npm run test:unit -- src/pages/ItemDetailPage.test.tsx`
+- `npm run lint -- src/pages/ItemDetailPage.tsx src/pages/ItemDetailPage.test.tsx`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because Item Detail is central navigation UI, but changes are local presentation and existing helper links.
+
+Stop conditions:
+
+- Stop or split if improvements require changing provider contracts, stored data shapes, or automatic writes.
+- Repair within phase if Item Detail tests, lint, or build fail due to this change.
+
+Result:
+
+- Added an onsite summary directly below the item hero with day position, time, coordinate readiness, location, and ticket status.
+- Allowed Apple/Google map opening even without coordinates by falling back to existing query-based map URLs.
+- Added previous-stop external route links using existing local map-link helpers and scoped ticket-library navigation to the current item.
+- Preserved the explicit place lookup search/confirmation boundary; no automatic provider calls or writes were added.
+
+Validation:
+
+- `npm run test:unit -- src/pages/ItemDetailPage.test.tsx` passed.
+- `npm run lint -- src/pages/ItemDetailPage.tsx src/pages/ItemDetailPage.test.tsx` passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+
 ## 2026-06-17 Phase 2 - Day Map Marker Card
 
 Status: completed

@@ -49,7 +49,9 @@ const mocks = vi.hoisted(() => ({
   getTicketCategoryLabel: vi.fn(() => ''),
   getTicketDisplayTitle: vi.fn(() => '票据'),
   hasValidCoordinates: vi.fn(() => true),
+  buildAppleMapsDirectionsUrl: vi.fn(() => 'https://maps.apple.com/directions'),
   buildAppleMapsUrl: vi.fn(() => 'https://maps.apple.com'),
+  buildGoogleMapsDirectionsUrl: vi.fn(() => 'https://maps.google.com/directions'),
   buildGoogleMapsUrl: vi.fn(() => 'https://maps.google.com'),
   getPlaceHeroVisual: vi.fn(() => ({
     gradientClass: 'from-blue-500 to-cyan-400',
@@ -91,7 +93,9 @@ vi.mock('../lib/tickets', () => ({
 
 vi.mock('../lib/mapLinks', () => ({
   hasValidCoordinates: mocks.hasValidCoordinates,
+  buildAppleMapsDirectionsUrl: mocks.buildAppleMapsDirectionsUrl,
   buildAppleMapsUrl: mocks.buildAppleMapsUrl,
+  buildGoogleMapsDirectionsUrl: mocks.buildGoogleMapsDirectionsUrl,
   buildGoogleMapsUrl: mocks.buildGoogleMapsUrl,
 }))
 
@@ -162,6 +166,8 @@ beforeEach(() => {
     updatedAt: 100,
   })
   mocks.listTicketsByItem.mockResolvedValue([])
+  mocks.listItemsByDay.mockResolvedValue([])
+  mocks.hasValidCoordinates.mockReturnValue(true)
 })
 
 afterEach(() => {
@@ -275,5 +281,47 @@ describe('ItemDetailPage', () => {
     const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
       .find((b) => b.textContent?.includes('删除'))
     expect(deleteButton).toBeTruthy()
+  })
+
+  it('renders onsite summary with scoped ticket access', async () => {
+    mocks.listItemsByDay.mockResolvedValue([
+      { id: 'item_0', dayId: 'day_1', tripId: 'trip_1', title: '酒店', ticketIds: [], sortOrder: 0, createdAt: 100, updatedAt: 100 },
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', locationName: '浅草寺', ticketIds: ['ticket_1'], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
+    ])
+    mocks.listTicketsByItem.mockResolvedValue([
+      {
+        id: 'ticket_1',
+        tripId: 'trip_1',
+        itemId: 'item_1',
+        fileName: 'ticket.pdf',
+        fileType: 'pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        ticketCategory: 'admission_ticket',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<ItemDetailPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(container?.textContent).toContain('第 2/3 项')
+    expect(container?.textContent).toContain('现场凭证')
+    expect(container?.textContent).toContain('1 张票据')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="item-ticket-view-all"]')?.click()
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('tickets', { tripId: 'trip_1', itemId: 'item_1' })
   })
 })

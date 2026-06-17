@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  MapPinned,
+  NotebookText,
+  Plus,
+  RotateCw,
+  Route,
+  Ticket,
+  WalletCards,
+} from 'lucide-react'
 import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
@@ -33,6 +46,7 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
+import { describeItemTime } from '../lib/itinerary'
 import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
 import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../lib/routeGeneration'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
@@ -54,7 +68,16 @@ import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../li
 import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
 import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
 import { loadOwnerSharedTripState } from '../lib/companion'
-import type { Day, SharedTripMutation, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord, TripDisruptionEvent } from '../types'
+import type {
+  Day,
+  ItineraryItem,
+  SharedTripMutation,
+  TicketBlobSyncState,
+  TicketMeta,
+  TravelInboxAccountSource,
+  TravelInboxPreviewRecord,
+  TripDisruptionEvent,
+} from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -361,6 +384,21 @@ export function TripWorkspacePage() {
   const liveRouteDay = liveDay
     ? routePreparation?.days.find((routeDay) => routeDay.day.id === liveDay.id) ?? null
     : null
+  const overviewItems = useMemo(() => {
+    if (allItems.length > 0) {
+      return allItems
+    }
+
+    return days.flatMap((day) => itemsByDay[day.id] ?? [])
+  }, [allItems, days, itemsByDay])
+  const tripHomeFocus = useMemo(
+    () => buildTripHomeFocus({ days, itemsByDay, liveDay, selectedDay }),
+    [days, itemsByDay, liveDay, selectedDay],
+  )
+  const mappedItemCount = useMemo(
+    () => overviewItems.filter(hasUsableCoordinates).length,
+    [overviewItems],
+  )
 
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
     if (!trip) return
@@ -515,18 +553,55 @@ export function TripWorkspacePage() {
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto app-scrollbar">
           <div className="space-y-section-gap pb-4">
-            {/* Overview Section - matches reference 12_1/code.html */}
-            <section className="flex flex-col gap-stack-gap">
-              <div className="flex items-baseline justify-between">
-                <h3 className="font-headline-md text-headline-md text-on-surface">今日概览</h3>
+            <section className="space-y-4" data-testid="trip-home-overview">
+              <TripCover
+                heroStats={{
+                  days: days.length,
+                  spots: overviewItems.length,
+                  tickets: ticketMetas.length,
+                }}
+                trip={trip}
+                variant="hero"
+              />
+              <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+                <TripHomeFocusPanel
+                  focus={tripHomeFocus}
+                  onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
+                  onOpenDay={(targetDay, targetView) => openDay(targetDay, targetView)}
+                  onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
+                />
+                <TripHomeQuickActions
+                  mappedItemCount={mappedItemCount}
+                  onOpenLedger={() => navigateTo('ledger', { tripId: trip.id })}
+                  onOpenRoutePreparation={() => document.getElementById('route-preparation-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+                  routePreparation={routePreparation}
+                  routePreparationLoading={routePreparationLoading}
+                  ticketCount={ticketMetas.length}
+                  totalItemCount={overviewItems.length}
+                />
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-stack-gap" data-testid="trip-home-map-overview">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-headline-md text-headline-md text-on-surface">全程地图</h3>
+                  <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
+                    {describeTripMapCoverage(overviewItems.length, mappedItemCount)}
+                  </p>
+                </div>
                 {selectedDay ? (
-                  <span className="font-label-sm text-label-sm text-primary uppercase tracking-wider">
-                    第 {days.findIndex(d => d.id === selectedDay.id) + 1} 天
-                  </span>
+                  <Button
+                    className="min-h-10 shrink-0 px-3 text-xs"
+                    icon={<MapPinned className="size-3.5" />}
+                    onClick={() => openDay(selectedDay, 'map')}
+                    variant="secondary"
+                  >
+                    打开地图
+                  </Button>
                 ) : null}
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">{selectedDay?.title || "选择一天开始探索"}</p>
-              {/* Map Preview Card */}
               <TripMapPreview
                 days={days}
                 itemsByDay={itemsByDay}
@@ -536,6 +611,9 @@ export function TripWorkspacePage() {
                 selectedDay={selectedDay}
                 tripId={trip.id}
               />
+            </section>
+
+            <section className="flex flex-col gap-stack-gap">
               <TripDailyTravelTipCard
                 days={days}
                 itemsByDay={itemsByDay}
@@ -548,9 +626,12 @@ export function TripWorkspacePage() {
                 }}
                 onSaved={async () => { await refresh() }}
                 routePreparation={routePreparation}
-                trip={trip}
-                tripCheck={tripCheckResult}
-              />
+                  trip={trip}
+                  tripCheck={tripCheckResult}
+                />
+            </section>
+
+            <section className="flex flex-col gap-stack-gap">
               {liveDay && tripOperationsModel ? (
                 <TripLiveModeCard
                   allItems={allItems}
@@ -570,26 +651,6 @@ export function TripWorkspacePage() {
                   trip={trip}
                 />
               ) : null}
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-2">
-                <button
-                  className="flex-1 bg-primary text-on-primary py-3.5 px-4 rounded-xl font-label-sm text-label-sm flex items-center justify-center gap-2 active:scale-95 transition shadow-md"
-                  onClick={() => selectedDay && openDay(selectedDay, 'schedule')}
-                  type="button"
-                >
-                  <CalendarDays className="size-4" />
-                  进入日视图
-                </button>
-                <button
-                  className="flex-1 bg-surface-container-high text-primary py-3.5 px-4 rounded-xl border border-outline-variant/50 font-label-sm text-label-sm flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95"
-                  data-testid="trip-action-ticket-library"
-                  onClick={() => navigateTo('tickets', { tripId: trip.id })}
-                  type="button"
-                >
-                  <Ticket className="size-4" />
-                  票据库
-                </button>
-              </div>
             </section>
 
             {readinessModel && tripOperationsModel ? (
@@ -638,53 +699,11 @@ export function TripWorkspacePage() {
               selectedDayId={selectedDay?.id}
             />
 
-            {/* Schedule Section - timeline with vertical line */}
-            {selectedDay ? (
-            <section className="flex flex-col gap-stack-gap">
-              <h3 className="font-headline-md text-headline-md text-on-surface">今天的安排</h3>
-              <div className="bg-surface-container rounded-xl border-[0.5px] border-outline-variant/30 overflow-hidden flex flex-col relative">
-                {/* Timeline vertical line */}
-                <div className="absolute left-[39px] top-6 bottom-6 w-[1px] bg-outline-variant/40 z-0" />
-                {(itemsByDay[selectedDay.id] || []).map((item, index) => {
-                  const isLast = index === (itemsByDay[selectedDay.id]?.length ?? 0) - 1
-                  return (
-                    <div
-                      className="flex items-stretch p-4 relative z-10 group hover:bg-surface-container-high/50 transition-colors cursor-pointer"
-                      key={item.id}
-                      onClick={() => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id })}
-                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id }) }}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="flex flex-col items-center mr-4 w-12 pt-1">
-                        {index === 0 ? (
-                          <div className="w-3 h-3 rounded-full bg-primary ring-4 ring-surface-container group-hover:ring-surface-container-high z-10 shadow-[0_0_8px_rgba(170,199,255,0.6)]" />
-                        ) : (
-                          <div className="w-3 h-3 rounded-full bg-surface-variant border-[1.5px] border-outline ring-4 ring-surface-container group-hover:ring-surface-container-high z-10" />
-                        )}
-                      </div>
-                      <div className={`flex-1 ${isLast ? '' : 'pb-4 border-b border-outline-variant/20'}`}>
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="font-body-lg text-body-lg text-on-surface font-medium">
-                            {item.title}
-                          </h4>
-                          {index === 0 ? (
-                            <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-primary/30">进行中</span>
-                          ) : (
-                            <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded-full font-label-sm text-label-sm border border-outline-variant/50">已预订</span>
-                          )}
-                        </div>
-                        <p className="font-body-md text-body-md text-on-surface-variant flex items-center gap-1">
-                          <Clock3 className="size-3.5" />
-                          {item.startTime || '10:00'}{item.endTime ? ` – ${item.endTime}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-            ) : null}
+            <FocusDayTimelinePreview
+              focus={tripHomeFocus}
+              onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
+              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
+            />
 
             {/* Extra panels (not in reference design, but useful functionality) */}
             <div className="flex min-w-0 justify-end">
@@ -785,6 +804,318 @@ function buildTripOperationsInboxSummary({
     readyEntryCount,
     selectedPreviewDiffCount: previewCheckedCount,
   }
+}
+
+type TripHomeFocus = {
+  day: Day
+  dayIndex: number
+  items: ItineraryItem[]
+  label: string
+  nextItem: ItineraryItem | null
+}
+
+function TripHomeFocusPanel({
+  focus,
+  onAddItem,
+  onOpenDay,
+  onOpenItem,
+}: {
+  focus: TripHomeFocus | null
+  onAddItem: (day: Day) => void
+  onOpenDay: (day: Day, view: 'schedule' | 'map') => void
+  onOpenItem: (item: ItineraryItem) => void
+}) {
+  if (!focus) {
+    return (
+      <Card className="space-y-3" data-testid="trip-home-focus" variant="grouped">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="size-4 text-primary" />
+          <h3 className="font-headline-md text-headline-md text-on-surface">下一步</h3>
+        </div>
+        <p className="font-body-md text-body-md text-on-surface-variant">生成每日行程后开始安排地点。</p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="space-y-4" data-testid="trip-home-focus" variant="grouped">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-primary">
+            <CalendarDays className="size-4" />
+            <span className="font-label-sm text-label-sm">{focus.label}</span>
+          </div>
+          <h3 className="mt-1 font-headline-md text-headline-md text-on-surface">{focus.day.title || `第 ${focus.dayIndex + 1} 天`}</h3>
+          <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">
+            {formatDate(focus.day.date)} · {focus.items.length} 个行程点
+          </p>
+        </div>
+        <button
+          className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-high px-3 text-xs font-semibold text-primary transition hover:bg-surface-container-highest active:scale-[0.98]"
+          onClick={() => onOpenDay(focus.day, 'schedule')}
+          type="button"
+        >
+          日程
+          <ChevronRight className="size-3.5" />
+        </button>
+      </div>
+
+      {focus.nextItem ? (
+        <button
+          className="flex w-full items-start gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-high p-3 text-left transition hover:bg-surface-container-highest active:scale-[0.99]"
+          data-testid="trip-home-next-item"
+          onClick={() => onOpenItem(focus.nextItem as ItineraryItem)}
+          type="button"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+            <Clock3 className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold text-on-surface">{focus.nextItem.title}</span>
+            <span className="mt-1 block text-sm text-on-surface-variant">
+              {describeItemTime(focus.nextItem)}
+              {focus.nextItem.locationName ? ` · ${focus.nextItem.locationName}` : ''}
+            </span>
+          </span>
+          <ChevronRight className="mt-2 size-4 shrink-0 text-outline" />
+        </button>
+      ) : (
+        <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-high px-3 py-4">
+          <p className="text-sm font-medium text-on-surface">这一天还没有行程点。</p>
+          <p className="mt-1 text-sm text-on-surface-variant">先添加地点，再补交通、票据和路线预览。</p>
+        </div>
+      )}
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Button className="min-h-11 px-3 text-sm" icon={<CalendarDays className="size-4" />} onClick={() => onOpenDay(focus.day, 'schedule')} variant="secondary">
+          看日程
+        </Button>
+        <Button className="min-h-11 px-3 text-sm" icon={<MapPinned className="size-4" />} onClick={() => onOpenDay(focus.day, 'map')} variant="secondary">
+          看地图
+        </Button>
+        <Button className="min-h-11 px-3 text-sm" icon={<Plus className="size-4" />} onClick={() => onAddItem(focus.day)} variant="secondary">
+          加地点
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function TripHomeQuickActions({
+  mappedItemCount,
+  onOpenLedger,
+  onOpenRoutePreparation,
+  onOpenTickets,
+  routePreparation,
+  routePreparationLoading,
+  ticketCount,
+  totalItemCount,
+}: {
+  mappedItemCount: number
+  onOpenLedger: () => void
+  onOpenRoutePreparation: () => void
+  onOpenTickets: () => void
+  routePreparation: TripRoutePreparation | null
+  routePreparationLoading: boolean
+  ticketCount: number
+  totalItemCount: number
+}) {
+  return (
+    <Card className="space-y-3" data-testid="trip-home-quick-actions" variant="grouped">
+      <div>
+        <h3 className="font-headline-md text-headline-md text-on-surface">关键入口</h3>
+        <p className="mt-1 text-sm text-on-surface-variant">{mappedItemCount}/{totalItemCount} 个行程点有地图坐标</p>
+      </div>
+      <div className="divide-y divide-outline-variant/30 overflow-hidden rounded-xl border border-outline-variant/30">
+        <TripHomeActionRow
+          detail={`${ticketCount} 张票据`}
+          icon={<Ticket className="size-4" />}
+          label="票据库"
+          onClick={onOpenTickets}
+        />
+        <TripHomeActionRow
+          detail={describeRouteReadiness(routePreparation, routePreparationLoading)}
+          icon={<Route className="size-4" />}
+          label="路线准备"
+          onClick={onOpenRoutePreparation}
+        />
+        <TripHomeActionRow
+          detail="预算、费用和结算"
+          icon={<WalletCards className="size-4" />}
+          label="旅行账本"
+          onClick={onOpenLedger}
+        />
+      </div>
+    </Card>
+  )
+}
+
+function TripHomeActionRow({
+  detail,
+  icon,
+  label,
+  onClick,
+}: {
+  detail: string
+  icon: ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      className="flex min-h-14 w-full items-center gap-3 bg-surface-container px-3 text-left transition hover:bg-surface-container-high active:scale-[0.99]"
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-container/70 text-primary">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-on-surface">{label}</span>
+        <span className="mt-0.5 block truncate text-xs text-on-surface-variant">{detail}</span>
+      </span>
+      <ChevronRight className="size-4 text-outline" />
+    </button>
+  )
+}
+
+function FocusDayTimelinePreview({
+  focus,
+  onAddItem,
+  onOpenItem,
+}: {
+  focus: TripHomeFocus | null
+  onAddItem: (day: Day) => void
+  onOpenItem: (item: ItineraryItem) => void
+}) {
+  if (!focus) {
+    return null
+  }
+
+  return (
+    <section className="flex flex-col gap-stack-gap" data-testid="trip-home-focus-timeline">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-headline-md text-headline-md text-on-surface">焦点日安排</h3>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            第 {focus.dayIndex + 1} 天 · {formatDate(focus.day.date)}
+          </p>
+        </div>
+        <Button className="min-h-10 shrink-0 px-3 text-xs" icon={<Plus className="size-3.5" />} onClick={() => onAddItem(focus.day)} variant="secondary">
+          添加
+        </Button>
+      </div>
+
+      {focus.items.length === 0 ? (
+        <Card className="space-y-2" variant="grouped">
+          <p className="text-sm font-semibold text-on-surface">暂无行程点</p>
+          <p className="text-sm leading-6 text-on-surface-variant">添加第一个地点后，这里会按时间线展示当天安排。</p>
+        </Card>
+      ) : (
+        <div className="relative overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container">
+          <div className="absolute bottom-5 left-[2.15rem] top-5 w-px bg-outline-variant/40" />
+          {focus.items.map((item, index) => {
+            const isLast = index === focus.items.length - 1
+            return (
+              <button
+                className="group relative z-10 flex w-full items-stretch gap-3 px-4 py-3 text-left transition hover:bg-surface-container-high active:scale-[0.99]"
+                key={item.id}
+                onClick={() => onOpenItem(item)}
+                type="button"
+              >
+                <span className="mt-1 flex w-9 shrink-0 justify-center">
+                  <span className={`size-3 rounded-full border ring-4 ring-surface-container group-hover:ring-surface-container-high ${
+                    index === 0
+                      ? 'border-primary bg-primary'
+                      : 'border-outline bg-surface-container-highest'
+                  }`} />
+                </span>
+                <span className={`min-w-0 flex-1 ${isLast ? '' : 'border-b border-outline-variant/20 pb-3'}`}>
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-on-surface">{item.title}</span>
+                      <span className="mt-1 flex items-center gap-1 text-sm text-on-surface-variant">
+                        <Clock3 className="size-3.5 shrink-0" />
+                        <span className="truncate">{describeItemTime(item)}</span>
+                      </span>
+                    </span>
+                    {item.ticketIds.length > 0 ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-container/70 px-2 py-1 text-xs font-semibold text-primary">
+                        <Ticket className="size-3" />
+                        {item.ticketIds.length}
+                      </span>
+                    ) : null}
+                  </span>
+                  {item.locationName ? (
+                    <span className="mt-1 block truncate text-sm text-on-surface-variant">{item.locationName}</span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function buildTripHomeFocus({
+  days,
+  itemsByDay,
+  liveDay,
+  selectedDay,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  liveDay: Day | null
+  selectedDay: Day | null
+}): TripHomeFocus | null {
+  const day = liveDay ?? selectedDay ?? days[0] ?? null
+  if (!day) {
+    return null
+  }
+
+  const dayIndex = Math.max(0, days.findIndex((candidate) => candidate.id === day.id))
+  const items = itemsByDay[day.id] ?? []
+  return {
+    day,
+    dayIndex,
+    items,
+    label: liveDay?.id === day.id ? '今天' : selectedDay?.id === day.id ? '当前选择' : '首日',
+    nextItem: items[0] ?? null,
+  }
+}
+
+function hasUsableCoordinates(item: ItineraryItem) {
+  return typeof item.lat === 'number' && Number.isFinite(item.lat)
+    && typeof item.lng === 'number' && Number.isFinite(item.lng)
+}
+
+function describeTripMapCoverage(itemCount: number, mappedItemCount: number) {
+  if (itemCount === 0) {
+    return '添加带地点的行程点后，这里会显示全旅行路线概览。'
+  }
+  if (mappedItemCount === 0) {
+    return '还没有可显示的坐标，先在行程点补充地点或地址。'
+  }
+  if (mappedItemCount === itemCount) {
+    return `全部 ${itemCount} 个行程点已可在地图上查看。`
+  }
+  return `${mappedItemCount}/${itemCount} 个行程点已可在地图上查看。`
+}
+
+function describeRouteReadiness(preparation: TripRoutePreparation | null, loading: boolean) {
+  if (loading || !preparation) {
+    return '正在检查路线缓存'
+  }
+  if (preparation.eligibleDayCount === 0) {
+    return '补充坐标后可生成'
+  }
+  if (preparation.targetDayIds.length === 0 && preparation.cachedDayCount === preparation.eligibleDayCount) {
+    return `${preparation.cachedDayCount} 天已准备`
+  }
+  if (preparation.cachedDayCount > 0) {
+    return `${preparation.cachedDayCount} 天已缓存，${preparation.targetDayIds.length} 天待生成`
+  }
+  return `${preparation.targetDayIds.length} 天可生成`
 }
 
 function DailyItineraryList({

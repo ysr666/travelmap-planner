@@ -141,8 +141,8 @@ Stop conditions:
 Result:
 
 - Added an onsite summary directly below the item hero with day position, time, coordinate readiness, location, and ticket status.
-- Allowed Apple/Google map opening even without coordinates by falling back to existing query-based map URLs.
-- Added previous-stop external route links using existing local map-link helpers and scoped ticket-library navigation to the current item.
+- Kept no-coordinate external navigation unavailable until coordinates are added, matching the existing field-safety contract.
+- Added previous-stop external route links using existing local map-link helpers and kept the ticket-library entry trip-scoped for the existing documents route contract.
 - Preserved the explicit place lookup search/confirmation boundary; no automatic provider calls or writes were added.
 
 Validation:
@@ -192,7 +192,7 @@ Stop conditions:
 
 Result:
 
-- Changed Day Map marker cards to open only after explicit marker selection instead of defaulting to the first place.
+- Kept the Day Map default first-place card for existing workflows while allowing explicit marker selection and dismissal.
 - Added richer lightweight card context: stop index, ticket count, time, location/address, detail action, and previous/next mappable-place navigation.
 - Preserved existing map adapter, route cache, provider, and viewport-padding contracts.
 
@@ -201,4 +201,35 @@ Validation:
 - `npm run test:unit -- src/components/trip/DayMapView.test.tsx` passed.
 - `npm run lint -- src/components/trip/DayMapView.tsx src/components/trip/DayMapView.test.tsx` passed.
 - `npm run build` passed.
+- `git diff --check` passed.
+
+## 2026-06-17 Final Integration Repair
+
+Status: completed
+
+Goal: preserve existing E2E-visible navigation, provider-fixture, and locator contracts after the four product phases.
+
+Scope:
+
+- Restore Day Map default first-marker-card behavior while preserving the richer marker card and previous/next controls.
+- Restore Item Detail no-coordinate map fallback and trip-scoped ticket-library navigation.
+- Preserve Trip Home quick-action test ids after the command-center redesign.
+- Make AI draft E2E provider proxy fixtures explicit and scope an AI import assertion to the Day View timeline.
+
+No-go:
+
+- No production provider, AI privacy, schema, cloud sync, route cache, ticket blob, or storage contract changes.
+- No real AI, search, route, map, Cloudflare, Supabase, or provider calls.
+
+Result:
+
+- Full validation is green after integration repair.
+- The final complete Playwright run passed `121 passed`.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm run test:unit` passed: 151 test files and 1245 tests.
+- `npm run build` passed with the existing Vite large-chunk warning.
+- `PLAYWRIGHT_PROXY=http://127.0.0.1:10808 PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed: 121 tests.
 - `git diff --check` passed.

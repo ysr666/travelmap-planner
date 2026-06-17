@@ -932,18 +932,21 @@ function TripHomeQuickActions({
           icon={<Ticket className="size-4" />}
           label="票据库"
           onClick={onOpenTickets}
+          testId="trip-action-ticket-library"
         />
         <TripHomeActionRow
           detail={describeRouteReadiness(routePreparation, routePreparationLoading)}
           icon={<Route className="size-4" />}
           label="路线准备"
           onClick={onOpenRoutePreparation}
+          testId="trip-action-route-preparation"
         />
         <TripHomeActionRow
           detail="预算、费用和结算"
           icon={<WalletCards className="size-4" />}
           label="旅行账本"
           onClick={onOpenLedger}
+          testId="trip-action-ledger"
         />
       </div>
     </Card>
@@ -955,15 +958,18 @@ function TripHomeActionRow({
   icon,
   label,
   onClick,
+  testId,
 }: {
   detail: string
   icon: ReactNode
   label: string
   onClick: () => void
+  testId?: string
 }) {
   return (
     <button
       className="flex min-h-14 w-full items-center gap-3 bg-surface-container px-3 text-left transition hover:bg-surface-container-high active:scale-[0.99]"
+      data-testid={testId}
       onClick={onClick}
       type="button"
     >

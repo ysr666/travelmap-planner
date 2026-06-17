@@ -322,6 +322,6 @@ describe('ItemDetailPage', () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="item-ticket-view-all"]')?.click()
     })
 
-    expect(mocks.navigateTo).toHaveBeenCalledWith('tickets', { tripId: 'trip_1', itemId: 'item_1' })
+    expect(mocks.navigateTo).toHaveBeenCalledWith('tickets', { tripId: 'trip_1' })
   })
 })

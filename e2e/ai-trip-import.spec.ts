@@ -182,7 +182,7 @@ test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await page.getByRole('button', { name: /缺坐标测试日/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
-  await expect(page.getByRole('button', { name: /无坐标餐厅/ })).toBeVisible()
+  await expect(page.getByTestId('day-timeline').getByRole('button', { name: /无坐标餐厅/ })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

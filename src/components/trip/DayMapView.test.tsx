@@ -297,14 +297,14 @@ describe('DayMapView', () => {
       )
     })
 
-    expect(container?.querySelector('[data-testid="map-marker-card"]')).toBeNull()
+    expect(container?.textContent).toContain('浅草寺')
+    expect(container?.textContent).toContain('第 1/2 站')
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="mock-marker"]')?.click()
     })
 
     expect(container?.textContent).toContain('浅草寺')
-    expect(container?.textContent).toContain('第 1/2 站')
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="map-marker-card-next"]')?.click()

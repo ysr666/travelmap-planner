@@ -355,7 +355,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         itemCount={dayItems.length}
         itemIndex={itemIndex}
         onOpenTicket={(ticket) => setPreviewTicket(ticket)}
-        onOpenTickets={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+        onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
         ticketCount={tickets.length}
       />
 
@@ -425,30 +425,33 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
 
       <section data-testid="item-detail-navigation">
         <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">地图导航</h2>
-        <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
-          <p className="font-body-md text-body-md text-on-surface-variant">
-            {hasCoordinates ? '使用坐标打开外部地图。' : '暂无坐标，将按地点名称或地址打开外部地图。'}
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <a
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm transition active:scale-[0.98]"
-              href={buildAppleMapsUrl(item)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Navigation className="size-4" />
-              Apple 地图
-            </a>
-            <a
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-primary font-label-sm text-label-sm transition active:scale-[0.98]"
-              href={buildGoogleMapsUrl(item)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <ExternalLink className="size-4" />
-              Google 地图
-            </a>
-          </div>
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
+          {hasCoordinates ? (
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                href={buildAppleMapsUrl(item)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Navigation className="size-4" />
+                Apple 地图
+              </a>
+              <a
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                href={buildGoogleMapsUrl(item)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <ExternalLink className="size-4" />
+                Google 地图
+              </a>
+            </div>
+          ) : (
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              无法从这里打开外部地图导航。请先补充这个行程点的坐标。
+            </p>
+          )}
         </div>
       </section>
 
@@ -562,7 +565,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           <button
             className="flex min-h-11 items-center gap-1 rounded-xl px-3 text-primary font-label-sm text-label-sm transition-opacity active:opacity-70 tm-focus"
             data-testid="item-ticket-view-all"
-            onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+            onClick={() => navigateTo('tickets', { tripId: trip.id })}
             type="button"
           >
             查看全部 {tickets.length > 3 ? <span>+{tickets.length - 3}</span> : null}<ChevronRight className="size-4" />

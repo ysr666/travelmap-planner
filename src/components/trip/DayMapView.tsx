@@ -86,6 +86,7 @@ export function DayMapView({
     dayId: string
     itemId: string
   } | null>(null)
+  const [markerCardDismissedDayId, setMarkerCardDismissedDayId] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<LngLat | null>(null)
   const [userLocationStatus, setUserLocationStatus] = useState<UserLocationStatus>('idle')
   const [mapControlNotice, setMapControlNotice] = useState<{
@@ -114,10 +115,10 @@ export function DayMapView({
   const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
   const markerCardItem = useMemo(() => {
     if (!markerCardItemId) {
-      return null
+      return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? null)
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [mappedItems, markerCardItemId])
+  }, [day.id, mappedItems, markerCardDismissedDayId, markerCardItemId])
   const markerCardItemIndex = useMemo(() => {
     if (!markerCardItem) {
       return -1
@@ -211,6 +212,7 @@ export function DayMapView({
     queueMicrotask(() => {
       setSelectedItemSelection(null)
       setMarkerCardSelection(null)
+      setMarkerCardDismissedDayId(null)
       setMapControlNotice(null)
     })
   }, [day.id])
@@ -338,6 +340,7 @@ export function DayMapView({
   }, [applyMapRecenterNotice, day.id, getCurrentMapPadding, mapReadyToken, markerCardVisible, userLocation])
 
   const handleSelectItem = useCallback((item: ItineraryItem) => {
+    setMarkerCardDismissedDayId(null)
     setSelectedItemSelection({
       dayId: day.id,
       itemId: item.id,
@@ -472,6 +475,7 @@ export function DayMapView({
             onClose={() => {
               setMarkerCardSelection(null)
               setSelectedItemSelection(null)
+              setMarkerCardDismissedDayId(day.id)
             }}
             onOpenItem={onOpenItem}
             onSelectItem={handleSelectItem}

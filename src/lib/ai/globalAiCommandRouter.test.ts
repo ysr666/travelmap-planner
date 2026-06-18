@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest'
+import {
+  parseGlobalAiCommandIntent,
+  resolveGlobalAiCommand,
+  type GlobalAiCommandContext,
+} from './globalAiCommandRouter'
+import type { Day, ItineraryItem, Trip } from '../../types'
+
+describe('globalAiCommandRouter', () => {
+  it('detects what-if late replanning without persistence', async () => {
+    const intent = parseGlobalAiCommandIntent('如果我晚到 45 分钟怎么办？')
+    expect(intent).toMatchObject({ delayMinutes: 45, disruptionKind: 'late', hypothetical: true, kind: 'replan' })
+
+    const result = await resolveGlobalAiCommand('如果我晚到 45 分钟怎么办？', buildContext())
+    expect(result.kind).toBe('replan_preview')
+    if (result.kind !== 'replan_preview') return
+    expect(result.hypothetical).toBe(true)
+    expect(result.eventDraft).toMatchObject({ delayMinutes: 45, kind: 'late', status: 'reported' })
+    expect(result.record.status).toBe('preview')
+    expect(result.record.id).toContain('global_ai_replan_record_preview')
+  })
+
+  it('keeps rainy-day execution requests as replanning commands', () => {
+    const intent = parseGlobalAiCommandIntent('今天下雨，户外少一点')
+    expect(intent).toMatchObject({ disruptionKind: 'weather_unsuitable', kind: 'replan' })
+  })
+
+  it('detects explicit item replan preferences', async () => {
+    const intent = parseGlobalAiCommandIntent('这个预约不能动，必须保留')
+    expect(intent).toMatchObject({
+      kind: 'preference_update',
+      preference: { flexibility: 'fixed', priority: 'must_keep' },
+    })
+
+    const result = await resolveGlobalAiCommand('这个预约不能动，必须保留', buildContext())
+    expect(result.kind).toBe('preference_preview')
+    if (result.kind !== 'preference_preview') return
+    expect(result.item.id).toBe('item_1')
+    expect(result.nextPreference).toMatchObject({ flexibility: 'fixed', priority: 'must_keep' })
+  })
+
+  it('routes ledger and smart workspace commands into existing surfaces', async () => {
+    const ledger = await resolveGlobalAiCommand('这趟旅行一共花了多少钱？', buildContext())
+    expect(ledger.kind).toBe('ledger_summary')
+    if (ledger.kind === 'ledger_summary') {
+      expect(ledger.lines.join(' ')).toContain('已确认费用')
+    }
+
+    const smart = await resolveGlobalAiCommand('帮我智能整理行程', buildContext())
+    expect(smart).toMatchObject({
+      kind: 'navigation',
+      route: 'trip',
+      scrollTargetId: 'smart-trip-workspace-panel',
+    })
+  })
+})
+
+function buildContext(): GlobalAiCommandContext {
+  const trip: Trip = {
+    createdAt: 1,
+    destination: '东京',
+    endDate: '2026-06-20',
+    id: 'trip_1',
+    startDate: '2026-06-18',
+    title: '东京旅行',
+    updatedAt: 1,
+  }
+  const day: Day = {
+    date: '2026-06-18',
+    id: 'day_1',
+    sortOrder: 1,
+    title: '第一天',
+    tripId: trip.id,
+  }
+  const currentItem: ItineraryItem = {
+    createdAt: 1,
+    dayId: day.id,
+    endTime: '10:00',
+    id: 'item_1',
+    sortOrder: 1,
+    startTime: '09:00',
+    ticketIds: [],
+    title: '预约美术馆',
+    tripId: trip.id,
+    updatedAt: 1,
+  }
+  const nextItem: ItineraryItem = {
+    createdAt: 1,
+    dayId: day.id,
+    endTime: '12:00',
+    id: 'item_2',
+    sortOrder: 2,
+    startTime: '11:00',
+    ticketIds: [],
+    title: '户外公园',
+    tripId: trip.id,
+    updatedAt: 1,
+  }
+  return {
+    activeRoute: 'item',
+    currentDay: day,
+    currentItem,
+    days: [day],
+    hash: '#/item?tripId=trip_1&dayId=day_1&itemId=item_1',
+    items: [currentItem, nextItem],
+    ledgerExpenses: [{
+      amountMinor: 12000,
+      category: 'admission',
+      createdAt: 1,
+      date: '2026-06-18',
+      currency: 'CNY',
+      id: 'expense_1',
+      source: { kind: 'manual' },
+      splitMode: 'equal',
+      splitShares: [],
+      status: 'confirmed',
+      title: '门票',
+      tripId: trip.id,
+      updatedAt: 1,
+    }],
+    params: new URLSearchParams('tripId=trip_1&dayId=day_1&itemId=item_1'),
+    tickets: [],
+    trip,
+  }
+}

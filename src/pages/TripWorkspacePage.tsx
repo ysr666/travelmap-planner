@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Clock3, Loader2, NotebookText, RotateCw, Route, Ticket } from 'lucide-react'
-import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip } from '../db'
+import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -54,7 +54,7 @@ import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../li
 import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
 import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
 import { loadOwnerSharedTripState } from '../lib/companion'
-import type { Day, SharedTripMutation, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord, TripDisruptionEvent } from '../types'
+import type { Day, SharedTripMutation, TicketBlobSyncState, TicketMeta, TravelInboxAccountSource, TravelInboxPreviewRecord, TripDisruptionEvent, TripReplanRecord } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -85,6 +85,7 @@ export function TripWorkspacePage() {
   const [tripOperationsInboxSummary, setTripOperationsInboxSummary] = useState<TripOperationsInboxSummary | null>(null)
   const [tripOperationsInboxPreview, setTripOperationsInboxPreview] = useState<TravelInboxPreviewRecord | null>(null)
   const [tripDisruptionEvents, setTripDisruptionEvents] = useState<TripDisruptionEvent[]>([])
+  const [tripReplanRecords, setTripReplanRecords] = useState<TripReplanRecord[]>([])
   const [sharedTripMutations, setSharedTripMutations] = useState<SharedTripMutation[]>([])
   const [tripOperationsLocalStates, setTripOperationsLocalStates] = useState<Record<string, TripOperationsLocalState>>({})
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
@@ -147,14 +148,16 @@ export function TripWorkspacePage() {
       getActiveTravelInboxPreview(trip.id),
       listTravelInboxAccountSources(),
       listTripDisruptionEventsByTrip(trip.id),
+      listTripReplanRecordsByTrip(trip.id),
       loadOwnerSharedTripState(trip.id).catch(() => null),
-    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources, replanEvents, sharedState]) => {
+    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources, replanEvents, replanRecords, sharedState]) => {
       if (!cancelled) {
         setItemsByDay(Object.fromEntries(entries))
         setTicketMetas(tickets)
         setTicketBlobSyncStates(blobSyncStates)
         setCloudSyncQueueSummary(syncSummary)
         setTripDisruptionEvents(replanEvents)
+        setTripReplanRecords(replanRecords)
         setSharedTripMutations(sharedState && sharedState.configured && sharedState.signedIn ? sharedState.mutations : [])
         setTripOperationsInboxPreview(inboxPreview ?? null)
         setTripOperationsInboxSummary(buildTripOperationsInboxSummary({
@@ -174,6 +177,7 @@ export function TripWorkspacePage() {
         setTripOperationsInboxSummary(null)
         setTripOperationsInboxPreview(null)
         setTripDisruptionEvents([])
+        setTripReplanRecords([])
         setSharedTripMutations([])
         setLoadedTripContextKey('')
       }
@@ -335,6 +339,7 @@ export function TripWorkspacePage() {
       tickets: ticketMetas,
       trip,
       tripDisruptionEvents,
+      tripReplanRecords,
     })
   }, [
     allItems,
@@ -349,6 +354,7 @@ export function TripWorkspacePage() {
     ticketMetas,
     trip,
     tripDisruptionEvents,
+    tripReplanRecords,
     tripOperationsInboxSummary,
     tripOperationsInboxPreview,
     tripOperationsLocalState.dispositions,

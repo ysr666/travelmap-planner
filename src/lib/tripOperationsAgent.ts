@@ -9,7 +9,7 @@ import { getZonedMinuteOfDay, getZonedPlainDate, resolveTripTimeZone } from './t
 import type { TripReadinessIssue, TripReadinessIssueType, TripReadinessModel, TripReadinessSeverity } from './tripReadiness'
 import { getTicketDisplayTitle, getTicketStorageMode } from './tickets'
 import type { TripRoutePreparation } from './routePreparation'
-import type { Day, ItineraryItem, SharedTripMutation, TicketBlobSyncState, TicketMeta, Trip, TripDisruptionEvent } from '../types'
+import type { Day, ItineraryItem, SharedTripMutation, TicketBlobSyncState, TicketMeta, Trip, TripDisruptionEvent, TripReplanRecord } from '../types'
 
 export type TripOperationsPhase =
   | 'pre_trip'
@@ -99,6 +99,15 @@ export type TripOperationsInboxSummary = {
   selectedPreviewDiffCount: number
 }
 
+export type TripOperationsReplanTimelineEntry = {
+  detail: string
+  id: string
+  label: string
+  severity: TripReadinessSeverity
+  timestamp: number
+  title: string
+}
+
 export type TripOperationsModel = {
   activeRecommendations: TripOperationsRecommendation[]
   allRecommendations: TripOperationsRecommendation[]
@@ -108,6 +117,7 @@ export type TripOperationsModel = {
   phase: TripOperationsPhase
   phaseLabel: string
   recommendations: TripOperationsRecommendation[]
+  replanTimeline: TripOperationsReplanTimelineEntry[]
   summary: {
     highRiskCount: number
     message: string
@@ -132,6 +142,7 @@ export type BuildTripOperationsModelInput = {
   tickets: TicketMeta[]
   trip: Trip
   tripDisruptionEvents?: TripDisruptionEvent[]
+  tripReplanRecords?: TripReplanRecord[]
 }
 
 type RecommendationDraft = Omit<
@@ -164,6 +175,7 @@ export function buildTripOperationsModel({
   tickets,
   trip,
   tripDisruptionEvents = [],
+  tripReplanRecords = [],
 }: BuildTripOperationsModelInput): TripOperationsModel {
   const phase = resolveTripOperationsPhase({ days, now, trip })
   const timeZone = resolveTripTimeZone(trip)
@@ -201,6 +213,7 @@ export function buildTripOperationsModel({
     recommendation.canBatch && recommendation.severity === 'low',
   )
   const highRiskCount = activeRecommendations.filter((recommendation) => recommendation.severity === 'high').length
+  const replanTimeline = buildAdaptiveReplanTimeline(tripDisruptionEvents, tripReplanRecords, sharedMutations)
 
   return {
     activeRecommendations,
@@ -211,6 +224,7 @@ export function buildTripOperationsModel({
     phase,
     phaseLabel: getTripOperationsPhaseLabel(phase),
     recommendations: visible,
+    replanTimeline,
     summary: {
       highRiskCount,
       message: buildSummaryMessage(phase, visible, activeRecommendations.length),
@@ -728,6 +742,79 @@ function buildAdaptiveReplanRecommendations(
       type: 'replan_undo_request',
     })),
   ]
+}
+
+function buildAdaptiveReplanTimeline(
+  events: TripDisruptionEvent[],
+  records: TripReplanRecord[],
+  sharedMutations: SharedTripMutation[],
+): TripOperationsReplanTimelineEntry[] {
+  const eventEntries: TripOperationsReplanTimelineEntry[] = events.map((event) => ({
+    detail: event.notes || (event.evidence[0]?.label ? `来源：${event.evidence[0].label}` : '来自用户或同行人的报告。'),
+    id: `event:${event.id}`,
+    label: formatDisruptionEventStatus(event.status),
+    severity: event.status === 'applied' || event.status === 'dismissed' ? 'low' : 'high',
+    timestamp: event.updatedAt,
+    title: getDisruptionKindLabel(event.kind),
+  }))
+  const recordEntries: TripOperationsReplanTimelineEntry[] = records.map((record) => ({
+    detail: record.selectedDiff
+      ? summarizeReplanDiff(record.selectedDiff)
+      : record.options.length > 0
+        ? `已生成 ${record.options.length} 个方案，等待确认。`
+        : '重排记录等待处理。',
+    id: `record:${record.id}`,
+    label: formatReplanRecordStatus(record.status),
+    severity: record.status === 'conflict' ? 'high' : record.status === 'preview' ? 'medium' : 'low',
+    timestamp: record.updatedAt,
+    title: record.status === 'applied' ? '已应用重排' : record.status === 'undone' ? '已撤销重排' : '重排方案',
+  }))
+  const undoRequestEntries: TripOperationsReplanTimelineEntry[] = sharedMutations
+    .filter((mutation) => mutation.mutationType === 'request_replan_undo')
+    .map((mutation) => ({
+      detail: typeof (mutation.payload as { notes?: unknown }).notes === 'string'
+        ? (mutation.payload as { notes: string }).notes
+        : '同行人请求负责人检查是否撤销。',
+      id: `mutation:${mutation.id}`,
+      label: mutation.status === 'pending' ? '待处理' : formatMutationStatus(mutation.status),
+      severity: mutation.status === 'pending' ? 'high' : 'low',
+      timestamp: Date.parse(mutation.updatedAt) || Date.parse(mutation.createdAt) || 0,
+      title: '撤销请求',
+    }))
+  return [...eventEntries, ...recordEntries, ...undoRequestEntries]
+    .sort((first, second) => second.timestamp - first.timestamp)
+    .slice(0, 5)
+}
+
+function summarizeReplanDiff(diff: TripReplanRecord['selectedDiff']) {
+  if (!diff) return '重排记录等待处理。'
+  const changed = diff.itemChanges.filter((change) => change.changeType !== 'unchanged').length
+  const skipped = diff.itemChanges.filter((change) => change.changeType === 'skipped').length
+  const companion = diff.companionImpacts[0]?.summary
+  return [changed > 0 ? `影响 ${changed} 个行程点` : '未改动行程点', skipped > 0 ? `跳过 ${skipped} 项` : '', companion ?? '']
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function formatDisruptionEventStatus(status: TripDisruptionEvent['status']) {
+  if (status === 'reported') return '已报告'
+  if (status === 'planned') return '有方案'
+  if (status === 'applied') return '已应用'
+  return '已忽略'
+}
+
+function formatReplanRecordStatus(status: TripReplanRecord['status']) {
+  if (status === 'preview') return '待确认'
+  if (status === 'applied') return '已应用'
+  if (status === 'undone') return '已撤销'
+  return '有冲突'
+}
+
+function formatMutationStatus(status: SharedTripMutation['status']) {
+  if (status === 'applied') return '已处理'
+  if (status === 'rejected') return '已拒绝'
+  if (status === 'conflict') return '有冲突'
+  return '待处理'
 }
 
 function getDisruptionKindLabel(kind: TripDisruptionEvent['kind']) {

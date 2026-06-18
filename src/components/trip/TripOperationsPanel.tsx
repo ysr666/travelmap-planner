@@ -568,6 +568,8 @@ export function TripOperationsPanel({
           </div>
         ) : null}
 
+        {model.replanTimeline.length > 0 ? <ReplanTimeline entries={model.replanTimeline} /> : null}
+
         {generatedPreview?.contentPreview ? (
           <PreviewResult
             actionLabel="应用内容"
@@ -793,6 +795,31 @@ function PreviewResult({ actionLabel, body, onAction, testId, title }: { actionL
           <p className="mt-0.5 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{body}</p>
         </div>
         <Button className="min-h-11 shrink-0 px-3 text-xs" onClick={onAction} variant="secondary">{actionLabel}</Button>
+      </div>
+    </div>
+  )
+}
+
+function ReplanTimeline({ entries }: { entries: TripOperationsModel['replanTimeline'] }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-outline-variant/30 bg-surface-container-high/35 p-3" data-testid="trip-operations-replan-timeline">
+      <div className="flex items-center gap-2">
+        <History className="size-4 text-primary" />
+        <p className="text-xs font-semibold text-on-surface">最近重排动态</p>
+      </div>
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <div className="flex items-start gap-2 text-xs leading-5" key={entry.id}>
+            <span className={`mt-1 size-2 shrink-0 rounded-full ${entry.severity === 'high' ? 'bg-red-500' : entry.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-semibold text-on-surface">{entry.title}</span>
+                <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-on-surface-variant">{entry.label}</span>
+              </div>
+              <p className="break-words tm-muted [overflow-wrap:anywhere]">{entry.detail}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

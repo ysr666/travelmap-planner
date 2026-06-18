@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   listItemsByDay: vi.fn().mockResolvedValue([]),
   listTicketsByTrip: vi.fn().mockResolvedValue([]),
   listTripDisruptionEventsByTrip: vi.fn().mockResolvedValue([]),
+  listTripReplanRecordsByTrip: vi.fn().mockResolvedValue([]),
   getTrip: vi.fn().mockResolvedValue({
     id: 'trip_1',
     title: '东京旅行',
@@ -60,6 +61,7 @@ vi.mock('../db', () => ({
   listItemsByDay: mocks.listItemsByDay,
   listTicketsByTrip: mocks.listTicketsByTrip,
   listTripDisruptionEventsByTrip: mocks.listTripDisruptionEventsByTrip,
+  listTripReplanRecordsByTrip: mocks.listTripReplanRecordsByTrip,
   getTrip: mocks.getTrip,
   listDaysByTrip: mocks.listDaysByTrip,
 }))
@@ -209,6 +211,7 @@ vi.mock('../lib/tripOperationsAgent', () => ({
     phase: 'pre_trip',
     phaseLabel: '出发前',
     recommendations: [],
+    replanTimeline: [],
     summary: {
       highRiskCount: 0,
       message: 'ok',

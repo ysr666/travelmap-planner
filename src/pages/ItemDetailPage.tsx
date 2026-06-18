@@ -10,7 +10,9 @@ import {
   MapPin,
   MapPinned,
   Navigation,
+  Save,
   Search,
+  ShieldCheck,
   Ticket,
   Trash2,
 } from 'lucide-react'
@@ -37,7 +39,13 @@ import {
   getTicketCategoryLabel,
   getTicketDisplayTitle,
 } from '../lib/tickets'
-import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+import {
+  formatFlexibility,
+  formatMobility,
+  formatPriority,
+  formatWeather,
+} from '../lib/ai/globalAiCommandRouter'
+import type { Day, ItineraryItem, ItineraryReplanPreference, ReplanFlexibility, ReplanMobilitySuitability, ReplanPriority, ReplanWeatherSuitability, TicketMeta, Trip } from '../types'
 import { Button } from '../components/ui/Button'
 import { getPlaceHeroVisual } from '../lib/placeHeroVisual'
 import { Card } from '../components/ui/Card'
@@ -213,6 +221,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   const [isPlaceLookupLoading, setIsPlaceLookupLoading] = useState(false)
   const [pendingPlaceCandidate, setPendingPlaceCandidate] = useState<ProviderProxyPlaceLookupResult | null>(null)
   const [isApplyingPlaceLookup, setIsApplyingPlaceLookup] = useState(false)
+  const [preferenceForm, setPreferenceForm] = useState(() => buildPreferenceFormState(item.replanPreference))
+  const [isSavingPreference, setIsSavingPreference] = useState(false)
+  const [preferenceMessage, setPreferenceMessage] = useState<string | null>(null)
 
   const loadRelations = useCallback(async () => {
     setIsLoadingRelations(true)
@@ -323,6 +334,24 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     }
   }
 
+  async function saveReplanPreference() {
+    setIsSavingPreference(true)
+    setPreferenceMessage(null)
+    try {
+      const nextPreference = normalizePreferenceFormState(preferenceForm)
+      const updated = await updateItineraryItem(item.id, {
+        replanPreference: Object.keys(nextPreference).length > 0 ? nextPreference : undefined,
+      })
+      if (!updated) throw new Error('未找到行程点。')
+      onItemUpdated(updated)
+      setPreferenceMessage('已保存，后续重排会优先读取这些偏好。')
+    } catch {
+      setPreferenceMessage('保存失败，请稍后再试。')
+    } finally {
+      setIsSavingPreference(false)
+    }
+  }
+
   const heroVisual = getPlaceHeroVisual(item)
 
   return (
@@ -402,6 +431,84 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             >
               查找地点信息
             </Button>
+          </div>
+        </div>
+      </section>
+
+      <section data-testid="item-replan-preferences">
+        <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">重排偏好</h2>
+        <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary">
+              <ShieldCheck className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-body-lg text-body-lg font-semibold text-on-surface">给自适应重排看的轻量规则</p>
+              <p className="mt-1 text-sm leading-6 tm-muted">不改变当前行程；只影响之后遇到延误、天气或跳过时，系统怎样保留或移动这个点。</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PreferenceSelect
+              label="移动性"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, flexibility: value }))}
+              options={[
+                { label: '自动判断', value: '' },
+                { label: formatFlexibility('fixed'), value: 'fixed' },
+                { label: formatFlexibility('movable'), value: 'movable' },
+                { label: formatFlexibility('optional'), value: 'optional' },
+              ]}
+              value={preferenceForm.flexibility}
+            />
+            <PreferenceSelect
+              label="优先级"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, priority: value }))}
+              options={[
+                { label: '自动判断', value: '' },
+                { label: formatPriority('must_keep'), value: 'must_keep' },
+                { label: formatPriority('high'), value: 'high' },
+                { label: formatPriority('normal'), value: 'normal' },
+                { label: formatPriority('low'), value: 'low' },
+              ]}
+              value={preferenceForm.priority}
+            />
+            <PreferenceSelect
+              label="天气"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, weatherSuitability: value }))}
+              options={[
+                { label: '未设置', value: '' },
+                { label: formatWeather('any_weather'), value: 'any_weather' },
+                { label: formatWeather('avoid_rain'), value: 'avoid_rain' },
+                { label: formatWeather('indoor_preferred'), value: 'indoor_preferred' },
+              ]}
+              value={preferenceForm.weatherSuitability}
+            />
+            <PreferenceSelect
+              label="体力"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, mobilitySuitability: value }))}
+              options={[
+                { label: '未设置', value: '' },
+                { label: formatMobility('normal'), value: 'normal' },
+                { label: formatMobility('easy'), value: 'easy' },
+                { label: formatMobility('demanding'), value: 'demanding' },
+              ]}
+              value={preferenceForm.mobilitySuitability}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PreferenceNumber
+              label="最短停留（分钟）"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, minimumStayMinutes: value }))}
+              value={preferenceForm.minimumStayMinutes}
+            />
+            <PreferenceNumber
+              label="前后缓冲（分钟）"
+              onChange={(value) => setPreferenceForm((current) => ({ ...current, bufferMinutes: value }))}
+              value={preferenceForm.bufferMinutes}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button className="min-h-11 px-3 text-xs" icon={<Save className="size-4" />} loading={isSavingPreference} onClick={() => void saveReplanPreference()} variant="secondary">保存偏好</Button>
+            {preferenceMessage ? <span className="text-xs font-semibold text-on-surface-variant">{preferenceMessage}</span> : null}
           </div>
         </div>
       </section>
@@ -663,6 +770,95 @@ function buildPlaceLookupQuery(item: ItineraryItem) {
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
   return Array.from(new Set(parts)).join(' ')
+}
+
+type PreferenceFormState = {
+  bufferMinutes: string
+  flexibility: '' | ReplanFlexibility
+  minimumStayMinutes: string
+  mobilitySuitability: '' | ReplanMobilitySuitability
+  priority: '' | ReplanPriority
+  weatherSuitability: '' | ReplanWeatherSuitability
+}
+
+function buildPreferenceFormState(preference?: ItineraryReplanPreference): PreferenceFormState {
+  return {
+    bufferMinutes: preference?.bufferMinutes?.toString() ?? '',
+    flexibility: preference?.flexibility ?? '',
+    minimumStayMinutes: preference?.minimumStayMinutes?.toString() ?? '',
+    mobilitySuitability: preference?.mobilitySuitability ?? '',
+    priority: preference?.priority ?? '',
+    weatherSuitability: preference?.weatherSuitability ?? '',
+  }
+}
+
+function normalizePreferenceFormState(form: PreferenceFormState): ItineraryReplanPreference {
+  const preference: ItineraryReplanPreference = {}
+  if (form.flexibility) preference.flexibility = form.flexibility
+  if (form.priority) preference.priority = form.priority
+  if (form.weatherSuitability) preference.weatherSuitability = form.weatherSuitability
+  if (form.mobilitySuitability) preference.mobilitySuitability = form.mobilitySuitability
+  const minimumStayMinutes = parsePreferenceMinutes(form.minimumStayMinutes, 720)
+  if (minimumStayMinutes != null) preference.minimumStayMinutes = minimumStayMinutes
+  const bufferMinutes = parsePreferenceMinutes(form.bufferMinutes, 240)
+  if (bufferMinutes != null) preference.bufferMinutes = bufferMinutes
+  return preference
+}
+
+function parsePreferenceMinutes(value: string, max: number) {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const numberValue = Number(trimmed)
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return undefined
+  return Math.min(max, Math.round(numberValue))
+}
+
+function PreferenceSelect<T extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string
+  onChange: (value: T | '') => void
+  options: Array<{ label: string; value: T | '' }>
+  value: T | ''
+}) {
+  return (
+    <label className="block min-w-0 text-xs font-semibold text-on-surface-variant">
+      {label}
+      <select
+        className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/40 bg-surface px-3 text-sm font-medium text-on-surface outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+        onChange={(event) => onChange(event.currentTarget.value as T | '')}
+        value={value}
+      >
+        {options.map((option) => <option key={option.value || 'empty'} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function PreferenceNumber({
+  label,
+  onChange,
+  value,
+}: {
+  label: string
+  onChange: (value: string) => void
+  value: string
+}) {
+  return (
+    <label className="block min-w-0 text-xs font-semibold text-on-surface-variant">
+      {label}
+      <input
+        className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/40 bg-surface px-3 text-sm font-medium text-on-surface outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+        min={0}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        type="number"
+        value={value}
+      />
+    </label>
+  )
 }
 
 function isValidPlaceLocation(location: ProviderProxyPlaceLookupResult['location'] | undefined): location is { lat: number; lng: number } {

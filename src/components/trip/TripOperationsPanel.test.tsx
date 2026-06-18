@@ -513,6 +513,7 @@ const model: TripOperationsModel = {
       type: 'route_long_distance',
     },
   ],
+  replanTimeline: [],
   summary: {
     highRiskCount: 1,
     message: '旅行中优先处理：今天路线可能过远。',

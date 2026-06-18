@@ -8,6 +8,8 @@ export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type ItineraryExecutionStatus = 'completed' | 'skipped'
 export type ReplanFlexibility = 'fixed' | 'movable' | 'optional'
 export type ReplanPriority = 'must_keep' | 'high' | 'normal' | 'low'
+export type ReplanWeatherSuitability = 'any_weather' | 'avoid_rain' | 'indoor_preferred'
+export type ReplanMobilitySuitability = 'normal' | 'easy' | 'demanding'
 
 export type ItineraryExecutionState = {
   status: ItineraryExecutionStatus
@@ -17,6 +19,10 @@ export type ItineraryExecutionState = {
 export type ItineraryReplanPreference = {
   flexibility?: ReplanFlexibility
   priority?: ReplanPriority
+  bufferMinutes?: number
+  minimumStayMinutes?: number
+  mobilitySuitability?: ReplanMobilitySuitability
+  weatherSuitability?: ReplanWeatherSuitability
 }
 
 export type ContentEnrichmentSource = {

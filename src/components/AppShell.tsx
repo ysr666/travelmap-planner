@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import {
   Home,
   Map,
@@ -9,6 +9,10 @@ import {
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 import { BottomTabBar } from './BottomTabBar'
+
+const GlobalAiCommandBar = lazy(() =>
+  import('./ai/GlobalAiCommandBar').then((module) => ({ default: module.GlobalAiCommandBar })),
+)
 
 
 type AppShellProps = {
@@ -42,6 +46,7 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
     || activeRoute === 'settings/privacy'
     || activeRoute === 'settings/maps'
     || activeRoute === 'settings/route'
+  const showGlobalAiCommand = shouldShowGlobalAiCommand(activeRoute)
 
   return (
     <div className="app-viewport relative mx-auto flex w-full max-w-[600px] flex-col overflow-hidden bg-background">
@@ -70,26 +75,42 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
       ) : null}
 
       <main
-        className={getMainClassName({ fullScreen, ownsCanvas, showTabBar, showTopAppBar })}
+        className={getMainClassName({ fullScreen, ownsCanvas, showGlobalAiCommand, showTabBar, showTopAppBar })}
       >
         <div className={fullScreen ? 'h-full min-h-0 w-full' : 'page-transition min-h-full w-full'}>
           {children}
         </div>
       </main>
 
+      {showGlobalAiCommand ? (
+        <Suspense fallback={null}>
+          <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
+        </Suspense>
+      ) : null}
       {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
     </div>
   )
 }
 
+function shouldShowGlobalAiCommand(activeRoute: RouteId) {
+  return activeRoute !== 'trip/new'
+    && activeRoute !== 'trip/edit'
+    && activeRoute !== 'item/new'
+    && activeRoute !== 'item/edit'
+    && activeRoute !== 'shared-trip'
+    && activeRoute !== 'ledger/expense'
+}
+
 function getMainClassName({
   fullScreen,
   ownsCanvas,
+  showGlobalAiCommand,
   showTabBar,
   showTopAppBar,
 }: {
   fullScreen: boolean
   ownsCanvas: boolean
+  showGlobalAiCommand: boolean
   showTabBar: boolean
   showTopAppBar: boolean
 }) {
@@ -98,11 +119,13 @@ function getMainClassName({
   }
 
   if (ownsCanvas) {
-    return 'relative min-h-0 flex-1 overflow-y-auto app-scrollbar'
+    return `relative min-h-0 flex-1 overflow-y-auto ${showGlobalAiCommand ? 'pb-32' : ''} app-scrollbar`
   }
 
   const topPadding = showTopAppBar ? 'pt-24' : 'pt-4'
-  const bottomPadding = showTabBar ? 'pb-28' : 'pb-6'
+  const bottomPadding = showGlobalAiCommand
+    ? showTabBar ? 'pb-48' : 'pb-28'
+    : showTabBar ? 'pb-28' : 'pb-6'
   return `relative min-h-0 flex-1 overflow-y-auto px-4 ${topPadding} ${bottomPadding} app-scrollbar`
 }
 

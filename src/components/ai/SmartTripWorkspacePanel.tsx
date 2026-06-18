@@ -320,7 +320,7 @@ export function SmartTripWorkspacePanel({
   }
 
   return (
-    <Card className="space-y-3" data-testid="smart-trip-workspace-panel" variant="grouped">
+    <Card className="space-y-3" data-testid="smart-trip-workspace-panel" id="smart-trip-workspace-panel" variant="grouped">
       <div className="flex items-start gap-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50/80 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
           <Sparkles className="size-4" />

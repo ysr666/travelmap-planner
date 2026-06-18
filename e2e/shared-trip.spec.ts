@@ -8,6 +8,7 @@ test('Companion shared trip supports read, comment, activity, and collaborator s
   await seedTravelRecords(page, seed)
 
   await page.goto(`/#/trip?tripId=${seed.trips[0].id}`, { waitUntil: 'domcontentloaded' })
+  await openTripHomeSecondaryTools(page)
   const panel = page.getByTestId('shared-trip-panel')
   await expect(panel).toBeVisible()
   await panel.getByRole('button', { name: '开启同行共享' }).click()
@@ -52,6 +53,7 @@ test('Companion shared trip supports read, comment, activity, and collaborator s
   await switchFixtureUser(page, 'owner_1', 'owner@example.com')
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.goto(`/#/trip?tripId=${seed.trips[0].id}`, { waitUntil: 'domcontentloaded' })
+  await openTripHomeSecondaryTools(page)
   await expect(panel).toContainText('我已到集合点')
   await panel.getByRole('button', { name: /同步同行更改/ }).click()
   await expect(panel).toContainText('应用 1 项')
@@ -71,6 +73,13 @@ test('Companion shared trip supports read, comment, activity, and collaborator s
   }, seed.itineraryItems[0].id)
   expect(localTitle).toBe('协作修改后的集合点')
 })
+
+async function openTripHomeSecondaryTools(page: Page) {
+  const tools = page.getByTestId('trip-home-secondary-tools')
+  if (await tools.isVisible().catch(() => false)) return
+  await page.locator('summary').filter({ hasText: '更多工具与详情' }).click()
+  await expect(tools).toBeVisible()
+}
 
 async function readLatestInviteUrl(panel: Locator, previous = '') {
   await expect.poll(async () => readLatestInviteUrlText(panel)).not.toBe(previous)

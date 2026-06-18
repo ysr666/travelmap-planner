@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Inbox,
   Loader2,
   MapPinned,
   NotebookText,
@@ -56,6 +57,7 @@ import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/clo
 import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
 import { buildTripReadinessModel } from '../lib/tripReadiness'
 import { buildTripOperationsModel, type TripOperationsInboxSummary } from '../lib/tripOperationsAgent'
+import { buildTripIntelligenceModel } from '../lib/tripIntelligence'
 import type { ExistingTripImportPreview } from '../lib/ai/existingTripImport'
 import {
   createEmptyTripOperationsLocalState,
@@ -118,6 +120,7 @@ export function TripWorkspacePage() {
   const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
   const [readinessDataVersion, setReadinessDataVersion] = useState(0)
   const [travelInboxRefreshVersion, setTravelInboxRefreshVersion] = useState(0)
+  const [travelInboxManualOpen, setTravelInboxManualOpen] = useState(false)
   const [routeGenerationConfirmOpen, setRouteGenerationConfirmOpen] = useState(false)
   const [routeGenerationLoading, setRouteGenerationLoading] = useState(false)
   const [routeGenerationResult, setRouteGenerationResult] = useState<RouteGenerationBatchResult | null>(null)
@@ -384,6 +387,26 @@ export function TripWorkspacePage() {
     tripOperationsLocalState.dispositions,
   ])
 
+  const tripIntelligenceModel = useMemo(() => {
+    if (!trip) return null
+    return buildTripIntelligenceModel({
+      inbox: {
+        activePreview: tripOperationsInboxPreview,
+        summary: tripOperationsInboxSummary,
+      },
+      operationsModel: tripOperationsModel,
+      readinessModel,
+      sharedMutations: sharedTripMutations,
+    })
+  }, [
+    readinessModel,
+    sharedTripMutations,
+    trip,
+    tripOperationsInboxSummary,
+    tripOperationsInboxPreview,
+    tripOperationsModel,
+  ])
+
   const liveDay = useMemo(() => {
     if (!trip) return null
     return days.find((day) => day.date === getZonedPlainDate(liveNow, resolveDayTimeZone(trip, day))) ?? null
@@ -406,6 +429,9 @@ export function TripWorkspacePage() {
     () => overviewItems.filter(hasUsableCoordinates).length,
     [overviewItems],
   )
+  const hasInboxAttention = hasTripHomeInboxAttention(tripOperationsInboxSummary, tripOperationsInboxPreview)
+  const showTravelInboxPanel = travelInboxManualOpen || hasInboxAttention
+  const sharedTripNeedsAttention = sharedTripMutations.some((mutation) => mutation.status === 'pending' || mutation.status === 'conflict')
 
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
     if (!trip) return
@@ -462,6 +488,23 @@ export function TripWorkspacePage() {
 
   function openDay(day: Day, view: 'schedule' | 'map' = 'schedule') {
     navigateTo('day', { tripId: day.tripId, dayId: day.id, view })
+  }
+
+  function openTravelInboxPanel() {
+    setTravelInboxManualOpen(true)
+    window.requestAnimationFrame(() => {
+      document.getElementById('trip-travel-inbox-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function openToolSection(elementId: string) {
+    const element = document.getElementById(elementId)
+    if (!element) return
+    const details = element.closest('details') as HTMLDetailsElement | null
+    if (details) details.open = true
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   function clearPostImportRoutePrompt({ hide }: { hide: boolean }) {
@@ -570,6 +613,49 @@ export function TripWorkspacePage() {
                 trip={trip}
                 variant="hero"
               />
+            </section>
+
+            {readinessModel && tripOperationsModel ? (
+              <TripOperationsPanel
+                activeInboxPreview={tripOperationsInboxPreview}
+                allItems={allItems}
+                dailyTipModel={dailyTipModel}
+                days={days}
+                intelligenceModel={tripIntelligenceModel}
+                itemsByDay={itemsByDay}
+                model={tripOperationsModel}
+                localState={tripOperationsLocalState}
+                onChanged={handleTripOperationsChanged}
+                onLocalStateChange={handleTripOperationsLocalStateChange}
+                readinessModel={readinessModel}
+                tickets={ticketMetas}
+                trip={trip}
+              />
+            ) : null}
+
+            <section className="flex flex-col gap-stack-gap">
+              {liveDay && tripOperationsModel ? (
+                <TripLiveModeCard
+                  allItems={allItems}
+                  compact
+                  day={liveDay}
+                  days={days}
+                  items={itemsByDay[liveDay.id] ?? []}
+                  now={liveNow}
+                  onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
+                  onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
+                  onOpenMap={() => openDay(liveDay, 'map')}
+                  onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
+                  onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
+                  operationsRecommendations={tripOperationsModel.activeRecommendations}
+                  routeDay={liveRouteDay}
+                  tickets={ticketMetas}
+                  trip={trip}
+                />
+              ) : null}
+            </section>
+
+            <section className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
                 <TripHomeFocusPanel
                   focus={tripHomeFocus}
@@ -579,9 +665,11 @@ export function TripWorkspacePage() {
                 />
                 <TripHomeQuickActions
                   mappedItemCount={mappedItemCount}
+                  onOpenAccountInbox={() => navigateTo('inbox')}
                   onOpenLedger={() => navigateTo('ledger', { tripId: trip.id })}
-                  onOpenRoutePreparation={() => document.getElementById('route-preparation-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  onOpenRoutePreparation={() => openToolSection('route-preparation-panel')}
                   onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+                  onOpenTravelInbox={openTravelInboxPanel}
                   routePreparation={routePreparation}
                   routePreparationLoading={routePreparationLoading}
                   ticketCount={ticketMetas.length}
@@ -633,71 +721,10 @@ export function TripWorkspacePage() {
                 }}
                 onSaved={async () => { await refresh() }}
                 routePreparation={routePreparation}
-                  trip={trip}
-                  tripCheck={tripCheckResult}
-                />
-            </section>
-
-            <section className="flex flex-col gap-stack-gap">
-              {liveDay && tripOperationsModel ? (
-                <TripLiveModeCard
-                  allItems={allItems}
-                  compact
-                  day={liveDay}
-                  days={days}
-                  items={itemsByDay[liveDay.id] ?? []}
-                  now={liveNow}
-                  onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
-                  onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
-                  onOpenMap={() => openDay(liveDay, 'map')}
-                  onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
-                  onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
-                  operationsRecommendations={tripOperationsModel.activeRecommendations}
-                  routeDay={liveRouteDay}
-                  tickets={ticketMetas}
-                  trip={trip}
-                />
-              ) : null}
-            </section>
-
-            {readinessModel && tripOperationsModel ? (
-              <TripOperationsPanel
-                activeInboxPreview={tripOperationsInboxPreview}
-                allItems={allItems}
-                dailyTipModel={dailyTipModel}
-                days={days}
-                itemsByDay={itemsByDay}
-                model={tripOperationsModel}
-                localState={tripOperationsLocalState}
-                onChanged={handleTripOperationsChanged}
-                onLocalStateChange={handleTripOperationsLocalStateChange}
-                readinessModel={readinessModel}
-                tickets={ticketMetas}
                 trip={trip}
+                tripCheck={tripCheckResult}
               />
-            ) : null}
-
-            <LedgerSummaryCard trip={trip} />
-
-            <SharedTripPanel
-              days={days}
-              itemsByDay={itemsByDay}
-              tickets={ticketMetas}
-              trip={trip}
-            />
-
-            {readinessModel ? (
-              <TripReadinessCenterPanel
-                allItems={allItems}
-                dailyTipModel={dailyTipModel}
-                days={days}
-                itemsByDay={itemsByDay}
-                key={trip.id}
-                model={readinessModel}
-                onChanged={handleReadinessChanged}
-                trip={trip}
-              />
-            ) : null}
+            </section>
 
             <DailyItineraryList
               days={days}
@@ -712,7 +739,21 @@ export function TripWorkspacePage() {
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
             />
 
-            {/* Extra panels (not in reference design, but useful functionality) */}
+            {showTravelInboxPanel ? (
+              <div id="trip-travel-inbox-panel">
+                <TravelInboxPanel
+                  allItems={allItems}
+                  days={days}
+                  key={trip.id}
+                  onApplied={async () => { await refresh() }}
+                  onPreviewChanged={async () => { await handleReadinessChanged({ refreshTripData: false }) }}
+                  refreshVersion={travelInboxRefreshVersion}
+                  tickets={ticketMetas}
+                  trip={trip}
+                />
+              </div>
+            ) : null}
+
             <div className="flex min-w-0 justify-end">
               <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
             </div>
@@ -726,27 +767,45 @@ export function TripWorkspacePage() {
                 tripId={trip.id}
               />
             ) : null}
-            <div id="trip-content-enrichment-panel">
-              <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={() => navigateTo('inbox')} variant="ghost">查看账号旅行收件箱</Button>
-            </div>
-            <div id="trip-travel-inbox-panel">
-              <TravelInboxPanel
-                allItems={allItems}
-                days={days}
-                key={trip.id}
-                onApplied={async () => { await refresh() }}
-                onPreviewChanged={async () => { await handleReadinessChanged({ refreshTripData: false }) }}
-                refreshVersion={travelInboxRefreshVersion}
-                tickets={ticketMetas}
-                trip={trip}
-              />
-            </div>
-            <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
-            <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
-            <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
+            <Collapsible
+              subtitle={sharedTripNeedsAttention ? '同行共享有待处理变更；其他工具保持二级入口。' : '账本、同行共享、出行前检查、AI 工具和路线准备。'}
+              title="更多工具与详情"
+            >
+              <div className="space-y-4" data-testid="trip-home-secondary-tools">
+                <div id="trip-tools-ledger-section">
+                  <LedgerSummaryCard trip={trip} />
+                </div>
+
+                <SharedTripPanel
+                  days={days}
+                  itemsByDay={itemsByDay}
+                  tickets={ticketMetas}
+                  trip={trip}
+                />
+
+                {readinessModel ? (
+                  <div id="trip-readiness-details-section">
+                    <TripReadinessCenterPanel
+                      allItems={allItems}
+                      dailyTipModel={dailyTipModel}
+                      days={days}
+                      itemsByDay={itemsByDay}
+                      key={trip.id}
+                      model={readinessModel}
+                      onChanged={handleReadinessChanged}
+                      trip={trip}
+                    />
+                  </div>
+                ) : null}
+
+                <div id="trip-content-enrichment-panel">
+                  <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+                </div>
+                <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
+                <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
+                <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
+              </div>
+            </Collapsible>
 
             {trip.notes ? (
               <Card className="flex items-start gap-3" variant="grouped">
@@ -910,18 +969,22 @@ function TripHomeFocusPanel({
 
 function TripHomeQuickActions({
   mappedItemCount,
+  onOpenAccountInbox,
   onOpenLedger,
   onOpenRoutePreparation,
   onOpenTickets,
+  onOpenTravelInbox,
   routePreparation,
   routePreparationLoading,
   ticketCount,
   totalItemCount,
 }: {
   mappedItemCount: number
+  onOpenAccountInbox: () => void
   onOpenLedger: () => void
   onOpenRoutePreparation: () => void
   onOpenTickets: () => void
+  onOpenTravelInbox: () => void
   routePreparation: TripRoutePreparation | null
   routePreparationLoading: boolean
   ticketCount: number
@@ -930,10 +993,24 @@ function TripHomeQuickActions({
   return (
     <Card className="space-y-3" data-testid="trip-home-quick-actions" variant="grouped">
       <div>
-        <h3 className="font-headline-md text-headline-md text-on-surface">关键入口</h3>
+        <h3 className="font-headline-md text-headline-md text-on-surface">旅行工具</h3>
         <p className="mt-1 text-sm text-on-surface-variant">{mappedItemCount}/{totalItemCount} 个行程点有地图坐标</p>
       </div>
       <div className="divide-y divide-outline-variant/30 overflow-hidden rounded-xl border border-outline-variant/30">
+        <TripHomeActionRow
+          detail="粘贴、上传或整理本次旅行材料"
+          icon={<Inbox className="size-4" />}
+          label="添加材料"
+          onClick={onOpenTravelInbox}
+          testId="trip-action-travel-inbox"
+        />
+        <TripHomeActionRow
+          detail="连接器与账号材料"
+          icon={<Inbox className="size-4" />}
+          label="账号收件箱"
+          onClick={onOpenAccountInbox}
+          testId="trip-action-account-inbox"
+        />
         <TripHomeActionRow
           detail={`${ticketCount} 张票据`}
           icon={<Ticket className="size-4" />}
@@ -1100,6 +1177,19 @@ function buildTripHomeFocus({
 function hasUsableCoordinates(item: ItineraryItem) {
   return typeof item.lat === 'number' && Number.isFinite(item.lat)
     && typeof item.lng === 'number' && Number.isFinite(item.lng)
+}
+
+function hasTripHomeInboxAttention(
+  summary: TripOperationsInboxSummary | null,
+  preview: TravelInboxPreviewRecord | null,
+) {
+  if (preview) return true
+  if (!summary) return false
+  return summary.readyEntryCount > 0
+    || summary.errorEntryCount > 0
+    || summary.accountNeedsAssignmentCount > 0
+    || summary.accountPreviewCount > 0
+    || summary.accountErrorCount > 0
 }
 
 function describeTripMapCoverage(itemCount: number, mappedItemCount: number) {

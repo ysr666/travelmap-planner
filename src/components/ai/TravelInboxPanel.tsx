@@ -504,7 +504,7 @@ export function TravelInboxPanel({
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Inbox className="size-4" />
             </div>
-            <h3 className="text-base font-semibold text-on-surface">旅行收件箱 · 智能整理中心</h3>
+            <h3 className="text-base font-semibold text-on-surface">旅行材料输入 · 待确认建议</h3>
           </div>
           <p className="mt-1 text-sm leading-6 tm-muted">
             粘贴邮件、PDF、截图或票据，本地提取/OCR 后自动整理成行程点、票据、备注和绑定建议。

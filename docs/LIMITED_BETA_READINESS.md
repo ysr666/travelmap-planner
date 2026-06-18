@@ -5,7 +5,7 @@ Baseline audited: current `main` code, docs, and tests after branching to `docs/
 
 ## A. Executive Summary
 
-TripMap is close to a controlled limited beta for offline-capable trip planning, map/day viewing, ticket storage, optional zip archive, and one-to-one Supabase account sync. The product should not be positioned as real-time search, booking, full navigation, realtime collaboration, or autonomous AI editing.
+TripMap is close to a controlled limited beta for a productized travel management experience across Trip Home, Day View, tickets, finance, maps, optional zip archive, and one-to-one Supabase account sync. Offline-capable storage and PWA behavior remain technical capabilities; the product should not be positioned as real-time search, booking, full navigation, realtime collaboration, or autonomous AI editing.
 
 The largest beta blockers are provider abuse operations and production smoke coverage: quota now has a D1-backed foundation when `TRIPMAP_PROVIDER_QUOTA_D1` is configured, but production binding setup, origin controls, account/IP policy, budgets, and real browser plus Cloudflare Pages/worker smoke are still needed for provider-backed paths.
 

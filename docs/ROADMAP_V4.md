@@ -89,7 +89,7 @@
 - AI / zip 导入后只提示用户生成路线，不静默消耗 API。
 - 生成结果写入本地 route cache，不进入 zip、Supabase 或 trip-plan schema。
 
-### 6. AI-native PWA
+### 6. AI-native travel intelligence
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
 - 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation。

@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TripOperationsPanel } from './TripOperationsPanel'
 import type { TripDailyTravelTipModel } from '../../lib/ai/tripDailyTravelTip'
+import type { TripIntelligenceModel, TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
 import type { TripReadinessModel } from '../../lib/tripReadiness'
 import type { TripOperationsModel } from '../../lib/tripOperationsAgent'
 import { createEmptyTripOperationsLocalState, type TripOperationsLocalState } from '../../lib/tripOperationsState'
@@ -192,6 +193,28 @@ describe('TripOperationsPanel', () => {
     expect(mocks.navigateTo).toHaveBeenCalledWith('day', { dayId: 'day_1', tripId: trip.id, view: 'schedule' })
   })
 
+  it('keeps non-operations unified suggestions navigation-only', async () => {
+    const onLocalStateChange = vi.fn()
+    await renderPanel(undefined, {
+      intelligenceModel: makeTripIntelligenceModel([financeSuggestion]),
+      onLocalStateChange,
+    })
+
+    expect(document.body.querySelectorAll('[data-testid="trip-intelligence-suggestion"]')).toHaveLength(1)
+    expect(document.body.querySelector('[data-testid="trip-operations-recommendation"]')).toBeNull()
+    expect(document.body.querySelector('[aria-label^="稍后处理："]')).toBeNull()
+    expect(document.body.querySelector('[aria-label^="忽略建议："]')).toBeNull()
+    expect(document.body.textContent).not.toContain('批量处理')
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[data-testid="trip-intelligence-action"]')?.click()
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('ledger', { tripId: trip.id })
+    expect(mocks.executeRepair).not.toHaveBeenCalled()
+    expect(onLocalStateChange).not.toHaveBeenCalled()
+  })
+
   it('records snooze and ignore dispositions without executing work', async () => {
     const onLocalStateChange = vi.fn()
     await renderPanel(undefined, { onLocalStateChange })
@@ -308,6 +331,7 @@ describe('TripOperationsPanel', () => {
 async function renderPanel(
   onChanged = vi.fn(async () => {}),
   overrides: {
+    intelligenceModel?: TripIntelligenceModel
     localState?: ReturnType<typeof createEmptyTripOperationsLocalState>
     model?: TripOperationsModel
     onLocalStateChange?: (state: TripOperationsLocalState) => void
@@ -320,6 +344,7 @@ async function renderPanel(
         allItems={[item]}
         dailyTipModel={dailyTipModel}
         days={[day]}
+        intelligenceModel={overrides.intelligenceModel}
         itemsByDay={{ [day.id]: [item] }}
         localState={overrides.localState ?? createEmptyTripOperationsLocalState()}
         model={overrides.model ?? model}
@@ -524,6 +549,47 @@ const model: TripOperationsModel = {
 model.allRecommendations = model.recommendations
 model.activeRecommendations = model.recommendations
 model.batchableRecommendations = model.recommendations.slice(0, 2)
+
+const financeSuggestion: TripIntelligenceSuggestion = {
+  action: {
+    kind: 'open_ledger',
+    label: '查看账本',
+    mode: 'navigate',
+    targetRoute: 'ledger',
+  },
+  affectedDayIds: [],
+  affectedItemIds: [],
+  id: 'ledger:review:expense_1',
+  key: 'ledger:review:expense_1',
+  message: '一条费用草稿等待在账本中确认。',
+  priority: 20,
+  requiresConfirmation: false,
+  requiresPreview: false,
+  scope: 'finance',
+  severity: 'medium',
+  source: { id: 'expense_1', kind: 'ledger' },
+  status: 'pending',
+  ticketIds: [],
+  title: '费用草稿待确认',
+}
+
+function makeTripIntelligenceModel(suggestions: TripIntelligenceSuggestion[]): TripIntelligenceModel {
+  return {
+    allSuggestions: suggestions,
+    forDay: (dayId) => suggestions.filter((suggestion) => suggestion.affectedDayIds.includes(dayId)),
+    forFinance: () => suggestions.filter((suggestion) => suggestion.scope === 'finance'),
+    forInbox: () => suggestions.filter((suggestion) => suggestion.scope === 'inbox'),
+    forItem: (itemId) => suggestions.filter((suggestion) => suggestion.affectedItemIds.includes(itemId)),
+    forTicket: (ticketId) => suggestions.filter((suggestion) => suggestion.ticketIds.includes(ticketId)),
+    forTripHome: () => suggestions,
+    suggestions,
+    summary: {
+      highRiskCount: suggestions.filter((suggestion) => suggestion.severity === 'high').length,
+      needsConfirmationCount: suggestions.filter((suggestion) => suggestion.status === 'needs_confirmation').length,
+      totalCount: suggestions.length,
+    },
+  }
+}
 
 function getByTestId(testId: string) {
   const element = document.body.querySelector(`[data-testid="${testId}"]`)

@@ -8,7 +8,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 ## 当前定位
 
-旅图是离线可用、登录后自动同步的出国旅行 PWA。核心数据先写入浏览器 IndexedDB 离线缓存；Supabase 用于账号数据同步，zip 是可选离线归档。
+旅图是产品化阶段的出国旅行管理工具，目标是用 Trip Home、Day View、票据、账本和共享旅行等上下文回答“现在要确认什么 / 现在该做什么”。核心数据仍先写入浏览器 IndexedDB；离线可用、PWA app shell、Supabase 账号同步和 zip 归档是底层能力，而不是主产品叙事。
 
 它不是订票软件、完整导航软件、实时同步产品或多人协作工具。AI 与地图服务只做辅助，最终写入仍应由用户确认。
 
@@ -40,7 +40,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 ## 已完成能力
 
-- local-first PWA 与 IndexedDB 数据模型。
+- 产品化旅行管理体验与 IndexedDB 本地数据底座。
 - Trip Home / Day View / Item Detail 路由拆分。
 - Trip / Item 新建编辑独立页面。
 - MapLibre 地图、OpenFreeMap 底图、编号 marker、直线连接。

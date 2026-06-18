@@ -18,24 +18,37 @@ export function navigateToTripOperationsRecommendation(
     return
   }
   if (recommendation.actionKind === 'open_inbox' || recommendation.actionKind === 'apply_inbox_preview') {
-    document.getElementById('trip-travel-inbox-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (scrollToTripElement('trip-travel-inbox-panel')) return
+    navigateTo('inbox')
     return
   }
   if (recommendation.actionKind === 'open_sync') {
-    document.getElementById('trip-sync-archive-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (scrollToTripElement('trip-sync-archive-section')) return
+    navigateTo('settings', { section: 'cloud' })
     return
   }
   if (recommendation.actionKind === 'open_route_panel') {
-    document.getElementById('route-preparation-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToTripElement('route-preparation-panel')
     return
   }
   if (recommendation.actionKind === 'open_content_enrichment') {
-    document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToTripElement('trip-content-enrichment-panel')
     return
   }
   if (recommendation.actionKind === 'open_adaptive_replan') {
-    document.getElementById('trip-live-mode-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToTripElement('trip-live-mode-card')
     return
   }
-  document.getElementById('trip-readiness-center-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  scrollToTripElement('trip-readiness-center-panel')
+}
+
+function scrollToTripElement(id: string) {
+  const element = document.getElementById(id)
+  if (!element) return false
+  const details = element.closest('details') as HTMLDetailsElement | null
+  if (details) details.open = true
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+  return true
 }

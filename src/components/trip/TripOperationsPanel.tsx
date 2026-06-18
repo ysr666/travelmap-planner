@@ -62,6 +62,7 @@ import {
 } from '../../lib/tripOperationsState'
 import { navigateTo } from '../../lib/routes'
 import { navigateToTripOperationsRecommendation } from '../../lib/tripOperationsNavigation'
+import type { TripIntelligenceModel, TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
 import type { TripReadinessModel } from '../../lib/tripReadiness'
 import { getZonedPlainDate, resolveTripTimeZone } from '../../lib/timeZone'
 import { Button } from '../ui/Button'
@@ -75,6 +76,7 @@ type TripOperationsPanelProps = {
   allItems: ItineraryItem[]
   dailyTipModel: TripDailyTravelTipModel | null
   days: Day[]
+  intelligenceModel?: TripIntelligenceModel | null
   itemsByDay: Record<string, ItineraryItem[]>
   localState: TripOperationsLocalState
   model: TripOperationsModel
@@ -99,6 +101,7 @@ export function TripOperationsPanel({
   allItems,
   dailyTipModel,
   days,
+  intelligenceModel,
   itemsByDay,
   localState,
   model,
@@ -140,6 +143,27 @@ export function TripOperationsPanel({
     () => new Map(model.allRecommendations.map((recommendation) => [recommendation.fingerprint, recommendation])),
     [model.allRecommendations],
   )
+  const recommendationById = useMemo(
+    () => new Map(model.allRecommendations.map((recommendation) => [recommendation.id, recommendation])),
+    [model.allRecommendations],
+  )
+  const itemById = useMemo(
+    () => new Map(allItems.map((item) => [item.id, item])),
+    [allItems],
+  )
+  const intelligenceSuggestions = intelligenceModel?.forTripHome() ?? null
+  const visibleIntelligenceSuggestions = intelligenceSuggestions?.slice(0, 5) ?? null
+  const hasVisibleSuggestions = visibleIntelligenceSuggestions
+    ? visibleIntelligenceSuggestions.length > 0
+    : model.recommendations.length > 0
+  const summaryMessage = intelligenceModel
+    ? buildIntelligenceSummaryMessage(intelligenceModel.summary)
+    : model.summary.message
+  const visibleBatchableRecommendations = visibleIntelligenceSuggestions
+    ? visibleIntelligenceSuggestions
+      .map((suggestion) => getOperationsRecommendationForSuggestion(suggestion))
+      .filter((recommendation): recommendation is TripOperationsRecommendation => Boolean(recommendation?.canBatch))
+    : model.batchableRecommendations
 
   function processRecommendation(recommendation: TripOperationsRecommendation) {
     resetTransientMessages()
@@ -160,6 +184,16 @@ export function TripOperationsPanel({
       return
     }
     navigateToTripOperationsRecommendation(recommendation, trip.id)
+  }
+
+  function processIntelligenceSuggestion(suggestion: TripIntelligenceSuggestion) {
+    resetTransientMessages()
+    const recommendation = getOperationsRecommendationForSuggestion(suggestion)
+    if (recommendation) {
+      processRecommendation(recommendation)
+      return
+    }
+    navigateToIntelligenceSuggestion(suggestion, trip.id, itemById)
   }
 
   function hideRecommendation(recommendation: TripOperationsRecommendation, status: 'ignored' | 'snoozed') {
@@ -508,7 +542,7 @@ export function TripOperationsPanel({
                 <h3 className="text-base font-semibold text-on-surface">现在建议做什么</h3>
               </div>
             </div>
-            <p className="mt-2 text-sm leading-6 tm-muted" data-testid="trip-operations-summary">{model.summary.message}</p>
+            <p className="mt-2 text-sm leading-6 tm-muted" data-testid="trip-operations-summary">{summaryMessage}</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <button
@@ -533,37 +567,54 @@ export function TripOperationsPanel({
           </div>
         </div>
 
-        {model.recommendations.length === 0 ? (
+        {!hasVisibleSuggestions ? (
           <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
             <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
             <span>路线、票据、收件箱和同步状态暂时没有需要优先处理的事项。</span>
           </div>
         ) : (
           <div className="space-y-2">
-            {model.recommendations.map((recommendation) => (
-              <RecommendationRow
-                key={recommendation.fingerprint}
-                onIgnore={() => hideRecommendation(recommendation, 'ignored')}
-                onProcess={() => processRecommendation(recommendation)}
-                onSnooze={() => hideRecommendation(recommendation, 'snoozed')}
-                recommendation={recommendation}
-              />
-            ))}
+            {visibleIntelligenceSuggestions ? visibleIntelligenceSuggestions.map((suggestion) => {
+              const recommendation = getOperationsRecommendationForSuggestion(suggestion)
+              return recommendation ? (
+                <RecommendationRow
+                  key={suggestion.id}
+                  onIgnore={() => hideRecommendation(recommendation, 'ignored')}
+                  onProcess={() => processRecommendation(recommendation)}
+                  onSnooze={() => hideRecommendation(recommendation, 'snoozed')}
+                  recommendation={recommendation}
+                />
+              ) : (
+                <IntelligenceSuggestionRow
+                  key={suggestion.id}
+                  onProcess={() => processIntelligenceSuggestion(suggestion)}
+                  suggestion={suggestion}
+                />
+              )
+            }) : model.recommendations.map((recommendation) => (
+                <RecommendationRow
+                  key={recommendation.fingerprint}
+                  onIgnore={() => hideRecommendation(recommendation, 'ignored')}
+                  onProcess={() => processRecommendation(recommendation)}
+                  onSnooze={() => hideRecommendation(recommendation, 'snoozed')}
+                  recommendation={recommendation}
+                />
+              ))}
           </div>
         )}
 
-        {model.recommendations.length > 0 ? (
+        {visibleBatchableRecommendations.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 tm-muted">只批量处理低风险项；预览生成后仍需再次确认写入。</p>
             <Button
               className="min-h-11 px-3 text-xs"
-              disabled={model.batchableCount === 0 || isRunning}
+              disabled={visibleBatchableRecommendations.length === 0 || isRunning}
               icon={isRunning ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
               loading={isRunning}
-              onClick={() => setPendingRecommendations(model.batchableRecommendations)}
+              onClick={() => setPendingRecommendations(visibleBatchableRecommendations)}
               variant="secondary"
             >
-              批量处理 {model.batchableCount} 项
+              批量处理 {visibleBatchableRecommendations.length} 项
             </Button>
           </div>
         ) : null}
@@ -751,6 +802,11 @@ export function TripOperationsPanel({
       />
     </>
   )
+
+  function getOperationsRecommendationForSuggestion(suggestion: TripIntelligenceSuggestion) {
+    if (suggestion.source.kind !== 'operations') return undefined
+    return recommendationById.get(suggestion.source.id)
+  }
 }
 
 function RecommendationRow({
@@ -765,7 +821,12 @@ function RecommendationRow({
   recommendation: TripOperationsRecommendation
 }) {
   return (
-    <div className="rounded-lg border border-outline-variant/30 bg-surface-container-high/40 px-3 py-3" data-testid="trip-operations-recommendation" data-type={recommendation.type}>
+    <div
+      className="rounded-lg border border-outline-variant/30 bg-surface-container-high/40 px-3 py-3"
+      data-id={recommendation.id}
+      data-testid="trip-operations-recommendation"
+      data-type={recommendation.type}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -780,6 +841,41 @@ function RecommendationRow({
           <Button className="min-h-11 px-3 text-xs" data-testid="trip-operations-action" icon={recommendation.requiresConfirm ? <ShieldCheck className="size-3.5" /> : undefined} onClick={onProcess} variant="secondary">处理</Button>
           <button aria-label={`稍后处理：${recommendation.title}`} className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high tm-focus" onClick={onSnooze} title="稍后处理" type="button"><Clock3 className="size-4" /></button>
           <button aria-label={`忽略建议：${recommendation.title}`} className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high tm-focus" onClick={onIgnore} title="忽略" type="button"><EyeOff className="size-4" /></button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IntelligenceSuggestionRow({
+  onProcess,
+  suggestion,
+}: {
+  onProcess: () => void
+  suggestion: TripIntelligenceSuggestion
+}) {
+  return (
+    <div className="rounded-lg border border-outline-variant/30 bg-surface-container-high/40 px-3 py-3" data-testid="trip-intelligence-suggestion" data-source={suggestion.source.kind}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {suggestionIcon(suggestion)}
+            <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</p>
+            <span className={severityBadgeClassName(suggestion.severity)}>{severityLabel(suggestion.severity)}</span>
+          </div>
+          <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+          <p className="mt-0.5 break-words text-[11px] leading-5 tm-muted [overflow-wrap:anywhere]">{sourceLabel(suggestion.source.kind)}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            className="min-h-11 px-3 text-xs"
+            data-testid="trip-intelligence-action"
+            icon={suggestion.requiresConfirmation ? <ShieldCheck className="size-3.5" /> : undefined}
+            onClick={onProcess}
+            variant="secondary"
+          >
+            {suggestion.action?.label ?? '查看'}
+          </Button>
         </div>
       </div>
     </div>
@@ -913,6 +1009,69 @@ function navigateToAppliedChange(change: TripOperationsAppliedChange, tripId: st
   navigateTo('trip', { tripId })
 }
 
+function navigateToIntelligenceSuggestion(
+  suggestion: TripIntelligenceSuggestion,
+  tripId: string,
+  itemById: Map<string, ItineraryItem>,
+) {
+  if (suggestion.scope === 'inbox') {
+    if (scrollToTripElement('trip-travel-inbox-panel')) return
+    navigateTo('inbox')
+    return
+  }
+  if (suggestion.scope === 'finance') {
+    if (scrollToTripElement('trip-tools-ledger-section')) return
+    navigateTo('ledger', { tripId })
+    return
+  }
+  if (suggestion.scope === 'ticket') {
+    navigateTo('tickets', { tripId })
+    return
+  }
+  if (suggestion.scope === 'shared_trip') {
+    if (scrollToTripElement('shared-trip-panel')) return
+    navigateTo('trip', { tripId })
+    return
+  }
+  if (suggestion.scope === 'sync') {
+    if (scrollToTripElement('trip-sync-archive-section')) return
+    navigateTo('settings', { section: 'cloud' })
+    return
+  }
+
+  const itemId = suggestion.affectedItemIds[0]
+  const item = itemId ? itemById.get(itemId) : undefined
+  const dayId = suggestion.affectedDayIds[0] ?? item?.dayId
+  if (itemId && dayId) {
+    navigateTo('item', { dayId, itemId, tripId })
+    return
+  }
+  if (dayId) {
+    navigateTo('day', { dayId, tripId, view: 'schedule' })
+    return
+  }
+  navigateTo('trip', { tripId })
+}
+
+function scrollToTripElement(id: string) {
+  const element = document.getElementById(id)
+  if (!element) return false
+  const details = element.closest('details') as HTMLDetailsElement | null
+  if (details) details.open = true
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+  return true
+}
+
+function buildIntelligenceSummaryMessage(summary: TripIntelligenceModel['summary']) {
+  if (summary.totalCount === 0) return '当前没有明显阻塞项。路线、票据、收件箱和同步状态暂时都不需要优先处理。'
+  const fragments = [`当前有 ${summary.totalCount} 项建议`]
+  if (summary.needsConfirmationCount > 0) fragments.push(`${summary.needsConfirmationCount} 项需要确认`)
+  if (summary.highRiskCount > 0) fragments.push(`${summary.highRiskCount} 项高风险`)
+  return `${fragments.join('，')}。优先处理上方事项；写入动作仍会保留确认。`
+}
+
 function recommendationIcon(recommendation: TripOperationsRecommendation) {
   if (recommendation.type === 'missing_route' || recommendation.type === 'route_long_distance') return <Route className="size-3.5 shrink-0 text-sky-600" />
   if (recommendation.type === 'missing_coordinate') return <MapPin className="size-3.5 shrink-0 text-amber-600" />
@@ -922,6 +1081,25 @@ function recommendationIcon(recommendation: TripOperationsRecommendation) {
   if (recommendation.type === 'inbox_needs_attention') return <Inbox className="size-3.5 shrink-0 text-primary" />
   if (recommendation.type === 'tomorrow_review') return <Moon className="size-3.5 shrink-0 text-indigo-600" />
   return <AlertTriangle className="size-3.5 shrink-0 text-red-600" />
+}
+
+function suggestionIcon(suggestion: TripIntelligenceSuggestion) {
+  if (suggestion.scope === 'inbox') return <Inbox className="size-3.5 shrink-0 text-primary" />
+  if (suggestion.scope === 'ticket') return <Ticket className="size-3.5 shrink-0 text-violet-600" />
+  if (suggestion.scope === 'sync') return <Cloud className="size-3.5 shrink-0 text-slate-600" />
+  if (suggestion.scope === 'finance') return <FileText className="size-3.5 shrink-0 text-emerald-600" />
+  if (suggestion.scope === 'day' || suggestion.scope === 'item' || suggestion.scope === 'live') return <MapPin className="size-3.5 shrink-0 text-amber-600" />
+  if (suggestion.source.kind === 'readiness') return <Route className="size-3.5 shrink-0 text-sky-600" />
+  return <AlertTriangle className="size-3.5 shrink-0 text-red-600" />
+}
+
+function sourceLabel(source: TripIntelligenceSuggestion['source']['kind']) {
+  if (source === 'operations') return '旅行执行建议'
+  if (source === 'readiness') return '出行前检查'
+  if (source === 'inbox') return '旅行材料'
+  if (source === 'live') return '今日现场'
+  if (source === 'ledger') return '旅行账本'
+  return '同行共享'
 }
 
 function severityBadgeClassName(severity: TripOperationsRecommendation['severity']) {

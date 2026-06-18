@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   Home,
   Map,
@@ -9,10 +9,7 @@ import {
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 import { BottomTabBar } from './BottomTabBar'
-
-const GlobalAiCommandBar = lazy(() =>
-  import('./ai/GlobalAiCommandBar').then((module) => ({ default: module.GlobalAiCommandBar })),
-)
+import { GlobalAiCommandBar } from './ai/GlobalAiCommandBar'
 
 
 type AppShellProps = {
@@ -83,9 +80,7 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
       </main>
 
       {showGlobalAiCommand ? (
-        <Suspense fallback={null}>
-          <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
-        </Suspense>
+        <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
       ) : null}
       {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
     </div>

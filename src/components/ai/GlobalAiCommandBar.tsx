@@ -300,7 +300,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           </span>
           <input
             aria-label="全局 AI 指令"
-            className="min-h-10 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
+            className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
             maxLength={1000}
             onChange={(event) => setCommand(event.currentTarget.value)}
             placeholder="问我改行程、重排、查账本…"
@@ -308,7 +308,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           />
           <button
             aria-label="发送 AI 指令"
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary transition active:scale-95 disabled:opacity-50"
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary transition active:scale-95 disabled:opacity-50"
             disabled={!trimmedCommand || loading}
             type="submit"
           >

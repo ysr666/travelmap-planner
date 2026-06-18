@@ -56,7 +56,7 @@ export function DayTimelineView({
   }
 
   return (
-    <div className={compact ? 'space-y-4' : 'space-y-5'}>
+    <div className={compact ? 'space-y-4' : 'space-y-5'} data-testid="day-timeline">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">当天日程</h3>

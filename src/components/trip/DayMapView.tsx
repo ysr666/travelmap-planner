@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from 'react'
-import { ArrowLeft, Building2, Clock3, Crosshair, Locate, Navigation, X } from 'lucide-react'
+import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Clock3, Crosshair, Locate, MapPin, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { EmptyState } from '../ui/EmptyState'
 import { hasValidCoordinates } from '../../lib/mapLinks'
@@ -115,10 +115,20 @@ export function DayMapView({
   const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
   const markerCardItem = useMemo(() => {
     if (!markerCardItemId) {
-      return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? items[0] ?? null)
+      return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? null)
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [day.id, items, mappedItems, markerCardDismissedDayId, markerCardItemId])
+  }, [day.id, mappedItems, markerCardDismissedDayId, markerCardItemId])
+  const markerCardItemIndex = useMemo(() => {
+    if (!markerCardItem) {
+      return -1
+    }
+    return mappedItems.findIndex((item) => item.id === markerCardItem.id)
+  }, [mappedItems, markerCardItem])
+  const previousMarkerCardItem = markerCardItemIndex > 0 ? mappedItems[markerCardItemIndex - 1] : null
+  const nextMarkerCardItem = markerCardItemIndex >= 0 && markerCardItemIndex < mappedItems.length - 1
+    ? mappedItems[markerCardItemIndex + 1]
+    : null
   const markerCardVisible = Boolean(
     isVisible
     && markerCardItem
@@ -197,6 +207,15 @@ export function DayMapView({
       window.removeEventListener('storage', refreshConfig)
     }
   }, [])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setSelectedItemSelection(null)
+      setMarkerCardSelection(null)
+      setMarkerCardDismissedDayId(null)
+      setMapControlNotice(null)
+    })
+  }, [day.id])
 
   useEffect(() => {
     function refreshRouteCache() {
@@ -451,12 +470,18 @@ export function DayMapView({
         {markerCardVisible && markerCardItem ? (
           <MarkerPreviewCard
             containerRef={markerCardRef}
+            itemIndex={markerCardItemIndex}
             item={markerCardItem}
             onClose={() => {
               setMarkerCardSelection(null)
+              setSelectedItemSelection(null)
               setMarkerCardDismissedDayId(day.id)
             }}
             onOpenItem={onOpenItem}
+            onSelectItem={handleSelectItem}
+            nextItem={nextMarkerCardItem}
+            previousItem={previousMarkerCardItem}
+            totalItems={mappedItems.length}
           />
         ) : null}
       </div>
@@ -492,14 +517,24 @@ export function DayMapView({
 
 function MarkerPreviewCard({
   containerRef,
+  itemIndex,
   item,
+  nextItem,
   onClose,
   onOpenItem,
+  onSelectItem,
+  previousItem,
+  totalItems,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
+  itemIndex: number
   item: ItineraryItem
+  nextItem: ItineraryItem | null
   onClose: () => void
   onOpenItem: (item: ItineraryItem) => void
+  onSelectItem: (item: ItineraryItem) => void
+  previousItem: ItineraryItem | null
+  totalItems: number
 }) {
 
   return (
@@ -508,18 +543,43 @@ function MarkerPreviewCard({
       ref={containerRef}
     >
       <div
-        className="bg-surface-container-high/95 backdrop-blur-md rounded-2xl p-4 border border-outline-variant/30 shadow-2xl flex items-center gap-4"
+        className="rounded-2xl border border-outline-variant/30 bg-surface-container-high/95 p-4 shadow-2xl backdrop-blur-md"
         data-testid="map-marker-card"
       >
-        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-          <Building2 className="size-5 text-primary" />
-        </div>
-        <div className="flex-grow min-w-0">
-          <div className="flex justify-between items-start">
-            <h3 className="font-headline-sm text-[16px] text-on-surface truncate">{item.title}</h3>
+        <div className="flex items-start gap-3">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/20">
+            <Building2 className="size-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+              <span>第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站</span>
+              {item.ticketIds.length > 0 ? <span>{item.ticketIds.length} 张票据</span> : null}
+            </div>
+            <h3 className="mt-1 truncate font-headline-sm text-[16px] text-on-surface">{item.title}</h3>
+            <p className="mt-1 flex min-w-0 items-center gap-1 text-[13px] text-on-surface-variant">
+              <Clock3 className="size-3.5 shrink-0" />
+              <span className="truncate">{describeItemTime(item)}</span>
+            </p>
+            {item.locationName || item.address ? (
+              <p className="mt-1 flex min-w-0 items-center gap-1 text-[13px] text-on-surface-variant">
+                <MapPin className="size-3.5 shrink-0" />
+                <span className="truncate">{item.locationName || item.address}</span>
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-start gap-2">
+            <button
+              aria-label="打开行程点详情"
+              className="pointer-events-auto flex size-10 items-center justify-center rounded-full bg-primary text-on-primary shadow-lg transition-transform active:scale-95"
+              data-testid="map-marker-card-open"
+              onClick={() => onOpenItem(item)}
+              type="button"
+            >
+              <Navigation className="size-5" />
+            </button>
             <button
               aria-label="关闭地点卡片"
-              className="ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant transition hover:text-on-surface active:scale-95"
+              className="flex size-10 items-center justify-center rounded-full bg-surface-container text-on-surface-variant transition hover:text-on-surface active:scale-95"
               data-testid="map-marker-card-close"
               onClick={onClose}
               type="button"
@@ -527,19 +587,29 @@ function MarkerPreviewCard({
               <X className="size-4" />
             </button>
           </div>
-          <p className="text-on-surface-variant text-[13px] mt-0.5 flex items-center gap-1">
-            <Clock3 className="size-3.5" />
-            {describeItemTime(item)}
-          </p>
         </div>
-        <button
-          className="pointer-events-auto w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform shrink-0"
-          data-testid="map-marker-card-open"
-          onClick={() => onOpenItem(item)}
-          type="button"
-        >
-          <Navigation className="size-5" />
-        </button>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            data-testid="map-marker-card-prev"
+            disabled={!previousItem}
+            onClick={() => previousItem && onSelectItem(previousItem)}
+            type="button"
+          >
+            <ChevronLeft className="size-4" />
+            上一站
+          </button>
+          <button
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            data-testid="map-marker-card-next"
+            disabled={!nextItem}
+            onClick={() => nextItem && onSelectItem(nextItem)}
+            type="button"
+          >
+            下一站
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -32,17 +32,22 @@ const mocks = vi.hoisted(() => ({
   updateItineraryItem: vi.fn(),
   formatFileSize: vi.fn((size: number) => `${size} B`),
   formatTicketCreatedAt: vi.fn(() => '2026-04-01'),
-  getTicketDisplayTitle: vi.fn(() => '票据'),
+  getTicketDisplayTitle: vi.fn((ticket?: { fileName?: string; title?: string }) => ticket?.title || ticket?.fileName || '票据'),
   getTicketFileType: vi.fn(() => 'image'),
-  getTicketScope: vi.fn(() => 'trip'),
-  getTicketStorageMode: vi.fn(() => 'reference'),
+  getTicketScope: vi.fn((ticket?: { itemId?: string; scope?: 'item' | 'trip' | 'unassigned' }) => ticket?.scope || (ticket?.itemId ? 'item' : 'trip')),
+  getTicketStorageMode: vi.fn((ticket?: { storageMode?: 'copy' | 'external' | 'reference' }) => ticket?.storageMode || 'reference'),
   isValidExternalUrl: vi.fn(() => false),
   normalizeTicketFileName: vi.fn((name: string) => name),
   ticketCategoryOptions: [],
   ticketScopeLabels: { trip: '旅行', day: '日期', item: '行程点' },
   describeItemTime: vi.fn(() => ''),
-  getTicketCloudSyncView: vi.fn(() => ({ status: 'local' as const, label: '本地' })),
-  getTicketDisplayMeta: vi.fn(() => ({ badge: '图片', badgeTone: 'default' as const })),
+  getTicketCloudSyncView: vi.fn(() => ({ detail: '仅此设备', label: '本地', status: 'local' as const, tone: 'neutral' as const })),
+  getTicketDisplayMeta: vi.fn((ticket?: { fileName?: string; fileType?: string }) => ({
+    badge: ticket?.fileType || '文件',
+    badgeTone: 'default' as const,
+    secondaryLine: ticket?.fileName || '票据文件',
+    toneKey: 'sky' as const,
+  })),
   getTripAutoSnapshotStatus: vi.fn(() => ({ status: 'idle' as const })),
   isAutoSnapshotBackupEnabled: vi.fn(() => false),
   subscribeAutoSnapshotBackup: vi.fn(() => () => {}),
@@ -161,6 +166,16 @@ beforeEach(() => {
     { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
   ])
   mocks.listTicketsByTrip.mockResolvedValue([])
+  mocks.getTicketDisplayTitle.mockImplementation((ticket?: { fileName?: string; title?: string }) => ticket?.title || ticket?.fileName || '票据')
+  mocks.getTicketScope.mockImplementation((ticket?: { itemId?: string; scope?: 'item' | 'trip' | 'unassigned' }) => ticket?.scope || (ticket?.itemId ? 'item' : 'trip'))
+  mocks.getTicketStorageMode.mockImplementation((ticket?: { storageMode?: 'copy' | 'external' | 'reference' }) => ticket?.storageMode || 'reference')
+  mocks.getTicketCloudSyncView.mockReturnValue({ detail: '仅此设备', label: '本地', status: 'local', tone: 'neutral' })
+  mocks.getTicketDisplayMeta.mockImplementation((ticket?: { fileName?: string; fileType?: string }) => ({
+    badge: ticket?.fileType || '文件',
+    badgeTone: 'default' as const,
+    secondaryLine: ticket?.fileName || '票据文件',
+    toneKey: 'sky' as const,
+  }))
 })
 
 afterEach(() => {
@@ -267,5 +282,63 @@ describe('TicketLibraryPage', () => {
     })
 
     expect(container?.textContent).toContain('db error')
+  })
+
+  it('renders gallery overview and binding sections', async () => {
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_item',
+        tripId: 'trip_1',
+        itemId: 'item_1',
+        title: '浅草寺门票',
+        fileName: 'asakusa.png',
+        fileType: 'image',
+        mimeType: 'image/png',
+        size: 1024,
+        storageMode: 'copy',
+        scope: 'item',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+      {
+        id: 'ticket_trip',
+        tripId: 'trip_1',
+        title: '机票确认',
+        fileName: 'flight.pdf',
+        fileType: 'pdf',
+        mimeType: 'application/pdf',
+        size: 2048,
+        storageMode: 'reference',
+        scope: 'trip',
+        createdAt: 101,
+        updatedAt: 101,
+      },
+      {
+        id: 'ticket_unassigned',
+        tripId: 'trip_1',
+        title: '待整理订单',
+        fileName: 'order.url',
+        fileType: 'other',
+        mimeType: 'text/uri-list',
+        size: 0,
+        storageMode: 'external',
+        scope: 'unassigned',
+        createdAt: 102,
+        updatedAt: 102,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(container?.textContent).toContain('票据总览')
+    expect(container?.textContent).toContain('行程点票据')
+    expect(container?.textContent).toContain('旅行级票据')
+    expect(container?.textContent).toContain('未分类')
+    expect(container?.querySelectorAll('[data-testid="ticket-gallery-section"]').length).toBe(3)
   })
 })

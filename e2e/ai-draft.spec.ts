@@ -243,6 +243,11 @@ function variantDraft(title: string, dayCount = 2) {
   }
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  await forceRouteProxyFixture(page)
+})
+
 test.describe('AI Trip Builder Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#/ai-draft')

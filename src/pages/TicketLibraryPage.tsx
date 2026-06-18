@@ -172,6 +172,14 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       return ticket.fileType === filter
     })
   }, [filter, tickets])
+  const ticketLibraryStats = useMemo(
+    () => buildTicketLibraryStats(tickets, ticketBlobPresence),
+    [ticketBlobPresence, tickets],
+  )
+  const gallerySections = useMemo(
+    () => buildTicketGallerySections(filteredTickets, itemById),
+    [filteredTickets, itemById],
+  )
 
   const defaultBindingTarget = useCallback(
     (loadedItems: ItineraryItem[]) => {
@@ -587,6 +595,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
+      <TicketLibraryOverview stats={ticketLibraryStats} />
+
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-2">
           <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
@@ -744,32 +754,47 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             title="暂无票据"
           />
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3" data-testid="ticket-gallery">
-            {filteredTickets.map((ticket) => {
-              const syncView = getTicketCloudSyncView(ticket, {
-                autoSyncEnabled,
-                autoSyncEntry: tripSyncEntry,
-                blobSyncState: ticketBlobSyncStates[ticket.id],
-                hasOfflineCache: ticketBlobPresence[ticket.id],
-                isOnline,
-                signedIn: isCloudSignedIn,
-              })
-              return (
-                <TicketCard
-                  bindingLabel={describeTicketBinding(ticket, itemById)}
-                  blobSyncState={ticketBlobSyncStates[ticket.id]}
-                  busy={ticketBlobActionId === ticket.id}
-                  key={ticket.id}
-                  onClearCache={() => void handleClearTicketCache(ticket)}
-                  onDelete={() => setPendingDeleteTicket(ticket)}
-                  onPreview={() => setPreviewTicket(ticket)}
-                  onRestoreCache={() => void handleRestoreTicketCache(ticket)}
-                  onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
-                  syncView={syncView}
-                  ticket={ticket}
-                />
-              )
-            })}
+          <div className="space-y-5" data-testid="ticket-gallery">
+            {gallerySections.map((section) => (
+              <div className="space-y-3" data-testid="ticket-gallery-section" key={section.id}>
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">{section.title}</h3>
+                    <p className="mt-1 text-xs leading-5 tm-muted">{section.summary}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-surface-container-high px-2 py-1 text-xs font-semibold tm-muted">
+                    {section.tickets.length}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3">
+                  {section.tickets.map((ticket) => {
+                    const syncView = getTicketCloudSyncView(ticket, {
+                      autoSyncEnabled,
+                      autoSyncEntry: tripSyncEntry,
+                      blobSyncState: ticketBlobSyncStates[ticket.id],
+                      hasOfflineCache: ticketBlobPresence[ticket.id],
+                      isOnline,
+                      signedIn: isCloudSignedIn,
+                    })
+                    return (
+                      <TicketCard
+                        bindingLabel={describeTicketBinding(ticket, itemById)}
+                        blobSyncState={ticketBlobSyncStates[ticket.id]}
+                        busy={ticketBlobActionId === ticket.id}
+                        key={ticket.id}
+                        onClearCache={() => void handleClearTicketCache(ticket)}
+                        onDelete={() => setPendingDeleteTicket(ticket)}
+                        onPreview={() => setPreviewTicket(ticket)}
+                        onRestoreCache={() => void handleRestoreTicketCache(ticket)}
+                        onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
+                        syncView={syncView}
+                        ticket={ticket}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -803,6 +828,133 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       />
     </div>
   )
+}
+
+type TicketLibraryStats = {
+  cachedCopyCount: number
+  copyCount: number
+  externalCount: number
+  referenceCount: number
+  totalCount: number
+  unassignedCount: number
+}
+
+type TicketGallerySection = {
+  id: 'item' | 'trip' | 'unassigned'
+  summary: string
+  tickets: TicketMeta[]
+  title: string
+}
+
+function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
+  return (
+    <Card className="space-y-4" data-testid="ticket-library-overview" variant="grouped">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">票据总览</h3>
+          <p className="mt-1 text-sm leading-6 tm-muted">
+            {stats.totalCount > 0
+              ? `${stats.totalCount} 张票据，${stats.cachedCopyCount} 张 copy 文件此设备可离线打开。`
+              : '还没有保存票据。'}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-on-primary-container">
+          {stats.totalCount}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 min-[430px]:grid-cols-6">
+        <TicketStat label="文件" value={stats.copyCount} />
+        <TicketStat label="位置" value={stats.referenceCount} />
+        <TicketStat label="链接" value={stats.externalCount} />
+        <TicketStat label="离线" value={stats.cachedCopyCount} />
+        <TicketStat label="未分类" value={stats.unassignedCount} />
+        <TicketStat label="全部" value={stats.totalCount} />
+      </div>
+    </Card>
+  )
+}
+
+function TicketStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-surface-container-high px-2 py-3 text-center">
+      <p className="truncate text-[11px] tm-muted">{label}</p>
+      <p className="mt-1 text-lg font-bold text-on-surface dark:text-on-surface">{value}</p>
+    </div>
+  )
+}
+
+function buildTicketLibraryStats(
+  tickets: TicketMeta[],
+  ticketBlobPresence: TicketBlobPresenceState,
+): TicketLibraryStats {
+  return tickets.reduce<TicketLibraryStats>((stats, ticket) => {
+    const storageMode = getTicketStorageMode(ticket)
+    const scope = getTicketScope(ticket)
+    stats.totalCount += 1
+    if (storageMode === 'copy') {
+      stats.copyCount += 1
+      if (ticketBlobPresence[ticket.id]) {
+        stats.cachedCopyCount += 1
+      }
+    } else if (storageMode === 'reference') {
+      stats.referenceCount += 1
+    } else if (storageMode === 'external') {
+      stats.externalCount += 1
+    }
+    if (scope === 'unassigned') {
+      stats.unassignedCount += 1
+    }
+    return stats
+  }, {
+    cachedCopyCount: 0,
+    copyCount: 0,
+    externalCount: 0,
+    referenceCount: 0,
+    totalCount: 0,
+    unassignedCount: 0,
+  })
+}
+
+function buildTicketGallerySections(
+  tickets: TicketMeta[],
+  itemById: Map<string, ItineraryItem>,
+): TicketGallerySection[] {
+  const sections: TicketGallerySection[] = [
+    {
+      id: 'item',
+      summary: '绑定到具体行程点的门票、订单和凭证。',
+      tickets: [],
+      title: '行程点票据',
+    },
+    {
+      id: 'trip',
+      summary: '机票、酒店、保险等旅行级文件。',
+      tickets: [],
+      title: '旅行级票据',
+    },
+    {
+      id: 'unassigned',
+      summary: '稍后再整理的票据。',
+      tickets: [],
+      title: '未分类',
+    },
+  ]
+  const sectionById = new Map(sections.map((section) => [section.id, section]))
+
+  tickets.forEach((ticket) => {
+    const scope = getTicketScope(ticket)
+    if (scope === 'item' || (ticket.itemId && itemById.has(ticket.itemId))) {
+      sectionById.get('item')?.tickets.push(ticket)
+      return
+    }
+    if (scope === 'unassigned') {
+      sectionById.get('unassigned')?.tickets.push(ticket)
+      return
+    }
+    sectionById.get('trip')?.tickets.push(ticket)
+  })
+
+  return sections.filter((section) => section.tickets.length > 0)
 }
 
 function TicketCard({

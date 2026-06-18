@@ -28,7 +28,9 @@ import {
 import { TicketPreview } from '../components/TicketPreview'
 import { ItemContentEnrichmentCard } from '../components/ai/TripContentEnrichmentPanel'
 import {
+  buildAppleMapsDirectionsUrl,
   buildAppleMapsUrl,
+  buildGoogleMapsDirectionsUrl,
   buildGoogleMapsUrl,
   hasValidCoordinates,
 } from '../lib/mapLinks'
@@ -253,6 +255,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   const nextItem = itemIndex >= 0 && itemIndex < dayItems.length - 1 ? dayItems[itemIndex + 1] : null
   const transportDescription = describePreviousTransport(item)
   const hasCoordinates = hasValidCoordinates(item)
+  const appleDirectionsUrl = previousItem ? buildAppleMapsDirectionsUrl(previousItem, item, item.previousTransportMode) : null
+  const googleDirectionsUrl = previousItem ? buildGoogleMapsDirectionsUrl(previousItem, item, item.previousTransportMode) : null
 
   async function confirmDeleteItem() {
     setIsDeleting(true)
@@ -370,6 +374,19 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
           ) : null}
         </div>
       </section>
+
+      <ItemOnsiteSummary
+        day={day}
+        firstTicket={tickets[0] ?? null}
+        hasCoordinates={hasCoordinates}
+        isLoadingRelations={isLoadingRelations}
+        item={item}
+        itemCount={dayItems.length}
+        itemIndex={itemIndex}
+        onOpenTicket={(ticket) => setPreviewTicket(ticket)}
+        onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+        ticketCount={tickets.length}
+      />
 
       {/* 基础信息 section - matches reference */}
       <section data-testid="item-detail-core">
@@ -613,6 +630,32 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 <a className="inline-flex min-h-11 items-center rounded-xl px-3 font-body-md text-body-md text-primary tm-focus" href={buildGoogleMapsUrl(item)} rel="noreferrer" target="_blank">导航</a>
               ) : null}
             </div>
+            {appleDirectionsUrl || googleDirectionsUrl ? (
+              <div className="grid grid-cols-2 gap-3 border-t border-outline-variant/30 p-4">
+                {appleDirectionsUrl ? (
+                  <a
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high font-label-sm text-label-sm text-primary transition active:scale-[0.98]"
+                    href={appleDirectionsUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <Navigation className="size-4" />
+                    Apple 路线
+                  </a>
+                ) : null}
+                {googleDirectionsUrl ? (
+                  <a
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high font-label-sm text-label-sm text-primary transition active:scale-[0.98]"
+                    href={googleDirectionsUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <ExternalLink className="size-4" />
+                    Google 路线
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -762,6 +805,89 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         title="确认使用这个地点吗？"
       />
     </>
+  )
+}
+
+function ItemOnsiteSummary({
+  day,
+  firstTicket,
+  hasCoordinates,
+  isLoadingRelations,
+  item,
+  itemCount,
+  itemIndex,
+  onOpenTicket,
+  onOpenTickets,
+  ticketCount,
+}: {
+  day: Day
+  firstTicket: TicketMeta | null
+  hasCoordinates: boolean
+  isLoadingRelations: boolean
+  item: ItineraryItem
+  itemCount: number
+  itemIndex: number
+  onOpenTicket: (ticket: TicketMeta) => void
+  onOpenTickets: () => void
+  ticketCount: number
+}) {
+  const positionLabel = itemIndex >= 0 && itemCount > 0
+    ? `第 ${itemIndex + 1}/${itemCount} 项`
+    : '当天行程点'
+
+  return (
+    <section className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]" data-testid="item-onsite-summary">
+      <Card className="space-y-4" variant="grouped">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-label-sm text-label-sm text-primary">{positionLabel}</p>
+            <h2 className="mt-1 font-headline-md text-headline-md text-on-surface">{formatDate(day.date)}</h2>
+            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{describeItemTime(item)}</p>
+          </div>
+          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+            hasCoordinates
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+              : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+          }`}>
+            {hasCoordinates ? '坐标就绪' : '待补坐标'}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-outline-variant/30 text-center">
+          <OnsiteMetric label="地点" value={item.locationName || item.address || '未填写'} />
+          <OnsiteMetric label="票据" value={isLoadingRelations ? '读取中' : `${ticketCount} 张`} />
+          <OnsiteMetric label="日期" value={day.title || '本日'} />
+        </div>
+      </Card>
+
+      <Card className="space-y-3" variant="grouped">
+        <div className="flex items-center gap-2">
+          <Ticket className="size-4 text-primary" />
+          <h2 className="font-headline-md text-headline-md text-on-surface">现场凭证</h2>
+        </div>
+        <p className="text-sm leading-6 text-on-surface-variant">
+          {ticketCount > 0 ? `${ticketCount} 张票据已绑定到这个行程点。` : '暂无绑定票据。'}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+          {firstTicket ? (
+            <Button className="min-h-11 px-3 text-sm" icon={<Ticket className="size-4" />} onClick={() => onOpenTicket(firstTicket)} variant="primary">
+              打开票据
+            </Button>
+          ) : null}
+          <Button className="min-h-11 px-3 text-sm" icon={<ChevronRight className="size-4" />} onClick={onOpenTickets} variant={firstTicket ? 'secondary' : 'primary'}>
+            票据库
+          </Button>
+        </div>
+      </Card>
+    </section>
+  )
+}
+
+function OnsiteMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 px-2">
+      <p className="text-[11px] text-on-surface-variant">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-on-surface">{value}</p>
+    </div>
   )
 }
 

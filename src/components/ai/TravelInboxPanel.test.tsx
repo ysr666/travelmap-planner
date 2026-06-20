@@ -5,7 +5,11 @@ import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TravelInboxPanel } from './TravelInboxPanel'
 
-const mocks = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => {
+  const listLedgerExpenses = vi.fn().mockResolvedValue([])
+  const listLedgerParticipants = vi.fn().mockResolvedValue([])
+  const loadLedgerSettings = vi.fn().mockResolvedValue(undefined)
+  return ({
   listTravelInboxEntriesByTrip: vi.fn().mockResolvedValue([]),
   getActiveTravelInboxPreview: vi.fn().mockResolvedValue(null),
   deleteTravelInboxEntries: vi.fn(),
@@ -18,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   summarizeTravelInboxPreview: vi.fn(() => ''),
   describeTravelInboxSourceKind: vi.fn(() => '文件'),
   inferTravelInboxSourceKind: vi.fn(() => 'file'),
+  listLedgerExpenses,
+  listLedgerParticipants,
+  loadLedgerSettings,
   addTravelInboxExtraction: vi.fn(),
   addTravelInboxErrorEntry: vi.fn(),
   markTravelInboxEntriesRecognizing: vi.fn(),
@@ -32,12 +39,22 @@ const mocks = vi.hoisted(() => ({
   extractExistingTripImportSources: vi.fn(),
   buildExistingTripImportPreview: vi.fn(),
   applyExistingTripImportPreview: vi.fn(),
+  appendExecutionResult: vi.fn(),
   navigateTo: vi.fn(),
-  db: { travelInbox: { where: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })) } },
+  restoreSuggestionState: vi.fn(),
+  setSuggestionState: vi.fn(),
+  db: {
+    ledgerExpenses: { where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: listLedgerExpenses })) })) },
+    ledgerParticipants: { where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: listLedgerParticipants })) })) },
+    ledgerSettings: { where: vi.fn(() => ({ equals: vi.fn(() => ({ first: loadLedgerSettings })) })) },
+    travelInbox: { where: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })) },
+    travelInboxBlobs: { get: vi.fn() },
+  },
   SYNC_QUEUE_SUCCESS_COPY: '已保存',
   ticketCategoryOptions: [],
   ticketCategoryLabels: {},
-}))
+  })
+})
 
 vi.mock('../../lib/ai/travelInbox', () => ({
   listTravelInboxEntriesByTrip: mocks.listTravelInboxEntriesByTrip,
@@ -92,6 +109,15 @@ vi.mock('../../lib/routes', () => ({
   navigateTo: mocks.navigateTo,
 }))
 
+vi.mock('../../hooks/useTripIntelligencePersistence', () => ({
+  useTripIntelligencePersistence: () => ({
+    appendExecutionResult: mocks.appendExecutionResult,
+    restoreSuggestionState: mocks.restoreSuggestionState,
+    setSuggestionState: mocks.setSuggestionState,
+    suggestionStates: [],
+  }),
+}))
+
 vi.mock('../../lib/tripSyncQueue', () => ({
   SYNC_QUEUE_SUCCESS_COPY: mocks.SYNC_QUEUE_SUCCESS_COPY,
 }))
@@ -135,6 +161,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.listTravelInboxEntriesByTrip.mockResolvedValue([])
   mocks.getActiveTravelInboxPreview.mockResolvedValue(null)
+  mocks.listLedgerExpenses.mockResolvedValue([])
+  mocks.listLedgerParticipants.mockResolvedValue([])
+  mocks.loadLedgerSettings.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -162,7 +191,7 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('旅行收件箱')
+    expect(container?.textContent).toContain('旅行材料输入 · 待确认建议')
   })
 
   it('renders empty state when no entries', async () => {
@@ -220,7 +249,19 @@ describe('TravelInboxPanel', () => {
 
   it('renders with entries', async () => {
     mocks.listTravelInboxEntriesByTrip.mockResolvedValue([
-      { id: 'entry_1', tripId: 'trip_1', kind: 'file', title: '机票确认.pdf', status: 'extracted', warnings: [], createdAt: 100, updatedAt: 100 },
+      {
+        category: 'ticket',
+        createdAt: 100,
+        extractedText: '机票确认',
+        fileName: '机票确认.pdf',
+        id: 'entry_1',
+        label: '机票确认.pdf',
+        sourceKind: 'file',
+        status: 'ready',
+        tripId: 'trip_1',
+        updatedAt: 100,
+        warnings: [],
+      },
     ])
 
     await act(async () => {
@@ -236,7 +277,8 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('需处理文件')
+    expect(container?.textContent).toContain('机票确认.pdf')
+    expect(container?.textContent).toContain('待处理收件')
   })
 
   it('renders with pending entries', async () => {
@@ -305,6 +347,50 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('旅行收件箱')
+    expect(container?.textContent).toContain('旅行材料输入 · 待确认建议')
+  })
+
+  it('offers a confirm-only draft for assigned local expense evidence without writing on render', async () => {
+    mocks.loadLedgerSettings.mockResolvedValue({
+      createdAt: 100,
+      homeCurrency: 'CNY',
+      id: 'settings_1',
+      settlementCurrency: 'CNY',
+      tripCurrency: 'JPY',
+      tripId: 'trip_1',
+      updatedAt: 100,
+    })
+    mocks.listLedgerParticipants.mockResolvedValue([
+      { createdAt: 100, displayName: '我', id: 'person_1', isSelf: true, tripId: 'trip_1', updatedAt: 100 },
+    ])
+    mocks.listTravelInboxEntriesByTrip.mockResolvedValue([{
+      category: 'mixed',
+      createdAt: 100,
+      extractedText: '东京冰激凌 receipt paid JPY 500',
+      id: 'entry_receipt',
+      label: '冰激凌收据',
+      sourceKind: 'pasted_text',
+      status: 'ready',
+      tripId: 'trip_1',
+      updatedAt: 100,
+      warnings: [],
+    }])
+
+    await act(async () => {
+      root?.render(
+        <TravelInboxPanel
+          days={defaultDays}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(container?.querySelector('[data-testid="travel-inbox-expense-suggestions"]')?.textContent).toContain('可能是现场消费')
+    expect(container?.textContent).toContain('生成草稿')
+    expect(mocks.appendExecutionResult).not.toHaveBeenCalled()
   })
 })

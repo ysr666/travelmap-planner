@@ -6,12 +6,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TripWorkspacePage } from './TripWorkspacePage'
 
 const mocks = vi.hoisted(() => ({
+  buildTripIntelligenceModel: vi.fn(),
   getRouteParams: vi.fn(() => new URLSearchParams({ tripId: 'trip_1' })),
+  getActiveTravelInboxPreview: vi.fn().mockResolvedValue(null),
+  intelligenceModel: {
+    allSuggestions: [],
+    forDay: vi.fn(() => []),
+    forDocument: vi.fn(() => []),
+    forFinance: vi.fn(() => []),
+    forInbox: vi.fn(() => []),
+    forItem: vi.fn(() => []),
+    forSharedTrip: vi.fn(() => []),
+    forTicket: vi.fn(() => []),
+    forTripHome: vi.fn(() => []),
+    suggestions: [],
+    summary: {
+      highRiskCount: 0,
+      needsConfirmationCount: 0,
+      totalCount: 0,
+    },
+  },
+  listTravelInboxAccountSources: vi.fn().mockResolvedValue([]),
+  listTravelInboxEntriesByTrip: vi.fn().mockResolvedValue([]),
   navigateTo: vi.fn(),
   listItemsByDay: vi.fn().mockResolvedValue([]),
   listTicketsByTrip: vi.fn().mockResolvedValue([]),
   listTripDisruptionEventsByTrip: vi.fn().mockResolvedValue([]),
   listTripReplanRecordsByTrip: vi.fn().mockResolvedValue([]),
+  tripOperationsPanelProps: [] as Array<Record<string, unknown>>,
   getTrip: vi.fn().mockResolvedValue({
     id: 'trip_1',
     title: '东京旅行',
@@ -99,12 +121,12 @@ vi.mock('../lib/travelBrief', () => ({
 }))
 
 vi.mock('../lib/ai/travelInbox', () => ({
-  getActiveTravelInboxPreview: vi.fn().mockResolvedValue(null),
-  listTravelInboxEntriesByTrip: vi.fn().mockResolvedValue([]),
+  getActiveTravelInboxPreview: mocks.getActiveTravelInboxPreview,
+  listTravelInboxEntriesByTrip: mocks.listTravelInboxEntriesByTrip,
 }))
 
 vi.mock('../lib/ai/travelInboxOrganization', () => ({
-  listTravelInboxAccountSources: vi.fn().mockResolvedValue([]),
+  listTravelInboxAccountSources: mocks.listTravelInboxAccountSources,
 }))
 
 vi.mock('../lib/cloudSyncQueueSummary', () => ({
@@ -159,7 +181,10 @@ vi.mock('../components/trip/TripReadinessCenterPanel', () => ({
 }))
 
 vi.mock('../components/trip/TripOperationsPanel', () => ({
-  TripOperationsPanel: () => <div data-testid="trip-operations-panel" />,
+  TripOperationsPanel: (props: Record<string, unknown>) => {
+    mocks.tripOperationsPanelProps.push(props)
+    return <div data-has-intelligence-model={props.intelligenceModel ? 'true' : 'false'} data-testid="trip-operations-panel" />
+  },
 }))
 
 vi.mock('../components/trip/TripLiveModeCard', () => ({
@@ -206,8 +231,11 @@ vi.mock('../components/cloud/AutoSnapshotBackupStatus', () => ({
 
 vi.mock('../lib/tripOperationsAgent', () => ({
   buildTripOperationsModel: vi.fn(() => ({
+    activeRecommendations: [],
     allRecommendations: [],
     batchableCount: 0,
+    batchableRecommendations: [],
+    hiddenRecommendations: [],
     phase: 'pre_trip',
     phaseLabel: '出发前',
     recommendations: [],
@@ -218,6 +246,10 @@ vi.mock('../lib/tripOperationsAgent', () => ({
       totalCount: 0,
     },
   })),
+}))
+
+vi.mock('../lib/tripIntelligence', () => ({
+  buildTripIntelligenceModel: mocks.buildTripIntelligenceModel,
 }))
 
 vi.mock('../lib/routeGeneration', () => ({
@@ -261,6 +293,33 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   vi.clearAllMocks()
+  mocks.getActiveTravelInboxPreview.mockResolvedValue(null)
+  mocks.listTravelInboxAccountSources.mockResolvedValue([])
+  mocks.listTravelInboxEntriesByTrip.mockResolvedValue([])
+  mocks.buildTripIntelligenceModel.mockReturnValue(mocks.intelligenceModel)
+  mocks.useTripData.mockReturnValue({
+    trip: {
+      id: 'trip_1',
+      title: '东京旅行',
+      destination: '东京',
+      startDate: '2026-04-01',
+      endDate: '2026-04-05',
+      createdAt: 100,
+      updatedAt: 100,
+    },
+    days: [{ id: 'day_1', tripId: 'trip_1', date: '2026-04-01', sortOrder: 0, createdAt: 100, updatedAt: 100 }],
+    selectedDay: { id: 'day_1', tripId: 'trip_1', date: '2026-04-01', sortOrder: 0, createdAt: 100, updatedAt: 100 },
+    itemsByDay: { day_1: [] },
+    allItems: [],
+    isLoading: false,
+    error: null,
+    setDays: vi.fn(),
+    setSelectedDay: vi.fn(),
+    setItems: vi.fn(),
+    setItemsByDay: vi.fn(),
+    refresh: vi.fn(),
+  })
+  mocks.tripOperationsPanelProps.length = 0
 })
 
 afterEach(() => {
@@ -289,6 +348,70 @@ describe('TripWorkspacePage', () => {
     expect(container?.textContent).toBeTruthy()
   })
 
+  it('passes the unified intelligence model to the operations panel', async () => {
+    await renderWorkspacePage()
+    await waitForSelector('[data-testid="trip-operations-panel"]')
+
+    expect(mocks.buildTripIntelligenceModel).toHaveBeenCalledWith(expect.objectContaining({
+      inbox: expect.objectContaining({
+        activePreview: null,
+        summary: expect.anything(),
+      }),
+      operationsModel: expect.anything(),
+      readinessModel: expect.anything(),
+      sharedMutations: [],
+    }))
+    expect(mocks.tripOperationsPanelProps.at(-1)?.intelligenceModel).toBe(mocks.intelligenceModel)
+    expect(container?.querySelector('[data-testid="trip-operations-panel"]')?.getAttribute('data-has-intelligence-model')).toBe('true')
+  })
+
+  it('keeps the embedded travel inbox hidden when there is no material needing attention', async () => {
+    await renderWorkspacePage()
+    await waitForSelector('[data-testid="trip-home-quick-actions"]')
+
+    expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="trip-action-travel-inbox"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="trip-action-account-inbox"]')).not.toBeNull()
+  })
+
+  it('shows the embedded travel inbox when an active preview is waiting for confirmation', async () => {
+    mocks.getActiveTravelInboxPreview.mockResolvedValue({
+      checkedDiffIds: ['diff_1'],
+      createdAt: 100,
+      id: 'preview_1',
+      preview: { diffs: [] },
+      sourceEntryIds: [],
+      tripId: 'trip_1',
+      updatedAt: 100,
+    })
+
+    await renderWorkspacePage()
+    await waitForSelector('[data-testid="travel-inbox-panel"]')
+
+    expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).not.toBeNull()
+  })
+
+  it('shows the embedded travel inbox when extracted material is ready', async () => {
+    mocks.listTravelInboxEntriesByTrip.mockResolvedValue([
+      {
+        createdAt: 100,
+        fileName: 'hotel.txt',
+        fileType: 'text/plain',
+        id: 'entry_1',
+        sourceKind: 'manual',
+        status: 'ready',
+        text: '酒店确认单',
+        tripId: 'trip_1',
+        updatedAt: 100,
+      },
+    ])
+
+    await renderWorkspacePage()
+    await waitForSelector('[data-testid="travel-inbox-panel"]')
+
+    expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).not.toBeNull()
+  })
+
   it('handles missing trip gracefully', async () => {
     mocks.useTripData.mockReturnValue({
       trip: null,
@@ -312,3 +435,27 @@ describe('TripWorkspacePage', () => {
     expect(container?.textContent).toBeTruthy()
   })
 })
+
+async function renderWorkspacePage() {
+  await act(async () => {
+    root?.render(<TripWorkspacePage />)
+  })
+  await flushAsyncWork()
+}
+
+async function flushAsyncWork() {
+  for (let index = 0; index < 6; index += 1) {
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+}
+
+async function waitForSelector(selector: string) {
+  for (let index = 0; index < 12; index += 1) {
+    const element = container?.querySelector(selector)
+    if (element) return element
+    await flushAsyncWork()
+  }
+  throw new Error(`Missing selector ${selector}`)
+}

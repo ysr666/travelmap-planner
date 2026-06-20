@@ -1,6 +1,6 @@
 # Supabase 云端同步与恢复
 
-旅图 TripMap 的云端能力是“离线可用 + 账号登录后自动同步”。IndexedDB 是此设备的离线缓存与首写层，Supabase 保存旅行结构化数据和已保存票据文件，用于跨设备延续和恢复。
+旅图 TripMap 的云端能力服务于产品化旅行管理体验：IndexedDB 是此设备缓存与首写层，Supabase 在登录后同步旅行结构化数据、统一智能状态和已保存票据文件，用于跨设备延续和恢复。
 
 本功能不做实时协作、多人协作或云端编辑。用户写入成功后会进入同步队列；同步会先拉取账号对象，不同对象和不同字段会自动合并，同一字段双边修改或删除/更新冲突会进入确认面板。
 
@@ -9,6 +9,7 @@
 旅图现在采用对象同步优先、snapshot 兼容保留的混合架构：
 
 - Trip / Day / ItineraryItem / TicketMeta 进入对象级同步表。
+- Ledger / Replan / Unified Trip Intelligence 进入同一对象级同步表。
 - copy 票据文件进入独立票据 Blob 记录和 Storage 路径。
 - 旧 `cloud_trip_backups` / `snapshot.json` 继续保留，用于旧账号数据恢复、迁移和兼容回滚。
 - 如果对象同步表尚未部署，应用会退回旧 snapshot 同步；此时不会开放“清理已同步票据缓存”。
@@ -69,7 +70,12 @@ create index if not exists cloud_trip_backups_user_updated_idx
 create table if not exists public.cloud_sync_objects (
   user_id uuid not null references auth.users(id) on delete cascade,
   trip_id text not null,
-  object_type text not null check (object_type in ('trip', 'day', 'item', 'ticket_meta')),
+  object_type text not null check (object_type in (
+    'trip', 'day', 'item', 'ticket_meta',
+    'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense',
+    'replan_event', 'replan_record',
+    'trip_intelligence_applied_change', 'trip_intelligence_suggestion_state'
+  )),
   object_id text not null,
   payload jsonb,
   updated_at_ms bigint not null check (updated_at_ms >= 0),
@@ -107,9 +113,10 @@ create index if not exists cloud_ticket_blobs_user_trip_idx
 可选更新时间触发器：
 
 ```sql
-create or replace function public.set_updated_at()
+create or replace function tripmap_private.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -121,7 +128,7 @@ drop trigger if exists cloud_trip_backups_set_updated_at on public.cloud_trip_ba
 
 create trigger cloud_trip_backups_set_updated_at
 before update on public.cloud_trip_backups
-for each row execute function public.set_updated_at();
+for each row execute function tripmap_private.set_updated_at();
 ```
 
 ## RLS policy
@@ -282,6 +289,23 @@ using (
 - 同一字段在此设备和账号都从共同基线改成不同值时，写入 `objectSyncConflicts`，用户在冲突面板选择“此设备版本 / 账号版本”；notes 字段若是追加式修改会自动合并，否则可选择“合并两边备注”。
 - 本机删除但账号更新、账号删除但本机更新时进入删除冲突，用户选择“删除对象”或“保留对象版本”。
 - TicketMeta 删除会写 tombstone；copy 票据 Blob 会删除 Storage 文件并标记 `cloud_ticket_blobs.deleted_at`。
+
+## Unified Trip Intelligence 同步
+
+- IndexedDB v10 表：`tripIntelligenceAppliedChanges`、`tripIntelligenceSuggestionStates`。
+- `trip_intelligence_applied_change` 是追加式完成记录；展示时按 `dedupeKey` 去重并保留最新 `occurredAt`。
+- `trip_intelligence_suggestion_state` 只保存 key、status、scope/source 与时间，不保存标题、message 或敏感正文；同一建议使用 latest `updatedAt` wins。
+- `ignored/completed` 最长保留 365 天；`later` 到期即失效；applied changes 保留 180 天且每个 trip 最多 200 条。
+- 清空历史、恢复建议和 retention prune 都进入对象删除队列，避免另一设备恢复已删除状态。
+- Document/Vault 完成记录只能以 `sensitive_redacted` 同步，禁止保存证件号、申请号、PNR、订单号、附件内容、provider payload、token 或 stack trace。
+
+## RPC 与生产安全边界
+
+- `20260620060942_persistent_trip_intelligence_sync.sql` 已在生产部署，扩展 `cloud_sync_objects` 的两类 intelligence object type。
+- `20260620074105_harden_production_boundaries.sql` 将公开 Companion/Inbox RPC 保持为签名不变的 `SECURITY INVOKER` 薄入口，把提权实现、RLS helper、更新时间 trigger、RLS event trigger 和 reminder cron 移入非暴露 `tripmap_private` schema。
+- `PUBLIC` 与 `anon` 无权执行登录态 RPC；`authenticated` 只获得公开入口及其所需私有实现的精确执行权。
+- 生产 advisor 报告的 8 个外键会补覆盖索引；不会根据 unused-index 提示删除既有索引。
+- `travel_inbox_connector_secrets` 开启 RLS 且无客户端 policy 是刻意 deny-all，connector secret 只允许受控后端路径访问。
 
 ## 票据 Blob 独立同步与离线缓存
 

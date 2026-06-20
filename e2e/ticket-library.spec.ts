@@ -9,9 +9,11 @@ type SeedTicket = {
   fileName: string
   fileType: 'image' | 'pdf' | 'other'
   mimeType: string
+  note?: string
   referenceLocation?: string
   size: number
   storageMode: 'copy' | 'reference' | 'external'
+  ticketCategory?: string
   title: string
 }
 
@@ -79,10 +81,12 @@ async function addTicketMetas(page: Page, tripId: string, itemId: string, ticket
           id,
           itemId: targetItemId,
           mimeType: seedTicket.mimeType,
+          note: seedTicket.note,
           referenceLocation: seedTicket.referenceLocation,
           scope: 'item',
           size: seedTicket.size,
           storageMode: seedTicket.storageMode,
+          ticketCategory: seedTicket.ticketCategory,
           title: seedTicket.title,
           tripId: targetTripId,
           updatedAt: now + index,
@@ -276,3 +280,108 @@ test('票据库预览 Escape 键可关闭', async ({ page }) => {
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('ticket-preview')).toHaveCount(0)
 })
+
+test('Package 5 票据费用草稿确认后进入 review queue 并持久显示完成记录', async ({ page }) => {
+  const tripId = await createDemoTripViaUi(page)
+  const firstItemId = await getFirstItemId(page, tripId)
+  await seedLedgerReceiver(page, tripId)
+  await addTicketMetas(page, tripId, firstItemId, [{
+    fileName: 'meal-receipt.pdf',
+    fileType: 'pdf',
+    mimeType: 'application/pdf',
+    note: '东京晚餐 receipt paid JPY 4800',
+    referenceLocation: '本地测试票据',
+    size: 0,
+    storageMode: 'reference',
+    ticketCategory: 'other',
+    title: '东京晚餐票据',
+  }])
+
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /查看东京晚餐票据/ }).click()
+  const preview = page.getByTestId('ticket-preview')
+  await expect(preview.getByTestId('ticket-preview-intelligence')).toContainText('可生成费用草稿')
+  expect(await countTripRecords(page, 'ledgerExpenses', tripId)).toBe(0)
+
+  await preview.getByTestId('ticket-preview-intelligence-action').filter({ hasText: '生成费用草稿' }).click()
+  expect(await countTripRecords(page, 'ledgerExpenses', tripId)).toBe(0)
+  const confirm = page.getByRole('dialog', { name: '从票据生成费用草稿？' })
+  await expect(confirm).toContainText('不会自动确认、不会计入结算')
+  await confirm.getByRole('button', { name: '生成草稿' }).click()
+
+  await expect.poll(() => countTripRecords(page, 'ledgerExpenses', tripId)).toBe(1)
+  await expect.poll(() => countTripRecords(page, 'tripIntelligenceAppliedChanges', tripId)).toBe(1)
+  await page.goto(`/#/ledger?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('ledger-review-queue')).toContainText('东京晚餐票据')
+
+  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  const completed = page.locator('summary').filter({ hasText: '完成了什么' })
+  await expect(completed).toBeVisible()
+  await completed.click()
+  await expect(page.getByTestId('trip-operations-history')).toContainText('已从票据生成费用草稿')
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.locator('summary').filter({ hasText: '完成了什么' }).click()
+  await expect(page.getByTestId('trip-operations-history')).toContainText('已从票据生成费用草稿')
+})
+
+async function seedLedgerReceiver(page: Page, tripId: string) {
+  await page.evaluate(async (targetTripId) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const now = Date.now()
+    const transaction = db.transaction(['ledgerSettings', 'ledgerParticipants', 'ledgerBudgets'], 'readwrite')
+    transaction.objectStore('ledgerSettings').put({
+      createdAt: now,
+      homeCurrency: 'CNY',
+      id: `settings-${targetTripId}`,
+      settlementCurrency: 'CNY',
+      tripCurrency: 'JPY',
+      tripId: targetTripId,
+      updatedAt: now,
+    })
+    transaction.objectStore('ledgerParticipants').put({
+      createdAt: now,
+      displayName: '我',
+      id: `person-${targetTripId}`,
+      isSelf: true,
+      source: 'manual',
+      tripId: targetTripId,
+      updatedAt: now,
+    })
+    transaction.objectStore('ledgerBudgets').put({
+      amountMinor: 100_000,
+      createdAt: now,
+      currency: 'JPY',
+      id: `budget-${targetTripId}`,
+      scope: 'trip',
+      tripId: targetTripId,
+      updatedAt: now,
+    })
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+    db.close()
+  }, tripId)
+}
+
+async function countTripRecords(page: Page, storeName: string, tripId: string) {
+  return page.evaluate(async ({ storeName: targetStoreName, tripId: targetTripId }) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = db.transaction(targetStoreName, 'readonly')
+    const countRequest = transaction.objectStore(targetStoreName).index('tripId').count(targetTripId)
+    const count = await new Promise<number>((resolve, reject) => {
+      countRequest.onsuccess = () => resolve(countRequest.result)
+      countRequest.onerror = () => reject(countRequest.error)
+    })
+    db.close()
+    return count
+  }, { storeName, tripId })
+}

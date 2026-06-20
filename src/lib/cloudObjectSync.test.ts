@@ -26,8 +26,12 @@ import {
   getTicketBlobCacheSummary,
   listPendingObjectSyncConflicts,
   resolveObjectSyncConflict,
+  restoreTripObjectsFromCloud,
   restoreTicketBlobCacheFromCloud,
 } from './cloudObjectSync'
+import { enqueueObjectUpsert } from './objectSyncLocal'
+import { clearTripIntelligenceHistory, loadTripIntelligenceLocalState, restoreTripIntelligenceSuggestionState } from './tripIntelligence/persistence'
+import type { TripIntelligenceAppliedChangeRecord, TripIntelligenceSuggestionStateRecord } from '../types'
 
 const fixtureKey = 'tripmap:e2e:cloud-fixture'
 
@@ -127,6 +131,82 @@ describe('cloud object sync ticket blob cache', () => {
     await expect(getLedgerExpense(expense.id)).resolves.toMatchObject({ category: 'other', title: '此设备晚餐' })
   })
 
+  it('uploads, restores, and deletes intelligence records through object sync', async () => {
+    const trip = await createTrip({ destination: '日本东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京智能记录' })
+    const appliedChange = intelligenceAppliedChange(trip.id, 'change-1', 100)
+    const suggestionState = intelligenceSuggestionState(trip.id, 'state-1', 100, 'completed')
+    await db.tripIntelligenceAppliedChanges.put(appliedChange)
+    await db.tripIntelligenceSuggestionStates.put(suggestionState)
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+
+    await uploadTripCloudBackup(trip.id)
+    const uploadedFixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as {
+      objectRows?: Array<{ deleted_at_ms?: number | null; object_id: string; object_type: string }>
+    }
+    expect(uploadedFixture.objectRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ object_id: appliedChange.id, object_type: 'trip_intelligence_applied_change' }),
+      expect.objectContaining({ object_id: suggestionState.id, object_type: 'trip_intelligence_suggestion_state' }),
+    ]))
+
+    await db.tripIntelligenceAppliedChanges.clear()
+    await db.tripIntelligenceSuggestionStates.clear()
+    await restoreTripObjectsFromCloud(trip.id)
+    await expect(db.tripIntelligenceAppliedChanges.get(appliedChange.id)).resolves.toMatchObject({ dedupeKey: appliedChange.dedupeKey })
+    await expect(db.tripIntelligenceSuggestionStates.get(suggestionState.id)).resolves.toMatchObject({ status: 'completed' })
+
+    await clearTripIntelligenceHistory(trip.id)
+    await restoreTripIntelligenceSuggestionState(trip.id, suggestionState.suggestionKey)
+    await uploadTripCloudBackup(trip.id)
+    const deletedFixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as {
+      objectRows?: Array<{ deleted_at_ms?: number | null; object_id: string }>
+    }
+    expect(deletedFixture.objectRows?.find((row) => row.object_id === appliedChange.id)?.deleted_at_ms).toEqual(expect.any(Number))
+    expect(deletedFixture.objectRows?.find((row) => row.object_id === suggestionState.id)?.deleted_at_ms).toEqual(expect.any(Number))
+  })
+
+  it('uses latest updatedAt for suggestion states without creating conflicts', async () => {
+    const trip = await createTrip({ destination: '日本东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京建议状态' })
+    const state = intelligenceSuggestionState(trip.id, 'state-latest', 100, 'completed')
+    await db.tripIntelligenceSuggestionStates.put(state)
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+    await uploadTripCloudBackup(trip.id)
+
+    const local = { ...state, status: 'completed' as const, updatedAt: 40_000 }
+    await db.tripIntelligenceSuggestionStates.put(local)
+    await enqueueObjectUpsert({ object: local, objectType: 'trip_intelligence_suggestion_state' })
+    mutateFixtureObjectRow('trip_intelligence_suggestion_state', state.id, { status: 'ignored' }, 50_000)
+
+    await uploadTripCloudBackup(trip.id)
+
+    await expect(db.tripIntelligenceSuggestionStates.get(state.id)).resolves.toMatchObject({ status: 'ignored', updatedAt: 50_000 })
+    await expect(listPendingObjectSyncConflicts(trip.id)).resolves.toHaveLength(0)
+  })
+
+  it('dedupes restored applied changes by dedupeKey for history display', async () => {
+    const trip = await createTrip({ destination: '日本东京', endDate: '2026-04-03', startDate: '2026-04-01', title: '东京完成记录' })
+    const first = intelligenceAppliedChange(trip.id, 'change-first', 100)
+    await db.tripIntelligenceAppliedChanges.put(first)
+    window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
+    await uploadTripCloudBackup(trip.id)
+    const fixture = JSON.parse(window.localStorage.getItem(fixtureKey) ?? '{}') as { objectRows?: Array<Record<string, unknown>> }
+    const row = fixture.objectRows?.find((candidate) => candidate.object_id === first.id)
+    if (!row) throw new Error('fixture intelligence row not found')
+    fixture.objectRows?.push({
+      ...row,
+      object_id: 'change-second',
+      payload: { ...(row.payload as Record<string, unknown>), id: 'change-second', occurredAt: 200, updatedAt: 200 },
+      updated_at_ms: 200,
+    })
+    window.localStorage.setItem(fixtureKey, JSON.stringify(fixture))
+
+    await restoreTripObjectsFromCloud(trip.id)
+    const restored = await loadTripIntelligenceLocalState(trip.id, 300)
+
+    expect(restored.localState.history).toHaveLength(1)
+    expect(restored.localState.history[0].intelligenceAppliedChanges).toHaveLength(1)
+    expect(restored.localState.history[0].intelligenceAppliedChanges?.[0].occurredAt).toBe(200)
+  })
+
   it('keeps same-field conflicts pending until the user resolves them', async () => {
     const { item, trip } = await seedTripWithItem()
     window.localStorage.setItem(fixtureKey, JSON.stringify({ user: { email: 'qa@example.com', id: 'user_1' } }))
@@ -221,4 +301,43 @@ function mutateFixtureObjectRow(objectType: string, objectId: string, patch: Rec
   }
   row.updated_at_ms = timestamp
   window.localStorage.setItem(fixtureKey, JSON.stringify(fixture))
+}
+
+function intelligenceAppliedChange(tripId: string, id: string, updatedAt: number): TripIntelligenceAppliedChangeRecord {
+  return {
+    actionType: 'generated_route',
+    dedupeKey: `${tripId}:same-route-change`,
+    detail: '已生成路线。',
+    executionId: 'execution-route',
+    executionSource: 'trip_operations',
+    executionStatus: 'success',
+    executionTitle: '路线已完成',
+    id,
+    occurredAt: updatedAt,
+    privacyLevel: 'private',
+    recommendationFingerprints: [],
+    sourceId: 'trip-operations',
+    sourceKind: 'operations',
+    targetType: 'trip',
+    title: '路线已完成',
+    tripId,
+    updatedAt,
+  }
+}
+
+function intelligenceSuggestionState(
+  tripId: string,
+  id: string,
+  updatedAt: number,
+  status: TripIntelligenceSuggestionStateRecord['status'],
+): TripIntelligenceSuggestionStateRecord {
+  return {
+    createdAt: updatedAt,
+    id,
+    sourceKind: 'operations',
+    status,
+    suggestionKey: 'operations:route',
+    tripId,
+    updatedAt,
+  }
 }

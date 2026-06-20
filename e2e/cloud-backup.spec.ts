@@ -612,7 +612,7 @@ function createCloudSnapshot({
 async function openCloudBackupPanel(page: Page, tripId: string) {
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
-  const details = page.locator('details').filter({ hasText: '同步与归档' }).first()
+  const details = page.locator('#trip-sync-archive-section details').first()
   await details.evaluate((element) => {
     element.open = true
   })

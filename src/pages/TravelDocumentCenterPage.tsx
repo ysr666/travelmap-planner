@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   Cloud,
@@ -55,9 +56,10 @@ import {
 } from '../lib/travelDocumentCenter'
 import { exportEncryptedVaultBackup, importEncryptedVaultBackup } from '../lib/vaultBackup'
 import { downloadBlob } from '../lib/backup'
-import { scheduleDocumentExpiryReminder, scheduleTransportReminder } from '../lib/travelReminders'
+import { listUpcomingReminders, scheduleDocumentExpiryReminder, scheduleTransportReminder } from '../lib/travelReminders'
 import { createDisabledFlightStatusProvider } from '../lib/flightStatusProvider'
 import type {
+  ReminderSchedule,
   ExternalActionKind,
   TicketMeta,
   TransportBooking,
@@ -76,6 +78,9 @@ import type {
 import { listTravelCenterSyncConflicts, resolveTravelCenterSyncConflict, syncTravelCenter } from '../lib/cloudTravelCenter'
 import { enableTravelWebPush, showDueLocalReminders } from '../lib/webPush'
 import { extractTransportImportPreview, type TransportImportPreview } from '../lib/transportImport'
+import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../lib/tripIntelligence'
+import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from '../components/trip/TripIntelligenceSuggestionControls'
 
 type CenterTab = 'documents' | 'transport' | 'attachments'
 type DraftSegment = Omit<TransportSegment, 'id' | 'bookingId' | 'tripId' | 'sortOrder' | 'createdAt' | 'updatedAt'>
@@ -117,6 +122,7 @@ export function TravelDocumentCenterPage() {
   const [bookings, setBookings] = useState<TransportBooking[]>([])
   const [segmentsByBooking, setSegmentsByBooking] = useState<Record<string, TransportSegment[]>>({})
   const [legacyTickets, setLegacyTickets] = useState<TicketMeta[]>([])
+  const [reminders, setReminders] = useState<ReminderSchedule[]>([])
   const [syncConflicts, setSyncConflicts] = useState<TravelCenterSyncConflict[]>([])
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
@@ -127,6 +133,25 @@ export function TravelDocumentCenterPage() {
   const [deleteAfterMigration, setDeleteAfterMigration] = useState(false)
 
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId)
+  const { restoreSuggestionState, setSuggestionState, suggestionStates } = useTripIntelligencePersistence(selectedTripId)
+  const documentIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
+    documentInput: {
+      documentTripIds,
+      documents,
+      legacyTickets,
+      reminders,
+      selectedTrip: selectedTrip ?? null,
+      syncConflicts,
+      transportBookings: bookings,
+      transportSegmentsByBooking: segmentsByBooking,
+      vaultUnlocked,
+    },
+    suggestionStates,
+  }), [bookings, documentTripIds, documents, legacyTickets, reminders, selectedTrip, segmentsByBooking, suggestionStates, syncConflicts, vaultUnlocked])
+  const documentSuggestions = documentIntelligenceModel.forDocument()
+  const hiddenDocumentSuggestions = documentIntelligenceModel.allSuggestions.filter((suggestion) =>
+    suggestion.scope === 'document' && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+  )
 
   const refresh = useCallback(async () => {
     const nextTrips = await listTrips()
@@ -139,6 +164,7 @@ export function TravelDocumentCenterPage() {
     setVaultId(status.vaultId)
     setBookings(await listTransportBookings(nextSelectedTripId || undefined))
     setLegacyTickets(nextSelectedTripId ? await listTicketsByTrip(nextSelectedTripId) : [])
+    setReminders(await listUpcomingReminders(200))
     setSyncConflicts(await listTravelCenterSyncConflicts())
     if (status.unlocked) {
       const [nextTravelers, nextDocuments, links] = await Promise.all([
@@ -269,6 +295,36 @@ export function TravelDocumentCenterPage() {
     })
   }
 
+  function handleDocumentSuggestion(suggestion: TripIntelligenceSuggestion) {
+    setError(null)
+    const actionKind = suggestion.action?.kind
+    if (actionKind === 'document_open_sync_conflicts') {
+      scrollToDocumentCenterElement('travel-document-sync-section')
+      return
+    }
+    if (actionKind === 'document_review_transport') {
+      changeTab('transport')
+      scrollToDocumentCenterElement('travel-document-transport-section')
+      return
+    }
+    if (actionKind === 'document_open_existing_migration') {
+      changeTab('documents')
+      if (!vaultUnlocked) {
+        setMessage('先解锁旅行资料库，再预览转入加密资料库。')
+        return
+      }
+      const ticket = legacyTickets.find((entry) => suggestion.ticketIds.includes(entry.id))
+      if (ticket) {
+        setMigrationTicket(ticket)
+        return
+      }
+      scrollToDocumentCenterElement('travel-document-migration-section')
+      return
+    }
+    changeTab('documents')
+    scrollToDocumentCenterElement('travel-document-documents-section')
+  }
+
   async function runAction(action: () => Promise<void>) {
     setBusy(true)
     setError(null)
@@ -309,6 +365,17 @@ export function TravelDocumentCenterPage() {
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
+
+      {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
+        <DocumentIntelligencePanel
+          hiddenSuggestions={hiddenDocumentSuggestions}
+          onAction={handleDocumentSuggestion}
+          onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+          onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+          onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
+          suggestions={documentSuggestions}
+        />
+      ) : null}
 
       {activeTab !== 'attachments' ? (
         <VaultAccessPanel
@@ -374,6 +441,7 @@ export function TravelDocumentCenterPage() {
         onCancel={() => { if (!busy) setMigrationTicket(null) }}
         onConfirm={() => void handleMigrateTicket()}
         open={Boolean(migrationTicket)}
+        testId="travel-document-migration-confirm-dialog"
         title="转入加密资料库"
       >
         <label className="mt-3 flex items-center gap-2 text-sm text-on-surface-variant">
@@ -392,7 +460,63 @@ function CloudControls({ busy, conflicts, onEnablePush, onResolve, onSync }: {
   onResolve: (id: string, choice: 'local' | 'remote') => Promise<void>
   onSync: () => void
 }) {
-  return <section className="space-y-3"><div className="grid grid-cols-2 gap-2"><Button icon={<Cloud className="size-4" />} loading={busy} onClick={onSync} variant="secondary">同步资料</Button><Button icon={<Bell className="size-4" />} disabled={busy} onClick={onEnablePush} variant="secondary">启用通知</Button></div>{conflicts.length ? <div className="space-y-2 rounded-xl border border-amber-300/60 bg-amber-50/70 p-3 dark:border-amber-900/50 dark:bg-amber-950/25"><h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">资料同步冲突</h3><p className="text-xs text-amber-800 dark:text-amber-300">加密对象按整项选择，不会尝试合并密文字段。</p>{conflicts.map((conflict) => <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2" key={conflict.id}><span className="min-w-0 flex-1 truncate text-xs">{conflict.objectType} · {conflict.objectId}</span><button className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => void onResolve(conflict.id, 'local')} type="button">保留本机</button><button className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => void onResolve(conflict.id, 'remote')} type="button">使用云端</button></div>)}</div> : null}</section>
+  return <section className="space-y-3" data-testid="travel-document-sync-section" id="travel-document-sync-section"><div className="grid grid-cols-2 gap-2"><Button icon={<Cloud className="size-4" />} loading={busy} onClick={onSync} variant="secondary">同步资料</Button><Button icon={<Bell className="size-4" />} disabled={busy} onClick={onEnablePush} variant="secondary">启用通知</Button></div>{conflicts.length ? <div className="space-y-2 rounded-xl border border-amber-300/60 bg-amber-50/70 p-3 dark:border-amber-900/50 dark:bg-amber-950/25"><h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">资料同步冲突</h3><p className="text-xs text-amber-800 dark:text-amber-300">加密对象按整项选择，不会尝试合并密文字段。</p>{conflicts.map((conflict) => <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2" key={conflict.id}><span className="min-w-0 flex-1 truncate text-xs">{conflict.objectType} · {conflict.objectId}</span><button className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => void onResolve(conflict.id, 'local')} type="button">保留本机</button><button className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus" onClick={() => void onResolve(conflict.id, 'remote')} type="button">使用云端</button></div>)}</div> : null}</section>
+}
+
+function DocumentIntelligencePanel({
+  hiddenSuggestions,
+  onAction,
+  onIgnore,
+  onLater,
+  onRestore,
+  suggestions,
+}: {
+  hiddenSuggestions: TripIntelligenceSuggestion[]
+  onAction: (suggestion: TripIntelligenceSuggestion) => void
+  onIgnore: (suggestion: TripIntelligenceSuggestion) => void
+  onLater: (suggestion: TripIntelligenceSuggestion) => void
+  onRestore: (suggestion: TripIntelligenceSuggestion) => void
+  suggestions: TripIntelligenceSuggestion[]
+}) {
+  return (
+    <Card className="space-y-3" data-testid="travel-document-intelligence-panel" variant="grouped">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-on-surface">资料建议</h3>
+          <p className="text-xs leading-5 tm-muted">只显示已脱敏的资料类型、状态和数量；具体内容仍在原有流程中确认。</p>
+        </div>
+        <span className="rounded-full bg-primary-container px-2 py-1 text-xs font-semibold text-on-primary-container">{suggestions.length} 项</span>
+      </div>
+      <div className="space-y-2">
+        {suggestions.map((suggestion) => (
+          <div className="flex min-h-11 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-1" key={suggestion.id}>
+            <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="travel-document-intelligence-action" onClick={() => onAction(suggestion)} type="button">
+              <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : suggestion.severity === 'medium' ? 'text-amber-600' : 'text-primary'}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+                <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+              </span>
+              <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+            </button>
+            <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
+          </div>
+        ))}
+        {hiddenSuggestions.length > 0 ? (
+          <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏资料建议（{hiddenSuggestions.length}）</summary>
+            <div className="mt-2 space-y-1">
+              {hiddenSuggestions.map((suggestion) => (
+                <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                  <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                  <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
+      </div>
+    </Card>
+  )
 }
 
 function VaultAccessPanel({ busy, confirmPassphrase, exists, onConfirmPassphraseChange, onCreate, onExport, onImport, onPassphraseChange, onUnlock, passphrase, unlocked }: {
@@ -439,7 +563,7 @@ function DocumentsPanel({ documents, documentTripIds, legacyTickets, onChanged, 
   const [showTravelerForm, setShowTravelerForm] = useState(false)
   const [showDocumentForm, setShowDocumentForm] = useState(false)
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-testid="travel-document-documents-section" id="travel-document-documents-section">
       <div className="grid grid-cols-2 gap-2">
         <Button icon={<UserRoundPlus className="size-4" />} onClick={() => setShowTravelerForm((value) => !value)} variant="secondary">添加旅客</Button>
         <Button icon={<Plus className="size-4" />} onClick={() => setShowDocumentForm((value) => !value)}>添加证件</Button>
@@ -463,7 +587,7 @@ function DocumentsPanel({ documents, documentTripIds, legacyTickets, onChanged, 
         )}
       </section>
       {legacyTickets.length > 0 ? (
-        <section className="space-y-3">
+        <section className="space-y-3" data-testid="travel-document-migration-section" id="travel-document-migration-section">
           <div><h3 className="text-base font-semibold text-on-surface">转入加密资料库</h3><p className="text-xs tm-muted">先复制和校验；只有你勾选后才会删除原票据。</p></div>
           <div className="rounded-xl border border-outline-variant/30 bg-surface-container">
             {legacyTickets.slice(0, 8).map((ticket) => <div className="flex items-center gap-3 border-b border-outline-variant/20 px-4 py-3 last:border-b-0" key={ticket.id}><FileText className="size-5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{ticket.title || ticket.fileName}</span><Button onClick={() => onMigrate(ticket)} variant="subtle">预览转入</Button></div>)}
@@ -557,7 +681,7 @@ function TransportPanel({ bookings, onChanged, onDelete, segmentsByBooking, sele
     window.setTimeout(() => document.getElementById(`transport-booking-${selectedBookingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
   }, [bookings, selectedBookingId])
   if (!selectedTrip) return <EmptyState body="大交通订单需要归属具体旅行。" icon={<TrainFront className="size-6" />} title="先选择旅行" />
-  return <div className="space-y-4"><Button className="w-full" icon={<Plus className="size-4" />} onClick={() => setShowForm((value) => !value)}>添加大交通订单</Button>{showForm ? <TransportForm onSaved={async () => { setShowForm(false); await onChanged() }} travelers={travelers} trip={selectedTrip} vaultUnlocked={vaultUnlocked} /> : null}{bookings.length === 0 ? <EmptyState body="往返、多程和联程订单会按交通段展示。" icon={<BriefcaseBusiness className="size-6" />} title="还没有交通订单" /> : <div className="space-y-3">{bookings.map((booking) => <BookingRow booking={booking} highlighted={booking.id === selectedBookingId} key={booking.id} onDelete={() => onDelete(booking.id)} segments={segmentsByBooking[booking.id] ?? []} />)}</div>}</div>
+  return <div className="space-y-4" data-testid="travel-document-transport-section" id="travel-document-transport-section"><Button className="w-full" icon={<Plus className="size-4" />} onClick={() => setShowForm((value) => !value)}>添加大交通订单</Button>{showForm ? <TransportForm onSaved={async () => { setShowForm(false); await onChanged() }} travelers={travelers} trip={selectedTrip} vaultUnlocked={vaultUnlocked} /> : null}{bookings.length === 0 ? <EmptyState body="往返、多程和联程订单会按交通段展示。" icon={<BriefcaseBusiness className="size-6" />} title="还没有交通订单" /> : <div className="space-y-3">{bookings.map((booking) => <BookingRow booking={booking} highlighted={booking.id === selectedBookingId} key={booking.id} onDelete={() => onDelete(booking.id)} segments={segmentsByBooking[booking.id] ?? []} />)}</div>}</div>
 }
 
 function TransportForm({ onSaved, travelers, trip, vaultUnlocked }: { onSaved: () => Promise<void>; travelers: Array<DecryptedVaultObject<TravelerProfileData>>; trip: Trip; vaultUnlocked: boolean }) {
@@ -688,4 +812,10 @@ function inferDocumentKind(ticket: TicketMeta): TravelDocumentKind {
 
 function toMessage(caught: unknown) {
   return caught instanceof Error ? caught.message : '操作失败，请稍后重试。'
+}
+
+function scrollToDocumentCenterElement(id: string) {
+  window.setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 0)
 }

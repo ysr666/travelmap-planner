@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
-import { LedgerArchiveController } from './components/ledger/LedgerArchiveController'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Card } from './components/ui/Card'
 import { getTrip } from './db'
@@ -129,7 +128,6 @@ function App() {
     <AppShell activeRoute={activeRoute} title={shellTitle}>
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
-      <LedgerArchiveController />
       {activeRoute === 'home' ? <HomePage /> : null}
       {activeRoute !== 'home' ? (
         <ErrorBoundary key={activeRoute}>

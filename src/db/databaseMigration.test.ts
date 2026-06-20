@@ -19,6 +19,22 @@ beforeEach(async () => {
 })
 
 describe('TravelConsoleDB migrations', () => {
+  it('creates persistent intelligence stores when upgrading from v9 to v10', async () => {
+    const legacyDb = new Dexie('TravelConsoleDB')
+    legacyDb.version(9).stores({ trips: 'id, updatedAt' })
+    await legacyDb.open()
+    legacyDb.close()
+
+    await db.open()
+
+    expect(db.tables.map((table) => table.name)).toEqual(expect.arrayContaining([
+      'tripIntelligenceAppliedChanges',
+      'tripIntelligenceSuggestionStates',
+    ]))
+    await expect(db.tripIntelligenceAppliedChanges.toArray()).resolves.toEqual([])
+    await expect(db.tripIntelligenceSuggestionStates.toArray()).resolves.toEqual([])
+  })
+
   it('upgrades v7 ledger expenses to canonical v8 bill defaults', async () => {
     const legacyDb = new Dexie('TravelConsoleDB')
     legacyDb.version(7).stores({

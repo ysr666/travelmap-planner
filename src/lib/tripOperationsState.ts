@@ -1,4 +1,6 @@
+import type { TripIntelligenceExecutionSource } from '../types'
 import type { TripOperationsPhase, TripOperationsRecommendation } from './tripOperationsAgent'
+import type { TripIntelligenceAppliedChange, TripIntelligenceScope, TripIntelligenceSourceKind } from './tripIntelligence/types'
 
 export type TripOperationsDispositionStatus = 'completed' | 'ignored' | 'snoozed'
 
@@ -8,6 +10,7 @@ export type TripOperationsDisposition = {
   phase: TripOperationsPhase
   scopeKey: string
   status: TripOperationsDispositionStatus
+  suggestionKey?: string
   zonedDate: string
 }
 
@@ -49,13 +52,14 @@ export type TripOperationsExecutionRecord = {
   appliedChanges: TripOperationsAppliedChange[]
   createdAt: number
   id: string
+  intelligenceAppliedChanges?: TripIntelligenceAppliedChange[]
   recommendationFingerprints: string[]
   source: TripOperationsExecutionSource
   status: 'partial' | 'success'
   title: string
 }
 
-export type TripOperationsExecutionSource = 'ai_trip_edit' | 'travel_inbox' | 'trip_operations'
+export type TripOperationsExecutionSource = TripIntelligenceExecutionSource
 
 export type TripOperationsLocalState = {
   dispositions: TripOperationsDisposition[]
@@ -110,12 +114,48 @@ const VALID_APPLIED_TARGETS = new Set<TripOperationsAppliedChangeTarget>([
   'tickets',
   'trip',
 ])
+const VALID_INTELLIGENCE_TARGETS = new Set<TripIntelligenceScope>([
+  'day',
+  'document',
+  'finance',
+  'inbox',
+  'item',
+  'live',
+  'shared_trip',
+  'sync',
+  'ticket',
+  'trip',
+])
+const VALID_INTELLIGENCE_SOURCE_KINDS = new Set<TripIntelligenceSourceKind>([
+  'document',
+  'inbox',
+  'ledger',
+  'live',
+  'operations',
+  'readiness',
+  'shared_trip',
+  'ticket',
+])
+const VALID_EXECUTION_SOURCES = new Set<TripOperationsExecutionSource>([
+  'ai_trip_edit',
+  'document',
+  'inbox',
+  'ledger',
+  'live',
+  'operations',
+  'readiness',
+  'shared_trip',
+  'ticket',
+  'travel_inbox',
+  'trip_operations',
+])
 
 export function createEmptyTripOperationsLocalState(): TripOperationsLocalState {
   return { dispositions: [], history: [], version: 2 }
 }
 
 export function readTripOperationsLocalState(tripId: string): TripOperationsLocalState {
+  // Legacy compatibility for the one-time IndexedDB migration.
   try {
     if (typeof window === 'undefined') return createEmptyTripOperationsLocalState()
     const raw = window.localStorage.getItem(getStorageKey(tripId))
@@ -127,6 +167,7 @@ export function readTripOperationsLocalState(tripId: string): TripOperationsLoca
 }
 
 export function writeTripOperationsLocalState(tripId: string, state: TripOperationsLocalState) {
+  // Legacy compatibility only. Product surfaces persist through tripIntelligence/persistence.
   const normalized = normalizeState(state)
   try {
     if (typeof window !== 'undefined') {
@@ -159,6 +200,9 @@ export function setTripOperationsDisposition({
     phase,
     scopeKey: recommendation.scopeKey,
     status,
+    suggestionKey: recommendation.readinessIssueIds[0]
+      ? `readiness:${recommendation.readinessIssueIds[0]}`
+      : `operations:${recommendation.scopeKey}`,
     zonedDate,
   }
   return normalizeState({
@@ -214,6 +258,7 @@ export function getActiveTripOperationsDisposition({
 export function createTripOperationsExecutionRecord({
   appliedChanges,
   fingerprints,
+  intelligenceAppliedChanges,
   now = Date.now(),
   source = 'trip_operations',
   status,
@@ -221,6 +266,7 @@ export function createTripOperationsExecutionRecord({
 }: {
   appliedChanges: TripOperationsAppliedChange[]
   fingerprints: string[]
+  intelligenceAppliedChanges?: TripIntelligenceAppliedChange[]
   now?: number
   source?: TripOperationsExecutionSource
   status: TripOperationsExecutionRecord['status']
@@ -230,6 +276,7 @@ export function createTripOperationsExecutionRecord({
     appliedChanges,
     createdAt: now,
     id: `trip-operations-${now}-${fingerprints.join('-').slice(0, 80)}`,
+    intelligenceAppliedChanges,
     recommendationFingerprints: [...new Set(fingerprints)],
     source,
     status,
@@ -261,6 +308,7 @@ function isDisposition(input: unknown): input is TripOperationsDisposition {
     VALID_PHASES.has(record.phase as TripOperationsPhase) &&
     typeof record.scopeKey === 'string' &&
     (record.status === 'completed' || record.status === 'ignored' || record.status === 'snoozed') &&
+    (record.suggestionKey === undefined || typeof record.suggestionKey === 'string') &&
     typeof record.zonedDate === 'string'
   )
 }
@@ -272,9 +320,13 @@ function isExecutionRecord(input: unknown): input is TripOperationsExecutionReco
     record.appliedChanges.every(isAppliedChange) &&
     typeof record.createdAt === 'number' &&
     typeof record.id === 'string' &&
+    (
+      record.intelligenceAppliedChanges === undefined ||
+      (Array.isArray(record.intelligenceAppliedChanges) && record.intelligenceAppliedChanges.every(isIntelligenceAppliedChange))
+    ) &&
     Array.isArray(record.recommendationFingerprints) &&
     record.recommendationFingerprints.every((entry) => typeof entry === 'string') &&
-    (record.source === 'ai_trip_edit' || record.source === 'travel_inbox' || record.source === 'trip_operations') &&
+    VALID_EXECUTION_SOURCES.has(record.source as TripOperationsExecutionSource) &&
     (record.status === 'partial' || record.status === 'success') &&
     typeof record.title === 'string'
   )
@@ -287,6 +339,23 @@ function isAppliedChange(input: unknown): input is TripOperationsAppliedChange {
     typeof record.detail === 'string' &&
     typeof record.occurredAt === 'number' &&
     VALID_APPLIED_TARGETS.has(record.target as TripOperationsAppliedChangeTarget) &&
+    typeof record.title === 'string'
+  )
+}
+
+function isIntelligenceAppliedChange(input: unknown): input is TripIntelligenceAppliedChange {
+  const record = readRecord(input)
+  const source = readRecord(record.source)
+  return (
+    typeof record.actionType === 'string' &&
+    (record.detail === undefined || typeof record.detail === 'string') &&
+    typeof record.id === 'string' &&
+    typeof record.occurredAt === 'number' &&
+    typeof source.id === 'string' &&
+    VALID_INTELLIGENCE_SOURCE_KINDS.has(source.kind as TripIntelligenceSourceKind) &&
+    (source.label === undefined || typeof source.label === 'string') &&
+    (record.targetId === undefined || typeof record.targetId === 'string') &&
+    VALID_INTELLIGENCE_TARGETS.has(record.targetType as TripIntelligenceScope) &&
     typeof record.title === 'string'
   )
 }

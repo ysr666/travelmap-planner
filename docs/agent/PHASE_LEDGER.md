@@ -293,7 +293,7 @@ Validation:
 
 ## 2026-06-20 Phase 6 - Global Home 2.0
 
-Status: planned
+Status: completed
 
 Goal: turn the global Home page into an accurate journey portfolio that selects the active or next trip by travel date, shows the next useful local action, and separates upcoming from completed travel.
 
@@ -333,6 +333,23 @@ Stop conditions:
 
 - Stop or split if overview signals require vault decryption, remote status, or a new persistent data model.
 - Repair within the phase if empty, ongoing, upcoming, or all-completed portfolios lose an existing primary action.
+
+Result:
+
+- Added a pure timezone-aware Home portfolio model that prioritizes ongoing travel, then the nearest upcoming trip, instead of trusting IndexedDB `updatedAt` order.
+- Added focus-day and next-item selection using stored plain dates, wall-clock times, execution state, and existing trip/day timezone semantics.
+- Rebuilt Home into a primary journey panel plus upcoming and completed sections, removed the duplicate primary row, restored an accessible delete action, and kept all create/import/AI/documents/settings paths.
+- Added bounded local preparation signals for day, itinerary, map-coordinate, and ticket coverage without provider, cloud, route, or vault calls.
+
+Validation:
+
+- `npm run test:unit -- src/lib/homeOverview.test.ts src/pages/HomePage.test.tsx` passed: 2 files and 12 tests.
+- focused ESLint passed for all Phase 6 files.
+- `npm run build` passed with the existing large-chunk warning.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/home-to-trip.spec.ts` passed at the project 390x844 viewport.
+- Playwright visual inspection passed at 390x844 and 1280x900 with zero horizontal overflow and no console errors; screenshots remained outside the repository.
+- The in-app Browser plugin was attempted first but its runtime was unavailable under the current session policy, so repository Playwright was used as the documented fallback.
+- `git diff --check` passed.
 
 ## 2026-06-20 Phase 7 - Local Search 2.0
 

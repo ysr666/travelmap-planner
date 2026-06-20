@@ -44,6 +44,14 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   vi.clearAllMocks()
+  window.localStorage.clear()
+  window.location.hash = '/home'
+  mocks.listTrips.mockResolvedValue([])
+  mocks.listDaysByTrip.mockResolvedValue([])
+  mocks.listItemsByTrip.mockResolvedValue([])
+  mocks.listTicketsByTrip.mockResolvedValue([])
+  mocks.createDemoTrip.mockResolvedValue({ id: 'demo_1' })
+  mocks.deleteTripCascade.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -113,6 +121,62 @@ describe('HomePage', () => {
     })
 
     expect(container?.textContent).toContain('东京旅行')
+  })
+
+  it('selects the next real trip instead of the most recently edited completed trip', async () => {
+    mocks.listTrips.mockResolvedValue([
+      {
+        id: 'completed_trip',
+        title: '旧旅行',
+        destination: '巴黎',
+        startDate: '2000-01-01',
+        endDate: '2000-01-05',
+        createdAt: 1,
+        updatedAt: 999,
+      },
+      {
+        id: 'future_trip',
+        title: '未来旅行',
+        destination: '东京',
+        startDate: '2099-04-01',
+        endDate: '2099-04-05',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<HomePage />)
+    })
+
+    const primary = container?.querySelector('[data-testid="home-primary-trip"]')
+    expect(primary?.textContent).toContain('未来旅行')
+    expect(container?.textContent).toContain('已完成')
+    expect(container?.textContent?.match(/未来旅行/g)).toHaveLength(1)
+  })
+
+  it('keeps trip deletion reachable with explicit confirmation', async () => {
+    mocks.listTrips.mockResolvedValue([
+      {
+        id: 'future_trip',
+        title: '未来旅行',
+        destination: '东京',
+        startDate: '2099-04-01',
+        endDate: '2099-04-05',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<HomePage />)
+    })
+    const deleteButton = container?.querySelector('button[aria-label="删除未来旅行"]')
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(document.body.textContent).toContain('确认删除「未来旅行」吗？')
   })
 
   it('renders error state on load failure', async () => {

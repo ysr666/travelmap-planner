@@ -353,7 +353,7 @@ Validation:
 
 ## 2026-06-20 Phase 7 - Local Search 2.0
 
-Status: planned
+Status: completed
 
 Goal: make the Search tab a useful local command surface across the expanded product, with ranked matches and accurate deep links for itinerary, tickets, transport bookings, and ledger records.
 
@@ -393,3 +393,21 @@ Stop conditions:
 
 - Stop or narrow if a useful result requires decrypting vault content or altering a protected storage contract.
 - Repair within the phase if ranking is unstable, deep links are incorrect, or large local datasets cause unbounded rendering.
+
+Result:
+
+- Added a pure weighted local-search index with NFKC/compact normalization, deterministic title-first ranking, category counts, bounded rendering, and grouped results.
+- Expanded Search to trips, itinerary items, tickets, non-secret transport booking/segment metadata, and ledger expenses with exact canonical deep links.
+- Loaded independent trip, ticket, ledger, booking, and segment datasets in parallel after their required parent IDs were known.
+- Added a horizontally scrollable category control and responsive grouped result rows for the expanded local command surface.
+- Kept the index in memory and explicitly excluded vault objects, booking secrets, PNR/order data, private links, ledger order numbers, ledger notes, OCR, and raw ticket file content.
+
+Validation:
+
+- `npm run test:unit -- src/lib/localSearch.test.ts src/pages/SearchPage.test.tsx` passed: 2 files and 12 tests.
+- focused ESLint passed for all Phase 7 files.
+- `npm run build` passed with the existing large-chunk warning; Search remains a lazy route chunk.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/search.spec.ts` passed at the project 390x844 viewport.
+- Playwright visual inspection passed at 390x844 and 1280x900 with zero horizontal page overflow and no console errors; screenshots remained outside the repository.
+- The E2E flow proved Home seed -> Search -> compact query -> item group -> exact Item Detail navigation.
+- `git diff --check` passed.

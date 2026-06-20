@@ -12,9 +12,11 @@ const mocks = vi.hoisted(() => ({
   intelligenceModel: {
     allSuggestions: [],
     forDay: vi.fn(() => []),
+    forDocument: vi.fn(() => []),
     forFinance: vi.fn(() => []),
     forInbox: vi.fn(() => []),
     forItem: vi.fn(() => []),
+    forSharedTrip: vi.fn(() => []),
     forTicket: vi.fn(() => []),
     forTripHome: vi.fn(() => []),
     suggestions: [],

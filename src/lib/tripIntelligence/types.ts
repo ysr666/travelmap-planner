@@ -22,10 +22,12 @@ export type TripIntelligenceScope =
 export type TripIntelligenceSeverity = 'low' | 'medium' | 'high'
 
 export type TripIntelligenceSourceKind =
+  | 'document'
   | 'operations'
   | 'readiness'
   | 'inbox'
   | 'live'
+  | 'ticket'
   | 'ledger'
   | 'shared_trip'
 
@@ -42,6 +44,15 @@ export type TripIntelligenceAction = {
   sourceActionKind?: string
   targetRoute?: RouteId
 }
+
+export type TripIntelligenceActionExecutionKind =
+  | 'ledger_create_expense_draft_from_candidate'
+  | 'live_report_disruption'
+  | 'live_set_item_execution_state'
+  | 'trip_operations_execute'
+  | 'travel_inbox_apply_preview'
+  | 'replan_apply_option'
+  | 'replan_undo'
 
 export type TripIntelligenceSourceRef = {
   id: string
@@ -78,6 +89,18 @@ export type TripIntelligenceAppliedChange = {
   title: string
 }
 
+export type TripIntelligenceActionResultStatus =
+  | 'completed'
+  | 'needs_confirmation'
+  | 'failed'
+  | 'cancelled'
+
+export type TripIntelligenceActionResult = {
+  appliedChanges: TripIntelligenceAppliedChange[]
+  message: string
+  status: TripIntelligenceActionResultStatus
+}
+
 export type TripIntelligenceContext = {
   dayId?: string
   itemId?: string
@@ -87,9 +110,11 @@ export type TripIntelligenceContext = {
 export type TripIntelligenceModel = {
   allSuggestions: TripIntelligenceSuggestion[]
   forDay: (dayId: string) => TripIntelligenceSuggestion[]
+  forDocument: () => TripIntelligenceSuggestion[]
   forFinance: () => TripIntelligenceSuggestion[]
   forInbox: () => TripIntelligenceSuggestion[]
   forItem: (itemId: string) => TripIntelligenceSuggestion[]
+  forSharedTrip: () => TripIntelligenceSuggestion[]
   forTicket: (ticketId: string) => TripIntelligenceSuggestion[]
   forTripHome: () => TripIntelligenceSuggestion[]
   suggestions: TripIntelligenceSuggestion[]
@@ -99,4 +124,3 @@ export type TripIntelligenceModel = {
     totalCount: number
   }
 }
-

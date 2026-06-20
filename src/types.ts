@@ -593,6 +593,46 @@ export type SharedTripMutation = {
   rejectedReason?: string
 }
 
+export type TripIntelligencePrivacyLevel = 'public' | 'private' | 'sensitive_redacted'
+
+export type TripIntelligenceAppliedChangeRecord = {
+  actionType: string
+  dedupeKey: string
+  detail?: string
+  executionId: string
+  executionSource: 'ai_trip_edit' | 'travel_inbox' | 'trip_operations'
+  executionStatus: 'partial' | 'success'
+  executionTitle: string
+  id: string
+  occurredAt: number
+  privacyLevel: TripIntelligencePrivacyLevel
+  recommendationFingerprints: string[]
+  sourceId: string
+  sourceKind: 'document' | 'inbox' | 'ledger' | 'live' | 'operations' | 'readiness' | 'shared_trip' | 'ticket'
+  sourceLabel?: string
+  targetId?: string
+  targetType: 'day' | 'document' | 'finance' | 'inbox' | 'item' | 'live' | 'shared_trip' | 'sync' | 'ticket' | 'trip'
+  title: string
+  tripId: string
+  updatedAt: number
+}
+
+export type TripIntelligenceSuggestionStateRecord = {
+  createdAt: number
+  id: string
+  legacyFingerprint?: string
+  phase?: 'post_trip' | 'pre_trip' | 'travel_evening' | 'travel_morning' | 'traveling'
+  scope?: 'day' | 'document' | 'finance' | 'inbox' | 'item' | 'live' | 'shared_trip' | 'sync' | 'ticket' | 'trip'
+  scopeKey?: string
+  sourceKind?: 'document' | 'inbox' | 'ledger' | 'live' | 'operations' | 'readiness' | 'shared_trip' | 'ticket'
+  status: 'completed' | 'ignored' | 'later'
+  suggestionKey: string
+  tripId: string
+  until?: number
+  updatedAt: number
+  zonedDate?: string
+}
+
 export type SyncObjectType =
   | 'trip'
   | 'day'
@@ -604,6 +644,8 @@ export type SyncObjectType =
   | 'ledger_expense'
   | 'replan_event'
   | 'replan_record'
+  | 'trip_intelligence_applied_change'
+  | 'trip_intelligence_suggestion_state'
 export type SyncOutboxOperation = 'upsert' | 'delete'
 export type SyncOutboxStatus = 'pending' | 'syncing' | 'error'
 export type SyncObjectPayload =
@@ -617,6 +659,8 @@ export type SyncObjectPayload =
   | LedgerExpense
   | TripDisruptionEvent
   | TripReplanRecord
+  | TripIntelligenceAppliedChangeRecord
+  | TripIntelligenceSuggestionStateRecord
 
 export type SyncOutboxEntry = {
   id: string

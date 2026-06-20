@@ -79,7 +79,14 @@ import { fetchProviderProxyAiExpenseExtract, fetchProviderProxyAiExpenseQuery, g
 import { getAccountAiPreferences } from '../lib/accountAiPreferences'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { listTransportBookings, listTravelerProfiles } from '../lib/travelDocumentCenter'
+import {
+  buildTripIntelligenceModel,
+  executeTripIntelligenceAction,
+  getLedgerDraftCandidateSuggestionKey,
+  type TripIntelligenceSuggestion,
+} from '../lib/tripIntelligence'
 import type {
+  Day,
   LedgerBudget,
   LedgerBudgetScope,
   LedgerExpense,
@@ -90,6 +97,7 @@ import type {
   LedgerSettings,
   LedgerSplitMode,
   ItineraryItem,
+  TicketMeta,
   Trip,
 } from '../types'
 
@@ -105,27 +113,33 @@ export function LedgerPage() {
   const [participants, setParticipants] = useState<LedgerParticipant[]>([])
   const [budgets, setBudgets] = useState<LedgerBudget[]>([])
   const [expenses, setExpenses] = useState<LedgerExpense[]>([])
+  const [days, setDays] = useState<Day[]>([])
   const [items, setItems] = useState<ItineraryItem[]>([])
+  const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [activeTab, setActiveTab] = useState<LedgerTab>('bills')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
     if (!tripId) return
-    const [nextTrip, nextSettings, nextParticipants, nextBudgets, nextExpenses, nextItems] = await Promise.all([
+    const [nextTrip, nextSettings, nextParticipants, nextBudgets, nextExpenses, nextDays, nextItems, nextTickets] = await Promise.all([
       getTrip(tripId),
       getLedgerSettingsByTrip(tripId),
       listLedgerParticipants(tripId),
       listLedgerBudgets(tripId),
       listLedgerExpenses(tripId),
+      listDaysByTrip(tripId),
       listItemsByTrip(tripId),
+      listTicketsByTrip(tripId),
     ])
     setTrip(nextTrip ?? null)
     setSettings(nextSettings ?? null)
     setParticipants(nextParticipants)
     setBudgets(nextBudgets)
     setExpenses(nextExpenses)
+    setDays(nextDays)
     setItems(nextItems)
+    setTickets(nextTickets)
   }, [tripId])
 
   useEffect(() => {
@@ -170,7 +184,7 @@ export function LedgerPage() {
         ))}
       </nav>
 
-      {activeTab === 'bills' ? <ExpensesView expenses={expenses} items={items} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
+      {activeTab === 'bills' ? <ExpensesView days={days} expenses={expenses} items={items} participants={participants} settings={settings} tickets={tickets} trip={trip} onChanged={refresh} /> : null}
       {activeTab === 'timeline' ? <TimelineView expenses={expenses} settings={settings} /> : null}
       {activeTab === 'integrity' ? <IntegrityView expenses={expenses} onEdit={(expense) => navigateTo('ledger/expense', { expenseId: expense.id, tripId: trip.id })} /> : null}
       {activeTab === 'budget' ? <BudgetAndForecastView budgets={budgets} expenses={expenses} settings={settings} trip={trip} onChanged={refresh} /> : null}
@@ -237,14 +251,111 @@ function LedgerSetup({ trip, onCreated }: { trip: Trip; onCreated: () => Promise
   )
 }
 
-function ExpensesView({ expenses, items, participants, settings, trip, onChanged }: { expenses: LedgerExpense[]; items: ItineraryItem[]; participants: LedgerParticipant[]; settings: LedgerSettings; trip: Trip; onChanged: () => Promise<void> }) {
+function ExpensesView({
+  days,
+  expenses,
+  items,
+  participants,
+  settings,
+  tickets,
+  trip,
+  onChanged,
+}: {
+  days: Day[]
+  expenses: LedgerExpense[]
+  items: ItineraryItem[]
+  participants: LedgerParticipant[]
+  settings: LedgerSettings
+  tickets: TicketMeta[]
+  trip: Trip
+  onChanged: () => Promise<void>
+}) {
   const [editing, setEditing] = useState<LedgerExpense | 'new' | null>(null)
   const [billView, setBillView] = useState<'review' | 'all'>(() => buildLedgerReviewEntries(expenses).length > 0 ? 'review' : 'all')
   const [scanCandidates, setScanCandidates] = useState<ScanCandidate[]>([])
   const [scanning, setScanning] = useState(false)
   const [aiConfirm, setAiConfirm] = useState(false)
   const [aiBusy, setAiBusy] = useState(false)
+  const [pendingDraftSuggestion, setPendingDraftSuggestion] = useState<{
+    candidate: LedgerExpenseDraftCandidate
+    suggestion: TripIntelligenceSuggestion
+  } | null>(null)
+  const [intelligenceActionId, setIntelligenceActionId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const reviewEntries = useMemo(() => buildLedgerReviewEntries(expenses), [expenses])
+  const ticketDraftCandidates = useMemo(() => buildLedgerExpenseDraftCandidates({
+    bookings: [],
+    days,
+    existingExpenses: expenses,
+    inboxEntries: [],
+    items,
+    participants,
+    tickets,
+    tripCurrency: settings.tripCurrency,
+    tripStartDate: trip.startDate,
+  }).filter((candidate) => candidate.source.kind === 'ticket'), [days, expenses, items, participants, settings.tripCurrency, tickets, trip.startDate])
+  const draftCandidateBySuggestionKey = useMemo(() => {
+    return new Map(ticketDraftCandidates.map((candidate, index) => [
+      getLedgerDraftCandidateSuggestionKey(candidate, index),
+      candidate,
+    ]))
+  }, [ticketDraftCandidates])
+  const financeIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
+    items,
+    ledgerDraftCandidates: ticketDraftCandidates,
+    ledgerReviewEntries: reviewEntries,
+  }), [items, reviewEntries, ticketDraftCandidates])
+
+  function handleFinanceSuggestion(suggestion: TripIntelligenceSuggestion) {
+    setMessage('')
+    if (suggestion.action?.kind === 'ledger_create_expense_draft_from_candidate') {
+      const candidate = draftCandidateBySuggestionKey.get(suggestion.key)
+      if (!candidate) {
+        setMessage('这条费用候选已变化，请刷新后重试。')
+        return
+      }
+      setPendingDraftSuggestion({ candidate, suggestion })
+      return
+    }
+    if (suggestion.action?.kind === 'open_ledger_review') {
+      setBillView('review')
+      window.requestAnimationFrame(() => {
+        document.getElementById('ledger-review-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+      return
+    }
+    if (suggestion.ticketIds[0]) {
+      navigateTo('tickets', { ticketId: suggestion.ticketIds[0], tripId: trip.id })
+      return
+    }
+    setBillView('review')
+  }
+
+  async function confirmFinanceDraft() {
+    if (!pendingDraftSuggestion) return
+    setIntelligenceActionId(pendingDraftSuggestion.suggestion.id)
+    setMessage('')
+    try {
+      const result = await executeTripIntelligenceAction({
+        candidate: pendingDraftSuggestion.candidate,
+        kind: 'ledger_create_expense_draft_from_candidate',
+        participants,
+        tripId: trip.id,
+      })
+      if (result.status !== 'completed') {
+        setMessage(result.message)
+        return
+      }
+      setMessage(result.message)
+      setPendingDraftSuggestion(null)
+      await onChanged()
+      setBillView('review')
+    } catch (caught) {
+      setMessage(getErrorMessage(caught))
+    } finally {
+      setIntelligenceActionId(null)
+    }
+  }
 
   async function scanSources() {
     setScanning(true); setMessage('')
@@ -309,13 +420,18 @@ function ExpensesView({ expenses, items, participants, settings, trip, onChanged
 
   return (
     <section className="space-y-4">
+      <LedgerIntelligencePanel
+        busySuggestionId={intelligenceActionId}
+        onAction={handleFinanceSuggestion}
+        suggestions={financeIntelligenceModel.forFinance()}
+      />
       <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-container p-1" aria-label="账单范围">
-        <button className={`min-h-11 rounded-lg text-sm font-semibold ${billView === 'review' ? 'bg-surface shadow-sm' : 'tm-muted'}`} onClick={() => setBillView('review')} type="button">待审核 {buildLedgerReviewEntries(expenses).length}</button>
+        <button className={`min-h-11 rounded-lg text-sm font-semibold ${billView === 'review' ? 'bg-surface shadow-sm' : 'tm-muted'}`} onClick={() => setBillView('review')} type="button">待审核 {reviewEntries.length}</button>
         <button className={`min-h-11 rounded-lg text-sm font-semibold ${billView === 'all' ? 'bg-surface shadow-sm' : 'tm-muted'}`} onClick={() => setBillView('all')} type="button">全部账单 {expenses.length}</button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>记一笔</Button>
-        <Button icon={<FileSearch className="size-4" />} loading={scanning} onClick={() => void scanSources()} variant="secondary">整理费用</Button>
+        <Button icon={<FileSearch className="size-4" />} loading={scanning} onClick={() => void scanSources()} variant="secondary">从更多来源整理</Button>
       </div>
       {message ? <p className="text-sm tm-muted">{message}</p> : null}
       {editing ? <ExpenseEditor expense={editing === 'new' ? undefined : editing} expenses={expenses} items={items} participants={participants} settings={settings} trip={trip} onCancel={() => setEditing(null)} onSaved={async () => { setEditing(null); await onChanged() }} /> : null}
@@ -335,14 +451,80 @@ function ExpensesView({ expenses, items, participants, settings, trip, onChanged
           <Button className="w-full" disabled={!scanCandidates.some((candidate) => candidate.selected)} onClick={() => void applyCandidates()}>生成待确认费用</Button>
         </section>
       ) : null}
-      {billView === 'review' ? <LedgerReviewQueue expenses={expenses} onChanged={onChanged} onEdit={(expense) => setEditing(expense)} settings={settings} trip={trip} /> : (
+      {billView === 'review' ? (
+        <div id="ledger-review-section">
+          <LedgerReviewQueue expenses={expenses} onChanged={onChanged} onEdit={(expense) => setEditing(expense)} settings={settings} trip={trip} />
+        </div>
+      ) : (
         <div className="space-y-2">
           {expenses.length === 0 ? <EmptyState body="手动记一笔，或从票据、订单和备注整理费用草稿。" icon={<WalletCards className="size-6" />} title="账本还是空的" /> : null}
           {expenses.map((expense) => <ExpenseRow expense={expense} key={expense.id} participants={participants} settings={settings} tripId={trip.id} onEdit={() => setEditing(expense)} onDelete={async () => { await deleteLedgerExpense(expense.id); await onChanged() }} />)}
         </div>
       )}
       <ConfirmDialog body={`将发送 ${scanCandidates.length} 条本地提取文本和同行人显示名给 AI。不会发送票据文件、邮箱、用户 ID、云数据或加密资料；返回内容只更新当前预览。`} confirmLabel="确认发送" loading={aiBusy} onCancel={() => setAiConfirm(false)} onConfirm={() => void fillWithAi()} open={aiConfirm} title="使用 AI 补全费用字段" />
+      <ConfirmDialog
+        body={pendingDraftSuggestion
+          ? `将为「${pendingDraftSuggestion.candidate.title}」生成一条待确认费用草稿。不会自动确认，也不会读取或上传票据文件内容。`
+          : '将生成一条待确认费用草稿。'}
+        cancelLabel="暂不生成"
+        confirmLabel="生成草稿"
+        loading={Boolean(intelligenceActionId)}
+        onCancel={() => {
+          if (!intelligenceActionId) {
+            setPendingDraftSuggestion(null)
+          }
+        }}
+        onConfirm={() => void confirmFinanceDraft()}
+        open={Boolean(pendingDraftSuggestion)}
+        title="生成费用草稿？"
+      />
     </section>
+  )
+}
+
+function LedgerIntelligencePanel({
+  busySuggestionId,
+  onAction,
+  suggestions,
+}: {
+  busySuggestionId: string | null
+  onAction: (suggestion: TripIntelligenceSuggestion) => void
+  suggestions: TripIntelligenceSuggestion[]
+}) {
+  if (suggestions.length === 0) return null
+  return (
+    <Card className="space-y-3" data-testid="ledger-intelligence-panel" variant="grouped">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-on-surface">账本建议</h3>
+          <p className="mt-1 text-sm leading-6 tm-muted">只处理已经确认或可确认的费用草稿，扫描入口保留在下方工具里。</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-primary-container px-2.5 py-1 text-xs font-semibold text-on-primary-container">
+          {suggestions.length}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {suggestions.slice(0, 5).map((suggestion) => (
+          <div className="rounded-xl border border-outline-variant/30 bg-surface-container-high/45 px-3 py-3" data-testid="ledger-intelligence-suggestion" key={suggestion.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</p>
+                <p className="mt-1 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+              </div>
+              <Button
+                className="min-h-11 shrink-0 px-3 text-xs"
+                disabled={busySuggestionId === suggestion.id}
+                icon={suggestion.requiresConfirmation ? <Check className="size-3.5" /> : undefined}
+                onClick={() => onAction(suggestion)}
+                variant="secondary"
+              >
+                {busySuggestionId === suggestion.id ? '处理中' : suggestion.action?.label ?? '查看'}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }
 

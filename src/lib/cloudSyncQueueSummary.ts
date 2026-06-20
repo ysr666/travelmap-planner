@@ -164,6 +164,10 @@ export function getObjectTypeSyncLabel(type: SyncObjectType) {
   if (type === 'trip') return '旅行'
   if (type === 'day') return '日期'
   if (type === 'item') return '行程点'
+  if (type === 'trip_intelligence_applied_change') return '智能记录'
+  if (type === 'trip_intelligence_suggestion_state') return '建议状态'
+  if (type.startsWith('ledger_')) return '旅行账本'
+  if (type.startsWith('replan_')) return 'Live Mode'
   return '票据'
 }
 

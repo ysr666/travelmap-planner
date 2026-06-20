@@ -1,6 +1,6 @@
-import { ArrowLeft, CalendarDays, Home, Map as MapIcon, MoreHorizontal, Route, Settings, Ticket } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarDays, Home, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { listItemsByDay, listTicketsByTrip, updateDay } from '../db'
+import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
 import { DaySelector } from '../components/trip/DaySelector'
@@ -12,6 +12,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { useLiveClock } from '../hooks/useLiveClock'
+import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
 import { DEFAULT_MAP_STYLE } from '../lib/mapConfig'
 import { markMapStartup, resetMapStartupTrace } from '../lib/mapStartupMetrics'
 import { buildTripContext } from '../lib/ai/aiTripContext'
@@ -22,15 +23,19 @@ import { buildDayBrief } from '../lib/travelBrief'
 import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
 import { buildTripReadinessModel } from '../lib/tripReadiness'
 import { buildTripOperationsModel } from '../lib/tripOperationsAgent'
-import { readTripOperationsLocalState } from '../lib/tripOperationsState'
+import {
+  type TripOperationsLocalState,
+} from '../lib/tripOperationsState'
 import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
+import { buildTripLiveModel } from '../lib/tripLiveMode'
+import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../lib/tripIntelligence'
 import { formatShortDate } from '../lib/dates'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
 import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import { getZonedPlainDate, normalizeTimeZone, resolveDayTimeZone } from '../lib/timeZone'
 import { TimeZoneSelect } from '../components/ui/TimeZoneSelect'
-import type { Day, ItineraryItem, TicketMeta, Trip } from '../types'
+import type { Day, ItineraryItem, TicketMeta, Trip, TripDisruptionEvent, TripReplanRecord } from '../types'
 
 type DayWorkspaceView = 'schedule' | 'map'
 
@@ -81,9 +86,18 @@ export function DayViewPage() {
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
   const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const [tripDisruptionEvents, setTripDisruptionEvents] = useState<TripDisruptionEvent[]>([])
+  const [tripReplanRecords, setTripReplanRecords] = useState<TripReplanRecord[]>([])
   const liveNow = useLiveClock()
   const mapPreloadStartedRef = useRef(false)
   const backgroundMapWarmupStartedRef = useRef(false)
+  const tripOperationsStateTripId = trip?.id ?? null
+  const {
+    isLoaded: isTripIntelligenceStateLoaded,
+    localState: tripOperationsLocalState,
+    suggestionStates: tripIntelligenceSuggestionStates,
+    updateLocalState: updateTripOperationsLocalState,
+  } = useTripIntelligencePersistence(tripOperationsStateTripId)
 
   useEffect(() => {
     resetMapStartupTrace()
@@ -214,6 +228,32 @@ export function DayViewPage() {
   }, [trip])
 
   useEffect(() => {
+    if (!trip) {
+      queueMicrotask(() => {
+        setTripDisruptionEvents([])
+        setTripReplanRecords([])
+      })
+      return
+    }
+    let cancelled = false
+    void Promise.all([
+      listTripDisruptionEventsByTrip(trip.id),
+      listTripReplanRecordsByTrip(trip.id),
+    ]).then(([events, records]) => {
+      if (cancelled) return
+      setTripDisruptionEvents(events)
+      setTripReplanRecords(records)
+    }).catch(() => {
+      if (cancelled) return
+      setTripDisruptionEvents([])
+      setTripReplanRecords([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [trip])
+
+  useEffect(() => {
     if (view !== 'map' || !hasOpenedMap) {
       return
     }
@@ -279,6 +319,31 @@ export function DayViewPage() {
       setHasOpenedMap(true)
     }
     navigateTo('day', { tripId: trip.id, dayId: selectedDay.id, view: nextView })
+  }
+
+  function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
+    if (!trip) {
+      return
+    }
+    updateTripOperationsLocalState(nextState)
+  }
+
+  async function handleLiveModeChanged() {
+    await refresh()
+    if (!trip) {
+      return
+    }
+    try {
+      const [events, records] = await Promise.all([
+        listTripDisruptionEventsByTrip(trip.id),
+        listTripReplanRecordsByTrip(trip.id),
+      ])
+      setTripDisruptionEvents(events)
+      setTripReplanRecords(records)
+    } catch {
+      setTripDisruptionEvents([])
+      setTripReplanRecords([])
+    }
   }
 
   if (isLoading) {
@@ -361,14 +426,37 @@ export function DayViewPage() {
     allItems: allItems.length > 0 ? allItems : items,
     dailyTipModel,
     days,
-    dispositions: readTripOperationsLocalState(trip.id).dispositions,
+    dispositions: tripOperationsLocalState.dispositions,
     itemsByDay,
     now: liveNow,
     readinessModel,
     routePreparation,
     tickets,
     trip,
+    tripDisruptionEvents,
+    tripReplanRecords,
   })
+  const dayLiveModel = buildTripLiveModel({
+    day: selectedDay,
+    items,
+    now: liveNow,
+    operations: { recommendations: tripOperationsModel.activeRecommendations },
+    routeDay: selectedRouteDay,
+    tickets,
+    trip,
+  })
+  const dayContextItems = allItems.length > 0 ? allItems : items
+  const dayContextItemById = new Map(dayContextItems.map((item) => [item.id, item]))
+  const dayLiveReplanRecord = selectLatestActiveDayReplanRecord(tripReplanRecords, selectedDay.id)
+  const dayIntelligenceModel = buildTripIntelligenceModel({
+    items: dayContextItems,
+    liveModel: dayLiveModel,
+    liveReplanRecord: dayLiveReplanRecord,
+    operationsModel: tripOperationsModel,
+    readinessModel,
+    suggestionStates: tripIntelligenceSuggestionStates,
+  })
+  const dayIntelligenceSuggestions = dayIntelligenceModel.forDay(selectedDay.id).slice(0, 5)
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -464,13 +552,24 @@ export function DayViewPage() {
               />
             </section>
 
-            <TripLiveModeCard
+            {isTripIntelligenceStateLoaded ? (
+              <DayContextIntelligenceCard
+                dayId={selectedDay.id}
+                itemById={dayContextItemById}
+                suggestions={dayIntelligenceSuggestions}
+                tripId={trip.id}
+              />
+            ) : null}
+
+            {isTripIntelligenceStateLoaded ? <TripLiveModeCard
               allItems={allItems.length > 0 ? allItems : items}
               day={selectedDay}
               days={days}
               items={items}
+              localState={tripOperationsLocalState}
               now={liveNow}
-              onChanged={async () => { await refresh() }}
+              onChanged={handleLiveModeChanged}
+              onLocalStateChange={handleTripOperationsLocalStateChange}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
               onOpenMap={() => handleSwitchView('map')}
               onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
@@ -479,7 +578,7 @@ export function DayViewPage() {
               routeDay={selectedRouteDay}
               tickets={tickets}
               trip={trip}
-            />
+            /> : null}
 
             {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
 
@@ -497,6 +596,144 @@ export function DayViewPage() {
       )}
     </div>
   )
+}
+
+function DayContextIntelligenceCard({
+  dayId,
+  itemById,
+  suggestions,
+  tripId,
+}: {
+  dayId: string
+  itemById: Map<string, ItineraryItem>
+  suggestions: TripIntelligenceSuggestion[]
+  tripId: string
+}) {
+  if (suggestions.length === 0) {
+    return null
+  }
+
+  return (
+    <Card className="space-y-3" data-testid="day-intelligence-card" variant="grouped">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-on-surface">今天要处理</p>
+          <p className="mt-0.5 text-xs leading-5 tm-muted">只显示和当天、行程点、票据或 Live Mode 有关的建议。</p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{suggestions.length} 项</span>
+      </div>
+      <div className="divide-y divide-outline-variant/20 rounded-lg bg-surface-container-high/55">
+        {suggestions.map((suggestion) => (
+          <div className="flex min-h-16 items-start gap-3 px-3 py-3" data-testid="day-intelligence-suggestion" key={suggestion.id}>
+            <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${getDaySuggestionIconTone(suggestion)}`}>
+              {getDaySuggestionIcon(suggestion)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</p>
+              <p className="mt-0.5 line-clamp-2 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+            </div>
+            <Button
+              className="shrink-0 px-3 text-xs"
+              onClick={() => openDaySuggestion(suggestion, { dayId, itemById, tripId })}
+              variant="secondary"
+            >
+              {suggestion.action?.label ?? '查看'}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function getDaySuggestionIcon(suggestion: TripIntelligenceSuggestion) {
+  if (suggestion.scope === 'ticket') return <Ticket className="size-4" />
+  if (suggestion.scope === 'live') return <AlertTriangle className="size-4" />
+  if (suggestion.requiresConfirmation || suggestion.requiresPreview) return <ShieldCheck className="size-4" />
+  if (suggestion.scope === 'item') return <MapPin className="size-4" />
+  return <Route className="size-4" />
+}
+
+function getDaySuggestionIconTone(suggestion: TripIntelligenceSuggestion) {
+  if (suggestion.severity === 'high') return 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200'
+  if (suggestion.severity === 'medium') return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'
+  return 'bg-primary/10 text-primary'
+}
+
+function openDaySuggestion(
+  suggestion: TripIntelligenceSuggestion,
+  context: {
+    dayId: string
+    itemById: Map<string, ItineraryItem>
+    tripId: string
+  },
+) {
+  const sourceActionKind = suggestion.action?.sourceActionKind
+  if (
+    suggestion.scope === 'live'
+    || sourceActionKind === 'open_adaptive_replan'
+    || sourceActionKind === 'replan_apply_option'
+    || sourceActionKind === 'replan_undo'
+  ) {
+    if (scrollToDayElement('trip-live-mode-card')) return
+  }
+
+  if (suggestion.scope === 'ticket' || suggestion.action?.targetRoute === 'tickets' || sourceActionKind === 'open_tickets') {
+    navigateTo('tickets', { tripId: context.tripId })
+    return
+  }
+
+  if (sourceActionKind === 'generate_routes' || sourceActionKind === 'open_route_panel' || sourceActionKind === 'open_readiness') {
+    navigateTo('trip', { tripId: context.tripId })
+    return
+  }
+
+  const itemId = suggestion.affectedItemIds[0]
+  if (itemId) {
+    const item = context.itemById.get(itemId)
+    navigateTo('item', {
+      dayId: item?.dayId ?? context.dayId,
+      itemId,
+      tripId: context.tripId,
+      view: 'schedule',
+    })
+    return
+  }
+
+  if (suggestion.affectedDayIds[0]) {
+    navigateTo('day', {
+      dayId: suggestion.affectedDayIds[0],
+      tripId: context.tripId,
+      view: 'schedule',
+    })
+    return
+  }
+
+  navigateTo('trip', { tripId: context.tripId })
+}
+
+function scrollToDayElement(id: string) {
+  const element = document.getElementById(id)
+  if (!element) return false
+  element.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  return true
+}
+
+const ACTIVE_DAY_REPLAN_RECORD_STATUSES = new Set<TripReplanRecord['status']>(['preview', 'applied', 'conflict'])
+
+function selectLatestActiveDayReplanRecord(records: TripReplanRecord[], dayId: string) {
+  return records
+    .filter((record) => ACTIVE_DAY_REPLAN_RECORD_STATUSES.has(record.status) && dayReplanRecordTouchesDay(record, dayId))
+    .sort((left, right) => (right.updatedAt - left.updatedAt) || (right.createdAt - left.createdAt))[0] ?? null
+}
+
+function dayReplanRecordTouchesDay(record: TripReplanRecord, dayId: string) {
+  return record.beforeSnapshot.days.some((snapshotDay) => snapshotDay.id === dayId)
+    || record.beforeSnapshot.items.some((item) => item.dayId === dayId)
+    || Boolean(record.afterSnapshot?.days.some((snapshotDay) => snapshotDay.id === dayId))
+    || Boolean(record.afterSnapshot?.items.some((item) => item.dayId === dayId))
+    || Boolean(record.selectedDiff?.routeImpacts.some((impact) => impact.dayId === dayId))
+    || Boolean(record.selectedDiff?.itemChanges.some((change) => change.before.dayId === dayId || change.after.dayId === dayId))
 }
 
 function DayMoreMenu({

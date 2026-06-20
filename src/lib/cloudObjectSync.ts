@@ -56,6 +56,7 @@ import {
 import { requireSupabaseClient } from './supabaseClient'
 import { shouldExpectTicketBlob } from './tickets'
 import { recordTripWriteForSync } from './tripSyncQueue'
+import { sanitizeAppliedChangeDetail } from './tripIntelligence/appliedChanges'
 import type {
   Day,
   ItineraryItem,
@@ -72,6 +73,8 @@ import type {
   TicketBlobSyncState,
   TicketMeta,
   TripDisruptionEvent,
+  TripIntelligenceAppliedChangeRecord,
+  TripIntelligenceSuggestionStateRecord,
   TripReplanRecord,
   Trip,
 } from '../types'
@@ -478,6 +481,19 @@ async function buildObjectSyncPushPlan({
       continue
     }
 
+    if (isTripIntelligenceObjectType(localRow.object_type)) {
+      const winner = pickLatestTripIntelligenceRow(localRow, remoteRow)
+      if (winner === localRow) {
+        plan.rowsToPush.push(localRow)
+      } else {
+        remoteRowsToApply.push(remoteRow)
+        await putObjectSyncBaseFromCloudRow(remoteRow)
+      }
+      plan.entriesToMarkSynced.push(...entriesForObject)
+      await deletePendingObjectSyncConflictForKey(objectKey)
+      continue
+    }
+
     if (!remoteChanged) {
       plan.rowsToPush.push(localRow)
       plan.entriesToMarkSynced.push(...entriesForObject)
@@ -537,7 +553,7 @@ async function buildObjectSyncPushPlan({
 }
 
 async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): Promise<CloudSyncObjectRow[]> {
-  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses, replanEvents, replanRecords] = await Promise.all([
+  const [trip, days, items, tickets, ledgerSettings, ledgerParticipants, ledgerBudgets, ledgerExpenses, replanEvents, replanRecords, intelligenceAppliedChanges, intelligenceSuggestionStates] = await Promise.all([
     getTrip(tripId),
     listDaysByTrip(tripId),
     listItemsByTrip(tripId),
@@ -548,6 +564,8 @@ async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): 
     listLedgerExpenses(tripId),
     listTripDisruptionEventsByTrip(tripId),
     listTripReplanRecordsByTrip(tripId),
+    db.tripIntelligenceAppliedChanges.where('tripId').equals(tripId).toArray(),
+    db.tripIntelligenceSuggestionStates.where('tripId').equals(tripId).toArray(),
   ])
   if (!trip) return []
   const deviceId = getObjectSyncDeviceId()
@@ -562,6 +580,8 @@ async function buildCurrentTripCloudObjectRows(tripId: string, userId: string): 
     ...ledgerExpenses.map((expense) => buildCloudObjectUpsertRow({ object: expense, objectType: 'ledger_expense' as const, tripId, userId, deviceId })),
     ...replanEvents.map((event) => buildCloudObjectUpsertRow({ object: event, objectType: 'replan_event' as const, tripId, userId, deviceId })),
     ...replanRecords.map((record) => buildCloudObjectUpsertRow({ object: record, objectType: 'replan_record' as const, tripId, userId, deviceId })),
+    ...intelligenceAppliedChanges.map((record) => buildCloudObjectUpsertRow({ object: record, objectType: 'trip_intelligence_applied_change' as const, tripId, userId, deviceId })),
+    ...intelligenceSuggestionStates.map((record) => buildCloudObjectUpsertRow({ object: record, objectType: 'trip_intelligence_suggestion_state' as const, tripId, userId, deviceId })),
   ]
 }
 
@@ -606,6 +626,19 @@ function isSameCloudObjectValue(left: CloudSyncObjectRow, right: CloudSyncObject
     left.object_id === right.object_id &&
     (left.deleted_at_ms ?? undefined) === (right.deleted_at_ms ?? undefined) &&
     isSameJsonRecord(left.payload, right.payload)
+}
+
+function isTripIntelligenceObjectType(objectType: SyncObjectType) {
+  return objectType === 'trip_intelligence_applied_change' || objectType === 'trip_intelligence_suggestion_state'
+}
+
+function pickLatestTripIntelligenceRow(localRow: CloudSyncObjectRow, remoteRow: CloudSyncObjectRow) {
+  if (localRow.updated_at_ms !== remoteRow.updated_at_ms) {
+    return localRow.updated_at_ms > remoteRow.updated_at_ms ? localRow : remoteRow
+  }
+  return JSON.stringify(localRow.payload ?? localRow.deleted_at_ms ?? null) >= JSON.stringify(remoteRow.payload ?? remoteRow.deleted_at_ms ?? null)
+    ? localRow
+    : remoteRow
 }
 
 function buildObjectLevelConflict({
@@ -974,6 +1007,8 @@ async function applyCloudObjectRows(rows: CloudSyncObjectRow[]) {
       db.ledgerExpenses,
       db.tripReplanEvents,
       db.tripReplanRecords,
+      db.tripIntelligenceAppliedChanges,
+      db.tripIntelligenceSuggestionStates,
       db.objectSyncStates,
       db.objectSyncBases,
       db.objectSyncConflicts,
@@ -1049,12 +1084,20 @@ async function applyRemotePayload(row: CloudSyncObjectRow) {
   } else if (row.object_type === 'replan_record') {
     if (isSameJsonRecord(await db.tripReplanRecords.get(row.object_id), row.payload)) return false
     await db.tripReplanRecords.put(row.payload as TripReplanRecord)
+  } else if (row.object_type === 'trip_intelligence_applied_change') {
+    const payload = sanitizeRemoteAppliedChangeRecord(row)
+    if (isSameJsonRecord(await db.tripIntelligenceAppliedChanges.get(row.object_id), payload)) return false
+    await db.tripIntelligenceAppliedChanges.put(payload)
+  } else if (row.object_type === 'trip_intelligence_suggestion_state') {
+    const payload = sanitizeRemoteSuggestionStateRecord(row)
+    if (isSameJsonRecord(await db.tripIntelligenceSuggestionStates.get(row.object_id), payload)) return false
+    await db.tripIntelligenceSuggestionStates.put(payload)
   }
   return true
 }
 
 async function applyResolvedPayload(objectType: SyncObjectType, payload: SyncObjectPayload) {
-  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses, db.tripReplanEvents, db.tripReplanRecords], async () => {
+  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses, db.tripReplanEvents, db.tripReplanRecords, db.tripIntelligenceAppliedChanges, db.tripIntelligenceSuggestionStates], async () => {
     if (objectType === 'trip') {
       await db.trips.put(payload as Trip)
     } else {
@@ -1075,8 +1118,12 @@ async function applyResolvedPayload(objectType: SyncObjectType, payload: SyncObj
         await db.ledgerExpenses.put(payload as LedgerExpense)
       } else if (objectType === 'replan_event') {
         await db.tripReplanEvents.put(payload as TripDisruptionEvent)
-      } else {
+      } else if (objectType === 'replan_record') {
         await db.tripReplanRecords.put(payload as TripReplanRecord)
+      } else if (objectType === 'trip_intelligence_applied_change') {
+        await db.tripIntelligenceAppliedChanges.put(payload as TripIntelligenceAppliedChangeRecord)
+      } else {
+        await db.tripIntelligenceSuggestionStates.put(payload as TripIntelligenceSuggestionStateRecord)
       }
     }
   })
@@ -1101,8 +1148,12 @@ async function enqueueResolvedPayload(objectType: SyncObjectType, payload: SyncO
     await enqueueObjectUpsert({ object: payload as LedgerExpense, objectType: 'ledger_expense' })
   } else if (objectType === 'replan_event') {
     await enqueueObjectUpsert({ object: payload as TripDisruptionEvent, objectType: 'replan_event' })
-  } else {
+  } else if (objectType === 'replan_record') {
     await enqueueObjectUpsert({ object: payload as TripReplanRecord, objectType: 'replan_record' })
+  } else if (objectType === 'trip_intelligence_applied_change') {
+    await enqueueObjectUpsert({ object: payload as TripIntelligenceAppliedChangeRecord, objectType: 'trip_intelligence_applied_change' })
+  } else {
+    await enqueueObjectUpsert({ object: payload as TripIntelligenceSuggestionStateRecord, objectType: 'trip_intelligence_suggestion_state' })
   }
 }
 
@@ -1138,12 +1189,18 @@ async function applyRemoteDelete(row: CloudSyncObjectRow) {
   } else if (row.object_type === 'replan_record') {
     if (!await db.tripReplanRecords.get(row.object_id)) return false
     await db.tripReplanRecords.delete(row.object_id)
+  } else if (row.object_type === 'trip_intelligence_applied_change') {
+    if (!await db.tripIntelligenceAppliedChanges.get(row.object_id)) return false
+    await db.tripIntelligenceAppliedChanges.delete(row.object_id)
+  } else if (row.object_type === 'trip_intelligence_suggestion_state') {
+    if (!await db.tripIntelligenceSuggestionStates.get(row.object_id)) return false
+    await db.tripIntelligenceSuggestionStates.delete(row.object_id)
   }
   return true
 }
 
 async function applyResolvedDelete(objectType: SyncObjectType, objectId: string) {
-  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses, db.tripReplanEvents, db.tripReplanRecords], async () => {
+  await db.transaction('rw', [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses, db.tripReplanEvents, db.tripReplanRecords, db.tripIntelligenceAppliedChanges, db.tripIntelligenceSuggestionStates], async () => {
     if (objectType === 'trip') {
       await db.trips.delete(objectId)
     } else if (objectType === 'day') {
@@ -1179,10 +1236,14 @@ async function applyResolvedDelete(objectType: SyncObjectType, objectId: string)
       const record = await db.tripReplanEvents.get(objectId)
       if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
       await db.tripReplanEvents.delete(objectId)
-    } else {
+    } else if (objectType === 'replan_record') {
       const record = await db.tripReplanRecords.get(objectId)
       if (record) await db.trips.update(record.tripId, { updatedAt: Date.now() })
       await db.tripReplanRecords.delete(objectId)
+    } else if (objectType === 'trip_intelligence_applied_change') {
+      await db.tripIntelligenceAppliedChanges.delete(objectId)
+    } else {
+      await db.tripIntelligenceSuggestionStates.delete(objectId)
     }
   })
 }
@@ -1330,6 +1391,116 @@ function isSameJsonRecord(left: unknown, right: unknown) {
   } catch {
     return false
   }
+}
+
+function sanitizeRemoteAppliedChangeRecord(row: CloudSyncObjectRow): TripIntelligenceAppliedChangeRecord {
+  const raw = readUnknownRecord(row.payload)
+  const sourceKind = normalizeIntelligenceSourceKind(raw.sourceKind)
+  const targetType = normalizeIntelligenceScope(raw.targetType)
+  const isSensitive = raw.privacyLevel === 'sensitive_redacted' || sourceKind === 'document' || targetType === 'document'
+  const occurredAt = readFiniteNumber(raw.occurredAt, row.updated_at_ms)
+  return {
+    actionType: sanitizeSyncIdentifier(raw.actionType, 'completed_action'),
+    dedupeKey: isSensitive
+      ? `${row.trip_id}:${row.object_id}`
+      : sanitizeSuggestionKey(raw.dedupeKey, `${row.trip_id}:${row.object_id}`),
+    detail: isSensitive ? '已完成一项脱敏资料操作。' : sanitizeAppliedChangeDetail(readOptionalString(raw.detail)),
+    executionId: sanitizeSyncIdentifier(raw.executionId, row.object_id),
+    executionSource: normalizeExecutionSource(raw.executionSource),
+    executionStatus: raw.executionStatus === 'partial' ? 'partial' : 'success',
+    executionTitle: isSensitive
+      ? '资料操作已完成'
+      : sanitizeAppliedChangeDetail(readOptionalString(raw.executionTitle)) ?? '已完成的旅行修改',
+    id: row.object_id,
+    occurredAt,
+    privacyLevel: isSensitive ? 'sensitive_redacted' : raw.privacyLevel === 'public' ? 'public' : 'private',
+    recommendationFingerprints: Array.isArray(raw.recommendationFingerprints)
+      ? raw.recommendationFingerprints
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => sanitizeSyncIdentifier(value, ''))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 50)
+      : [],
+    sourceId: isSensitive ? 'document' : sanitizeSyncIdentifier(raw.sourceId, sourceKind),
+    sourceKind,
+    sourceLabel: isSensitive ? '资料库' : sanitizeAppliedChangeDetail(readOptionalString(raw.sourceLabel)),
+    targetId: isSensitive ? undefined : readOptionalString(raw.targetId) ? sanitizeSyncIdentifier(raw.targetId, undefined) : undefined,
+    targetType,
+    title: isSensitive
+      ? '资料操作已完成'
+      : sanitizeAppliedChangeDetail(readOptionalString(raw.title)) ?? '已完成的旅行修改',
+    tripId: row.trip_id,
+    updatedAt: readFiniteNumber(raw.updatedAt, Math.max(occurredAt, row.updated_at_ms)),
+  }
+}
+
+function sanitizeRemoteSuggestionStateRecord(row: CloudSyncObjectRow): TripIntelligenceSuggestionStateRecord {
+  const raw = readUnknownRecord(row.payload)
+  const updatedAt = readFiniteNumber(raw.updatedAt, row.updated_at_ms)
+  const phase = normalizeOperationsPhase(raw.phase)
+  const scope = raw.scope === undefined ? undefined : normalizeIntelligenceScope(raw.scope)
+  const sourceKind = raw.sourceKind === undefined ? undefined : normalizeIntelligenceSourceKind(raw.sourceKind)
+  return {
+    createdAt: readFiniteNumber(raw.createdAt, updatedAt),
+    id: row.object_id,
+    legacyFingerprint: readOptionalString(raw.legacyFingerprint)
+      ? sanitizeSyncIdentifier(raw.legacyFingerprint, undefined)
+      : undefined,
+    phase,
+    scope,
+    scopeKey: readOptionalString(raw.scopeKey) ? sanitizeSuggestionKey(raw.scopeKey, '') : undefined,
+    sourceKind,
+    status: raw.status === 'ignored' || raw.status === 'later' ? raw.status : 'completed',
+    suggestionKey: sanitizeSuggestionKey(raw.suggestionKey, `restored:${row.object_id}`),
+    tripId: row.trip_id,
+    until: typeof raw.until === 'number' && Number.isFinite(raw.until) ? raw.until : undefined,
+    updatedAt,
+    zonedDate: typeof raw.zonedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.zonedDate) ? raw.zonedDate : undefined,
+  }
+}
+
+function normalizeIntelligenceSourceKind(value: unknown): TripIntelligenceAppliedChangeRecord['sourceKind'] {
+  if (value === 'document' || value === 'inbox' || value === 'ledger' || value === 'live' || value === 'operations' || value === 'readiness' || value === 'shared_trip' || value === 'ticket') return value
+  return 'operations'
+}
+
+function normalizeIntelligenceScope(value: unknown): TripIntelligenceAppliedChangeRecord['targetType'] {
+  if (value === 'day' || value === 'document' || value === 'finance' || value === 'inbox' || value === 'item' || value === 'live' || value === 'shared_trip' || value === 'sync' || value === 'ticket' || value === 'trip') return value
+  return 'trip'
+}
+
+function normalizeExecutionSource(value: unknown): TripIntelligenceAppliedChangeRecord['executionSource'] {
+  if (value === 'ai_trip_edit' || value === 'travel_inbox') return value
+  return 'trip_operations'
+}
+
+function normalizeOperationsPhase(value: unknown): TripIntelligenceSuggestionStateRecord['phase'] {
+  if (value === 'post_trip' || value === 'pre_trip' || value === 'travel_evening' || value === 'travel_morning' || value === 'traveling') return value
+  return undefined
+}
+
+function sanitizeSyncIdentifier(value: unknown, fallback: string): string
+function sanitizeSyncIdentifier(value: unknown, fallback: undefined): string | undefined
+function sanitizeSyncIdentifier(value: unknown, fallback: string | undefined): string | undefined {
+  if (typeof value !== 'string') return fallback
+  return value.replace(/[^a-zA-Z0-9:_-]/g, '').slice(0, 200) || fallback
+}
+
+function sanitizeSuggestionKey(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback
+  return value.replace(/[^a-zA-Z0-9:._/-]/g, '').slice(0, 240) || fallback
+}
+
+function readUnknownRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' ? value : undefined
+}
+
+function readFiniteNumber(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
 export function buildObjectTicketBlobPath(userId: string, tripId: string, ticketId: string, sha256: string, fileName: string) {

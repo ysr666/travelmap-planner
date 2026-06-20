@@ -16,6 +16,8 @@ import type {
   TicketBlobSyncState,
   TicketMeta,
   TripDisruptionEvent,
+  TripIntelligenceAppliedChangeRecord,
+  TripIntelligenceSuggestionStateRecord,
   TripReplanRecord,
   Trip,
 } from '../types'
@@ -35,6 +37,8 @@ export type ObjectSyncRecordInput =
   | { object: LedgerExpense; objectType: 'ledger_expense'; operation?: 'upsert' }
   | { object: TripDisruptionEvent; objectType: 'replan_event'; operation?: 'upsert' }
   | { object: TripReplanRecord; objectType: 'replan_record'; operation?: 'upsert' }
+  | { object: TripIntelligenceAppliedChangeRecord; objectType: 'trip_intelligence_applied_change'; operation?: 'upsert' }
+  | { object: TripIntelligenceSuggestionStateRecord; objectType: 'trip_intelligence_suggestion_state'; operation?: 'upsert' }
 
 export type ObjectSyncDeleteInput = {
   objectId: string

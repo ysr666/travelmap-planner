@@ -24,8 +24,12 @@ const mocks = vi.hoisted(() => ({
     { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
   ]),
   listTicketsByTrip: vi.fn().mockResolvedValue([]),
+  getLedgerSettingsByTrip: vi.fn().mockResolvedValue(null),
+  listLedgerExpenses: vi.fn().mockResolvedValue([]),
+  listLedgerParticipants: vi.fn().mockResolvedValue([]),
   getItineraryItem: vi.fn().mockResolvedValue(null),
   createTicketMeta: vi.fn(),
+  createLedgerExpense: vi.fn(),
   deleteTicket: vi.fn(),
   getTicketBlob: vi.fn(),
   saveTicketBlob: vi.fn(),
@@ -70,11 +74,17 @@ vi.mock('../db', () => ({
   listDaysByTrip: mocks.listDaysByTrip,
   listItemsByTrip: mocks.listItemsByTrip,
   listTicketsByTrip: mocks.listTicketsByTrip,
+  getLedgerSettingsByTrip: mocks.getLedgerSettingsByTrip,
+  listLedgerExpenses: mocks.listLedgerExpenses,
+  listLedgerParticipants: mocks.listLedgerParticipants,
   getItineraryItem: mocks.getItineraryItem,
   createTicketMeta: mocks.createTicketMeta,
+  createLedgerExpense: mocks.createLedgerExpense,
   deleteTicket: mocks.deleteTicket,
+  createTripDisruptionEvent: vi.fn(),
   getTicketBlob: mocks.getTicketBlob,
   saveTicketBlob: mocks.saveTicketBlob,
+  setItineraryItemExecutionState: vi.fn(),
   updateItineraryItem: mocks.updateItineraryItem,
 }))
 
@@ -126,7 +136,26 @@ vi.mock('../lib/supabaseClient', () => ({
 }))
 
 vi.mock('../components/TicketPreview', () => ({
-  TicketPreview: () => <div data-testid="ticket-preview" />,
+  TicketPreview: ({
+    intelligenceSuggestions = [],
+    onIntelligenceSuggestionAction,
+  }: {
+    intelligenceSuggestions?: Array<{ action?: { label?: string }; id: string; title: string }>
+    onIntelligenceSuggestionAction?: (suggestion: { id: string }) => void
+  }) => (
+    <div data-testid="ticket-preview">
+      {intelligenceSuggestions.map((suggestion) => (
+        <button
+          data-testid="ticket-preview-intelligence-action"
+          key={suggestion.id}
+          onClick={() => onIntelligenceSuggestionAction?.(suggestion)}
+          type="button"
+        >
+          {suggestion.title} {suggestion.action?.label}
+        </button>
+      ))}
+    </div>
+  ),
 }))
 
 vi.mock('../components/tickets/TicketThumbnail', () => ({
@@ -166,6 +195,15 @@ beforeEach(() => {
     { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', sortOrder: 1, createdAt: 100, updatedAt: 100 },
   ])
   mocks.listTicketsByTrip.mockResolvedValue([])
+  mocks.getLedgerSettingsByTrip.mockResolvedValue(null)
+  mocks.listLedgerExpenses.mockResolvedValue([])
+  mocks.listLedgerParticipants.mockResolvedValue([])
+  mocks.createLedgerExpense.mockImplementation(async (input) => ({
+    createdAt: 100,
+    id: 'expense_1',
+    updatedAt: 101,
+    ...input,
+  }))
   mocks.getTicketDisplayTitle.mockImplementation((ticket?: { fileName?: string; title?: string }) => ticket?.title || ticket?.fileName || '票据')
   mocks.getTicketScope.mockImplementation((ticket?: { itemId?: string; scope?: 'item' | 'trip' | 'unassigned' }) => ticket?.scope || (ticket?.itemId ? 'item' : 'trip'))
   mocks.getTicketStorageMode.mockImplementation((ticket?: { storageMode?: 'copy' | 'external' | 'reference' }) => ticket?.storageMode || 'reference')
@@ -340,5 +378,61 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('旅行级票据')
     expect(container?.textContent).toContain('未分类')
     expect(container?.querySelectorAll('[data-testid="ticket-gallery-section"]').length).toBe(3)
+  })
+
+  it('shows ticket intelligence suggestions and requires confirmation before creating an expense draft', async () => {
+    mocks.getLedgerSettingsByTrip.mockResolvedValue({
+      createdAt: 100,
+      homeCurrency: 'CNY',
+      id: 'settings_1',
+      settlementCurrency: 'CNY',
+      tripCurrency: 'JPY',
+      tripId: 'trip_1',
+      updatedAt: 100,
+    })
+    mocks.listLedgerParticipants.mockResolvedValue([
+      { createdAt: 100, displayName: '我', id: 'person_1', isSelf: true, tripId: 'trip_1', updatedAt: 100 },
+    ])
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        createdAt: 100,
+        fileName: 'receipt.pdf',
+        fileType: 'pdf',
+        id: 'ticket_1',
+        mimeType: 'application/pdf',
+        note: 'receipt paid JPY 12000',
+        scope: 'unassigned',
+        size: 1024,
+        storageMode: 'reference',
+        ticketCategory: 'other',
+        title: '收据',
+        tripId: 'trip_1',
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    const previewButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('查看'))
+    await act(async () => {
+      previewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-preview"]')?.textContent).toContain('票据待绑定')
+    expect(container?.querySelector('[data-testid="ticket-preview"]')?.textContent).toContain('可生成费用草稿')
+
+    const draftButton = Array.from(container?.querySelectorAll('[data-testid="ticket-preview-intelligence-action"]') ?? [])
+      .find((button) => button.textContent?.includes('生成费用草稿'))
+    await act(async () => {
+      draftButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.createLedgerExpense).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('从票据生成费用草稿？')
   })
 })

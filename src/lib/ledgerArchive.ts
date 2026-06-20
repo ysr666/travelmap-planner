@@ -146,8 +146,9 @@ export function buildLedgerExpenseFromCandidate(
   candidate: LedgerExpenseDraftCandidate,
   tripId: string,
   participants: LedgerParticipant[],
+  options: { forceDraft?: boolean } = {},
 ): Omit<LedgerExpense, 'id' | 'createdAt' | 'updatedAt'> {
-  const autoConfirmed = canAutoConfirmLedgerCandidate(candidate)
+  const autoConfirmed = !options.forceDraft && canAutoConfirmLedgerCandidate(candidate)
   const amountMinor = candidate.sourceRole === 'refund_notice' && candidate.amountMinor != null
     ? -Math.abs(candidate.amountMinor)
     : candidate.amountMinor
@@ -177,7 +178,11 @@ export function buildLedgerExpenseFromCandidate(
     sourceLinks: [candidate.sourceLink],
     splitMode: 'equal',
     splitShares: participants.map((participant) => ({ participantId: participant.id, weight: 1 })),
-    status: autoConfirmed ? 'confirmed' : candidate.orderStatus === 'cancelled' && candidate.paymentStatus === 'unpaid' ? 'void' : 'draft',
+    status: autoConfirmed
+      ? 'confirmed'
+      : options.forceDraft
+        ? 'draft'
+        : candidate.orderStatus === 'cancelled' && candidate.paymentStatus === 'unpaid' ? 'void' : 'draft',
     title: candidate.title,
     tripId,
   }

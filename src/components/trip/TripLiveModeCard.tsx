@@ -15,17 +15,22 @@ import {
   Sparkles,
   Ticket,
 } from 'lucide-react'
-import { createTripDisruptionEvent, listTripReplanRecordsByTrip, setItineraryItemExecutionState } from '../../db'
+import { listTripReplanRecordsByTrip } from '../../db'
 import { prepareAiTripEditExecution } from '../../lib/ai/aiTripEditExecution'
 import { applyAiTripEditPatchPlanToDb } from '../../lib/ai/aiTripEditApply'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/ai/aiTripEditPatch'
 import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION } from '../../lib/ai/providerProxyContract'
-import { applyTripReplanOption, createTripReplanPreviewForEvent, undoTripReplan } from '../../lib/adaptiveReplanning'
 import { fetchProviderProxyAiTripEditPlan, fetchProviderProxyTravelSearch, getProviderProxyConfig, ProviderProxyClientError } from '../../lib/providerProxyClient'
 import { buildAppleMapsDirectionsUrl, buildGoogleMapsDirectionsUrl } from '../../lib/mapLinks'
 import type { RoutePreparationDay } from '../../lib/routePreparation'
 import { buildTripLiveModel, type TripLiveRisk, type TripLiveStage } from '../../lib/tripLiveMode'
 import type { TripOperationsRecommendation } from '../../lib/tripOperationsAgent'
+import type { TripOperationsLocalState } from '../../lib/tripOperationsState'
+import {
+  appendTripIntelligenceExecutionRecord,
+  executeTripIntelligenceAction,
+  type ExecuteTripIntelligenceActionResult,
+} from '../../lib/tripIntelligence'
 import type { Day, ItineraryItem, TicketMeta, Trip, TripDisruptionKind, TripReplanRecord, TripReplanSourceEvidence } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -38,8 +43,10 @@ type TripLiveModeCardProps = {
   day: Day
   days: Day[]
   items: ItineraryItem[]
+  localState?: TripOperationsLocalState
   now?: Date
   onChanged: () => Promise<void>
+  onLocalStateChange?: (state: TripOperationsLocalState) => void
   onOpenItem: (item: ItineraryItem) => void
   onOpenMap: () => void
   onOpenOperation: (recommendation: TripOperationsRecommendation) => void
@@ -59,8 +66,10 @@ export function TripLiveModeCard({
   day,
   days,
   items,
+  localState,
   now,
   onChanged,
+  onLocalStateChange,
   onOpenItem,
   onOpenMap,
   onOpenOperation,
@@ -130,8 +139,19 @@ export function TripLiveModeCard({
     setBusyItemId(item.id)
     setError(null)
     try {
-      await setItineraryItemExecutionState(item.id, state)
-      setMessage(state === 'completed' ? `已完成「${item.title}」，下一站已更新。` : state === 'skipped' ? `已跳过「${item.title}」，可随时恢复。` : `已恢复「${item.title}」。`)
+      const result = await executeTripIntelligenceAction({
+        itemId: item.id,
+        kind: 'live_set_item_execution_state',
+        status: state,
+      })
+      if (result.status === 'failed' || !result.liveItem) {
+        throw new Error(result.message)
+      }
+      commitLiveExecutionRecord(
+        state === 'completed' ? '标记行程点完成' : state === 'skipped' ? '跳过行程点' : '恢复行程点',
+        result,
+      )
+      setMessage(result.message)
       await onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '更新旅行执行状态失败。')
@@ -171,23 +191,31 @@ export function TripLiveModeCard({
         targetItem: targetItem ?? null,
         trip,
       })
-      const event = await createTripDisruptionEvent({
-        dayId: day.id,
-        delayMinutes: reportKind === 'delay' || reportKind === 'late' ? reportDelayMinutes : undefined,
-        evidence,
-        itemId: targetItem?.id,
-        kind: reportKind,
-        notes: reportNotes.trim() || undefined,
-        occurredAt: new Date().toISOString(),
-        reportedByRole: 'owner',
-        status: 'reported',
-        tripId: trip.id,
+      const result = await executeTripIntelligenceAction({
+        event: {
+          dayId: day.id,
+          delayMinutes: reportKind === 'delay' || reportKind === 'late' ? reportDelayMinutes : undefined,
+          evidence,
+          itemId: targetItem?.id,
+          kind: reportKind,
+          notes: reportNotes.trim() || undefined,
+          occurredAt: new Date().toISOString(),
+          reportedByRole: 'owner',
+          status: 'reported',
+          tripId: trip.id,
+        },
+        kind: 'live_report_disruption',
       })
-      const record = await createTripReplanPreviewForEvent(event.id)
+      if (result.status === 'failed' || !result.replanRecord) {
+        throw new Error(result.message)
+      }
+      const record = result.replanRecord
       setReplanRecord(record)
       setSelectedReplanOptionId(record.options[0]?.id ?? null)
       setReportOpen(false)
-      setMessage('已生成 3 个当天重排方案，确认前不会写入。')
+      commitLiveExecutionRecord('报告突发情况', result)
+      setMessage(result.message)
+      await onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '生成重排方案失败。')
     } finally {
@@ -200,10 +228,19 @@ export function TripLiveModeCard({
     setReplanBusy(true)
     setError(null)
     try {
-      const applied = await applyTripReplanOption(replanRecord.id, selectedReplanOptionId)
+      const result = await executeTripIntelligenceAction({
+        kind: 'replan_apply_option',
+        optionId: selectedReplanOptionId,
+        recordId: replanRecord.id,
+      })
+      if (result.status === 'failed' || !result.replanRecord) {
+        throw new Error(result.message)
+      }
+      const applied = result.replanRecord
       setReplanRecord(applied)
       setReplanApplyOpen(false)
-      setMessage('已应用重排方案，同行人会在共享行程发布后看到新的集合时间。')
+      commitLiveExecutionRecord('应用自适应重排', result)
+      setMessage(result.message)
       await onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '应用重排方案失败。')
@@ -217,15 +254,40 @@ export function TripLiveModeCard({
     setReplanBusy(true)
     setError(null)
     try {
-      const undone = await undoTripReplan(replanRecord.id)
+      const result = await executeTripIntelligenceAction({
+        kind: 'replan_undo',
+        recordId: replanRecord.id,
+      })
+      if (result.status === 'failed' || !result.replanRecord) {
+        throw new Error(result.message)
+      }
+      const undone = result.replanRecord
       setReplanRecord(undone)
-      setMessage('已撤销整次重排。')
+      commitLiveExecutionRecord('撤销自适应重排', result)
+      setMessage(result.message)
       await onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '撤销重排失败。')
     } finally {
       setReplanBusy(false)
     }
+  }
+
+  function commitLiveExecutionRecord(title: string, result: ExecuteTripIntelligenceActionResult) {
+    if (!localState || !onLocalStateChange || result.appliedChanges.length === 0) return
+    const fingerprints = [
+      result.replanRecord ? `replan:${result.replanRecord.id}` : null,
+      result.disruptionEvent ? `disruption:${result.disruptionEvent.id}` : null,
+      result.liveItem ? `live-item:${result.liveItem.id}` : null,
+    ].filter((fingerprint): fingerprint is string => Boolean(fingerprint))
+    onLocalStateChange(appendTripIntelligenceExecutionRecord(localState, {
+      fingerprints,
+      intelligenceAppliedChanges: result.appliedChanges,
+      legacyAppliedChanges: [],
+      source: 'trip_operations',
+      status: 'success',
+      title,
+    }))
   }
 
   async function generatePatch() {

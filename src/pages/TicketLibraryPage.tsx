@@ -5,10 +5,13 @@ import {
   createTicketMeta,
   deleteTicket,
   getItineraryItem,
+  getLedgerSettingsByTrip,
   getTicketBlob,
   getTrip,
   listDaysByTrip,
   listItemsByTrip,
+  listLedgerExpenses,
+  listLedgerParticipants,
   listTicketsByTrip,
   saveTicketBlob,
   updateItineraryItem,
@@ -29,6 +32,7 @@ import {
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { describeItemTime } from '../lib/itinerary'
+import { buildLedgerExpenseDraftCandidates, type LedgerExpenseDraftCandidate } from '../lib/ledgerExtraction'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
   formatFileSize,
@@ -64,7 +68,25 @@ import {
 } from '../lib/cloudObjectSync'
 import { getTicketBlobSyncState } from '../lib/objectSyncLocal'
 import { getSupabaseClient } from '../lib/supabaseClient'
-import type { Day, ItineraryItem, TicketBlobSyncState, TicketCategory, TicketMeta, TicketScope, TicketStorageMode, Trip } from '../types'
+import {
+  buildTripIntelligenceModel,
+  executeTripIntelligenceAction,
+  getLedgerDraftCandidateSuggestionKey,
+  type TripIntelligenceSuggestion,
+} from '../lib/tripIntelligence'
+import type {
+  Day,
+  ItineraryItem,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
+  TicketBlobSyncState,
+  TicketCategory,
+  TicketMeta,
+  TicketScope,
+  TicketStorageMode,
+  Trip,
+} from '../types'
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
@@ -114,6 +136,9 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [days, setDays] = useState<Day[]>([])
   const [items, setItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const [ledgerSettings, setLedgerSettings] = useState<LedgerSettings | null>(null)
+  const [ledgerParticipants, setLedgerParticipants] = useState<LedgerParticipant[]>([])
+  const [ledgerExpenses, setLedgerExpenses] = useState<LedgerExpense[]>([])
   const [storageMode, setStorageMode] = useState<TicketStorageMode>('copy')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
@@ -139,7 +164,13 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [isUploading, setIsUploading] = useState(false)
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
   const [ticketBlobActionId, setTicketBlobActionId] = useState<string | null>(null)
+  const [ticketIntelligenceActionId, setTicketIntelligenceActionId] = useState<string | null>(null)
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<TicketMeta | null>(null)
+  const [pendingExpenseDraft, setPendingExpenseDraft] = useState<{
+    candidate: LedgerExpenseDraftCandidate
+    suggestion: TripIntelligenceSuggestion
+    ticket: TicketMeta
+  } | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -180,6 +211,34 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     () => buildTicketGallerySections(filteredTickets, itemById),
     [filteredTickets, itemById],
   )
+  const ticketLedgerDraftCandidates = useMemo(() => {
+    if (!trip || !ledgerSettings) return []
+    return buildLedgerExpenseDraftCandidates({
+      bookings: [],
+      days,
+      existingExpenses: ledgerExpenses,
+      inboxEntries: [],
+      items,
+      participants: ledgerParticipants,
+      tickets,
+      tripCurrency: ledgerSettings.tripCurrency,
+      tripStartDate: trip.startDate,
+    }).filter((candidate) => candidate.source.kind === 'ticket')
+  }, [days, items, ledgerExpenses, ledgerParticipants, ledgerSettings, tickets, trip])
+  const ledgerDraftCandidateBySuggestionKey = useMemo(() => {
+    return new Map(ticketLedgerDraftCandidates.map((candidate, index) => [
+      getLedgerDraftCandidateSuggestionKey(candidate, index),
+      candidate,
+    ]))
+  }, [ticketLedgerDraftCandidates])
+  const ticketIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
+    items,
+    ledgerDraftCandidates: ticketLedgerDraftCandidates,
+    ticketInput: {
+      ticketBlobSyncStates: Object.values(ticketBlobSyncStates),
+      tickets,
+    },
+  }), [items, ticketBlobSyncStates, ticketLedgerDraftCandidates, tickets])
 
   const defaultBindingTarget = useCallback(
     (loadedItems: ItineraryItem[]) => {
@@ -198,6 +257,9 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       setDays([])
       setItems([])
       setTickets([])
+      setLedgerSettings(null)
+      setLedgerParticipants([])
+      setLedgerExpenses([])
       setLoadError('缺少旅行 ID，请从旅行总览进入票据库。')
       setIsLoading(false)
       return
@@ -213,19 +275,28 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         setDays([])
         setItems([])
         setTickets([])
+        setLedgerSettings(null)
+        setLedgerParticipants([])
+        setLedgerExpenses([])
         setLoadError('没有找到这个旅行，请返回首页重新选择。')
         return
       }
 
-      const [foundDays, foundItems, foundTickets] = await Promise.all([
+      const [foundDays, foundItems, foundTickets, foundLedgerSettings, foundLedgerParticipants, foundLedgerExpenses] = await Promise.all([
         listDaysByTrip(tripId),
         listItemsByTrip(tripId),
         listTicketsByTrip(tripId),
+        getLedgerSettingsByTrip(tripId).catch(() => null),
+        listLedgerParticipants(tripId).catch(() => []),
+        listLedgerExpenses(tripId).catch(() => []),
       ])
       setTrip(foundTrip)
       setDays(foundDays)
       setItems(foundItems)
       setTickets(foundTickets)
+      setLedgerSettings(foundLedgerSettings ?? null)
+      setLedgerParticipants(foundLedgerParticipants)
+      setLedgerExpenses(foundLedgerExpenses)
       setBindingTarget(defaultBindingTarget(foundItems))
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : '读取票据库失败')
@@ -530,6 +601,67 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     }
   }
 
+  function handleTicketIntelligenceAction(suggestion: TripIntelligenceSuggestion) {
+    const ticket = tickets.find((candidate) => suggestion.ticketIds.includes(candidate.id))
+    if (!ticket || !trip) return
+    setActionError(null)
+    setActionMessage(null)
+    if (suggestion.action?.kind === 'ledger_create_expense_draft_from_candidate') {
+      const candidate = ledgerDraftCandidateBySuggestionKey.get(suggestion.key)
+      if (!ledgerSettings || !candidate) {
+        setActionError('先建立旅行账本后，才能从票据生成费用草稿。')
+        return
+      }
+      setPendingExpenseDraft({ candidate, suggestion, ticket })
+      return
+    }
+    if (suggestion.action?.kind === 'ticket_retry_upload_existing_flow') {
+      void handleRetryTicketBlobUpload(ticket)
+      return
+    }
+    if (suggestion.action?.kind === 'ticket_restore_cache_existing_flow') {
+      void handleRestoreTicketCache(ticket)
+      return
+    }
+    if (suggestion.action?.targetRoute === 'documents') {
+      navigateTo('documents', { tab: 'attachments', ticketId: ticket.id, tripId: trip.id })
+      return
+    }
+    setPreviewTicket(null)
+    if (suggestion.action?.kind === 'ticket_open_binding_existing_flow') {
+      setFilter('unassigned')
+      setActionMessage('已定位到未绑定票据；现阶段不会自动改写绑定。')
+      return
+    }
+    setActionMessage('已回到票据库；当前建议只作为整理入口，不会自动改写票据。')
+  }
+
+  async function confirmCreateExpenseDraft() {
+    if (!pendingExpenseDraft || !trip) return
+    setTicketIntelligenceActionId(pendingExpenseDraft.suggestion.id)
+    setActionError(null)
+    setActionMessage(null)
+    try {
+      const result = await executeTripIntelligenceAction({
+        candidate: pendingExpenseDraft.candidate,
+        kind: 'ledger_create_expense_draft_from_candidate',
+        participants: ledgerParticipants,
+        tripId: trip.id,
+      })
+      if (result.status !== 'completed') {
+        setActionError(result.message)
+        return
+      }
+      setPendingExpenseDraft(null)
+      setActionMessage(result.message)
+      await refreshLibrary()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '生成费用草稿失败')
+    } finally {
+      setTicketIntelligenceActionId(null)
+    }
+  }
+
   function resetForm() {
     setSelectedFile(null)
     setTitle('')
@@ -801,9 +933,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       {previewTicket ? (
         <TicketPreview
+          intelligenceActionBusyId={ticketIntelligenceActionId}
+          intelligenceSuggestions={ticketIntelligenceModel.forTicket(previewTicket.id)}
           key={previewTicket.id}
           onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
+          onIntelligenceSuggestionAction={handleTicketIntelligenceAction}
           ticket={previewTicket}
           tickets={filteredTickets}
         />
@@ -825,6 +960,23 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             ? `确认删除「${getTicketDisplayTitle(pendingDeleteTicket)}」吗？`
             : '确认删除这个票据吗？'
         }
+      />
+
+      <ConfirmDialog
+        body={pendingExpenseDraft
+          ? `将为「${getTicketDisplayTitle(pendingExpenseDraft.ticket)}」生成一条待确认费用草稿。不会自动确认、不会计入结算，也不会读取或上传票据文件内容。`
+          : '将生成一条待确认费用草稿。'}
+        cancelLabel="暂不生成"
+        confirmLabel="生成草稿"
+        loading={Boolean(ticketIntelligenceActionId)}
+        onCancel={() => {
+          if (!ticketIntelligenceActionId) {
+            setPendingExpenseDraft(null)
+          }
+        }}
+        onConfirm={() => void confirmCreateExpenseDraft()}
+        open={Boolean(pendingExpenseDraft)}
+        title="从票据生成费用草稿？"
       />
     </div>
   )

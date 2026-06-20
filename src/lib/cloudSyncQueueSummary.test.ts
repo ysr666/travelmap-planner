@@ -5,6 +5,7 @@ import { resetAutoSnapshotBackupForTests, markTripAutoSnapshotSynced } from './a
 import {
   getCloudLoginOnboardingCopy,
   getCloudSyncQueueSummary,
+  getObjectTypeSyncLabel,
 } from './cloudSyncQueueSummary'
 import { putTicketBlobSyncState } from './objectSyncLocal'
 
@@ -67,5 +68,10 @@ describe('cloud sync queue summary', () => {
       detail: expect.stringContaining('正在比对'),
       tone: 'warning',
     })
+  })
+
+  it('labels intelligence sync objects without exposing their contents', () => {
+    expect(getObjectTypeSyncLabel('trip_intelligence_applied_change')).toBe('智能记录')
+    expect(getObjectTypeSyncLabel('trip_intelligence_suggestion_state')).toBe('建议状态')
   })
 })

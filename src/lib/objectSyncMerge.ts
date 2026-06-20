@@ -12,6 +12,8 @@ import type {
   SyncObjectType,
   TicketMeta,
   TripDisruptionEvent,
+  TripIntelligenceAppliedChangeRecord,
+  TripIntelligenceSuggestionStateRecord,
   TripReplanRecord,
   Trip,
 } from '../types'
@@ -173,6 +175,8 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: '默认时区来源', path: 'timeZoneSource' },
     { label: '备注', notes: true, path: 'notes' },
   ],
+  trip_intelligence_applied_change: [],
+  trip_intelligence_suggestion_state: [],
 }
 
 export function mergeObjectPayloadFields({
@@ -188,6 +192,23 @@ export function mergeObjectPayloadFields({
   objectType: SyncObjectType
   remotePayload: SyncObjectPayload
 }): ObjectFieldMergeResult {
+  if (isTripIntelligenceObjectType(objectType)) {
+    const localUpdatedAt = (localPayload as TripIntelligenceAppliedChangeRecord | TripIntelligenceSuggestionStateRecord).updatedAt
+    const remoteUpdatedAt = (remotePayload as TripIntelligenceAppliedChangeRecord | TripIntelligenceSuggestionStateRecord).updatedAt
+    const payload = remoteUpdatedAt > localUpdatedAt
+      ? clonePayload(remotePayload)
+      : remoteUpdatedAt < localUpdatedAt
+        ? clonePayload(localPayload)
+        : stableStringify(remotePayload) > stableStringify(localPayload)
+          ? clonePayload(remotePayload)
+          : clonePayload(localPayload)
+    return {
+      changed: !isSameJsonValue(payload, localPayload),
+      conflicts: [],
+      payload,
+      status: 'merged',
+    }
+  }
   const next = clonePayload(localPayload)
   const conflicts: ObjectSyncConflictField[] = []
   let changed = false
@@ -321,6 +342,8 @@ export function buildObjectConflictLabel(objectType: SyncObjectType, payload?: S
   if (objectType === 'ledger_expense') return (payload as LedgerExpense).title || '旅行费用'
   if (objectType === 'replan_event') return `突发事件：${(payload as TripDisruptionEvent).kind}`
   if (objectType === 'replan_record') return `重排记录：${(payload as TripReplanRecord).selectedOptionId ?? (payload as TripReplanRecord).status}`
+  if (objectType === 'trip_intelligence_applied_change') return '智能记录'
+  if (objectType === 'trip_intelligence_suggestion_state') return '建议状态'
   const ticket = payload as TicketMeta
   return ticket.title || ticket.fileName || '票据'
 }
@@ -335,6 +358,8 @@ export function getObjectTypeLabel(objectType: SyncObjectType) {
   if (objectType === 'ledger_expense') return '旅行费用'
   if (objectType === 'replan_event') return '突发事件'
   if (objectType === 'replan_record') return '重排记录'
+  if (objectType === 'trip_intelligence_applied_change') return '智能记录'
+  if (objectType === 'trip_intelligence_suggestion_state') return '建议状态'
   return '票据'
 }
 
@@ -403,8 +428,12 @@ function clonePayload<T extends SyncObjectPayload | undefined>(payload: T): T {
 
 function touchPayload(payload: SyncObjectPayload, objectType: SyncObjectType, now: number) {
   if (objectType !== 'day') {
-    ;(payload as Trip | ItineraryItem | TicketMeta | LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense | TripDisruptionEvent | TripReplanRecord).updatedAt = now
+    ;(payload as Trip | ItineraryItem | TicketMeta | LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense | TripDisruptionEvent | TripReplanRecord | TripIntelligenceAppliedChangeRecord | TripIntelligenceSuggestionStateRecord).updatedAt = now
   }
+}
+
+function isTripIntelligenceObjectType(objectType: SyncObjectType) {
+  return objectType === 'trip_intelligence_applied_change' || objectType === 'trip_intelligence_suggestion_state'
 }
 
 function stableStringify(value: unknown): string {

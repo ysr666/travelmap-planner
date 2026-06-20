@@ -6,6 +6,7 @@ import {
   Clock3,
   Cloud,
   EyeOff,
+  FileLock2,
   FileText,
   History,
   Inbox,
@@ -38,9 +39,8 @@ import {
   type TripDailyTravelTipEnhancedPreview,
   type TripDailyTravelTipModel,
 } from '../../lib/ai/tripDailyTravelTip'
-import type { ExistingTripImportAppliedChange, ExistingTripImportPreview } from '../../lib/ai/existingTripImport'
+import type { ExistingTripImportPreview } from '../../lib/ai/existingTripImport'
 import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION } from '../../lib/ai/providerProxyContract'
-import { applyTravelInboxPreviewRecord } from '../../lib/ai/travelInboxApply'
 import {
   fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyTripOperationsSummary,
@@ -48,21 +48,29 @@ import {
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
 import type { TripOperationsModel, TripOperationsRecommendation } from '../../lib/tripOperationsAgent'
-import { executeTripOperationsRecommendations } from '../../lib/tripOperationsExecutor'
+import type { ExecuteTripOperationsRecommendationsResult } from '../../lib/tripOperationsExecutor'
 import {
-  appendTripOperationsExecutionRecord,
   clearTripOperationsExecutionHistory,
-  createTripOperationsExecutionRecord,
   restoreTripOperationsRecommendation,
   setTripOperationsDisposition,
   type TripOperationsAppliedChange,
-  type TripOperationsExecutionResult,
   type TripOperationsExecutionSource,
   type TripOperationsLocalState,
 } from '../../lib/tripOperationsState'
 import { navigateTo } from '../../lib/routes'
 import { navigateToTripOperationsRecommendation } from '../../lib/tripOperationsNavigation'
-import type { TripIntelligenceModel, TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
+import {
+  appendTripIntelligenceExecutionRecord,
+  executeTripIntelligenceAction,
+  formatTripIntelligenceAppliedActionLabel,
+  getTripIntelligenceAppliedChangesForRecord,
+  mapTripOperationsAppliedChange,
+  type ExecuteTripIntelligenceActionResult,
+  type TripIntelligenceActionResult,
+  type TripIntelligenceAppliedChange,
+  type TripIntelligenceModel,
+  type TripIntelligenceSuggestion,
+} from '../../lib/tripIntelligence'
 import type { TripReadinessModel } from '../../lib/tripReadiness'
 import { getZonedPlainDate, resolveTripTimeZone } from '../../lib/timeZone'
 import { Button } from '../ui/Button'
@@ -114,7 +122,7 @@ export function TripOperationsPanel({
   const providerConfig = useMemo(() => getProviderProxyConfig(), [])
   const [pendingRecommendations, setPendingRecommendations] = useState<TripOperationsRecommendation[] | null>(null)
   const [isRunning, setIsRunning] = useState(false)
-  const [executionResult, setExecutionResult] = useState<TripOperationsExecutionResult | null>(null)
+  const [executionResult, setExecutionResult] = useState<TripIntelligenceActionResult | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [generatedPreview, setGeneratedPreview] = useState<PendingGeneratedPreview | null>(null)
   const [contentApplyConfirmOpen, setContentApplyConfirmOpen] = useState(false)
@@ -213,22 +221,26 @@ export function TripOperationsPanel({
     setIsRunning(true)
     resetTransientMessages()
     try {
-      const result = await executeTripOperationsRecommendations({
-        allItems,
-        dailyTipModel,
-        days,
-        itemsByDay,
-        providerConfig,
-        readinessModel,
-        recommendations,
-        tickets,
-        trip,
+      const result = await executeTripIntelligenceAction({
+        kind: 'trip_operations_execute',
+        operation: {
+          allItems,
+          dailyTipModel,
+          days,
+          itemsByDay,
+          providerConfig,
+          readinessModel,
+          recommendations,
+          tickets,
+          trip,
+        },
       })
       setExecutionResult(result)
       setPendingRecommendations(null)
-      if (result.pendingPreviews.length > 0) {
-        const content = result.pendingPreviews.find((preview) => preview.contentPreview)
-        const dailyTip = result.pendingPreviews.find((preview) => preview.dailyTipPreview)
+      const operationsResult = result.operationsResult
+      if (operationsResult?.pendingPreviews.length) {
+        const content = operationsResult.pendingPreviews.find((preview) => preview.contentPreview)
+        const dailyTip = operationsResult.pendingPreviews.find((preview) => preview.dailyTipPreview)
         setGeneratedPreview({
           contentFingerprint: content?.fingerprint,
           contentPreview: content?.contentPreview ?? null,
@@ -236,7 +248,14 @@ export function TripOperationsPanel({
           dailyTipPreview: dailyTip?.dailyTipPreview ?? null,
         })
       }
-      commitExecutionResult(recommendations, result, recommendations.length > 1 ? '批量处理旅行建议' : recommendations[0].title)
+      if (operationsResult) {
+        commitExecutionResult(
+          recommendations,
+          operationsResult,
+          result,
+          recommendations.length > 1 ? '批量处理旅行建议' : recommendations[0].title,
+        )
+      }
       await onChanged({ refreshTripData: false })
     } catch (error) {
       setOperationError(toErrorMessage(error, '执行建议失败。'))
@@ -247,7 +266,8 @@ export function TripOperationsPanel({
 
   function commitExecutionResult(
     recommendations: TripOperationsRecommendation[],
-    result: TripOperationsExecutionResult,
+    result: ExecuteTripOperationsRecommendationsResult,
+    intelligenceResult: ExecuteTripIntelligenceActionResult,
     title: string,
   ) {
     const zonedDate = getZonedPlainDate(new Date(), resolveTripTimeZone(trip))
@@ -267,12 +287,13 @@ export function TripOperationsPanel({
       completedFingerprints.push(recommendation.fingerprint)
     }
     if (result.appliedChanges.length > 0) {
-      nextState = appendTripOperationsExecutionRecord(nextState, createTripOperationsExecutionRecord({
-        appliedChanges: result.appliedChanges,
+      nextState = appendTripIntelligenceExecutionRecord(nextState, {
         fingerprints: completedFingerprints,
+        intelligenceAppliedChanges: intelligenceResult.appliedChanges,
+        legacyAppliedChanges: result.appliedChanges,
         status: result.outcomes.some((outcome) => outcome.status === 'failed' || outcome.status === 'partial') ? 'partial' : 'success',
         title,
-      }))
+      })
     }
     if (nextState !== localState) onLocalStateChange(nextState)
   }
@@ -303,10 +324,15 @@ export function TripOperationsPanel({
         target: 'item',
         title: item.itemTitle,
       }))
-      completePreviewRecommendation(generatedPreview.contentFingerprint, changes, '应用景点内容预览')
+      const intelligenceChanges = changes.map((change) => mapTripOperationsAppliedChange(change))
+      completePreviewRecommendation(generatedPreview.contentFingerprint, changes, '应用景点内容预览', 'trip_operations', intelligenceChanges)
       setGeneratedPreview((current) => current ? { ...current, contentPreview: null } : null)
       setContentApplyConfirmOpen(false)
-      setExecutionResult({ appliedChanges: changes, outcomes: [] })
+      setExecutionResult({
+        appliedChanges: intelligenceChanges,
+        message: '已应用景点内容预览。',
+        status: 'completed',
+      })
       await onChanged({ refreshTripData: true })
     } finally {
       setIsApplyingContent(false)
@@ -336,10 +362,15 @@ export function TripOperationsPanel({
         target: dailyTipModel?.targetDay ? 'day' : 'trip',
         title: dailyTipPreview.targetTitle,
       }]
-      completePreviewRecommendation(generatedPreview.dailyTipFingerprint, changes, '保存每日旅行提示')
+      const intelligenceChanges = changes.map((change) => mapTripOperationsAppliedChange(change))
+      completePreviewRecommendation(generatedPreview.dailyTipFingerprint, changes, '保存每日旅行提示', 'trip_operations', intelligenceChanges)
       setGeneratedPreview((current) => current ? { ...current, dailyTipPreview: null } : null)
       setDailyTipSaveConfirmOpen(false)
-      setExecutionResult({ appliedChanges: changes, outcomes: [] })
+      setExecutionResult({
+        appliedChanges: intelligenceChanges,
+        message: '已保存每日旅行提示。',
+        status: 'completed',
+      })
       await onChanged({ refreshTripData: true })
     } finally {
       setIsSavingDailyTip(false)
@@ -351,6 +382,7 @@ export function TripOperationsPanel({
     changes: TripOperationsAppliedChange[],
     title: string,
     source: TripOperationsExecutionSource = 'trip_operations',
+    intelligenceChanges: TripIntelligenceAppliedChange[] = changes.map((change) => mapTripOperationsAppliedChange(change)),
   ) {
     const recommendation = recommendationByFingerprint.get(fingerprint)
     if (!recommendation || changes.length === 0) return
@@ -362,13 +394,14 @@ export function TripOperationsPanel({
       status: 'completed',
       zonedDate,
     })
-    onLocalStateChange(appendTripOperationsExecutionRecord(completed, createTripOperationsExecutionRecord({
-      appliedChanges: changes,
+    onLocalStateChange(appendTripIntelligenceExecutionRecord(completed, {
       fingerprints: [fingerprint],
+      intelligenceAppliedChanges: intelligenceChanges,
+      legacyAppliedChanges: changes,
       source,
       status: 'success',
       title,
-    })))
+    }))
   }
 
   function prepareAiPatch(recommendation: TripOperationsRecommendation) {
@@ -440,8 +473,15 @@ export function TripOperationsPanel({
         target: change.itemId ? 'item' : 'day',
         title: change.title,
       }))
-      completePreviewRecommendation(aiRecommendation.fingerprint, changes, aiRecommendation.title, 'ai_trip_edit')
-      setExecutionResult({ appliedChanges: changes, outcomes: [] })
+      const intelligenceChanges = changes.map((change) => mapTripOperationsAppliedChange(change, {
+        source: { id: 'ai_trip_edit', kind: 'operations', label: 'AI Trip Edit' },
+      }))
+      completePreviewRecommendation(aiRecommendation.fingerprint, changes, aiRecommendation.title, 'ai_trip_edit', intelligenceChanges)
+      setExecutionResult({
+        appliedChanges: intelligenceChanges,
+        message: '已应用 AI 修改方案。',
+        status: 'completed',
+      })
       clearAiPatch()
       await onChanged({ refreshTripData: true })
     } finally {
@@ -454,17 +494,20 @@ export function TripOperationsPanel({
     setIsApplyingInbox(true)
     setOperationError(null)
     try {
-      const result = await applyTravelInboxPreviewRecord({ record: activeInboxPreview })
-      if (!result.ok) {
-        setOperationError(result.errors.join('；'))
+      const result = await executeTripIntelligenceAction({
+        kind: 'travel_inbox_apply_preview',
+        record: activeInboxPreview,
+      })
+      if (result.status === 'failed' || !result.inboxResult?.ok) {
+        setOperationError(result.message)
         setInboxApplyConfirmOpen(false)
         return
       }
-      const changes = result.appliedChanges.map(mapInboxAppliedChange)
+      const changes = result.legacyAppliedChanges ?? []
       if (changes.length > 0) {
-        completePreviewRecommendation(inboxRecommendation.fingerprint, changes, inboxRecommendation.title, 'travel_inbox')
+        completePreviewRecommendation(inboxRecommendation.fingerprint, changes, inboxRecommendation.title, 'travel_inbox', result.appliedChanges)
       }
-      setExecutionResult({ appliedChanges: changes, outcomes: [] })
+      setExecutionResult(result)
       setInboxApplyConfirmOpen(false)
       setInboxRecommendation(null)
       await onChanged({ refreshTripData: true })
@@ -663,7 +706,7 @@ export function TripOperationsPanel({
           </div>
         ) : null}
 
-        {executionResult ? <ExecutionResult changes={executionResult.appliedChanges} outcomes={executionResult.outcomes} /> : null}
+        {executionResult ? <ExecutionResult result={executionResult} /> : null}
 
         {aiSummaryMessage ? (
           <div className="rounded-lg bg-surface-container-high px-3 py-2 text-xs leading-5 tm-muted" data-testid="trip-operations-ai-summary">
@@ -693,7 +736,7 @@ export function TripOperationsPanel({
         ) : null}
 
         {localState.history.length > 0 ? (
-          <Collapsible subtitle="最近 20 条，仅保存在本机。" title="完成了什么">
+          <Collapsible subtitle="最近 20 条，可随账号同步。" title="完成了什么">
             <div className="space-y-3" data-testid="trip-operations-history">
               <div className="flex justify-end">
                 <Button className="min-h-11 px-3 text-xs" icon={<Trash2 className="size-3.5" />} onClick={clearHistory} variant="ghost">清空历史</Button>
@@ -705,14 +748,14 @@ export function TripOperationsPanel({
                     <p className="text-xs font-semibold text-on-surface">{record.title}</p>
                     <span className="text-[11px] tm-muted">{executionSourceLabel(record.source)} · {formatHistoryTime(record.createdAt)}</span>
                   </div>
-                  {record.appliedChanges.map((change, index) => (
+                  {getTripIntelligenceAppliedChangesForRecord(record).map((change, index) => (
                     <button
                       className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2 text-left text-xs hover:bg-surface-container-high tm-focus"
-                      key={`${change.action}-${change.itemId ?? change.ticketId ?? change.dayId ?? index}`}
-                      onClick={() => navigateToAppliedChange(change, trip.id)}
+                      key={`${change.id}-${index}`}
+                      onClick={() => navigateToAppliedChange(change, trip.id, record.appliedChanges[index])}
                       type="button"
                     >
-                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{appliedActionLabel(change.action)} · {change.title} · {change.detail}</span>
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{formatTripIntelligenceAppliedActionLabel(change.actionType)} · {change.title}{change.detail ? ` · ${change.detail}` : ''}</span>
                       <span className="shrink-0 text-primary">查看</span>
                     </button>
                   ))}
@@ -921,15 +964,29 @@ function ReplanTimeline({ entries }: { entries: TripOperationsModel['replanTimel
   )
 }
 
-function ExecutionResult({ changes, outcomes }: { changes: TripOperationsAppliedChange[]; outcomes: TripOperationsExecutionResult['outcomes'] }) {
-  const errors = outcomes.flatMap((outcome) => outcome.errors)
-  const messages = outcomes.flatMap((outcome) => outcome.messages)
-  if (changes.length === 0 && errors.length === 0 && messages.length === 0) return null
+function ExecutionResult({ result }: { result: TripIntelligenceActionResult }) {
+  const changes = result.appliedChanges
+  if (changes.length === 0 && !result.message) return null
   return (
     <div className="space-y-2 rounded-lg bg-sky-50/75 px-3 py-2 text-xs leading-5 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200" data-testid="trip-operations-result">
-      {changes.map((change, index) => <p className="flex items-start gap-2" key={`${change.action}-${index}`}><CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /><span>{change.title}：{change.detail}</span></p>)}
-      {changes.length === 0 ? messages.map((message) => <p key={message}>{message}</p>) : null}
-      {errors.map((error, index) => <p className="flex items-start gap-2 text-amber-700 dark:text-amber-200" key={`${error}-${index}`}><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>{error}</span></p>)}
+      {changes.map((change) => (
+        <p className="flex items-start gap-2" key={change.id}>
+          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+          <span>{change.title}{change.detail ? `：${change.detail}` : ''}</span>
+        </p>
+      ))}
+      {changes.length === 0 && result.message ? (
+        <p className={result.status === 'failed' ? 'flex items-start gap-2 text-amber-700 dark:text-amber-200' : undefined}>
+          {result.status === 'failed' ? <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> : null}
+          <span>{result.message}</span>
+        </p>
+      ) : null}
+      {changes.length > 0 && result.status !== 'completed' && result.message ? (
+        <p className="flex items-start gap-2 text-amber-700 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{result.message}</span>
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -956,55 +1013,53 @@ function describeInboxPreview(record: TravelInboxPreviewRecord) {
   return `将应用 ${selected.length} 项已勾选修改${summaries ? `：${summaries}` : ''}。写入前会重新校验行程基线。`
 }
 
-function mapInboxAppliedChange(change: ExistingTripImportAppliedChange): TripOperationsAppliedChange {
-  const target = change.kind === 'ticket' ? 'tickets' : change.kind === 'item' ? 'item' : change.kind === 'day' ? 'day' : 'trip'
-  const action: TripOperationsAppliedChange['action'] = change.kind === 'ticket'
-    ? change.action === 'bound' ? 'bound_ticket' : 'merged_ticket'
-    : change.kind === 'item'
-      ? change.action === 'created' ? 'created_item' : 'updated_item'
-      : change.kind === 'day'
-        ? 'updated_day'
-        : 'updated_trip'
-  return {
-    action,
-    dayId: change.dayId,
-    detail: `${inboxActionLabel(change.action)}收件箱内容。`,
-    itemId: change.itemId,
-    occurredAt: Date.now(),
-    target,
-    ticketId: change.ticketId,
-    title: change.title,
-  }
-}
-
-function inboxActionLabel(action: ExistingTripImportAppliedChange['action']) {
-  if (action === 'created') return '已创建'
-  if (action === 'bound') return '已绑定'
-  if (action === 'merged') return '已合并'
-  if (action === 'appended') return '已追加'
-  return '已更新'
-}
-
-function navigateToAppliedChange(change: TripOperationsAppliedChange, tripId: string) {
-  if (change.target === 'item' && change.itemId && change.dayId) {
-    navigateTo('item', { dayId: change.dayId, itemId: change.itemId, tripId })
+function navigateToAppliedChange(
+  change: TripIntelligenceAppliedChange,
+  tripId: string,
+  legacyChange?: TripOperationsAppliedChange,
+) {
+  if (legacyChange?.target === 'item' && legacyChange.itemId && legacyChange.dayId) {
+    navigateTo('item', { dayId: legacyChange.dayId, itemId: legacyChange.itemId, tripId })
     return
   }
-  if (change.target === 'day' && change.dayId) {
-    navigateTo('day', { dayId: change.dayId, tripId, view: 'schedule' })
+  if (legacyChange?.target === 'day' && legacyChange.dayId) {
+    navigateTo('day', { dayId: legacyChange.dayId, tripId, view: 'schedule' })
     return
   }
-  if (change.target === 'tickets') {
+  if (legacyChange?.target === 'tickets') {
     navigateTo('tickets', { tripId })
     return
   }
-  if (change.target === 'sync_settings') {
+  if (legacyChange?.target === 'sync_settings') {
     navigateTo('settings', { section: 'cloud' })
     return
   }
-  if (change.target === 'route_settings') {
+  if (legacyChange?.target === 'route_settings') {
     navigateTo('settings')
     return
+  }
+  if (change.targetType === 'day' && change.targetId) {
+    navigateTo('day', { dayId: change.targetId, tripId, view: 'schedule' })
+    return
+  }
+  if (change.targetType === 'ticket') {
+    navigateTo('tickets', { tripId })
+    return
+  }
+  if (change.targetType === 'sync') {
+    navigateTo('settings', { section: 'cloud' })
+    return
+  }
+  if (change.targetType === 'finance') {
+    navigateTo('ledger', { tripId })
+    return
+  }
+  if (change.targetType === 'inbox') {
+    navigateTo('inbox')
+    return
+  }
+  if (change.targetType === 'live') {
+    if (scrollToTripElement('trip-live-mode-card')) return
   }
   navigateTo('trip', { tripId })
 }
@@ -1026,6 +1081,10 @@ function navigateToIntelligenceSuggestion(
   }
   if (suggestion.scope === 'ticket') {
     navigateTo('tickets', { tripId })
+    return
+  }
+  if (suggestion.scope === 'document') {
+    navigateTo('documents', { tripId })
     return
   }
   if (suggestion.scope === 'shared_trip') {
@@ -1085,6 +1144,7 @@ function recommendationIcon(recommendation: TripOperationsRecommendation) {
 
 function suggestionIcon(suggestion: TripIntelligenceSuggestion) {
   if (suggestion.scope === 'inbox') return <Inbox className="size-3.5 shrink-0 text-primary" />
+  if (suggestion.scope === 'document') return <FileLock2 className="size-3.5 shrink-0 text-teal-600" />
   if (suggestion.scope === 'ticket') return <Ticket className="size-3.5 shrink-0 text-violet-600" />
   if (suggestion.scope === 'sync') return <Cloud className="size-3.5 shrink-0 text-slate-600" />
   if (suggestion.scope === 'finance') return <FileText className="size-3.5 shrink-0 text-emerald-600" />
@@ -1098,6 +1158,8 @@ function sourceLabel(source: TripIntelligenceSuggestion['source']['kind']) {
   if (source === 'readiness') return '出行前检查'
   if (source === 'inbox') return '旅行材料'
   if (source === 'live') return '今日现场'
+  if (source === 'document') return '旅行资料'
+  if (source === 'ticket') return '票据库'
   if (source === 'ledger') return '旅行账本'
   return '同行共享'
 }
@@ -1129,22 +1191,6 @@ function executionSourceLabel(source: TripOperationsExecutionSource) {
   if (source === 'ai_trip_edit') return 'AI 修改方案'
   if (source === 'travel_inbox') return '旅行收件箱'
   return '执行代理'
-}
-
-function appliedActionLabel(action: TripOperationsAppliedChange['action']) {
-  if (action === 'generated_route') return '生成路线'
-  if (action === 'retried_ticket_upload') return '重试上传'
-  if (action === 'cleared_ticket_cache') return '清理缓存'
-  if (action === 'saved_daily_tip') return '保存提示'
-  if (action === 'updated_content') return '补充内容'
-  if (action === 'bound_ticket') return '绑定票据'
-  if (action === 'merged_ticket') return '合并票据'
-  if (action === 'created_item') return '创建行程点'
-  if (action === 'removed_item') return '删除行程点'
-  if (action === 'reordered_day') return '调整顺序'
-  if (action === 'updated_day') return '更新日期'
-  if (action === 'updated_trip') return '更新旅行'
-  return '更新行程点'
 }
 
 function buildTripOperationsSummaryRequest(model: TripOperationsModel, trip: Trip) {

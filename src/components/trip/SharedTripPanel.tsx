@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Copy, Link2, Loader2, RefreshCw, ShieldCheck, UserRoundPlus, UsersRound, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Copy, Link2, Loader2, RefreshCw, ShieldCheck, UserRoundPlus, UsersRound, XCircle } from 'lucide-react'
 import {
   createSharedTripInvite,
   getCompanionPermissionLabel,
@@ -12,7 +12,8 @@ import {
   type OwnerSharedTripState,
 } from '../../lib/companion'
 import { navigateTo } from '../../lib/routes'
-import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, TicketMeta, Trip } from '../../types'
+import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
+import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, SharedTripMutation, TicketMeta, Trip } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
@@ -42,6 +43,10 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   const pendingMutationCount = state?.configured && state.signedIn
     ? state.mutations.filter((mutation) => mutation.status === 'pending').length
     : 0
+  const sharedTripIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
+    sharedMutations: state?.configured && state.signedIn ? state.mutations : [],
+  }), [state])
+  const sharedTripSuggestions = sharedTripIntelligenceModel.forSharedTrip()
 
   async function refresh() {
     try {
@@ -106,6 +111,23 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
     })
   }
 
+  function handleSharedTripSuggestion(suggestion: TripIntelligenceSuggestion) {
+    if (suggestion.action?.kind === 'open_adaptive_replan') {
+      setError(null)
+      setMessage('撤销重排请求需要在 Live Mode / 重排记录中确认，当前不会自动撤销。')
+      return
+    }
+    const mutation = state?.configured && state.signedIn
+      ? state.mutations.find((entry) => entry.id === suggestion.source.id)
+      : undefined
+    if (mutation?.status === 'pending' && mutation.mutationType !== 'request_replan_undo') {
+      void handleSync()
+      return
+    }
+    setError(null)
+    setMessage('请在下方协作修改记录中查看处理状态；不会自动重放已冲突或未应用的更改。')
+  }
+
   return (
     <Card className="space-y-4" data-testid="shared-trip-panel" id="shared-trip-panel" variant="grouped">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -157,6 +179,13 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
             <SummaryCell label="行程点" value={`${itemCount} 个`} />
             <SummaryCell label="票据摘要" value={`${tickets.length} 条`} />
           </div>
+
+          {sharedTripSuggestions.length > 0 ? (
+            <SharedTripIntelligencePanel
+              onAction={handleSharedTripSuggestion}
+              suggestions={sharedTripSuggestions}
+            />
+          ) : null}
 
           <div className="flex flex-wrap gap-2">
             <Button
@@ -267,6 +296,10 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
               <Collapsible title={`同行人动态（${state.activities.length}）`}>
                 <ActivityList activities={state.activities} />
               </Collapsible>
+
+              <Collapsible title={`协作修改（${state.mutations.length}）`}>
+                <MutationList mutations={state.mutations} />
+              </Collapsible>
             </>
           ) : null}
         </>
@@ -296,6 +329,39 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
   )
 }
 
+function SharedTripIntelligencePanel({
+  onAction,
+  suggestions,
+}: {
+  onAction: (suggestion: TripIntelligenceSuggestion) => void
+  suggestions: TripIntelligenceSuggestion[]
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border border-outline-variant/30 bg-surface-container-low p-3" data-testid="shared-trip-intelligence-panel">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-on-surface">同行待处理</h4>
+        <span className="text-xs font-semibold text-primary">{suggestions.length} 项</span>
+      </div>
+      {suggestions.map((suggestion) => (
+        <button
+          className="flex min-h-11 w-full items-start gap-3 rounded-lg bg-surface px-3 py-2 text-left tm-focus"
+          data-testid="shared-trip-intelligence-action"
+          key={suggestion.id}
+          onClick={() => onAction(suggestion)}
+          type="button"
+        >
+          <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+            <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function ActivityList({ activities }: { activities: SharedTripActivity[] }) {
   return (
     <div className="space-y-2" data-testid="shared-trip-activity">
@@ -305,6 +371,20 @@ function ActivityList({ activities }: { activities: SharedTripActivity[] }) {
           <p className="text-sm font-semibold text-on-surface">{activity.displayName || '同行人'}</p>
           <p className="mt-0.5 text-xs leading-5 tm-muted">{formatActivity(activity)}</p>
           <p className="mt-1 text-[11px] font-semibold text-on-surface-variant">{formatDateTime(activity.createdAt)}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MutationList({ mutations }: { mutations: SharedTripMutation[] }) {
+  return (
+    <div className="space-y-2" data-testid="shared-trip-mutations">
+      {mutations.length === 0 ? <p className="text-xs tm-muted">还没有协作修改。</p> : null}
+      {mutations.map((mutation) => (
+        <div className="rounded-lg bg-surface-container-low px-3 py-2" key={mutation.id}>
+          <p className="text-sm font-semibold text-on-surface">{mutationTypeLabel(mutation.mutationType)}</p>
+          <p className="mt-0.5 text-xs leading-5 tm-muted">{mutationStatusLabel(mutation.status)} · {formatDateTime(mutation.createdAt)}</p>
         </div>
       ))}
     </div>
@@ -321,6 +401,23 @@ function formatActivity(activity: { activityType: string; body?: string }) {
   if (activity.activityType === 'rejected_change') return '修改未应用'
   if (activity.activityType === 'published') return '更新了共享行程'
   return '更新了同行动态'
+}
+
+function mutationTypeLabel(type: SharedTripMutation['mutationType']) {
+  if (type === 'create_item') return '新增行程'
+  if (type === 'delete_item') return '删除行程'
+  if (type === 'reorder_day_items') return '调整顺序'
+  if (type === 'report_disruption') return '突发报告'
+  if (type === 'request_replan_undo') return '撤销重排请求'
+  if (type === 'update_item_execution_state') return '现场状态更新'
+  return '行程修改'
+}
+
+function mutationStatusLabel(status: SharedTripMutation['status']) {
+  if (status === 'applied') return '已应用'
+  if (status === 'conflict') return '存在冲突'
+  if (status === 'rejected') return '未应用'
+  return '待处理'
 }
 
 function formatDateTime(value: string) {

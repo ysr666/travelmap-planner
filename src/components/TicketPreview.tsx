@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
 import {
   describeTicketMetaLine,
@@ -10,10 +10,14 @@ import {
   ticketStorageModeLabels,
 } from '../lib/tickets'
 import type { TicketMeta } from '../types'
+import type { TripIntelligenceSuggestion } from '../lib/tripIntelligence'
 import { TicketThumbnail } from './tickets/TicketThumbnail'
 import { useModalAccessibility } from './ui/useModalAccessibility'
 
 type TicketPreviewProps = {
+  intelligenceActionBusyId?: string | null
+  intelligenceSuggestions?: TripIntelligenceSuggestion[]
+  onIntelligenceSuggestionAction?: (suggestion: TripIntelligenceSuggestion) => void
   ticket: TicketMeta
   onClose: () => void
   onChangeTicket?: (ticket: TicketMeta) => void
@@ -30,7 +34,15 @@ type BlobPreviewState = {
 
 const SWIPE_THRESHOLD = 50
 
-export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: TicketPreviewProps) {
+export function TicketPreview({
+  intelligenceActionBusyId,
+  intelligenceSuggestions = [],
+  onIntelligenceSuggestionAction,
+  ticket,
+  onClose,
+  onChangeTicket,
+  tickets,
+}: TicketPreviewProps) {
   const storageMode = getTicketStorageMode(ticket)
   const displayTitle = getTicketDisplayTitle(ticket)
   const [blobState, setBlobState] = useState<BlobPreviewState>({
@@ -334,6 +346,36 @@ export function TicketPreview({ ticket, onClose, onChangeTicket, tickets }: Tick
 
         {/* ── Bottom action bar ── */}
         <div className="flex shrink-0 flex-col gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {intelligenceSuggestions.length > 0 ? (
+            <div className="space-y-2 rounded-2xl bg-white/10 p-3 text-white ring-1 ring-white/10" data-testid="ticket-preview-intelligence">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-sky-200" />
+                <p className="text-xs font-semibold text-slate-100">这张票据可以处理</p>
+              </div>
+              <div className="space-y-1.5">
+                {intelligenceSuggestions.slice(0, 4).map((suggestion) => (
+                  <button
+                    className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-white/10 px-3 py-2 text-left ring-1 ring-white/10 transition active:scale-[0.99] disabled:opacity-60"
+                    data-testid="ticket-preview-intelligence-action"
+                    disabled={!onIntelligenceSuggestionAction || intelligenceActionBusyId === suggestion.id}
+                    key={suggestion.id}
+                    onClick={() => onIntelligenceSuggestionAction?.(suggestion)}
+                    type="button"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-white">{suggestion.title}</span>
+                      <span className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-300">{suggestion.message}</span>
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-950">
+                      {suggestion.requiresConfirmation ? <ShieldCheck className="size-3" /> : null}
+                      {intelligenceActionBusyId === suggestion.id ? '处理中' : suggestion.action?.label ?? '查看'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {storageMode === 'copy' ? (
             <>
               {canOpenInNewTab ? (

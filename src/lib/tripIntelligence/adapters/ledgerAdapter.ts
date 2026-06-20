@@ -1,4 +1,5 @@
 import type { LedgerReviewEntry } from '../../ledgerReview'
+import type { LedgerExpenseDraftCandidate } from '../../ledgerExtraction'
 import type { TripIntelligenceSuggestion } from '../types'
 
 export function mapLedgerReviewEntriesToSuggestions(entries: LedgerReviewEntry[] = []): TripIntelligenceSuggestion[] {
@@ -33,4 +34,47 @@ export function mapLedgerReviewEntriesToSuggestions(entries: LedgerReviewEntry[]
       title: entry.buckets.includes('duplicate') ? '费用可能重复' : '费用待确认',
     } satisfies TripIntelligenceSuggestion
   })
+}
+
+export function mapLedgerDraftCandidatesToSuggestions(candidates: LedgerExpenseDraftCandidate[] = []): TripIntelligenceSuggestion[] {
+  return candidates.map((candidate, index) => {
+    const key = getLedgerDraftCandidateSuggestionKey(candidate, index)
+    const sourceLabel = getCandidateSourceLabel(candidate)
+    return {
+      action: {
+        kind: 'ledger_create_expense_draft_from_candidate',
+        label: '生成费用草稿',
+        mode: 'confirm_required',
+        sourceActionKind: 'ledger_draft_candidate',
+        targetRoute: 'ledger',
+      },
+      affectedDayIds: [],
+      affectedItemIds: candidate.itemIds,
+      id: key,
+      key,
+      message: `${sourceLabel}「${candidate.title}」可生成待确认费用草稿，确认后再进入账本审核。`,
+      priority: candidate.source.kind === 'ticket' ? 18 : 24,
+      requiresConfirmation: true,
+      requiresPreview: false,
+      scope: 'finance',
+      severity: candidate.amountMinor == null || candidate.warnings.length > 0 ? 'medium' : 'low',
+      source: { id: key, kind: 'ledger', label: 'draft_candidate' },
+      status: 'needs_confirmation',
+      ticketIds: candidate.source.kind === 'ticket' && candidate.source.sourceId ? [candidate.source.sourceId] : [],
+      title: '可生成费用草稿',
+    } satisfies TripIntelligenceSuggestion
+  })
+}
+
+export function getLedgerDraftCandidateSuggestionKey(candidate: LedgerExpenseDraftCandidate, fallbackIndex = 0) {
+  const sourceId = candidate.source.sourceId ?? candidate.source.fingerprint ?? String(fallbackIndex)
+  return `ledger:candidate:${candidate.source.kind}:${sourceId}`
+}
+
+function getCandidateSourceLabel(candidate: LedgerExpenseDraftCandidate) {
+  if (candidate.source.kind === 'ticket') return '票据'
+  if (candidate.source.kind === 'inbox') return '旅行材料'
+  if (candidate.source.kind === 'transport_booking') return '交通订单'
+  if (candidate.source.kind === 'itinerary_note') return '行程备注'
+  return '来源'
 }

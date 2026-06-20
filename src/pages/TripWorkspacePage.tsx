@@ -41,6 +41,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { useLiveClock } from '../hooks/useLiveClock'
+import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
 import { ensureDaysForTrip, formatDate, formatDateRange } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -60,9 +61,6 @@ import { buildTripOperationsModel, type TripOperationsInboxSummary } from '../li
 import { buildTripIntelligenceModel } from '../lib/tripIntelligence'
 import type { ExistingTripImportPreview } from '../lib/ai/existingTripImport'
 import {
-  createEmptyTripOperationsLocalState,
-  readTripOperationsLocalState,
-  writeTripOperationsLocalState,
   type TripOperationsLocalState,
 } from '../lib/tripOperationsState'
 import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
@@ -113,7 +111,6 @@ export function TripWorkspacePage() {
   const [tripDisruptionEvents, setTripDisruptionEvents] = useState<TripDisruptionEvent[]>([])
   const [tripReplanRecords, setTripReplanRecords] = useState<TripReplanRecord[]>([])
   const [sharedTripMutations, setSharedTripMutations] = useState<SharedTripMutation[]>([])
-  const [tripOperationsLocalStates, setTripOperationsLocalStates] = useState<Record<string, TripOperationsLocalState>>({})
   const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
   const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
   const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
@@ -137,16 +134,12 @@ export function TripWorkspacePage() {
     return `${trip.id}:${days.map((day) => day.id).join('|')}`
   }, [days, trip])
 
-  const tripOperationsStateTripId = trip?.id
-  const storedTripOperationsLocalState = useMemo(
-    () => tripOperationsStateTripId
-      ? readTripOperationsLocalState(tripOperationsStateTripId)
-      : createEmptyTripOperationsLocalState(),
-    [tripOperationsStateTripId],
-  )
-  const tripOperationsLocalState = trip
-    ? tripOperationsLocalStates[trip.id] ?? storedTripOperationsLocalState
-    : storedTripOperationsLocalState
+  const {
+    isLoaded: isTripIntelligenceStateLoaded,
+    localState: tripOperationsLocalState,
+    suggestionStates: tripIntelligenceSuggestionStates,
+    updateLocalState: updateTripOperationsLocalState,
+  } = useTripIntelligencePersistence(trip?.id)
 
   useEffect(() => {
     if (!isLoading && trip && selectedDay && (requestedView === 'schedule' || requestedView === 'map')) {
@@ -397,10 +390,12 @@ export function TripWorkspacePage() {
       operationsModel: tripOperationsModel,
       readinessModel,
       sharedMutations: sharedTripMutations,
+      suggestionStates: tripIntelligenceSuggestionStates,
     })
   }, [
     readinessModel,
     sharedTripMutations,
+    tripIntelligenceSuggestionStates,
     trip,
     tripOperationsInboxSummary,
     tripOperationsInboxPreview,
@@ -435,8 +430,7 @@ export function TripWorkspacePage() {
 
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
     if (!trip) return
-    const stored = writeTripOperationsLocalState(trip.id, nextState)
-    setTripOperationsLocalStates((current) => ({ ...current, [trip.id]: stored }))
+    updateTripOperationsLocalState(nextState)
   }
 
   async function handleGenerateDays() {
@@ -615,7 +609,7 @@ export function TripWorkspacePage() {
               />
             </section>
 
-            {readinessModel && tripOperationsModel ? (
+            {isTripIntelligenceStateLoaded && readinessModel && tripOperationsModel ? (
               <TripOperationsPanel
                 activeInboxPreview={tripOperationsInboxPreview}
                 allItems={allItems}
@@ -634,15 +628,17 @@ export function TripWorkspacePage() {
             ) : null}
 
             <section className="flex flex-col gap-stack-gap">
-              {liveDay && tripOperationsModel ? (
+              {isTripIntelligenceStateLoaded && liveDay && tripOperationsModel ? (
                 <TripLiveModeCard
                   allItems={allItems}
                   compact
                   day={liveDay}
                   days={days}
                   items={itemsByDay[liveDay.id] ?? []}
+                  localState={tripOperationsLocalState}
                   now={liveNow}
                   onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
+                  onLocalStateChange={handleTripOperationsLocalStateChange}
                   onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
                   onOpenMap={() => openDay(liveDay, 'map')}
                   onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}

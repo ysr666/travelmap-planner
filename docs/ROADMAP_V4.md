@@ -24,6 +24,8 @@
 - Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
 - AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation 完成。
 - E2E locator hardening 完成。
+- Unified Trip Intelligence Packages 1-7 完成：统一建议/动作/完成记录、Trip Home 收敛、Day/Live、Ticket/Inbox/Finance、Document/Shared Trip、IndexedDB v10 与跨设备对象同步。
+- Finance 接收端改造完成：移除后台来源扫描，Ticket/Inbox 费用证据必须确认后生成 `draft + needs_review`。
 
 当前 canonical routes：
 
@@ -43,10 +45,10 @@
 
 ## 不要误判为完成
 
-- Trip Home 还不是完整旅行首页：全旅行地图概览和入口层级仍待做。
+- Trip Home 主建议层级已收敛；全旅行地图概览仍待继续优化。
 - Day View 还没有完成 marker-card interaction：当前仍以 sheet 为主，理想形态是 marker 触发轻卡片，再进入 Item Detail。
 - Item Detail 仍需变成旅行现场查看页。
-- Ticket Library 仍偏文件列表，还不是票据画廊。
+- Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
 - 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
@@ -92,6 +94,7 @@
 ### 6. AI-native travel intelligence
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
+- Unified Trip Intelligence 基础与上下文接入已完成；后续执行扩展必须复用统一 executor / appliedChanges，不为 Ledger、Document 或 Shared Trip 新建平行中心。
 - 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation。
 - 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
 - AI draft 只生成 / 修复 draft preview；AI trip edit 只生成 patch plan preview。地点、坐标、路线、交通时间、票据绑定和本地写入必须由用户确认。

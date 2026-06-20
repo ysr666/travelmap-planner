@@ -18,6 +18,7 @@
 
 ## ✨ 核心功能
 
+- Unified Trip Intelligence：Trip Home、Day View、票据、旅行材料、账本、资料和同行共享共用 suggestion / action / appliedChanges 模型
 - 旅行管理：创建、查看和删除本机旅行计划
 - Day 时间轴：按天管理景点、酒店、餐厅和交通点
 - MapLibre 地图视图：用 OpenFreeMap 底图显示当天地点、编号 marker、直线顺序，可选手动生成道路路线 polyline
@@ -28,7 +29,7 @@
   - reference：仅记录文件位置，不保存票据文件
   - external：保存外部链接，适合网盘、邮箱或订单网页
 - zip 归档：导出和导入单个旅行的离线归档
-- Supabase 云端同步：登录后优先使用对象同步同步 Trip / Day / Item / TicketMeta 和票据 Blob，也支持手动立即同步和方向确认
+- Supabase 云端同步：登录后优先同步 Trip / Day / Item / TicketMeta、账本、Live/Replan 和统一智能记录/建议状态；票据 Blob 独立同步
 - PWA：支持 iPhone Safari 添加到主屏幕，并缓存基础 app shell
 
 ## 🤖 AI 草稿与外部 AI 行程包
@@ -130,6 +131,8 @@ VITE_SUPABASE_ANON_KEY=
 - 第一版未做端到端加密，护照、签证、银行卡等高度敏感文件请谨慎上传。
 
 Supabase 建表、RLS 和 Storage policy 见 [Supabase 云端同步配置](docs/SUPABASE_CLOUD_BACKUP.md)。
+
+统一旅行智能的 `appliedChanges` 与 `ignored/later/completed` 状态保存在 IndexedDB v10，并通过 `trip_intelligence_applied_change`、`trip_intelligence_suggestion_state` 跨设备同步。普通非 Operations 建议可忽略或稍后 24 小时；高风险、同步冲突和资料过期建议只能稍后。Finance 是费用草稿接收与审核端：票据和已分配旅行的 Inbox 材料只在用户确认后生成 `draft + needs_review`，不会后台扫描或自动计入结算。
 
 ## 🗺️ 道路路线 Polyline
 

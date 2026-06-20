@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-06-14
-基线：Phase 12E 后，视觉完整性纠偏、全页表单布局修复、AI Privacy Guard、AI draft real provider adapter、AI draft repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation、Tavily search adapter、Google Places item lookup foundation、durable provider quota foundation、route order suggestion proxy、server provider key separation、cloud save wording 和 E2E locator hardening 均已完成。
+更新时间：2026-06-20
+基线：Unified Trip Intelligence Packages 1-7 已完成，suggestion/action/appliedChanges 已接入 Trip Home、Day/Live、Ticket/Inbox/Finance、Document 与 Shared Trip，并具备 IndexedDB v10 持久化和对象同步。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
@@ -62,6 +62,10 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - 冲突感知云端提示：本地较新、云端较新、可能冲突时只显示非阻塞提示。
 - Playwright 移动端 E2E 与 Vitest 单元测试。
 - Trip Home 旅行账本：双币种、整数最小货币单位、费用草稿、预算提醒、同行分摊、历史汇率快照、重复提醒和净额结算。
+- Unified Trip Intelligence：统一 Operations、Readiness、Inbox、Live、Ledger、Document、Shared Trip 建议模型，不新增独立中心页面。
+- 统一 action executor 已接入 Operations、Inbox、Live/Replan、票据与 Inbox 费用草稿；执行结果写入统一 `appliedChanges`。
+- suggestion dispositions 与完成记录已迁移到 IndexedDB v10；普通非 Operations 建议可忽略或稍后 24 小时，高风险只能稍后，Operations 保留旅行时区当日 snooze。
+- Finance 已停止后台来源扫描，只接收手动费用或 Ticket/Inbox 明确确认后的 `draft + needs_review`，再由 review queue 补充、确认和结算。
 
 ## 已完成阶段
 
@@ -81,7 +85,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 ## 不要误判为完成
 
-- Trip Home 还缺全旅行地图概览与更清晰入口。
+- Trip Home 已收敛主建议层级，但全旅行地图概览仍可继续优化。
 - Day View 的 marker-card interaction 尚未完成：目标是点击 marker 出现轻量卡片，再进入 Item Detail。
 - Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
 - Ticket Library 仍需从文件列表升级为票据画廊。
@@ -95,7 +99,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 云端与同步状态
 
 - Supabase 用于账号登录后的旅行对象同步和恢复。
-- 当前版本同步 Trip / Day / Item / TicketMeta 与主人账本对象；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
+- 当前版本同步 Trip / Day / Item / TicketMeta、主人账本、Replan、`trip_intelligence_applied_change` 与 `trip_intelligence_suggestion_state`；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
 - 账本对象为 `ledger_settings`、`ledger_participant`、`ledger_budget`、`ledger_expense`，仍受主人账号 RLS 约束，不进入 Companion 共享投影。
 - 旧 `cloud_trip_backups` / `snapshot.json` 路径保留为兼容与迁移路径；对象同步表不可用时会自动降级到旧 snapshot 同步。
 - 自动云端同步默认开启，可由用户关闭；开启后在 Trip / Day / Item / Ticket / AI 应用 / 导入 / 内容补充 / 备注追加等写入成功后延迟同步对应对象。
@@ -106,6 +110,8 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - 旧版多条云端记录和旧版恢复出的离线缓存可能仍存在；当前版本不会自动迁移、合并、删除或清理这些历史数据。
 - 删除本地旅行不会删除云端同步记录；删除云端记录必须走手动确认。
 - 当前不是实时表同步或实时协作；对象删除使用 tombstone 同步。
+- intelligence applied changes 按 dedupeKey 去重展示；suggestion state 使用 latest `updatedAt` wins。清空历史、恢复建议与 retention prune 都同步 tombstone。
+- Package 7 migration `20260620060942_persistent_trip_intelligence_sync.sql` 已部署生产；权限加固 migration `20260620074105_harden_production_boundaries.sql` 将在进入 `main` 后部署。
 - 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；未来仍需 per-device 操作审计、队列调试工具和协议迁移工具。
 
 ## 数据与缓存边界

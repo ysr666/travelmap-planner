@@ -91,10 +91,11 @@ export function SearchPage() {
           />
         </label>
 
+        <span className="sr-only" id="search-filter-label">搜索分类</span>
         <div
-          aria-label="搜索分类"
+          aria-labelledby="search-filter-label"
           className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 app-scrollbar"
-          role="tablist"
+          role="group"
         >
           {filterOptions.map((option) => (
             <button
@@ -107,7 +108,6 @@ export function SearchPage() {
               data-testid={`search-filter-${option}`}
               key={option}
               onClick={() => setFilter(option)}
-              role="tab"
               type="button"
             >
               <span>{localSearchCategoryLabels[option]}</span>

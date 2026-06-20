@@ -411,3 +411,36 @@ Validation:
 - Playwright visual inspection passed at 390x844 and 1280x900 with zero horizontal page overflow and no console errors; screenshots remained outside the repository.
 - The E2E flow proved Home seed -> Search -> compact query -> item group -> exact Item Detail navigation.
 - `git diff --check` passed.
+
+## 2026-06-20 Final Integration and Accessibility Repair
+
+Status: completed
+
+Goal: prove the three phases work together across the full product and repair any branch-owned regression before push.
+
+Scope:
+
+- Run the full lint, unit, build, and Playwright suites from the isolated feature worktree.
+- Preserve existing Home `trip-card` interaction/text contracts while keeping the new portfolio structure.
+- Repair Search accessibility failures found by the existing 390px axe audit.
+
+No-go:
+
+- No provider, cloud, schema, vault, route-cache, ticket/blob, or AI privacy changes.
+- No weakening, skipping, or suppressing existing accessibility rules.
+
+Result:
+
+- Preserved the Home `trip-card` test/interaction contract and complete stats phrases inside the redesigned primary journey panel.
+- Replaced the invalid `role=tab` plus `aria-pressed` combination with a named segmented-filter group using native pressed-button semantics.
+- Tightened the Search E2E URL assertion so it independently proves the Item route and selected trip ID.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm run test:unit` passed: 166 files and 1338 tests.
+- `npm run build` passed with the existing large-chunk warning.
+- First full Playwright run passed 125/126 and identified one branch-owned critical `aria-allowed-attr` failure in Search filters.
+- Focused `e2e/mobile-ux-a11y.spec.ts` passed after the semantic repair.
+- Final `PLAYWRIGHT_PROXY=http://127.0.0.1:10808 PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed: 126 tests in approximately 5.7 minutes.
+- No real AI, search, route, cloud, or provider operation was invoked; provider-backed E2E paths remained mocked/disabled.

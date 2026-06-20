@@ -18,6 +18,7 @@ test('本机搜索可筛选行程点并进入准确详情', async ({ page }) => 
   await expectNoHorizontalOverflow(page)
 
   await itemGroup.getByRole('button', { name: '打开Shibuya Sky 夜景' }).click()
-  await expect(page).toHaveURL(new RegExp(`#\/item\?[^#]*tripId=${tripId}`))
+  await expect(page).toHaveURL(/#\/item\?/)
+  await expect.poll(() => new URL(page.url()).hash).toContain(`tripId=${tripId}`)
   await expect(page.getByRole('heading', { name: 'Shibuya Sky 夜景' })).toBeVisible()
 })

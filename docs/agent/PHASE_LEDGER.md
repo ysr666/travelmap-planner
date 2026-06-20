@@ -233,3 +233,146 @@ Validation:
 - `npm run build` passed with the existing Vite large-chunk warning.
 - `PLAYWRIGHT_PROXY=http://127.0.0.1:10808 PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed: 121 tests.
 - `git diff --check` passed.
+
+## 2026-06-20 Phase 5 - Trip Context Continuity
+
+Status: completed
+
+Goal: preserve the last meaningful trip and day across global navigation so the bottom Trip tab, page headers, and return paths keep users inside the journey they were working on.
+
+Scope:
+
+- Add a small versioned browser navigation-context store for non-sensitive trip/day identifiers.
+- Record context from canonical trip-scoped routes without changing route shapes.
+- Make the global Trip tab reopen the active or most recently visited trip instead of falling back to Home when the current URL has no `tripId`.
+- Resolve the app-shell title for trip-scoped routes, not only Trip Home.
+- Add focused unit/component coverage for invalid persisted data, stale trips, route transitions, and tab behavior.
+
+No-go:
+
+- No IndexedDB schema, cloud sync, route cache, provider, AI privacy, ticket/blob, or vault changes.
+- No new route contract or automatic remote lookup.
+- Do not persist titles, notes, coordinates, ticket data, document data, or other sensitive content in browser navigation context.
+
+Likely files:
+
+- `src/lib/navigationContext.ts`
+- `src/lib/navigationContext.test.ts`
+- `src/App.tsx`
+- `src/components/AppShell.tsx`
+- `src/components/BottomTabBar.tsx`
+- focused component tests.
+
+Validation:
+
+- focused Vitest files for navigation context, app shell, and bottom tabs.
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because global navigation is shared by every route, while persisted data remains limited to non-sensitive identifiers.
+
+Stop conditions:
+
+- Stop or narrow if continuity requires changing canonical hashes, IndexedDB records, sync payloads, or private document data.
+- Repair within the phase if stale context can trap users on missing trips or break existing tab navigation.
+
+Result:
+
+- Added a versioned navigation-context store that persists only trip/day identifiers and safely ignores malformed or oversized records.
+- Validated stored and route-derived trip IDs against IndexedDB before using them, and automatically removed stale persisted context.
+- Extended trip-scoped shell titles beyond Trip Home and made the global Trip tab return to the last valid trip from Home, Search, Inbox, or Settings.
+- Preserved the last day while moving within one trip and dropped it when switching to a different trip.
+
+Validation:
+
+- `npm run test:unit -- src/App.test.tsx src/lib/navigationContext.test.ts src/components/AppShell.test.tsx` passed: 3 files and 22 tests.
+- focused ESLint passed for all Phase 5 files.
+- `npm run build` passed with the existing large-chunk warning.
+- `git diff --check` passed.
+
+## 2026-06-20 Phase 6 - Global Home 2.0
+
+Status: planned
+
+Goal: turn the global Home page into an accurate journey portfolio that selects the active or next trip by travel date, shows the next useful local action, and separates upcoming from completed travel.
+
+Scope:
+
+- Build a pure Home overview model for ongoing, upcoming, and completed trips using each trip's existing timezone semantics.
+- Select the primary trip by status/date rather than database array position.
+- Add next-day/next-item context and compact local preparation signals from existing days, items, and tickets.
+- Remove duplicate rendering of the primary trip from the recent list and make completed travel a secondary section.
+- Preserve create, demo, AI draft, documents, import, settings, and delete workflows.
+
+No-go:
+
+- No automatic provider, cloud, map, route, AI, or search calls.
+- No schema, timezone model, route cache, ticket blob, cloud semantics, or AI privacy changes.
+- Do not infer realtime travel status beyond stored plain dates, wall-clock times, and the existing trip timezone rules.
+
+Likely files:
+
+- `src/lib/homeOverview.ts`
+- `src/lib/homeOverview.test.ts`
+- `src/pages/HomePage.tsx`
+- `src/pages/HomePage.test.tsx`
+- `e2e/home.spec.ts` or a focused Home E2E.
+
+Validation:
+
+- focused Home model and page tests.
+- relevant Home E2E at desktop and 390px when feasible.
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because Home is the global entry point and trip ordering changes, but all data is read-only derived local state.
+
+Stop conditions:
+
+- Stop or split if overview signals require vault decryption, remote status, or a new persistent data model.
+- Repair within the phase if empty, ongoing, upcoming, or all-completed portfolios lose an existing primary action.
+
+## 2026-06-20 Phase 7 - Local Search 2.0
+
+Status: planned
+
+Goal: make the Search tab a useful local command surface across the expanded product, with ranked matches and accurate deep links for itinerary, tickets, transport bookings, and ledger records.
+
+Scope:
+
+- Add a pure weighted local-search index and query model with normalized matching and deterministic ranking.
+- Index trips, itinerary items, tickets, non-secret transport booking/segment metadata, and ledger expenses.
+- Add category filters, result counts, grouped empty states, and query-aware result labels.
+- Deep-link each result to the narrowest existing canonical route.
+- Load independent local datasets in parallel and keep result rendering bounded.
+
+No-go:
+
+- No network search, AI search, provider call, OCR, vault unlock, or decrypted document indexing.
+- No IndexedDB schema, cloud sync, ledger contract, transport contract, ticket/blob contract, or route changes.
+- Do not index encrypted secrets, document numbers, PNR/order numbers, notes from private vault objects, or raw ticket file content.
+
+Likely files:
+
+- `src/lib/localSearch.ts`
+- `src/lib/localSearch.test.ts`
+- `src/pages/SearchPage.tsx`
+- `src/pages/SearchPage.test.tsx`
+- focused Search E2E.
+
+Validation:
+
+- focused search model and page tests.
+- relevant Search E2E at desktop and 390px when feasible.
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+
+Risk: medium, because search spans several local modules, while the implementation remains read-only and excludes protected/private payloads.
+
+Stop conditions:
+
+- Stop or narrow if a useful result requires decrypting vault content or altering a protected storage contract.
+- Repair within the phase if ranking is unstable, deep links are incorrect, or large local datasets cause unbounded rendering.

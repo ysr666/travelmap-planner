@@ -15,11 +15,12 @@ import { GlobalAiCommandBar } from './ai/GlobalAiCommandBar'
 type AppShellProps = {
   activeRoute: RouteId
   children: ReactNode
+  lastTripId?: string | null
   title: string
 }
 
 
-export function AppShell({ activeRoute, children, title }: AppShellProps) {
+export function AppShell({ activeRoute, children, lastTripId, title }: AppShellProps) {
   const ownsCanvas = activeRoute === 'home'
     || activeRoute === 'inbox'
     || activeRoute === 'settings'
@@ -82,7 +83,7 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
       {showGlobalAiCommand ? (
         <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
       ) : null}
-      {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
+      {showTabBar ? <BottomTabBar activeRoute={activeRoute} lastTripId={lastTripId} /> : null}
     </div>
   )
 }

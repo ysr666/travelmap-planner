@@ -86,6 +86,34 @@ describe('BottomTabBar', () => {
     expect(tripButton?.className).toContain('text-primary')
   })
 
+  it('reopens the last trip from a global route', async () => {
+    window.location.hash = '/search'
+    await act(async () => {
+      root?.render(<BottomTabBar activeRoute="search" lastTripId="trip_7" />)
+    })
+
+    const tripButton = container?.querySelector('button[aria-label="行程"]')
+    await act(async () => {
+      tripButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('trip', { tripId: 'trip_7' })
+  })
+
+  it('falls back to Home when no trip context exists', async () => {
+    window.location.hash = '/search'
+    await act(async () => {
+      root?.render(<BottomTabBar activeRoute="search" />)
+    })
+
+    const tripButton = container?.querySelector('button[aria-label="行程"]')
+    await act(async () => {
+      tripButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('home')
+  })
+
   it('maps settings sub-routes to settings tab', async () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="settings/privacy" />)

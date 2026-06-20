@@ -39,7 +39,6 @@ import {
   summarizeTravelInboxPreview,
   updateTravelInboxPreviewRecord,
 } from '../../lib/ai/travelInbox'
-import { applyTravelInboxPreviewRecord } from '../../lib/ai/travelInboxApply'
 import {
   PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
 } from '../../lib/ai/providerProxyContract'
@@ -49,10 +48,30 @@ import {
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
 import { db } from '../../db/database'
+import { buildLedgerExpenseDraftCandidates, type LedgerExpenseDraftCandidate } from '../../lib/ledgerExtraction'
 import { navigateTo } from '../../lib/routes'
 import { SYNC_QUEUE_SUCCESS_COPY } from '../../lib/tripSyncQueue'
 import { ticketCategoryOptions, ticketCategoryLabels } from '../../lib/tickets'
-import type { Day, ItineraryItem, TicketCategory, TicketMeta, TravelInboxEntry, TravelInboxPreviewRecord, Trip } from '../../types'
+import {
+  buildTripIntelligenceModel,
+  executeTripIntelligenceAction,
+  getLedgerDraftCandidateSuggestionKey,
+  type TripIntelligenceSuggestion,
+} from '../../lib/tripIntelligence'
+import { useTripIntelligencePersistence } from '../../hooks/useTripIntelligencePersistence'
+import { TripIntelligenceSuggestionControls } from '../trip/TripIntelligenceSuggestionControls'
+import type {
+  Day,
+  ItineraryItem,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
+  TicketCategory,
+  TicketMeta,
+  TravelInboxEntry,
+  TravelInboxPreviewRecord,
+  Trip,
+} from '../../types'
 import { resetTravelInboxAccountSourcePreview } from '../../lib/ai/travelInboxOrganization'
 
 type TravelInboxPanelProps = {
@@ -79,8 +98,6 @@ const languageLabels: Record<ExistingTripImportOcrLanguage, string> = {
   tha: '泰文',
 }
 
-const TRAVEL_INBOX_APPLIED_CHANGES_KEY_PREFIX = 'tripmap:travel-inbox:applied-changes:'
-
 export function TravelInboxPanel({
   allItems,
   days,
@@ -106,8 +123,22 @@ export function TravelInboxPanel({
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [appliedChanges, setAppliedChanges] = useState<ExistingTripImportAppliedChange[]>(() => readTravelInboxAppliedChanges(trip.id))
+  const [appliedChanges, setAppliedChanges] = useState<ExistingTripImportAppliedChange[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
+  const [ledgerSettings, setLedgerSettings] = useState<LedgerSettings | null>(null)
+  const [ledgerParticipants, setLedgerParticipants] = useState<LedgerParticipant[]>([])
+  const [ledgerExpenses, setLedgerExpenses] = useState<LedgerExpense[]>([])
+  const [pendingExpenseDraft, setPendingExpenseDraft] = useState<{
+    candidate: LedgerExpenseDraftCandidate
+    suggestion: TripIntelligenceSuggestion
+  } | null>(null)
+  const [expenseActionId, setExpenseActionId] = useState<string | null>(null)
+  const {
+    appendExecutionResult,
+    restoreSuggestionState,
+    setSuggestionState,
+    suggestionStates,
+  } = useTripIntelligencePersistence(trip.id)
 
   const preview = previewRecord?.preview as ExistingTripImportPreview | undefined
   const selectedCount = preview?.diffs.filter((diff) => checkedDiffIds.includes(diff.id)).length ?? 0
@@ -116,20 +147,60 @@ export function TravelInboxPanel({
   const summary = preview ? summarizeTravelInboxPreview(preview) : null
   const readyDiffs = useMemo(() => preview?.diffs.filter((diff) => !needsReview(diff, preview)) ?? [], [preview])
   const reviewDiffs = useMemo(() => preview?.diffs.filter((diff) => needsReview(diff, preview)) ?? [], [preview])
+  const expenseDraftCandidates = useMemo(() => {
+    if (!ledgerSettings || ledgerParticipants.length === 0) return []
+    return buildLedgerExpenseDraftCandidates({
+      bookings: [],
+      days,
+      existingExpenses: ledgerExpenses,
+      inboxEntries: entries,
+      items: allItems,
+      participants: ledgerParticipants,
+      tickets: [],
+      tripCurrency: ledgerSettings.tripCurrency,
+      tripStartDate: trip.startDate,
+    })
+      .filter((candidate) => candidate.source.kind === 'inbox' && isLikelyInboxExpense(candidate))
+      .map((candidate) => attachInboxCandidateItems(candidate, preview, allItems, tickets))
+  }, [allItems, days, entries, ledgerExpenses, ledgerParticipants, ledgerSettings, preview, tickets, trip.startDate])
+  const expenseCandidateBySuggestionKey = useMemo(() => new Map(
+    expenseDraftCandidates.map((candidate, index) => [getLedgerDraftCandidateSuggestionKey(candidate, index), candidate]),
+  ), [expenseDraftCandidates])
+  const inboxIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
+    inbox: { entries, expenseDraftCandidates },
+    items: allItems,
+    suggestionStates,
+  }), [allItems, entries, expenseDraftCandidates, suggestionStates])
+  const expenseSuggestions = inboxIntelligenceModel.forInbox().filter((suggestion) =>
+    suggestion.action?.kind === 'ledger_create_expense_draft_from_candidate',
+  )
+  const hiddenExpenseSuggestions = inboxIntelligenceModel.allSuggestions.filter((suggestion) =>
+    suggestion.action?.kind === 'ledger_create_expense_draft_from_candidate'
+      && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+  )
 
   const loadInbox = useCallback(async () => {
     try {
-      const [nextEntries, activePreview] = await Promise.all([
+      const [nextEntries, activePreview, nextLedgerSettings, nextParticipants, nextExpenses] = await Promise.all([
         listTravelInboxEntriesByTrip(trip.id),
         getActiveTravelInboxPreview(trip.id),
+        db.ledgerSettings.where('tripId').equals(trip.id).first(),
+        db.ledgerParticipants.where('tripId').equals(trip.id).toArray(),
+        db.ledgerExpenses.where('tripId').equals(trip.id).toArray(),
       ])
       setEntries(nextEntries)
       setPreviewRecord(activePreview ?? null)
       setCheckedDiffIds(activePreview?.checkedDiffIds ?? [])
+      setLedgerSettings(nextLedgerSettings ?? null)
+      setLedgerParticipants(nextParticipants)
+      setLedgerExpenses(nextExpenses)
     } catch {
       setEntries([])
       setPreviewRecord(null)
       setCheckedDiffIds([])
+      setLedgerSettings(null)
+      setLedgerParticipants([])
+      setLedgerExpenses([])
     }
   }, [trip.id])
 
@@ -166,7 +237,6 @@ export function TravelInboxPanel({
     setError(null)
     setSuccessMessage(null)
     setAppliedChanges([])
-    persistTravelInboxAppliedChanges(trip.id, [])
     try {
       const extraction = await extractExistingTripImportSources({
         files,
@@ -319,21 +389,31 @@ export function TravelInboxPanel({
     setIsApplying(true)
     setError(null)
     try {
-      const result = await applyTravelInboxPreviewRecord({
+      const result = await executeTripIntelligenceAction({
         checkedDiffIds,
+        kind: 'travel_inbox_apply_preview',
         record: previewRecord,
       })
-      if (!result.ok) {
-        setError(result.errors.join('\n'))
+      if (result.status !== 'completed' || !result.inboxResult?.ok) {
+        setError(result.message)
         return
       }
+      await appendExecutionResult({
+        result,
+        source: 'inbox',
+        suggestion: {
+          key: `inbox:preview:${previewRecord.id}`,
+          scope: 'inbox',
+          source: { id: previewRecord.id, kind: 'inbox', label: 'preview' },
+        },
+        title: '已应用旅行材料建议',
+      })
+      const inboxResult = result.inboxResult
       setConfirmApplyOpen(false)
-      if (result.appliedCount > 0) {
-        persistTravelInboxAppliedChanges(trip.id, result.appliedChanges)
-        setAppliedChanges(result.appliedChanges)
-        setSuccessMessage(`已应用 ${result.appliedCount} 项收件箱建议。${SYNC_QUEUE_SUCCESS_COPY}`)
+      if (inboxResult.appliedCount > 0) {
+        setAppliedChanges(inboxResult.appliedChanges)
+        setSuccessMessage(`已应用 ${inboxResult.appliedCount} 项收件箱建议。${SYNC_QUEUE_SUCCESS_COPY}`)
       } else {
-        persistTravelInboxAppliedChanges(trip.id, [])
         setAppliedChanges([])
         setSuccessMessage('没有应用任何建议。')
       }
@@ -343,6 +423,48 @@ export function TravelInboxPanel({
       await loadInbox()
     } finally {
       setIsApplying(false)
+    }
+  }
+
+  function prepareExpenseDraft(suggestion: TripIntelligenceSuggestion) {
+    const candidate = expenseCandidateBySuggestionKey.get(suggestion.key)
+    if (!ledgerSettings || ledgerParticipants.length === 0 || !candidate) {
+      setError('先建立旅行账本并添加参与人，才能从材料生成费用草稿。')
+      return
+    }
+    setError(null)
+    setPendingExpenseDraft({ candidate, suggestion })
+  }
+
+  async function confirmExpenseDraft() {
+    if (!pendingExpenseDraft) return
+    setExpenseActionId(pendingExpenseDraft.suggestion.id)
+    setError(null)
+    try {
+      const result = await executeTripIntelligenceAction({
+        candidate: pendingExpenseDraft.candidate,
+        kind: 'ledger_create_expense_draft_from_candidate',
+        participants: ledgerParticipants,
+        tripId: trip.id,
+      })
+      if (result.status !== 'completed') {
+        setError(result.message)
+        return
+      }
+      await appendExecutionResult({
+        result,
+        source: 'inbox',
+        suggestion: pendingExpenseDraft.suggestion,
+        title: '已从旅行材料生成费用草稿',
+      })
+      setPendingExpenseDraft(null)
+      setSuccessMessage(result.message)
+      await loadInbox()
+      await onApplied()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '生成费用草稿失败。')
+    } finally {
+      setExpenseActionId(null)
     }
   }
 
@@ -648,6 +770,44 @@ export function TravelInboxPanel({
         <p className="rounded-xl bg-surface-container-high px-3 py-3 text-sm tm-muted">还没有待处理收件。添加材料后会先在此设备本地提取，确认应用前不会写入旅行。</p>
       )}
 
+      {expenseSuggestions.length > 0 || hiddenExpenseSuggestions.length > 0 ? (
+        <section className="space-y-2 rounded-xl border border-outline-variant/30 bg-surface-container-high p-3" data-testid="travel-inbox-expense-suggestions">
+          <div>
+            <p className="text-sm font-semibold text-on-surface">费用草稿建议</p>
+            <p className="mt-1 text-xs leading-5 tm-muted">只从已提取文本识别；确认后生成待审核草稿，不会自动计入支出。</p>
+          </div>
+          {expenseSuggestions.map((suggestion) => (
+            <div className="flex flex-col gap-2 rounded-lg bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between" key={suggestion.key}>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-on-surface">{suggestion.title}</p>
+                <p className="mt-0.5 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button className="min-h-11 px-3 text-xs" disabled={expenseActionId === suggestion.id} onClick={() => prepareExpenseDraft(suggestion)} variant="secondary">生成草稿</Button>
+                <TripIntelligenceSuggestionControls
+                  onIgnore={(target) => void setSuggestionState({ status: 'ignored', suggestion: target })}
+                  onLater={(target) => void setSuggestionState({ status: 'later', suggestion: target })}
+                  suggestion={suggestion}
+                />
+              </div>
+            </div>
+          ))}
+          {hiddenExpenseSuggestions.length > 0 ? (
+            <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏费用建议（{hiddenExpenseSuggestions.length}）</summary>
+              <div className="mt-2 space-y-2">
+                {hiddenExpenseSuggestions.map((suggestion) => (
+                  <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                    <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                    <Button className="min-h-11 px-3 text-xs" onClick={() => void restoreSuggestionState(suggestion.key)} variant="ghost">恢复</Button>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+
       {warnings.length > 0 ? (
         <div className="rounded-xl bg-amber-50/80 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
           {warnings.slice(-6).map((warning) => (
@@ -773,6 +933,19 @@ export function TravelInboxPanel({
         open={confirmApplyOpen}
         testId="travel-inbox-apply-confirm"
         title="应用收件箱预览？"
+      />
+      <ConfirmDialog
+        body={pendingExpenseDraft
+          ? `将为「${pendingExpenseDraft.candidate.title}」生成待审核费用草稿。${pendingExpenseDraft.candidate.itemIds.length > 0 ? '已关联现有行程点。' : '未匹配具体行程点，可能是现场消费；请在账本中确认。'}不会自动计入支出。`
+          : '将生成一条待审核费用草稿。'}
+        cancelLabel="暂不生成"
+        confirmLabel="生成草稿"
+        loading={Boolean(expenseActionId)}
+        onCancel={() => !expenseActionId && setPendingExpenseDraft(null)}
+        onConfirm={() => void confirmExpenseDraft()}
+        open={Boolean(pendingExpenseDraft)}
+        testId="travel-inbox-expense-confirm"
+        title="从旅行材料生成费用草稿？"
       />
     </Card>
   )
@@ -1016,50 +1189,53 @@ function buildMergePatchForPreview(target: ItineraryItem, fields: ExistingTripIm
   return patch
 }
 
-function getTravelInboxAppliedChangesStorageKey(tripId: string) {
-  return `${TRAVEL_INBOX_APPLIED_CHANGES_KEY_PREFIX}${tripId}`
+function isLikelyInboxExpense(candidate: LedgerExpenseDraftCandidate) {
+  return candidate.amountMinor != null || new Set([
+    'credit_card_notice',
+    'invoice',
+    'payment_receipt',
+    'refund_notice',
+  ]).has(candidate.sourceRole)
 }
 
-function readTravelInboxAppliedChanges(tripId: string): ExistingTripImportAppliedChange[] {
-  try {
-    if (typeof window === 'undefined') return []
-    const raw = window.sessionStorage.getItem(getTravelInboxAppliedChangesStorageKey(tripId))
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter(isTravelInboxAppliedChange) : []
-  } catch {
-    return []
-  }
-}
+function attachInboxCandidateItems(
+  candidate: LedgerExpenseDraftCandidate,
+  preview: ExistingTripImportPreview | undefined,
+  items: ItineraryItem[],
+  tickets: TicketMeta[],
+): LedgerExpenseDraftCandidate {
+  const sourceId = candidate.source.sourceId
+  if (!sourceId || !preview) return candidate
+  const validItemIds = new Set(items.map((item) => item.id))
+  const ticketItemById = new Map(tickets.filter((ticket) => ticket.itemId).map((ticket) => [ticket.id, ticket.itemId!]))
+  const itemIds = new Set(candidate.itemIds.filter((itemId) => validItemIds.has(itemId)))
+  const matchingDiffs = preview.diffs.filter((diff) => diff.sourceIds.includes(sourceId))
+  const matchingTempTickets = new Set(matchingDiffs.flatMap((diff) => diff.type === 'create_ticket' ? [diff.data.tempTicketKey] : []))
 
-function persistTravelInboxAppliedChanges(tripId: string, changes: ExistingTripImportAppliedChange[]) {
-  try {
-    if (typeof window === 'undefined') return
-    const key = getTravelInboxAppliedChangesStorageKey(tripId)
-    if (changes.length === 0) {
-      window.sessionStorage.removeItem(key)
-      return
+  for (const diff of preview.diffs) {
+    if (diff.sourceIds.includes(sourceId)) {
+      if (diff.type === 'merge_item_fields' || diff.type === 'append_item_note') itemIds.add(diff.data.targetItemId)
+      if (diff.type === 'bind_ticket' || diff.type === 'bind_existing_ticket') {
+        if (diff.data.targetItemId) itemIds.add(diff.data.targetItemId)
+      }
+      if (diff.type === 'merge_ticket_meta') {
+        const itemId = ticketItemById.get(diff.data.targetTicketId)
+        if (itemId) itemIds.add(itemId)
+      }
     }
-    window.sessionStorage.setItem(key, JSON.stringify(changes))
-  } catch {
-    // Session storage is best-effort; the in-memory result list still renders until remount.
+    if (diff.type === 'bind_ticket' && matchingTempTickets.has(diff.data.tempTicketKey) && diff.data.targetItemId) {
+      itemIds.add(diff.data.targetItemId)
+    }
   }
-}
 
-function isTravelInboxAppliedChange(input: unknown): input is ExistingTripImportAppliedChange {
-  if (!input || typeof input !== 'object') return false
-  const record = input as Record<string, unknown>
-  const action = record.action
-  const kind = record.kind
-  return (
-    typeof record.id === 'string' &&
-    typeof record.title === 'string' &&
-    (action === 'appended' || action === 'bound' || action === 'created' || action === 'merged' || action === 'updated') &&
-    (kind === 'day' || kind === 'item' || kind === 'note' || kind === 'ticket' || kind === 'trip') &&
-    (record.dayId === undefined || typeof record.dayId === 'string') &&
-    (record.itemId === undefined || typeof record.itemId === 'string') &&
-    (record.ticketId === undefined || typeof record.ticketId === 'string')
-  )
+  const linkedItemIds = [...itemIds].filter((itemId) => validItemIds.has(itemId))
+  return {
+    ...candidate,
+    itemIds: linkedItemIds,
+    warnings: linkedItemIds.length > 0
+      ? candidate.warnings.filter((warning) => warning !== '未关联行程')
+      : candidate.warnings,
+  }
 }
 
 function describeEntryStatus(entry: TravelInboxEntry) {

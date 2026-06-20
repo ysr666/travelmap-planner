@@ -74,6 +74,7 @@ import {
   getLedgerDraftCandidateSuggestionKey,
   type TripIntelligenceSuggestion,
 } from '../lib/tripIntelligence'
+import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
 import type {
   Day,
   ItineraryItem,
@@ -174,6 +175,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const {
+    appendExecutionResult,
+    restoreSuggestionState,
+    setSuggestionState,
+    suggestionStates,
+  } = useTripIntelligencePersistence(tripId)
 
   const itemById = useMemo(() => {
     return new Map(items.map((item) => [item.id, item]))
@@ -234,11 +241,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const ticketIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
     items,
     ledgerDraftCandidates: ticketLedgerDraftCandidates,
+    suggestionStates,
     ticketInput: {
       ticketBlobSyncStates: Object.values(ticketBlobSyncStates),
       tickets,
     },
-  }), [items, ticketBlobSyncStates, ticketLedgerDraftCandidates, tickets])
+  }), [items, suggestionStates, ticketBlobSyncStates, ticketLedgerDraftCandidates, tickets])
 
   const defaultBindingTarget = useCallback(
     (loadedItems: ItineraryItem[]) => {
@@ -652,6 +660,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         setActionError(result.message)
         return
       }
+      await appendExecutionResult({
+        result,
+        source: 'ticket',
+        suggestion: pendingExpenseDraft.suggestion,
+        title: '已从票据生成费用草稿',
+      })
       setPendingExpenseDraft(null)
       setActionMessage(result.message)
       await refreshLibrary()
@@ -933,12 +947,18 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       {previewTicket ? (
         <TicketPreview
+          hiddenIntelligenceSuggestions={ticketIntelligenceModel.allSuggestions.filter((suggestion) =>
+            suggestion.ticketIds.includes(previewTicket.id) && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+          )}
           intelligenceActionBusyId={ticketIntelligenceActionId}
           intelligenceSuggestions={ticketIntelligenceModel.forTicket(previewTicket.id)}
           key={previewTicket.id}
           onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
           onIntelligenceSuggestionAction={handleTicketIntelligenceAction}
+          onIntelligenceSuggestionIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+          onIntelligenceSuggestionLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+          onIntelligenceSuggestionRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
           ticket={previewTicket}
           tickets={filteredTickets}
         />

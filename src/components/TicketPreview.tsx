@@ -12,12 +12,17 @@ import {
 import type { TicketMeta } from '../types'
 import type { TripIntelligenceSuggestion } from '../lib/tripIntelligence'
 import { TicketThumbnail } from './tickets/TicketThumbnail'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from './trip/TripIntelligenceSuggestionControls'
 import { useModalAccessibility } from './ui/useModalAccessibility'
 
 type TicketPreviewProps = {
+  hiddenIntelligenceSuggestions?: TripIntelligenceSuggestion[]
   intelligenceActionBusyId?: string | null
   intelligenceSuggestions?: TripIntelligenceSuggestion[]
   onIntelligenceSuggestionAction?: (suggestion: TripIntelligenceSuggestion) => void
+  onIntelligenceSuggestionIgnore?: (suggestion: TripIntelligenceSuggestion) => void
+  onIntelligenceSuggestionLater?: (suggestion: TripIntelligenceSuggestion) => void
+  onIntelligenceSuggestionRestore?: (suggestion: TripIntelligenceSuggestion) => void
   ticket: TicketMeta
   onClose: () => void
   onChangeTicket?: (ticket: TicketMeta) => void
@@ -35,9 +40,13 @@ type BlobPreviewState = {
 const SWIPE_THRESHOLD = 50
 
 export function TicketPreview({
+  hiddenIntelligenceSuggestions = [],
   intelligenceActionBusyId,
   intelligenceSuggestions = [],
   onIntelligenceSuggestionAction,
+  onIntelligenceSuggestionIgnore,
+  onIntelligenceSuggestionLater,
+  onIntelligenceSuggestionRestore,
   ticket,
   onClose,
   onChangeTicket,
@@ -354,25 +363,32 @@ export function TicketPreview({
               </div>
               <div className="space-y-1.5">
                 {intelligenceSuggestions.slice(0, 4).map((suggestion) => (
-                  <button
-                    className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-white/10 px-3 py-2 text-left ring-1 ring-white/10 transition active:scale-[0.99] disabled:opacity-60"
-                    data-testid="ticket-preview-intelligence-action"
-                    disabled={!onIntelligenceSuggestionAction || intelligenceActionBusyId === suggestion.id}
-                    key={suggestion.id}
-                    onClick={() => onIntelligenceSuggestionAction?.(suggestion)}
-                    type="button"
-                  >
-                    <span className="min-w-0">
+                  <div className="flex min-h-11 items-center gap-1 rounded-xl bg-white/10 px-1 ring-1 ring-white/10" key={suggestion.id}>
+                    <button className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 px-2 py-2 text-left transition active:scale-[0.99] disabled:opacity-60" data-testid="ticket-preview-intelligence-action" disabled={!onIntelligenceSuggestionAction || intelligenceActionBusyId === suggestion.id} onClick={() => onIntelligenceSuggestionAction?.(suggestion)} type="button">
+                      <span className="min-w-0">
                       <span className="block truncate text-xs font-semibold text-white">{suggestion.title}</span>
                       <span className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-300">{suggestion.message}</span>
-                    </span>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-950">
+                      </span>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-950">
                       {suggestion.requiresConfirmation ? <ShieldCheck className="size-3" /> : null}
                       {intelligenceActionBusyId === suggestion.id ? '处理中' : suggestion.action?.label ?? '查看'}
-                    </span>
-                  </button>
+                      </span>
+                    </button>
+                    <TripIntelligenceSuggestionControls onIgnore={onIntelligenceSuggestionIgnore} onLater={onIntelligenceSuggestionLater} suggestion={suggestion} tone="inverse" />
+                  </div>
                 ))}
               </div>
+            </div>
+          ) : null}
+          {hiddenIntelligenceSuggestions.length > 0 && onIntelligenceSuggestionRestore ? (
+            <div className="space-y-1 rounded-xl bg-white/5 p-2 text-white ring-1 ring-white/10" data-testid="ticket-preview-hidden-intelligence">
+              <p className="px-1 text-[11px] font-semibold text-slate-300">已隐藏建议</p>
+              {hiddenIntelligenceSuggestions.map((suggestion) => (
+                <div className="flex min-h-11 items-center justify-between gap-2 px-1" key={suggestion.key}>
+                  <span className="min-w-0 truncate text-xs text-slate-300">{suggestion.title}</span>
+                  <RestoreTripIntelligenceSuggestionButton onRestore={onIntelligenceSuggestionRestore} suggestion={suggestion} tone="inverse" />
+                </div>
+              ))}
             </div>
           ) : null}
 

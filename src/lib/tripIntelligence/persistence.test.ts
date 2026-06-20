@@ -12,12 +12,15 @@ import {
 } from '../tripOperationsState'
 import type { TripOperationsRecommendation } from '../tripOperationsAgent'
 import {
+  appendTripIntelligenceExecutionResult,
   clearTripIntelligenceHistory,
   loadTripIntelligenceLocalState,
   persistTripIntelligenceLocalState,
   pruneTripIntelligencePersistence,
   restoreTripIntelligenceSuggestionState,
+  setTripIntelligenceSuggestionState,
 } from './persistence'
+import { TRIP_INTELLIGENCE_LATER_MS } from './dispositions'
 
 beforeEach(async () => {
   window.localStorage.clear()
@@ -129,7 +132,66 @@ describe('trip intelligence persistence', () => {
       expect.objectContaining({ objectType: 'trip_intelligence_suggestion_state', operation: 'delete' }),
     ]))
   })
+
+  it('persists completed executor results as unified history and suggestion state', async () => {
+    const result = await appendTripIntelligenceExecutionResult('trip-1', {
+      result: {
+        appliedChanges: [appliedChange('ticket-expense-draft', 200)],
+        message: '费用草稿已生成。',
+        status: 'completed',
+      },
+      source: 'ticket',
+      suggestion: {
+        key: 'ticket:ticket-1:expense-draft',
+        scope: 'ticket',
+        source: { id: 'ticket-1', kind: 'ledger', label: 'draft_candidate' },
+      },
+      title: '已从票据生成费用草稿',
+    }, 200)
+
+    expect(result.localState.history).toEqual([
+      expect.objectContaining({ source: 'ticket', title: '已从票据生成费用草稿' }),
+    ])
+    expect(result.suggestionStates).toEqual([
+      expect.objectContaining({
+        status: 'completed',
+        suggestionKey: 'ticket:ticket-1:expense-draft',
+      }),
+    ])
+    await expect(db.syncOutbox.where('objectType').equals('trip_intelligence_applied_change').count()).resolves.toBe(1)
+    await expect(db.syncOutbox.where('objectType').equals('trip_intelligence_suggestion_state').count()).resolves.toBe(1)
+  })
+
+  it('uses a 24-hour later window and rejects ignoring high-severity suggestions', async () => {
+    const now = 1_000
+    await setTripIntelligenceSuggestionState('trip-1', {
+      now,
+      status: 'later',
+      suggestion: suggestion('medium'),
+    })
+
+    await expect(db.tripIntelligenceSuggestionStates
+      .where('[tripId+suggestionKey]')
+      .equals(['trip-1', 'inbox:expense'])
+      .first()).resolves.toEqual(
+      expect.objectContaining({ status: 'later', until: now + TRIP_INTELLIGENCE_LATER_MS }),
+    )
+    await expect(setTripIntelligenceSuggestionState('trip-1', {
+      now,
+      status: 'ignored',
+      suggestion: suggestion('high'),
+    })).rejects.toThrow('cannot be ignored')
+  })
 })
+
+function suggestion(severity: 'high' | 'medium') {
+  return {
+    key: 'inbox:expense',
+    scope: 'inbox' as const,
+    severity,
+    source: { id: 'expense', kind: 'inbox' as const, label: 'expense_candidate' },
+  }
+}
 
 function appliedChange(id: string, occurredAt: number) {
   return {

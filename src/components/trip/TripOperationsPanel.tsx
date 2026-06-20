@@ -78,6 +78,7 @@ import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import type { Day, ItineraryItem, TicketMeta, TravelInboxPreviewRecord, Trip } from '../../types'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from './TripIntelligenceSuggestionControls'
 
 type TripOperationsPanelProps = {
   activeInboxPreview: TravelInboxPreviewRecord | null
@@ -90,6 +91,8 @@ type TripOperationsPanelProps = {
   model: TripOperationsModel
   onChanged: (options?: { refreshTripData?: boolean }) => Promise<void>
   onLocalStateChange: (state: TripOperationsLocalState) => void
+  onSuggestionStateChange?: (suggestion: TripIntelligenceSuggestion, status: 'ignored' | 'later') => void
+  onSuggestionStateRestore?: (suggestionKey: string) => void
   readinessModel: TripReadinessModel
   tickets: TicketMeta[]
   trip: Trip
@@ -115,6 +118,8 @@ export function TripOperationsPanel({
   model,
   onChanged,
   onLocalStateChange,
+  onSuggestionStateChange,
+  onSuggestionStateRestore,
   readinessModel,
   tickets,
   trip,
@@ -161,6 +166,9 @@ export function TripOperationsPanel({
   )
   const intelligenceSuggestions = intelligenceModel?.forTripHome() ?? null
   const visibleIntelligenceSuggestions = intelligenceSuggestions?.slice(0, 5) ?? null
+  const hiddenIntelligenceSuggestions = intelligenceModel?.allSuggestions.filter((suggestion) =>
+    suggestion.source.kind !== 'operations' && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+  ) ?? []
   const hasVisibleSuggestions = visibleIntelligenceSuggestions
     ? visibleIntelligenceSuggestions.length > 0
     : model.recommendations.length > 0
@@ -630,6 +638,8 @@ export function TripOperationsPanel({
               ) : (
                 <IntelligenceSuggestionRow
                   key={suggestion.id}
+                  onIgnore={onSuggestionStateChange ? () => onSuggestionStateChange(suggestion, 'ignored') : undefined}
+                  onLater={onSuggestionStateChange ? () => onSuggestionStateChange(suggestion, 'later') : undefined}
                   onProcess={() => processIntelligenceSuggestion(suggestion)}
                   suggestion={suggestion}
                 />
@@ -729,6 +739,22 @@ export function TripOperationsPanel({
                     <p className="text-[11px] tm-muted">{dispositionLabel(disposition.status)}</p>
                   </div>
                   <Button className="min-h-11 shrink-0 px-3 text-xs" icon={<RotateCcw className="size-3.5" />} onClick={() => restoreRecommendation(recommendation.fingerprint)} variant="ghost">恢复</Button>
+                </div>
+              ))}
+            </div>
+          </Collapsible>
+        ) : null}
+
+        {hiddenIntelligenceSuggestions.length > 0 && onSuggestionStateRestore ? (
+          <Collapsible subtitle="这些建议可随时恢复。" title={`其他已隐藏建议（${hiddenIntelligenceSuggestions.length}）`}>
+            <div className="space-y-2" data-testid="trip-intelligence-hidden-list">
+              {hiddenIntelligenceSuggestions.map((suggestion) => (
+                <div className="flex min-h-11 items-center justify-between gap-3" key={suggestion.key}>
+                  <div className="min-w-0">
+                    <p className="break-words text-xs font-medium text-on-surface">{suggestion.title}</p>
+                    <p className="text-[11px] tm-muted">{suggestion.status === 'later' ? '稍后提醒' : '已忽略'}</p>
+                  </div>
+                  <RestoreTripIntelligenceSuggestionButton onRestore={() => onSuggestionStateRestore(suggestion.key)} suggestion={suggestion} />
                 </div>
               ))}
             </div>
@@ -891,9 +917,13 @@ function RecommendationRow({
 }
 
 function IntelligenceSuggestionRow({
+  onIgnore,
+  onLater,
   onProcess,
   suggestion,
 }: {
+  onIgnore?: () => void
+  onLater?: () => void
   onProcess: () => void
   suggestion: TripIntelligenceSuggestion
 }) {
@@ -919,6 +949,11 @@ function IntelligenceSuggestionRow({
           >
             {suggestion.action?.label ?? '查看'}
           </Button>
+          <TripIntelligenceSuggestionControls
+            onIgnore={onIgnore ? () => onIgnore() : undefined}
+            onLater={onLater ? () => onLater() : undefined}
+            suggestion={suggestion}
+          />
         </div>
       </div>
     </div>
@@ -1189,7 +1224,13 @@ function formatHistoryTime(timestamp: number) {
 
 function executionSourceLabel(source: TripOperationsExecutionSource) {
   if (source === 'ai_trip_edit') return 'AI 修改方案'
-  if (source === 'travel_inbox') return '旅行收件箱'
+  if (source === 'travel_inbox' || source === 'inbox') return '旅行收件箱'
+  if (source === 'ticket') return '票据库'
+  if (source === 'ledger') return '旅行账本'
+  if (source === 'live') return 'Live Mode'
+  if (source === 'document') return '资料库'
+  if (source === 'shared_trip') return '同行共享'
+  if (source === 'readiness') return '旅行检查'
   return '执行代理'
 }
 

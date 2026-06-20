@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TicketLibraryPage } from './TicketLibraryPage'
 
 const mocks = vi.hoisted(() => ({
+  appendExecutionResult: vi.fn(),
   getRouteParams: vi.fn(() => new URLSearchParams({ tripId: 'trip_1' })),
   navigateTo: vi.fn(),
   getTrip: vi.fn().mockResolvedValue({
@@ -62,6 +63,8 @@ const mocks = vi.hoisted(() => ({
   retryTicketBlobUpload: vi.fn(),
   getTicketBlobSyncState: vi.fn(() => null),
   getSupabaseClient: vi.fn(() => null),
+  restoreSuggestionState: vi.fn(),
+  setSuggestionState: vi.fn(),
 }))
 
 vi.mock('../lib/routes', () => ({
@@ -133,6 +136,15 @@ vi.mock('../lib/objectSyncLocal', () => ({
 
 vi.mock('../lib/supabaseClient', () => ({
   getSupabaseClient: mocks.getSupabaseClient,
+}))
+
+vi.mock('../hooks/useTripIntelligencePersistence', () => ({
+  useTripIntelligencePersistence: () => ({
+    appendExecutionResult: mocks.appendExecutionResult,
+    restoreSuggestionState: mocks.restoreSuggestionState,
+    setSuggestionState: mocks.setSuggestionState,
+    suggestionStates: [],
+  }),
 }))
 
 vi.mock('../components/TicketPreview', () => ({
@@ -434,5 +446,25 @@ describe('TicketLibraryPage', () => {
 
     expect(mocks.createLedgerExpense).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('从票据生成费用草稿？')
+
+    const confirmButton = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('生成草稿'))
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.createLedgerExpense).toHaveBeenCalledWith(expect.objectContaining({
+      reviewStatus: 'needs_review',
+      source: expect.objectContaining({ kind: 'ticket', sourceId: 'ticket_1' }),
+      status: 'draft',
+      tripId: 'trip_1',
+    }))
+    expect(mocks.appendExecutionResult).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'ticket',
+      suggestion: expect.objectContaining({
+        action: expect.objectContaining({ kind: 'ledger_create_expense_draft_from_candidate' }),
+      }),
+    }))
   })
 })

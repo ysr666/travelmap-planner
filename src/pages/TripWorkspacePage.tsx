@@ -137,6 +137,8 @@ export function TripWorkspacePage() {
   const {
     isLoaded: isTripIntelligenceStateLoaded,
     localState: tripOperationsLocalState,
+    restoreSuggestionState: restoreTripIntelligenceSuggestionState,
+    setSuggestionState: setTripIntelligenceSuggestionState,
     suggestionStates: tripIntelligenceSuggestionStates,
     updateLocalState: updateTripOperationsLocalState,
   } = useTripIntelligencePersistence(trip?.id)
@@ -621,6 +623,12 @@ export function TripWorkspacePage() {
                 localState={tripOperationsLocalState}
                 onChanged={handleTripOperationsChanged}
                 onLocalStateChange={handleTripOperationsLocalStateChange}
+                onSuggestionStateChange={(suggestion, status) => {
+                  void setTripIntelligenceSuggestionState({ status, suggestion })
+                }}
+                onSuggestionStateRestore={(suggestionKey) => {
+                  void restoreTripIntelligenceSuggestionState(suggestionKey)
+                }}
                 readinessModel={readinessModel}
                 tickets={ticketMetas}
                 trip={trip}

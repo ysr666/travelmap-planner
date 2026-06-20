@@ -29,6 +29,7 @@ import {
 import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
 import { buildTripLiveModel } from '../lib/tripLiveMode'
 import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../lib/tripIntelligence'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from '../components/trip/TripIntelligenceSuggestionControls'
 import { formatShortDate } from '../lib/dates'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
@@ -95,6 +96,8 @@ export function DayViewPage() {
   const {
     isLoaded: isTripIntelligenceStateLoaded,
     localState: tripOperationsLocalState,
+    restoreSuggestionState,
+    setSuggestionState,
     suggestionStates: tripIntelligenceSuggestionStates,
     updateLocalState: updateTripOperationsLocalState,
   } = useTripIntelligencePersistence(tripOperationsStateTripId)
@@ -457,6 +460,11 @@ export function DayViewPage() {
     suggestionStates: tripIntelligenceSuggestionStates,
   })
   const dayIntelligenceSuggestions = dayIntelligenceModel.forDay(selectedDay.id).slice(0, 5)
+  const hiddenDayIntelligenceSuggestions = dayIntelligenceModel.allSuggestions.filter((suggestion) => {
+    if (suggestion.status !== 'ignored' && suggestion.status !== 'later') return false
+    if (suggestion.affectedDayIds.includes(selectedDay.id)) return true
+    return suggestion.affectedItemIds.some((itemId) => dayContextItemById.get(itemId)?.dayId === selectedDay.id)
+  })
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -555,7 +563,11 @@ export function DayViewPage() {
             {isTripIntelligenceStateLoaded ? (
               <DayContextIntelligenceCard
                 dayId={selectedDay.id}
+                hiddenSuggestions={hiddenDayIntelligenceSuggestions}
                 itemById={dayContextItemById}
+                onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+                onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+                onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
                 suggestions={dayIntelligenceSuggestions}
                 tripId={trip.id}
               />
@@ -600,16 +612,24 @@ export function DayViewPage() {
 
 function DayContextIntelligenceCard({
   dayId,
+  hiddenSuggestions,
   itemById,
+  onIgnore,
+  onLater,
+  onRestore,
   suggestions,
   tripId,
 }: {
   dayId: string
+  hiddenSuggestions: TripIntelligenceSuggestion[]
   itemById: Map<string, ItineraryItem>
+  onIgnore: (suggestion: TripIntelligenceSuggestion) => void
+  onLater: (suggestion: TripIntelligenceSuggestion) => void
+  onRestore: (suggestion: TripIntelligenceSuggestion) => void
   suggestions: TripIntelligenceSuggestion[]
   tripId: string
 }) {
-  if (suggestions.length === 0) {
+  if (suggestions.length === 0 && hiddenSuggestions.length === 0) {
     return null
   }
 
@@ -639,8 +659,22 @@ function DayContextIntelligenceCard({
             >
               {suggestion.action?.label ?? '查看'}
             </Button>
+            <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
           </div>
         ))}
+        {hiddenSuggestions.length > 0 ? (
+          <details className="px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏建议（{hiddenSuggestions.length}）</summary>
+            <div className="mt-2 space-y-1">
+              {hiddenSuggestions.map((suggestion) => (
+                <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                  <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                  <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
     </Card>
   )

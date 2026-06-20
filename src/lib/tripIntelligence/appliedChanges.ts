@@ -314,7 +314,13 @@ function sanitizeAppliedChangeTitle(input: string) {
 }
 
 function sourceForExecutionRecord(source: TripOperationsExecutionSource): TripIntelligenceSourceRef {
-  if (source === 'travel_inbox') return INBOX_SOURCE
+  if (source === 'travel_inbox' || source === 'inbox') return INBOX_SOURCE
+  if (source === 'ledger') return LEDGER_SOURCE
+  if (source === 'ticket') return { id: 'ticket_library', kind: 'ticket', label: 'Ticket Library' }
+  if (source === 'live') return LIVE_SOURCE
+  if (source === 'document') return { id: 'document_center', kind: 'document', label: 'Document Center' }
+  if (source === 'readiness') return { id: 'trip_readiness', kind: 'readiness', label: 'Readiness' }
+  if (source === 'shared_trip') return { id: 'shared_trip', kind: 'shared_trip', label: 'Shared Trip' }
   if (source === 'ai_trip_edit') {
     return {
       id: 'ai_trip_edit',

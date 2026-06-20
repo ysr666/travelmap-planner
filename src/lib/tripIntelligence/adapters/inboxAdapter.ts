@@ -1,6 +1,8 @@
 import type { TripOperationsActiveInboxPreview, TripOperationsInboxSummary } from '../../tripOperationsAgent'
 import type { TravelInboxEntry, TravelInboxPreviewRecord } from '../../../types'
+import type { LedgerExpenseDraftCandidate } from '../../ledgerExtraction'
 import type { TripIntelligenceSuggestion } from '../types'
+import { getLedgerDraftCandidateSuggestionKey } from './ledgerAdapter'
 
 export type TripIntelligenceInboxInput = {
   accountErrorCount?: number
@@ -8,6 +10,7 @@ export type TripIntelligenceInboxInput = {
   accountPreviewCount?: number
   activePreview?: Pick<TripOperationsActiveInboxPreview, 'checkedDiffIds' | 'id'> | TravelInboxPreviewRecord | null
   entries?: TravelInboxEntry[]
+  expenseDraftCandidates?: LedgerExpenseDraftCandidate[]
   summary?: TripOperationsInboxSummary | null
 }
 
@@ -42,6 +45,35 @@ export function mapInboxInputToSuggestions(input?: TripIntelligenceInboxInput | 
       status: 'needs_confirmation',
       ticketIds: [],
       title: '收件箱整理建议待确认',
+    })
+  }
+
+  for (const [index, candidate] of (input.expenseDraftCandidates ?? []).entries()) {
+    const key = getLedgerDraftCandidateSuggestionKey(candidate, index)
+    suggestions.push({
+      action: {
+        kind: 'ledger_create_expense_draft_from_candidate',
+        label: '生成费用草稿',
+        mode: 'confirm_required',
+        sourceActionKind: 'inbox_expense_candidate',
+        targetRoute: 'inbox',
+      },
+      affectedDayIds: [],
+      affectedItemIds: candidate.itemIds,
+      id: key,
+      key,
+      message: candidate.itemIds.length > 0
+        ? `已识别到「${candidate.title}」的费用信息，并关联到现有行程点。`
+        : `已识别到「${candidate.title}」的费用信息；未匹配具体行程点，可能是现场消费。`,
+      priority: 18,
+      requiresConfirmation: true,
+      requiresPreview: false,
+      scope: 'inbox',
+      severity: candidate.amountMinor == null || candidate.warnings.length > 0 ? 'medium' : 'low',
+      source: { id: candidate.source.sourceId ?? key, kind: 'inbox', label: 'expense_candidate' },
+      status: 'needs_confirmation',
+      ticketIds: [],
+      title: '旅行材料可生成费用草稿',
     })
   }
 

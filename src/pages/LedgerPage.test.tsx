@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   getRouteParams: vi.fn(() => new URLSearchParams({ tripId: 'trip_1' })),
   getTicketBlob: vi.fn(),
   getTrip: vi.fn(),
+  restoreSuggestionState: vi.fn(),
+  setSuggestionState: vi.fn(),
   listDaysByTrip: vi.fn(),
   listItemsByTrip: vi.fn(),
   listLedgerBudgets: vi.fn(),
@@ -61,6 +63,14 @@ vi.mock('../db', () => ({
 
 vi.mock('../lib/dataEvents', () => ({
   subscribeTravelDataChanged: mocks.subscribeTravelDataChanged,
+}))
+
+vi.mock('../hooks/useTripIntelligencePersistence', () => ({
+  useTripIntelligencePersistence: () => ({
+    restoreSuggestionState: mocks.restoreSuggestionState,
+    setSuggestionState: mocks.setSuggestionState,
+    suggestionStates: [],
+  }),
 }))
 
 vi.mock('../lib/ai/travelInbox', () => ({
@@ -126,7 +136,26 @@ beforeEach(() => {
     { createdAt: 100, displayName: '我', id: 'person_1', isSelf: true, tripId: 'trip_1', updatedAt: 100 },
   ])
   mocks.listLedgerBudgets.mockResolvedValue([])
-  mocks.listLedgerExpenses.mockResolvedValue([])
+  mocks.listLedgerExpenses.mockResolvedValue([{
+    amountMinor: 12_000,
+    category: 'food',
+    createdAt: 100,
+    currency: 'JPY',
+    date: '2026-04-01',
+    id: 'expense_1',
+    itemIds: ['item_1'],
+    payerParticipantId: 'person_1',
+    paymentStatus: 'paid',
+    reviewStatus: 'needs_review',
+    source: { kind: 'ticket', sourceId: 'ticket_1' },
+    sourceLinks: [{ available: true, id: 'ticket:ticket_1', kind: 'ticket', role: 'payment_receipt', sourceId: 'ticket_1' }],
+    splitMode: 'equal',
+    splitShares: [{ participantId: 'person_1', weight: 1 }],
+    status: 'draft',
+    title: '餐厅费用',
+    tripId: 'trip_1',
+    updatedAt: 100,
+  }])
   mocks.listDaysByTrip.mockResolvedValue([
     { createdAt: 100, date: '2026-04-01', id: 'day_1', sortOrder: 1, tripId: 'trip_1', updatedAt: 100 },
   ])
@@ -170,7 +199,7 @@ afterEach(() => {
 })
 
 describe('LedgerPage', () => {
-  it('shows unified finance suggestions and keeps source scan as a secondary tool', async () => {
+  it('receives review suggestions without scanning source material', async () => {
     await act(async () => {
       root?.render(<LedgerPage />)
     })
@@ -178,16 +207,17 @@ describe('LedgerPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.querySelector('[data-testid="ledger-intelligence-panel"]')?.textContent).toContain('可生成费用草稿')
-    expect(container?.textContent).toContain('从更多来源整理')
+    expect(container?.querySelector('[data-testid="ledger-intelligence-panel"]')?.textContent).toContain('费用待确认')
+    expect(container?.textContent).toContain('手动记一笔')
+    expect(container?.textContent).not.toContain('从更多来源整理')
 
-    const draftButton = Array.from(container?.querySelectorAll('[data-testid="ledger-intelligence-suggestion"] button') ?? [])
-      .find((button) => button.textContent?.includes('生成费用草稿'))
+    const reviewButton = Array.from(container?.querySelectorAll('[data-testid="ledger-intelligence-suggestion"] button') ?? [])
+      .find((button) => button.textContent?.includes('确认费用'))
     await act(async () => {
-      draftButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      reviewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mocks.createLedgerExpense).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('生成费用草稿？')
+    expect(container?.querySelector('[data-testid="ledger-review-queue"]')).toBeTruthy()
   })
 })

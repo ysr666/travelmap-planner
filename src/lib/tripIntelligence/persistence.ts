@@ -1,11 +1,13 @@
 import { db } from '../../db/database'
 import type {
   TripIntelligenceAppliedChangeRecord,
+  TripIntelligenceExecutionSource,
   TripIntelligenceSuggestionStateRecord,
 } from '../../types'
 import { emitTravelDataChanged } from '../dataEvents'
 import {
   createEmptyTripOperationsLocalState,
+  createTripOperationsExecutionRecord,
   readTripOperationsLocalState,
   type TripOperationsDisposition,
   type TripOperationsExecutionRecord,
@@ -16,6 +18,8 @@ import {
   getTripIntelligenceAppliedChangesForRecord,
   sanitizeAppliedChangeDetail,
 } from './appliedChanges'
+import type { TripIntelligenceActionResult, TripIntelligenceSuggestion } from './types'
+import { TRIP_INTELLIGENCE_LATER_MS } from './dispositions'
 
 const LEGACY_STORAGE_KEY_PREFIX = 'tripmap:trip-operations:v2:'
 const LEGACY_MIGRATION_MARKER_PREFIX = 'tripmap:trip-intelligence:migrated:v1:'
@@ -27,6 +31,20 @@ const APPLIED_CHANGE_LIMIT = 200
 export type TripIntelligencePersistedLocalState = {
   localState: TripOperationsLocalState
   suggestionStates: TripIntelligenceSuggestionStateRecord[]
+}
+
+export type AppendTripIntelligenceExecutionResultInput = {
+  result: TripIntelligenceActionResult
+  source: TripIntelligenceExecutionSource
+  suggestion?: Pick<TripIntelligenceSuggestion, 'key' | 'scope' | 'source'>
+  title: string
+}
+
+export type SetTripIntelligenceSuggestionStateInput = {
+  now?: number
+  status: 'completed' | 'ignored' | 'later'
+  suggestion: Pick<TripIntelligenceSuggestion, 'key' | 'scope' | 'severity' | 'source'>
+  until?: number
 }
 
 export async function loadTripIntelligenceLocalState(
@@ -82,6 +100,63 @@ export async function persistTripIntelligenceLocalState(
     })),
   ])
   await pruneTripIntelligencePersistence(tripId, now)
+  return loadPersistedStateWithoutMigration(tripId)
+}
+
+export async function appendTripIntelligenceExecutionResult(
+  tripId: string,
+  input: AppendTripIntelligenceExecutionResultInput,
+  now = Date.now(),
+) {
+  const shouldRecordExecution = input.result.appliedChanges.length > 0
+  const execution = shouldRecordExecution
+    ? createTripOperationsExecutionRecord({
+        appliedChanges: [],
+        fingerprints: input.suggestion ? [input.suggestion.key] : [],
+        intelligenceAppliedChanges: input.result.appliedChanges,
+        now,
+        source: input.source,
+        status: 'success',
+        title: input.title,
+      })
+    : null
+  const appliedRecords = execution ? mapExecutionRecord(tripId, execution) : []
+  const suggestionState = input.result.status === 'completed' && input.suggestion
+    ? buildSuggestionStateRecord(tripId, {
+        now,
+        status: 'completed',
+        suggestion: input.suggestion,
+      })
+    : null
+
+  await db.transaction(
+    'rw',
+    [db.tripIntelligenceAppliedChanges, db.tripIntelligenceSuggestionStates],
+    async () => {
+      if (appliedRecords.length > 0) await db.tripIntelligenceAppliedChanges.bulkPut(appliedRecords)
+      if (suggestionState) await db.tripIntelligenceSuggestionStates.put(suggestionState)
+    },
+  )
+  await Promise.all([
+    ...appliedRecords.map((record) => enqueueObjectUpsert({ object: record, objectType: 'trip_intelligence_applied_change' })),
+    ...(suggestionState ? [enqueueObjectUpsert({ object: suggestionState, objectType: 'trip_intelligence_suggestion_state' })] : []),
+  ])
+  await pruneTripIntelligencePersistence(tripId, now)
+  emitTravelDataChanged()
+  return loadPersistedStateWithoutMigration(tripId)
+}
+
+export async function setTripIntelligenceSuggestionState(
+  tripId: string,
+  input: SetTripIntelligenceSuggestionStateInput,
+) {
+  if (input.status === 'ignored' && input.suggestion.severity === 'high') {
+    throw new Error('High-severity trip intelligence suggestions cannot be ignored.')
+  }
+  const record = buildSuggestionStateRecord(tripId, input)
+  await db.tripIntelligenceSuggestionStates.put(record)
+  await enqueueObjectUpsert({ object: record, objectType: 'trip_intelligence_suggestion_state' })
+  emitTravelDataChanged()
   return loadPersistedStateWithoutMigration(tripId)
 }
 
@@ -206,6 +281,28 @@ function mapDispositionToRecord(
     until: disposition.status === 'snoozed' ? getLatestPossibleEndOfZonedDate(disposition.zonedDate) : undefined,
     updatedAt: disposition.createdAt,
     zonedDate: disposition.zonedDate,
+  }
+}
+
+function buildSuggestionStateRecord(
+  tripId: string,
+  input: Omit<SetTripIntelligenceSuggestionStateInput, 'suggestion'> & {
+    suggestion: Pick<TripIntelligenceSuggestion, 'key' | 'scope' | 'source'>
+  },
+): TripIntelligenceSuggestionStateRecord {
+  const now = input.now ?? Date.now()
+  const id = buildSuggestionStateId(tripId, input.suggestion.key)
+  const existingCreatedAt = now
+  return {
+    createdAt: existingCreatedAt,
+    id,
+    scope: input.suggestion.scope,
+    sourceKind: input.suggestion.source.kind,
+    status: input.status,
+    suggestionKey: input.suggestion.key,
+    tripId,
+    until: input.status === 'later' ? input.until ?? now + TRIP_INTELLIGENCE_LATER_MS : undefined,
+    updatedAt: now,
   }
 }
 

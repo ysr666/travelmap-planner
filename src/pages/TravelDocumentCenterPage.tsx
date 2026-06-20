@@ -79,6 +79,8 @@ import { listTravelCenterSyncConflicts, resolveTravelCenterSyncConflict, syncTra
 import { enableTravelWebPush, showDueLocalReminders } from '../lib/webPush'
 import { extractTransportImportPreview, type TransportImportPreview } from '../lib/transportImport'
 import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../lib/tripIntelligence'
+import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from '../components/trip/TripIntelligenceSuggestionControls'
 
 type CenterTab = 'documents' | 'transport' | 'attachments'
 type DraftSegment = Omit<TransportSegment, 'id' | 'bookingId' | 'tripId' | 'sortOrder' | 'createdAt' | 'updatedAt'>
@@ -131,6 +133,7 @@ export function TravelDocumentCenterPage() {
   const [deleteAfterMigration, setDeleteAfterMigration] = useState(false)
 
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId)
+  const { restoreSuggestionState, setSuggestionState, suggestionStates } = useTripIntelligencePersistence(selectedTripId)
   const documentIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
     documentInput: {
       documentTripIds,
@@ -143,8 +146,12 @@ export function TravelDocumentCenterPage() {
       transportSegmentsByBooking: segmentsByBooking,
       vaultUnlocked,
     },
-  }), [bookings, documentTripIds, documents, legacyTickets, reminders, selectedTrip, segmentsByBooking, syncConflicts, vaultUnlocked])
+    suggestionStates,
+  }), [bookings, documentTripIds, documents, legacyTickets, reminders, selectedTrip, segmentsByBooking, suggestionStates, syncConflicts, vaultUnlocked])
   const documentSuggestions = documentIntelligenceModel.forDocument()
+  const hiddenDocumentSuggestions = documentIntelligenceModel.allSuggestions.filter((suggestion) =>
+    suggestion.scope === 'document' && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+  )
 
   const refresh = useCallback(async () => {
     const nextTrips = await listTrips()
@@ -359,9 +366,13 @@ export function TravelDocumentCenterPage() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
 
-      {documentSuggestions.length > 0 ? (
+      {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
         <DocumentIntelligencePanel
+          hiddenSuggestions={hiddenDocumentSuggestions}
           onAction={handleDocumentSuggestion}
+          onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+          onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+          onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
           suggestions={documentSuggestions}
         />
       ) : null}
@@ -453,10 +464,18 @@ function CloudControls({ busy, conflicts, onEnablePush, onResolve, onSync }: {
 }
 
 function DocumentIntelligencePanel({
+  hiddenSuggestions,
   onAction,
+  onIgnore,
+  onLater,
+  onRestore,
   suggestions,
 }: {
+  hiddenSuggestions: TripIntelligenceSuggestion[]
   onAction: (suggestion: TripIntelligenceSuggestion) => void
+  onIgnore: (suggestion: TripIntelligenceSuggestion) => void
+  onLater: (suggestion: TripIntelligenceSuggestion) => void
+  onRestore: (suggestion: TripIntelligenceSuggestion) => void
   suggestions: TripIntelligenceSuggestion[]
 }) {
   return (
@@ -470,21 +489,31 @@ function DocumentIntelligencePanel({
       </div>
       <div className="space-y-2">
         {suggestions.map((suggestion) => (
-          <button
-            className="flex min-h-11 w-full items-start gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-left tm-focus"
-            data-testid="travel-document-intelligence-action"
-            key={suggestion.id}
-            onClick={() => onAction(suggestion)}
-            type="button"
-          >
-            <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : suggestion.severity === 'medium' ? 'text-amber-600' : 'text-primary'}`} />
-            <span className="min-w-0 flex-1">
-              <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
-              <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
-            </span>
-            <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
-          </button>
+          <div className="flex min-h-11 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-1" key={suggestion.id}>
+            <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="travel-document-intelligence-action" onClick={() => onAction(suggestion)} type="button">
+              <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : suggestion.severity === 'medium' ? 'text-amber-600' : 'text-primary'}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+                <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+              </span>
+              <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+            </button>
+            <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
+          </div>
         ))}
+        {hiddenSuggestions.length > 0 ? (
+          <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏资料建议（{hiddenSuggestions.length}）</summary>
+            <div className="mt-2 space-y-1">
+              {hiddenSuggestions.map((suggestion) => (
+                <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                  <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                  <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
     </Card>
   )

@@ -1,3 +1,4 @@
+import type { TripIntelligenceExecutionSource } from '../types'
 import type { TripOperationsPhase, TripOperationsRecommendation } from './tripOperationsAgent'
 import type { TripIntelligenceAppliedChange, TripIntelligenceScope, TripIntelligenceSourceKind } from './tripIntelligence/types'
 
@@ -58,7 +59,7 @@ export type TripOperationsExecutionRecord = {
   title: string
 }
 
-export type TripOperationsExecutionSource = 'ai_trip_edit' | 'travel_inbox' | 'trip_operations'
+export type TripOperationsExecutionSource = TripIntelligenceExecutionSource
 
 export type TripOperationsLocalState = {
   dispositions: TripOperationsDisposition[]
@@ -134,6 +135,19 @@ const VALID_INTELLIGENCE_SOURCE_KINDS = new Set<TripIntelligenceSourceKind>([
   'readiness',
   'shared_trip',
   'ticket',
+])
+const VALID_EXECUTION_SOURCES = new Set<TripOperationsExecutionSource>([
+  'ai_trip_edit',
+  'document',
+  'inbox',
+  'ledger',
+  'live',
+  'operations',
+  'readiness',
+  'shared_trip',
+  'ticket',
+  'travel_inbox',
+  'trip_operations',
 ])
 
 export function createEmptyTripOperationsLocalState(): TripOperationsLocalState {
@@ -312,7 +326,7 @@ function isExecutionRecord(input: unknown): input is TripOperationsExecutionReco
     ) &&
     Array.isArray(record.recommendationFingerprints) &&
     record.recommendationFingerprints.every((entry) => typeof entry === 'string') &&
-    (record.source === 'ai_trip_edit' || record.source === 'travel_inbox' || record.source === 'trip_operations') &&
+    VALID_EXECUTION_SOURCES.has(record.source as TripOperationsExecutionSource) &&
     (record.status === 'partial' || record.status === 'success') &&
     typeof record.title === 'string'
   )

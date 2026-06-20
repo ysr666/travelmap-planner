@@ -595,12 +595,25 @@ export type SharedTripMutation = {
 
 export type TripIntelligencePrivacyLevel = 'public' | 'private' | 'sensitive_redacted'
 
+export type TripIntelligenceExecutionSource =
+  | 'ai_trip_edit'
+  | 'document'
+  | 'inbox'
+  | 'ledger'
+  | 'live'
+  | 'operations'
+  | 'readiness'
+  | 'shared_trip'
+  | 'ticket'
+  | 'travel_inbox'
+  | 'trip_operations'
+
 export type TripIntelligenceAppliedChangeRecord = {
   actionType: string
   dedupeKey: string
   detail?: string
   executionId: string
-  executionSource: 'ai_trip_edit' | 'travel_inbox' | 'trip_operations'
+  executionSource: TripIntelligenceExecutionSource
   executionStatus: 'partial' | 'success'
   executionTitle: string
   id: string

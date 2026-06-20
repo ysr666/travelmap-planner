@@ -13,10 +13,12 @@ import {
 } from '../../lib/companion'
 import { navigateTo } from '../../lib/routes'
 import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
+import { useTripIntelligencePersistence } from '../../hooks/useTripIntelligencePersistence'
 import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, SharedTripMutation, TicketMeta, Trip } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
+import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from './TripIntelligenceSuggestionControls'
 
 type SharedTripPanelProps = {
   days: Day[]
@@ -38,6 +40,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { restoreSuggestionState, setSuggestionState, suggestionStates } = useTripIntelligencePersistence(trip.id)
 
   const itemCount = useMemo(() => Object.values(itemsByDay).reduce((sum, items) => sum + items.length, 0), [itemsByDay])
   const pendingMutationCount = state?.configured && state.signedIn
@@ -45,8 +48,12 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
     : 0
   const sharedTripIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
     sharedMutations: state?.configured && state.signedIn ? state.mutations : [],
-  }), [state])
+    suggestionStates,
+  }), [state, suggestionStates])
   const sharedTripSuggestions = sharedTripIntelligenceModel.forSharedTrip()
+  const hiddenSharedTripSuggestions = sharedTripIntelligenceModel.allSuggestions.filter((suggestion) =>
+    suggestion.scope === 'shared_trip' && (suggestion.status === 'ignored' || suggestion.status === 'later'),
+  )
 
   async function refresh() {
     try {
@@ -180,9 +187,13 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
             <SummaryCell label="票据摘要" value={`${tickets.length} 条`} />
           </div>
 
-          {sharedTripSuggestions.length > 0 ? (
+          {sharedTripSuggestions.length > 0 || hiddenSharedTripSuggestions.length > 0 ? (
             <SharedTripIntelligencePanel
+              hiddenSuggestions={hiddenSharedTripSuggestions}
               onAction={handleSharedTripSuggestion}
+              onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+              onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+              onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
               suggestions={sharedTripSuggestions}
             />
           ) : null}
@@ -330,10 +341,18 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 }
 
 function SharedTripIntelligencePanel({
+  hiddenSuggestions,
   onAction,
+  onIgnore,
+  onLater,
+  onRestore,
   suggestions,
 }: {
+  hiddenSuggestions: TripIntelligenceSuggestion[]
   onAction: (suggestion: TripIntelligenceSuggestion) => void
+  onIgnore: (suggestion: TripIntelligenceSuggestion) => void
+  onLater: (suggestion: TripIntelligenceSuggestion) => void
+  onRestore: (suggestion: TripIntelligenceSuggestion) => void
   suggestions: TripIntelligenceSuggestion[]
 }) {
   return (
@@ -343,21 +362,31 @@ function SharedTripIntelligencePanel({
         <span className="text-xs font-semibold text-primary">{suggestions.length} 项</span>
       </div>
       {suggestions.map((suggestion) => (
-        <button
-          className="flex min-h-11 w-full items-start gap-3 rounded-lg bg-surface px-3 py-2 text-left tm-focus"
-          data-testid="shared-trip-intelligence-action"
-          key={suggestion.id}
-          onClick={() => onAction(suggestion)}
-          type="button"
-        >
-          <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
-          <span className="min-w-0 flex-1">
-            <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
-            <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
-          </span>
-          <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
-        </button>
+        <div className="flex min-h-11 items-center gap-1 rounded-lg bg-surface px-1" key={suggestion.id}>
+          <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="shared-trip-intelligence-action" onClick={() => onAction(suggestion)} type="button">
+            <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+            <span className="min-w-0 flex-1">
+              <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+              <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+          </button>
+          <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
+        </div>
       ))}
+      {hiddenSuggestions.length > 0 ? (
+        <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏同行建议（{hiddenSuggestions.length}）</summary>
+          <div className="mt-2 space-y-1">
+            {hiddenSuggestions.map((suggestion) => (
+              <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   )
 }

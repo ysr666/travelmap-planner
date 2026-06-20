@@ -2,10 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TripOperationsLocalState } from '../lib/tripOperationsState'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
 import {
+  appendTripIntelligenceExecutionResult,
   clearTripIntelligenceHistory,
   createEmptyTripIntelligencePersistedLocalState,
   loadTripIntelligenceLocalState,
   persistTripIntelligenceLocalState,
+  restoreTripIntelligenceSuggestionState,
+  setTripIntelligenceSuggestionState,
+  type AppendTripIntelligenceExecutionResultInput,
+  type SetTripIntelligenceSuggestionStateInput,
   type TripIntelligencePersistedLocalState,
 } from '../lib/tripIntelligence/persistence'
 
@@ -82,10 +87,33 @@ export function useTripIntelligencePersistence(tripId?: string | null) {
       })
   }, [tripId])
 
+  const appendExecutionResult = useCallback(async (input: AppendTripIntelligenceExecutionResultInput) => {
+    if (!tripId) return
+    const persisted = await appendTripIntelligenceExecutionResult(tripId, input)
+    latestLocalStateRef.current = persisted.localState
+    setSnapshot(persisted)
+  }, [tripId])
+
+  const setSuggestionState = useCallback(async (input: SetTripIntelligenceSuggestionStateInput) => {
+    if (!tripId) return
+    const persisted = await setTripIntelligenceSuggestionState(tripId, input)
+    latestLocalStateRef.current = persisted.localState
+    setSnapshot(persisted)
+  }, [tripId])
+
+  const restoreSuggestionState = useCallback(async (suggestionKey: string) => {
+    if (!tripId) return
+    await restoreTripIntelligenceSuggestionState(tripId, suggestionKey)
+    await reload()
+  }, [reload, tripId])
+
   return {
+    appendExecutionResult,
     isLoaded: loadedTripId === (tripId ?? null),
     localState: snapshot.localState,
     reload,
+    restoreSuggestionState,
+    setSuggestionState,
     suggestionStates: snapshot.suggestionStates,
     updateLocalState,
   }

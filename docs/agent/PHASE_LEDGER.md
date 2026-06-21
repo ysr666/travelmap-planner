@@ -444,3 +444,9 @@ Validation:
 - Focused `e2e/mobile-ux-a11y.spec.ts` passed after the semantic repair.
 - Final `PLAYWRIGHT_PROXY=http://127.0.0.1:10808 PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed: 126 tests in approximately 5.7 minutes.
 - No real AI, search, route, cloud, or provider operation was invoked; provider-backed E2E paths remained mocked/disabled.
+- Fetched and merged the parallel `main` increment `2500f73` after read-only review of its production smoke script and Companion owner-select RLS migration; no Home, Search, navigation, or product-code conflicts occurred.
+- Post-merge `node --check scripts/trip-intelligence-cross-device-smoke.mjs`, full lint, 166-file/1338-test unit suite, and production build passed.
+- GitHub Actions run `27873146515` for `main@2500f73` passed Lint, Type Check, Build, Unit Tests, and E2E Tests. This feature push has no branch run because CI is configured for `main` pushes and `main` pull requests only.
+- Latest Cloudflare Pages production deployment `0f6e0bd8-22d8-48f8-92c0-8a3869cb5da0` for `main@2500f73` completed the deploy stage successfully.
+- Supabase production migration history includes `harden_production_boundaries` and `allow_owner_select_companion_projection`; targeted SQL confirmed owner-or-member SELECT plus owner-only insert/update/delete policies on `companion_shared_trips`.
+- Supabase security advisors reported one existing leaked-password-protection warning and one informational deny-all connector-secrets table notice; performance advisors reported nine informational unused-index notices and no blocking issue.

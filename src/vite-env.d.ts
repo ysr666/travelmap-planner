@@ -21,4 +21,5 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_MAPS_API_KEY?: string
   readonly VITE_ROUTE_PROXY_URL?: string
   readonly VITE_ROUTE_PROXY_PROVIDER?: string
+  readonly VITE_E2E_AUTH_BYPASS?: string
 }

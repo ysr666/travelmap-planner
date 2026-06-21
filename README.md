@@ -134,6 +134,8 @@ Supabase 建表、RLS 和 Storage policy 见 [Supabase 云端同步配置](docs/
 
 统一旅行智能的 `appliedChanges` 与 `ignored/later/completed` 状态保存在 IndexedDB v10，并通过 `trip_intelligence_applied_change`、`trip_intelligence_suggestion_state` 跨设备同步。普通非 Operations 建议可忽略或稍后 24 小时；高风险、同步冲突和资料过期建议只能稍后。Finance 是费用草稿接收与审核端：票据和已分配旅行的 Inbox 材料只在用户确认后生成 `draft + needs_review`，不会后台扫描或自动计入结算。
 
+Package 7 与生产权限加固 migration 已部署。Companion 生产 RPC smoke 与真实双设备 intelligence smoke 已完整通过，覆盖设备 A 上传、设备 B 全新 IndexedDB 恢复、latest-wins 和 tombstone 删除传播。Smoke session 只缓存在仓库外并自动刷新，两个设备与 Companion 复用同一次登录，不重复发送 OTP。
+
 ## 🗺️ 道路路线 Polyline
 
 地图默认使用直线连接当天地点。配置 TripMap provider proxy 后，在地图页手动点击“生成道路路线”，旅图会按相邻地点请求道路路线 polyline。失败、超时、额度不足或交通模式不支持时，会回退显示直线。

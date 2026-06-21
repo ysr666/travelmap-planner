@@ -26,6 +26,7 @@
 - E2E locator hardening 完成。
 - Unified Trip Intelligence Packages 1-7 完成：统一建议/动作/完成记录、Trip Home 收敛、Day/Live、Ticket/Inbox/Finance、Document/Shared Trip、IndexedDB v10 与跨设备对象同步。
 - Finance 接收端改造完成：移除后台来源扫描，Ticket/Inbox 费用证据必须确认后生成 `draft + needs_review`。
+- Package 7、生产权限加固与 Companion owner policy 前向修复已部署；Companion 与真实双设备生产 smoke 完整通过，覆盖 A 上传、B 全新恢复、latest-wins 与 tombstone 传播。
 
 当前 canonical routes：
 

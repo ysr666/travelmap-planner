@@ -302,10 +302,12 @@ using (
 ## RPC 与生产安全边界
 
 - `20260620060942_persistent_trip_intelligence_sync.sql` 已在生产部署，扩展 `cloud_sync_objects` 的两类 intelligence object type。
-- `20260620074105_harden_production_boundaries.sql` 将公开 Companion/Inbox RPC 保持为签名不变的 `SECURITY INVOKER` 薄入口，把提权实现、RLS helper、更新时间 trigger、RLS event trigger 和 reminder cron 移入非暴露 `tripmap_private` schema。
+- `20260620074105_harden_production_boundaries.sql` 已在生产部署：公开 Companion/Inbox RPC 保持为签名不变的 `SECURITY INVOKER` 薄入口，提权实现、RLS helper、更新时间 trigger、RLS event trigger 和 reminder cron 位于非暴露 `tripmap_private` schema。
+- `20260620135038_allow_owner_select_companion_projection.sql` 已作为前向修复部署，使 owner 在新建共享投影的 `INSERT ... RETURNING` 阶段直接通过 SELECT policy，成员读取仍使用私有权限 helper。
 - `PUBLIC` 与 `anon` 无权执行登录态 RPC；`authenticated` 只获得公开入口及其所需私有实现的精确执行权。
-- 生产 advisor 报告的 8 个外键会补覆盖索引；不会根据 unused-index 提示删除既有索引。
+- 生产 advisor 报告的 8 个外键已补覆盖索引；不会根据 unused-index 提示删除既有索引。
 - `travel_inbox_connector_secrets` 开启 RLS 且无客户端 policy 是刻意 deny-all，connector secret 只允许受控后端路径访问。
+- Companion 与双设备 intelligence 生产 smoke 已完整通过，覆盖 A 端上传、全新 B 端恢复、建议状态与完成历史恢复、latest-wins 和 tombstone 删除传播。脚本把 refresh session 以 `0600` 权限缓存到仓库外，后续运行自动刷新并在两个设备与 Companion 之间复用，不重复投递 OTP。
 
 ## 票据 Blob 独立同步与离线缓存
 

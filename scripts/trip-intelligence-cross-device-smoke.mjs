@@ -6,6 +6,10 @@ import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import tls from 'node:tls'
+import {
+  persistSupabaseSmokeSession,
+  restoreSupabaseSmokeSession,
+} from './lib/supabase-smoke-session.mjs'
 
 const DEFAULT_APP_URL = 'https://travelmap-planner.pages.dev'
 const DEVICE_ID_KEY = 'tripmap:object-sync:device-id'
@@ -48,7 +52,9 @@ async function run() {
   await seedDeviceA(pageA)
   await pageA.goto(`${appUrl}/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
-  const activeSuggestion = pageA.locator('[data-testid="trip-intelligence-suggestion"]')
+  const activeSuggestion = pageA.locator(
+    '[data-testid="trip-operations-recommendation"], [data-testid="trip-intelligence-suggestion"]',
+  )
     .filter({ has: pageA.getByRole('button', { name: /忽略建议/ }) })
     .first()
   await activeSuggestion.waitFor({ state: 'visible', timeout: 15_000 })
@@ -71,14 +77,7 @@ async function run() {
 
   log('Restoring the same trip into a fresh Device B IndexedDB.')
   const pageB = await contextB.newPage()
-  await pageB.goto(`${appUrl}/#/settings?section=cloud`, { waitUntil: 'domcontentloaded' })
-  const backupGroup = pageB.getByTestId('cloud-backup-group').filter({ hasText: `TripMap Intelligence Smoke ${smokeId}` })
-  await backupGroup.waitFor({ state: 'visible', timeout: 20_000 })
-  await backupGroup.getByTestId('cloud-restore-backup').click()
-  const restoreDialog = pageB.getByTestId('cloud-save-confirm-dialog')
-  await restoreDialog.waitFor({ state: 'visible' })
-  await restoreDialog.getByRole('button', { name: '同步账号数据到此设备' }).click()
-  await pageB.waitForURL(new RegExp(`#\/trip\?tripId=${tripId}`), { timeout: 30_000 })
+  await restoreCurrentTripFromCloud(pageB)
 
   const recordsB = await readIntelligenceRecords(pageB)
   if (!recordsB.states.some((record) => record.id === stateId)) fail('Device B did not restore the ignored suggestion state.')
@@ -99,7 +98,7 @@ async function run() {
   if (latestRemote?.payload?.status !== 'later' || latestRemote.updated_at_ms !== laterUpdatedAt) {
     fail('Remote suggestion state did not keep the latest update.')
   }
-  await syncCurrentTrip(pageA)
+  await restoreCurrentTripFromCloud(pageA)
   const latestA = (await readIntelligenceRecords(pageA)).states.find((record) => record.id === stateId)
   if (latestA?.status !== 'later' || latestA.updatedAt !== laterUpdatedAt) {
     fail('Device A did not receive Device B latest-wins state.')
@@ -112,7 +111,7 @@ async function run() {
     const remote = await readRemoteObject(entry.objectType, entry.objectId)
     if (!remote?.deleted_at_ms) fail('An intelligence delete tombstone was not uploaded.')
   }
-  await syncCurrentTrip(pageA)
+  await restoreCurrentTripFromCloud(pageA)
   const deletedA = await readIntelligenceRecords(pageA)
   if (deletedA.states.length !== 0 || deletedA.changes.length !== 0) {
     fail('Device A restored intelligence records after remote deletion.')
@@ -128,10 +127,29 @@ async function run() {
 }
 
 async function authenticate(targetEmail) {
+  const accessToken = process.env.SUPABASE_SMOKE_ACCESS_TOKEN
+  const refreshToken = process.env.SUPABASE_SMOKE_REFRESH_TOKEN
+  if (accessToken && refreshToken) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    })
+    if (error || !data.session) fail('Supabase smoke session token was rejected.')
+    persistSupabaseSmokeSession(data.session, { email: targetEmail, supabaseUrl })
+    return data.session
+  }
+
+  const cachedSession = await restoreSupabaseSmokeSession(supabase, {
+    email: targetEmail,
+    supabaseUrl,
+  })
+  if (cachedSession) return cachedSession
+
   const password = process.env.SUPABASE_SMOKE_PASSWORD
   if (password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email: targetEmail, password })
     if (error || !data.session) fail('Supabase smoke password sign-in failed.')
+    persistSupabaseSmokeSession(data.session, { email: targetEmail, supabaseUrl })
     return data.session
   }
 
@@ -152,6 +170,7 @@ async function authenticate(targetEmail) {
     ? await supabase.auth.verifyOtp({ email: targetEmail, token: credential.token, type: 'email' })
     : await supabase.auth.verifyOtp({ token_hash: credential.tokenHash, type: credential.type })
   if (verified.error || !verified.data.session) fail('Supabase smoke OTP verification failed.')
+  persistSupabaseSmokeSession(verified.data.session, { email: targetEmail, supabaseUrl })
   return verified.data.session
 }
 
@@ -271,15 +290,55 @@ async function seedDeviceA(page) {
 
 async function syncCurrentTrip(page) {
   await page.goto(`${appUrl}/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  const syncDetails = page.locator('#trip-sync-archive-section details')
-  if (!(await syncDetails.getAttribute('open'))) await syncDetails.locator('summary').click()
+  const syncDetails = page.locator('#trip-sync-archive-section > details')
+  if (!(await syncDetails.evaluate((details) => details.open))) {
+    await syncDetails.locator(':scope > summary').click()
+  }
   const upload = page.getByTestId('cloud-upload-current-trip')
   await upload.waitFor({ state: 'visible', timeout: 20_000 })
   await upload.click()
   const dialog = page.getByTestId('cloud-save-confirm-dialog')
   await dialog.waitFor({ state: 'visible' })
   await dialog.getByRole('button', { name: '立即同步' }).click()
-  await page.getByText('此设备版本已同步到账号。', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+  await waitFor(async () => {
+    const status = await readTripSyncOutboxStatus(page)
+    return status.pending === 0
+  }, 'Trip sync outbox', 30_000)
+  const status = await readTripSyncOutboxStatus(page)
+  if (status.errors > 0) fail('Trip sync outbox contains failed operations.')
+}
+
+async function restoreCurrentTripFromCloud(page) {
+  await page.goto(`${appUrl}/#/settings?section=cloud`, { waitUntil: 'domcontentloaded' })
+  const backupGroup = page.getByTestId('cloud-backup-group')
+    .filter({ hasText: `TripMap Intelligence Smoke ${smokeId}` })
+  await backupGroup.waitFor({ state: 'visible', timeout: 30_000 })
+  await backupGroup.getByTestId('cloud-restore-backup').click()
+  const dialog = page.getByTestId('cloud-save-confirm-dialog')
+  await dialog.waitFor({ state: 'visible' })
+  await dialog.getByRole('button', { name: '同步账号数据到此设备' }).click()
+  await page.waitForURL((url) => url.hash === `#/trip?tripId=${tripId}`, { timeout: 30_000 })
+}
+
+async function readTripSyncOutboxStatus(page) {
+  return page.evaluate(async (targetTripId) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const read = db.transaction('syncOutbox', 'readonly').objectStore('syncOutbox').getAll()
+    const records = await new Promise((resolve, reject) => {
+      read.onsuccess = () => resolve(read.result)
+      read.onerror = () => reject(read.error)
+    })
+    db.close()
+    const current = records.filter((record) => record.tripId === targetTripId)
+    return {
+      errors: current.filter((record) => record.status === 'error').length,
+      pending: current.filter((record) => record.status === 'pending' || record.status === 'syncing').length,
+    }
+  }, tripId)
 }
 
 async function readIntelligenceRecords(page) {

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js'
 import { chromium } from '@playwright/test'
+import PostalMime from 'postal-mime'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import tls from 'node:tls'
@@ -29,11 +31,14 @@ const itemId = `item_${smokeId}`
 let browser
 let contextA
 let contextB
+let mailboxDiagnosticLogged = false
 
-try {
-  log('Authenticating the production smoke account.')
-  const session = await authenticate(email)
-  const authStorageKey = buildAuthStorageKey(supabaseUrl)
+async function run() {
+  try {
+    log('Authenticating the production smoke account.')
+    const session = await authenticate(email)
+    if (process.env.TRIPMAP_SMOKE_RUN_COMPANION === '1') await runCompanionSmoke(session)
+    const authStorageKey = buildAuthStorageKey(supabaseUrl)
   browser = await chromium.launch({ headless: true })
   contextA = await createDeviceContext(browser, authStorageKey, session, `device-a-${smokeId}`)
   contextB = await createDeviceContext(browser, authStorageKey, session, `device-b-${smokeId}`)
@@ -43,7 +48,7 @@ try {
   await seedDeviceA(pageA)
   await pageA.goto(`${appUrl}/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
-  const activeSuggestion = pageA.locator('[data-testid="trip-intelligence-suggestion"][data-source="operations"]')
+  const activeSuggestion = pageA.locator('[data-testid="trip-intelligence-suggestion"]')
     .filter({ has: pageA.getByRole('button', { name: /忽略建议/ }) })
     .first()
   await activeSuggestion.waitFor({ state: 'visible', timeout: 15_000 })
@@ -113,12 +118,13 @@ try {
     fail('Device A restored intelligence records after remote deletion.')
   }
 
-  log('Production two-device intelligence smoke passed.')
-} finally {
-  await cleanupRemoteSmoke()
-  await contextB?.close().catch(() => undefined)
-  await contextA?.close().catch(() => undefined)
-  await browser?.close().catch(() => undefined)
+    log('Production two-device intelligence smoke passed.')
+  } finally {
+    await cleanupRemoteSmoke()
+    await contextB?.close().catch(() => undefined)
+    await contextA?.close().catch(() => undefined)
+    await browser?.close().catch(() => undefined)
+  }
 }
 
 async function authenticate(targetEmail) {
@@ -129,14 +135,22 @@ async function authenticate(targetEmail) {
     return data.session
   }
 
-  const sentAt = Date.now()
-  const { error } = await supabase.auth.signInWithOtp({
-    email: targetEmail,
-    options: { shouldCreateUser: false },
-  })
-  if (error) fail('Supabase smoke OTP send failed.')
-  const token = process.env.SUPABASE_SMOKE_OTP || await readLatestOtpFromImap(sentAt)
-  const verified = await supabase.auth.verifyOtp({ email: targetEmail, token, type: 'email' })
+  const reuseRecentAuthEmail = process.env.TRIPMAP_SMOKE_REUSE_RECENT_AUTH_EMAIL === '1'
+  const sentAt = reuseRecentAuthEmail ? Date.now() - 15 * 60_000 : Date.now()
+  if (!reuseRecentAuthEmail) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: targetEmail,
+      options: { shouldCreateUser: false },
+    })
+    if (error) fail('Supabase smoke authentication email send failed.')
+  }
+  const configuredOtp = process.env.SUPABASE_SMOKE_OTP
+  const credential = configuredOtp
+    ? { kind: 'otp', token: configuredOtp }
+    : await readLatestAuthCredentialFromImap(sentAt)
+  const verified = credential.kind === 'otp'
+    ? await supabase.auth.verifyOtp({ email: targetEmail, token: credential.token, type: 'email' })
+    : await supabase.auth.verifyOtp({ token_hash: credential.tokenHash, type: credential.type })
   if (verified.error || !verified.data.session) fail('Supabase smoke OTP verification failed.')
   return verified.data.session
 }
@@ -149,6 +163,26 @@ async function createDeviceContext(targetBrowser, authStorageKey, session, devic
     window.localStorage.setItem('tripmap:cloud-auto-snapshot:enabled', '0')
   }, { authStorageKey, deviceId, session })
   return context
+}
+
+async function runCompanionSmoke(session) {
+  log('Running the authenticated Companion production smoke with the same session.')
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['scripts/companion-shared-trip-smoke.mjs'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SUPABASE_COMPANION_SMOKE_ACCESS_TOKEN: session.access_token,
+        SUPABASE_COMPANION_SMOKE_REFRESH_TOKEN: session.refresh_token,
+      },
+      stdio: 'inherit',
+    })
+    child.once('error', reject)
+    child.once('exit', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error('Companion production smoke failed.'))
+    })
+  })
 }
 
 async function seedDeviceA(page) {
@@ -172,6 +206,7 @@ async function seedDeviceA(page) {
       createdAt: now,
       dayId: targetDayId,
       id: targetItemId,
+      locationName: 'Smoke Venue',
       sortOrder: 1,
       startTime,
       ticketIds: [],
@@ -382,7 +417,7 @@ async function cleanupRemoteSmoke() {
   }
 }
 
-async function readLatestOtpFromImap(sentAt) {
+async function readLatestAuthCredentialFromImap(sentAt) {
   const host = process.env.QA_EMAIL_IMAP_HOST
   const port = Number(process.env.QA_EMAIL_IMAP_PORT || 993)
   const username = process.env.QA_EMAIL || email
@@ -391,31 +426,76 @@ async function readLatestOtpFromImap(sentAt) {
 
   const deadline = Date.now() + 120_000
   while (Date.now() < deadline) {
-    const otp = await findOtpOnce({ host, password, port, sentAt, username }).catch(() => null)
-    if (otp) return otp
+    let credential = null
+    try {
+      credential = await findAuthCredentialOnce({ host, password, port, sentAt, username })
+    } catch (error) {
+      if (process.env.TRIPMAP_SMOKE_MAIL_DIAGNOSTIC === '1' && !mailboxDiagnosticLogged) {
+        const failure = error instanceof Error && /^mailbox_[a-z]+_[A-Z0-9_]+_[A-Za-z]+$/.test(error.message)
+          ? error.message.replace('mailbox_', '').toLowerCase()
+          : 'query_unknown'
+        log(`Mailbox diagnostic: IMAP ${failure} failed before message parsing.`)
+        mailboxDiagnosticLogged = true
+      }
+    }
+    if (credential) return credential
     await new Promise((resolve) => setTimeout(resolve, 4_000))
   }
-  fail('Timed out waiting for the Supabase OTP email.')
+  fail('Timed out waiting for the Supabase authentication email.')
 }
 
-async function findOtpOnce({ host, password, port, sentAt, username }) {
-  const client = await ImapClient.connect({ host, port })
+async function findAuthCredentialOnce({ host, password, port, sentAt, username }) {
+  let client
+  let stage = 'connect'
   try {
+    client = await ImapClient.connect({ host, port })
+    stage = 'login'
     await client.command(`LOGIN ${quoteImap(username)} ${quoteImap(password)}`)
+    stage = 'select'
     await client.command('SELECT INBOX')
+    stage = 'search'
     const search = await client.command('SEARCH ALL')
     const ids = parseSearchIds(search).slice(-20).reverse()
+    let candidateCount = 0
     for (const id of ids) {
+      stage = 'fetch'
       const raw = await client.command(`FETCH ${id} (BODY.PEEK[] INTERNALDATE)`)
       if (!/supabase|验证码|verification|confirm/i.test(raw)) continue
       const date = parseMessageDate(raw)
-      if (date && date < sentAt - 120_000) continue
-      const token = extractOtp(raw)
-      if (token) return token
+      if (date && date < sentAt - 10_000) continue
+      candidateCount += 1
+      const decoded = await decodeMimeText(raw)
+      const credential = extractAuthCredential(decoded)
+      if (process.env.TRIPMAP_SMOKE_MAIL_DIAGNOSTIC === '1' && !mailboxDiagnosticLogged) {
+        const flags = [
+          `content=${decoded.trim().length > 0 ? 'yes' : 'no'}`,
+          `url=${/https?:\/\//i.test(decoded) ? 'yes' : 'no'}`,
+          `verify=${/auth\/v1\/verify/i.test(decoded) ? 'yes' : 'no'}`,
+          `credential=${credential?.kind || 'none'}`,
+        ].join(', ')
+        log(`Mailbox diagnostic: ${candidateCount} recent auth candidate(s); ${flags}.`)
+        mailboxDiagnosticLogged = true
+      }
+      if (credential) return credential
+    }
+    if (process.env.TRIPMAP_SMOKE_MAIL_DIAGNOSTIC === '1' && !mailboxDiagnosticLogged) {
+      log(`Mailbox diagnostic: ${candidateCount} recent auth candidate(s); credential=none.`)
+      mailboxDiagnosticLogged = true
     }
     return null
+  } catch (error) {
+    const rawCode = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'UNKNOWN'
+    let code = /^[A-Z0-9_]+$/.test(rawCode) ? rawCode : 'UNKNOWN'
+    const rawName = error instanceof Error ? error.name : 'Error'
+    const name = /^[A-Za-z]+$/.test(rawName) ? rawName : 'Error'
+    if (name === 'ReferenceError') {
+      const symbol = ['cleanup', 'timeout', 'onData', 'onError', 'tls', 'ImapClient']
+        .find((candidate) => error.message.includes(candidate))
+      code = symbol ? `REF_${symbol.toUpperCase()}` : 'REF_UNKNOWN'
+    }
+    throw new Error(`mailbox_${stage}_${code}_${name}`)
   } finally {
-    await client.close()
+    await client?.close()
   }
 }
 
@@ -428,10 +508,9 @@ class ImapClient {
 
   static connect(options) {
     return new Promise((resolve, reject) => {
-      const socket = tls.connect({ host: options.host, port: options.port, servername: options.host }, () => {
-        const client = new ImapClient(socket)
-        client.waitForGreeting().then(() => resolve(client), reject)
-      })
+      const socket = tls.connect({ host: options.host, port: options.port, servername: options.host })
+      const client = new ImapClient(socket)
+      client.waitForGreeting().then(() => resolve(client), reject)
       socket.once('error', reject)
     })
   }
@@ -455,6 +534,10 @@ class ImapClient {
       return Promise.resolve(value)
     }
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('IMAP response timed out'))
+      }, 10_000)
       const onData = (chunk) => {
         this.buffer += chunk.toString('utf8')
         if (!predicate(this.buffer)) return
@@ -464,7 +547,11 @@ class ImapClient {
         resolve(value)
       }
       const onError = (error) => { cleanup(); reject(error) }
-      const cleanup = () => { this.socket.off('data', onData); this.socket.off('error', onError) }
+      const cleanup = () => {
+        clearTimeout(timeout)
+        this.socket.off('data', onData)
+        this.socket.off('error', onError)
+      }
       this.socket.on('data', onData)
       this.socket.on('error', onError)
     })
@@ -489,15 +576,55 @@ function parseMessageDate(raw) {
 
 function extractOtp(raw) {
   const patterns = [
-    /verification code(?: is)?[^0-9]{0,80}(\d{6})/i,
-    /验证码[^0-9]{0,80}(\d{6})/i,
-    /(?:token|code)[^0-9]{0,80}(\d{6})/i,
+    /verification code(?: is)?[^0-9]{0,80}(\d{6,8})(?!\d)/i,
+    /验证码[^0-9]{0,80}(\d{6,8})(?!\d)/i,
+    /(?:token|code)[^0-9]{0,80}(\d{6,8})(?!\d)/i,
   ]
   for (const pattern of patterns) {
     const match = raw.match(pattern)
     if (match) return match[1]
   }
+  const standaloneCandidates = raw.match(/(?<!\d)\d{6,8}(?!\d)/g) || []
+  if (standaloneCandidates.length === 1) return standaloneCandidates[0]
   return null
+}
+
+function extractAuthCredential(raw) {
+  const otp = extractOtp(raw)
+  if (otp) return { kind: 'otp', token: otp }
+
+  for (const match of raw.matchAll(/https?:\/\/[^\s"'<>]+/gi)) {
+    const candidate = match[0]
+      .replace(/&amp;/gi, '&')
+      .replace(/[),.;]+$/, '')
+    try {
+      const url = new URL(candidate)
+      if (!url.pathname.includes('/auth/v1/verify')) continue
+      const tokenHash = url.searchParams.get('token') || url.searchParams.get('token_hash')
+      const type = url.searchParams.get('type')
+      if (tokenHash && type) return { kind: 'token_hash', tokenHash, type }
+    } catch {
+      // Ignore unrelated or wrapped URLs in the message body.
+    }
+  }
+  return null
+}
+
+async function decodeMimeText(raw) {
+  const message = extractRfc822Message(raw)
+  try {
+    const parsed = await PostalMime.parse(message)
+    return [parsed.subject, parsed.text, parsed.html].filter(Boolean).join('\n')
+  } catch {
+    return message
+  }
+}
+
+function extractRfc822Message(raw) {
+  const literal = raw.match(/\{(\d+)\}\r?\n/)
+  if (!literal || literal.index === undefined) return raw
+  const start = literal.index + literal[0].length
+  return raw.slice(start, start + Number(literal[1]))
 }
 
 function quoteImap(value) {
@@ -540,3 +667,5 @@ function log(message) {
 function fail(message) {
   throw new Error(`[trip-intelligence-smoke] ${message}`)
 }
+
+await run()

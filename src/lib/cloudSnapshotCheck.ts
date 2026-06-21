@@ -232,11 +232,12 @@ export function formatVersionTimestamp(
 
 export function buildCloudSnapshotVersionContextRows(
   result: Pick<CloudSnapshotCheckResult, 'cloudVersion' | 'dirtyAt' | 'localVersion' | 'tripUpdatedAt'>,
+  timeZone = getDeviceTimeZone(),
 ): CloudSnapshotVersionContextRow[] {
   const rows: CloudSnapshotVersionContextRow[] = []
-  const localTime = formatVersionTimestamp(result.localVersion)
-  const cloudTime = formatVersionTimestamp(result.cloudVersion)
-  const dirtyTime = formatVersionTimestamp(result.dirtyAt)
+  const localTime = formatVersionTimestamp(result.localVersion, timeZone)
+  const cloudTime = formatVersionTimestamp(result.cloudVersion, timeZone)
+  const dirtyTime = formatVersionTimestamp(result.dirtyAt, timeZone)
   const localSource =
     result.dirtyAt && result.localVersion === result.dirtyAt
       ? '来自当前设备待同步修改时间'

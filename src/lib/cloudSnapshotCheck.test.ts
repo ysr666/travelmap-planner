@@ -336,7 +336,7 @@ describe('cloud snapshot version context fields', () => {
       trips: [baseTrip],
     })
 
-    expect(buildCloudSnapshotVersionContextRows(result)).toEqual([
+    expect(buildCloudSnapshotVersionContextRows(result, 'Asia/Shanghai')).toEqual([
       {
         description: '来自当前设备待同步修改时间',
         label: '此设备版本',

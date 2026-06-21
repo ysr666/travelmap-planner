@@ -70,6 +70,25 @@ describe('time zone helpers', () => {
 
     expect(range.startEpochMs).toBe(Date.parse('2026-06-10T21:30:00.000Z'))
     expect(range.endEpochMs).toBe(Date.parse('2026-06-11T09:20:00.000Z'))
+    expect(range.isChronologicallyValid).toBe(true)
+  })
+
+  it('compares cross-date transport by instant instead of local clock order', () => {
+    const range = resolveItemTimeRange({
+      day: { ...day, date: '2026-06-10', timeZone: 'Asia/Tokyo' },
+      item: {
+        endDate: '2026-06-10',
+        endTime: '17:00',
+        endTimeZone: 'America/Los_Angeles',
+        startTime: '16:00',
+        startTimeZone: 'Asia/Tokyo',
+      },
+      trip: { ...trip, timeZone: 'Asia/Tokyo' },
+    })
+
+    expect(range.startEpochMs).toBe(Date.parse('2026-06-10T07:00:00.000Z'))
+    expect(range.endEpochMs).toBe(Date.parse('2026-06-11T00:00:00.000Z'))
+    expect(range.isChronologicallyValid).toBe(true)
   })
 
   it('looks up IANA time zones from coordinates', async () => {

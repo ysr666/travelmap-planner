@@ -12,6 +12,8 @@ import type {
   LedgerSourceRole,
   Trip,
 } from '../types'
+import { resolveTripTimeZone } from './timeZone'
+import { plainDateDaysBetween, todayInTimeZone } from './timeSemantics'
 import { convertExpenseMinor, formatLedgerMoney, ledgerCategoryLabels, normalizeCurrencyCode } from './ledger'
 import { canAutoConfirmLedgerCandidate, type LedgerExpenseDraftCandidate } from './ledgerExtraction'
 import { buildLedgerReviewEntries, type LedgerReviewBucket } from './ledgerReview'
@@ -271,7 +273,7 @@ export function buildLedgerForecast({
   expenses,
   settings,
   trip,
-  today = new Date().toISOString().slice(0, 10),
+  today,
 }: {
   budgets: LedgerBudget[]
   expenses: LedgerExpense[]
@@ -279,15 +281,15 @@ export function buildLedgerForecast({
   trip: Trip
   today?: string
 }): LedgerForecast {
-  const actualExpenses = expenses.filter((expense) => expense.status === 'confirmed' && expense.date <= today)
-  const futureExpenses = expenses.filter((expense) => expense.status === 'confirmed' && expense.date > today)
+  const currentDate = today ?? todayInTimeZone(resolveTripTimeZone(trip))
+  const actualExpenses = expenses.filter((expense) => expense.status === 'confirmed' && expense.date <= currentDate)
+  const futureExpenses = expenses.filter((expense) => expense.status === 'confirmed' && expense.date > currentDate)
   const actualMinor = sumInCurrency(actualExpenses, settings.tripCurrency)
   const knownFutureMinor = sumInCurrency(futureExpenses, settings.tripCurrency)
-  const tripStart = parseDate(trip.startDate)
-  const tripEnd = parseDate(trip.endDate)
-  const current = parseDate(today)
-  const totalDays = Math.max(1, daysBetween(tripStart, tripEnd) + 1)
-  const elapsedDays = current < tripStart ? 0 : Math.min(totalDays, daysBetween(tripStart, current) + 1)
+  const totalDays = Math.max(1, (plainDateDaysBetween(trip.startDate, trip.endDate) ?? 0) + 1)
+  const elapsedDays = currentDate < trip.startDate
+    ? 0
+    : Math.min(totalDays, (plainDateDaysBetween(trip.startDate, currentDate) ?? 0) + 1)
   const remainingDays = Math.max(0, totalDays - elapsedDays)
   const variableDailyAverage = elapsedDays > 0 ? Math.round(actualMinor / elapsedDays) : 0
   const projectedMinor = actualMinor + knownFutureMinor + variableDailyAverage * remainingDays
@@ -515,15 +517,7 @@ function unique<T>(values: T[]) {
 }
 
 function dateDistance(first: string, second: string) {
-  return daysBetween(parseDate(first), parseDate(second))
-}
-
-function parseDate(value: string) {
-  return new Date(`${value.slice(0, 10)}T00:00:00Z`)
-}
-
-function daysBetween(first: Date, second: Date) {
-  return Math.round((second.getTime() - first.getTime()) / 86_400_000)
+  return plainDateDaysBetween(first.slice(0, 10), second.slice(0, 10)) ?? 0
 }
 
 function sumInCurrency(expenses: LedgerExpense[], currency: string) {

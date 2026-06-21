@@ -407,7 +407,8 @@ describe('deduplicateResultsByTripId', () => {
 describe('formatVersionTimestamp', () => {
   it('formats valid epoch as YYYY-MM-DD HH:mm', () => {
     const epoch = Date.parse('2026-04-02T10:30:00.000Z')
-    expect(formatVersionTimestamp(epoch)).toBe('2026-04-02 18:30')
+    expect(formatVersionTimestamp(epoch, 'Asia/Shanghai')).toBe('2026-04-02 18:30')
+    expect(formatVersionTimestamp(epoch, 'America/Los_Angeles')).toBe('2026-04-02 03:30')
   })
 
   it('returns null for null', () => {

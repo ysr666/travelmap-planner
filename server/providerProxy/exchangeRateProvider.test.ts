@@ -10,6 +10,7 @@ describe('Frankfurter exchange rate provider', () => {
     const result = await fetchFrankfurterExchangeRates({ baseCurrency: 'JPY', operation: 'exchange_rate', quoteCurrencies: ['CNY', 'USD'], requestedDate: '2026-04-05' }, fetcher)
     expect(result).toMatchObject({ ok: true, response: { effectiveDate: '2026-04-03', rates: [{ quoteCurrency: 'CNY', rate: '0.05' }, { quoteCurrency: 'USD', rate: '0.0067' }] } })
     expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher.mock.calls[0]?.[0]).toContain('from=2026-03-29')
   })
 
   it('fails closed when a requested quote is missing', async () => {

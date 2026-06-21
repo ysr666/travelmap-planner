@@ -37,7 +37,9 @@ import type {
   VaultObjectRecord,
 } from '../types'
 
-class TravelConsoleDatabase extends Dexie {
+export const LEGACY_TRAVEL_DATABASE_NAME = 'TravelConsoleDB'
+
+export class TravelConsoleDatabase extends Dexie {
   trips!: Table<Trip, string>
   days!: Table<Day, string>
   itineraryItems!: Table<ItineraryItem, string>
@@ -74,8 +76,8 @@ class TravelConsoleDatabase extends Dexie {
   tripIntelligenceAppliedChanges!: Table<TripIntelligenceAppliedChangeRecord, string>
   tripIntelligenceSuggestionStates!: Table<TripIntelligenceSuggestionStateRecord, string>
 
-  constructor() {
-    super('TravelConsoleDB')
+  constructor(name = LEGACY_TRAVEL_DATABASE_NAME) {
+    super(name)
 
     this.version(1).stores({
       trips: 'id, updatedAt',
@@ -422,4 +424,28 @@ class TravelConsoleDatabase extends Dexie {
   }
 }
 
-export const db = new TravelConsoleDatabase()
+let activeDatabase = new TravelConsoleDatabase()
+
+export const db = new Proxy({} as TravelConsoleDatabase, {
+  get(_target, property) {
+    const value = activeDatabase[property as keyof TravelConsoleDatabase]
+    return typeof value === 'function' ? value.bind(activeDatabase) : value
+  },
+})
+
+export function getActiveTravelDatabase() {
+  return activeDatabase
+}
+
+export function setActiveTravelDatabase(database: TravelConsoleDatabase) {
+  if (activeDatabase === database) return
+  activeDatabase.close()
+  activeDatabase = database
+}
+
+export function activateLegacyTravelDatabase() {
+  if (activeDatabase.name === LEGACY_TRAVEL_DATABASE_NAME && activeDatabase.isOpen()) return activeDatabase
+  const database = new TravelConsoleDatabase()
+  setActiveTravelDatabase(database)
+  return database
+}

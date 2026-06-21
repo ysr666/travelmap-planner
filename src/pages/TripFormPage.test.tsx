@@ -99,7 +99,7 @@ describe('TripFormPage', () => {
       root?.render(<TripFormPage />)
     })
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(651)
     })
 
     expect(container?.textContent).toContain('编辑旅行')

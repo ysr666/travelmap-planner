@@ -37,6 +37,7 @@ import {
   type CloudBackupSummary,
   type RestoreCloudBackupResult,
 } from '../../lib/cloudBackup'
+import { getAccountScopedStorageKey } from '../../lib/accountStorageScope'
 import { listPendingObjectSyncConflicts } from '../../lib/cloudObjectSync'
 import { subscribeTravelDataChanged } from '../../lib/dataEvents'
 import { getSupabaseClient, type User } from '../../lib/supabaseClient'
@@ -231,7 +232,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setBackups([])
       setRestoreResult(null)
       setLoginOnboarding(null)
-      setMessage('已退出账号。此设备仍可离线查看已缓存内容；登录后可继续同步。')
+      setMessage('已退出账号。请重新登录后继续使用旅图。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
     } finally {
@@ -1066,7 +1067,7 @@ function CloudInfoPill({
 
 function persistCloudPanelMessage(tripId: string, text: string) {
   try {
-    window.localStorage.setItem(CLOUD_PANEL_STATUS_MESSAGE_KEY, JSON.stringify({
+    window.localStorage.setItem(getAccountScopedStorageKey(CLOUD_PANEL_STATUS_MESSAGE_KEY), JSON.stringify({
       createdAt: Date.now(),
       text,
       tripId,
@@ -1079,7 +1080,7 @@ function persistCloudPanelMessage(tripId: string, text: string) {
 function readPersistedCloudPanelMessage(tripId: string | undefined) {
   if (!tripId) return null
   try {
-    const raw = window.localStorage.getItem(CLOUD_PANEL_STATUS_MESSAGE_KEY)
+    const raw = window.localStorage.getItem(getAccountScopedStorageKey(CLOUD_PANEL_STATUS_MESSAGE_KEY))
     if (!raw) return null
     const parsed = JSON.parse(raw) as { createdAt?: unknown; text?: unknown; tripId?: unknown }
     if (

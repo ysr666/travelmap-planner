@@ -1,6 +1,7 @@
 import { Temporal } from '@js-temporal/polyfill'
 import { parsePlainDate } from './plainDate'
 import type { Day, ItineraryItem, TimeZoneSource, Trip } from '../types'
+import { resolveWallClockToInstant, type WallClockResolution } from './timeSemantics'
 
 export type { TimeZoneSource }
 
@@ -10,11 +11,14 @@ export type ItemTimeRange = {
   endMinutes: number | null
   endTime?: string
   endTimeZone: string
+  endResolution?: WallClockResolution
+  isChronologicallyValid?: boolean
   startDate: string
   startEpochMs?: number
   startMinutes: number | null
   startTime?: string
   startTimeZone: string
+  startResolution?: WallClockResolution
 }
 
 type TzLookupFn = (lat: number, lng: number) => string
@@ -114,18 +118,30 @@ export function resolveItemTimeRange({
   const endDate = normalizedEndDate ?? day.date
   const startMinutes = parseTimeMinutes(item.startTime)
   const endMinutes = parseTimeMinutes(item.endTime)
+  const startResolution = startMinutes === null || !item.startTime
+    ? null
+    : resolveWallClockToInstant({ date: day.date, time: item.startTime, timeZone: startTimeZone })
+  const endResolution = endMinutes === null || !item.endTime
+    ? null
+    : resolveWallClockToInstant({ date: endDate, time: item.endTime, timeZone: endTimeZone })
+  const isChronologicallyValid = startResolution && endResolution
+    ? endResolution.instant >= startResolution.instant
+    : undefined
 
   return {
     endDate,
-    endEpochMs: endMinutes === null ? undefined : wallClockToEpochMs(endDate, endMinutes, endTimeZone),
+    endEpochMs: endResolution?.instant,
     endMinutes,
     endTime: normalizeTimeText(item.endTime),
     endTimeZone,
+    endResolution: endResolution ?? undefined,
+    isChronologicallyValid,
     startDate: day.date,
-    startEpochMs: startMinutes === null ? undefined : wallClockToEpochMs(day.date, startMinutes, startTimeZone),
+    startEpochMs: startResolution?.instant,
     startMinutes,
     startTime: normalizeTimeText(item.startTime),
     startTimeZone,
+    startResolution: startResolution ?? undefined,
   }
 }
 
@@ -151,27 +167,6 @@ export function formatTimeZoneSource(source: TimeZoneSource | undefined) {
 function getZonedDateTime(now: Date, timeZone: string) {
   const normalized = normalizeTimeZone(timeZone) ?? getDeviceTimeZone()
   return Temporal.Instant.fromEpochMilliseconds(now.getTime()).toZonedDateTimeISO(normalized)
-}
-
-function wallClockToEpochMs(date: string, minuteOfDay: number, timeZone: string) {
-  const parts = parsePlainDate(date)
-  if (!parts) {
-    return undefined
-  }
-  const hour = Math.floor(minuteOfDay / 60)
-  const minute = minuteOfDay % 60
-  return Temporal.ZonedDateTime.from({
-    day: parts.day,
-    hour,
-    microsecond: 0,
-    millisecond: 0,
-    minute,
-    month: parts.month,
-    nanosecond: 0,
-    second: 0,
-    timeZone,
-    year: parts.year,
-  }).epochMilliseconds
 }
 
 function parseTimeMinutes(value: string | undefined) {

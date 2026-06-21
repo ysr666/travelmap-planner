@@ -2,6 +2,8 @@ import type { LedgerBudget, LedgerExpense, LedgerExpenseCategory, LedgerParticip
 import { downloadBlob, safeFileName } from './backup'
 import { buildLedgerForecast, buildLedgerIntegrityIssues, getLedgerSourceLinks } from './ledgerArchive'
 import { buildLedgerSummary, convertExpenseMinor, formatLedgerMoney, ledgerCategoryLabels } from './ledger'
+import { resolveTripTimeZone } from './timeZone'
+import { todayInTimeZone } from './timeSemantics'
 
 export type LedgerReportInput = {
   trip: Trip
@@ -54,9 +56,10 @@ export type LedgerReportModel = {
   }>
 }
 
-export function buildLedgerReportModel(input: LedgerReportInput, today = new Date().toISOString().slice(0, 10)): LedgerReportModel {
+export function buildLedgerReportModel(input: LedgerReportInput, today?: string): LedgerReportModel {
+  const reportDate = today ?? todayInTimeZone(resolveTripTimeZone(input.trip))
   const summary = buildLedgerSummary(input)
-  const forecast = buildLedgerForecast({ ...input, today })
+  const forecast = buildLedgerForecast({ ...input, today: reportDate })
   const convertedConfirmed = input.expenses
     .filter((expense) => expense.status === 'confirmed')
     .map((expense) => ({ expense, amountMinor: convertExpenseMinor(expense, input.settings.tripCurrency) }))
@@ -97,7 +100,7 @@ export function buildLedgerReportModel(input: LedgerReportInput, today = new Dat
       title: source.title ?? source.label ?? source.sourceId ?? '未命名来源',
     }))),
     timeline,
-    title: today > input.trip.endDate ? '旅行结束报告' : '截至当前的旅行消费档案',
+    title: reportDate > input.trip.endDate ? '旅行结束报告' : '截至当前的旅行消费档案',
   }
 }
 

@@ -29,6 +29,7 @@ import { FIELD_INPUT_CLASS, FIELD_LABEL_CLASS, FIELD_SELECT_CLASS, FIELD_TEXTARE
 import { TimeZoneSelect } from '../components/ui/TimeZoneSelect'
 import { TicketLibraryPage } from './TicketLibraryPage'
 import { getRouteParams, navigateTo } from '../lib/routes'
+import { todayInTimeZone } from '../lib/timeSemantics'
 import { getDeviceTimeZone, resolveTripTimeZone } from '../lib/timeZone'
 import { extractSensitiveDocumentPreview, type SensitiveDocumentOcrPreview } from '../lib/sensitiveDocumentOcr'
 import {
@@ -234,7 +235,7 @@ export function TravelDocumentCenterPage() {
   async function handleExportVault() {
     await runAction(async () => {
       const blob = await exportEncryptedVaultBackup()
-      downloadBlob(blob, `tripmap-encrypted-vault-${new Date().toISOString().slice(0, 10)}.zip`)
+      downloadBlob(blob, `tripmap-encrypted-vault-${todayInTimeZone(getDeviceTimeZone())}.zip`)
       setMessage('已导出加密资料库。恢复时仍需要你的恢复口令。')
     })
   }

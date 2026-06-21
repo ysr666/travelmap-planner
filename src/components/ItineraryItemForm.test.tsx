@@ -124,4 +124,73 @@ describe('ItineraryItemForm', () => {
 
     expect(container?.textContent).toContain('保存')
   })
+
+  it('shows a visible notice when DST changes the requested wall-clock time', async () => {
+    await act(async () => {
+      root?.render(
+        <ItineraryItemForm
+          dayDate="2026-03-08"
+          defaultTimeZone="America/New_York"
+          initialItem={{
+            createdAt: 1,
+            dayId: 'day_1',
+            endDate: '2026-03-08',
+            endTime: '04:00',
+            endTimeZone: 'America/New_York',
+            id: 'flight_1',
+            sortOrder: 1,
+            startTime: '02:30',
+            startTimeZone: 'America/New_York',
+            ticketIds: [],
+            title: '机场接驳',
+            transportMode: 'flight',
+            tripId: 'trip_1',
+            updatedAt: 1,
+          }}
+          onCancel={vi.fn()}
+          onSubmit={vi.fn()}
+          submitLabel="保存"
+        />,
+      )
+    })
+
+    expect(container?.querySelector('[data-testid="time-adjustment-notice"]')?.textContent).toContain('夏令时跳时')
+  })
+
+  it('rejects a cross-time-zone arrival instant before departure', async () => {
+    const onSubmit = vi.fn()
+    await act(async () => {
+      root?.render(
+        <ItineraryItemForm
+          dayDate="2026-06-10"
+          initialItem={{
+            createdAt: 1,
+            dayId: 'day_1',
+            endDate: '2026-06-10',
+            endTime: '06:00',
+            endTimeZone: 'America/Los_Angeles',
+            id: 'flight_1',
+            sortOrder: 1,
+            startTime: '23:30',
+            startTimeZone: 'Asia/Tokyo',
+            ticketIds: [],
+            title: '跨时区航班',
+            transportMode: 'flight',
+            tripId: 'trip_1',
+            updatedAt: 1,
+          }}
+          onCancel={vi.fn()}
+          onSubmit={onSubmit}
+          submitLabel="保存"
+        />,
+      )
+    })
+
+    const submit = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('保存'))
+    await act(async () => submit?.click())
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(container?.textContent).toContain('到达时刻不能早于出发时刻')
+  })
 })

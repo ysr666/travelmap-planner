@@ -71,6 +71,7 @@ describe('buildAiTripDraftRequest', () => {
 describe('calculateEndDateFromDayCount', () => {
   it('calculates inclusive end date from start date and day count', () => {
     expect(calculateEndDateFromDayCount('2025-04-01', 3)).toBe('2025-04-03')
+    expect(calculateEndDateFromDayCount('2028-02-28', 3)).toBe('2028-03-01')
   })
 
   it('returns empty string for invalid input', () => {

@@ -4,6 +4,7 @@ import { parseCoordinatesFromMapLink } from '../lib/mapLinks'
 import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { transportModeOptions } from '../lib/itinerary'
 import { isValidPlainDate } from '../lib/plainDate'
+import { describeWallClockAdjustment, resolveWallClockToInstant } from '../lib/timeSemantics'
 import { getDeviceTimeZone, normalizeTimeZone } from '../lib/timeZone'
 import type { ItineraryItem, TransportMode } from '../types'
 import { Button } from './ui/Button'
@@ -96,6 +97,28 @@ export function ItineraryItemForm({
   const [showManualCoords, setShowManualCoords] = useState(!googleMapsKeyConfigured)
   const showTravelTimeZoneFields = isLongDistanceTransportMode(form.transportMode) ||
     Boolean(initialItem?.startTimeZone || initialItem?.endDate || initialItem?.endTimeZone)
+  const startResolution = useMemo(() => (
+    dayDate && form.startTime
+      ? resolveWallClockToInstant({
+          date: dayDate,
+          time: form.startTime,
+          timeZone: form.startTimeZone || inheritedTimeZone,
+        })
+      : null
+  ), [dayDate, form.startTime, form.startTimeZone, inheritedTimeZone])
+  const endResolution = useMemo(() => (
+    (form.endDate || dayDate) && form.endTime
+      ? resolveWallClockToInstant({
+          date: form.endDate || dayDate!,
+          time: form.endTime,
+          timeZone: form.endTimeZone || form.startTimeZone || inheritedTimeZone,
+        })
+      : null
+  ), [dayDate, form.endDate, form.endTime, form.endTimeZone, form.startTimeZone, inheritedTimeZone])
+  const timeAdjustmentMessages = [
+    describeWallClockAdjustment(startResolution),
+    describeWallClockAdjustment(endResolution),
+  ].filter((message): message is string => Boolean(message))
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     setForm((current) => ({
@@ -146,6 +169,10 @@ export function ItineraryItemForm({
       }
       if (endDate && !isValidPlainDate(endDate)) {
         setError('到达日期格式无效，请使用 YYYY-MM-DD')
+        return
+      }
+      if (startResolution && endResolution && endResolution.instant < startResolution.instant) {
+        setError('到达时刻不能早于出发时刻，请检查日期、时间和时区。')
         return
       }
     }
@@ -281,6 +308,14 @@ export function ItineraryItemForm({
               value={form.endTimeZone}
             />
           </div>
+          {timeAdjustmentMessages.length > 0 ? (
+            <div
+              className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 ring-1 ring-amber-200/80 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-900/60"
+              data-testid="time-adjustment-notice"
+            >
+              {timeAdjustmentMessages.join(' ')}
+            </div>
+          ) : null}
         </section>
       ) : null}
       <section className="space-y-3 border-t tm-row pt-4">

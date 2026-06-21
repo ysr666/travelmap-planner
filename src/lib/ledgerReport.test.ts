@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { LedgerExpense } from '../types'
 import { buildLedgerReportModel, toCsv } from './ledgerReport'
 
@@ -51,5 +51,19 @@ describe('ledger travel archive report', () => {
 
   it('escapes quotes and line breaks in CSV output', () => {
     expect(toCsv([['标题'], ['东京"酒店\n账单']])).toContain('"东京""酒店\n账单"')
+  })
+
+  it('uses the trip time zone rather than UTC for the default report date', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-06-10T16:30:00.000Z'))
+      const model = buildLedgerReportModel({
+        ...input,
+        trip: { ...input.trip, timeZone: 'Asia/Tokyo' },
+      })
+      expect(model.title).toBe('旅行结束报告')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

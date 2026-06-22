@@ -12,6 +12,8 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest src/lib/tripPlanImport.test.ts",
     "test:e2e": "playwright test",
+    "test:e2e:desktop-smoke": "playwright test --project \"Desktop Beta Smoke 1440x900\"",
+    "test:e2e:pwa-upgrade": "playwright test e2e/pwa-upgrade.spec.ts --project \"Mobile 390x844\" --workers=1",
     "test:e2e:serial": "playwright test --workers=1",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

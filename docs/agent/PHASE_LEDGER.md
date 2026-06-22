@@ -688,7 +688,7 @@ Stop conditions:
 
 ## 2026-06-22 Phase 11 - Executable Design System Pass
 
-Status: planned
+Status: completed
 
 Branch: `feature/autonomous-iteration-20260620-navigation-search`
 
@@ -714,6 +714,30 @@ Likely files:
 Validation:
 
 - UI primitive tests, focused page tests, lint, build, diff check, 390px/desktop visual and accessibility E2E.
+
+Read-only mini-plan result:
+
+- Existing UI primitives already cover buttons, cards, rows, empty states, forms, and collapsible settings sections, so Phase 11 should not introduce a broad component framework.
+- Recent Day, Ticket, and PWA surfaces duplicated compact action rows and rounded inline status blocks; these are justified shared primitives because they recur across multiple product workflows.
+- The safe executable scope is to add `ActionToolbar` and `InlineStatus`, document when to use them, migrate the Phase 8-10 surfaces, and lock the semantics with component tests plus focused workflow validation.
+
+Result:
+
+- Added executable repository design-system guidance in `docs/DESIGN_SYSTEM.md`.
+- Added shared `ActionToolbar` and `InlineStatus` primitives with unit coverage for grouping, alignment, tone, icon, and role semantics.
+- Migrated Day timeline, Ticket library, PWA lifecycle banner, and Settings PWA status copy to the shared primitives while preserving existing data, provider, and confirmation boundaries.
+- Added a focused Phase 11 E2E layout guard across 390px and desktop widths, and scoped the workspace version assertion to the About section because PWA lifecycle status also surfaces the current version.
+- Hardened local Playwright coworking by letting `PLAYWRIGHT_PORT` or `E2E_PORT` override the default `4173` preview port while preserving the default path.
+
+Completed validation:
+
+- `npm run lint` passed.
+- `npm run test:unit` passed: 175 files, 1391 tests.
+- `npm run build` passed; only the existing large chunk warning was reported, and PWA `generateSW` completed.
+- `git diff --check` passed.
+- Focused E2E passed for the new design-system layout guard, Day ordering, Ticket metadata editing, PWA lifecycle status, mobile UX/a11y, and the workspace view-switching path.
+- First isolated full E2E on `PLAYWRIGHT_PORT=4273` completed with 129 passed and one transient `cloud-backup.spec.ts` timing failure. The failed test then passed alone and `e2e/cloud-backup.spec.ts` passed 12/12.
+- Final isolated full E2E on `PLAYWRIGHT_PORT=4275 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 130 tests.
 
 Risk: medium, because shared primitives can affect multiple surfaces; migration remains limited to recently changed workflows.
 

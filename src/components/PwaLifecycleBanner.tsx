@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { RefreshCw, WifiOff, X } from 'lucide-react'
 import { usePwaLifecycleState } from '../hooks/usePwaLifecycleState'
 import { applyPendingPwaUpdate } from '../lib/pwaLifecycle'
+import { ActionToolbar } from './ui/ActionToolbar'
 
 export function PwaLifecycleBanner({ topAppBar }: { topAppBar: boolean }) {
   const lifecycle = usePwaLifecycleState()
@@ -55,7 +56,7 @@ export function PwaLifecycleBanner({ topAppBar }: { topAppBar: boolean }) {
           </p>
         </div>
         {showUpdate ? (
-          <div className="flex shrink-0 items-center gap-1">
+          <ActionToolbar align="end" ariaLabel="应用更新操作" className="shrink-0">
             <button
               className="min-h-9 rounded-lg bg-white px-2 text-[11px] font-bold text-sky-800 active:scale-[0.98] disabled:opacity-60 dark:bg-sky-200 dark:text-sky-950"
               disabled={isApplyingUpdate}
@@ -73,7 +74,7 @@ export function PwaLifecycleBanner({ topAppBar }: { topAppBar: boolean }) {
             >
               <X className="size-4" />
             </button>
-          </div>
+          </ActionToolbar>
         ) : null}
       </div>
     </div>

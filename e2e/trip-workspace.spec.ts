@@ -138,8 +138,11 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await forceSupabaseUnconfigured(page)
   await page.goto(`/#/settings?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
-  await page.locator('summary').filter({ hasText: '关于' }).click()
-  await expect(page.locator('main').getByText(/当前版本：v\d+\.\d+\.\d+(?:\.\d+)?/)).toBeVisible()
+  const aboutSection = page.locator('details').filter({
+    has: page.locator('summary').filter({ hasText: '关于' }),
+  })
+  await aboutSection.locator('summary').click()
+  await expect(aboutSection.getByText(/当前版本：v\d+\.\d+\.\d+(?:\.\d+)?/)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

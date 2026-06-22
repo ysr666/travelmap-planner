@@ -30,6 +30,7 @@ import {
   FIELD_SELECT_CLASS,
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
+import { InlineStatus } from '../components/ui/InlineStatus'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import {
@@ -730,9 +731,9 @@ export function SettingsPage() {
           </div>
 
           {pwaLifecycle.message ? (
-            <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
+            <InlineStatus tone={pwaLifecycle.status === 'error' ? 'error' : 'neutral'}>
               {pwaLifecycle.message}
-            </p>
+            </InlineStatus>
           ) : null}
 
           {pwaLifecycle.status === 'update-ready' ? (
@@ -748,9 +749,9 @@ export function SettingsPage() {
           ) : null}
 
           {pwaUpdateMessage ? (
-            <p className="rounded-xl bg-emerald-50/75 px-3 py-2 text-xs leading-5 text-emerald-800 ring-1 ring-emerald-100/70 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+            <InlineStatus role="status" tone="success">
               {pwaUpdateMessage}
-            </p>
+            </InlineStatus>
           ) : null}
         </Card>
       </section>
@@ -1419,20 +1420,10 @@ function getRoutingConfigLabel(config: RoutingConfig) {
 }
 
 function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {
-  const styles =
-    tone === 'error'
-      ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300'
-      : 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/35 dark:text-emerald-300'
-  const Icon = tone === 'error' ? AlertTriangle : CheckCircle2
-
   return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-    >
-      <Icon className="mt-0.5 size-4 shrink-0" />
-      <p className="min-w-0 break-words leading-6 [overflow-wrap:anywhere]">{message}</p>
-    </div>
+    <InlineStatus role={tone === 'error' ? 'alert' : 'status'} size="md" tone={tone}>
+      {message}
+    </InlineStatus>
   )
 }
 

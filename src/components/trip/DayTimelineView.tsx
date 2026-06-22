@@ -4,8 +4,10 @@ import { deleteItineraryItemCascade, reorderDayItems } from '../../db'
 import { navigateTo } from '../../lib/routes'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
+import { ActionToolbar } from '../ui/ActionToolbar'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
+import { InlineStatus } from '../ui/InlineStatus'
 import { SectionHeader } from '../ui/SectionHeader'
 import { describeItemTime, describePreviousTransport, transportModeLabels } from '../../lib/itinerary'
 import { buildAppleMapsDirectionsUrl, buildGoogleMapsDirectionsUrl } from '../../lib/mapLinks'
@@ -121,7 +123,7 @@ export function DayTimelineView({
           <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">当天日程</h3>
           <p className="mt-0.5 text-xs tm-muted">{items.length} 个行程点</p>
         </div>
-        <div className="flex max-w-[70%] shrink-0 flex-wrap justify-end gap-2">
+        <ActionToolbar align="end" ariaLabel="日程操作" className="max-w-[70%] shrink-0">
           {isOrdering ? (
             <>
               <Button
@@ -159,32 +161,34 @@ export function DayTimelineView({
               排序
             </Button>
           ) : null}
-          {!isOrdering ? <Button
-            className="min-h-11 px-3"
-            icon={<Plus className="size-4" />}
-            onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id, view: sourceView })}
-          >
-            新增
-          </Button> : null}
-        </div>
+          {!isOrdering ? (
+            <Button
+              className="min-h-11 px-3"
+              icon={<Plus className="size-4" />}
+              onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id, view: sourceView })}
+            >
+              新增
+            </Button>
+          ) : null}
+        </ActionToolbar>
       </div>
 
       {actionError ? (
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
+        <InlineStatus role="alert" size="md" tone="error">
           {actionError}
-        </div>
+        </InlineStatus>
       ) : null}
 
       {actionMessage ? (
-        <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200" role="status">
+        <InlineStatus role="status" tone="success">
           {actionMessage}
-        </div>
+        </InlineStatus>
       ) : null}
 
       {isOrdering ? (
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-700/35 dark:bg-amber-500/10 dark:text-amber-100">
+        <InlineStatus tone="warning">
           这里只调整浏览和路线顺序，不会改动时间。交通方式、耗时和备注仍跟随当前行程点，保存后请检查新的相邻路段。
-        </div>
+        </InlineStatus>
       ) : null}
 
       <section className="space-y-3">
@@ -263,30 +267,34 @@ export function DayTimelineView({
                       {!isOrdering && previousItem ? (
                         <DirectionsLinks fromItem={previousItem} toItem={item} />
                       ) : null}
-                      {!isOrdering ? <div className="mt-3 flex items-center justify-between gap-2 border-t tm-row pt-3">
-                        <span className="tm-chip">
-                          <Ticket className="size-3.5" />
-                          {item.ticketIds.length}
-                        </span>
-                        <div className="flex gap-2">
-                          <Button
-                            className="min-h-11 rounded-xl px-3"
-                            onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
-                            variant="secondary"
-                          >
-                            编辑
-                          </Button>
-                          <Button
-                            className="min-h-11 rounded-xl px-3"
-                            disabled={deletingItemId === item.id}
-                            icon={<Trash2 className="size-4" />}
-                            onClick={() => setPendingDeleteItem(item)}
-                            variant="destructive"
-                          >
-                            删除
-                          </Button>
+                      {!isOrdering ? (
+                        <div className="mt-3 border-t tm-row pt-3">
+                          <ActionToolbar align="between" ariaLabel={`${item.title} 操作`}>
+                            <span className="tm-chip">
+                              <Ticket className="size-3.5" />
+                              {item.ticketIds.length}
+                            </span>
+                            <ActionToolbar align="end">
+                              <Button
+                                className="min-h-11 rounded-xl px-3"
+                                onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
+                                variant="secondary"
+                              >
+                                编辑
+                              </Button>
+                              <Button
+                                className="min-h-11 rounded-xl px-3"
+                                disabled={deletingItemId === item.id}
+                                icon={<Trash2 className="size-4" />}
+                                onClick={() => setPendingDeleteItem(item)}
+                                variant="destructive"
+                              >
+                                删除
+                              </Button>
+                            </ActionToolbar>
+                          </ActionToolbar>
                         </div>
-                      </div> : null}
+                      ) : null}
                     </Card>
                   </div>
                 </div>

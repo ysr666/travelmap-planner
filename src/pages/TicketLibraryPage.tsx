@@ -20,6 +20,7 @@ import {
 import { TicketPreview } from '../components/TicketPreview'
 import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import { TripNav } from '../components/AppShell'
+import { ActionToolbar } from '../components/ui/ActionToolbar'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -30,6 +31,7 @@ import {
   FIELD_SELECT_CLASS,
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
+import { InlineStatus } from '../components/ui/InlineStatus'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { describeItemTime } from '../lib/itinerary'
@@ -900,14 +902,14 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         </label>
 
         {actionError ? (
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
+          <InlineStatus role="alert" size="md" tone="error">
             {actionError}
-          </p>
+          </InlineStatus>
         ) : null}
         {actionMessage ? (
-          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+          <InlineStatus role="status" size="md" tone="success">
             {actionMessage}
-          </p>
+          </InlineStatus>
         ) : null}
 
         <Button
@@ -1374,7 +1376,7 @@ function TicketCard({
         </span>
       </button>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t tm-row pt-2">
+      <ActionToolbar align="between" ariaLabel={`${displayTitle} 操作`} className="mt-2 border-t tm-row pt-2">
         <button
           className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
@@ -1400,10 +1402,10 @@ function TicketCard({
           <Trash2 className="size-3.5" />
           删除
         </button>
-      </div>
+      </ActionToolbar>
 
       {canClearCache || canRestoreCache || canRetryUpload ? (
-        <div className="mt-2 flex flex-wrap gap-1.5 border-t tm-row pt-2">
+        <ActionToolbar ariaLabel={`${displayTitle} 缓存操作`} className="mt-2 gap-1.5 border-t tm-row pt-2">
           {canClearCache ? (
             <button
               className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
@@ -1437,7 +1439,7 @@ function TicketCard({
               重试上传
             </button>
           ) : null}
-        </div>
+        </ActionToolbar>
       ) : null}
     </Card>
   )
@@ -1496,9 +1498,9 @@ function ReferenceTicketFields({
         required
         value={location}
       />
-      <p className="rounded-xl bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
+      <InlineStatus tone="warning">
         旅图只记录这个文件的位置说明，不保存文件内容，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
-      </p>
+      </InlineStatus>
     </div>
   )
 }

@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tripmap-provider-maintenance",
+  "main": "workers/provider-maintenance/index.ts",
+  "compatibility_date": "2026-06-22",
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "TRIPMAP_PROVIDER_QUOTA_D1",
+      "database_name": "tripmap_provider_quota",
+      "database_id": "d2f1b40d-4a5f-4ed5-99b0-5bf0669f75e4"
+    }
+  ]
+}

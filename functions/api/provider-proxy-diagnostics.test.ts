@@ -37,4 +37,12 @@ describe('provider proxy diagnostics function', () => {
     expect(response.status).toBe(405)
     expect(response.headers.get('Allow')).toContain('GET')
   })
+
+  it('rejects missing origins in production', async () => {
+    const response = await onRequest({
+      env: { TRIPMAP_PROVIDER_PROXY_ENV: 'production' },
+      request: new Request('https://travelmap-planner.pages.dev/api/provider-proxy-diagnostics'),
+    })
+    expect(response.status).toBe(403)
+  })
 })

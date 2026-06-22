@@ -27,6 +27,13 @@ describe('provider proxy diagnostics', () => {
         travelSearch: { configured: true, hasApiKey: true, provider: 'tavily' },
       },
       retrievedAt: '2026-06-02T01:02:03.000Z',
+      security: {
+        authRequired: false,
+        budgetAlertsConfigured: false,
+        durableQuotaConfigured: false,
+        environment: 'development',
+        originEnforced: false,
+      },
     })
 
     const text = JSON.stringify(response)
@@ -53,6 +60,22 @@ describe('provider proxy diagnostics', () => {
     expect(response.providers.placeLookup).toMatchObject({ configured: false, hasGooglePlacesKey: false, provider: 'unconfigured' })
     expect(response.providers.routeOrder).toMatchObject({ configured: false, hasGoogleRoutesKey: false, provider: 'unconfigured' })
     expect(response.providers.ai).toMatchObject({ configured: false, hasApiKey: false, provider: 'unconfigured' })
+  })
+
+  it('reports hardened runtime controls without returning binding details', () => {
+    const response = buildProviderProxyDiagnosticsResponse({
+      TRIPMAP_PROVIDER_PROXY_ENV: 'production',
+      TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH: '1',
+      TRIPMAP_PROVIDER_QUOTA_D1: { prepare() {} },
+    }, '2026-06-02T01:02:03.000Z')
+    expect(response.security).toEqual({
+      authRequired: true,
+      budgetAlertsConfigured: false,
+      durableQuotaConfigured: true,
+      environment: 'production',
+      originEnforced: true,
+    })
+    expect(JSON.stringify(response)).not.toContain('prepare')
   })
 
   it('reports a Vite Google Maps key without treating it as a server provider key', () => {

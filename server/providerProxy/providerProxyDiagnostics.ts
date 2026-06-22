@@ -43,6 +43,13 @@ export type ProviderProxyDiagnosticsResponse = {
     }
   }
   retrievedAt: string
+  security: {
+    authRequired: boolean
+    budgetAlertsConfigured: boolean
+    durableQuotaConfigured: boolean
+    environment: 'development' | 'preview' | 'production'
+    originEnforced: boolean
+  }
 }
 
 export function buildProviderProxyDiagnosticsResponse(
@@ -62,6 +69,7 @@ export function buildProviderProxyDiagnosticsResponse(
   const searchProvider = normalizeSearchProvider(env.TRIPMAP_SEARCH_PROVIDER)
   const aiProvider = normalizeAiProvider(env.TRIPMAP_AI_PROVIDER)
   const hasOpenRouteServiceApiKey = hasSecret(env.OPENROUTESERVICE_API_KEY)
+  const environment = normalizeEnvironment(env.TRIPMAP_PROVIDER_PROXY_ENV)
 
   return {
     googleMaps,
@@ -104,7 +112,18 @@ export function buildProviderProxyDiagnosticsResponse(
       },
     },
     retrievedAt: normalizeRetrievedAt(now),
+    security: {
+      authRequired: environment !== 'development' || env.TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH === '1' || env.TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH === 'true',
+      budgetAlertsConfigured: Boolean(env.TRIPMAP_PROVIDER_ALERT_EMAIL && hasSecret(env.TRIPMAP_PROVIDER_ALERT_FROM)),
+      durableQuotaConfigured: Boolean(env.TRIPMAP_PROVIDER_QUOTA_D1),
+      environment,
+      originEnforced: environment !== 'development',
+    },
   }
+}
+
+function normalizeEnvironment(value: unknown): ProviderProxyDiagnosticsResponse['security']['environment'] {
+  return value === 'production' || value === 'preview' ? value : 'development'
 }
 
 function normalizeAiProvider(value: unknown): ProviderProxyDiagnosticsResponse['providers']['ai']['provider'] {

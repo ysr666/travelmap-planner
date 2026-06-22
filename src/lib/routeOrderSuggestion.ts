@@ -1,4 +1,4 @@
-import { sortItineraryItems } from './itinerary'
+import { sortItineraryItemsByPlanOrder } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
 import type { ProviderProxyRouteOrderSuggestionItem } from './ai/providerProxyContract'
 import type { Day, ItineraryItem } from '../types'
@@ -9,7 +9,7 @@ export type RouteOrderSuggestionSortPatch = {
 }
 
 export function buildRouteOrderSuggestionRequestItems(items: ItineraryItem[]): ProviderProxyRouteOrderSuggestionItem[] {
-  return sortItineraryItems(items).map((item) => ({
+  return sortItineraryItemsByPlanOrder(items).map((item) => ({
     address: item.address,
     coordinate: hasValidCoordinates(item) ? { lat: item.lat as number, lng: item.lng as number } : undefined,
     id: item.id,
@@ -38,7 +38,7 @@ export function getRouteOrderSuggestionCandidateDay({
 }
 
 export function isRouteOrderSuggestionCandidate(items: ItineraryItem[]) {
-  const orderedItems = sortItineraryItems(items)
+  const orderedItems = sortItineraryItemsByPlanOrder(items)
   const coordinateCount = orderedItems.filter(hasValidCoordinates).length
   return orderedItems.length >= 2 && orderedItems.length <= 10 && coordinateCount >= 2 && coordinateCount <= 10
 }
@@ -47,7 +47,7 @@ export function buildRouteOrderSuggestionSortPatches(
   items: ItineraryItem[],
   suggestedItemIds: string[],
 ): RouteOrderSuggestionSortPatch[] {
-  const orderedItems = sortItineraryItems(items)
+  const orderedItems = sortItineraryItemsByPlanOrder(items)
   const coordinateItems = orderedItems.filter(hasValidCoordinates)
   if (!hasSameStringSet(suggestedItemIds, coordinateItems.map((item) => item.id))) {
     throw new Error('路线顺序建议与当前行程点不匹配。')

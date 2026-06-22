@@ -14,6 +14,7 @@ import {
   deleteTripCascade,
   getTicketMeta,
   importTripPlanRecords,
+  reorderDayItems,
   saveTicketBlob,
   setItineraryItemExecutionState,
   updateItineraryItem,
@@ -129,6 +130,23 @@ describe('tracked db mutations', () => {
     expect(outbox).toHaveLength(1)
     expect(outbox[0]).toMatchObject({ objectId: item.id, objectType: 'item', operation: 'upsert' })
     expect(outbox[0].payload).toMatchObject({ executionState: { status: 'completed', updatedAt: 123 } })
+  })
+
+  it('queues changed items after an atomic day reorder and records one trip write', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-06-13', startDate: '2026-06-13', title: '东京' })
+    const day = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const first = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: '浅草寺', tripId: trip.id })
+    const second = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: '东京塔', tripId: trip.id })
+    const third = await createItineraryItem({ dayId: day.id, sortOrder: 3, ticketIds: [], title: '银座', tripId: trip.id })
+    await db.syncOutbox.clear()
+
+    const changed = await reorderDayItems(day.id, [third.id, first.id, second.id])
+
+    expect(changed.map((item) => item.id).sort()).toEqual([first.id, second.id, third.id].sort())
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('items-reordered')
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox).toHaveLength(3)
+    expect(outbox.every((entry) => entry.objectType === 'item' && entry.operation === 'upsert')).toBe(true)
   })
 
   it('tracks every owner-only ledger object and cascades it with the trip', async () => {

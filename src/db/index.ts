@@ -43,6 +43,7 @@ export {
   importTripBackupRecords,
   importTripPlanRecords,
   replaceTripPlanRecords,
+  reorderDayItems,
   saveTicketBlob,
   setItineraryItemExecutionState,
   updateDay,

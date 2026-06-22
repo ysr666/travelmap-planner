@@ -36,6 +36,22 @@ export function sortItineraryItems(items: ItineraryItem[]) {
   })
 }
 
+export function sortItineraryItemsByPlanOrder(items: ItineraryItem[]) {
+  return [...items].sort((first, second) => {
+    if (first.sortOrder !== second.sortOrder) {
+      return first.sortOrder - second.sortOrder
+    }
+
+    const firstTime = first.startTime?.trim() ?? ''
+    const secondTime = second.startTime?.trim() ?? ''
+    if (firstTime !== secondTime) {
+      return firstTime.localeCompare(secondTime)
+    }
+
+    return first.id.localeCompare(second.id)
+  })
+}
+
 export function describeItemTime(item: ItineraryItem) {
   if (item.startTime && item.endTime) {
     return `${item.startTime} - ${item.endTime}`

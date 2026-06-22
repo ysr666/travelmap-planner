@@ -1,4 +1,4 @@
-import { sortItineraryItems } from './itinerary'
+import { sortItineraryItemsByPlanOrder } from './itinerary'
 import { hasValidCoordinates } from './mapLinks'
 import {
   buildFallbackStraightRoute,
@@ -181,7 +181,7 @@ export async function fetchTripPreviewRoute({
 
 function getTripPreviewRecords(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): TripMapPreviewRecord[] {
   return days.flatMap((day) =>
-    sortItineraryItems(itemsByDay[day.id] ?? [])
+    sortItineraryItemsByPlanOrder(itemsByDay[day.id] ?? [])
       .filter(hasValidCoordinates)
       .flatMap((item) => {
         const coordinate = getItemLngLat(item)

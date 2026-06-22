@@ -450,3 +450,192 @@ Validation:
 - Latest Cloudflare Pages production deployment `0f6e0bd8-22d8-48f8-92c0-8a3869cb5da0` for `main@2500f73` completed the deploy stage successfully.
 - Supabase production migration history includes `harden_production_boundaries` and `allow_owner_select_companion_projection`; targeted SQL confirmed owner-or-member SELECT plus owner-only insert/update/delete policies on `companion_shared_trips`.
 - Supabase security advisors reported one existing leaked-password-protection warning and one informational deny-all connector-secrets table notice; performance advisors reported nine informational unused-index notices and no blocking issue.
+
+## 2026-06-22 Baseline Integration - Parallel Main Rebase
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: continue the autonomous product run in the existing isolated worktree without touching the parallel `codex/provider-production-hardening` checkout, while incorporating the latest account isolation, authentication, and time-semantics work from `main`.
+
+Result:
+
+- Reused the clean `/Users/ysradmin/Documents/tripmap-autonomous-20260620` worktree; the primary checkout and its untracked screenshots were left untouched.
+- Merged `origin/main` without conflicts.
+- Preserved the completed navigation-context, Global Home 2.0, and Local Search 2.0 phases.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm run test:unit` passed: 169 files and 1352 tests.
+- `npm run build` passed with the existing large-chunk warning.
+
+## 2026-06-22 Phase 8 - Direct Day Plan Reordering
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: let users directly reorder a day's itinerary with accessible controls while replacing scattered multi-write reorder loops with one atomic local mutation that preserves existing object-sync and confirmation contracts.
+
+Scope:
+
+- Add a repository-level transaction for a complete day order and a tracked mutation that emits the existing item upserts after the transaction succeeds.
+- Reuse that mutation in manual Day Timeline ordering, route-order suggestion apply, Companion reorder, and AI trip-edit reorder paths where their existing validation already supplies a complete order.
+- Add an explicit Day Timeline ordering mode with move-up/move-down controls, pending preview, save, and cancel.
+- Warn that transport details remain attached to their destination item; do not silently rewrite times or transport fields.
+
+No-go:
+
+- No IndexedDB schema, object-sync wire shape, route-cache key, AI patch schema, Companion mutation contract, provider, or cloud semantic changes.
+- No drag-and-drop-only interaction; keyboard and 390px controls must remain complete.
+- No automatic route generation or route-order provider call.
+
+Likely files:
+
+- `src/db/repositories.ts` and `src/db/trackedMutations.ts`
+- `src/components/trip/DayTimelineView.tsx`
+- existing AI, Companion, and route-order apply call sites plus focused tests.
+
+Validation:
+
+- Focused repository/tracked-mutation, Day Timeline, AI apply, Companion, and Trip Map tests.
+- `npm run lint`, `npm run build`, `git diff --check`, and relevant 390px Day E2E.
+
+Result:
+
+- Added `reorderDayItems` as one Dexie transaction with duplicate, stale-set, stale-baseline, and day-existence guards.
+- Added a tracked reorder mutation so object-sync item upserts and trip dirty events are emitted only after the local transaction succeeds.
+- Split chronological sorting from explicit plan-order sorting, then reused plan order in day lists, route-order suggestion, map preview, route preparation, Companion reorder, and Trip Map route-order apply paths.
+- Added a Day Timeline sorting mode with Chinese copy, accessible up/down controls, draft preview, cancel, save, and transport metadata guidance.
+- Hardened the mobile E2E database cleanup to unregister stale service workers and clear Cache Storage before each scenario.
+
+Completed validation:
+
+- `npx eslint src/lib/itinerary.ts src/lib/itinerary.test.ts src/db/repositories.ts src/db/repositories.test.ts src/db/trackedMutations.ts src/db/trackedMutations.test.ts src/db/index.ts src/lib/companion.ts src/components/trip/TripMapPreview.tsx src/components/trip/DayTimelineView.tsx src/components/trip/DayTimelineView.test.tsx src/lib/routeOrderSuggestion.ts src/lib/routing.ts src/lib/tripMapPreview.ts src/components/DayMap.tsx e2e/helpers.ts e2e/full-page-forms.spec.ts` passed.
+- `git diff --check` passed.
+- `npm run test:unit -- src/lib/itinerary.test.ts src/db/repositories.test.ts src/db/trackedMutations.test.ts src/components/trip/DayTimelineView.test.tsx src/components/trip/DayMapView.test.tsx src/lib/routeOrderSuggestion.test.ts src/lib/routing.test.ts src/lib/routeCache.test.ts src/lib/tripMapPreview.test.ts src/lib/companion.test.ts src/lib/ai/aiTripEditApply.test.ts` passed: 11 files and 103 tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 169 files and 1357 tests.
+- `npm run build` passed with the existing large-chunk warning.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/full-page-forms.spec.ts -g '日程排序模式'` passed.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/full-page-forms.spec.ts` passed: 7 mobile tests.
+
+Risk: medium-high, because ordering is shared across manual, AI, Companion, and route-suggestion flows, but stored shapes and sync payloads remain unchanged.
+
+Stop conditions:
+
+- Stop or narrow if atomic ordering requires a schema/wire-contract change or changes the meaning of transport metadata.
+- Repair within the phase if any existing confirmation, stale-preview, route-order, or object-sync test regresses.
+
+## 2026-06-22 Phase 9 - Ticket Metadata Editor
+
+Status: planned
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: complete the missing ticket editor so users can correct titles, categories, notes, and itinerary binding without re-uploading or deleting the ticket.
+
+Scope:
+
+- Add a transactional metadata update/rebind operation that keeps `TicketMeta.itemId`, scope, and itinerary `ticketIds` consistent.
+- Expose editing from gallery cards and the full-screen preview, using a dedicated responsive editor surface.
+- Permit title, category, note, and trip/item/unassigned binding changes; preserve storage mode and underlying copy/reference/external payload.
+- Refresh gallery grouping, preview metadata, local search data, and existing object-sync queue through current change events.
+
+No-go:
+
+- No ticket/blob schema, file replacement, storage-mode conversion, cloud path, vault, OCR, or upload contract changes.
+- No deletion or rebinding without explicit save; cancel leaves all records unchanged.
+
+Likely files:
+
+- ticket repository/tracked mutation contracts.
+- `src/pages/TicketLibraryPage.tsx` and a focused editor component.
+- Ticket Library, repository, object-sync, and preview tests.
+
+Validation:
+
+- Focused ticket repository/page/preview/local-search tests.
+- `npm run lint`, `npm run build`, `git diff --check`, and ticket E2E at 390px.
+
+Risk: medium-high, because metadata participates in item binding and object sync, while blob/storage semantics remain untouched.
+
+Stop conditions:
+
+- Stop or split if rebind cannot be transactional with the existing stores or would require migration/cloud contract changes.
+- Repair within the phase if editing can orphan an itinerary `ticketIds` reference or mutate file/blob fields.
+
+## 2026-06-22 Phase 10 - PWA Lifecycle Control
+
+Status: planned
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: replace invisible service-worker behavior with a clear, non-blocking update and offline lifecycle so beta users know when a new build is ready and when network-only features are unavailable.
+
+Scope:
+
+- Register the PWA through an application controller instead of the injected opaque auto-update path.
+- Show a compact global offline notice and a user-triggered update/restart prompt with defer and retry behavior.
+- Keep map tiles, provider calls, search, routes, and cloud explicitly network-only; do not add runtime caches.
+- Surface the same lifecycle state in Settings with the current app version and recovery guidance.
+
+No-go:
+
+- No commercial map caching, background provider retries, forced reload during unsaved form work, or new telemetry/provider calls.
+- No claim that offline mode includes maps, routes, search, or cloud.
+
+Likely files:
+
+- `vite.config.ts`, `src/main.tsx`, and `src/components/AppShell.tsx`.
+- a focused PWA lifecycle module/controller and Settings integration.
+
+Validation:
+
+- Unit/component tests with mocked service-worker registration and online/offline events.
+- production build/service-worker artifact inspection, lint, diff check, and focused PWA E2E.
+
+Risk: medium, because update timing affects the full application shell but no stored data contract changes.
+
+Stop conditions:
+
+- Stop or narrow if the plugin cannot expose a deterministic prompt flow without breaking production registration.
+- Repair within the phase if an update can reload automatically while a form or confirmation flow is active.
+
+## 2026-06-22 Phase 11 - Executable Design System Pass
+
+Status: planned
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: turn the existing SwiftUI-like direction into an executable repository contract and reusable controls, then apply it to the new Day, Ticket, and PWA surfaces instead of leaving another layer of one-off utility strings.
+
+Scope:
+
+- Record the existing product tokens and interaction hierarchy in repository design-system guidance compatible with agent workflows.
+- Add only the missing reusable primitives justified by Phases 8-10, such as compact toolbars, inline status notices, and segmented action groups.
+- Migrate the new surfaces and nearby duplicated patterns while preserving current route and data behavior.
+- Verify light/dark, 390px, desktop, focus, reduced-motion, and long Chinese labels.
+
+No-go:
+
+- No wholesale visual rebrand, generated UI/code import, marketing page, or unrelated page rewrite.
+- No purple/blue monochrome redesign, nested-card expansion, or decorative-only UI.
+
+Likely files:
+
+- repository design-system guidance and `src/components/ui/*`.
+- the Day, Ticket, PWA, and focused UI tests touched by the prior phases.
+
+Validation:
+
+- UI primitive tests, focused page tests, lint, build, diff check, 390px/desktop visual and accessibility E2E.
+
+Risk: medium, because shared primitives can affect multiple surfaces; migration remains limited to recently changed workflows.
+
+Stop conditions:
+
+- Stop expansion if a primitive cannot remove real duplication or preserve existing semantics.
+- Repair within the phase if shared styling causes layout shift, overlap, focus, or dark-mode regressions.

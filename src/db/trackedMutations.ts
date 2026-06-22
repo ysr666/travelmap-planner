@@ -88,6 +88,19 @@ export async function updateItineraryItem(
   return item
 }
 
+export async function reorderDayItems(
+  dayId: string,
+  orderedItemIds: string[],
+  expectedCurrentItemIds?: string[],
+) {
+  const items = await repo.reorderDayItems(dayId, orderedItemIds, expectedCurrentItemIds)
+  if (items.length > 0) {
+    await Promise.all(items.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' })))
+    recordTripWriteForSync(items[0].tripId, 'items-reordered', { emitChangeEvent: false })
+  }
+  return items
+}
+
 export async function setItineraryItemExecutionState(
   itemId: string,
   status: 'completed' | 'skipped' | null,

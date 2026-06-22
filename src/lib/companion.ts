@@ -10,6 +10,7 @@ import {
   listTicketsByTrip,
   listTripDisruptionEventsByTrip,
   listTripReplanRecordsByTrip,
+  reorderDayItems,
   setItineraryItemExecutionState,
   updateItineraryItem,
 } from '../db'
@@ -1030,7 +1031,7 @@ async function applyMutationPayload(tripId: string, mutation: SharedTripMutation
     if (items.length !== orderedItemIds.length) throw new Error('排序列表与当前行程不一致，存在冲突。')
     const itemIds = new Set(items.map((item) => item.id))
     if (!orderedItemIds.every((id) => itemIds.has(id))) throw new Error('排序列表包含无效行程点。')
-    await Promise.all(orderedItemIds.map((id, index) => updateItineraryItem(id, { sortOrder: index + 1 })))
+    await reorderDayItems(dayId, orderedItemIds, items.map((item) => item.id))
     return
   }
 

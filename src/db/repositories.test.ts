@@ -22,6 +22,7 @@ import {
   listTicketsByItem,
   listTicketsByTrip,
   replaceTripPlanRecords,
+  reorderDayItems,
   listTrips,
   saveTicketBlob,
   updateDay,
@@ -108,6 +109,35 @@ describe('ItineraryItem CRUD', () => {
     const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Old', sortOrder: 1, ticketIds: [] })
     const updated = await updateItineraryItem(item.id, { title: 'New' })
     expect(updated?.title).toBe('New')
+  })
+
+  it('reorders a complete day atomically and rejects stale or duplicate orders', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'First', sortOrder: 1, ticketIds: [] })
+    const second = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Second', sortOrder: 2, ticketIds: [] })
+    const third = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Third', sortOrder: 3, ticketIds: [] })
+
+    const changed = await reorderDayItems(day.id, [third.id, first.id, second.id])
+
+    expect(changed).toHaveLength(3)
+    await expect(listItemsByDay(day.id)).resolves.toMatchObject([
+      { id: third.id, sortOrder: 1 },
+      { id: first.id, sortOrder: 2 },
+      { id: second.id, sortOrder: 3 },
+    ])
+    await expect(reorderDayItems(day.id, [third.id, third.id, second.id])).rejects.toThrow('重复行程点')
+    await expect(reorderDayItems(day.id, [third.id, first.id])).rejects.toThrow('当前行程不一致')
+    await expect(reorderDayItems(
+      day.id,
+      [first.id, second.id, third.id],
+      [first.id, second.id, third.id],
+    )).rejects.toThrow('已在其他位置更新')
+    await expect(listItemsByDay(day.id)).resolves.toMatchObject([
+      { id: third.id, sortOrder: 1 },
+      { id: first.id, sortOrder: 2 },
+      { id: second.id, sortOrder: 3 },
+    ])
   })
 })
 

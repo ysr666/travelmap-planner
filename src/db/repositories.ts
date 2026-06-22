@@ -1,7 +1,7 @@
 import { db } from './database'
 import Dexie from 'dexie'
 import { createId } from './ids'
-import { sortItineraryItems } from '../lib/itinerary'
+import { sortItineraryItems, sortItineraryItemsByPlanOrder } from '../lib/itinerary'
 import type {
   Day,
   ItineraryItem,
@@ -214,7 +214,7 @@ export async function listItemsByDay(dayId: string) {
     .where('[dayId+sortOrder]')
     .between([dayId, DexieMinKey], [dayId, DexieMaxKey])
     .toArray()
-  return sortItineraryItems(items)
+  return sortItineraryItemsByPlanOrder(items)
 }
 
 export async function listItemsByTrip(tripId: string) {
@@ -242,6 +242,60 @@ export async function updateItineraryItem(itemId: string, patch: UpdateItinerary
   })
 
   return getItineraryItem(itemId)
+}
+
+export async function reorderDayItems(
+  dayId: string,
+  orderedItemIds: string[],
+  expectedCurrentItemIds?: string[],
+) {
+  if (new Set(orderedItemIds).size !== orderedItemIds.length) {
+    throw new Error('排序列表包含重复行程点。')
+  }
+  if (expectedCurrentItemIds && new Set(expectedCurrentItemIds).size !== expectedCurrentItemIds.length) {
+    throw new Error('排序基线包含重复行程点。')
+  }
+
+  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
+    const day = await db.days.get(dayId)
+    if (!day) {
+      throw new Error('当天行程不存在。')
+    }
+
+    const currentItems = sortItineraryItemsByPlanOrder(await db.itineraryItems.where('dayId').equals(dayId).toArray())
+    const currentItemIds = new Set(currentItems.map((item) => item.id))
+    if (
+      currentItems.length !== orderedItemIds.length
+      || orderedItemIds.some((itemId) => !currentItemIds.has(itemId))
+    ) {
+      throw new Error('排序列表与当前行程不一致，请刷新后重试。')
+    }
+    if (
+      expectedCurrentItemIds
+      && (
+        expectedCurrentItemIds.length !== currentItems.length
+        || expectedCurrentItemIds.some((itemId, index) => itemId !== currentItems[index]?.id)
+      )
+    ) {
+      throw new Error('当天顺序已在其他位置更新，请刷新后重试。')
+    }
+
+    const itemById = new Map(currentItems.map((item) => [item.id, item]))
+    const updatedAt = Date.now()
+    const changedItems = orderedItemIds.flatMap((itemId, index) => {
+      const item = itemById.get(itemId)
+      if (!item || item.sortOrder === index + 1) return []
+      return [{ ...item, sortOrder: index + 1, updatedAt }]
+    })
+
+    if (changedItems.length === 0) {
+      return []
+    }
+
+    await db.itineraryItems.bulkPut(changedItems)
+    await db.trips.update(day.tripId, { updatedAt })
+    return changedItems
+  })
 }
 
 export async function deleteItineraryItemCascade(itemId: string) {

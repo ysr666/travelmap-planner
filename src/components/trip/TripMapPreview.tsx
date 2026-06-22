@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles } from 'lucide-react'
-import { updateItineraryItem } from '../../db'
+import { reorderDayItems } from '../../db'
 import { EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE, TRIP_PREVIEW_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
 import {
@@ -22,6 +22,7 @@ import {
   getRouteOrderSuggestionCandidateDay,
 } from '../../lib/routeOrderSuggestion'
 import { getRoutingConfig } from '../../lib/routing'
+import { sortItineraryItemsByPlanOrder } from '../../lib/itinerary'
 import { ROUTE_CACHE_CHANGED_EVENT } from '../../lib/routeCache'
 import {
   buildTripMapPreviewData,
@@ -432,7 +433,14 @@ export function TripMapPreview({
     const { day, result } = routeOrderSuggestionState
     const dayItems = itemsByDay[day.id] ?? []
     const patches = buildRouteOrderSuggestionSortPatches(dayItems, result.suggestedItemIds)
-    await Promise.all(patches.map((patch) => updateItineraryItem(patch.id, { sortOrder: patch.sortOrder })))
+    const orderedItemIds = [...dayItems]
+      .sort((first, second) => {
+        const firstPatch = patches.find((patch) => patch.id === first.id)
+        const secondPatch = patches.find((patch) => patch.id === second.id)
+        return (firstPatch?.sortOrder ?? first.sortOrder) - (secondPatch?.sortOrder ?? second.sortOrder)
+      })
+      .map((item) => item.id)
+    await reorderDayItems(day.id, orderedItemIds, sortItineraryItemsByPlanOrder(dayItems).map((item) => item.id))
     setRouteOrderConfirmOpen(false)
     setRouteOrderSuggestionState({
       message: patches.length > 0

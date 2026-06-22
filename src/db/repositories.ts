@@ -11,6 +11,7 @@ import type {
   LedgerSettings,
   TicketBlob,
   TicketMeta,
+  TicketScope,
   TripDisruptionEvent,
   TripReplanRecord,
   Trip,
@@ -28,6 +29,17 @@ type UpdateItineraryItemPatch = Partial<
 >
 
 type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateTicketMetaInput = {
+  itemId?: string
+  note?: string
+  scope: TicketScope
+  ticketCategory?: TicketMeta['ticketCategory']
+  title?: string
+}
+type UpdateTicketMetaResult = {
+  changedItems: ItineraryItem[]
+  ticket: TicketMeta
+}
 type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
 type CreateTripReplanRecordInput = Omit<TripReplanRecord, 'id' | 'createdAt' | 'updatedAt'>
@@ -367,6 +379,67 @@ export async function listTicketsByTrip(tripId: string) {
 export async function listTicketsByItem(itemId: string) {
   const tickets = await db.ticketMetas.where('itemId').equals(itemId).toArray()
   return tickets.sort((first, second) => second.createdAt - first.createdAt)
+}
+
+export async function updateTicketMeta(
+  ticketId: string,
+  input: UpdateTicketMetaInput,
+): Promise<UpdateTicketMetaResult | undefined> {
+  return db.transaction(
+    'rw',
+    db.ticketMetas,
+    db.itineraryItems,
+    db.trips,
+    async () => {
+      const ticket = await db.ticketMetas.get(ticketId)
+      if (!ticket) return undefined
+
+      const now = Date.now()
+      const nextItemId = input.scope === 'item' ? input.itemId : undefined
+
+      if (input.scope === 'item' && !nextItemId) {
+        throw new Error('请选择要绑定的行程点。')
+      }
+
+      const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
+      const targetItem = nextItemId ? tripItems.find((item) => item.id === nextItemId) : undefined
+      if (nextItemId && !targetItem) {
+        throw new Error('绑定的行程点不存在。')
+      }
+
+      const changedItems = tripItems.flatMap((item) => {
+        const ticketIds = item.ticketIds ?? []
+        const hasTicket = ticketIds.includes(ticket.id)
+        const shouldHaveTicket = item.id === nextItemId
+        if (hasTicket === shouldHaveTicket) return []
+        return [{
+          ...item,
+          ticketIds: shouldHaveTicket
+            ? [...ticketIds, ticket.id]
+            : ticketIds.filter((id) => id !== ticket.id),
+          updatedAt: now,
+        }]
+      })
+
+      const nextTicket: TicketMeta = {
+        ...ticket,
+        itemId: nextItemId,
+        note: input.note,
+        scope: input.scope,
+        ticketCategory: input.ticketCategory,
+        title: input.title,
+        updatedAt: now,
+      }
+
+      await db.ticketMetas.put(nextTicket)
+      if (changedItems.length > 0) {
+        await db.itineraryItems.bulkPut(changedItems)
+      }
+      await db.trips.update(ticket.tripId, { updatedAt: now })
+
+      return { changedItems, ticket: nextTicket }
+    },
+  )
 }
 
 export async function deleteTicket(ticketId: string) {

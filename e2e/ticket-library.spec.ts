@@ -138,6 +138,44 @@ async function addTicketMetas(page: Page, tripId: string, itemId: string, ticket
   }, { targetTripId: tripId, targetItemId: itemId, seedTickets: tickets })
 }
 
+async function readTicketBinding(page: Page, tripId: string, itemId: string, title: string) {
+  return page.evaluate(async ({ targetItemId, targetTitle, targetTripId }) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    const tx = db.transaction(['itineraryItems', 'ticketMetas'], 'readonly')
+    const tickets = await new Promise<Array<{
+      id: string
+      itemId?: string
+      note?: string
+      scope?: string
+      ticketCategory?: string
+      title?: string
+      tripId: string
+    }>>((resolve, reject) => {
+      const request = tx.objectStore('ticketMetas').index('tripId').getAll(targetTripId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const item = await new Promise<{ ticketIds?: string[] }>((resolve, reject) => {
+      const request = tx.objectStore('itineraryItems').get(targetItemId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+
+    const ticket = tickets.find((candidate) => candidate.title === targetTitle)
+    if (!ticket) throw new Error(`没有找到票据 ${targetTitle}`)
+    return {
+      itemTicketIds: item.ticketIds ?? [],
+      ticket,
+    }
+  }, { targetItemId: itemId, targetTitle: title, targetTripId: tripId })
+}
+
 const ticketSeeds: SeedTicket[] = [
   {
     fileName: 'hotel-order.pdf',
@@ -206,6 +244,43 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
   await expect(page.getByTestId('ticket-preview-reference')).toContainText('此票据仅记录文件位置')
   await page.getByTestId('ticket-preview-close').click()
   await expect(page.getByTestId('ticket-preview')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('票据库可以编辑票据元数据并原子移除行程点绑定', async ({ page }) => {
+  const tripId = await createDemoTripViaUi(page)
+  const firstItemId = await getFirstItemId(page, tripId)
+  await addTicketMetas(page, tripId, firstItemId, [ticketSeeds[0]])
+
+  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /编辑酒店订单 PDF/ }).click()
+  const editor = page.getByTestId('ticket-metadata-editor')
+  await expect(editor).toBeVisible()
+
+  await editor.getByLabel('显示名称').fill('酒店订单已整理')
+  await editor.getByLabel('票据分类').selectOption('hotel_booking')
+  await editor.getByLabel('绑定对象').selectOption('unassigned')
+  await editor.getByLabel('备注').fill('入住时出示护照')
+  await editor.getByRole('button', { name: '保存修改' }).click()
+
+  await expect(editor).toHaveCount(0)
+  await expect(page.getByText('票据信息已更新。')).toBeVisible()
+  await expect(page.getByTestId('ticket-gallery')).toContainText('酒店订单已整理')
+  await expect(page.getByTestId('ticket-gallery-section').filter({ hasText: '未分类' })).toContainText('酒店订单已整理')
+
+  const binding = await readTicketBinding(page, tripId, firstItemId, '酒店订单已整理')
+  expect(binding.ticket.itemId).toBeUndefined()
+  expect(binding.ticket).toMatchObject({
+    note: '入住时出示护照',
+    scope: 'unassigned',
+    ticketCategory: 'hotel_booking',
+    title: '酒店订单已整理',
+  })
+  expect(binding.itemTicketIds).not.toContain(binding.ticket.id)
+
+  await page.getByRole('button', { name: /查看酒店订单已整理/ }).click()
+  await expect(page.getByTestId('ticket-preview')).toContainText('酒店订单')
+  await page.getByTestId('ticket-preview-close').click()
   await expectNoHorizontalOverflow(page)
 })
 

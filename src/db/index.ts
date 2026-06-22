@@ -48,6 +48,7 @@ export {
   setItineraryItemExecutionState,
   updateDay,
   updateItineraryItem,
+  updateTicketMeta,
   updateTrip,
   updateTripDisruptionEvent,
   updateTripReplanRecord,

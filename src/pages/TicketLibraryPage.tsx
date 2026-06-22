@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileArchive, HardDrive, Link2, MapPinned, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -15,6 +15,7 @@ import {
   listTicketsByTrip,
   saveTicketBlob,
   updateItineraryItem,
+  updateTicketMeta,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
 import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
@@ -35,6 +36,7 @@ import { describeItemTime } from '../lib/itinerary'
 import { buildLedgerExpenseDraftCandidates, type LedgerExpenseDraftCandidate } from '../lib/ledgerExtraction'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
+  describeTicketMetaLine,
   formatFileSize,
   formatTicketCreatedAt,
   getTicketDisplayTitle,
@@ -91,6 +93,12 @@ import type {
 
 type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
+type TicketEditDraft = {
+  bindingTarget: BindingTarget
+  note: string
+  ticketCategory: TicketCategory
+  title: string
+}
 type StorageEstimateState = {
   usage?: number
   quota?: number
@@ -151,6 +159,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [bindingTarget, setBindingTarget] = useState<BindingTarget>('trip')
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
+  const [editingTicket, setEditingTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
   const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncStateMap>({})
@@ -163,6 +172,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [fileInputKey, setFileInputKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSavingTicketEdit, setIsSavingTicketEdit] = useState(false)
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
   const [ticketBlobActionId, setTicketBlobActionId] = useState<string | null>(null)
   const [ticketIntelligenceActionId, setTicketIntelligenceActionId] = useState<string | null>(null)
@@ -676,6 +686,40 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     }
   }
 
+  function openTicketEditor(ticket: TicketMeta) {
+    setActionError(null)
+    setActionMessage(null)
+    setPreviewTicket(null)
+    setEditingTicket(ticket)
+  }
+
+  async function handleSaveTicketEdit(ticket: TicketMeta, draft: TicketEditDraft) {
+    setActionError(null)
+    setActionMessage(null)
+    setIsSavingTicketEdit(true)
+    try {
+      const itemId = draft.bindingTarget.startsWith('item:') ? draft.bindingTarget.slice(5) : undefined
+      const scope: TicketScope = itemId ? 'item' : (draft.bindingTarget as TicketScope)
+      const result = await updateTicketMeta(ticket.id, {
+        itemId,
+        note: normalizeOptional(draft.note),
+        scope,
+        ticketCategory: draft.ticketCategory,
+        title: normalizeOptional(draft.title),
+      })
+      if (!result) {
+        throw new Error('票据不存在，可能已在其他位置删除。')
+      }
+      setEditingTicket(null)
+      await refreshLibrary()
+      setActionMessage('票据信息已更新。')
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '更新票据信息失败')
+    } finally {
+      setIsSavingTicketEdit(false)
+    }
+  }
+
   function resetForm() {
     setSelectedFile(null)
     setTitle('')
@@ -930,6 +974,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
                         key={ticket.id}
                         onClearCache={() => void handleClearTicketCache(ticket)}
                         onDelete={() => setPendingDeleteTicket(ticket)}
+                        onEdit={() => openTicketEditor(ticket)}
                         onPreview={() => setPreviewTicket(ticket)}
                         onRestoreCache={() => void handleRestoreTicketCache(ticket)}
                         onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
@@ -955,12 +1000,27 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           key={previewTicket.id}
           onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
+          onEditTicket={openTicketEditor}
           onIntelligenceSuggestionAction={handleTicketIntelligenceAction}
           onIntelligenceSuggestionIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
           onIntelligenceSuggestionLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
           onIntelligenceSuggestionRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
           ticket={previewTicket}
           tickets={filteredTickets}
+        />
+      ) : null}
+
+      {editingTicket ? (
+        <TicketMetadataEditor
+          bindingOptions={bindingOptions}
+          isSaving={isSavingTicketEdit}
+          onCancel={() => {
+            if (!isSavingTicketEdit) {
+              setEditingTicket(null)
+            }
+          }}
+          onSave={(draft) => void handleSaveTicketEdit(editingTicket, draft)}
+          ticket={editingTicket}
         />
       ) : null}
 
@@ -1016,6 +1076,117 @@ type TicketGallerySection = {
   summary: string
   tickets: TicketMeta[]
   title: string
+}
+
+function TicketMetadataEditor({
+  bindingOptions,
+  isSaving,
+  onCancel,
+  onSave,
+  ticket,
+}: {
+  bindingOptions: Array<{ id: string; label: string }>
+  isSaving: boolean
+  onCancel: () => void
+  onSave: (draft: TicketEditDraft) => void
+  ticket: TicketMeta
+}) {
+  const [title, setTitle] = useState(ticket.title ?? '')
+  const [ticketCategory, setTicketCategory] = useState<TicketCategory>(ticket.ticketCategory ?? 'other')
+  const [bindingTarget, setBindingTarget] = useState<BindingTarget>(getTicketBindingTarget(ticket))
+  const [note, setNote] = useState(ticket.note ?? '')
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 px-3 py-4 backdrop-blur-sm sm:items-center"
+      data-testid="ticket-metadata-editor"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !isSaving) onCancel()
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-[460px] space-y-4 rounded-2xl bg-surface p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)] ring-1 ring-outline-variant/30 dark:bg-surface-container-high">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{describeTicketMetaLine(ticket)}</p>
+            <h3 className="mt-1 text-lg font-semibold text-on-surface dark:text-on-surface">编辑票据</h3>
+          </div>
+          <button
+            aria-label="关闭编辑"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full tm-chip tm-focus"
+            disabled={isSaving}
+            onClick={onCancel}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <TextField
+          label="显示名称"
+          onChange={setTitle}
+          placeholder={ticket.fileName}
+          value={title}
+        />
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>票据分类</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            onChange={(event) => setTicketCategory(event.target.value as TicketCategory)}
+            value={ticketCategory}
+          >
+            {ticketCategoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>绑定对象</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
+            value={bindingTarget}
+          >
+            <option value="trip">整个旅行：机票、酒店、保险等</option>
+            <option value="unassigned">不绑定：暂时未分类</option>
+            {bindingOptions.map((option) => (
+              <option key={option.id} value={`item:${option.id}`}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>备注</span>
+          <textarea
+            className={`${FIELD_TEXTAREA_CLASS} min-h-24 resize-none`}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="例如：订单号、取票位置、同行人说明"
+            value={note}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button disabled={isSaving} onClick={onCancel} variant="secondary">
+            取消
+          </Button>
+          <Button
+            icon={<Save className="size-4" />}
+            loading={isSaving}
+            onClick={() => onSave({ bindingTarget, note, ticketCategory, title })}
+          >
+            保存修改
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
@@ -1137,6 +1308,7 @@ function TicketCard({
   syncView,
   onClearCache,
   onPreview,
+  onEdit,
   onDelete,
   onRestoreCache,
   onRetryUpload,
@@ -1148,6 +1320,7 @@ function TicketCard({
   syncView: TicketCloudSyncView
   onClearCache: () => void
   onPreview: () => void
+  onEdit: () => void
   onDelete: () => void
   onRestoreCache: () => void
   onRetryUpload: () => void
@@ -1201,13 +1374,22 @@ function TicketCard({
         </span>
       </button>
 
-      <div className="mt-2 flex items-center justify-between gap-2 border-t tm-row pt-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t tm-row pt-2">
         <button
           className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
           type="button"
         >
           查看
+        </button>
+        <button
+          aria-label={`编辑${displayTitle}`}
+          className="flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-sky-50 active:text-sky-700 tm-focus dark:text-on-surface-variant dark:active:bg-sky-950/35 dark:active:text-sky-300"
+          onClick={onEdit}
+          type="button"
+        >
+          <Pencil className="size-3.5" />
+          编辑
         </button>
         <button
           aria-label={`删除${displayTitle}`}
@@ -1467,6 +1649,15 @@ function describeTicketBinding(ticket: TicketMeta, itemById: Map<string, Itinera
   }
 
   return ticketScopeLabels[scope]
+}
+
+function getTicketBindingTarget(ticket: TicketMeta): BindingTarget {
+  const scope = getTicketScope(ticket)
+  if (scope === 'item') {
+    return ticket.itemId ? `item:${ticket.itemId}` : 'unassigned'
+  }
+
+  return scope
 }
 
 function normalizeOptional(value: string) {

@@ -34,7 +34,9 @@ const mocks = vi.hoisted(() => ({
   deleteTicket: vi.fn(),
   getTicketBlob: vi.fn(),
   saveTicketBlob: vi.fn(),
+  updateTicketMeta: vi.fn(),
   updateItineraryItem: vi.fn(),
+  describeTicketMetaLine: vi.fn(() => '其他票据 · PDF · 位置记录'),
   formatFileSize: vi.fn((size: number) => `${size} B`),
   formatTicketCreatedAt: vi.fn(() => '2026-04-01'),
   getTicketDisplayTitle: vi.fn((ticket?: { fileName?: string; title?: string }) => ticket?.title || ticket?.fileName || '票据'),
@@ -43,8 +45,11 @@ const mocks = vi.hoisted(() => ({
   getTicketStorageMode: vi.fn((ticket?: { storageMode?: 'copy' | 'external' | 'reference' }) => ticket?.storageMode || 'reference'),
   isValidExternalUrl: vi.fn(() => false),
   normalizeTicketFileName: vi.fn((name: string) => name),
-  ticketCategoryOptions: [],
-  ticketScopeLabels: { trip: '旅行', day: '日期', item: '行程点' },
+  ticketCategoryOptions: [
+    { label: '其他票据', value: 'other' },
+    { label: '火车票', value: 'train_ticket' },
+  ],
+  ticketScopeLabels: { item: '行程点', trip: '旅行', unassigned: '未绑定' },
   describeItemTime: vi.fn(() => ''),
   getTicketCloudSyncView: vi.fn(() => ({ detail: '仅此设备', label: '本地', status: 'local' as const, tone: 'neutral' as const })),
   getTicketDisplayMeta: vi.fn((ticket?: { fileName?: string; fileType?: string }) => ({
@@ -89,9 +94,11 @@ vi.mock('../db', () => ({
   saveTicketBlob: mocks.saveTicketBlob,
   setItineraryItemExecutionState: vi.fn(),
   updateItineraryItem: mocks.updateItineraryItem,
+  updateTicketMeta: mocks.updateTicketMeta,
 }))
 
 vi.mock('../lib/tickets', () => ({
+  describeTicketMetaLine: mocks.describeTicketMetaLine,
   formatFileSize: mocks.formatFileSize,
   formatTicketCreatedAt: mocks.formatTicketCreatedAt,
   getTicketDisplayTitle: mocks.getTicketDisplayTitle,
@@ -151,11 +158,16 @@ vi.mock('../components/TicketPreview', () => ({
   TicketPreview: ({
     intelligenceSuggestions = [],
     onIntelligenceSuggestionAction,
+    onEditTicket,
+    ticket,
   }: {
     intelligenceSuggestions?: Array<{ action?: { label?: string }; id: string; title: string }>
     onIntelligenceSuggestionAction?: (suggestion: { id: string }) => void
+    onEditTicket?: (ticket: { id: string }) => void
+    ticket: { id: string; title?: string }
   }) => (
     <div data-testid="ticket-preview">
+      <button onClick={() => onEditTicket?.(ticket)} type="button">编辑票据</button>
       {intelligenceSuggestions.map((suggestion) => (
         <button
           data-testid="ticket-preview-intelligence-action"
@@ -182,6 +194,14 @@ vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+
+function setInputValue(element: HTMLInputElement | HTMLTextAreaElement | undefined | null, value: string) {
+  if (!element) return
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+  setter?.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -226,6 +246,22 @@ beforeEach(() => {
     secondaryLine: ticket?.fileName || '票据文件',
     toneKey: 'sky' as const,
   }))
+  mocks.updateTicketMeta.mockResolvedValue({
+    changedItems: [],
+    ticket: {
+      createdAt: 100,
+      fileName: 'ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket_1',
+      mimeType: 'application/pdf',
+      scope: 'trip',
+      size: 1,
+      storageMode: 'reference',
+      title: '票据',
+      tripId: 'trip_1',
+      updatedAt: 101,
+    },
+  })
 })
 
 afterEach(() => {
@@ -390,6 +426,84 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('旅行级票据')
     expect(container?.textContent).toContain('未分类')
     expect(container?.querySelectorAll('[data-testid="ticket-gallery-section"]').length).toBe(3)
+  })
+
+  it('opens the metadata editor from a ticket card and saves a rebind', async () => {
+    const originalTicket = {
+      id: 'ticket_1',
+      tripId: 'trip_1',
+      title: '机票确认',
+      fileName: 'flight.pdf',
+      fileType: 'pdf' as const,
+      mimeType: 'application/pdf',
+      size: 2048,
+      storageMode: 'reference' as const,
+      scope: 'trip' as const,
+      ticketCategory: 'other' as const,
+      createdAt: 100,
+      updatedAt: 100,
+    }
+    mocks.listTicketsByTrip.mockResolvedValue([originalTicket])
+    mocks.updateTicketMeta.mockResolvedValue({
+      changedItems: [],
+      ticket: {
+        ...originalTicket,
+        itemId: 'item_1',
+        note: '改绑到浅草寺',
+        scope: 'item',
+        ticketCategory: 'train_ticket',
+        title: '东京车票',
+        updatedAt: 120,
+      },
+    })
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    const editButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.getAttribute('aria-label') === '编辑机票确认')
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(document.body.textContent).toContain('编辑票据')
+    const editor = document.body.querySelector('[data-testid="ticket-metadata-editor"]')
+    const titleInput = Array.from(editor?.querySelectorAll('input') ?? [])[0]
+    const [categorySelect, bindingSelect] = Array.from(editor?.querySelectorAll('select') ?? [])
+    const noteTextarea = editor?.querySelector('textarea')
+
+    await act(async () => {
+      setInputValue(titleInput, '东京车票')
+      if (categorySelect) {
+        categorySelect.value = 'train_ticket'
+        categorySelect.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      if (bindingSelect) {
+        bindingSelect.value = 'item:item_1'
+        bindingSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      setInputValue(noteTextarea, '改绑到浅草寺')
+    })
+
+    const saveButton = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('保存修改'))
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.updateTicketMeta).toHaveBeenCalledWith('ticket_1', {
+      itemId: 'item_1',
+      note: '改绑到浅草寺',
+      scope: 'item',
+      ticketCategory: 'train_ticket',
+      title: '东京车票',
+    })
+    expect(document.body.textContent).toContain('票据信息已更新')
   })
 
   it('shows ticket intelligence suggestions and requires confirmation before creating an expense draft', async () => {

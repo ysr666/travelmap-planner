@@ -137,6 +137,21 @@ export async function saveTicketBlob(ticketId: string, blob: Blob) {
   return record
 }
 
+export async function updateTicketMeta(
+  ticketId: string,
+  input: Parameters<typeof repo.updateTicketMeta>[1],
+) {
+  const result = await repo.updateTicketMeta(ticketId, input)
+  if (result) {
+    await Promise.all([
+      enqueueObjectUpsert({ object: result.ticket, objectType: 'ticket_meta' }),
+      ...result.changedItems.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' as const })),
+    ])
+    recordTripWriteForSync(result.ticket.tripId, 'ticket-updated', { emitChangeEvent: false })
+  }
+  return result
+}
+
 export async function deleteTicket(ticketId: string) {
   const ticket = await repo.getTicketMeta(ticketId)
   await repo.deleteTicket(ticketId)

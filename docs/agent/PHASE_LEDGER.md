@@ -522,6 +522,13 @@ Completed validation:
 - `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/full-page-forms.spec.ts -g '日程排序模式'` passed.
 - `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/full-page-forms.spec.ts` passed: 7 mobile tests.
 
+Post-push remote diagnostics:
+
+- Pushed `feature/autonomous-iteration-20260620-navigation-search` at `c57b707e9e062e811f80779f751e2fed50ece8ed`.
+- GitHub Actions returned no run for this feature branch/commit.
+- Cloudflare Pages latest production deployment stayed on `main` commit `06b7c32c391dec3b4867e0483165df1dafc49165`; deploy stage was `success`.
+- Supabase CLI listed project `rfpcooafakuvgrdlfxpg` as `ACTIVE_HEALTHY`; Supabase MCP migration/branch reads were unavailable because the connector OAuth token was revoked, and CLI migration listing required linked DB credentials not available in this session.
+
 Risk: medium-high, because ordering is shared across manual, AI, Companion, and route-suggestion flows, but stored shapes and sync payloads remain unchanged.
 
 Stop conditions:
@@ -531,7 +538,7 @@ Stop conditions:
 
 ## 2026-06-22 Phase 9 - Ticket Metadata Editor
 
-Status: planned
+Status: completed
 
 Branch: `feature/autonomous-iteration-20260620-navigation-search`
 
@@ -559,6 +566,31 @@ Validation:
 
 - Focused ticket repository/page/preview/local-search tests.
 - `npm run lint`, `npm run build`, `git diff --check`, and ticket E2E at 390px.
+
+Read-only mini-plan result:
+
+- Existing ticket creation updates `TicketMeta`, optional `TicketBlob`, and itinerary `ticketIds` through separate calls; deletion already centralizes cleanup in a repository transaction.
+- Phase 9 will add one repository/tracked mutation for metadata and binding edits, then route the gallery card and full-screen preview through that mutation.
+- The editor will preserve storage mode, file/blob/reference/external payloads, cloud paths, OCR/import contracts, and object-sync wire shapes.
+
+Result:
+
+- Added `updateTicketMeta` as one repository transaction over ticket metadata, trip items, and trip timestamps; it rejects cross-trip item binding and repairs stale item `ticketIds` references while rebinding.
+- Added the tracked mutation wrapper so updated ticket metadata and changed itinerary items enter the existing object-sync outbox only after the local transaction succeeds.
+- Added card-level and full-screen-preview editing entry points in the ticket library.
+- Added a responsive ticket metadata editor for title, category, note, and trip/item/unassigned binding; storage mode, file/blob/reference/external payloads, OCR, vault, and cloud paths are not editable.
+- Added repository, tracked mutation, page, and mobile E2E coverage for metadata editing and atomic binding cleanup.
+
+Completed validation:
+
+- `npx eslint src/db/repositories.ts src/db/repositories.test.ts src/db/trackedMutations.ts src/db/trackedMutations.test.ts src/db/index.ts src/components/TicketPreview.tsx src/pages/TicketLibraryPage.tsx src/pages/TicketLibraryPage.test.tsx e2e/ticket-library.spec.ts` passed.
+- `git diff --check` passed.
+- `npm run test:unit -- src/db/repositories.test.ts src/db/trackedMutations.test.ts src/pages/TicketLibraryPage.test.tsx src/lib/localSearch.test.ts` passed: 4 files and 48 tests.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/ticket-library.spec.ts -g '票据库可以编辑票据元数据'` passed.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/ticket-library.spec.ts` passed: 7 mobile tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 169 files and 1361 tests.
+- `npm run build` passed with the existing large-chunk warning.
 
 Risk: medium-high, because metadata participates in item binding and object sync, while blob/storage semantics remain untouched.
 

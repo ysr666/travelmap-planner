@@ -25,6 +25,7 @@ import {
   reorderDayItems,
   listTrips,
   saveTicketBlob,
+  updateTicketMeta,
   updateDay,
   updateItineraryItem,
   updateTrip,
@@ -189,6 +190,90 @@ describe('Ticket CRUD', () => {
 
     const tickets = await listTicketsByItem(item.id)
     expect(tickets).toHaveLength(1)
+  })
+
+  it('updates ticket metadata and atomically rebinds item references', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 1, ticketIds: [] })
+    const second = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'B', sortOrder: 2, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      tripId: trip.id,
+      itemId: first.id,
+      scope: 'item',
+      title: '旧票据',
+      fileName: 'a.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 1,
+    })
+    await updateItineraryItem(first.id, { ticketIds: [ticket.id] })
+
+    const rebound = await updateTicketMeta(ticket.id, {
+      itemId: second.id,
+      note: '改到第二站',
+      scope: 'item',
+      ticketCategory: 'train_ticket',
+      title: '新票据',
+    })
+
+    expect(rebound?.ticket).toMatchObject({
+      id: ticket.id,
+      itemId: second.id,
+      note: '改到第二站',
+      scope: 'item',
+      ticketCategory: 'train_ticket',
+      title: '新票据',
+    })
+    await expect(getItineraryItem(first.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
+
+    const unassigned = await updateTicketMeta(ticket.id, {
+      note: undefined,
+      scope: 'unassigned',
+      ticketCategory: 'other',
+      title: undefined,
+    })
+    expect(unassigned?.ticket.itemId).toBeUndefined()
+    expect(unassigned?.ticket.note).toBeUndefined()
+    expect(unassigned?.ticket.title).toBeUndefined()
+    expect(unassigned?.ticket).toMatchObject({
+      id: ticket.id,
+      scope: 'unassigned',
+      ticketCategory: 'other',
+    })
+    await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [] })
+  })
+
+  it('rejects ticket rebinds to items outside the ticket trip without mutating metadata', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const otherTrip = await createTrip({ title: 'Other', destination: 'B', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: otherTrip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const otherItem = await createItineraryItem({ tripId: otherTrip.id, dayId: day.id, title: 'Other item', sortOrder: 1, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      tripId: trip.id,
+      scope: 'trip',
+      title: '机票',
+      fileName: 'flight.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 1,
+    })
+
+    await expect(updateTicketMeta(ticket.id, {
+      itemId: otherItem.id,
+      scope: 'item',
+      ticketCategory: 'flight_ticket',
+      title: '不应保存',
+    })).rejects.toThrow('绑定的行程点不存在')
+
+    const unchanged = await getTicketMeta(ticket.id)
+    expect(unchanged?.itemId).toBeUndefined()
+    expect(unchanged).toMatchObject({
+      scope: 'trip',
+      title: '机票',
+    })
+    await expect(getItineraryItem(otherItem.id)).resolves.toMatchObject({ ticketIds: [] })
   })
 })
 

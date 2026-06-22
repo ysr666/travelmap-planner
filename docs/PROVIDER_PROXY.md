@@ -204,6 +204,8 @@ Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request
 
 When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events without changing provider contracts.
 
+Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production code uses those settings after the PR3 deployment reaches `main`.
+
 The foundation table remains:
 
 ```sql

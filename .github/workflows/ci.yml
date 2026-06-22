@@ -71,8 +71,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Install Playwright Chromium
-        run: |
-          timeout 180s npx playwright install --with-deps chromium || npx playwright install chromium
+        run: npx playwright install chromium
       - run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()

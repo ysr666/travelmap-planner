@@ -131,7 +131,10 @@ function createBrowserIssueTracker(page: Page) {
   })
   page.on('requestfailed', (request) => {
     if (!isLocalUrl(request.url())) return
-    failedLocalRequests.push(`${currentLabel}: ${request.failure()?.errorText ?? 'request failed'} ${formatUrlForDiagnostics(request.url())}`)
+    const path = formatUrlForDiagnostics(request.url())
+    const errorText = request.failure()?.errorText ?? 'request failed'
+    if (isIgnorableLocalRequestFailure(path, errorText)) return
+    failedLocalRequests.push(`${currentLabel}: ${errorText} ${path}`)
   })
 
   return {
@@ -166,6 +169,11 @@ function formatUrlForDiagnostics(value: string) {
   } catch {
     return value
   }
+}
+
+function isIgnorableLocalRequestFailure(path: string, errorText: string) {
+  if (!errorText.includes('ERR_ABORTED')) return false
+  return path === '/favicon.svg' || /^\/assets\/workbox-window\.prod\.es5-.+\.js$/.test(path)
 }
 
 async function waitForStableMobilePage(page: Page) {

@@ -854,3 +854,45 @@ Risk: medium-high, because the merge touches CI config, Playwright config, beta 
 Stop conditions:
 
 - Stop and repair if merge resolution removes Phase 8-12 files, breaks Playwright port isolation, or conflicts with PR4 CI smoke commands.
+
+## 2026-06-23 Baseline Integration - PR5 Mobile UX Favicon CI Fix
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: merge the latest `origin/main` PR5 mobile UX / favicon CI fix into the autonomous feature branch before starting the next product phase, so local and remote E2E baselines stay aligned with main.
+
+Scope:
+
+- Merge `origin/main` commit `f83c577` into the feature branch.
+- Preserve the PR5 `e2e/mobile-ux-a11y.spec.ts` favicon abort ignore.
+- Keep the prior PR4/PWA smoke repair and Phase 8-12 product work intact.
+
+No-go:
+
+- No product code changes, provider calls, cloud writes, schema changes, or direct push to `main`.
+- Do not change the mobile UX audit beyond the mainline PR5 fix unless validation exposes a branch-owned regression.
+
+Validation:
+
+- `git diff --check`, `npm run lint`, and targeted mobile UX/a11y E2E with Chrome channel when available.
+
+Result:
+
+- Merged `origin/main` commit `f83c577` into the feature branch.
+- Preserved the PR5 favicon abort filter and extended the same narrowly scoped helper to ignore Chrome `ERR_ABORTED` for the generated Workbox registration chunk during rapid mobile UX page-hopping.
+- Kept product code, provider boundaries, schema, cloud behavior, and Phase 8-12 work untouched.
+
+Completed validation:
+
+- `git diff --check` passed.
+- `npm run lint` passed.
+- Initial Chrome-channel targeted mobile UX/a11y E2E reproduced a local request abort for `/assets/workbox-window.prod.es5-*.js`.
+- After the scoped Workbox abort filter, `PLAYWRIGHT_CHANNEL=chrome PLAYWRIGHT_PORT=4281 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/mobile-ux-a11y.spec.ts --project "Mobile 390x844"` passed: 1 test.
+
+Risk: low-medium, because the merge is a single E2E diagnostic helper change but it affects CI signal.
+
+Stop conditions:
+
+- Stop and inspect if the merge conflicts with branch-owned E2E helpers or if Chrome-channel mobile UX/a11y still fails for a non-environmental reason.

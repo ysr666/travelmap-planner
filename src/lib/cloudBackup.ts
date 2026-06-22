@@ -22,6 +22,7 @@ import { emitTravelDataChanged } from './dataEvents'
 import { requireSupabaseClient } from './supabaseClient'
 import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketBlob, TicketMeta, Trip } from '../types'
+import { clearOfflineAccessLease } from './appAuth'
 
 export { getSupabaseConfigStatus } from './supabaseClient'
 
@@ -254,6 +255,7 @@ export async function signOut() {
   if (error) {
     throw new Error('退出登录失败：' + error.message)
   }
+  clearOfflineAccessLease()
 }
 
 export async function listCloudBackups(): Promise<CloudBackupSummary[]> {

@@ -4,6 +4,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
+import {
+  persistSupabaseSmokeSession,
+  restoreSupabaseSmokeSession,
+} from './lib/supabase-smoke-session.mjs'
 
 const DEFAULT_SMOKE_EMAIL = 'ysr182@qq.com'
 
@@ -220,20 +224,25 @@ function buildProjection() {
 async function authenticate() {
   const accessToken = process.env.SUPABASE_COMPANION_SMOKE_ACCESS_TOKEN || process.env.SUPABASE_SMOKE_ACCESS_TOKEN
   const refreshToken = process.env.SUPABASE_COMPANION_SMOKE_REFRESH_TOKEN || process.env.SUPABASE_SMOKE_REFRESH_TOKEN
+  const email = process.env.SUPABASE_COMPANION_SMOKE_EMAIL || process.env.SUPABASE_SMOKE_EMAIL || DEFAULT_SMOKE_EMAIL
   if (accessToken && refreshToken) {
-    const { error } = await supabase.auth.setSession({
+    const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
     })
-    if (error) fail('Companion smoke session token was rejected.')
+    if (error || !data.session) fail('Companion smoke session token was rejected.')
+    persistSupabaseSmokeSession(data.session, { email, supabaseUrl: url })
     return
   }
 
-  const email = process.env.SUPABASE_COMPANION_SMOKE_EMAIL || process.env.SUPABASE_SMOKE_EMAIL || DEFAULT_SMOKE_EMAIL
+  const cachedSession = await restoreSupabaseSmokeSession(supabase, { email, supabaseUrl: url })
+  if (cachedSession) return
+
   const password = process.env.SUPABASE_COMPANION_SMOKE_PASSWORD || process.env.SUPABASE_SMOKE_PASSWORD
   if (email && password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) fail('Companion smoke email/password sign-in failed.')
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error || !data.session) fail('Companion smoke email/password sign-in failed.')
+    persistSupabaseSmokeSession(data.session, { email, supabaseUrl: url })
     return
   }
 
@@ -243,12 +252,13 @@ async function authenticate() {
   })
   if (error) fail('Companion smoke OTP send failed.')
   const token = process.env.SUPABASE_COMPANION_SMOKE_OTP || process.env.SUPABASE_SMOKE_OTP || await promptOtp(email)
-  const { error: verifyError } = await supabase.auth.verifyOtp({
+  const { data, error: verifyError } = await supabase.auth.verifyOtp({
     email,
     token: token.trim(),
     type: 'email',
   })
-  if (verifyError) fail('Companion smoke OTP verification failed.')
+  if (verifyError || !data.session) fail('Companion smoke OTP verification failed.')
+  persistSupabaseSmokeSession(data.session, { email, supabaseUrl: url })
 }
 
 async function promptOtp(email) {

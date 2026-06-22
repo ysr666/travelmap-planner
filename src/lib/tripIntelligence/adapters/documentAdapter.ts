@@ -9,6 +9,8 @@ import type {
   TravelDocumentStatus,
   Trip,
 } from '../../../types'
+import { plainDateDaysBetween, todayInTimeZone } from '../../timeSemantics'
+import { resolveTripTimeZone } from '../../timeZone'
 import type { TripIntelligenceSuggestion } from '../types'
 
 export type TripIntelligenceDocumentRecord = {
@@ -22,7 +24,7 @@ export type TripIntelligenceDocumentInput = {
   legacyTickets?: TicketMeta[]
   now?: Date | number | string
   reminders?: ReminderSchedule[]
-  selectedTrip?: Pick<Trip, 'id'> | null
+  selectedTrip?: Pick<Trip, 'id' | 'timeZone'> | null
   syncConflicts?: TravelCenterSyncConflict[]
   transportBookings?: TransportBooking[]
   transportSegmentsByBooking?: Record<string, TransportSegment[]>
@@ -59,11 +61,10 @@ const DOCUMENT_STATUS_LABELS: Record<TravelDocumentStatus, string> = {
 const VISA_OR_INSURANCE_KINDS = new Set<TravelDocumentKind>(['entry_permit', 'insurance', 'residence_permit', 'visa'])
 const ACTIVE_DOCUMENT_STATUSES = new Set<TravelDocumentStatus>(['active', 'approved'])
 const ATTENTION_DOCUMENT_STATUSES = new Set<TravelDocumentStatus>(['cancelled', 'expired', 'rejected'])
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
 export function mapDocumentInputToSuggestions(input?: TripIntelligenceDocumentInput | null): TripIntelligenceSuggestion[] {
   if (!input) return []
-  const now = normalizeDate(input.now)
+  const now = normalizeInstant(input.now)
+  const today = todayInTimeZone(resolveTripTimeZone(input.selectedTrip), now)
   const reminders = (input.reminders ?? []).filter((reminder) => reminder.status === 'pending')
   const suggestions: TripIntelligenceSuggestion[] = []
 
@@ -84,7 +85,7 @@ export function mapDocumentInputToSuggestions(input?: TripIntelligenceDocumentIn
 
   for (const document of input.documents ?? []) {
     const kindLabel = DOCUMENT_KIND_LABELS[document.data.kind]
-    const daysUntilExpiry = getDaysUntilDate(document.data.validUntil, now)
+    const daysUntilExpiry = getDaysUntilDate(document.data.validUntil, today)
     if (document.data.status === 'expired' || (typeof daysUntilExpiry === 'number' && daysUntilExpiry < 0)) {
       suggestions.push(documentSuggestion({
         actionKind: 'document_review_expiry',
@@ -276,20 +277,16 @@ function isDocumentLikeTicket(ticket: TicketMeta) {
   return /护照|passport|签证|visa|保险|insurance|保单|证件|document|身份证|id card|entry permit|residence permit/i.test(value)
 }
 
-function getDaysUntilDate(value: string | undefined, now: Date) {
+function getDaysUntilDate(value: string | undefined, today: string) {
   if (!value) return undefined
-  const parsed = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return undefined
-  const today = new Date(now)
-  today.setHours(0, 0, 0, 0)
-  return Math.ceil((parsed.getTime() - today.getTime()) / MS_PER_DAY)
+  return plainDateDaysBetween(today, value) ?? undefined
 }
 
-function normalizeDate(value: Date | number | string | undefined) {
-  if (value instanceof Date) return value
+function normalizeInstant(value: Date | number | string | undefined) {
+  if (value instanceof Date) return value.getTime()
   if (typeof value === 'number' || typeof value === 'string') {
     const parsed = new Date(value)
-    if (!Number.isNaN(parsed.getTime())) return parsed
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime()
   }
-  return new Date()
+  return Date.now()
 }

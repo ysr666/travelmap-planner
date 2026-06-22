@@ -94,6 +94,25 @@ describe('mapDocumentInputToSuggestions', () => {
 
     expect(suggestions.map((suggestion) => suggestion.id)).not.toContain('document:reminder:doc-insurance')
   })
+
+  it('evaluates expiry against the selected trip local date', () => {
+    const document = documentRecord({ kind: 'passport', status: 'active', validUntil: '2026-06-01' }, 'doc-zone')
+    const now = '2026-06-01T15:30:00.000Z'
+
+    const tokyo = mapDocumentInputToSuggestions({
+      documents: [document],
+      now,
+      selectedTrip: { id: 'trip-tokyo', timeZone: 'Asia/Tokyo' },
+    })
+    const losAngeles = mapDocumentInputToSuggestions({
+      documents: [document],
+      now,
+      selectedTrip: { id: 'trip-la', timeZone: 'America/Los_Angeles' },
+    })
+
+    expect(tokyo.map((suggestion) => suggestion.id)).toContain('document:expired:doc-zone')
+    expect(losAngeles.map((suggestion) => suggestion.id)).toContain('document:expiring:doc-zone')
+  })
 })
 
 function visibleText(suggestions: ReturnType<typeof mapDocumentInputToSuggestions>) {

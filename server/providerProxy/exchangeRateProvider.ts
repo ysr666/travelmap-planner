@@ -2,6 +2,7 @@ import type {
   ProviderProxyExchangeRateRequest,
   ProviderProxyExchangeRateSuccessResponse,
 } from '../../src/lib/ai/providerProxyContract'
+import { addPlainDateDays } from '../../src/lib/timeSemantics'
 
 const FRANKFURTER_ENDPOINT = 'https://api.frankfurter.dev/v2/rates'
 
@@ -75,7 +76,5 @@ function parseRateRow(value: unknown) {
 }
 
 function subtractDays(date: string, days: number) {
-  const value = new Date(`${date}T00:00:00.000Z`)
-  value.setUTCDate(value.getUTCDate() - days)
-  return value.toISOString().slice(0, 10)
+  return addPlainDateDays(date, -days) ?? date
 }

@@ -62,15 +62,32 @@ let memoryRouteCacheMaxBytes = DEFAULT_ROUTE_CACHE_MAX_BYTES
 class TripMapRouteCacheDatabase extends Dexie {
   routeCaches!: Table<RouteCacheEntry, string>
 
-  constructor() {
-    super(ROUTE_CACHE_DB_NAME)
+  constructor(name = ROUTE_CACHE_DB_NAME) {
+    super(name)
     this.version(1).stores({
       routeCaches: 'id, signature, [tripId+dayId], lastUsedAt, updatedAt',
     })
   }
 }
 
-const routeCacheDb = new TripMapRouteCacheDatabase()
+let routeCacheDb = new TripMapRouteCacheDatabase()
+
+export function configureRouteCacheDatabase(accountHash: string) {
+  const databaseName = `${ROUTE_CACHE_DB_NAME}:account:${accountHash}`
+  if (routeCacheDb.name === databaseName) return
+  routeCacheDb.close()
+  routeCacheDb = new TripMapRouteCacheDatabase(databaseName)
+}
+
+export function resetRouteCacheDatabase() {
+  if (routeCacheDb.name === ROUTE_CACHE_DB_NAME) return
+  routeCacheDb.close()
+  routeCacheDb = new TripMapRouteCacheDatabase()
+}
+
+export function getLegacyRouteCacheDatabaseName() {
+  return ROUTE_CACHE_DB_NAME
+}
 
 export function buildRouteCoordinateKey(items: ItineraryItem[]) {
   return getOrderedMappableItems(items)

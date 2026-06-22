@@ -79,6 +79,8 @@ import {
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 import { validateAiTripDraft } from './ai/aiTripDraft'
+import { isE2eAuthBypassEnabled } from './appAuth'
+import { getSupabaseClient } from './supabaseClient'
 
 export type ProviderProxyRuntimeConfig = {
   configured: boolean
@@ -88,6 +90,8 @@ export type ProviderProxyRuntimeConfig = {
 }
 
 export type ProviderProxyClientOptions = {
+  accessToken?: string | null
+  accessTokenProvider?: () => Promise<string | null>
   fetcher?: typeof fetch
   signal?: AbortSignal
   storage?: Storage | null
@@ -148,9 +152,7 @@ export async function fetchProviderProxyRoutePreview(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -188,7 +190,7 @@ export async function fetchProviderProxyExchangeRate(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: { 'Content-Type': 'application/json' },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -219,7 +221,7 @@ export async function fetchProviderProxyAiExpenseExtract(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: { 'Content-Type': 'application/json' },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -250,7 +252,7 @@ export async function fetchProviderProxyAiExpenseQuery(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: { 'Content-Type': 'application/json' },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -287,9 +289,7 @@ export async function fetchProviderProxyRouteOrderSuggestion(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -330,9 +330,7 @@ export async function fetchProviderProxyAiTripDraft(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -373,9 +371,7 @@ export async function fetchProviderProxyAiTripDraftRepair(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -416,9 +412,7 @@ export async function fetchProviderProxyAiTripDraftRefine(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -459,9 +453,7 @@ export async function fetchProviderProxyAiTripEditPlan(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -502,9 +494,7 @@ export async function fetchProviderProxyTravelSearch(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -545,9 +535,7 @@ export async function fetchProviderProxyPlaceLookup(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -588,9 +576,7 @@ export async function fetchProviderProxyPlaceDetails(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -631,9 +617,7 @@ export async function fetchProviderProxyTripContentEnrichment(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -674,9 +658,7 @@ export async function fetchProviderProxyTripDailyTip(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -717,9 +699,7 @@ export async function fetchProviderProxyTripOperationsSummary(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -760,9 +740,7 @@ export async function fetchProviderProxyExistingTripImport(
   try {
     response = await fetcher(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -799,7 +777,7 @@ export async function fetchProviderProxyTravelInboxClassify(
   try {
     response = await (options.fetcher ?? fetch)(proxyUrl, {
       body: JSON.stringify(validation.request),
-      headers: { 'Content-Type': 'application/json' },
+      headers: await buildProviderProxyHeaders(options),
       method: 'POST',
       signal: options.signal,
     })
@@ -1891,6 +1869,24 @@ function validateProviderProxyAiTripDraftSuccessResponse(record: Record<string, 
       ? record.warnings.filter((w): w is string => typeof w === 'string')
       : [],
   }
+}
+
+async function buildProviderProxyHeaders(options: ProviderProxyClientOptions): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const accessToken = await resolveProviderProxyAccessToken(options)
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+  return headers
+}
+
+async function resolveProviderProxyAccessToken(options: ProviderProxyClientOptions) {
+  if (options.accessToken !== undefined) return options.accessToken?.trim() || null
+  if (options.accessTokenProvider) return (await options.accessTokenProvider())?.trim() || null
+  if (isE2eAuthBypassEnabled()) return 'tripmap-e2e-access-token'
+  const client = getSupabaseClient()
+  if (!client) return null
+  const { data, error } = await client.auth.getSession()
+  if (error) return null
+  return data.session?.access_token ?? null
 }
 
 function normalizeProxyProvider(value?: string | null): ProviderProxyConcreteProvider | null {

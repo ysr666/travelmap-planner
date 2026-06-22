@@ -1,3 +1,5 @@
+import { getAccountScopedStorageKey } from './accountStorageScope'
+
 export const AUTO_SNAPSHOT_BACKUP_SETTINGS_KEY = 'tripmap:cloud-auto-snapshot:enabled'
 export const AUTO_SNAPSHOT_BACKUP_STATE_KEY = 'tripmap:cloud-auto-snapshot:state'
 const STATE_VERSION = 1
@@ -302,39 +304,42 @@ function emitAutoSnapshotBackupEvent(
 }
 
 function readStorageValue(key: string) {
+  const scopedKey = getAccountScopedStorageKey(key)
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage.getItem(key)
+      return window.localStorage.getItem(scopedKey)
     }
   } catch {
     // Fall through to in-memory storage for restricted environments.
   }
 
-  return memoryStorage.get(key) ?? null
+  return memoryStorage.get(scopedKey) ?? null
 }
 
 function writeStorageValue(key: string, value: string) {
+  const scopedKey = getAccountScopedStorageKey(key)
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(key, value)
+      window.localStorage.setItem(scopedKey, value)
       return
     }
   } catch {
     // Fall through to in-memory storage for restricted environments.
   }
 
-  memoryStorage.set(key, value)
+  memoryStorage.set(scopedKey, value)
 }
 
 function removeStorageValue(key: string) {
+  const scopedKey = getAccountScopedStorageKey(key)
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(key)
+      window.localStorage.removeItem(scopedKey)
       return
     }
   } catch {
     // Fall through to in-memory storage for restricted environments.
   }
 
-  memoryStorage.delete(key)
+  memoryStorage.delete(scopedKey)
 }

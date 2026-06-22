@@ -31,6 +31,7 @@ export async function clearTravelDatabase(page: Page) {
   })
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
 }
 
 export async function createDemoTripViaUi(page: Page) {

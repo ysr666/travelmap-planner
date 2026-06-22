@@ -1,5 +1,6 @@
 import type { AccountAiPreferences } from '../types'
 import { getSupabaseClient, getSupabaseConfigStatus } from './supabaseClient'
+import { getAccountScopedStorageKey } from './accountStorageScope'
 
 const STORAGE_KEY = 'tripmap:account-ai-preferences'
 const PRIVACY_VERSION = 1
@@ -12,7 +13,7 @@ const defaults: AccountAiPreferences = {
 export function getStoredAccountAiPreferences(): AccountAiPreferences {
   if (typeof window === 'undefined') return defaults
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<AccountAiPreferences>
+    const parsed = JSON.parse(window.localStorage.getItem(getAccountScopedStorageKey(STORAGE_KEY)) ?? '{}') as Partial<AccountAiPreferences>
     return normalizePreferences(parsed)
   } catch {
     return defaults
@@ -74,7 +75,7 @@ function normalizePreferences(value: Partial<AccountAiPreferences>): AccountAiPr
 function storePreferences(preferences: AccountAiPreferences) {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences))
+    window.localStorage.setItem(getAccountScopedStorageKey(STORAGE_KEY), JSON.stringify(preferences))
   } catch {
     // Restricted storage keeps the in-memory defaults.
   }

@@ -111,7 +111,9 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - 删除本地旅行不会删除云端同步记录；删除云端记录必须走手动确认。
 - 当前不是实时表同步或实时协作；对象删除使用 tombstone 同步。
 - intelligence applied changes 按 dedupeKey 去重展示；suggestion state 使用 latest `updatedAt` wins。清空历史、恢复建议与 retention prune 都同步 tombstone。
-- Package 7 migration `20260620060942_persistent_trip_intelligence_sync.sql` 已部署生产；权限加固 migration `20260620074105_harden_production_boundaries.sql` 将在进入 `main` 后部署。
+- Package 7 migration `20260620060942_persistent_trip_intelligence_sync.sql`、权限加固 migration `20260620074105_harden_production_boundaries.sql` 和 Companion owner `RETURNING` 前向修复 `20260620135038_allow_owner_select_companion_projection.sql` 均已部署生产。
+- 生产检查确认公开 Companion/Inbox RPC 为 invoker 薄入口，私有实现固定 `search_path`，15 个更新时间 trigger、RLS event trigger、reminder cron、9 条依赖 policy 和 8 个外键索引均保持有效；security advisor 只剩刻意 deny-all 的 connector secrets 表提示及 Free 计划无法开启的泄露密码保护。
+- Companion 真实账号生产 smoke 与双设备 intelligence smoke 均完整通过并清理测试数据。双设备验证覆盖设备 A 忽略/完成与上传、设备 B 全新 IndexedDB 恢复、建议不重复、完成历史恢复、latest-wins 和 tombstone 删除传播。登录 refresh session 仅以 `0600` 权限缓存在仓库外，两个设备与 Companion 复用同一次登录。
 - 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；未来仍需 per-device 操作审计、队列调试工具和协议迁移工具。
 
 ## 数据与缓存边界

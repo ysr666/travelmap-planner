@@ -1,6 +1,7 @@
 import type { AutoSnapshotBackupEntry } from './autoSnapshotBackup'
 import type { CloudBackupSummary } from './cloudBackup'
 import type { Trip } from '../types'
+import { getDeviceTimeZone } from './timeZone'
 
 export type CloudSnapshotCheckStatus =
   | 'local_newer'
@@ -205,7 +206,10 @@ export function deduplicateResultsByTripId(results: CloudSnapshotCheckResult[]) 
   return [...byTripId.values()]
 }
 
-export function formatVersionTimestamp(epochMs: number | null): string | null {
+export function formatVersionTimestamp(
+  epochMs: number | null,
+  timeZone = getDeviceTimeZone(),
+): string | null {
   if (epochMs == null || !Number.isFinite(epochMs) || epochMs <= 0) {
     return null
   }
@@ -219,7 +223,7 @@ export function formatVersionTimestamp(epochMs: number | null): string | null {
     hour12: false,
     minute: '2-digit',
     month: '2-digit',
-    timeZone: 'Asia/Shanghai',
+    timeZone,
     year: 'numeric',
   }).formatToParts(date)
   const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]))
@@ -228,11 +232,12 @@ export function formatVersionTimestamp(epochMs: number | null): string | null {
 
 export function buildCloudSnapshotVersionContextRows(
   result: Pick<CloudSnapshotCheckResult, 'cloudVersion' | 'dirtyAt' | 'localVersion' | 'tripUpdatedAt'>,
+  timeZone = getDeviceTimeZone(),
 ): CloudSnapshotVersionContextRow[] {
   const rows: CloudSnapshotVersionContextRow[] = []
-  const localTime = formatVersionTimestamp(result.localVersion)
-  const cloudTime = formatVersionTimestamp(result.cloudVersion)
-  const dirtyTime = formatVersionTimestamp(result.dirtyAt)
+  const localTime = formatVersionTimestamp(result.localVersion, timeZone)
+  const cloudTime = formatVersionTimestamp(result.cloudVersion, timeZone)
+  const dirtyTime = formatVersionTimestamp(result.dirtyAt, timeZone)
   const localSource =
     result.dirtyAt && result.localVersion === result.dirtyAt
       ? '来自当前设备待同步修改时间'

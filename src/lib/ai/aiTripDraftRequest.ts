@@ -1,6 +1,7 @@
 import type { TravelPace, TravelTransportPreference } from '../travelProfile'
 import { isTravelPace, isTravelTransportPreference } from '../travelProfile'
-import { formatPlainDate, isValidPlainDate, listPlainDateRangeInclusive, parsePlainDate } from '../plainDate'
+import { isValidPlainDate, listPlainDateRangeInclusive } from '../plainDate'
+import { addPlainDateDays } from '../timeSemantics'
 
 export type AiTripDraftRequest = {
   dayCount?: number
@@ -205,15 +206,8 @@ function normalizeInterestTags(value: unknown): string[] | undefined {
 }
 
 export function calculateEndDateFromDayCount(startDate: string, dayCount?: number) {
-  const parts = parsePlainDate(startDate)
-  if (!parts || !Number.isInteger(dayCount) || !dayCount || dayCount < 1) {
+  if (!isValidPlainDate(startDate) || !Number.isInteger(dayCount) || !dayCount || dayCount < 1) {
     return ''
   }
-  const cursor = new Date(Date.UTC(parts.year, parts.month - 1, parts.day))
-  cursor.setUTCDate(cursor.getUTCDate() + dayCount - 1)
-  return formatPlainDate({
-    day: cursor.getUTCDate(),
-    month: cursor.getUTCMonth() + 1,
-    year: cursor.getUTCFullYear(),
-  })
+  return addPlainDateDays(startDate, dayCount - 1) ?? ''
 }

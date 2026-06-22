@@ -60,6 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     env:
+      PLAYWRIGHT_CHANNEL: chrome
       VITE_ROUTE_PROXY_PROVIDER: openrouteservice
       VITE_ROUTE_PROXY_URL: /api/provider-proxy
     steps:
@@ -70,8 +71,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
       - run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()

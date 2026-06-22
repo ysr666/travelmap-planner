@@ -158,10 +158,10 @@ The proxy foundation:
 - Returns `405` for unsupported methods.
 - Requires `Content-Type: application/json`.
 - Handles `OPTIONS` for CORS preflight.
-- Supports an origin allowlist placeholder through `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`.
+- Enforces `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS` in hardened production and trusted preview environments.
 - Must not log full request bodies because coordinates and trip/day ids may be sensitive.
 
-Production should define an explicit origin allowlist. Same-origin deployment usually avoids browser CORS, but the allowlist still matters for alternate domains and staging.
+Production defines an explicit origin allowlist. Same-origin deployment usually avoids browser CORS, but the allowlist still matters for alternate domains and trusted preview deployments.
 
 ## Quota Guard
 
@@ -204,7 +204,7 @@ Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request
 
 When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events without changing provider contracts.
 
-Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production code uses those settings after the PR3 deployment reaches `main`.
+Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production smoke confirmed missing/forged Origin is rejected before auth, and missing/forged Bearer is rejected before provider dispatch.
 
 The foundation table remains:
 
@@ -246,7 +246,7 @@ Now:
 - Manual day route generation can use the proxy when configured.
 - Trip Home route generation can use the proxy after user confirmation.
 - Trip Home map preview still reads cached route geometry or displays straight lines; it does not silently call providers.
-- Browser-side Google Routes order optimization is disabled; it must become a separate server proxy operation before returning.
+- Browser-side Google Routes order optimization is disabled; route order suggestion now runs as the server proxy operation `route_order_suggestion`.
 - AI draft generation can use the proxy after user confirmation.
 - AI draft repair can use the proxy after user confirmation and only updates the draft preview.
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
@@ -258,7 +258,6 @@ Now:
 
 Later:
 
-- Route order suggestion should become a separate proxy operation.
 - Opening hours, ratings, reviews, photos, phone, and website fields for places remain deferred because they may change cost, field tiers, privacy, and UI expectations.
 
 ## Travel Search Operation

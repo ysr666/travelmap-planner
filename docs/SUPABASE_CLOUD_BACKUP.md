@@ -8,6 +8,9 @@
 
 旅图现在采用对象同步优先、snapshot 兼容保留的混合架构：
 
+- 业务页面由 Supabase AuthGate 保护；登录前只保留登录和邀请/目标路由恢复。
+- 本机 IndexedDB 数据空间按账号 hash 派生，旧全局 `TravelConsoleDB` 只作为接管来源或只读备份保留。
+- 路线缓存和用户派生 localStorage 状态跟随账号 scope，退出登录会关闭当前账号数据空间。
 - Trip / Day / ItineraryItem / TicketMeta 进入对象级同步表。
 - Ledger / Replan / Unified Trip Intelligence 进入同一对象级同步表。
 - copy 票据文件进入独立票据 Blob 记录和 Storage 路径。
@@ -24,6 +27,14 @@
 - 从当前版本开始，同一用户的同一 `trip.id` 使用稳定 `backupId`，重复同步会覆盖同一个云端同步记录。
 - 旧版本已经产生的多条云端记录或额外离线缓存不会自动迁移、合并、删除或清理；用户可在设置页手动删除历史云端记录。
 - 内部表字段、Storage 路径和文件名仍保留 `snapshot` 命名，用于兼容旧数据；当前用户界面统一呈现为一对一“云端同步”。
+
+## 旧本机库接管
+
+首次登录某账号时，如果发现旧全局本机库有数据且账号库为空，应用会展示本机与云端数量：
+
+- “接管本机数据”：复制旅行、日程、行程点、票据、Inbox、Document Vault、账本、Replan、Unified Trip Intelligence 等业务数据和 blob 到账号库，清理并重建 sync outbox，不复制旧冲突、sync base、session 或设备状态。
+- “仅恢复云端”：保留旧全局库不动，进入空账号库并按当前账号云端对象恢复。
+- 旧库接管成功后不会自动删除，避免误清用户历史数据。
 
 ## 环境变量
 

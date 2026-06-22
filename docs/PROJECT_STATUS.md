@@ -1,14 +1,14 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-06-20
-基线：Unified Trip Intelligence Packages 1-7 已完成，suggestion/action/appliedChanges 已接入 Trip Home、Day/Live、Ticket/Inbox/Finance、Document 与 Shared Trip，并具备 IndexedDB v10 持久化和对象同步。
+更新时间：2026-06-22
+基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
 
 ## 当前定位
 
-旅图是产品化阶段的出国旅行管理工具，目标是用 Trip Home、Day View、票据、账本和共享旅行等上下文回答“现在要确认什么 / 现在该做什么”。核心数据仍先写入浏览器 IndexedDB；离线可用、PWA app shell、Supabase 账号同步和 zip 归档是底层能力，而不是主产品叙事。
+旅图是产品化阶段的出国旅行管理工具，目标是用 Trip Home、Day View、票据、账本和共享旅行等上下文回答“现在要确认什么 / 现在该做什么”。核心数据仍先写入浏览器 IndexedDB；离线可用、PWA app shell、Supabase 账号同步和 zip 归档是底层能力，而不是主产品叙事。业务页面需要登录，已联网验证设备获得 30 天离线访问期，退出登录会关闭当前账号数据空间。
 
 它不是订票软件、完整导航软件、实时同步产品或多人协作工具。AI 与地图服务只做辅助，最终写入仍应由用户确认。
 
@@ -41,6 +41,8 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 已完成能力
 
 - 产品化旅行管理体验与 IndexedDB 本地数据底座。
+- Supabase AuthGate：未登录不能进入业务页面，保留登录前目标路由；账号验证后支持 30 天离线访问期。
+- 账号数据隔离：`TravelConsoleDB`、路线缓存和用户派生本地状态按账号 hash 分区；旧全局库可接管到账号库或保留为只读备份后仅恢复云端。
 - Trip Home / Day View / Item Detail 路由拆分。
 - Trip / Item 新建编辑独立页面。
 - MapLibre 地图、OpenFreeMap 底图、编号 marker、直线连接。
@@ -54,7 +56,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Trip Home AI 修改建议：一次性用户指令 → 脱敏 saved-trip context → provider proxy patch plan → 本地校验 → diff preview → 二次确认后本地事务 apply。
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
-- Provider proxy quota foundation：生产可绑定 Cloudflare D1 `TRIPMAP_PROVIDER_QUOTA_D1`，本地/dev 无 binding 时使用内存 fallback；route/search/place/AI buckets 保持隔离。
+- Provider proxy production hardening：生产/可信预览先拒绝无 Origin 或非 allowlist Origin，再做 IP 限流、Bearer 检查、Supabase Auth 验证、D1 kill switch、每日预算和 operation 分钟配额，最后才调用 provider。
 - Supabase 对象同步 / 原地恢复。
 - copy 票据 Blob 独立云端记录与此设备离线缓存管理。
 - 自动云端同步基础。
@@ -66,6 +68,8 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - 统一 action executor 已接入 Operations、Inbox、Live/Replan、票据与 Inbox 费用草稿；执行结果写入统一 `appliedChanges`。
 - suggestion dispositions 与完成记录已迁移到 IndexedDB v10；普通非 Operations 建议可忽略或稍后 24 小时，高风险只能稍后，Operations 保留旅行时区当日 snooze。
 - Finance 已停止后台来源扫描，只接收手动费用或 Ticket/Inbox 明确确认后的 `draft + needs_review`，再由 review queue 补充、确认和结算。
+- Phase 12F 时间语义：PlainDate、WallClockTime、Instant、IANA 时区、`todayInTimeZone()`、DST 自动校正、跨日交通出发/到达时区解析已进入主路径并有单元测试。
+- Limited Beta QA 基线：移动端 390x844 仍为完整 E2E 项目，新增桌面 1440x900 smoke 与真实构建 PWA v1 到 v2 升级测试。
 
 ## 已完成阶段
 
@@ -79,6 +83,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Phase 12B：启动云端同步检查。
 - Phase 12C：冲突感知云端提示。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复。
+- Phase 12F：时间语义收口完成，保持现有字段兼容，不做历史数据格式迁移。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
 - Search provider proxy foundation / AI trip edit patch plan foundation。
 - E2E locator hardening。
@@ -86,11 +91,11 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 不要误判为完成
 
 - Trip Home 已收敛主建议层级，但全旅行地图概览仍可继续优化。
-- Day View 的 marker-card interaction 尚未完成：目标是点击 marker 出现轻量卡片，再进入 Item Detail。
+- Day View 已有 marker card 初版与回归测试；后续仍需把交互打磨成理想的 marker → 轻卡片 → Item Detail 现场路径。
 - Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
-- 时区与日期语义审计待做。
+- 时间语义仍需在后续新功能中遵守 Phase 12F 边界：旅行日期用 Trip/Day 时区，提醒/同步/版本时间用 Instant，不新增半套时间字段。
 - Web search 虽已可通过 server-side Tavily env 接入，但仍只允许 AI Trip Edit 在明确搜索意图且用户确认后单次调用 `travel_search`；没有 source-bearing 结果就不声明实时信息。
 - Google Places item lookup 是手动、单行程点、确认后写入的 foundation；不是自动 enrich、批量更新、路线生成或地点详情全量同步。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
@@ -99,6 +104,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 云端与同步状态
 
 - Supabase 用于账号登录后的旅行对象同步和恢复。
+- 本地数据库与路线缓存跟随账号 hash。旧全局 `TravelConsoleDB` 不自动删除，用户确认接管后复制业务数据和 blob，重建 sync outbox，不复制旧冲突、sync base、session 或设备状态。
 - 当前版本同步 Trip / Day / Item / TicketMeta、主人账本、Replan、`trip_intelligence_applied_change` 与 `trip_intelligence_suggestion_state`；copy 票据文件使用独立 `cloud_ticket_blobs` 记录和 Storage 路径同步。
 - 账本对象为 `ledger_settings`、`ledger_participant`、`ledger_budget`、`ledger_expense`，仍受主人账号 RLS 约束，不进入 Companion 共享投影。
 - 旧 `cloud_trip_backups` / `snapshot.json` 路径保留为兼容与迁移路径；对象同步表不可用时会自动降级到旧 snapshot 同步。
@@ -119,12 +125,12 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 数据与缓存边界
 
 - IndexedDB 是此设备离线缓存与首写层。
-- 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
+- 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：PlainDate 是 `YYYY-MM-DD`，WallClockTime 是地点当地钟表时间，Instant 用 epoch milliseconds，IANA 时区经校验后进入 Trip/Day/Item 和跨日交通解析。
 - 完整 zip schema v2 归档包含旅行、Day、Item、票据元数据、copy 文件内容和账本数据；继续接受无账本的 v1 归档。
 - 汇率缓存只在本机使用，不进入 zip 或云同步；每笔费用保存自己的历史汇率快照，保证跨设备统计稳定。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
 - Server-only OpenRouteService / Google Routes / Google Maps Platform shared server key / AI provider / Tavily / Google Places secrets 不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan；浏览器可见的 Google Maps JS 渲染 key 只能作为公开受限 key 使用。若 Maps JS、Google Routes 和 Google Places 使用同一个实际 key 值，后端仍通过 `GOOGLE_MAPS_PLATFORM_API_KEY` 读取。
-- Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。D1 binding 缺失时仅本地/dev 内存 fallback；binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。
+- Provider quota row id 只保存 bucket + hashed identity；不保存 raw IP/session。生产和可信预览使用 Supabase verified user id、Cloudflare request IP、D1 budgets 和 provider controls；D1 binding 存在但失败时 fail closed 为 normalized `quota_exceeded`，不调用 provider。
 - AI trip-plan 导入创建新旅行，不覆盖已有旅行。
 - AI draft generation / repair 只生成或修复草稿 preview；用户必须核对地点、坐标、交通时间和票据，并在最终导入前确认。
 - AI trip edit plan 不直接写库；只允许 granular 白名单 operations（item title/time/location/note/transport、add/remove/move/reorder、day title），预览后必须二次确认才写入 IndexedDB。应用前会重新读取本地状态并拒绝 stale preview；删除 ticket-bound item 会被拒绝，不删除或解绑票据。
@@ -149,6 +155,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 - `wrangler pages dev` / Workerd 可能受 shell `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 影响。若 direct DeepSeek 检查健康但本地 provider proxy repair 间歇性 `network_error` / timeout，先用 unset proxy env 的 wrangler 进程重测。
 - PWA service worker 可能在本地 QA 时提供旧 bundle。若页面行为和最新 build 不一致，先 unregister service worker、clear site data、hard refresh。
+- PR4 后新增 `npm run test:e2e:desktop-smoke` 和 `npm run test:e2e:pwa-upgrade`；实体机 iPhone Safari / Android Chrome 结果必须人工写入 `docs/BETA_QA_RECORD.md`，不要提交截图。
 - `wrangler pages dev` 的真实 provider env 必须通过 Pages Function `context.env` binding / secret 路径验证；不要假设 `.env.local` 或 `--env-file` 一定进入 `context.env`。Tavily 生产/预览用 Cloudflare Pages env/secrets 配 `TRIPMAP_SEARCH_PROVIDER=tavily` 和 `TRIPMAP_SEARCH_API_KEY`，本地真实 smoke 不要把真实 key 写进命令行参数。
 - `.env.local` 和 `.dev.vars` 必须保持 gitignored，不得提交。报告不得包含真实 key、key prefix、raw provider body、full prompt 或 raw model output；如任何 key prefix 曾被复制进聊天或日志，应 rotate key。
 
@@ -156,9 +163,10 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 优先执行 `docs/ROADMAP_V4.md` 中的后续阶段：
 
-1. 时区与日期语义审计（Phase 12F）。
-2. Trip Home 地图概览与入口优化（Phase 13A）。
-3. Day View marker-card interaction（Phase 13B）。
-4. Provider quota 生产 D1 smoke、backend reasoning policy evolution、search provider proxy 和 AI trip edit agent。
+1. 完成 PR4 本地与远端 QA：build、lint、unit、桌面 smoke、PWA 升级、全量 E2E、GitHub Actions 和 Cloudflare production deploy。
+2. 人工补录 iPhone Safari 与 Android Chrome 实体机检查。
+3. Trip Home 地图概览与入口优化（Phase 13A）。
+4. Day View marker-card interaction 打磨（Phase 13B）。
+5. AI 全局入口与咨询能力产品化：区分普通问答、行程内 action、provider-backed patch plan，减少“返回内容不合法”的误判。
 
-在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。
+后续 Map Provider 或 Transit Hints 必须复用 Phase 12F 时间语义和 Provider 加固边界。AI 新能力继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。

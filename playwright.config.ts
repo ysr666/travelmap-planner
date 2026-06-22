@@ -33,11 +33,22 @@ export default defineConfig({
   projects: [
     {
       name: 'Mobile 390x844',
+      testIgnore: /desktop-beta-smoke\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
         isMobile: true,
         hasTouch: true,
+      },
+    },
+    {
+      name: 'Desktop Beta Smoke 1440x900',
+      testMatch: /desktop-beta-smoke\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1440, height: 900 },
+        isMobile: false,
+        hasTouch: false,
       },
     },
   ],

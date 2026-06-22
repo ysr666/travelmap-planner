@@ -806,3 +806,51 @@ Stop conditions:
 
 - Stop or split if a fix requires changing stored record shape, migration, cloud object contracts, or provider request/response contracts.
 - Repair within the phase if timezone fallback changes valid display output, selected-day behavior, or cross-timezone chronology tests.
+
+## 2026-06-23 Baseline Integration - PR4 Beta QA Governance Main Merge
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: merge the latest `origin/main` PR4 beta QA / CI governance changes into the autonomous feature branch before starting another product phase, keeping Phase 8-12 work and cowork validation isolation intact.
+
+Scope:
+
+- Merge `origin/main` commit `2f97045` into the feature branch.
+- Preserve PR4 beta docs, desktop smoke, PWA upgrade E2E, CI Chrome install hardening, and package scripts.
+- Preserve Phase 11 Playwright port isolation and Phase 12 time-semantics guardrails.
+- Resolve docs conflicts by combining beta QA priorities with the updated time-semantics boundary.
+
+No-go:
+
+- No direct push to `main`, no provider calls, no cloud writes, no schema changes.
+- Do not drop Phase 8-12 product work or PR4 governance docs.
+
+Validation:
+
+- Conflict marker scan, `git diff --check`, `npm run lint`, `npm run test:unit`, `npm run build`, and focused E2E for new PR4 scripts / cloud backup as feasible.
+
+Result:
+
+- Merged `origin/main` commit `2f97045` into the autonomous feature branch and preserved PR4 beta QA governance docs, CI hardening, desktop smoke, PWA upgrade smoke, and package scripts.
+- Resolved docs conflicts by combining PR4 limited beta / QA priorities with Phase 12 time-semantics boundaries in `docs/PROJECT_STATUS.md`, `docs/ROADMAP_V4.md`, and `docs/TIMEZONE_AUDIT.md`.
+- Preserved Phase 11 Playwright port isolation while keeping the PR4 desktop smoke project.
+- Repaired the newly merged PWA upgrade smoke so it explicitly activates the waiting service worker with the product-supported `SKIP_WAITING` message and uses bounded waits before checking IndexedDB data retention.
+
+Completed validation:
+
+- Conflict marker scan passed across resolved docs, Playwright config, helpers, and ledger.
+- `git diff --check` passed before and after the PWA smoke repair.
+- `npm run lint` passed before and after the PWA smoke repair.
+- `npm run test:unit` passed: 176 files, 1398 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `PLAYWRIGHT_PORT=4277 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e:desktop-smoke` passed: 1 test.
+- Initial `PLAYWRIGHT_PORT=4278 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e:pwa-upgrade` exposed a PWA upgrade smoke waiting bug; after repair the same command passed: 1 test.
+- `PLAYWRIGHT_PORT=4280 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 132 tests.
+
+Risk: medium-high, because the merge touches CI config, Playwright config, beta QA docs, and the same status docs changed in Phase 12.
+
+Stop conditions:
+
+- Stop and repair if merge resolution removes Phase 8-12 files, breaks Playwright port isolation, or conflicts with PR4 CI smoke commands.

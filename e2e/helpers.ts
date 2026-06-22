@@ -221,3 +221,41 @@ export function getHashParam(url: string, key: string) {
   const query = hash.split('?')[1] ?? ''
   return new URLSearchParams(query).get(key)
 }
+
+export async function getFirstTripDayAndItemIds(page: Page, tripId: string) {
+  return page.evaluate(async (targetTripId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+
+    try {
+      const dayTransaction = db.transaction(['days'], 'readonly')
+      const days = await new Promise<Array<{ id: string; sortOrder: number }>>((resolve, reject) => {
+        const request = dayTransaction.objectStore('days').index('tripId').getAll(targetTripId)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('读取测试日程失败'))
+      })
+      const firstDay = days.sort((first, second) => first.sortOrder - second.sortOrder)[0]
+      if (!firstDay) throw new Error('测试旅行没有日程')
+
+      const itemTransaction = db.transaction(['itineraryItems'], 'readonly')
+      const items = await new Promise<Array<{ id: string; sortOrder: number }>>((resolve, reject) => {
+        const request = itemTransaction.objectStore('itineraryItems').index('dayId').getAll(firstDay.id)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('读取测试行程点失败'))
+      })
+      const sortedItems = items.sort((first, second) => first.sortOrder - second.sortOrder)
+      const firstItem = sortedItems[0]
+      if (!firstItem) throw new Error('测试日程没有行程点')
+
+      return {
+        dayId: firstDay.id,
+        firstItemId: firstItem.id,
+      }
+    } finally {
+      db.close()
+    }
+  }, tripId)
+}

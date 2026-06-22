@@ -27,6 +27,8 @@
 - Unified Trip Intelligence Packages 1-7 完成：统一建议/动作/完成记录、Trip Home 收敛、Day/Live、Ticket/Inbox/Finance、Document/Shared Trip、IndexedDB v10 与跨设备对象同步。
 - Finance 接收端改造完成：移除后台来源扫描，Ticket/Inbox 费用证据必须确认后生成 `draft + needs_review`。
 - Package 7、生产权限加固与 Companion owner policy 前向修复已部署；Companion 与真实双设备生产 smoke 完整通过，覆盖 A 上传、B 全新恢复、latest-wins 与 tombstone 传播。
+- PR1-PR3 Limited Beta 基础收口完成：全局登录与账号隔离、Phase 12F 时间语义、Provider 生产运营加固均已进入主线；Provider D1 migration、Pages env、maintenance Worker 和 production smoke 已完成。
+- PR4 QA/文档/治理分支新增桌面 1440x900 smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 模板。
 
 当前 canonical routes：
 
@@ -47,11 +49,11 @@
 ## 不要误判为完成
 
 - Trip Home 主建议层级已收敛；全旅行地图概览仍待继续优化。
-- Day View 还没有完成 marker-card interaction：当前仍以 sheet 为主，理想形态是 marker 触发轻卡片，再进入 Item Detail。
+- Day View 已有 marker card 初版；后续仍需把 marker → 轻卡片 → Item Detail 现场路径做得更顺。
 - Item Detail 仍需变成旅行现场查看页。
 - Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
-- 时区与日期语义基础已对齐：Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已有测试；未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
+- Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正、Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已进入主路径。后续功能必须复用这些边界，未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
 - AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
 - AI trip edit 当前只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
@@ -127,10 +129,10 @@
 
 #### Durable Quota And Abuse Controls
 
-- D1-backed provider quota foundation 已实现：生产绑定 `TRIPMAP_PROVIDER_QUOTA_D1` 后使用 durable quota，本地/dev 无 binding 时使用内存 fallback。
-- 结合 session、IP 和 server-observed signals；account slot 保留给后续登录态配额。
-- 保持 route、travel search、place lookup、AI generation、AI repair 和 AI trip edit 的 quota namespace 隔离。
-- Public beta 前仍需要 D1 migration/binding smoke、origin allowlist、billing / abuse protection、expired-row cleanup job 和近生产 Cloudflare smoke。
+- D1-backed provider quota 和生产加固已实现：生产/可信预览按 method/body size、Origin、edge IP、Bearer、Supabase Auth、kill switch、D1 quota、provider 的顺序处理。
+- 已启用账号/IP/全局 daily budgets，preview 使用 25% 独立 namespace，`provider_controls` 可即时关闭 `global`、`ai`、`search`、`place`、`route`、`fx`。
+- `tripmap-provider-maintenance` hourly cron 已部署，负责清理过期 minute rows、8 天前 daily rows、30 天前 alert rows，并恢复过期自动预算控制。
+- Cloudflare 免费前提下未配置可发送 Email Service 时，预算告警保留 pending 记录；100% 硬限制和 kill switch 不依赖邮件。
 
 ## 长期边界
 
@@ -145,6 +147,7 @@
 - 长期同步路线见 `docs/SUPABASE_CLOUD_BACKUP.md`：对象同步、票据 Blob 独立上传、字段级冲突面板和轻量队列摘要已进入主路径；后续仍需设备/操作审计、队列调试工具和协议迁移工具。
 - OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
 - DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
-- 当前 AI 不联网搜索。`travel_search` 只是未来真实搜索的结构槽位，当前成功 runtime source 仅限 mock。未来 web search 必须显示来源、retrievedAt 和置信度，并通过独立 provider proxy operation 调用；AI 不得在没有搜索来源时声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
+- 当前 AI 不能把搜索当作模型常识。`travel_search` 可以在 server-side Tavily env 可用时作为来源化搜索 provider，但仅限用户确认后的单次辅助流程；没有来源就不得声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
 - 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
 - 390px 移动端宽度是基础验收线。
+- 1440x900 桌面 Beta smoke 和真实构建 PWA 升级 smoke 是新增 QA 基线；实体机 Safari/Android 检查需要人工记录。

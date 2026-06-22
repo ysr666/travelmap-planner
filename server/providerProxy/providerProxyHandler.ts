@@ -166,6 +166,27 @@ import {
 import { fetchFrankfurterExchangeRates } from './exchangeRateProvider'
 import { extractExpensesWithProvider } from './expenseExtractProvider'
 import { answerExpenseQueryWithProvider } from './expenseQueryProvider'
+import {
+  checkProviderControl,
+  consumeProviderDailyBudgets,
+  getProviderOperationGroup,
+  resolveProviderRuntimeEnvironment,
+  selectProviderBudgetAlertSender,
+  selectProviderOperationsStorage,
+  type ProviderBudgetAlertSender,
+  type ProviderOperationsStorage,
+  type ProviderRuntimeEnvironment,
+} from './providerOperationsGuard'
+import {
+  consumeProviderEdgeIpLimit,
+  evaluateProviderOrigin,
+  extractBearerToken,
+  getProviderRequestIp,
+  readProviderRequestBody,
+  shouldRequireProviderAuth,
+  verifyProviderAccessToken,
+  type ProviderProxyAuthVerifier,
+} from './providerRequestSecurity'
 
 export type ProviderProxyHandlerEnv = {
   [key: string]: unknown
@@ -179,17 +200,28 @@ export type ProviderProxyHandlerEnv = {
   TRIPMAP_AI_MODEL?: string
   TRIPMAP_AI_PROVIDER_KEY?: string
   TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS?: string
+  TRIPMAP_PROVIDER_PROXY_ENV?: string
+  TRIPMAP_PROVIDER_PROXY_KILL_SWITCH?: string
   TRIPMAP_PROVIDER_PROXY_MOCK?: string
+  TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH?: string
+  TRIPMAP_PROVIDER_ALERT_EMAIL?: unknown
+  TRIPMAP_PROVIDER_ALERT_FROM?: string
   TRIPMAP_GOOGLE_PLACES_API_KEY?: string
   TRIPMAP_PLACE_PROVIDER?: string
   TRIPMAP_PROVIDER_QUOTA_D1?: unknown
+  TRIPMAP_SUPABASE_ANON_KEY?: string
+  TRIPMAP_SUPABASE_URL?: string
   TRIPMAP_SEARCH_API_KEY?: string
   TRIPMAP_SEARCH_PROVIDER?: string
 }
 
 export type ProviderProxyHandlerInput = {
+  alertSender?: ProviderBudgetAlertSender
+  authVerifier?: ProviderProxyAuthVerifier
   env?: ProviderProxyHandlerEnv
   fetcher?: typeof fetch
+  nowMs?: number
+  operationsStorage?: ProviderOperationsStorage
   quotaHasher?: ProviderProxyQuotaHasher
   quotaLimits?: Partial<ProviderProxyQuotaLimits>
   quotaStorage?: ProviderProxyQuotaStorage
@@ -200,22 +232,87 @@ const OPENROUTESERVICE_ENDPOINT = 'https://api.openrouteservice.org/v2/direction
 const GOOGLE_ROUTES_ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes'
 const GOOGLE_ROUTE_ORDER_FIELD_MASK = 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex'
 
+type ProviderRequestExecutionContext = {
+  accountId: string
+  alertSender?: ProviderBudgetAlertSender
+  environment: ProviderRuntimeEnvironment
+  ip: string
+  nowMs: number
+  operationsStorage: ProviderOperationsStorage
+}
+
+const providerRequestExecutionContexts = new WeakMap<Request, ProviderRequestExecutionContext>()
+
 export async function handleProviderProxyRequest({
+  alertSender,
+  authVerifier = verifyProviderAccessToken,
   env = {},
   fetcher = fetch,
+  nowMs = Date.now(),
+  operationsStorage,
   quotaHasher,
   quotaLimits,
   quotaStorage,
   request,
 }: ProviderProxyHandlerInput): Promise<Response> {
-  const corsHeaders = getCorsHeaders(request, env)
   const selectedQuotaStorage = quotaStorage ?? selectProviderProxyQuotaStorage(env)
+  const environment = resolveProviderRuntimeEnvironment(env)
+  const selectedOperationsStorage = operationsStorage
+    ?? selectProviderOperationsStorage(env, shouldRequireProviderAuth(env, environment))
+
+  if (request.method !== 'POST' && request.method !== 'OPTIONS') {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: 'unsupported',
+        message: 'Provider proxy only supports POST requests.',
+      }),
+      405,
+      {},
+      { Allow: 'POST, OPTIONS' },
+    )
+  }
+
+  let bodyText = ''
+  if (request.method === 'POST') {
+    if (!isJsonContentType(request.headers.get('Content-Type'))) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({
+          code: 'invalid_request',
+          message: 'Provider proxy requires application/json.',
+        }),
+        415,
+        {},
+      )
+    }
+    const bodyResult = await readProviderRequestBody(request)
+    if (!bodyResult.ok) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy request is too large.' }),
+        413,
+        {},
+      )
+    }
+    bodyText = bodyResult.text
+  }
+
+  const origin = evaluateProviderOrigin(request, env, environment)
+  if (!origin.allowed) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({
+        code: 'invalid_request',
+        message: 'Provider proxy origin is not allowed.',
+      }),
+      403,
+      {},
+    )
+  }
+  const corsHeaders = origin.corsHeaders
 
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
         ...corsHeaders,
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Max-Age': '86400',
         Allow: 'POST, OPTIONS',
@@ -224,42 +321,76 @@ export async function handleProviderProxyRequest({
     })
   }
 
-  if (request.method !== 'POST') {
+  const ip = getProviderRequestIp(request)
+  if (!ip && shouldRequireProviderAuth(env, environment)) {
     return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: 'unsupported',
-        message: 'Provider proxy only supports POST requests.',
-      }),
-      405,
+      buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy request identity is unavailable.' }),
+      403,
       corsHeaders,
-      { Allow: 'POST, OPTIONS' },
     )
   }
+  if (ip) {
+    const edgeLimit = await consumeProviderEdgeIpLimit({ hasher: quotaHasher, ip, nowMs, storage: selectedQuotaStorage })
+    if (!edgeLimit.allowed) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({ code: 'quota_exceeded' }),
+        429,
+        corsHeaders,
+        edgeLimit.resetAt ? { 'Retry-After': String(getRetryAfterSeconds(edgeLimit.resetAt)) } : {},
+      )
+    }
+  }
 
-  if (!isJsonContentType(request.headers.get('Content-Type'))) {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({
-        code: 'invalid_request',
-        message: 'Provider proxy requires application/json.',
-      }),
-      415,
-      corsHeaders,
-    )
+  let accountId: string | undefined
+  if (shouldRequireProviderAuth(env, environment)) {
+    const accessToken = extractBearerToken(request)
+    if (!accessToken) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy authentication is required.' }),
+        401,
+        corsHeaders,
+      )
+    }
+    const verified = await authVerifier({ accessToken, env, fetcher })
+    if (!verified.ok) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy authentication failed.' }),
+        401,
+        corsHeaders,
+      )
+    }
+    accountId = verified.userId
   }
 
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(bodyText)
   } catch {
-    return jsonResponse(
-      buildProviderProxyErrorResponse({ code: 'invalid_request' }),
-      400,
-      corsHeaders,
-    )
+    return jsonResponse(buildProviderProxyErrorResponse({ code: 'invalid_request' }), 400, corsHeaders)
   }
 
   const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : {}
   const operation = bodyRecord.operation
+  const operationGroup = getProviderOperationGroup(typeof operation === 'string' ? operation : undefined)
+  const control = await checkProviderControl({ env, group: operationGroup, nowMs, storage: selectedOperationsStorage })
+  if (!control.enabled) {
+    return jsonResponse(
+      buildProviderProxyErrorResponse({ code: 'provider_unavailable', operation: typeof operation === 'string' ? operation as ProviderProxyOperation : undefined }),
+      503,
+      corsHeaders,
+    )
+  }
+
+  if (accountId && ip) {
+    providerRequestExecutionContexts.set(request, {
+      accountId,
+      alertSender: alertSender ?? selectProviderBudgetAlertSender(env),
+      environment,
+      ip,
+      nowMs,
+      operationsStorage: selectedOperationsStorage,
+    })
+  }
 
   if (operation === PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION) {
     return handleAiTripDraftRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
@@ -2299,15 +2430,48 @@ async function consumeQuotaOrBuildErrorResponse({
   request: Request
   requestId?: string
 }): Promise<Response | null> {
-  const quota = await consumeProviderProxyQuota({
-    coordinateCount,
-    dayCount,
-    hasher: quotaHasher,
-    identity: getQuotaIdentity(request, quotaSessionId),
-    limits: quotaLimits,
-    operation,
-    storage: quotaStorage,
-  })
+  const executionContext = providerRequestExecutionContexts.get(request)
+  if (executionContext) {
+    const daily = await consumeProviderDailyBudgets({
+      accountId: executionContext.accountId,
+      alertSender: executionContext.alertSender,
+      environment: executionContext.environment,
+      group: getProviderOperationGroup(operation),
+      ip: executionContext.ip,
+      nowMs: executionContext.nowMs,
+      storage: executionContext.operationsStorage,
+    })
+    if (!daily.allowed) {
+      return jsonResponse(
+        buildProviderProxyErrorResponse({ code: 'quota_exceeded', operation, requestId }),
+        429,
+        corsHeaders,
+        daily.retryAt ? { 'Retry-After': String(getRetryAfterSeconds(daily.retryAt)) } : {},
+      )
+    }
+  }
+
+  const identities = executionContext
+    ? [{ accountId: executionContext.accountId }, { ip: executionContext.ip }]
+    : [getLegacyQuotaIdentity(request, quotaSessionId)]
+  let quota: Awaited<ReturnType<typeof consumeProviderProxyQuota>> = {
+    allowed: true,
+    remaining: 0,
+    resetAt: Date.now(),
+  }
+  for (const identity of identities) {
+    quota = await consumeProviderProxyQuota({
+      coordinateCount,
+      dayCount,
+      hasher: quotaHasher,
+      identity,
+      limits: quotaLimits,
+      nowMs: executionContext?.nowMs,
+      operation,
+      storage: quotaStorage,
+    })
+    if (!quota.allowed) break
+  }
 
   if (quota.allowed) {
     return null
@@ -2327,44 +2491,15 @@ async function consumeQuotaOrBuildErrorResponse({
   )
 }
 
-function getQuotaIdentity(request: Request, quotaSessionId?: string) {
+function getLegacyQuotaIdentity(request: Request, quotaSessionId?: string) {
   return {
-    ip: getQuotaRequestIp(request),
+    ip: getProviderRequestIp(request),
     quotaSessionId,
   }
 }
 
-function getQuotaRequestIp(request: Request) {
-  const cfIp = request.headers.get('CF-Connecting-IP')?.trim()
-  if (cfIp) {
-    return cfIp
-  }
-  return request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
-}
-
 function getRetryAfterSeconds(resetAt: number) {
   return Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
-}
-
-function getCorsHeaders(request: Request, env: ProviderProxyHandlerEnv): Record<string, string> {
-  const origin = request.headers.get('Origin')
-  if (!origin) {
-    return {}
-  }
-
-  const allowedOrigins = parseAllowedOrigins(env.TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS)
-  if (!allowedOrigins.has(origin) && !allowedOrigins.has('*')) {
-    return {}
-  }
-
-  return {
-    'Access-Control-Allow-Origin': allowedOrigins.has('*') ? '*' : origin,
-    'Vary': 'Origin',
-  }
-}
-
-function parseAllowedOrigins(value?: string) {
-  return new Set((value ?? '').split(',').map((origin) => origin.trim()).filter(Boolean))
 }
 
 function isJsonContentType(value: string | null) {

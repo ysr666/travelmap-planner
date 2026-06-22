@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
 import { createProviderProxyMemoryQuotaStorage, type ProviderProxyQuotaMemoryEntry } from './quotaGuard'
 import { handleProviderProxyRequest } from './providerProxyHandler'
+import { createProviderOperationsMemoryStorage } from './providerOperationsGuard'
 
 describe('provider proxy handler HTTP safety', () => {
   it('handles CORS preflight and rejects unsupported methods', async () => {
@@ -33,6 +34,71 @@ describe('provider proxy handler HTTP safety', () => {
 
     expect(response.status).toBe(415)
     expect(await response.json()).toMatchObject({ code: 'invalid_request', ok: false })
+  })
+
+  it('enforces production origin, edge identity, bearer auth, and verified account/IP quota keys', async () => {
+    const consumedKeys: string[] = []
+    const quotaStorage = {
+      consume: vi.fn(async (input: { key: string }) => {
+        consumedKeys.push(input.key)
+        return { allowed: true as const, remaining: 10, resetAt: Date.now() + 60_000 }
+      }),
+    }
+    const response = await handleProviderProxyRequest({
+      authVerifier: vi.fn(async () => ({ ok: true as const, userId: 'verified-user' })),
+      env: { TRIPMAP_PROVIDER_PROXY_ENV: 'production', TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      operationsStorage: createProviderOperationsMemoryStorage(),
+      quotaHasher: (material) => material.includes('account:verified-user') ? 'account-hash' : material.includes('ip:203.0.113.8') ? 'ip-hash' : 'unexpected-hash',
+      quotaStorage,
+      request: secureJsonRequest(validRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    expect(consumedKeys).toEqual(['edge_ip|ip-hash', 'route|account-hash', 'route|ip-hash'])
+    expect(consumedKeys.join(' ')).not.toContain('session-a')
+  })
+
+  it('rejects missing origins and invalid bearer tokens before provider execution', async () => {
+    const authVerifier = vi.fn(async () => ({ ok: false as const }))
+    const noOrigin = await handleProviderProxyRequest({
+      authVerifier,
+      env: { TRIPMAP_PROVIDER_PROXY_ENV: 'production' },
+      operationsStorage: createProviderOperationsMemoryStorage(),
+      quotaStorage: createProviderProxyMemoryQuotaStorage(),
+      request: jsonRequest(validRequest()),
+    })
+    expect(noOrigin.status).toBe(403)
+    expect(authVerifier).not.toHaveBeenCalled()
+
+    const invalidBearer = await handleProviderProxyRequest({
+      authVerifier,
+      env: { TRIPMAP_PROVIDER_PROXY_ENV: 'production' },
+      operationsStorage: createProviderOperationsMemoryStorage(),
+      quotaStorage: createProviderProxyMemoryQuotaStorage(),
+      request: secureJsonRequest(validRequest()),
+    })
+    expect(invalidBearer.status).toBe(401)
+    expect(authVerifier).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an oversized body before auth verification', async () => {
+    const authVerifier = vi.fn(async () => ({ ok: true as const, userId: 'verified-user' }))
+    const response = await handleProviderProxyRequest({
+      authVerifier,
+      env: { TRIPMAP_PROVIDER_PROXY_ENV: 'production' },
+      request: new Request('https://travelmap-planner.pages.dev/api/provider-proxy', {
+        body: 'x'.repeat(256 * 1024 + 1),
+        headers: {
+          Authorization: 'Bearer test-token',
+          'CF-Connecting-IP': '203.0.113.8',
+          'Content-Type': 'application/json',
+          Origin: 'https://travelmap-planner.pages.dev',
+        },
+        method: 'POST',
+      }),
+    })
+    expect(response.status).toBe(413)
+    expect(authVerifier).not.toHaveBeenCalled()
   })
 })
 
@@ -156,6 +222,19 @@ function jsonRequest(body: unknown) {
   return new Request('https://tripmap.example/api/provider-proxy', {
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  })
+}
+
+function secureJsonRequest(body: unknown) {
+  return new Request('https://travelmap-planner.pages.dev/api/provider-proxy', {
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: 'Bearer test-token',
+      'CF-Connecting-IP': '203.0.113.8',
+      'Content-Type': 'application/json',
+      Origin: 'https://travelmap-planner.pages.dev',
+    },
     method: 'POST',
   })
 }

@@ -1,5 +1,7 @@
 import { buildProviderProxyDiagnosticsResponse } from '../../server/providerProxy/providerProxyDiagnostics'
 import type { ProviderProxyHandlerEnv } from '../../server/providerProxy/providerProxyHandler'
+import { evaluateProviderOrigin } from '../../server/providerProxy/providerRequestSecurity'
+import { resolveProviderRuntimeEnvironment } from '../../server/providerProxy/providerOperationsGuard'
 
 type ProviderProxyDiagnosticsPagesContext = {
   env: ProviderProxyHandlerEnv
@@ -7,7 +9,11 @@ type ProviderProxyDiagnosticsPagesContext = {
 }
 
 export function onRequest(context: ProviderProxyDiagnosticsPagesContext) {
-  const corsHeaders = getCorsHeaders(context.request, context.env)
+  const origin = evaluateProviderOrigin(context.request, context.env, resolveProviderRuntimeEnvironment(context.env))
+  if (!origin.allowed) {
+    return jsonResponse({ code: 'invalid_request', ok: false, message: 'Provider diagnostics origin is not allowed.' }, 403, {})
+  }
+  const corsHeaders = origin.corsHeaders
   if (context.request.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
@@ -28,21 +34,6 @@ export function onRequest(context: ProviderProxyDiagnosticsPagesContext) {
   }
 
   return jsonResponse(buildProviderProxyDiagnosticsResponse(context.env), 200, corsHeaders)
-}
-
-function getCorsHeaders(request: Request, env: ProviderProxyHandlerEnv): Record<string, string> {
-  const origin = request.headers.get('Origin')
-  if (!origin) {
-    return {}
-  }
-  const allowedOrigins = new Set((env.TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS ?? '').split(',').map((value) => value.trim()).filter(Boolean))
-  if (!allowedOrigins.has(origin) && !allowedOrigins.has('*')) {
-    return {}
-  }
-  return {
-    'Access-Control-Allow-Origin': allowedOrigins.has('*') ? '*' : origin,
-    Vary: 'Origin',
-  }
 }
 
 function jsonResponse(

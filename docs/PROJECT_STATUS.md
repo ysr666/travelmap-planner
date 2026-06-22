@@ -90,7 +90,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
-- 时区与日期语义审计待做。
+- 时区与日期语义基础已对齐；后续重点是 AI ISO datetime 显式确认、跨国家高级 UI 和实时 provider facts 的来源边界。
 - Web search 虽已可通过 server-side Tavily env 接入，但仍只允许 AI Trip Edit 在明确搜索意图且用户确认后单次调用 `travel_search`；没有 source-bearing 结果就不声明实时信息。
 - Google Places item lookup 是手动、单行程点、确认后写入的 foundation；不是自动 enrich、批量更新、路线生成或地点详情全量同步。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
@@ -119,7 +119,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 ## 数据与缓存边界
 
 - IndexedDB 是此设备离线缓存与首写层。
-- 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date 与 `HH:mm` 本地墙上时间。
+- 旅行日期 / 时间语义见 `docs/TIMEZONE_AUDIT.md`：当前保持 `YYYY-MM-DD` plain date、`HH:mm` 本地墙上时间、可选 IANA timezone、Item 级跨日期 / 跨时区到达字段，系统版本时间继续使用 absolute timestamp。
 - 完整 zip schema v2 归档包含旅行、Day、Item、票据元数据、copy 文件内容和账本数据；继续接受无账本的 v1 归档。
 - 汇率缓存只在本机使用，不进入 zip 或云同步；每笔费用保存自己的历史汇率快照，保证跨设备统计稳定。
 - 路线缓存只保存在当前浏览器本机，不进入 zip、Supabase 或 trip-plan。
@@ -156,9 +156,9 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 优先执行 `docs/ROADMAP_V4.md` 中的后续阶段：
 
-1. 时区与日期语义审计（Phase 12F）。
-2. Trip Home 地图概览与入口优化（Phase 13A）。
-3. Day View marker-card interaction（Phase 13B）。
+1. Trip Home 地图概览与入口优化（Phase 13A），复用现有 timezone helper，不加入无来源实时事实。
+2. Day View marker-card interaction（Phase 13B）。
+3. AI ISO datetime 显式确认 / 映射设计，不允许静默截断成 plain date/time。
 4. Provider quota 生产 D1 smoke、backend reasoning policy evolution、search provider proxy 和 AI trip edit agent。
 
-在时区审计完成前，不建议继续推进 Map Provider 或 Transit Hints 等新能力。AI 新能力应继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。
+AI 新能力应继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。地图和交通新能力不得把无来源实时营业时间、ETA、航班延误或交通状态包装成本地 timezone 计算结果。

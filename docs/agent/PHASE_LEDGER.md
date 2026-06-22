@@ -745,3 +745,64 @@ Stop conditions:
 
 - Stop expansion if a primitive cannot remove real duplication or preserve existing semantics.
 - Repair within the phase if shared styling causes layout shift, overlap, focus, or dark-mode regressions.
+
+## 2026-06-23 Phase 12 - Time Semantics Alignment
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: align the stale timezone audit with the current codebase and add executable guardrails so Trip/Day timezone selection, cross-timezone item ranges, and cloud version timestamps stay deterministic without introducing schema or provider changes.
+
+Scope:
+
+- Update timezone/date documentation and roadmap/status stale notes to reflect the existing Trip/Day/Item timezone fields, `timeSemantics` helpers, and cross-timezone transport support.
+- Harden cloud version timestamp formatting so invalid or missing timezone input cannot crash sync prompts.
+- Strengthen unit coverage for Trip/Day timezone inheritance, selected-day choice around date boundaries, cross-timezone item chronology, and version timestamp fallback.
+- Keep all behavior local and deterministic; no migrations, cloud writes, provider calls, or schema changes.
+
+No-go:
+
+- No new timezone schema fields, no Supabase migration, no IndexedDB version bump, and no automatic timezone backfill for historical data.
+- No route/cache/provider contract changes and no real AI/search/map/route calls.
+- No product claim that timezone handling fully solves multi-leg transport beyond the current explicit fields.
+
+Likely files:
+
+- `docs/TIMEZONE_AUDIT.md`, `docs/ROADMAP_V4.md`, `docs/PROJECT_STATUS.md`.
+- `src/lib/cloudSnapshotCheck.ts`, `src/lib/cloudSnapshotCheck.test.ts`, `src/lib/timeZone.test.ts`, `src/hooks/useTripData.test.ts`, and possibly `src/lib/tripVisuals.test.ts`.
+
+Validation:
+
+- Targeted unit tests for time semantics, timezone helpers, selected-day behavior, trip visual status, and cloud snapshot checks.
+- `npm run lint`, `npm run test:unit`, `npm run build`, `git diff --check`, and focused E2E only if UI copy or prompts change.
+
+Read-only mini-plan result:
+
+- The 2026-05-17 timezone audit is stale: code now has Trip/Day timezones, item start/end timezones, cross-date `endDate`, and Temporal-backed helpers.
+- `pickSelectedDay` and `getTripStatus` already use trip/day timezone semantics, so the phase should document and guard them rather than invent a new model.
+- `formatVersionTimestamp` accepts a timezone but directly passes it to `Intl.DateTimeFormat`; invalid values can throw inside cloud/sync prompts. Safe fallback is a small but real reliability fix.
+- The safe executable scope is documentation alignment plus tests and local pure-helper hardening; any schema or migration work remains explicitly out of scope.
+
+Result:
+
+- Updated `docs/TIMEZONE_AUDIT.md`, `docs/ROADMAP_V4.md`, and `docs/PROJECT_STATUS.md` so the repository no longer treats Trip/Day/Item timezone support as future-only work.
+- Hardened `formatVersionTimestamp` with timezone validation and a UTC fallback for invalid timezone input.
+- Added executable tests for invalid cloud-version timezone fallback, explicit requested-day precedence, Day timezone future-day selection, invalid Item timezone/endDate fallback, and Trip status timezone boundaries.
+- Kept schema, IndexedDB versioning, Supabase, route/cache/provider contracts, and real provider calls untouched.
+
+Completed validation:
+
+- `npm run test:unit -- src/lib/cloudSnapshotCheck.test.ts src/lib/timeZone.test.ts src/hooks/useTripData.test.ts src/lib/tripVisuals.test.ts src/lib/timeSemantics.test.ts` passed: 5 files, 47 tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 176 files, 1398 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `git diff --check` passed.
+- `PLAYWRIGHT_PORT=4276 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/cloud-backup.spec.ts` passed: 12 tests.
+
+Risk: medium, because time semantics affect navigation, trip status, sync prompts, and import confidence; changes remain in pure helpers and docs.
+
+Stop conditions:
+
+- Stop or split if a fix requires changing stored record shape, migration, cloud object contracts, or provider request/response contracts.
+- Repair within the phase if timezone fallback changes valid display output, selected-day behavior, or cross-timezone chronology tests.

@@ -51,7 +51,7 @@
 - Item Detail 仍需变成旅行现场查看页。
 - Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
-- 时区与日期语义审计待做：formatVersionTimestamp 等时间处理需复查。
+- 时区与日期语义基础已对齐：Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已有测试；未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
 - AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
 - AI trip edit 当前只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
@@ -136,7 +136,7 @@
 
 - 用户可见文案保持中文。
 - IndexedDB 仍是此设备离线缓存与首写层。
-- 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
+- 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；基础 timezone 字段已存在，后续不要新增半套字段、自动回填历史数据或静默截断 ISO datetime。
 - Supabase 是账号数据同步，不是实时表同步；当前优先同步 Trip / Day / Item / TicketMeta 对象和 copy 票据 Blob。
 - 同步采用 pull-before-push 增量对象同步；不同对象和不同字段可自动合并，同一字段双边修改时提示用户选择字段版本。
 - 设置页只做轻量同步队列摘要和登录后同步方向提示，不暴露 snapshot 路径或 Storage 细节。

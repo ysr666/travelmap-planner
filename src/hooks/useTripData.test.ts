@@ -20,6 +20,12 @@ const days: Day[] = [
 ]
 
 describe('pickSelectedDay', () => {
+  it('keeps an explicitly requested day even when another day is today', () => {
+    const todayInLondon = new Date('2026-06-10T12:00:00.000Z')
+
+    expect(pickSelectedDay(trip, days, 'day_2', todayInLondon)?.id).toBe('day_2')
+  })
+
   it('uses the trip time zone instead of the device-local calendar date', () => {
     const chinaAlreadyTomorrow = new Date('2026-06-10T16:30:00.000Z')
 
@@ -33,5 +39,14 @@ describe('pickSelectedDay', () => {
     ]
 
     expect(pickSelectedDay({ ...trip, timeZone: 'Asia/Shanghai' }, mixedDays, null, new Date('2026-06-10T16:30:00.000Z'))?.id).toBe('day_1')
+  })
+
+  it('uses each day time zone when choosing the next future day', () => {
+    const mixedDays: Day[] = [
+      { ...days[0], date: '2026-06-10', timeZone: 'Asia/Tokyo' },
+      { ...days[1], date: '2026-06-11', timeZone: 'America/Los_Angeles' },
+    ]
+
+    expect(pickSelectedDay(trip, mixedDays, null, new Date('2026-06-10T23:30:00.000Z'))?.id).toBe('day_2')
   })
 })

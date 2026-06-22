@@ -31,6 +31,7 @@ import {
 } from '../../src/lib/ai/providerProxyContract'
 
 export type ProviderProxyQuotaBucket =
+  | 'edge_ip|'
   | 'route|'
   | 'search|'
   | 'place|'
@@ -106,6 +107,7 @@ export type ProviderProxyD1Result = {
 }
 
 export type ProviderProxyD1PreparedStatement = {
+  all?<T = Record<string, unknown>>(): Promise<{ results?: T[]; success?: boolean }>
   bind(...values: Array<number | string>): ProviderProxyD1PreparedStatement
   first<T = Record<string, unknown>>(columnName?: string): Promise<T | null>
   run(): Promise<ProviderProxyD1Result>
@@ -326,6 +328,28 @@ export async function consumeProviderProxyQuota({
   return consumed
 }
 
+export async function consumeProviderProxyFixedQuota(input: {
+  bucket: ProviderProxyQuotaBucket
+  hasher?: ProviderProxyQuotaHasher
+  identity: ProviderProxyQuotaIdentityInput
+  maxRequests: number
+  nowMs?: number
+  storage?: ProviderProxyQuotaStorage
+  windowMs: number
+}): Promise<ProviderProxyQuotaStorageConsumeResult> {
+  const key = await buildProviderProxyQuotaRowId({
+    bucket: input.bucket,
+    hasher: input.hasher,
+    identity: input.identity,
+  })
+  return (input.storage ?? defaultMemoryQuotaStorage).consume({
+    key,
+    maxRequests: input.maxRequests,
+    nowMs: input.nowMs ?? Date.now(),
+    windowMs: input.windowMs,
+  })
+}
+
 export function getProviderProxyQuotaBucketConfig(
   operation: ProviderProxyOperation | undefined,
   limits: ProviderProxyQuotaLimits,
@@ -423,13 +447,7 @@ export async function hashProviderProxyQuotaIdentity(input: string): Promise<str
     const digest = await subtle.digest('SHA-256', new TextEncoder().encode(input))
     return arrayBufferToHex(digest)
   }
-
-  try {
-    const nodeCrypto = await import('node:crypto')
-    return nodeCrypto.createHash('sha256').update(input).digest('hex')
-  } catch {
-    return fallbackHash(input)
-  }
+  return fallbackHash(input)
 }
 
 function createProviderProxyFailClosedQuotaStorage(): ProviderProxyQuotaStorage {

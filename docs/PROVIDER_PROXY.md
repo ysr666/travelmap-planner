@@ -167,7 +167,9 @@ Production should define an explicit origin allowlist. Same-origin deployment us
 
 The provider proxy uses an internal async quota layer before any provider call. Cloudflare D1 is used only when an explicit `TRIPMAP_PROVIDER_QUOTA_D1` binding exists; otherwise local/dev runs use a deterministic in-memory fallback.
 
-Current bucket limits:
+Request processing order is fixed in hardened environments (`production` and `preview`): method/body size, Origin rejection, edge IP minute limit, Bearer presence, Supabase Auth verification, environment/D1 kill switch, daily and operation minute quotas, then the provider adapter. The proxy ignores client account fields and `quotaSessionId` after authentication; only the verified Supabase `user.id` and Cloudflare request IP participate in production identity.
+
+Current operation minute bucket limits:
 
 - `route|`: 60 requests per 60 seconds.
 - `search|`: 20 requests per 60 seconds.
@@ -180,16 +182,29 @@ Current bucket limits:
 
 `route_preview` and `route_order_suggestion` both use the `route|` bucket. Quota is consumed before any mock or real provider call; over-limit and durable-storage-failure paths return normalized HTTP 429 `quota_exceeded`.
 
+Production and trusted preview also enforce a separate `edge_ip|` bucket at 120 requests per minute before authentication. Each validated provider operation then consumes separate account and IP minute rows. Preview and production daily counters use separate namespaces.
+
+Production daily budgets:
+
+| Scope | AI | Search | Place | Route | FX |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Account | 20 | 20 | 60 | 100 | 30 |
+| IP | 100 | 100 | 300 | 500 | 150 |
+| Global | 200 | 200 | 600 | 1000 | 300 |
+
+Trusted preview uses 25% of these limits, rounded up. At 70% and 90% of a global group budget, a redacted alert event is recorded. At 100%, the request is rejected and that group is disabled until the next UTC day. `provider_controls` supports immediate `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `TRIPMAP_PROVIDER_PROXY_KILL_SWITCH` is the environment fallback.
+
 Quota identity combines available server-side signals before hashing:
 
-- `quotaSessionId` from the client request when present.
-- `CF-Connecting-IP`, or the first `X-Forwarded-For` value when present.
-- Reserved `account:*` slot for a future authenticated user/account id.
-- Stable anonymous fallback only when both session and IP are missing.
+- Verified Supabase `user.id` for account rows.
+- `CF-Connecting-IP`, or the first `X-Forwarded-For` value when present, for IP rows.
+- `quotaSessionId` is retained only for local/development compatibility and is ignored in hardened environments.
 
 Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request headers, provider keys, SQL errors, stack traces, and internal row ids are never returned to the frontend. Production deployments should provide reliable IP/session signals. The anonymous fallback is only a last-resort local/dev path and is not sufficient abuse protection for public traffic.
 
-When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Deployment setup must run this SQL explicitly:
+When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events without changing provider contracts.
+
+The foundation table remains:
 
 ```sql
 CREATE TABLE IF NOT EXISTS provider_quota (
@@ -205,7 +220,9 @@ ON provider_quota (expires_at);
 
 If the binding is absent, the proxy falls back to in-memory storage for local/dev. If the binding exists but prepare/query fails or the table is missing, the proxy fails closed with HTTP 429 and normalized `quota_exceeded`; the provider is not called. `Retry-After` may be returned only when a reset time is safely known.
 
-Expired-row cleanup is deferred. The schema includes `expires_at` and an index so a future scheduled cleanup job can delete old rows without changing provider contracts.
+`tripmap-provider-maintenance` runs hourly from `wrangler.provider-maintenance.jsonc`. It removes expired minute rows, daily rows older than 8 days, sent alerts older than 30 days, restores expired automatic budget controls, and retries pending redacted alerts when a free verified-destination Email Service binding is available.
+
+Cloudflare Email Service can send to a verified destination for free, but it still requires a Cloudflare routing domain and a verified destination address. If those prerequisites are absent, do not enable a paid sender: threshold rows remain pending in D1 while all hard limits continue to apply.
 
 ## Frontend Behavior
 
@@ -621,9 +638,11 @@ Current phase includes server-side infrastructure for real AI provider integrati
 
 **Production requirements:**
 
-- Configure and migrate the `TRIPMAP_PROVIDER_QUOTA_D1` binding for durable provider quota.
-- Origin allowlist and account/session/IP controls.
-- Billing and abuse protection.
+- Bind and migrate `TRIPMAP_PROVIDER_QUOTA_D1` using the checked-in D1 migrations.
+- Set `TRIPMAP_PROVIDER_PROXY_ENV=production`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH=1`, and the canonical Origin allowlist.
+- Provide Supabase public Auth configuration server-side; the proxy validates every access token before provider execution.
+- Deploy the hourly maintenance Worker. Email alert delivery remains optional until the free verified-destination prerequisites exist.
+- Keep upstream provider billing alerts and key rotation in place; D1 limits are an application boundary, not a replacement for provider-side controls.
 
 ### Real AI Provider Configuration
 

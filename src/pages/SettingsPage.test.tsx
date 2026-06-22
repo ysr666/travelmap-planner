@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPage } from './SettingsPage'
+import { resetPwaLifecycleForTests } from '../lib/pwaLifecycle'
 
 const mocks = vi.hoisted(() => ({
   navigateTo: vi.fn(),
@@ -142,6 +143,7 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   vi.clearAllMocks()
+  resetPwaLifecycleForTests({ appVersion: '0.0.0-test', isOnline: true, serviceWorkerSupported: true, status: 'registered' })
 })
 
 afterEach(() => {
@@ -151,6 +153,7 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  resetPwaLifecycleForTests()
 })
 
 describe('SettingsPage', () => {
@@ -210,6 +213,24 @@ describe('SettingsPage', () => {
     })
 
     expect(container?.querySelector('[data-testid="app-version"]')).toBeTruthy()
+  })
+
+  it('renders PWA lifecycle update state', async () => {
+    resetPwaLifecycleForTests({
+      appVersion: '0.0.0-test',
+      isOnline: true,
+      message: '发现新版本，可在确认后更新并重启。',
+      serviceWorkerSupported: true,
+      status: 'update-ready',
+    })
+
+    await act(async () => {
+      root?.render(<SettingsPage />)
+    })
+
+    expect(container?.textContent).toContain('应用更新：有新版本可更新')
+    expect(container?.textContent).toContain('当前版本：v0.0.0-test')
+    expect(container?.textContent).toContain('更新并重启')
   })
 
   it('renders import trip plan section', async () => {

@@ -10,6 +10,7 @@ import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 import { BottomTabBar } from './BottomTabBar'
 import { GlobalAiCommandBar } from './ai/GlobalAiCommandBar'
+import { PwaLifecycleBanner } from './PwaLifecycleBanner'
 
 
 type AppShellProps = {
@@ -71,6 +72,8 @@ export function AppShell({ activeRoute, children, lastTripId, title }: AppShellP
           </button>
         </header>
       ) : null}
+
+      <PwaLifecycleBanner topAppBar={showTopAppBar} />
 
       <main
         className={getMainClassName({ fullScreen, ownsCanvas, showGlobalAiCommand, showTabBar, showTopAppBar })}

@@ -599,9 +599,32 @@ Stop conditions:
 - Stop or split if rebind cannot be transactional with the existing stores or would require migration/cloud contract changes.
 - Repair within the phase if editing can orphan an itinerary `ticketIds` reference or mutate file/blob fields.
 
+## 2026-06-22 Baseline Integration - Provider Hardening Rebase
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: absorb the latest provider production hardening merge from `main` before starting PWA lifecycle work, while preserving the autonomous branch's Phase 8 and Phase 9 product changes.
+
+Result:
+
+- Fetched `origin/main` and merged `cb1b992090a461c5a1e455ae67bc0fff65da33c3` without conflicts.
+- Preserved Phase 8 day plan ordering and Phase 9 ticket metadata editor commits.
+- Pushed merge commit `9ad2a99` to the feature branch.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm run test:unit` passed: 172 files and 1379 tests.
+- `npm run build` passed with the existing large-chunk warning.
+- GitHub Actions returned no run for the feature branch.
+- Cloudflare Pages latest production deployment stayed on `main` commit `cb1b992090a461c5a1e455ae67bc0fff65da33c3`; deploy stage was `success`.
+- Supabase CLI listed project `rfpcooafakuvgrdlfxpg` as `ACTIVE_HEALTHY`.
+
 ## 2026-06-22 Phase 10 - PWA Lifecycle Control
 
-Status: planned
+Status: completed
 
 Branch: `feature/autonomous-iteration-20260620-navigation-search`
 
@@ -628,6 +651,33 @@ Validation:
 
 - Unit/component tests with mocked service-worker registration and online/offline events.
 - production build/service-worker artifact inspection, lint, diff check, and focused PWA E2E.
+
+Read-only mini-plan result:
+
+- `vite-plugin-pwa` currently injects registration automatically with `registerType: autoUpdate` and `skipWaiting: true`, so users get invisible update behavior.
+- Phase 10 will switch to manual registration through a controller that records SW availability, update-ready, offline-ready, error, and online/offline state in a local store.
+- AppShell will render a compact global offline/update notice, and Settings will expose the same lifecycle state with the current app version and a user-triggered update action.
+- Workbox runtime caching stays empty; map/search/route/cloud/provider capabilities remain network-dependent.
+
+Result:
+
+- Switched `vite-plugin-pwa` from injected `autoUpdate` registration to manual prompt registration; Workbox runtime caching remains empty, and `skipWaiting`/`clientsClaim` are no longer automatic.
+- Added a PWA lifecycle store, hook, registration wrapper, controller, and Vitest virtual-module stub.
+- Added global AppShell lifecycle banners for offline and update-ready states, including user-triggered update/restart and a dismiss path.
+- Added Settings lifecycle status with current version, service-worker state, update action, online/offline state, and explicit network-only map/route/search/cloud guidance.
+- Added unit/component tests for lifecycle state, mocked registration callbacks, global banner behavior, and Settings integration, plus a mobile Settings E2E smoke.
+
+Completed validation:
+
+- `npx eslint vite.config.ts src/vite-env.d.ts src/lib/pwaRegister.ts src/lib/pwaLifecycle.ts src/lib/pwaLifecycle.test.ts src/hooks/usePwaLifecycleState.ts src/components/PwaLifecycleController.tsx src/components/PwaLifecycleController.test.tsx src/components/PwaLifecycleBanner.tsx src/components/PwaLifecycleBanner.test.tsx src/components/AppShell.tsx src/App.tsx src/pages/SettingsPage.tsx src/pages/SettingsPage.test.tsx e2e/appearance.spec.ts vitest.config.ts src/test/pwaRegisterStub.ts` passed.
+- `git diff --check` passed.
+- `npm run test:unit -- src/lib/pwaLifecycle.test.ts src/components/PwaLifecycleController.test.tsx src/components/PwaLifecycleBanner.test.tsx src/pages/SettingsPage.test.tsx src/components/AppShell.test.tsx` passed: 5 files and 33 tests.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/appearance.spec.ts -g 'PWA 生命周期'` passed.
+- `PLAYWRIGHT_WORKERS=1 npm run test:e2e -- e2e/appearance.spec.ts` passed: 2 mobile tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 175 files and 1387 tests.
+- `npm run build` passed with the existing large-chunk warning.
+- Build artifact inspection showed no `dist/registerSW.js` and no injected registration in `dist/index.html`; `dist/sw.js` only retains the user-triggered `SKIP_WAITING` message listener and does not call `clients.claim()`.
 
 Risk: medium, because update timing affects the full application shell but no stored data contract changes.
 

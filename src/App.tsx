@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell'
 import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { PwaLifecycleController } from './components/PwaLifecycleController'
 import { Card } from './components/ui/Card'
 import { getTrip } from './db'
 import { subscribeTravelDataChanged } from './lib/dataEvents'
@@ -141,6 +142,7 @@ function App() {
 
   return (
     <AppShell activeRoute={activeRoute} lastTripId={lastTripId} title={shellTitle}>
+      <PwaLifecycleController />
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
       {activeRoute === 'home' ? <HomePage /> : null}

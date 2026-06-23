@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react'
-import { CalendarDays, ChevronRight, Download, FolderLock, Plus, Settings, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  CalendarDays,
+  ChevronRight,
+  Clock3,
+  Download,
+  FolderLock,
+  MapPin,
+  Plus,
+  Settings,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import {
   createDemoTrip,
   deleteTripCascade,
@@ -8,72 +19,81 @@ import {
   listTicketsByTrip,
   listTrips,
 } from '../db'
-import { navigateTo } from '../lib/routes'
-import { formatDateRange } from '../lib/dates'
-import { subscribeTravelDataChanged } from '../lib/dataEvents'
-import { getZonedPlainDate, resolveTripTimeZone } from '../lib/timeZone'
-import type { Trip } from '../types'
 import { AppVersion } from '../components/AppVersion'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
+import { subscribeTravelDataChanged } from '../lib/dataEvents'
+import { describeItemTime } from '../lib/itinerary'
+import { formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
+import {
+  buildHomePortfolioModel,
+  type HomePortfolioModel,
+  type HomeTripOverview,
+  type HomeTripSnapshot,
+} from '../lib/homeOverview'
+import { readTripNavigationContext } from '../lib/navigationContext'
+import { navigateTo } from '../lib/routes'
+import type { Trip } from '../types'
 
-type TripCardStats = {
-  dayCount: number
-  itemCount: number
-  ticketCount: number
-}
-
-// ── 直接基于 design-reference/_3/code.html 转换 ──
+const EMPTY_PORTFOLIO: HomePortfolioModel = { activeAndUpcoming: [], completed: [], primary: null }
 
 export function HomePage() {
-  const [trips, setTrips] = useState<Trip[]>([])
+  const [snapshots, setSnapshots] = useState<HomeTripSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreatingDemo, setIsCreatingDemo] = useState(false)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
   const [pendingDeleteTrip, setPendingDeleteTrip] = useState<Trip | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tripStatsById, setTripStatsById] = useState<Record<string, TripCardStats>>({})
-
-  const hasTrips = trips.length > 0
-  const firstTrip = hasTrips ? trips[0] : null
-  const firstStats = firstTrip ? tripStatsById[firstTrip.id] : null
-  const firstStatus = firstTrip ? getTripStatus(firstTrip) : null
-
-  async function refreshTrips() {
-    setError(null)
-    const { statsById, trips: nextTrips } = await loadTripsWithStats()
-    setTrips(nextTrips)
-    setTripStatsById(statsById)
-  }
+  const preferredTripId = useMemo(() => readTripNavigationContext()?.tripId ?? null, [])
+  const portfolio = useMemo(
+    () => snapshots.length > 0
+      ? buildHomePortfolioModel(snapshots, { preferredTripId })
+      : EMPTY_PORTFOLIO,
+    [preferredTripId, snapshots],
+  )
 
   useEffect(() => {
-    let isMounted = true
+    let cancelled = false
+
     async function load() {
-      setIsLoading(true)
-      setError(null)
       try {
-        const { statsById, trips: nextTrips } = await loadTripsWithStats()
-        if (isMounted) { setTrips(nextTrips); setTripStatsById(statsById) }
+        const nextSnapshots = await loadHomeTripSnapshots()
+        if (!cancelled) {
+          setSnapshots(nextSnapshots)
+          setError(null)
+        }
       } catch (caught) {
-        if (isMounted) setError(caught instanceof Error ? caught.message : '读取本地数据库失败')
+        if (!cancelled) setError(caught instanceof Error ? caught.message : '读取本地数据库失败')
       } finally {
-        if (isMounted) setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
+
     void load()
-    return () => { isMounted = false }
+    const unsubscribe = subscribeTravelDataChanged(() => void load())
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
-  useEffect(() => subscribeTravelDataChanged(() => void refreshTrips()), [])
+  async function refreshTrips() {
+    setSnapshots(await loadHomeTripSnapshots())
+  }
 
   async function handleCreateDemoTrip() {
     setIsCreatingDemo(true)
     setError(null)
-    try { await createDemoTrip(); await refreshTrips() }
-    catch (caught) { setError(caught instanceof Error ? caught.message : '创建示例旅行失败') }
-    finally { setIsCreatingDemo(false) }
+    try {
+      await createDemoTrip()
+      await refreshTrips()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '创建示例旅行失败')
+    } finally {
+      setIsCreatingDemo(false)
+    }
   }
 
   async function confirmDeleteTrip() {
@@ -81,160 +101,79 @@ export function HomePage() {
     const trip = pendingDeleteTrip
     setDeletingTripId(trip.id)
     setError(null)
-    try { await deleteTripCascade(trip.id); setPendingDeleteTrip(null); await refreshTrips() }
-    catch (caught) { setError(caught instanceof Error ? caught.message : '删除旅行失败') }
-    finally { setDeletingTripId(null) }
+    try {
+      await deleteTripCascade(trip.id)
+      setPendingDeleteTrip(null)
+      await refreshTrips()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '删除旅行失败')
+    } finally {
+      setDeletingTripId(null)
+    }
   }
 
   return (
-    <>{/* ── Main Content Canvas ── 参考: 124 行 (TopAppBar 由 AppShell 管理) */}
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-section-gap px-4 pb-32 pt-24">
-
-        {/* ── Hero Section ── */}
-        <section className="flex justify-between items-end">
-          <div>
-            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-1">旅图</h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
+    <>
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-section-gap px-4 pb-36 pt-24">
+        <header className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">旅图</h2>
+            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
             <AppVersion className="mt-1 text-left text-on-surface-variant" suffix="本地优先" />
           </div>
           <button
             aria-label="设置"
-            className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-colors"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95 tm-focus"
             onClick={() => navigateTo('settings')}
+            title="设置"
             type="button"
           >
             <Settings className="size-5" />
           </button>
-        </section>
+        </header>
 
-        {/* Loading */}
-        {isLoading ? (
-          <div className="space-y-3"><SkeletonLine className="w-2/3" /><SkeletonLine className="w-full" /><SkeletonLine className="w-1/2" /></div>
-        ) : null}
+        {isLoading ? <HomeLoading /> : null}
 
-        {/* Error */}
         {error ? (
-          <div className="rounded-xl border border-error/30 bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">{error}</div>
-        ) : null}
-
-        {/* Empty */}
-        {!isLoading && !hasTrips ? (
-          <div className="space-y-3">
-            <EmptyState body="新用户不会自动生成示例数据。你可以新建旅行，也可以手动创建一个东京示例用于体验地图和时间轴。" icon={<CalendarDays className="size-6" />} title="还没有旅行" />
-            <Button className="w-full" loading={isCreatingDemo} onClick={() => void handleCreateDemoTrip()} variant="secondary">创建示例旅行</Button>
+          <div className="rounded-lg border border-error/30 bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
+            {error}
           </div>
         ) : null}
 
-        {/* ── Current Trip Card (Travel Pass) ── 参考: 136-167 行 */}
-        {firstTrip ? (
-          <button
-            className="group relative w-full overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container text-left transition active:scale-[0.99]"
-            data-testid="trip-card"
-            onClick={() => navigateTo('trip', { tripId: firstTrip.id })}
-            type="button"
-          >
-            <div className="absolute inset-0 z-0">
-              <div className="w-full h-full bg-surface-variant" />
-              <div className="absolute inset-0 bg-gradient-to-t from-surface-container via-surface-container/80 to-transparent" />
-            </div>
-            <div className="relative z-10 p-6 flex flex-col gap-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{firstTrip.title}</h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant">{formatDateRange(firstTrip.startDate, firstTrip.endDate)}</p>
-                  <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">{firstTrip.destination}</p>
-                </div>
-                {firstStatus ? (
-                  <div className={`${firstStatus.className} px-3 py-1 rounded-full border border-primary/30 flex items-center gap-1`}>
-                    <span className="font-label-sm text-label-sm">{firstStatus.label}</span>
-                  </div>
-                ) : null}
-              </div>
-              {firstStats ? (
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-outline-variant/30">
-                  <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.dayCount} 天</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">日程</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.itemCount} 个</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">行程点</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-headline-md text-headline-md text-on-surface">{firstStats.ticketCount} 张</span>
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">票据</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </button>
+        {!isLoading && snapshots.length === 0 ? (
+          <div className="space-y-3">
+            <EmptyState
+              body="新建一趟旅行，或创建东京示例体验地图、时间轴和票据。"
+              icon={<CalendarDays className="size-6" />}
+              title="还没有旅行"
+            />
+            <Button className="w-full" loading={isCreatingDemo} onClick={() => void handleCreateDemoTrip()} variant="secondary">
+              创建示例旅行
+            </Button>
+          </div>
         ) : null}
 
-        {/* ── Recent Trips Section ── 参考: 169-217 行 */}
-        {trips.length > 0 ? (
-          <section className="flex flex-col gap-stack-gap">
-            <h3 className="font-headline-md text-headline-md text-on-surface">最近行程</h3>
-            <div className="bg-surface-container rounded-xl border border-outline-variant/30 flex flex-col">
-              {trips.map((trip, index) => {
-                const status = getTripStatus(trip)
-                const isLast = index === trips.length - 1
-                return (
-                  <button
-                    key={trip.id}
-                    className="flex items-center gap-4 p-4 hover:bg-surface-container-high/50 transition-colors w-full text-left"
-                    onClick={() => navigateTo('trip', { tripId: trip.id })}
-                    type="button"
-                  >
-                    <div className="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant/30 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      <span className="text-lg">{getTripEmoji(trip)}</span>
-                    </div>
-                    <div className={`flex-1 flex flex-col h-full justify-center ${isLast ? '' : 'border-b border-outline-variant/30 pb-4'}`}>
-                      <span className="font-body-lg text-body-lg text-on-surface">{trip.title}</span>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">{status.label} · {formatDateRange(trip.startDate, trip.endDate)}</span>
-                    </div>
-                    <ChevronRight className={`size-5 text-on-surface-variant ${isLast ? '' : 'border-b border-outline-variant/30 pb-4'}`} />
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+        {portfolio.primary ? (
+          <PrimaryTripPanel onDelete={setPendingDeleteTrip} overview={portfolio.primary} />
         ) : null}
 
-        {/* ── Action Buttons ── 参考: 219-228 行 */}
-        <section className="flex flex-col gap-3 mt-4">
-          <button
-            className="w-full py-4 rounded-xl bg-surface-container text-on-surface font-headline-md text-headline-md flex items-center justify-center gap-2 border border-outline-variant/30 transition-colors active:scale-[0.98]"
-            onClick={() => navigateTo('documents', firstTrip ? { tripId: firstTrip.id } : undefined)}
-            type="button"
-          >
-            <FolderLock className="size-5" />
-            旅行资料中心
-          </button>
-          <button
-            className="w-full py-4 rounded-xl bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-[0.98]"
-            onClick={() => navigateTo('ai-draft')}
-            type="button"
-          >
-            <Sparkles className="size-5" />
-            AI 生成行程
-          </button>
-          <button
-            className="w-full py-4 rounded-xl bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-[0.98]"
-            onClick={() => navigateTo('trip/new')}
-            type="button"
-          >
-            <Plus className="size-5" />
-            新建旅行
-          </button>
-          <button
-            className="w-full py-4 rounded-xl bg-inverse-surface text-inverse-on-surface font-headline-md text-headline-md flex items-center justify-center gap-2 hover:bg-inverse-surface/90 transition-colors active:scale-[0.98]"
-            onClick={() => navigateTo('settings')}
-            type="button"
-          >
-            <Download className="size-5" />
-            导入行程
-          </button>
-        </section>
+        {portfolio.activeAndUpcoming.length > 0 ? (
+          <TripSection
+            onDelete={setPendingDeleteTrip}
+            overviews={portfolio.activeAndUpcoming}
+            title="接下来的旅行"
+          />
+        ) : null}
+
+        {portfolio.completed.length > 0 ? (
+          <TripSection
+            onDelete={setPendingDeleteTrip}
+            overviews={portfolio.completed}
+            title="已完成"
+          />
+        ) : null}
+
+        <HomeActions primaryTrip={portfolio.primary?.trip ?? null} />
       </div>
 
       <ConfirmDialog
@@ -250,44 +189,230 @@ export function HomePage() {
   )
 }
 
-function getTripEmoji(trip: Trip): string {
-  const dest = (trip.destination || trip.title || '').toLowerCase()
-  if (dest.includes('东京') || dest.includes('日本') || dest.includes('japan')) return '🗼'
-  if (dest.includes('伦敦') || dest.includes('london') || dest.includes('英国')) return '🎡'
-  if (dest.includes('巴黎') || dest.includes('paris') || dest.includes('法国')) return '🗼'
-  if (dest.includes('纽约') || dest.includes('new york') || dest.includes('美国')) return '🗽'
-  if (dest.includes('首尔') || dest.includes('seoul') || dest.includes('韩国')) return '🇰🇷'
-  if (dest.includes('曼谷') || dest.includes('bangkok') || dest.includes('泰国')) return '🇹🇭'
-  if (dest.includes('悉尼') || dest.includes('sydney') || dest.includes('澳洲')) return '🦘'
-  if (dest.includes('迪拜') || dest.includes('dubai')) return '🏙️'
-  if (dest.includes('罗马') || dest.includes('rome') || dest.includes('意大利')) return '🏛️'
-  if (dest.includes('巴塞罗那') || dest.includes('barcelona') || dest.includes('西班牙')) return '🇪🇸'
+function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => void; overview: HomeTripOverview }) {
+  const { focusDay, nextItem, stats, trip } = overview
+  return (
+    <section
+      className="overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container"
+      data-testid="home-primary-trip"
+    >
+      <div className="space-y-4 p-5" data-testid="trip-card">
+        <div className="flex items-start justify-between gap-3">
+          <button
+            className="min-w-0 flex-1 text-left active:opacity-80 tm-focus"
+            onClick={() => navigateTo('trip', { tripId: trip.id })}
+            type="button"
+          >
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className={getStatusClassName(overview.status)}>{overview.statusLabel}</span>
+              <span className="text-xs font-medium text-on-surface-variant">{formatDateRange(trip.startDate, trip.endDate)}</span>
+            </div>
+            <h3 className="break-words font-headline-lg text-headline-lg text-on-surface">{trip.title}</h3>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-on-surface-variant">
+              <MapPin className="size-4 shrink-0" />
+              <span className="truncate">{trip.destination || '目的地待补充'}</span>
+            </p>
+          </button>
+          <button
+            aria-label={`删除${trip.title}`}
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
+            onClick={() => onDelete(trip)}
+            title="删除旅行"
+            type="button"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 divide-x divide-outline-variant/30 border-y border-outline-variant/30 py-3">
+          <TripStat label="日程" value={`${stats.dayCount} 天`} />
+          <TripStat label="行程点" value={`${stats.itemCount} 个`} />
+          <TripStat label="票据" value={`${stats.ticketCount} 张`} />
+        </div>
+
+        <div className="flex items-start gap-3" data-testid="home-primary-next-step">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
+            <Clock3 className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-on-surface-variant">
+              {focusDay ? formatShortDateWithWeekday(focusDay.date) : '旅行准备'}
+            </p>
+            <p className="mt-0.5 break-words text-sm font-semibold text-on-surface">
+              {nextItem ? nextItem.title : overview.preparationLabel}
+            </p>
+            {nextItem ? (
+              <p className="mt-0.5 text-xs text-on-surface-variant">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button className="w-full" onClick={() => navigateTo('trip', { tripId: trip.id })}>
+            打开旅行
+          </Button>
+          <Button
+            className="w-full"
+            icon={nextItem ? <ChevronRight className="size-4" /> : <FolderLock className="size-4" />}
+            onClick={() => nextItem
+              ? navigateTo('item', { dayId: nextItem.dayId, itemId: nextItem.id, tripId: trip.id })
+              : navigateTo('documents', { tripId: trip.id })}
+            variant="secondary"
+          >
+            {nextItem ? '查看下一项' : '打开资料'}
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TripStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-2 text-center">
+      <p className="font-headline-md text-headline-md text-on-surface">{value}</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-on-surface-variant">{label}</p>
+    </div>
+  )
+}
+
+function TripSection({
+  onDelete,
+  overviews,
+  title,
+}: {
+  onDelete: (trip: Trip) => void
+  overviews: HomeTripOverview[]
+  title: string
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="font-headline-md text-headline-md text-on-surface">{title}</h3>
+      <div className="overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container">
+        {overviews.map((overview, index) => (
+          <TripPortfolioRow
+            key={overview.trip.id}
+            onDelete={onDelete}
+            overview={overview}
+            separator={index < overviews.length - 1}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function TripPortfolioRow({
+  onDelete,
+  overview,
+  separator,
+}: {
+  onDelete: (trip: Trip) => void
+  overview: HomeTripOverview
+  separator: boolean
+}) {
+  const { trip } = overview
+  return (
+    <div className={`flex items-center gap-2 px-2 ${separator ? 'border-b border-outline-variant/30' : ''}`}>
+      <button
+        aria-label={`打开${trip.title}`}
+        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus"
+        data-testid="trip-card"
+        onClick={() => navigateTo('trip', { tripId: trip.id })}
+        type="button"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-variant text-lg">
+          {getTripEmoji(trip)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-on-surface">{trip.title}</span>
+          <span className="mt-0.5 block truncate text-xs text-on-surface-variant">
+            {overview.statusLabel} · {formatDateRange(trip.startDate, trip.endDate)}
+          </span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+      </button>
+      <button
+        aria-label={`删除${trip.title}`}
+        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
+        onClick={() => onDelete(trip)}
+        title="删除旅行"
+        type="button"
+      >
+        <Trash2 className="size-4" />
+      </button>
+    </div>
+  )
+}
+
+function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="font-headline-md text-headline-md text-on-surface">开始</h3>
+      <div className="grid grid-cols-2 gap-2">
+        <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => navigateTo('trip/new')}>
+          新建旅行
+        </Button>
+        <Button className="w-full" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
+          AI 生成行程
+        </Button>
+        <Button
+          className="w-full"
+          icon={<FolderLock className="size-4" />}
+          onClick={() => navigateTo('documents', primaryTrip ? { tripId: primaryTrip.id } : undefined)}
+          variant="secondary"
+        >
+          旅行资料
+        </Button>
+        <Button className="w-full" icon={<Download className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
+          导入/恢复
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function HomeLoading() {
+  return (
+    <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container p-5">
+      <SkeletonLine className="w-1/3" />
+      <SkeletonLine className="w-2/3" />
+      <SkeletonLine className="w-full" />
+      <SkeletonLine className="w-1/2" />
+    </div>
+  )
+}
+
+function getStatusClassName(status: HomeTripOverview['status']) {
+  const base = 'inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-semibold'
+  if (status === 'ongoing') return `${base} bg-primary-container text-on-primary-container`
+  if (status === 'completed') return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300`
+  return `${base} bg-surface-container-high text-on-surface-variant`
+}
+
+function getTripEmoji(trip: Trip) {
+  const destination = (trip.destination || trip.title || '').toLowerCase()
+  if (destination.includes('东京') || destination.includes('日本') || destination.includes('japan')) return '🗼'
+  if (destination.includes('伦敦') || destination.includes('london') || destination.includes('英国')) return '🎡'
+  if (destination.includes('巴黎') || destination.includes('paris') || destination.includes('法国')) return '🗼'
+  if (destination.includes('纽约') || destination.includes('new york') || destination.includes('美国')) return '🗽'
+  if (destination.includes('首尔') || destination.includes('seoul') || destination.includes('韩国')) return '🇰🇷'
+  if (destination.includes('曼谷') || destination.includes('bangkok') || destination.includes('泰国')) return '🇹🇭'
+  if (destination.includes('悉尼') || destination.includes('sydney') || destination.includes('澳洲')) return '🦘'
+  if (destination.includes('迪拜') || destination.includes('dubai')) return '🏙️'
+  if (destination.includes('罗马') || destination.includes('rome') || destination.includes('意大利')) return '🏛️'
+  if (destination.includes('巴塞罗那') || destination.includes('barcelona') || destination.includes('西班牙')) return '🇪🇸'
   return '✈️'
 }
 
-function getTripStatus(trip: Trip): { label: string; className: string } {
-  const today = getZonedPlainDate(new Date(), resolveTripTimeZone(trip))
-  if (today > trip.endDate) return { label: '已完成', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' }
-  if (today >= trip.startDate) return { label: '进行中', className: 'bg-primary/20 text-primary' }
-  return { label: '计划中', className: 'bg-surface-container-high text-on-surface-variant' }
-}
-
-async function loadTripsWithStats() {
+async function loadHomeTripSnapshots(): Promise<HomeTripSnapshot[]> {
   const trips = await listTrips()
-  const entries = await Promise.all(
-    trips.map(async (trip) => {
-      try {
-        const [days, items, tickets] = await Promise.all([
-          listDaysByTrip(trip.id),
-          listItemsByTrip(trip.id),
-          listTicketsByTrip(trip.id),
-        ])
-        return [trip.id, { dayCount: days.length, itemCount: items.length, ticketCount: tickets.length }] as const
-      } catch { return null }
-    }),
-  )
-  return {
-    statsById: Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)),
-    trips,
-  }
+  return Promise.all(trips.map(async (trip) => {
+    const [days, items, tickets] = await Promise.all([
+      listDaysByTrip(trip.id),
+      listItemsByTrip(trip.id),
+      listTicketsByTrip(trip.id),
+    ])
+    return { days, items, tickets, trip }
+  }))
 }

@@ -11,6 +11,7 @@ const markerEnd = '/* tripmap e2e pwa marker:end */'
 
 test.skip(!existsSync(join(builtDistDir, 'index.html')), 'Run npm run build before PWA upgrade smoke.')
 test.skip(!existsSync(join(builtDistDir, 'sw.js')), 'PWA upgrade smoke requires a generated sw.js.')
+test.setTimeout(60_000)
 
 test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({ page }) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-upgrade-'))
@@ -29,19 +30,7 @@ test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({
 
     await putIndexedDbMarker(page)
     await writeServiceWorkerVersion(appDir, 'v2')
-    await page.evaluate(async () => {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (!registration) throw new Error('missing service worker registration')
-
-      const controllerChanged = new Promise<void>((resolveController) => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => resolveController(), { once: true })
-      })
-      await registration.update()
-      await Promise.race([
-        controllerChanged,
-        new Promise((resolveTimeout) => window.setTimeout(resolveTimeout, 5000)),
-      ])
-    })
+    await activateUpdatedServiceWorker(page)
     await page.reload({ waitUntil: 'networkidle' })
     await ensureServiceWorkerController(page)
 
@@ -124,6 +113,78 @@ async function ensureServiceWorkerController(page: Page) {
     await page.reload({ waitUntil: 'networkidle' })
   }
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 10_000 })
+}
+
+async function activateUpdatedServiceWorker(page: Page) {
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) throw new Error('missing service worker registration')
+
+    function waitForUpdatedServiceWorker() {
+      return new Promise<ServiceWorker>((resolveWorker, rejectWorker) => {
+        const timeout = window.setTimeout(() => {
+          registration.removeEventListener('updatefound', handleUpdateFound)
+          rejectWorker(new Error('updated service worker did not finish installing'))
+        }, 10_000)
+        const existingWorker = registration.waiting ?? registration.installing
+        if (existingWorker) {
+          resolveWhenInstalled(existingWorker)
+          return
+        }
+
+        function handleUpdateFound() {
+          const installingWorker = registration.installing
+          if (!installingWorker) return
+          resolveWhenInstalled(installingWorker)
+        }
+
+        function resolveWhenInstalled(worker: ServiceWorker) {
+          if (worker.state === 'installed' || worker.state === 'activated') {
+            cleanup()
+            resolveWorker(worker)
+            return
+          }
+
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' || worker.state === 'activated') {
+              cleanup()
+              resolveWorker(worker)
+            }
+          })
+        }
+
+        function cleanup() {
+          window.clearTimeout(timeout)
+          registration.removeEventListener('updatefound', handleUpdateFound)
+        }
+
+        registration.addEventListener('updatefound', handleUpdateFound)
+      })
+    }
+
+    await registration.update()
+    const worker = await waitForUpdatedServiceWorker()
+    await new Promise<void>((resolveActivated, rejectActivated) => {
+      if (worker.state === 'activated' || registration.active === worker) {
+        resolveActivated()
+        return
+      }
+
+      const timeout = window.setTimeout(() => {
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+        rejectActivated(new Error('service worker activation timeout'))
+      }, 10_000)
+
+      function handleControllerChange() {
+        window.clearTimeout(timeout)
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+        resolveActivated()
+      }
+
+      navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+      worker.postMessage({ type: 'SKIP_WAITING' })
+    })
+  })
 }
 
 async function readServiceWorkerVersion(page: Page) {

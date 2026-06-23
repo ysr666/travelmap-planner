@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarDays,
   ChevronRight,
+  Compass,
   Info,
   Map,
   Clock3,
@@ -28,13 +30,10 @@ import {
 import { TicketPreview } from '../components/TicketPreview'
 import { ItemContentEnrichmentCard } from '../components/ai/TripContentEnrichmentPanel'
 import {
-  buildAppleMapsDirectionsUrl,
   buildAppleMapsUrl,
-  buildGoogleMapsDirectionsUrl,
   buildGoogleMapsUrl,
-  hasValidCoordinates,
 } from '../lib/mapLinks'
-import { describeItemTime, describePreviousTransport } from '../lib/itinerary'
+import { describeItemTime } from '../lib/itinerary'
 import { formatDate } from '../lib/dates'
 import { navigateTo } from '../lib/routes'
 import {
@@ -48,6 +47,12 @@ import {
   formatWeather,
 } from '../lib/ai/globalAiCommandRouter'
 import type { Day, ItineraryItem, ItineraryReplanPreference, ReplanFlexibility, ReplanMobilitySuitability, ReplanPriority, ReplanWeatherSuitability, TicketMeta, Trip } from '../types'
+import {
+  buildItemFieldContext,
+  type ItemFieldContext,
+  type ItemNeighborContext,
+  type ItemRouteActionContext,
+} from '../lib/itemFieldContext'
 import { Button } from '../components/ui/Button'
 import { getPlaceHeroVisual } from '../lib/placeHeroVisual'
 import { Card } from '../components/ui/Card'
@@ -250,13 +255,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     return () => window.clearTimeout(timeout)
   }, [loadRelations])
 
-  const itemIndex = dayItems.findIndex((dayItem) => dayItem.id === item.id)
-  const previousItem = itemIndex > 0 ? dayItems[itemIndex - 1] : null
-  const nextItem = itemIndex >= 0 && itemIndex < dayItems.length - 1 ? dayItems[itemIndex + 1] : null
-  const transportDescription = describePreviousTransport(item)
-  const hasCoordinates = hasValidCoordinates(item)
-  const appleDirectionsUrl = previousItem ? buildAppleMapsDirectionsUrl(previousItem, item, item.previousTransportMode) : null
-  const googleDirectionsUrl = previousItem ? buildGoogleMapsDirectionsUrl(previousItem, item, item.previousTransportMode) : null
+  const fieldContext = buildItemFieldContext({ day, dayItems, item, tickets })
+  const previousItem = fieldContext.previousItem
+  const nextItem = fieldContext.nextItem
+  const transportDescription = fieldContext.transportDescription
+  const hasCoordinates = fieldContext.hasCoordinates
+  const appleDirectionsUrl = fieldContext.routeAction.appleUrl
+  const googleDirectionsUrl = fieldContext.routeAction.googleUrl
 
   async function confirmDeleteItem() {
     setIsDeleting(true)
@@ -375,17 +380,12 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         </div>
       </section>
 
-      <ItemOnsiteSummary
-        day={day}
-        firstTicket={tickets[0] ?? null}
-        hasCoordinates={hasCoordinates}
+      <ItemFieldActionDeck
+        context={fieldContext}
         isLoadingRelations={isLoadingRelations}
-        item={item}
-        itemCount={dayItems.length}
-        itemIndex={itemIndex}
+        onOpenNeighbor={(targetItem) => navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: targetItem.id, view: sourceView })}
         onOpenTicket={(ticket) => setPreviewTicket(ticket)}
         onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
-        ticketCount={tickets.length}
       />
 
       {/* 基础信息 section - matches reference */}
@@ -808,76 +808,90 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   )
 }
 
-function ItemOnsiteSummary({
-  day,
-  firstTicket,
-  hasCoordinates,
+function ItemFieldActionDeck({
+  context,
   isLoadingRelations,
-  item,
-  itemCount,
-  itemIndex,
+  onOpenNeighbor,
   onOpenTicket,
   onOpenTickets,
-  ticketCount,
 }: {
-  day: Day
-  firstTicket: TicketMeta | null
-  hasCoordinates: boolean
+  context: ItemFieldContext
   isLoadingRelations: boolean
-  item: ItineraryItem
-  itemCount: number
-  itemIndex: number
+  onOpenNeighbor: (item: ItineraryItem) => void
   onOpenTicket: (ticket: TicketMeta) => void
   onOpenTickets: () => void
-  ticketCount: number
 }) {
-  const positionLabel = itemIndex >= 0 && itemCount > 0
-    ? `第 ${itemIndex + 1}/${itemCount} 项`
-    : '当天行程点'
+  const firstTicket = context.ticketAction.firstTicket
+  const ticketLabel = isLoadingRelations ? '读取中' : context.ticketAction.label
+  const ticketSummary = isLoadingRelations ? '正在读取绑定票据。' : context.ticketAction.summary
 
   return (
-    <section className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]" data-testid="item-onsite-summary">
-      <Card className="space-y-4" variant="grouped">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-label-sm text-label-sm text-primary">{positionLabel}</p>
-            <h2 className="mt-1 font-headline-md text-headline-md text-on-surface">{formatDate(day.date)}</h2>
-            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{describeItemTime(item)}</p>
+    <section className="space-y-3" data-testid="item-field-action-deck">
+      <div className="grid gap-3 md:grid-cols-[1.25fr_0.75fr]">
+        <Card className="overflow-hidden p-0" variant="grouped">
+          <div className="flex items-start justify-between gap-3 border-b border-outline-variant/30 p-4">
+            <div className="flex min-w-0 gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-container/20 text-primary">
+                <Compass className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-label-sm text-label-sm text-primary">现场行动</p>
+                <h2 className="mt-1 font-headline-md text-headline-md text-on-surface">{context.timeLabel}</h2>
+                <p className="mt-1 truncate text-sm font-semibold text-on-surface-variant">{context.positionLabel}</p>
+              </div>
+            </div>
+            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+              context.hasCoordinates
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+            }`}>
+              {context.coordinateLabel}
+            </span>
           </div>
-          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
-            hasCoordinates
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-              : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-          }`}>
-            {hasCoordinates ? '坐标就绪' : '待补坐标'}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 divide-x divide-outline-variant/30 text-center">
-          <OnsiteMetric label="地点" value={item.locationName || item.address || '未填写'} />
-          <OnsiteMetric label="票据" value={isLoadingRelations ? '读取中' : `${ticketCount} 张`} />
-          <OnsiteMetric label="日期" value={day.title || '本日'} />
-        </div>
-      </Card>
+          <div className="grid grid-cols-3 divide-x divide-outline-variant/30 p-4 text-center">
+            <OnsiteMetric label="地点" value={context.placeLabel} />
+            <OnsiteMetric label="票据" value={ticketLabel} />
+            <OnsiteMetric label="位置" value={`${Math.max(context.itemIndex + 1, 1)}/${Math.max(context.itemCount, 1)}`} />
+          </div>
+          <div className="grid gap-2 border-t border-outline-variant/30 p-3 sm:grid-cols-2">
+            <NeighborButton label="上一站" neighbor={context.previousStop} onOpenNeighbor={onOpenNeighbor} testId="item-field-previous-stop" />
+            <NeighborButton label="下一站" neighbor={context.nextStop} onOpenNeighbor={onOpenNeighbor} testId="item-field-next-stop" />
+          </div>
+        </Card>
 
-      <Card className="space-y-3" variant="grouped">
-        <div className="flex items-center gap-2">
-          <Ticket className="size-4 text-primary" />
-          <h2 className="font-headline-md text-headline-md text-on-surface">现场凭证</h2>
-        </div>
-        <p className="text-sm leading-6 text-on-surface-variant">
-          {ticketCount > 0 ? `${ticketCount} 张票据已绑定到这个行程点。` : '暂无绑定票据。'}
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
-          {firstTicket ? (
-            <Button className="min-h-11 px-3 text-sm" icon={<Ticket className="size-4" />} onClick={() => onOpenTicket(firstTicket)} variant="primary">
-              打开票据
+        <Card className="space-y-3" variant="grouped">
+          <div className="flex items-center gap-2">
+            <Ticket className="size-4 text-primary" />
+            <h2 className="font-headline-md text-headline-md text-on-surface">现场凭证</h2>
+          </div>
+          <p className="text-sm leading-6 text-on-surface-variant">{ticketSummary}</p>
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+            {firstTicket ? (
+              <Button className="min-h-11 px-3 text-sm" icon={<Ticket className="size-4" />} onClick={() => onOpenTicket(firstTicket)} variant="primary">
+                打开票据
+              </Button>
+            ) : null}
+            <Button className="min-h-11 px-3 text-sm" icon={<ChevronRight className="size-4" />} onClick={onOpenTickets} variant={firstTicket ? 'secondary' : 'primary'}>
+              票据库
             </Button>
-          ) : null}
-          <Button className="min-h-11 px-3 text-sm" icon={<ChevronRight className="size-4" />} onClick={onOpenTickets} variant={firstTicket ? 'secondary' : 'primary'}>
-            票据库
-          </Button>
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <ActionLinkPanel
+          action={context.routeAction}
+          icon={<Navigation className="size-5" />}
+          testId="item-field-route-action"
+          unavailableDetail={context.routeAction.detail}
+        />
+        <ActionLinkPanel
+          action={context.placeAction}
+          icon={<MapPinned className="size-5" />}
+          testId="item-field-place-action"
+          unavailableDetail={context.placeAction.detail}
+        />
+      </div>
     </section>
   )
 }
@@ -888,6 +902,89 @@ function OnsiteMetric({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] text-on-surface-variant">{label}</p>
       <p className="mt-1 truncate text-sm font-bold text-on-surface">{value}</p>
     </div>
+  )
+}
+
+function NeighborButton({
+  label,
+  neighbor,
+  onOpenNeighbor,
+  testId,
+}: {
+  label: string
+  neighbor: ItemNeighborContext | null
+  onOpenNeighbor: (item: ItineraryItem) => void
+  testId: string
+}) {
+  return (
+    <button
+      className="flex min-h-[4.25rem] min-w-0 items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3 text-left transition active:scale-[0.99] disabled:opacity-50 tm-focus"
+      data-testid={testId}
+      disabled={!neighbor}
+      onClick={() => neighbor && onOpenNeighbor(neighbor.item)}
+      type="button"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-primary">
+        {label === '上一站' ? <ArrowLeft className="size-4" /> : <ArrowRight className="size-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold text-on-surface-variant">{label}</span>
+        <span className="mt-1 block truncate text-sm font-bold text-on-surface">{neighbor?.label ?? '无'}</span>
+        {neighbor ? <span className="mt-0.5 block truncate text-xs text-on-surface-variant">{neighbor.timeLabel}</span> : null}
+      </span>
+    </button>
+  )
+}
+
+function ActionLinkPanel({
+  action,
+  icon,
+  testId,
+  unavailableDetail,
+}: {
+  action: ItemRouteActionContext
+  icon: ReactNode
+  testId: string
+  unavailableDetail: string
+}) {
+  return (
+    <Card className="space-y-3" data-testid={testId} variant="grouped">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container/20 text-primary">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-headline-md text-headline-md text-on-surface">{action.title}</h2>
+          <p className="mt-1 text-sm leading-6 text-on-surface-variant">{action.isAvailable ? action.detail : unavailableDetail}</p>
+        </div>
+      </div>
+      {action.isAvailable ? (
+        <div className="grid grid-cols-2 gap-2">
+          {action.appleUrl ? (
+            <a
+              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
+              href={action.appleUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Navigation className="size-4" />
+              <span className="truncate">Apple 地图</span>
+            </a>
+          ) : null}
+          {action.googleUrl ? (
+            <a
+              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-sm font-semibold text-primary transition active:scale-[0.98] tm-focus"
+              href={action.googleUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink className="size-4" />
+              <span className="truncate">Google 地图</span>
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
   )
 }
 

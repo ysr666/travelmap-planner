@@ -10,16 +10,18 @@ import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 import { BottomTabBar } from './BottomTabBar'
 import { GlobalAiCommandBar } from './ai/GlobalAiCommandBar'
+import { PwaLifecycleBanner } from './PwaLifecycleBanner'
 
 
 type AppShellProps = {
   activeRoute: RouteId
   children: ReactNode
+  lastTripId?: string | null
   title: string
 }
 
 
-export function AppShell({ activeRoute, children, title }: AppShellProps) {
+export function AppShell({ activeRoute, children, lastTripId, title }: AppShellProps) {
   const ownsCanvas = activeRoute === 'home'
     || activeRoute === 'inbox'
     || activeRoute === 'settings'
@@ -71,6 +73,8 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
         </header>
       ) : null}
 
+      <PwaLifecycleBanner topAppBar={showTopAppBar} />
+
       <main
         className={getMainClassName({ fullScreen, ownsCanvas, showGlobalAiCommand, showTabBar, showTopAppBar })}
       >
@@ -82,7 +86,7 @@ export function AppShell({ activeRoute, children, title }: AppShellProps) {
       {showGlobalAiCommand ? (
         <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
       ) : null}
-      {showTabBar ? <BottomTabBar activeRoute={activeRoute} /> : null}
+      {showTabBar ? <BottomTabBar activeRoute={activeRoute} lastTripId={lastTripId} /> : null}
     </div>
   )
 }

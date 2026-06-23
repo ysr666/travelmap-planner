@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeItemTime, describePreviousTransport, sortItineraryItems } from './itinerary'
+import { describeItemTime, describePreviousTransport, sortItineraryItems, sortItineraryItemsByPlanOrder } from './itinerary'
 import type { ItineraryItem } from '../types'
 
 function makeItem(overrides: Partial<ItineraryItem> = {}): ItineraryItem {
@@ -51,6 +51,26 @@ describe('sortItineraryItems', () => {
     const original = [...items]
     sortItineraryItems(items)
     expect(items.map((i) => i.id)).toEqual(original.map((i) => i.id))
+  })
+})
+
+describe('sortItineraryItemsByPlanOrder', () => {
+  it('keeps explicit plan order even when times are not chronological', () => {
+    const items = [
+      makeItem({ id: 'early', sortOrder: 2, startTime: '08:00' }),
+      makeItem({ id: 'late', sortOrder: 1, startTime: '18:00' }),
+    ]
+
+    expect(sortItineraryItemsByPlanOrder(items).map((item) => item.id)).toEqual(['late', 'early'])
+    expect(sortItineraryItems(items).map((item) => item.id)).toEqual(['early', 'late'])
+  })
+
+  it('uses time and id only to stabilize duplicate legacy sort orders', () => {
+    const items = [
+      makeItem({ id: 'b', sortOrder: 1, startTime: '10:00' }),
+      makeItem({ id: 'a', sortOrder: 1, startTime: '09:00' }),
+    ]
+    expect(sortItineraryItemsByPlanOrder(items).map((item) => item.id)).toEqual(['a', 'b'])
   })
 })
 

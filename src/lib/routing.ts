@@ -1,5 +1,5 @@
 import { hasValidCoordinates } from './mapLinks'
-import { sortItineraryItems } from './itinerary'
+import { sortItineraryItemsByPlanOrder } from './itinerary'
 import {
   fetchProviderProxyRoutePreview,
   getProviderProxyConfig,
@@ -424,7 +424,7 @@ export function getItemLngLat(item?: ItineraryItem): LngLat | null {
 }
 
 export function getOrderedMappableItems(items: ItineraryItem[]) {
-  return sortItineraryItems(items).filter((item) => getItemLngLat(item) !== null)
+  return sortItineraryItemsByPlanOrder(items).filter((item) => getItemLngLat(item) !== null)
 }
 
 function buildStraightSegments(items: ItineraryItem[], provider: RoutingProvider, warning?: string) {

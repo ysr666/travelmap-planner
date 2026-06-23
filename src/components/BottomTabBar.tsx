@@ -4,6 +4,7 @@ import { navigateTo } from '../lib/routes'
 
 type BottomTabBarProps = {
   activeRoute: RouteId
+  lastTripId?: string | null
 }
 
 const tabs = [
@@ -14,7 +15,7 @@ const tabs = [
   { id: 'settings' as RouteId, label: '设置', icon: Settings },
 ]
 
-export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
+export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
   return (
     <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-16 items-center justify-between border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
       {tabs.map((tab) => {
@@ -29,7 +30,7 @@ export function BottomTabBar({ activeRoute }: BottomTabBarProps) {
                 ? 'text-primary bg-primary-container/10'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
-            onClick={() => navigateToTab(tab.id)}
+            onClick={() => navigateToTab(tab.id, lastTripId)}
             type="button"
           >
             <Icon className="size-5 mb-1" />
@@ -54,10 +55,10 @@ function getActiveTab(activeRoute: RouteId): RouteId {
   return activeRoute
 }
 
-function navigateToTab(tabId: RouteId) {
+function navigateToTab(tabId: RouteId, lastTripId?: string | null) {
   if (tabId === 'trip') {
     const params = new URLSearchParams(window.location.hash.replace(/^#\/?/, '').split('?')[1] ?? '')
-    const tripId = params.get('tripId')
+    const tripId = params.get('tripId') ?? lastTripId
     if (tripId) {
       navigateTo('trip', { tripId })
       return

@@ -355,6 +355,23 @@ describe('cloud snapshot version context fields', () => {
     ])
   })
 
+  it('falls back to UTC when version context receives an invalid time zone', () => {
+    const dirtyAt = Date.parse('2026-04-02T12:00:00.000Z')
+    const [result] = buildCloudSnapshotCheckResults({
+      autoStatusByTripId: {
+        trip_1: createAutoStatus({ dirtyAt, lastSuccessAt: Date.parse('2026-04-02T10:30:00.000Z') }),
+      },
+      backups: [createBackup({ exportedAt: '2026-04-02T09:00:00.000Z' })],
+      trips: [baseTrip],
+    })
+
+    expect(buildCloudSnapshotVersionContextRows(result, 'Invalid/Zone').map((row) => row.value)).toEqual([
+      '2026-04-02 12:00',
+      '2026-04-02 09:00',
+      '2026-04-02 12:00',
+    ])
+  })
+
   it('ignores restored-source metadata when building startup comparison results', () => {
     const plainResult = buildCloudSnapshotCheckResults({
       backups: [createBackup({ exportedAt: '2026-04-03T00:00:00.000Z' })],
@@ -409,6 +426,11 @@ describe('formatVersionTimestamp', () => {
     const epoch = Date.parse('2026-04-02T10:30:00.000Z')
     expect(formatVersionTimestamp(epoch, 'Asia/Shanghai')).toBe('2026-04-02 18:30')
     expect(formatVersionTimestamp(epoch, 'America/Los_Angeles')).toBe('2026-04-02 03:30')
+  })
+
+  it('falls back to UTC for invalid time zones instead of throwing', () => {
+    const epoch = Date.parse('2026-04-02T10:30:00.000Z')
+    expect(formatVersionTimestamp(epoch, 'Invalid/Zone')).toBe('2026-04-02 10:30')
   })
 
   it('returns null for null', () => {

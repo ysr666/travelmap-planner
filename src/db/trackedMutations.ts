@@ -88,6 +88,19 @@ export async function updateItineraryItem(
   return item
 }
 
+export async function reorderDayItems(
+  dayId: string,
+  orderedItemIds: string[],
+  expectedCurrentItemIds?: string[],
+) {
+  const items = await repo.reorderDayItems(dayId, orderedItemIds, expectedCurrentItemIds)
+  if (items.length > 0) {
+    await Promise.all(items.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' })))
+    recordTripWriteForSync(items[0].tripId, 'items-reordered', { emitChangeEvent: false })
+  }
+  return items
+}
+
 export async function setItineraryItemExecutionState(
   itemId: string,
   status: 'completed' | 'skipped' | null,
@@ -122,6 +135,21 @@ export async function saveTicketBlob(ticketId: string, blob: Blob) {
     recordTripWriteForSync(ticket.tripId, 'ticket-blob-saved', { emitChangeEvent: false })
   }
   return record
+}
+
+export async function updateTicketMeta(
+  ticketId: string,
+  input: Parameters<typeof repo.updateTicketMeta>[1],
+) {
+  const result = await repo.updateTicketMeta(ticketId, input)
+  if (result) {
+    await Promise.all([
+      enqueueObjectUpsert({ object: result.ticket, objectType: 'ticket_meta' }),
+      ...result.changedItems.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' as const })),
+    ])
+    recordTripWriteForSync(result.ticket.tripId, 'ticket-updated', { emitChangeEvent: false })
+  }
+  return result
 }
 
 export async function deleteTicket(ticketId: string) {

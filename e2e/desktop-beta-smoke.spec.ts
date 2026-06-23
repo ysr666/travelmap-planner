@@ -49,7 +49,7 @@ test('桌面 Beta smoke 覆盖核心页面与 AI 确认边界', async ({ page })
 
   await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${firstItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('item-detail-page')).toBeVisible()
-  await expect(page.getByTestId('item-onsite-summary')).toBeVisible()
+  await expect(page.getByTestId('item-field-action-deck')).toBeVisible()
   await expect(page.getByTestId('item-detail-tickets')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

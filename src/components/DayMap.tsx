@@ -14,7 +14,7 @@ import {
   type DayMapRecenterResult,
   type ScreenRect,
 } from '../lib/dayMapViewport'
-import { sortItineraryItems } from '../lib/itinerary'
+import { sortItineraryItemsByPlanOrder } from '../lib/itinerary'
 import { getItemLngLat, type LngLat } from '../lib/routing'
 import { getMarkerEmoji } from '../lib/markerEmoji'
 import type { DayPrewarmTarget } from '../lib/mapPrewarm'
@@ -115,7 +115,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const prewarmSessionRef = useRef<PrewarmSession | null>(null)
   const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
-    () => sortItineraryItems(items).filter((item) => getItemLngLat(item) !== null),
+    () => sortItineraryItemsByPlanOrder(items).filter((item) => getItemLngLat(item) !== null),
     [items],
   )
   const validItemsRef = useRef(validItems)

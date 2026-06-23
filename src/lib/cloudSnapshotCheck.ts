@@ -1,7 +1,7 @@
 import type { AutoSnapshotBackupEntry } from './autoSnapshotBackup'
 import type { CloudBackupSummary } from './cloudBackup'
 import type { Trip } from '../types'
-import { getDeviceTimeZone } from './timeZone'
+import { getDeviceTimeZone, normalizeTimeZone } from './timeZone'
 
 export type CloudSnapshotCheckStatus =
   | 'local_newer'
@@ -217,13 +217,14 @@ export function formatVersionTimestamp(
   if (Number.isNaN(date.getTime())) {
     return null
   }
+  const safeTimeZone = normalizeTimeZone(timeZone) ?? 'UTC'
   const parts = new Intl.DateTimeFormat('zh-CN', {
     day: '2-digit',
     hour: '2-digit',
     hour12: false,
     minute: '2-digit',
     month: '2-digit',
-    timeZone,
+    timeZone: safeTimeZone,
     year: 'numeric',
   }).formatToParts(date)
   const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]))

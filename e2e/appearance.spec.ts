@@ -49,3 +49,14 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   expect(await page.evaluate(() => window.localStorage.getItem('tripmap:appearance'))).toBe('system')
   await expectNoHorizontalOverflow(page)
 })
+
+test('设置页展示 PWA 生命周期状态和网络能力边界', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByRole('heading', { name: 'PWA 和离线使用' })).toBeVisible()
+  await expect(page.locator('main')).toContainText(/应用更新：(等待注册|已启用|应用外壳可离线打开|有新版本可更新|更新检查失败|当前浏览器不支持应用更新控制)/)
+  await expect(page.locator('main')).toContainText(/当前版本：v\d+\.\d+\.\d+/)
+  await expect(page.locator('main')).toContainText('地图底图和外部 Apple/Google Maps 路线需要网络')
+  await expectNoHorizontalOverflow(page)
+})

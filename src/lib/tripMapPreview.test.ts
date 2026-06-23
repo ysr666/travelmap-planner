@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearRouteCache, saveRouteCache } from './routeCache'
 import {
+  buildTripMapPreviewData,
   buildTripPreviewRouteCacheIdentity,
   fetchTripPreviewRoute,
   selectTripPreviewRoutingConfig,
@@ -33,6 +34,45 @@ const proxyConfig = {
   configured: true,
   source: 'proxy' as const,
 }
+
+describe('trip map preview data', () => {
+  it('summarizes per-day map coverage in day order', () => {
+    const day1 = day('day-1', 1)
+    const day2 = day('day-2', 2)
+    const day3 = day('day-3', 3)
+    const day1FirstMissingCoordinate = {
+      ...item('a', 35.1, 139.1, 1),
+      lat: undefined,
+      lng: undefined,
+      title: '未定位地点',
+    }
+    const day1SecondMapped = { ...item('b', 35.2, 139.2, 2), title: '已定位地点' }
+    const day2Mapped = { ...item('c', 35.3, 139.3, 1), dayId: 'day-2', title: '第二天地点' }
+
+    const data = buildTripMapPreviewData({
+      days: [day2, day3, day1],
+      itemsByDay: {
+        'day-1': [day1SecondMapped, day1FirstMissingCoordinate],
+        'day-2': [day2Mapped],
+      },
+      selectedDay: day3,
+    })
+
+    expect(data.coordinateCount).toBe(2)
+    expect(data.dayCount).toBe(2)
+    expect(data.targetDay?.id).toBe('day-1')
+    expect(data.daySummaries.map((summary) => summary.day.id)).toEqual(['day-1', 'day-2', 'day-3'])
+    expect(data.daySummaries.map((summary) => ({
+      coordinateCount: summary.coordinateCount,
+      firstRecordTitle: summary.firstRecord?.item.title ?? null,
+      itemCount: summary.itemCount,
+    }))).toEqual([
+      { coordinateCount: 1, firstRecordTitle: '已定位地点', itemCount: 2 },
+      { coordinateCount: 1, firstRecordTitle: '第二天地点', itemCount: 1 },
+      { coordinateCount: 0, firstRecordTitle: null, itemCount: 0 },
+    ])
+  })
+})
 
 describe('trip map preview cache identity', () => {
   it('changes on coordinate order mode or provider changes but ignores titles', () => {

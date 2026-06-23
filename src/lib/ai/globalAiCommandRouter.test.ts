@@ -53,6 +53,30 @@ describe('globalAiCommandRouter', () => {
       scrollTargetId: 'smart-trip-workspace-panel',
     })
   })
+
+  it('keeps ordinary questions in a read-only local consultation lane', async () => {
+    const intent = parseGlobalAiCommandIntent('今天接下来应该先确认什么？')
+    expect(intent).toEqual({ kind: 'consultation' })
+
+    const result = await resolveGlobalAiCommand('今天接下来应该先确认什么？', buildContext())
+    expect(result.kind).toBe('consultation')
+    if (result.kind !== 'consultation') return
+    expect(result.title).toBe('只读旅行咨询')
+    expect(result.lines.join(' ')).toContain('只基于「东京旅行」的本地行程数据')
+    expect(result.lines.join(' ')).toContain('如果你要我实际改行程')
+    expect(result.warnings.join(' ')).toContain('没有调用外部 AI')
+  })
+
+  it('keeps explicit trip edit requests on the provider-backed patch-plan lane', async () => {
+    const intent = parseGlobalAiCommandIntent('帮我把户外公园移到下午')
+    expect(intent).toEqual({ kind: 'ai_trip_edit' })
+
+    const result = await resolveGlobalAiCommand('帮我把户外公园移到下午', buildContext())
+    expect(result).toMatchObject({
+      kind: 'ai_trip_edit',
+      title: '生成 AI 修改预览',
+    })
+  })
 })
 
 function buildContext(): GlobalAiCommandContext {

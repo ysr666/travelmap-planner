@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileArchive, HardDrive, Link2, MapPinned, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -15,10 +15,12 @@ import {
   listTicketsByTrip,
   saveTicketBlob,
   updateItineraryItem,
+  updateTicketMeta,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
 import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import { TripNav } from '../components/AppShell'
+import { ActionToolbar } from '../components/ui/ActionToolbar'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -29,12 +31,14 @@ import {
   FIELD_SELECT_CLASS,
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
+import { InlineStatus } from '../components/ui/InlineStatus'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { describeItemTime } from '../lib/itinerary'
 import { buildLedgerExpenseDraftCandidates, type LedgerExpenseDraftCandidate } from '../lib/ledgerExtraction'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import {
+  describeTicketMetaLine,
   formatFileSize,
   formatTicketCreatedAt,
   getTicketDisplayTitle,
@@ -89,8 +93,21 @@ import type {
   Trip,
 } from '../types'
 
-type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
+type TicketFilter =
+  | 'all'
+  | TicketMeta['fileType']
+  | TicketStorageMode
+  | 'item-bound'
+  | 'offline-ready'
+  | 'trip-level'
+  | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
+type TicketEditDraft = {
+  bindingTarget: BindingTarget
+  note: string
+  ticketCategory: TicketCategory
+  title: string
+}
 type StorageEstimateState = {
   usage?: number
   quota?: number
@@ -103,6 +120,8 @@ const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'image', label: '图片' },
   { value: 'pdf', label: 'PDF' },
   { value: 'other', label: '其他' },
+  { value: 'item-bound', label: '行程点' },
+  { value: 'trip-level', label: '旅行级' },
   { value: 'unassigned', label: '未绑定' },
 ]
 
@@ -151,6 +170,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [bindingTarget, setBindingTarget] = useState<BindingTarget>('trip')
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
+  const [editingTicket, setEditingTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
   const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncStateMap>({})
@@ -163,6 +183,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [fileInputKey, setFileInputKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSavingTicketEdit, setIsSavingTicketEdit] = useState(false)
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
   const [ticketBlobActionId, setTicketBlobActionId] = useState<string | null>(null)
   const [ticketIntelligenceActionId, setTicketIntelligenceActionId] = useState<string | null>(null)
@@ -207,9 +228,25 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         return getTicketScope(ticket) === 'unassigned'
       }
 
+      if (filter === 'item-bound') {
+        return getTicketScope(ticket) === 'item' || Boolean(ticket.itemId)
+      }
+
+      if (filter === 'trip-level') {
+        return getTicketScope(ticket) === 'trip'
+      }
+
+      if (filter === 'offline-ready') {
+        return getTicketStorageMode(ticket) === 'copy' && ticketBlobPresence[ticket.id] === true
+      }
+
+      if (filter === 'copy' || filter === 'reference' || filter === 'external') {
+        return getTicketStorageMode(ticket) === filter
+      }
+
       return ticket.fileType === filter
     })
-  }, [filter, tickets])
+  }, [filter, ticketBlobPresence, tickets])
   const ticketLibraryStats = useMemo(
     () => buildTicketLibraryStats(tickets, ticketBlobPresence),
     [ticketBlobPresence, tickets],
@@ -676,6 +713,40 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     }
   }
 
+  function openTicketEditor(ticket: TicketMeta) {
+    setActionError(null)
+    setActionMessage(null)
+    setPreviewTicket(null)
+    setEditingTicket(ticket)
+  }
+
+  async function handleSaveTicketEdit(ticket: TicketMeta, draft: TicketEditDraft) {
+    setActionError(null)
+    setActionMessage(null)
+    setIsSavingTicketEdit(true)
+    try {
+      const itemId = draft.bindingTarget.startsWith('item:') ? draft.bindingTarget.slice(5) : undefined
+      const scope: TicketScope = itemId ? 'item' : (draft.bindingTarget as TicketScope)
+      const result = await updateTicketMeta(ticket.id, {
+        itemId,
+        note: normalizeOptional(draft.note),
+        scope,
+        ticketCategory: draft.ticketCategory,
+        title: normalizeOptional(draft.title),
+      })
+      if (!result) {
+        throw new Error('票据不存在，可能已在其他位置删除。')
+      }
+      setEditingTicket(null)
+      await refreshLibrary()
+      setActionMessage('票据信息已更新。')
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '更新票据信息失败')
+    } finally {
+      setIsSavingTicketEdit(false)
+    }
+  }
+
   function resetForm() {
     setSelectedFile(null)
     setTitle('')
@@ -741,7 +812,11 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
-      <TicketLibraryOverview stats={ticketLibraryStats} />
+      <TicketLibraryOverview
+        activeFilter={filter}
+        onFilterChange={setFilter}
+        stats={ticketLibraryStats}
+      />
 
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-2">
@@ -856,14 +931,14 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         </label>
 
         {actionError ? (
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
+          <InlineStatus role="alert" size="md" tone="error">
             {actionError}
-          </p>
+          </InlineStatus>
         ) : null}
         {actionMessage ? (
-          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
+          <InlineStatus role="status" size="md" tone="success">
             {actionMessage}
-          </p>
+          </InlineStatus>
         ) : null}
 
         <Button
@@ -891,6 +966,21 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
               {option.label}
             </button>
           ))}
+        </div>
+        <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-surface-container px-3 py-2 text-sm ring-1 ring-outline-variant/30" data-testid="ticket-filter-summary">
+          <span className="min-w-0 truncate font-semibold text-on-surface">
+            {getTicketFilterSummary(filter, filteredTickets.length)}
+          </span>
+          {filter !== 'all' ? (
+            <button
+              className="flex size-9 shrink-0 items-center justify-center rounded-full text-primary transition active:scale-95 tm-focus"
+              onClick={() => setFilter('all')}
+              type="button"
+            >
+              <X className="size-4" />
+              <span className="sr-only">清除筛选</span>
+            </button>
+          ) : null}
         </div>
 
         {filteredTickets.length === 0 ? (
@@ -930,6 +1020,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
                         key={ticket.id}
                         onClearCache={() => void handleClearTicketCache(ticket)}
                         onDelete={() => setPendingDeleteTicket(ticket)}
+                        onEdit={() => openTicketEditor(ticket)}
                         onPreview={() => setPreviewTicket(ticket)}
                         onRestoreCache={() => void handleRestoreTicketCache(ticket)}
                         onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
@@ -955,12 +1046,27 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           key={previewTicket.id}
           onChangeTicket={setPreviewTicket}
           onClose={() => setPreviewTicket(null)}
+          onEditTicket={openTicketEditor}
           onIntelligenceSuggestionAction={handleTicketIntelligenceAction}
           onIntelligenceSuggestionIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
           onIntelligenceSuggestionLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
           onIntelligenceSuggestionRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
           ticket={previewTicket}
           tickets={filteredTickets}
+        />
+      ) : null}
+
+      {editingTicket ? (
+        <TicketMetadataEditor
+          bindingOptions={bindingOptions}
+          isSaving={isSavingTicketEdit}
+          onCancel={() => {
+            if (!isSavingTicketEdit) {
+              setEditingTicket(null)
+            }
+          }}
+          onSave={(draft) => void handleSaveTicketEdit(editingTicket, draft)}
+          ticket={editingTicket}
         />
       ) : null}
 
@@ -1006,7 +1112,9 @@ type TicketLibraryStats = {
   cachedCopyCount: number
   copyCount: number
   externalCount: number
+  itemBoundCount: number
   referenceCount: number
+  tripLevelCount: number
   totalCount: number
   unassignedCount: number
 }
@@ -1018,7 +1126,126 @@ type TicketGallerySection = {
   title: string
 }
 
-function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
+function TicketMetadataEditor({
+  bindingOptions,
+  isSaving,
+  onCancel,
+  onSave,
+  ticket,
+}: {
+  bindingOptions: Array<{ id: string; label: string }>
+  isSaving: boolean
+  onCancel: () => void
+  onSave: (draft: TicketEditDraft) => void
+  ticket: TicketMeta
+}) {
+  const [title, setTitle] = useState(ticket.title ?? '')
+  const [ticketCategory, setTicketCategory] = useState<TicketCategory>(ticket.ticketCategory ?? 'other')
+  const [bindingTarget, setBindingTarget] = useState<BindingTarget>(getTicketBindingTarget(ticket))
+  const [note, setNote] = useState(ticket.note ?? '')
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 px-3 py-4 backdrop-blur-sm sm:items-center"
+      data-testid="ticket-metadata-editor"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !isSaving) onCancel()
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-[460px] space-y-4 rounded-2xl bg-surface p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)] ring-1 ring-outline-variant/30 dark:bg-surface-container-high">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{describeTicketMetaLine(ticket)}</p>
+            <h3 className="mt-1 text-lg font-semibold text-on-surface dark:text-on-surface">编辑票据</h3>
+          </div>
+          <button
+            aria-label="关闭编辑"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full tm-chip tm-focus"
+            disabled={isSaving}
+            onClick={onCancel}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <TextField
+          label="显示名称"
+          onChange={setTitle}
+          placeholder={ticket.fileName}
+          value={title}
+        />
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>票据分类</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            onChange={(event) => setTicketCategory(event.target.value as TicketCategory)}
+            value={ticketCategory}
+          >
+            {ticketCategoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>绑定对象</span>
+          <select
+            className={FIELD_SELECT_CLASS}
+            onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
+            value={bindingTarget}
+          >
+            <option value="trip">整个旅行：机票、酒店、保险等</option>
+            <option value="unassigned">不绑定：暂时未分类</option>
+            {bindingOptions.map((option) => (
+              <option key={option.id} value={`item:${option.id}`}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className={FIELD_LABEL_CLASS}>备注</span>
+          <textarea
+            className={`${FIELD_TEXTAREA_CLASS} min-h-24 resize-none`}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="例如：订单号、取票位置、同行人说明"
+            value={note}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button disabled={isSaving} onClick={onCancel} variant="secondary">
+            取消
+          </Button>
+          <Button
+            icon={<Save className="size-4" />}
+            loading={isSaving}
+            onClick={() => onSave({ bindingTarget, note, ticketCategory, title })}
+          >
+            保存修改
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TicketLibraryOverview({
+  activeFilter,
+  onFilterChange,
+  stats,
+}: {
+  activeFilter: TicketFilter
+  onFilterChange: (filter: TicketFilter) => void
+  stats: TicketLibraryStats
+}) {
   return (
     <Card className="space-y-4" data-testid="ticket-library-overview" variant="grouped">
       <div className="flex items-start justify-between gap-3">
@@ -1035,23 +1262,45 @@ function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2 min-[430px]:grid-cols-6">
-        <TicketStat label="文件" value={stats.copyCount} />
-        <TicketStat label="位置" value={stats.referenceCount} />
-        <TicketStat label="链接" value={stats.externalCount} />
-        <TicketStat label="离线" value={stats.cachedCopyCount} />
-        <TicketStat label="未分类" value={stats.unassignedCount} />
-        <TicketStat label="全部" value={stats.totalCount} />
+        <TicketStat active={activeFilter === 'copy'} filter="copy" label="文件" onSelect={onFilterChange} value={stats.copyCount} />
+        <TicketStat active={activeFilter === 'reference'} filter="reference" label="位置" onSelect={onFilterChange} value={stats.referenceCount} />
+        <TicketStat active={activeFilter === 'external'} filter="external" label="链接" onSelect={onFilterChange} value={stats.externalCount} />
+        <TicketStat active={activeFilter === 'offline-ready'} filter="offline-ready" label="离线" onSelect={onFilterChange} value={stats.cachedCopyCount} />
+        <TicketStat active={activeFilter === 'unassigned'} filter="unassigned" label="未分类" onSelect={onFilterChange} value={stats.unassignedCount} />
+        <TicketStat active={activeFilter === 'all'} filter="all" label="全部" onSelect={onFilterChange} value={stats.totalCount} />
       </div>
     </Card>
   )
 }
 
-function TicketStat({ label, value }: { label: string; value: number }) {
+function TicketStat({
+  active,
+  filter,
+  label,
+  onSelect,
+  value,
+}: {
+  active: boolean
+  filter: TicketFilter
+  label: string
+  onSelect: (filter: TicketFilter) => void
+  value: number
+}) {
   return (
-    <div className="min-w-0 rounded-xl bg-surface-container-high px-2 py-3 text-center">
-      <p className="truncate text-[11px] tm-muted">{label}</p>
-      <p className="mt-1 text-lg font-bold text-on-surface dark:text-on-surface">{value}</p>
-    </div>
+    <button
+      aria-pressed={active}
+      className={`min-h-[4.25rem] min-w-0 rounded-xl px-2 py-3 text-center transition active:scale-[0.99] tm-focus ${
+        active
+          ? 'bg-primary-container text-on-primary-container ring-1 ring-primary/20'
+          : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+      }`}
+      data-testid={`ticket-stat-${filter}`}
+      onClick={() => onSelect(filter)}
+      type="button"
+    >
+      <p className={`truncate text-[11px] ${active ? 'text-on-primary-container/90' : 'tm-muted'}`}>{label}</p>
+      <p className={`mt-1 text-lg font-bold ${active ? 'text-on-primary-container' : 'text-on-surface dark:text-on-surface'}`}>{value}</p>
+    </button>
   )
 }
 
@@ -1075,16 +1324,53 @@ function buildTicketLibraryStats(
     }
     if (scope === 'unassigned') {
       stats.unassignedCount += 1
+    } else if (scope === 'item' || ticket.itemId) {
+      stats.itemBoundCount += 1
+    } else {
+      stats.tripLevelCount += 1
     }
     return stats
   }, {
     cachedCopyCount: 0,
     copyCount: 0,
     externalCount: 0,
+    itemBoundCount: 0,
     referenceCount: 0,
+    tripLevelCount: 0,
     totalCount: 0,
     unassignedCount: 0,
   })
+}
+
+function getTicketFilterSummary(filter: TicketFilter, count: number) {
+  return `${getTicketFilterLabel(filter)}：${count} 张`
+}
+
+function getTicketFilterLabel(filter: TicketFilter) {
+  switch (filter) {
+    case 'all':
+      return '全部票据'
+    case 'copy':
+      return '保存票据文件'
+    case 'reference':
+      return '仅记录位置'
+    case 'external':
+      return '外部链接'
+    case 'image':
+      return '图片票据'
+    case 'pdf':
+      return 'PDF 票据'
+    case 'other':
+      return '其他文件'
+    case 'item-bound':
+      return '行程点票据'
+    case 'offline-ready':
+      return '此设备离线可用'
+    case 'trip-level':
+      return '旅行级票据'
+    case 'unassigned':
+      return '未分类票据'
+  }
 }
 
 function buildTicketGallerySections(
@@ -1137,6 +1423,7 @@ function TicketCard({
   syncView,
   onClearCache,
   onPreview,
+  onEdit,
   onDelete,
   onRestoreCache,
   onRetryUpload,
@@ -1148,6 +1435,7 @@ function TicketCard({
   syncView: TicketCloudSyncView
   onClearCache: () => void
   onPreview: () => void
+  onEdit: () => void
   onDelete: () => void
   onRestoreCache: () => void
   onRetryUpload: () => void
@@ -1201,13 +1489,22 @@ function TicketCard({
         </span>
       </button>
 
-      <div className="mt-2 flex items-center justify-between gap-2 border-t tm-row pt-2">
+      <ActionToolbar align="between" ariaLabel={`${displayTitle} 操作`} className="mt-2 border-t tm-row pt-2">
         <button
           className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
           type="button"
         >
           查看
+        </button>
+        <button
+          aria-label={`编辑${displayTitle}`}
+          className="flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-sky-50 active:text-sky-700 tm-focus dark:text-on-surface-variant dark:active:bg-sky-950/35 dark:active:text-sky-300"
+          onClick={onEdit}
+          type="button"
+        >
+          <Pencil className="size-3.5" />
+          编辑
         </button>
         <button
           aria-label={`删除${displayTitle}`}
@@ -1218,10 +1515,10 @@ function TicketCard({
           <Trash2 className="size-3.5" />
           删除
         </button>
-      </div>
+      </ActionToolbar>
 
       {canClearCache || canRestoreCache || canRetryUpload ? (
-        <div className="mt-2 flex flex-wrap gap-1.5 border-t tm-row pt-2">
+        <ActionToolbar ariaLabel={`${displayTitle} 缓存操作`} className="mt-2 gap-1.5 border-t tm-row pt-2">
           {canClearCache ? (
             <button
               className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
@@ -1255,7 +1552,7 @@ function TicketCard({
               重试上传
             </button>
           ) : null}
-        </div>
+        </ActionToolbar>
       ) : null}
     </Card>
   )
@@ -1314,9 +1611,9 @@ function ReferenceTicketFields({
         required
         value={location}
       />
-      <p className="rounded-xl bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
+      <InlineStatus tone="warning">
         旅图只记录这个文件的位置说明，不保存文件内容，也不能直接打开本地路径。请按你填写的位置到“文件”App、网盘或相册中查找。
-      </p>
+      </InlineStatus>
     </div>
   )
 }
@@ -1467,6 +1764,15 @@ function describeTicketBinding(ticket: TicketMeta, itemById: Map<string, Itinera
   }
 
   return ticketScopeLabels[scope]
+}
+
+function getTicketBindingTarget(ticket: TicketMeta): BindingTarget {
+  const scope = getTicketScope(ticket)
+  if (scope === 'item') {
+    return ticket.itemId ? `item:${ticket.itemId}` : 'unassigned'
+  }
+
+  return scope
 }
 
 function normalizeOptional(value: string) {

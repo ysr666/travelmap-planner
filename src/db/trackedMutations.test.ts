@@ -13,9 +13,12 @@ import {
   createTrip,
   deleteTripCascade,
   getTicketMeta,
+  getItineraryItem,
   importTripPlanRecords,
+  reorderDayItems,
   saveTicketBlob,
   setItineraryItemExecutionState,
+  updateTicketMeta,
   updateItineraryItem,
 } from './index'
 import {
@@ -90,6 +93,72 @@ describe('tracked db mutations', () => {
     })
   })
 
+  it('queues ticket and item upserts after a metadata rebind', async () => {
+    const trip = await createTrip({
+      destination: '日本东京',
+      endDate: '2026-04-03',
+      startDate: '2026-04-01',
+      title: '东京',
+    })
+    const day = await createDay({
+      date: '2026-04-01',
+      sortOrder: 1,
+      title: '第一天',
+      tripId: trip.id,
+    })
+    const first = await createItineraryItem({
+      dayId: day.id,
+      sortOrder: 1,
+      ticketIds: [],
+      title: '浅草寺',
+      tripId: trip.id,
+    })
+    const second = await createItineraryItem({
+      dayId: day.id,
+      sortOrder: 2,
+      ticketIds: [],
+      title: '东京塔',
+      tripId: trip.id,
+    })
+    const ticket = await createTicketMeta({
+      fileName: 'order.pdf',
+      fileType: 'pdf',
+      itemId: first.id,
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 3,
+      storageMode: 'reference',
+      title: '旧订单',
+      tripId: trip.id,
+    })
+    await updateItineraryItem(first.id, { ticketIds: [ticket.id] })
+    await db.syncOutbox.clear()
+
+    const result = await updateTicketMeta(ticket.id, {
+      itemId: second.id,
+      note: '改绑到东京塔',
+      scope: 'item',
+      ticketCategory: 'admission_ticket',
+      title: '东京塔门票',
+    })
+
+    expect(result?.ticket).toMatchObject({
+      id: ticket.id,
+      itemId: second.id,
+      note: '改绑到东京塔',
+      title: '东京塔门票',
+    })
+    await expect(getItineraryItem(first.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('ticket-updated')
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectId: ticket.id, objectType: 'ticket_meta', operation: 'upsert' }),
+      expect.objectContaining({ objectId: first.id, objectType: 'item', operation: 'upsert' }),
+      expect.objectContaining({ objectId: second.id, objectType: 'item', operation: 'upsert' }),
+    ]))
+  })
+
   it('queues object upserts for trip, day and item writes', async () => {
     const trip = await createTrip({
       destination: '日本东京',
@@ -129,6 +198,23 @@ describe('tracked db mutations', () => {
     expect(outbox).toHaveLength(1)
     expect(outbox[0]).toMatchObject({ objectId: item.id, objectType: 'item', operation: 'upsert' })
     expect(outbox[0].payload).toMatchObject({ executionState: { status: 'completed', updatedAt: 123 } })
+  })
+
+  it('queues changed items after an atomic day reorder and records one trip write', async () => {
+    const trip = await createTrip({ destination: '东京', endDate: '2026-06-13', startDate: '2026-06-13', title: '东京' })
+    const day = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const first = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: '浅草寺', tripId: trip.id })
+    const second = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: '东京塔', tripId: trip.id })
+    const third = await createItineraryItem({ dayId: day.id, sortOrder: 3, ticketIds: [], title: '银座', tripId: trip.id })
+    await db.syncOutbox.clear()
+
+    const changed = await reorderDayItems(day.id, [third.id, first.id, second.id])
+
+    expect(changed.map((item) => item.id).sort()).toEqual([first.id, second.id, third.id].sort())
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('items-reordered')
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox).toHaveLength(3)
+    expect(outbox.every((entry) => entry.objectType === 'item' && entry.operation === 'upsert')).toBe(true)
   })
 
   it('tracks every owner-only ledger object and cascades it with the trip', async () => {

@@ -1,7 +1,7 @@
 import { db } from './database'
 import Dexie from 'dexie'
 import { createId } from './ids'
-import { sortItineraryItems } from '../lib/itinerary'
+import { sortItineraryItems, sortItineraryItemsByPlanOrder } from '../lib/itinerary'
 import type {
   Day,
   ItineraryItem,
@@ -11,6 +11,7 @@ import type {
   LedgerSettings,
   TicketBlob,
   TicketMeta,
+  TicketScope,
   TripDisruptionEvent,
   TripReplanRecord,
   Trip,
@@ -28,6 +29,17 @@ type UpdateItineraryItemPatch = Partial<
 >
 
 type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
+type UpdateTicketMetaInput = {
+  itemId?: string
+  note?: string
+  scope: TicketScope
+  ticketCategory?: TicketMeta['ticketCategory']
+  title?: string
+}
+type UpdateTicketMetaResult = {
+  changedItems: ItineraryItem[]
+  ticket: TicketMeta
+}
 type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
 type CreateTripReplanRecordInput = Omit<TripReplanRecord, 'id' | 'createdAt' | 'updatedAt'>
@@ -214,7 +226,7 @@ export async function listItemsByDay(dayId: string) {
     .where('[dayId+sortOrder]')
     .between([dayId, DexieMinKey], [dayId, DexieMaxKey])
     .toArray()
-  return sortItineraryItems(items)
+  return sortItineraryItemsByPlanOrder(items)
 }
 
 export async function listItemsByTrip(tripId: string) {
@@ -242,6 +254,60 @@ export async function updateItineraryItem(itemId: string, patch: UpdateItinerary
   })
 
   return getItineraryItem(itemId)
+}
+
+export async function reorderDayItems(
+  dayId: string,
+  orderedItemIds: string[],
+  expectedCurrentItemIds?: string[],
+) {
+  if (new Set(orderedItemIds).size !== orderedItemIds.length) {
+    throw new Error('排序列表包含重复行程点。')
+  }
+  if (expectedCurrentItemIds && new Set(expectedCurrentItemIds).size !== expectedCurrentItemIds.length) {
+    throw new Error('排序基线包含重复行程点。')
+  }
+
+  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
+    const day = await db.days.get(dayId)
+    if (!day) {
+      throw new Error('当天行程不存在。')
+    }
+
+    const currentItems = sortItineraryItemsByPlanOrder(await db.itineraryItems.where('dayId').equals(dayId).toArray())
+    const currentItemIds = new Set(currentItems.map((item) => item.id))
+    if (
+      currentItems.length !== orderedItemIds.length
+      || orderedItemIds.some((itemId) => !currentItemIds.has(itemId))
+    ) {
+      throw new Error('排序列表与当前行程不一致，请刷新后重试。')
+    }
+    if (
+      expectedCurrentItemIds
+      && (
+        expectedCurrentItemIds.length !== currentItems.length
+        || expectedCurrentItemIds.some((itemId, index) => itemId !== currentItems[index]?.id)
+      )
+    ) {
+      throw new Error('当天顺序已在其他位置更新，请刷新后重试。')
+    }
+
+    const itemById = new Map(currentItems.map((item) => [item.id, item]))
+    const updatedAt = Date.now()
+    const changedItems = orderedItemIds.flatMap((itemId, index) => {
+      const item = itemById.get(itemId)
+      if (!item || item.sortOrder === index + 1) return []
+      return [{ ...item, sortOrder: index + 1, updatedAt }]
+    })
+
+    if (changedItems.length === 0) {
+      return []
+    }
+
+    await db.itineraryItems.bulkPut(changedItems)
+    await db.trips.update(day.tripId, { updatedAt })
+    return changedItems
+  })
 }
 
 export async function deleteItineraryItemCascade(itemId: string) {
@@ -313,6 +379,67 @@ export async function listTicketsByTrip(tripId: string) {
 export async function listTicketsByItem(itemId: string) {
   const tickets = await db.ticketMetas.where('itemId').equals(itemId).toArray()
   return tickets.sort((first, second) => second.createdAt - first.createdAt)
+}
+
+export async function updateTicketMeta(
+  ticketId: string,
+  input: UpdateTicketMetaInput,
+): Promise<UpdateTicketMetaResult | undefined> {
+  return db.transaction(
+    'rw',
+    db.ticketMetas,
+    db.itineraryItems,
+    db.trips,
+    async () => {
+      const ticket = await db.ticketMetas.get(ticketId)
+      if (!ticket) return undefined
+
+      const now = Date.now()
+      const nextItemId = input.scope === 'item' ? input.itemId : undefined
+
+      if (input.scope === 'item' && !nextItemId) {
+        throw new Error('请选择要绑定的行程点。')
+      }
+
+      const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
+      const targetItem = nextItemId ? tripItems.find((item) => item.id === nextItemId) : undefined
+      if (nextItemId && !targetItem) {
+        throw new Error('绑定的行程点不存在。')
+      }
+
+      const changedItems = tripItems.flatMap((item) => {
+        const ticketIds = item.ticketIds ?? []
+        const hasTicket = ticketIds.includes(ticket.id)
+        const shouldHaveTicket = item.id === nextItemId
+        if (hasTicket === shouldHaveTicket) return []
+        return [{
+          ...item,
+          ticketIds: shouldHaveTicket
+            ? [...ticketIds, ticket.id]
+            : ticketIds.filter((id) => id !== ticket.id),
+          updatedAt: now,
+        }]
+      })
+
+      const nextTicket: TicketMeta = {
+        ...ticket,
+        itemId: nextItemId,
+        note: input.note,
+        scope: input.scope,
+        ticketCategory: input.ticketCategory,
+        title: input.title,
+        updatedAt: now,
+      }
+
+      await db.ticketMetas.put(nextTicket)
+      if (changedItems.length > 0) {
+        await db.itineraryItems.bulkPut(changedItems)
+      }
+      await db.trips.update(ticket.tripId, { updatedAt: now })
+
+      return { changedItems, ticket: nextTicket }
+    },
+  )
 }
 
 export async function deleteTicket(ticketId: string) {

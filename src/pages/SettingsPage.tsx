@@ -30,6 +30,7 @@ import {
   FIELD_SELECT_CLASS,
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
+import { InlineStatus } from '../components/ui/InlineStatus'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import {
@@ -82,6 +83,12 @@ import {
 } from '../lib/travelProfile'
 import type { AppearanceMode } from '../lib/appearance'
 import { useAppearance } from '../lib/appearanceContext'
+import { usePwaLifecycleState } from '../hooks/usePwaLifecycleState'
+import {
+  applyPendingPwaUpdate,
+  getPwaLifecycleStatusLabel,
+  type PwaLifecycleStatus,
+} from '../lib/pwaLifecycle'
 import { listTrips } from '../db/repositories'
 import {
   clearSyncedTicketBlobCachesForTrip,
@@ -220,6 +227,7 @@ const aiPrivacyGroups: Array<{
 
 export function SettingsPage() {
   const { mode: appearanceMode, resolvedMode, setMode: setAppearanceMode } = useAppearance()
+  const pwaLifecycle = usePwaLifecycleState()
   const routeParams = getRouteParams()
   const shouldOpenCloudBackup = routeParams.get('section') === 'cloud'
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -257,6 +265,8 @@ export function SettingsPage() {
   const [autoExpenseAiEnabled, setAutoExpenseAiEnabled] = useState(() => getStoredAccountAiPreferences().autoExpenseAiEnabled)
   const [autoExpenseAiBusy, setAutoExpenseAiBusy] = useState(false)
   const [autoExpenseAiMessage, setAutoExpenseAiMessage] = useState('')
+  const [isApplyingPwaUpdate, setIsApplyingPwaUpdate] = useState(false)
+  const [pwaUpdateMessage, setPwaUpdateMessage] = useState('')
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -555,6 +565,19 @@ export function SettingsPage() {
     }
   }
 
+  async function handleApplyPwaUpdate() {
+    setIsApplyingPwaUpdate(true)
+    setPwaUpdateMessage('')
+    try {
+      const applied = await applyPendingPwaUpdate()
+      setPwaUpdateMessage(applied ? '正在应用新版本。' : '当前没有可应用的新版本。')
+    } catch {
+      setPwaUpdateMessage('更新失败，请稍后重新打开应用。')
+    } finally {
+      setIsApplyingPwaUpdate(false)
+    }
+  }
+
   async function handleRouteCacheMaxBytesChange(bytes: number) {
     setIsUpdatingRouteCacheLimit(true)
     setRouteCacheError(null)
@@ -676,12 +699,21 @@ export function SettingsPage() {
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">可添加到 iPhone 主屏幕</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">
-                在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。安装后的应用会自动更新到新版本；如果页面异常，可以关闭后重新打开。
+                在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。发现新版本后，应用会先提示再重启。
               </p>
             </div>
           </div>
 
           <div className="grid gap-2">
+            <InfoPill
+              icon={<RefreshCw className="size-4" />}
+              text={`应用更新：${getPwaLifecycleStatusLabel(pwaLifecycle.status)}`}
+              tone={getPwaLifecycleTone(pwaLifecycle.status)}
+            />
+            <InfoPill
+              icon={<Smartphone className="size-4" />}
+              text={`当前版本：v${pwaLifecycle.appVersion}`}
+            />
             <InfoPill
               icon={isOnline ? <Wifi className="size-4" /> : <WifiOff className="size-4" />}
               text={isOnline ? '当前在线' : '当前离线'}
@@ -697,6 +729,30 @@ export function SettingsPage() {
               tone="warning"
             />
           </div>
+
+          {pwaLifecycle.message ? (
+            <InlineStatus tone={pwaLifecycle.status === 'error' ? 'error' : 'neutral'}>
+              {pwaLifecycle.message}
+            </InlineStatus>
+          ) : null}
+
+          {pwaLifecycle.status === 'update-ready' ? (
+            <Button
+              className="w-full"
+              icon={<RefreshCw className="size-4" />}
+              loading={isApplyingPwaUpdate}
+              onClick={() => void handleApplyPwaUpdate()}
+              variant="secondary"
+            >
+              更新并重启
+            </Button>
+          ) : null}
+
+          {pwaUpdateMessage ? (
+            <InlineStatus role="status" tone="success">
+              {pwaUpdateMessage}
+            </InlineStatus>
+          ) : null}
         </Card>
       </section>
 
@@ -1364,20 +1420,10 @@ function getRoutingConfigLabel(config: RoutingConfig) {
 }
 
 function StatusMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {
-  const styles =
-    tone === 'error'
-      ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300'
-      : 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/35 dark:text-emerald-300'
-  const Icon = tone === 'error' ? AlertTriangle : CheckCircle2
-
   return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${styles}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-    >
-      <Icon className="mt-0.5 size-4 shrink-0" />
-      <p className="min-w-0 break-words leading-6 [overflow-wrap:anywhere]">{message}</p>
-    </div>
+    <InlineStatus role={tone === 'error' ? 'alert' : 'status'} size="md" tone={tone}>
+      {message}
+    </InlineStatus>
   )
 }
 
@@ -1697,6 +1743,18 @@ function getPersistenceDetail(isSupported: boolean, persisted: boolean | null) {
   }
 
   return '持久化存储状态未知'
+}
+
+function getPwaLifecycleTone(status: PwaLifecycleStatus): 'neutral' | 'success' | 'warning' {
+  if (status === 'registered' || status === 'offline-ready') {
+    return 'success'
+  }
+
+  if (status === 'error' || status === 'unsupported' || status === 'update-ready') {
+    return 'warning'
+  }
+
+  return 'neutral'
 }
 
 function formatStorageSize(size?: number) {

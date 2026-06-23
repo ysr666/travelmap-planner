@@ -172,7 +172,8 @@ function formatUrlForDiagnostics(value: string) {
 }
 
 function isIgnorableLocalRequestFailure(path: string, errorText: string) {
-  return path === '/favicon.svg' && errorText.includes('ERR_ABORTED')
+  if (!errorText.includes('ERR_ABORTED')) return false
+  return path === '/favicon.svg' || /^\/assets\/workbox-window\.prod\.es5-.+\.js$/.test(path)
 }
 
 async function waitForStableMobilePage(page: Page) {

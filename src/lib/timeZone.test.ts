@@ -91,6 +91,27 @@ describe('time zone helpers', () => {
     expect(range.isChronologicallyValid).toBe(true)
   })
 
+  it('falls back invalid item time zones and end dates to day semantics', () => {
+    const range = resolveItemTimeRange({
+      day: { ...day, date: '2026-06-10', timeZone: 'Asia/Tokyo' },
+      item: {
+        endDate: '2026-02-30',
+        endTime: '10:00',
+        endTimeZone: 'Invalid/Zone',
+        startTime: '09:00',
+        startTimeZone: 'Mars/Phobos',
+      },
+      trip: { ...trip, timeZone: 'Europe/London' },
+    })
+
+    expect(range.startTimeZone).toBe('Asia/Tokyo')
+    expect(range.endDate).toBe('2026-06-10')
+    expect(range.endTimeZone).toBe('Asia/Tokyo')
+    expect(range.startEpochMs).toBe(Date.parse('2026-06-10T00:00:00.000Z'))
+    expect(range.endEpochMs).toBe(Date.parse('2026-06-10T01:00:00.000Z'))
+    expect(range.isChronologicallyValid).toBe(true)
+  })
+
   it('looks up IANA time zones from coordinates', async () => {
     await expect(lookupTimeZoneFromCoordinates(51.5074, -0.1278)).resolves.toBe('Europe/London')
   })

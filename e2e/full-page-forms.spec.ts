@@ -39,6 +39,24 @@ async function getDemoIds(page: import('@playwright/test').Page, tripId: string)
   }, tripId)
 }
 
+async function readDayOrder(page: import('@playwright/test').Page, dayId: string) {
+  return page.evaluate(async (targetDayId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = db.transaction('itineraryItems', 'readonly')
+    const request = transaction.objectStore('itineraryItems').index('dayId').getAll(targetDayId)
+    const items = await new Promise<Array<{ id: string; sortOrder: number }>>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return items.sort((first, second) => first.sortOrder - second.sortOrder).map((item) => item.id)
+  }, dayId)
+}
+
 test('新建旅行页面可以创建旅行并跳转到工作台', async ({ page }) => {
   await clearTravelDatabase(page)
 
@@ -124,6 +142,31 @@ test('编辑行程点页面可以修改并保存', async ({ page }) => {
   await page.getByRole('button', { name: '保存修改' }).click()
 
   await expect(page).toHaveURL(/#\/item\?tripId=/)
+})
+
+test('日程排序模式在 390px 下预览并原子保存顺序', async ({ page }) => {
+  await createDemoTripViaUi(page)
+  const dayId = new URLSearchParams(page.url().split('?')[1] ?? '').get('dayId')
+  expect(dayId).toBeTruthy()
+  const before = await readDayOrder(page, dayId!)
+  expect(before.length).toBeGreaterThan(1)
+
+  const timeline = page.getByTestId('day-timeline')
+  await timeline.getByRole('button', { name: '排序' }).click()
+  await expect(timeline).toContainText('这里只调整浏览和路线顺序')
+  await expectNoHorizontalOverflow(page)
+
+  const firstOrderItem = timeline.getByTestId('day-order-item').first()
+  const firstTitle = (await firstOrderItem.locator('h3').textContent())?.trim()
+  const secondTitle = (await timeline.getByTestId('day-order-item').nth(1).locator('h3').textContent())?.trim()
+  expect(firstTitle).toBeTruthy()
+  expect(secondTitle).toBeTruthy()
+  await timeline.getByRole('button', { name: `下移${firstTitle}` }).click()
+  await timeline.getByRole('button', { name: '保存' }).click()
+
+  await expect(timeline).toContainText('当天顺序已保存')
+  await expect(timeline.getByTestId('day-timeline-item').first().locator('h3')).toHaveText(secondTitle!)
+  await expect.poll(() => readDayOrder(page, dayId!)).toEqual([before[1], before[0], ...before.slice(2)])
 })
 
 test('缺少参数时显示错误并可返回', async ({ page }) => {

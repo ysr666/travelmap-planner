@@ -29,6 +29,11 @@
 - Package 7、生产权限加固与 Companion owner policy 前向修复已部署；Companion 与真实双设备生产 smoke 完整通过，覆盖 A 上传、B 全新恢复、latest-wins 与 tombstone 传播。
 - PR1-PR3 Limited Beta 基础收口完成：全局登录与账号隔离、Phase 12F 时间语义、Provider 生产运营加固均已进入主线；Provider D1 migration、Pages env、maintenance Worker 和 production smoke 已完成。
 - PR4 QA/文档/治理分支新增桌面 1440x900 smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 模板。
+- Phase 13A：Trip Home 全程地图概览入口优化完成第一轮，地图预览下方提供按天坐标覆盖、Day Map 入口和首个有坐标地点入口。
+- Phase 13B：Day View marker 卡片交互完成第一轮，卡片提供站点 rail、明确详情 CTA、上一/下一站和与全局 AI 输入条错位的安全位置。
+- Phase 13C：全局 AI 输入咨询模式完成第一轮，普通问答留在本地只读咨询，明确修改才进入 provider-backed patch plan 和二次确认。
+- Phase 14A：Item Detail 现场行动区完成第一轮，详情页顶部整合时间、前后站、外部地图/路线、坐标状态和绑定票据入口。
+- Phase 16A：Ticket Library 现场筛选完成第一轮，票据总览数字可直接筛选文件、位置、链接、离线可用、未分类和全部票据。
 
 当前 canonical routes：
 
@@ -48,15 +53,15 @@
 
 ## 不要误判为完成
 
-- Trip Home 主建议层级已收敛；全旅行地图概览仍待继续优化。
-- Day View 已有 marker card 初版；后续仍需把 marker → 轻卡片 → Item Detail 现场路径做得更顺。
-- Item Detail 仍需变成旅行现场查看页。
-- Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
+- Trip Home 主建议层级已收敛；全旅行地图概览入口已完成第一轮，后续可继续做视觉 QA 和更丰富地图 provider 能力。
+- Day View marker → 轻卡片 → Item Detail 现场路径已完成第一轮；后续可继续做真实设备视觉 QA 和更丰富现场信息布局。
+- Item Detail 已完成现场行动区第一轮；后续仍可继续做真实设备视觉 QA、票据紧凑展示和更高级跨时区解释。
+- Ticket Library 已升级为票据画廊、元数据编辑器和现场筛选第一轮；后续仍可继续做全屏票据预览器和更细的票据分类。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
-- Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正和跨日交通解析已进入主路径。后续功能必须复用这些边界。
+- Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正、Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已进入主路径。后续功能必须复用这些边界，未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
-- AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
-- AI trip edit 当前只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
+- Web search 只允许在用户确认后的受限 AI Trip Edit 搜索意图中作为 source-bearing 辅助；没有来源就不声明实时营业时间、票价、交通、天气、评价、活动或网页事实。
+- 全局 AI 输入已有本地只读咨询 / 本地重排预览 / 账本摘要 / provider-backed patch plan 分流；它仍不是多轮聊天助手，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 后续路线图
 
@@ -64,10 +69,12 @@
 
 - Phase 12D：Home 与全局视觉纠偏。✅ 已完成。
 - Phase 12E：Full-page form 布局修复与输入体验 QA。✅ 已完成。
-- Phase 13A：Trip Home 地图概览与入口优化。Trip Home 成为真正旅行首页，而不是纯 overview。
-- Phase 13B：Day View 地图点卡片交互。点击 marker 显示轻量卡片，点击卡片进入 Item Detail。
-- Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。
-- Phase 16A/B/C：Ticket Library 2.0、全屏票据预览器、Item Detail 票据紧凑展示。
+- Phase 13A：Trip Home 地图概览与入口优化。✅ 已完成第一轮。
+- Phase 13B：Day View 地图点卡片交互。✅ 已完成第一轮。
+- Phase 13C：全局 AI 咨询模式。✅ 已完成第一轮。
+- Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。✅ 已完成第一轮。
+- Phase 16A：Ticket Library 2.0 现场筛选。✅ 已完成第一轮。
+- Phase 16B/C：全屏票据预览器、Item Detail 票据紧凑展示。
 
 ### 2. SwiftUI-like design system
 
@@ -98,8 +105,8 @@
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
 - Unified Trip Intelligence 基础与上下文接入已完成；后续执行扩展必须复用统一 executor / appliedChanges，不为 Ledger、Document 或 Shared Trip 新建平行中心。
-- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation。
-- 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
+- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation，以及全局 AI 输入的本地只读咨询 / 本地 confirmable action / provider-backed patch plan 分流。
+- 当前限制：不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 只在用户确认后的 AI Trip Edit 搜索意图中作为 source-bearing 辅助，不是通用实时来源。
 - AI draft 只生成 / 修复 draft preview；AI trip edit 只生成 patch plan preview。地点、坐标、路线、交通时间、票据绑定和本地写入必须由用户确认。
 
 ### 7. AI-first future work
@@ -138,7 +145,7 @@
 
 - 用户可见文案保持中文。
 - IndexedDB 仍是此设备离线缓存与首写层。
-- 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；在 schema 设计完成前不要新增半套 timezone 字段。
+- 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；基础 timezone 字段已存在，后续不要新增半套字段、自动回填历史数据或静默截断 ISO datetime。
 - Supabase 是账号数据同步，不是实时表同步；当前优先同步 Trip / Day / Item / TicketMeta 对象和 copy 票据 Blob。
 - 同步采用 pull-before-push 增量对象同步；不同对象和不同字段可自动合并，同一字段双边修改时提示用户选择字段版本。
 - 设置页只做轻量同步队列摘要和登录后同步方向提示，不暴露 snapshot 路径或 Storage 细节。

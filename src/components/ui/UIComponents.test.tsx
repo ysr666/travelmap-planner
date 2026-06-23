@@ -3,11 +3,13 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ActionToolbar } from './ActionToolbar'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
 import { Card } from './Card'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EmptyState } from './EmptyState'
+import { InlineStatus } from './InlineStatus'
 import { ListRow } from './ListRow'
 import { SectionHeader } from './SectionHeader'
 import { SkeletonLine } from './SkeletonLine'
@@ -271,6 +273,65 @@ describe('Card', () => {
     const card = container?.querySelector('[data-testid="card"]')
     expect(card?.className).toContain('px-6')
     expect(card?.className).not.toContain('p-4')
+  })
+})
+
+describe('ActionToolbar', () => {
+  it('groups related actions when labelled', async () => {
+    await act(async () => {
+      root?.render(
+        <ActionToolbar align="between" ariaLabel="日程操作">
+          <button type="button">编辑</button>
+          <button type="button">删除</button>
+        </ActionToolbar>,
+      )
+    })
+    const group = container?.querySelector('[role="group"]')
+    expect(group?.getAttribute('aria-label')).toBe('日程操作')
+    expect(group?.className).toContain('justify-between')
+  })
+
+  it('renders as a plain toolbar when no explicit label is needed', async () => {
+    await act(async () => {
+      root?.render(
+        <ActionToolbar align="end">
+          <button type="button">保存</button>
+        </ActionToolbar>,
+      )
+    })
+    const toolbar = container?.querySelector('div')
+    expect(toolbar?.getAttribute('role')).toBeNull()
+    expect(toolbar?.className).toContain('justify-end')
+  })
+})
+
+describe('InlineStatus', () => {
+  it('renders alert text with error tone', async () => {
+    await act(async () => {
+      root?.render(
+        <InlineStatus role="alert" tone="error">
+          保存失败
+        </InlineStatus>,
+      )
+    })
+    const alert = container?.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('保存失败')
+    expect(alert?.className).toContain('border-red-100')
+  })
+
+  it('uses a decorative icon and medium sizing', async () => {
+    await act(async () => {
+      root?.render(
+        <InlineStatus size="md" tone="success">
+          已保存
+        </InlineStatus>,
+      )
+    })
+    const icon = container?.querySelector('[aria-hidden="true"]')
+    const status = container?.firstElementChild
+    expect(icon).toBeTruthy()
+    expect(status?.className).toContain('text-sm')
+    expect(status?.textContent).toContain('已保存')
   })
 })
 

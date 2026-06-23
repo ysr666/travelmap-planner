@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test'
 
 export async function clearTravelDatabase(page: Page) {
   await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     window.localStorage.removeItem('tripmap:e2e:cloud-fixture')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:enabled')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:state')
@@ -24,10 +24,19 @@ export async function clearTravelDatabase(page: Page) {
       })
     }
 
-    return Promise.all([
+    const registrations = 'serviceWorker' in navigator
+      ? await navigator.serviceWorker.getRegistrations()
+      : []
+    await Promise.all(registrations.map((registration) => registration.unregister()))
+    if ('caches' in window) {
+      const cacheNames = await caches.keys()
+      await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)))
+    }
+
+    await Promise.all([
       deleteDatabase('TravelConsoleDB'),
       deleteDatabase('TripMapRouteCacheDB'),
-    ]).then(() => undefined)
+    ])
   })
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })

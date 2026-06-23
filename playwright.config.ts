@@ -3,6 +3,8 @@ import { cpus } from 'node:os'
 
 const playwrightProxy = process.env.PLAYWRIGHT_PROXY?.trim()
 const playwrightChannel = process.env.PLAYWRIGHT_CHANNEL?.trim()
+const playwrightPort = resolvePort()
+const playwrightBaseUrl = `http://127.0.0.1:${playwrightPort}`
 const playwrightWorkers = resolveWorkerCount()
 const reuseExistingServer = !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER === '1'
 
@@ -12,7 +14,7 @@ export default defineConfig({
   workers: playwrightWorkers,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: playwrightBaseUrl,
     trace: 'on-first-retry',
     ...(playwrightChannel ? { channel: playwrightChannel } : {}),
     ...(playwrightProxy ? {
@@ -23,8 +25,8 @@ export default defineConfig({
     } : {}),
   },
   webServer: {
-    command: 'VITE_E2E_AUTH_BYPASS=1 npm run build && npm run preview -- --host 127.0.0.1',
-    url: 'http://127.0.0.1:4173',
+    command: `VITE_E2E_AUTH_BYPASS=1 npm run build && npm run preview -- --host 127.0.0.1 --port ${playwrightPort}`,
+    url: playwrightBaseUrl,
     reuseExistingServer,
     timeout: 120_000,
   },
@@ -51,6 +53,18 @@ export default defineConfig({
     },
   ],
 })
+
+function resolvePort() {
+  const explicitPort = Number.parseInt(
+    process.env.PLAYWRIGHT_PORT?.trim() || process.env.E2E_PORT?.trim() || '',
+    10,
+  )
+  if (Number.isInteger(explicitPort) && explicitPort > 0 && explicitPort <= 65535) {
+    return explicitPort
+  }
+
+  return 4173
+}
 
 function resolveWorkerCount() {
   const explicitWorkers = Number.parseInt(

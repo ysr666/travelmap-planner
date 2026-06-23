@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, Pencil, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
 import {
   describeTicketMetaLine,
@@ -26,6 +26,7 @@ type TicketPreviewProps = {
   ticket: TicketMeta
   onClose: () => void
   onChangeTicket?: (ticket: TicketMeta) => void
+  onEditTicket?: (ticket: TicketMeta) => void
   tickets?: TicketMeta[]
 }
 
@@ -50,6 +51,7 @@ export function TicketPreview({
   ticket,
   onClose,
   onChangeTicket,
+  onEditTicket,
   tickets,
 }: TicketPreviewProps) {
   const storageMode = getTicketStorageMode(ticket)
@@ -390,6 +392,18 @@ export function TicketPreview({
                 </div>
               ))}
             </div>
+          ) : null}
+
+          {onEditTicket ? (
+            <button
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-3 text-sm font-semibold text-white ring-1 ring-white/10 active:scale-[0.98]"
+              data-testid="ticket-preview-edit"
+              onClick={() => onEditTicket(ticket)}
+              type="button"
+            >
+              <Pencil className="size-4" />
+              编辑票据
+            </button>
           ) : null}
 
           {storageMode === 'copy' ? (

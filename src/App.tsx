@@ -3,10 +3,17 @@ import { AppShell } from './components/AppShell'
 import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { PwaLifecycleController } from './components/PwaLifecycleController'
 import { Card } from './components/ui/Card'
 import { getTrip } from './db'
 import { subscribeTravelDataChanged } from './lib/dataEvents'
-import { getCanonicalHashRedirect, getRouteParams, routeFromHash } from './lib/routes'
+import {
+  clearTripNavigationContext,
+  getTripNavigationTarget,
+  readTripNavigationContext,
+  recordTripNavigationContext,
+} from './lib/navigationContext'
+import { getCanonicalHashRedirect, routeFromHash } from './lib/routes'
 import type { RouteId } from './types'
 import { HomePage } from './pages/HomePage'
 
@@ -67,6 +74,7 @@ const SettingsRoutePage = lazy(() =>
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
   const [shellTitle, setShellTitle] = useState(DEFAULT_SHELL_TITLE)
+  const [lastTripId, setLastTripId] = useState(() => readTripNavigationContext()?.tripId ?? null)
   const activeRoute: RouteId = routeFromHash(currentHash)
 
   useEffect(() => {
@@ -92,23 +100,31 @@ function App() {
   useEffect(() => {
     let cancelled = false
 
-    async function refreshShellTitle() {
-      if (activeRoute !== 'trip') {
-        setShellTitle(DEFAULT_SHELL_TITLE)
-        return
-      }
-
-      const tripId = getRouteParams(currentHash).get('tripId')
-      if (!tripId) {
-        setShellTitle(DEFAULT_SHELL_TITLE)
+    async function refreshTripContext() {
+      const routeTarget = getTripNavigationTarget(currentHash)
+      const storedContext = readTripNavigationContext()
+      const candidateTripId = routeTarget?.tripId ?? storedContext?.tripId
+      if (!candidateTripId) {
+        if (!cancelled) {
+          setLastTripId(null)
+          setShellTitle(DEFAULT_SHELL_TITLE)
+        }
         return
       }
 
       try {
-        const trip = await getTrip(tripId)
-        if (!cancelled) {
-          setShellTitle(trip?.title || DEFAULT_SHELL_TITLE)
+        const trip = await getTrip(candidateTripId)
+        if (cancelled) return
+        if (!trip) {
+          if (storedContext?.tripId === candidateTripId) clearTripNavigationContext()
+          setLastTripId(null)
+          setShellTitle(DEFAULT_SHELL_TITLE)
+          return
         }
+
+        setLastTripId(trip.id)
+        setShellTitle(routeTarget ? trip.title || DEFAULT_SHELL_TITLE : DEFAULT_SHELL_TITLE)
+        if (routeTarget) recordTripNavigationContext(routeTarget)
       } catch {
         if (!cancelled) {
           setShellTitle(DEFAULT_SHELL_TITLE)
@@ -116,8 +132,8 @@ function App() {
       }
     }
 
-    void refreshShellTitle()
-    const unsubscribe = subscribeTravelDataChanged(() => void refreshShellTitle())
+    void refreshTripContext()
+    const unsubscribe = subscribeTravelDataChanged(() => void refreshTripContext())
     return () => {
       cancelled = true
       unsubscribe()
@@ -125,7 +141,8 @@ function App() {
   }, [activeRoute, currentHash])
 
   return (
-    <AppShell activeRoute={activeRoute} title={shellTitle}>
+    <AppShell activeRoute={activeRoute} lastTripId={lastTripId} title={shellTitle}>
+      <PwaLifecycleController />
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
       {activeRoute === 'home' ? <HomePage /> : null}

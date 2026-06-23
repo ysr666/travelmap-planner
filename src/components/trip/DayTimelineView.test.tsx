@@ -7,6 +7,7 @@ import { DayTimelineView } from './DayTimelineView'
 
 const mocks = vi.hoisted(() => ({
   deleteItineraryItemCascade: vi.fn().mockResolvedValue(undefined),
+  reorderDayItems: vi.fn().mockResolvedValue([]),
   navigateTo: vi.fn(),
   describeItemTime: vi.fn(() => '10:00'),
   describePreviousTransport: vi.fn(() => ''),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../db', () => ({
   deleteItineraryItemCascade: mocks.deleteItineraryItemCascade,
+  reorderDayItems: mocks.reorderDayItems,
 }))
 
 vi.mock('../../lib/routes', () => ({
@@ -267,5 +269,51 @@ describe('DayTimelineView', () => {
 
     expect(container?.textContent).toContain('浅草寺')
     expect(container?.textContent).toContain('东京塔')
+  })
+
+  it('previews, saves and reports an accessible manual order change', async () => {
+    const onItemsChange = vi.fn().mockResolvedValue(undefined)
+    const items = [
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
+      { id: 'item_3', dayId: 'day_1', tripId: 'trip_1', title: '银座', ticketIds: [], sortOrder: 3, createdAt: 100, updatedAt: 100 },
+    ]
+
+    await act(async () => {
+      root?.render(
+        <DayTimelineView
+          day={defaultDay}
+          items={items}
+          onItemsChange={onItemsChange}
+          onOpenItem={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+
+    const orderButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('排序'))
+    await act(async () => orderButton?.click())
+
+    expect(container?.textContent).toContain('这里只调整浏览和路线顺序')
+    const moveDown = container?.querySelector<HTMLButtonElement>('[aria-label="下移浅草寺"]')
+    await act(async () => moveDown?.click())
+    expect(Array.from(container?.querySelectorAll('[data-testid="day-order-item"]') ?? []).map((node) => node.textContent)).toEqual([
+      expect.stringContaining('东京塔'),
+      expect.stringContaining('浅草寺'),
+      expect.stringContaining('银座'),
+    ])
+
+    const saveButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('保存'))
+    await act(async () => saveButton?.click())
+
+    expect(mocks.reorderDayItems).toHaveBeenCalledWith(
+      'day_1',
+      ['item_2', 'item_1', 'item_3'],
+      ['item_1', 'item_2', 'item_3'],
+    )
+    expect(onItemsChange).toHaveBeenCalledOnce()
+    expect(container?.textContent).toContain('当天顺序已保存')
   })
 })

@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   updateItineraryItem: vi.fn().mockResolvedValue(undefined),
   describeItemTime: vi.fn(() => '10:00'),
   describePreviousTransport: vi.fn(() => ''),
+  sortItineraryItemsByPlanOrder: vi.fn((items: Array<{ sortOrder: number }>) => [...items].sort((first, second) => first.sortOrder - second.sortOrder)),
   formatDate: vi.fn(() => '4月1日'),
   getTicketCategoryLabel: vi.fn(() => ''),
   getTicketDisplayTitle: vi.fn(() => '票据'),
@@ -80,6 +81,7 @@ vi.mock('../db', () => ({
 vi.mock('../lib/itinerary', () => ({
   describeItemTime: mocks.describeItemTime,
   describePreviousTransport: mocks.describePreviousTransport,
+  sortItineraryItemsByPlanOrder: mocks.sortItineraryItemsByPlanOrder,
 }))
 
 vi.mock('../lib/dates', () => ({
@@ -283,9 +285,9 @@ describe('ItemDetailPage', () => {
     expect(deleteButton).toBeTruthy()
   })
 
-  it('renders onsite summary with scoped ticket access', async () => {
+  it('renders field action deck with scoped ticket access', async () => {
     mocks.listItemsByDay.mockResolvedValue([
-      { id: 'item_0', dayId: 'day_1', tripId: 'trip_1', title: '酒店', ticketIds: [], sortOrder: 0, createdAt: 100, updatedAt: 100 },
+      { id: 'item_0', dayId: 'day_1', tripId: 'trip_1', title: '酒店', locationName: '酒店', lat: 35.7, lng: 139.7, ticketIds: [], sortOrder: 0, createdAt: 100, updatedAt: 100 },
       { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', locationName: '浅草寺', ticketIds: ['ticket_1'], sortOrder: 1, createdAt: 100, updatedAt: 100 },
       { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
     ])
@@ -314,9 +316,12 @@ describe('ItemDetailPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('第 2/3 项')
+    expect(container?.querySelector('[data-testid="item-field-action-deck"]')?.textContent).toContain('现场行动')
+    expect(container?.textContent).toContain('第 1 天 · 第 2/3 项')
     expect(container?.textContent).toContain('现场凭证')
     expect(container?.textContent).toContain('1 张票据')
+    expect(container?.querySelector('[data-testid="item-field-previous-stop"]')?.textContent).toContain('酒店')
+    expect(container?.querySelector('[data-testid="item-field-next-stop"]')?.textContent).toContain('东京塔')
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="item-ticket-view-all"]')?.click()

@@ -269,7 +269,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       >
         {panelOpen ? (
           <div className="mb-2 max-h-[52dvh] overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface/95 p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] backdrop-blur-xl app-scrollbar">
-            {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在生成预览…" /> : null}
+            {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在处理指令…" /> : null}
             {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p> : null}
             {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
             {result ? (
@@ -388,6 +388,21 @@ function CommandResultView({
           {result.lines.map((line) => <p key={line}>{line}</p>)}
         </div>
         <Button className="min-h-10 px-3 text-xs" onClick={() => onNavigate(result)} variant="secondary">{result.actionLabel}</Button>
+      </ResultShell>
+    )
+  }
+
+  if (result.kind === 'consultation') {
+    return (
+      <ResultShell icon={<Bot className="size-4" />} title={result.title}>
+        <div className="space-y-1 text-xs leading-5 text-on-surface-variant" data-testid="global-ai-consultation-result">
+          {result.lines.map((line) => <p className="break-words [overflow-wrap:anywhere]" key={line}>{line}</p>)}
+        </div>
+        {result.warnings.length ? (
+          <div className="space-y-1 rounded-xl bg-surface-container-high px-3 py-2 text-xs leading-5 text-on-surface-variant">
+            {result.warnings.slice(0, 3).map((warning) => <p key={warning}>{warning}</p>)}
+          </div>
+        ) : null}
       </ResultShell>
     )
   }

@@ -93,7 +93,14 @@ import type {
   Trip,
 } from '../types'
 
-type TicketFilter = 'all' | TicketMeta['fileType'] | 'unassigned'
+type TicketFilter =
+  | 'all'
+  | TicketMeta['fileType']
+  | TicketStorageMode
+  | 'item-bound'
+  | 'offline-ready'
+  | 'trip-level'
+  | 'unassigned'
 type BindingTarget = TicketScope | `item:${string}`
 type TicketEditDraft = {
   bindingTarget: BindingTarget
@@ -113,6 +120,8 @@ const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'image', label: '图片' },
   { value: 'pdf', label: 'PDF' },
   { value: 'other', label: '其他' },
+  { value: 'item-bound', label: '行程点' },
+  { value: 'trip-level', label: '旅行级' },
   { value: 'unassigned', label: '未绑定' },
 ]
 
@@ -219,9 +228,25 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         return getTicketScope(ticket) === 'unassigned'
       }
 
+      if (filter === 'item-bound') {
+        return getTicketScope(ticket) === 'item' || Boolean(ticket.itemId)
+      }
+
+      if (filter === 'trip-level') {
+        return getTicketScope(ticket) === 'trip'
+      }
+
+      if (filter === 'offline-ready') {
+        return getTicketStorageMode(ticket) === 'copy' && ticketBlobPresence[ticket.id] === true
+      }
+
+      if (filter === 'copy' || filter === 'reference' || filter === 'external') {
+        return getTicketStorageMode(ticket) === filter
+      }
+
       return ticket.fileType === filter
     })
-  }, [filter, tickets])
+  }, [filter, ticketBlobPresence, tickets])
   const ticketLibraryStats = useMemo(
     () => buildTicketLibraryStats(tickets, ticketBlobPresence),
     [ticketBlobPresence, tickets],
@@ -787,7 +812,11 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
 
-      <TicketLibraryOverview stats={ticketLibraryStats} />
+      <TicketLibraryOverview
+        activeFilter={filter}
+        onFilterChange={setFilter}
+        stats={ticketLibraryStats}
+      />
 
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-center gap-2">
@@ -938,6 +967,21 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             </button>
           ))}
         </div>
+        <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-surface-container px-3 py-2 text-sm ring-1 ring-outline-variant/30" data-testid="ticket-filter-summary">
+          <span className="min-w-0 truncate font-semibold text-on-surface">
+            {getTicketFilterSummary(filter, filteredTickets.length)}
+          </span>
+          {filter !== 'all' ? (
+            <button
+              className="flex size-9 shrink-0 items-center justify-center rounded-full text-primary transition active:scale-95 tm-focus"
+              onClick={() => setFilter('all')}
+              type="button"
+            >
+              <X className="size-4" />
+              <span className="sr-only">清除筛选</span>
+            </button>
+          ) : null}
+        </div>
 
         {filteredTickets.length === 0 ? (
           <EmptyState
@@ -1068,7 +1112,9 @@ type TicketLibraryStats = {
   cachedCopyCount: number
   copyCount: number
   externalCount: number
+  itemBoundCount: number
   referenceCount: number
+  tripLevelCount: number
   totalCount: number
   unassignedCount: number
 }
@@ -1191,7 +1237,15 @@ function TicketMetadataEditor({
   )
 }
 
-function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
+function TicketLibraryOverview({
+  activeFilter,
+  onFilterChange,
+  stats,
+}: {
+  activeFilter: TicketFilter
+  onFilterChange: (filter: TicketFilter) => void
+  stats: TicketLibraryStats
+}) {
   return (
     <Card className="space-y-4" data-testid="ticket-library-overview" variant="grouped">
       <div className="flex items-start justify-between gap-3">
@@ -1208,23 +1262,45 @@ function TicketLibraryOverview({ stats }: { stats: TicketLibraryStats }) {
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2 min-[430px]:grid-cols-6">
-        <TicketStat label="文件" value={stats.copyCount} />
-        <TicketStat label="位置" value={stats.referenceCount} />
-        <TicketStat label="链接" value={stats.externalCount} />
-        <TicketStat label="离线" value={stats.cachedCopyCount} />
-        <TicketStat label="未分类" value={stats.unassignedCount} />
-        <TicketStat label="全部" value={stats.totalCount} />
+        <TicketStat active={activeFilter === 'copy'} filter="copy" label="文件" onSelect={onFilterChange} value={stats.copyCount} />
+        <TicketStat active={activeFilter === 'reference'} filter="reference" label="位置" onSelect={onFilterChange} value={stats.referenceCount} />
+        <TicketStat active={activeFilter === 'external'} filter="external" label="链接" onSelect={onFilterChange} value={stats.externalCount} />
+        <TicketStat active={activeFilter === 'offline-ready'} filter="offline-ready" label="离线" onSelect={onFilterChange} value={stats.cachedCopyCount} />
+        <TicketStat active={activeFilter === 'unassigned'} filter="unassigned" label="未分类" onSelect={onFilterChange} value={stats.unassignedCount} />
+        <TicketStat active={activeFilter === 'all'} filter="all" label="全部" onSelect={onFilterChange} value={stats.totalCount} />
       </div>
     </Card>
   )
 }
 
-function TicketStat({ label, value }: { label: string; value: number }) {
+function TicketStat({
+  active,
+  filter,
+  label,
+  onSelect,
+  value,
+}: {
+  active: boolean
+  filter: TicketFilter
+  label: string
+  onSelect: (filter: TicketFilter) => void
+  value: number
+}) {
   return (
-    <div className="min-w-0 rounded-xl bg-surface-container-high px-2 py-3 text-center">
-      <p className="truncate text-[11px] tm-muted">{label}</p>
-      <p className="mt-1 text-lg font-bold text-on-surface dark:text-on-surface">{value}</p>
-    </div>
+    <button
+      aria-pressed={active}
+      className={`min-h-[4.25rem] min-w-0 rounded-xl px-2 py-3 text-center transition active:scale-[0.99] tm-focus ${
+        active
+          ? 'bg-primary-container text-on-primary-container ring-1 ring-primary/20'
+          : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+      }`}
+      data-testid={`ticket-stat-${filter}`}
+      onClick={() => onSelect(filter)}
+      type="button"
+    >
+      <p className={`truncate text-[11px] ${active ? 'text-on-primary-container/90' : 'tm-muted'}`}>{label}</p>
+      <p className={`mt-1 text-lg font-bold ${active ? 'text-on-primary-container' : 'text-on-surface dark:text-on-surface'}`}>{value}</p>
+    </button>
   )
 }
 
@@ -1248,16 +1324,53 @@ function buildTicketLibraryStats(
     }
     if (scope === 'unassigned') {
       stats.unassignedCount += 1
+    } else if (scope === 'item' || ticket.itemId) {
+      stats.itemBoundCount += 1
+    } else {
+      stats.tripLevelCount += 1
     }
     return stats
   }, {
     cachedCopyCount: 0,
     copyCount: 0,
     externalCount: 0,
+    itemBoundCount: 0,
     referenceCount: 0,
+    tripLevelCount: 0,
     totalCount: 0,
     unassignedCount: 0,
   })
+}
+
+function getTicketFilterSummary(filter: TicketFilter, count: number) {
+  return `${getTicketFilterLabel(filter)}：${count} 张`
+}
+
+function getTicketFilterLabel(filter: TicketFilter) {
+  switch (filter) {
+    case 'all':
+      return '全部票据'
+    case 'copy':
+      return '保存票据文件'
+    case 'reference':
+      return '仅记录位置'
+    case 'external':
+      return '外部链接'
+    case 'image':
+      return '图片票据'
+    case 'pdf':
+      return 'PDF 票据'
+    case 'other':
+      return '其他文件'
+    case 'item-bound':
+      return '行程点票据'
+    case 'offline-ready':
+      return '此设备离线可用'
+    case 'trip-level':
+      return '旅行级票据'
+    case 'unassigned':
+      return '未分类票据'
+  }
 }
 
 function buildTicketGallerySections(

@@ -33,6 +33,7 @@
 - Phase 13B：Day View marker 卡片交互完成第一轮，卡片提供站点 rail、明确详情 CTA、上一/下一站和与全局 AI 输入条错位的安全位置。
 - Phase 13C：全局 AI 输入咨询模式完成第一轮，普通问答留在本地只读咨询，明确修改才进入 provider-backed patch plan 和二次确认。
 - Phase 14A：Item Detail 现场行动区完成第一轮，详情页顶部整合时间、前后站、外部地图/路线、坐标状态和绑定票据入口。
+- Phase 16A：Ticket Library 现场筛选完成第一轮，票据总览数字可直接筛选文件、位置、链接、离线可用、未分类和全部票据。
 
 当前 canonical routes：
 
@@ -55,7 +56,7 @@
 - Trip Home 主建议层级已收敛；全旅行地图概览入口已完成第一轮，后续可继续做视觉 QA 和更丰富地图 provider 能力。
 - Day View marker → 轻卡片 → Item Detail 现场路径已完成第一轮；后续可继续做真实设备视觉 QA 和更丰富现场信息布局。
 - Item Detail 已完成现场行动区第一轮；后续仍可继续做真实设备视觉 QA、票据紧凑展示和更高级跨时区解释。
-- Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
+- Ticket Library 已升级为票据画廊、元数据编辑器和现场筛选第一轮；后续仍可继续做全屏票据预览器和更细的票据分类。
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
 - Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正、Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已进入主路径。后续功能必须复用这些边界，未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
@@ -72,7 +73,8 @@
 - Phase 13B：Day View 地图点卡片交互。✅ 已完成第一轮。
 - Phase 13C：全局 AI 咨询模式。✅ 已完成第一轮。
 - Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。✅ 已完成第一轮。
-- Phase 16A/B/C：Ticket Library 2.0、全屏票据预览器、Item Detail 票据紧凑展示。
+- Phase 16A：Ticket Library 2.0 现场筛选。✅ 已完成第一轮。
+- Phase 16B/C：全屏票据预览器、Item Detail 票据紧凑展示。
 
 ### 2. SwiftUI-like design system
 

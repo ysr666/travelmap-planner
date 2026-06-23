@@ -428,6 +428,73 @@ describe('TicketLibraryPage', () => {
     expect(container?.querySelectorAll('[data-testid="ticket-gallery-section"]').length).toBe(3)
   })
 
+  it('filters gallery from actionable overview stats', async () => {
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_copy',
+        tripId: 'trip_1',
+        itemId: 'item_1',
+        title: '浅草寺门票',
+        fileName: 'asakusa.png',
+        fileType: 'image',
+        mimeType: 'image/png',
+        size: 1024,
+        storageMode: 'copy',
+        scope: 'item',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+      {
+        id: 'ticket_reference',
+        tripId: 'trip_1',
+        title: '机票确认',
+        fileName: 'flight.pdf',
+        fileType: 'pdf',
+        mimeType: 'application/pdf',
+        size: 2048,
+        storageMode: 'reference',
+        scope: 'trip',
+        createdAt: 101,
+        updatedAt: 101,
+      },
+      {
+        id: 'ticket_external',
+        tripId: 'trip_1',
+        title: '外部订单',
+        fileName: 'order.url',
+        fileType: 'other',
+        mimeType: 'text/uri-list',
+        size: 0,
+        storageMode: 'external',
+        scope: 'unassigned',
+        createdAt: 102,
+        updatedAt: 102,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="ticket-stat-external"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('外部链接：1 张')
+    expect(container?.querySelector('[data-testid="ticket-gallery"]')?.textContent).toContain('外部订单')
+    expect(container?.querySelector('[data-testid="ticket-gallery"]')?.textContent).not.toContain('机票确认')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="ticket-stat-all"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('全部票据：3 张')
+    expect(container?.querySelector('[data-testid="ticket-gallery"]')?.textContent).toContain('机票确认')
+  })
+
   it('opens the metadata editor from a ticket card and saves a rebind', async () => {
     const originalTicket = {
       id: 'ticket_1',

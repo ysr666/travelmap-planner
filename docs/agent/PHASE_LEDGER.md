@@ -1160,3 +1160,70 @@ Completed validation:
 - `git diff --check` passed.
 - Initial full E2E exposed a stale desktop smoke test id for the replaced onsite summary; after updating the smoke to `item-field-action-deck`, `PLAYWRIGHT_PORT=4292 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/desktop-beta-smoke.spec.ts` passed: 1 test.
 - `PLAYWRIGHT_PORT=4293 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 133 tests.
+
+## 2026-06-23 Phase 16A - Ticket Library Field Filters
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: make Ticket Library feel more like a field-ready document wallet by turning the overview into actionable filters for storage mode, offline readiness, and binding state.
+
+Scope:
+
+- Extend ticket filtering beyond file type / unassigned to include copy files, reference locations, external links, offline-ready copy tickets, item-bound tickets, and trip-level tickets.
+- Make the ticket overview stat cells clickable filter controls while preserving the existing gallery card preview / edit / delete flows.
+- Show a compact active-filter summary above the gallery so users understand why a subset is visible.
+- Add unit and E2E coverage for actionable overview filters and filtered preview context.
+- Update roadmap/project status after validation.
+
+No-go:
+
+- No ticket/blob storage schema, cloud object sync, ledger, AI, provider, route cache, or privacy boundary changes.
+- No real cloud/provider calls and no automatic ticket rebinding or file upload retries.
+- No full ticket previewer redesign in this phase.
+
+Likely files:
+
+- `src/pages/TicketLibraryPage.tsx`
+- `src/pages/TicketLibraryPage.test.tsx`
+- `e2e/ticket-library.spec.ts`
+- Docs and ledger.
+
+Validation:
+
+- Focused Ticket Library unit tests.
+- Focused Ticket Library E2E.
+- `npm run lint`, `npm run build`, `npm run test:unit`, `git diff --check`.
+
+Read-only mini-plan result:
+
+- Ticket Library already has gallery sections, metadata editing, preview navigation, cache actions, and ticket intelligence suggestions.
+- The weak spot is scan/navigation: the overview numbers are passive, and the only filters are file type plus unassigned.
+- Safe executable scope is to make existing local stats drive local filtering; all writes remain behind existing explicit buttons and confirmations.
+
+Risk: medium, because ticket filtering changes which tickets are passed into preview navigation and must not hide or mutate ticket metadata unexpectedly.
+
+Stop conditions:
+
+- Stop and repair if filtered gallery sections are misleading, preview navigation loses the filtered context, edit/delete actions mutate the wrong ticket, or cache/cloud/intelligence actions are triggered by filtering.
+
+Result:
+
+- Extended Ticket Library filtering to storage mode, offline-ready copy tickets, item-bound tickets, trip-level tickets, and unassigned tickets while preserving existing file-type filters.
+- Turned Ticket Library overview stats into clickable local filters for copy/reference/external/offline/unassigned/all.
+- Added an active filter summary with a clear reset control above the gallery.
+- Preserved gallery sections, preview navigation, metadata editing, delete confirmation, cache actions, cloud sync state display, and ticket intelligence suggestions.
+- Added unit and E2E coverage proving overview filters update the gallery and filtered preview context.
+
+Completed validation:
+
+- `npm run test:unit -- src/pages/TicketLibraryPage.test.tsx` passed: 1 file, 11 tests.
+- `npm run lint` passed.
+- `PLAYWRIGHT_PORT=4294 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/ticket-library.spec.ts` passed: 7 tests.
+- `npm run test:unit` passed: 177 files, 1404 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `git diff --check` passed.
+- Initial full E2E exposed two UX issues: active Ticket Library stat labels had insufficient contrast, and Trip Home map overview first-item shortcuts were 36px touch targets. Both were repaired within this phase.
+- `PLAYWRIGHT_PORT=4297 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/mobile-ux-a11y.spec.ts` passed: 1 test after repair.
+- `PLAYWRIGHT_PORT=4298 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 133 tests.

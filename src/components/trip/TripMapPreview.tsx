@@ -605,7 +605,7 @@ function TripMapDayEntries({
               {summary.firstRecord && onOpenItem ? (
                 <button
                   aria-label={`查看 ${summary.firstRecord.item.title}`}
-                  className="mt-1 flex min-h-9 w-full items-center justify-between gap-2 rounded-lg bg-white/60 px-2 text-left text-[11px] font-semibold text-on-surface transition hover:bg-white/80 active:scale-[0.99] dark:bg-surface-dim/45 dark:text-outline-variant dark:hover:bg-surface-dim/70 tm-focus"
+                  className="mt-1 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg bg-white/60 px-2 text-left text-[11px] font-semibold text-on-surface transition hover:bg-white/80 active:scale-[0.99] dark:bg-surface-dim/45 dark:text-outline-variant dark:hover:bg-surface-dim/70 tm-focus"
                   data-testid="trip-map-day-first-item"
                   onClick={() => onOpenItem(summary.firstRecord!.item)}
                   type="button"
@@ -614,7 +614,7 @@ function TripMapDayEntries({
                   <ChevronRight className="size-3.5 shrink-0 text-outline" />
                 </button>
               ) : (
-                <p className="mt-1 min-h-9 px-2 py-1 text-[11px] leading-4 tm-muted">补充坐标后可直达地点</p>
+                <p className="mt-1 min-h-11 px-2 py-1 text-[11px] leading-4 tm-muted">补充坐标后可直达地点</p>
               )}
             </div>
           )

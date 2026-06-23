@@ -57,7 +57,7 @@ const LOCATION_UNAVAILABLE_MESSAGE = '暂时无法取得位置，请稍后重试
 const LOCATION_PERMISSION_MESSAGE = '定位失败，请在地址栏允许位置后重试'
 const MAP_OVERLAY_GAP = 12
 const MARKER_EDGE_RESERVE = 96
-const MARKER_CARD_FALLBACK_HEIGHT = 136
+const MARKER_CARD_FALLBACK_HEIGHT = 196
 
 export function DayMapView({
   trip,
@@ -471,6 +471,7 @@ export function DayMapView({
           <MarkerPreviewCard
             containerRef={markerCardRef}
             itemIndex={markerCardItemIndex}
+            items={mappedItems}
             item={markerCardItem}
             onClose={() => {
               setMarkerCardSelection(null)
@@ -518,6 +519,7 @@ export function DayMapView({
 function MarkerPreviewCard({
   containerRef,
   itemIndex,
+  items,
   item,
   nextItem,
   onClose,
@@ -528,6 +530,7 @@ function MarkerPreviewCard({
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
   itemIndex: number
+  items: ItineraryItem[]
   item: ItineraryItem
   nextItem: ItineraryItem | null
   onClose: () => void
@@ -539,7 +542,7 @@ function MarkerPreviewCard({
 
   return (
     <div
-      className="absolute bottom-[calc(56px+env(safe-area-inset-bottom,20px)+16px)] left-4 right-4 z-30"
+      className="absolute bottom-[calc(120px+env(safe-area-inset-bottom,20px))] left-4 right-4 z-50"
       ref={containerRef}
     >
       <div
@@ -567,16 +570,7 @@ function MarkerPreviewCard({
               </p>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-start gap-2">
-            <button
-              aria-label="打开行程点详情"
-              className="pointer-events-auto flex size-10 items-center justify-center rounded-full bg-primary text-on-primary shadow-lg transition-transform active:scale-95"
-              data-testid="map-marker-card-open"
-              onClick={() => onOpenItem(item)}
-              type="button"
-            >
-              <Navigation className="size-5" />
-            </button>
+          <div className="flex shrink-0 items-start">
             <button
               aria-label="关闭地点卡片"
               className="flex size-10 items-center justify-center rounded-full bg-surface-container text-on-surface-variant transition hover:text-on-surface active:scale-95"
@@ -588,9 +582,43 @@ function MarkerPreviewCard({
             </button>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        {items.length > 1 ? (
+          <div className="-mx-1 mt-3 overflow-x-auto px-1 pb-1 app-scrollbar" data-testid="map-marker-card-station-rail">
+            <div className="flex min-w-max gap-2">
+              {items.map((candidate, index) => {
+                const active = candidate.id === item.id
+                return (
+                  <button
+                    aria-current={active ? 'true' : undefined}
+                    aria-label={`选择第 ${index + 1} 站 ${candidate.title}`}
+                    className={`flex min-h-11 w-32 shrink-0 items-center gap-2 rounded-xl border px-2 text-left text-xs transition active:scale-[0.98] ${
+                      active
+                        ? 'border-primary/40 bg-primary-container text-primary'
+                        : 'border-outline-variant/30 bg-surface-container text-on-surface hover:bg-surface-container-high'
+                    }`}
+                    data-testid="map-marker-card-station"
+                    key={candidate.id}
+                    onClick={() => onSelectItem(candidate)}
+                    type="button"
+                  >
+                    <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                      active
+                        ? 'bg-primary text-on-primary'
+                        : 'bg-surface-container-highest text-on-surface-variant'
+                    }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-semibold">{candidate.title}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+        <div className="mt-3 grid grid-cols-[1fr_1.15fr_1fr] gap-2">
           <button
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/30 bg-surface-container px-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
             data-testid="map-marker-card-prev"
             disabled={!previousItem}
             onClick={() => previousItem && onSelectItem(previousItem)}
@@ -600,7 +628,16 @@ function MarkerPreviewCard({
             上一站
           </button>
           <button
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-2 text-sm font-semibold text-on-primary transition active:scale-[0.98]"
+            data-testid="map-marker-card-open"
+            onClick={() => onOpenItem(item)}
+            type="button"
+          >
+            <Navigation className="size-4" />
+            详情
+          </button>
+          <button
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/30 bg-surface-container px-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
             data-testid="map-marker-card-next"
             disabled={!nextItem}
             onClick={() => nextItem && onSelectItem(nextItem)}

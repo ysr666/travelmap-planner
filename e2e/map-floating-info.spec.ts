@@ -41,6 +41,15 @@ test('点击地图 marker 更新浮动信息栏并可进入详情', async ({ pag
   const markerCard = page.getByTestId('map-marker-card')
 
   await expect(markerCard).toBeVisible({ timeout: 15000 })
+  await expect(markerCard.getByTestId('map-marker-card-open')).toContainText('详情')
+  const stationButtons = markerCard.getByTestId('map-marker-card-station')
+  await expect(stationButtons).toHaveCount(3)
+  await expect(stationButtons.nth(0)).toHaveAttribute('aria-current', 'true')
+  await stationButtons.nth(2).click()
+  await expect(markerCard).toContainText('Shibuya Sky 夜景')
+  await expect(stationButtons.nth(2)).toHaveAttribute('aria-current', 'true')
+  await expectMarkerAndCardInUsableMapArea(page, shibuyaSkyMarker, markerCard)
+
   await expect(shibuyaSkyMarker).toBeVisible()
   await shibuyaSkyMarker.click()
   await expect(markerCard).toContainText('Shibuya Sky 夜景')

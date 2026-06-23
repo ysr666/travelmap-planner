@@ -960,3 +960,66 @@ Risk: medium, because Trip Home is a central route and the map preview touches M
 Stop conditions:
 
 - Stop and repair if per-day entries overlap the map plot, break marker rendering, trigger unexpected provider calls, or make the existing Trip Workspace / desktop smoke assertions unstable.
+
+## 2026-06-23 Phase 13B - Day Map Marker Card Interaction Polish
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: make the Day Map marker-to-card-to-detail path more discoverable and field-ready by turning the floating marker card into a compact station navigator with an explicit detail CTA.
+
+Scope:
+
+- Refine the existing `MarkerPreviewCard` in `DayMapView`.
+- Add a compact station rail for mapped items on the current day.
+- Replace the icon-only detail affordance with an explicit "查看详情" action while preserving the existing test id / route behavior.
+- Keep previous/next station navigation, map recenter, location, route cache, and fallback behavior intact.
+
+No-go:
+
+- No map provider, route provider, route cache, schema, cloud, AI, or privacy boundary changes.
+- No new automatic route/search/place calls.
+- No broader Day View layout redesign beyond the marker card interaction surface.
+
+Likely files:
+
+- `src/components/trip/DayMapView.tsx`.
+- `e2e/map-floating-info.spec.ts`.
+- Docs and ledger if completed.
+
+Validation:
+
+- Focused Day Map marker-card E2E.
+- `npm run lint`, `npm run build`, `git diff --check`.
+- Full unit and relevant E2E if the interaction changes shared map behavior.
+
+Read-only mini-plan result:
+
+- `DayMapView` already has marker selection, a floating card, previous/next station actions, map recenter, user location, route cache, and padding measurement.
+- The weak point is discoverability: the detail action is icon-only and the user cannot directly scan/switch mapped stops from the floating card.
+- Safe executable scope is the card surface and E2E assertions; route/cache/provider behavior remains unchanged.
+
+Result:
+
+- Added a compact station rail inside the Day Map marker card for all mapped items on the current day.
+- Replaced the icon-only detail affordance with an explicit `详情` CTA while preserving `map-marker-card-open`.
+- Kept previous/next station navigation and close behavior.
+- Raised the marker card above the global AI command bar and increased fallback padding so the taller card does not intercept or hide map interactions.
+- Updated roadmap and project status so Phase 13B is recorded as completed first pass.
+
+Completed validation:
+
+- Initial focused `e2e/map-floating-info.spec.ts` reproduced a real overlap bug: the global AI command bar intercepted the new detail CTA.
+- After raising the card, `PLAYWRIGHT_PORT=4285 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/map-floating-info.spec.ts` passed: 7 tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 176 files, 1399 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `git diff --check` passed.
+- `PLAYWRIGHT_PORT=4286 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 132 tests.
+
+Risk: medium, because the floating card determines map viewport padding and can overlap controls on 390px if its height grows.
+
+Stop conditions:
+
+- Stop and repair if the card overlaps map controls, pushes selected markers out of usable area, breaks return-to-map context, or weakens the no-provider-call map recenter guarantees.

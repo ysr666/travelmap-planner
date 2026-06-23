@@ -98,6 +98,35 @@ test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ p
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
 })
 
+test('全局 AI 会话面板支持上下文切换和内存清空', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await page.route('**/api/provider-proxy', (route) => route.abort())
+
+  await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+  await expect(tripCard).toBeVisible()
+  await clickTripCard(tripCard)
+  await expect(page.getByTestId('global-ai-context-label')).toContainText('当前旅行')
+
+  await page.getByRole('button', { name: '展开 AI 会话' }).click()
+  await expect(page.getByTestId('global-ai-conversation-panel')).toBeVisible()
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('本轮会话只保存在当前页面内')
+
+  await page.getByTestId('global-ai-context-switch').getByRole('button', { name: '全部旅行' }).click()
+  await expect(page.getByTestId('global-ai-context-label')).toContainText('全部旅行')
+
+  await page.getByLabel('全局 AI 指令').fill('你能做什么？')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('你')
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('助手')
+  await expect(page.getByTestId('global-ai-source-cards')).toContainText('本地能力说明')
+
+  await page.getByRole('button', { name: '清空 AI 会话' }).click()
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('本轮会话只保存在当前页面内')
+  await expectNoHorizontalOverflow(page)
+})
+
 async function expectCommandBarAboveBottomTab(page: Page) {
   const commandBox = await page.getByTestId('global-ai-command-bar').boundingBox()
   const tabBox = await page.locator('nav').filter({ has: page.getByRole('button', { name: '首页' }) }).boundingBox()

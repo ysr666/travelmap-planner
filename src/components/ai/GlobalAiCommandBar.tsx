@@ -1,7 +1,11 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Bot, CheckCircle2, Loader2, ReceiptText, Route, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react'
 import { createTripDisruptionEvent, updateItineraryItem } from '../../db'
-import { applyAiTripEditPatchPlanToDb, buildAiTripEditLocalStateFingerprint } from '../../lib/ai/aiTripEditApply'
+import {
+  applyAiTripEditPatchPlanToDb,
+  buildAiTripEditLocalStateFingerprint,
+  type AiTripEditAppliedChange,
+} from '../../lib/ai/aiTripEditApply'
 import { buildAiTripEditContext, type AiTripEditContext } from '../../lib/ai/aiTripEditContext'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/ai/aiTripEditPatch'
 import {
@@ -22,6 +26,7 @@ import {
   loadGlobalAiInteractionContext,
   mergeAssistantAnswerProviderResponse,
   resolveGlobalAiInteraction,
+  type GlobalAiActionProposal,
   type GlobalAiInteractionResult,
 } from '../../lib/ai/globalAiInteraction'
 import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, type ProviderProxyAiTripEditSearchSummary, type ProviderProxyTravelSearchRequest } from '../../lib/ai/providerProxyContract'
@@ -35,7 +40,12 @@ import {
   getProviderProxyConfig,
   ProviderProxyClientError,
 } from '../../lib/providerProxyClient'
-import type { ItineraryReplanPreference, RouteId, TripReplanDiff, TripReplanOption } from '../../types'
+import {
+  appendTripIntelligenceExecutionResult,
+  mapTripReplanAppliedChange,
+  type TripIntelligenceAppliedChange,
+} from '../../lib/tripIntelligence'
+import type { ItineraryReplanPreference, RouteId, TripReplanDiff, TripReplanOption, TripReplanRecord } from '../../types'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 
@@ -45,6 +55,7 @@ type GlobalAiCommandBarProps = {
 }
 
 type PendingAiTripEdit = {
+  actionProposal?: GlobalAiActionProposal
   baselineFingerprint: string
   command: string
   context: AiTripEditContext
@@ -54,6 +65,7 @@ type PendingAiTripEdit = {
 }
 
 type AiTripEditPreviewState = {
+  actionProposal?: GlobalAiActionProposal
   baselineFingerprint: string
   patchPlan: AiTripEditPatchPlan
   preview: AiTripEditPatchPreview
@@ -81,6 +93,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [result, setResult] = useState<GlobalAiInteractionResult | null>(null)
+  const [contextLabel, setContextLabel] = useState(getRouteScopeFallback(activeRoute))
   const [selectedReplanOptionId, setSelectedReplanOptionId] = useState<string | null>(null)
   const [pendingAi, setPendingAi] = useState<PendingAiTripEdit | null>(null)
   const [aiSendConfirmOpen, setAiSendConfirmOpen] = useState(false)
@@ -94,6 +107,24 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     ? result.record.options.find((option) => option.id === selectedReplanOptionId) ?? result.record.options[0]
     : null
   const panelOpen = Boolean(error || success || result || aiPreview || loading)
+
+  useEffect(() => {
+    let cancelled = false
+    async function refreshContextLabel() {
+      try {
+        const context = await loadGlobalAiInteractionContext(activeRoute)
+        if (!cancelled) setContextLabel(context.scopeLabel)
+      } catch {
+        if (!cancelled) setContextLabel(getRouteScopeFallback(activeRoute))
+      }
+    }
+    void refreshContextLabel()
+    window.addEventListener('hashchange', refreshContextLabel)
+    return () => {
+      cancelled = true
+      window.removeEventListener('hashchange', refreshContextLabel)
+    }
+  }, [activeRoute])
 
   if (hidden) return null
 
@@ -109,7 +140,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       const context = await loadGlobalAiInteractionContext(activeRoute)
       const resolved = await resolveGlobalAiInteraction(trimmedCommand, context)
       if (resolved.kind === 'ai_trip_edit') {
-        prepareAiTripEdit(context)
+        prepareAiTripEdit(context, resolved.actionProposal)
       } else if (resolved.kind === 'assistant_answer') {
         setResult(await resolveAssistantAnswer(resolved))
       } else {
@@ -123,7 +154,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     }
   }
 
-  function prepareAiTripEdit(context: GlobalAiCommandContext) {
+  function prepareAiTripEdit(context: GlobalAiCommandContext, actionProposal?: GlobalAiActionProposal) {
     if (!context.trip) {
       setError('当前没有打开具体旅行。')
       return
@@ -143,6 +174,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       return
     }
     setPendingAi({
+      actionProposal,
       baselineFingerprint: buildAiTripEditLocalStateFingerprint({
         days: context.days,
         items: context.items,
@@ -172,9 +204,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setLoading(true)
     setError(null)
     setAiPreview(null)
+    const warnings = [...pendingAi.warnings]
+    let searchResults: ProviderProxyAiTripEditSearchSummary | null = null
     try {
-      const warnings = [...pendingAi.warnings]
-      let searchResults: ProviderProxyAiTripEditSearchSummary | null = null
       if (pendingAi.searchRequest) {
         try {
           const searchResponse = await fetchProviderProxyTravelSearch(pendingAi.searchRequest, providerConfig.proxyUrl)
@@ -193,6 +225,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       }, providerConfig.proxyUrl)
       setAiPreview({
         baselineFingerprint: pendingAi.baselineFingerprint,
+        actionProposal: pendingAi.actionProposal,
         patchPlan: response.patchPlan,
         preview: buildAiTripEditPatchPreview(response.patchPlan, pendingAi.context),
         searchResults,
@@ -201,6 +234,31 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       })
       setAiSendConfirmOpen(false)
     } catch (caught) {
+      if (caught instanceof ProviderProxyClientError && caught.code === 'invalid_response') {
+        try {
+          const response = await fetchProviderProxyAiTripEditPlan({
+            command: `${pendingAi.command}\n\n请只返回符合 TripMap patch schema 的 JSON，不要输出解释文字。`,
+            context: pendingAi.context,
+            operation: PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
+            searchResults: undefined,
+          }, providerConfig.proxyUrl)
+          setAiPreview({
+            actionProposal: pendingAi.actionProposal,
+            baselineFingerprint: pendingAi.baselineFingerprint,
+            patchPlan: response.patchPlan,
+            preview: buildAiTripEditPatchPreview(response.patchPlan, pendingAi.context),
+            searchResults,
+            tripId: pendingAi.tripId,
+            warnings: Array.from(new Set([...warnings, 'AI 输出结构异常，已自动重试一次。', ...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])),
+          })
+          setAiSendConfirmOpen(false)
+          return
+        } catch {
+          setError('我理解了你的需求，但没能生成可应用修改。你可以重新生成，或改成普通咨询。')
+          setAiSendConfirmOpen(false)
+          return
+        }
+      }
       setError(caught instanceof ProviderProxyClientError ? caught.message : 'AI 修改建议生成失败。')
       setAiSendConfirmOpen(false)
     } finally {
@@ -221,6 +279,16 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         setAiApplyConfirmOpen(false)
         return
       }
+      await appendTripIntelligenceExecutionResult(aiPreview.tripId, {
+        result: {
+          appliedChanges: mapAiTripEditAppliedChanges(result.appliedChanges),
+          message: `已应用 ${result.appliedOperationCount} 项 AI 修改。`,
+          status: 'completed',
+        },
+        source: 'ai_trip_edit',
+        suggestion: aiPreview.actionProposal?.suggestion,
+        title: aiPreview.actionProposal?.title ?? 'AI 修改已应用',
+      })
       setSuccess(`已应用 ${result.appliedOperationCount} 项修改。`)
       clearInteraction()
       setAiApplyConfirmOpen(false)
@@ -240,11 +308,31 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       if (result.kind === 'preference_preview') {
         const updated = await updateItineraryItem(result.item.id, { replanPreference: result.nextPreference })
         if (!updated) throw new Error('未找到行程点。')
+        await appendTripIntelligenceExecutionResult(updated.tripId, {
+          result: {
+            appliedChanges: [buildPreferenceAppliedChange(updated.id, updated.title)],
+            message: `已更新「${updated.title}」重排偏好。`,
+            status: 'completed',
+          },
+          source: 'ai_trip_edit',
+          suggestion: result.actionProposal?.suggestion,
+          title: result.actionProposal?.title ?? '重排偏好已更新',
+        })
         emitTravelDataChanged()
         setSuccess(`已更新「${result.item.title}」重排偏好。`)
         clearInteraction()
       } else if (result.kind === 'replan_preview') {
-        await applyReplanPreview(result, selectedReplanOption)
+        const record = await applyReplanPreview(result, selectedReplanOption)
+        await appendTripIntelligenceExecutionResult(record.tripId, {
+          result: {
+            appliedChanges: [mapTripReplanAppliedChange(record, 'applied')],
+            message: '已应用全局 AI 重排建议。',
+            status: 'completed',
+          },
+          source: 'live',
+          suggestion: result.actionProposal?.suggestion,
+          title: result.actionProposal?.title ?? 'Live Mode 重排已应用',
+        })
         setSuccess(result.hypothetical ? '已应用模拟重排，并保存为一次可撤销记录。' : '已应用突发重排，并保存为一次可撤销记录。')
         clearInteraction()
       }
@@ -281,11 +369,11 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   return (
     <>
       <div
-        className={`absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[4.75rem]' : 'bottom-4'}`}
+        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[4.75rem]' : 'bottom-4'}`}
         data-testid="global-ai-command-bar"
       >
         {panelOpen ? (
-          <div className="mb-2 max-h-[52dvh] overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface/95 p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] backdrop-blur-xl app-scrollbar">
+          <div className="pointer-events-auto mb-2 max-h-[52dvh] overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface/95 p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] backdrop-blur-xl app-scrollbar">
             {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在处理指令…" /> : null}
             {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p> : null}
             {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
@@ -308,8 +396,12 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           </div>
         ) : null}
 
+        <div className="pointer-events-none mb-1 flex max-w-full items-center gap-1.5 overflow-hidden px-1 text-[11px] font-semibold text-on-surface-variant" data-testid="global-ai-context-label">
+          <span className="shrink-0">上下文</span>
+          <span className="min-w-0 truncate rounded-lg bg-surface-container-high px-2 py-1 text-on-surface">{contextLabel}</span>
+        </div>
         <form
-          className="flex min-h-12 items-center gap-2 rounded-2xl border border-outline-variant/35 bg-surface/95 px-2 py-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.16)] backdrop-blur-xl"
+          className="pointer-events-auto flex min-h-12 items-center gap-2 rounded-2xl border border-outline-variant/35 bg-surface/95 px-2 py-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.16)] backdrop-blur-xl"
           onSubmit={(event) => void handleSubmit(event)}
         >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -409,6 +501,7 @@ function CommandResultView({
     return (
       <ResultShell icon={<Route className="size-4" />} title={result.title}>
         <p className="text-xs leading-5 tm-muted">{result.message}</p>
+        <ActionProposalCard proposal={result.actionProposal} />
         <Button className="min-h-10 px-3 text-xs" onClick={() => onNavigate(result)} variant="secondary">{result.actionLabel}</Button>
       </ResultShell>
     )
@@ -420,6 +513,7 @@ function CommandResultView({
         <div className="space-y-1 text-xs leading-5 tm-muted">
           {result.lines.map((line) => <p key={line}>{line}</p>)}
         </div>
+        <ActionProposalCard proposal={result.actionProposal} />
         <Button className="min-h-10 px-3 text-xs" onClick={() => onNavigate(result)} variant="secondary">{result.actionLabel}</Button>
       </ResultShell>
     )
@@ -436,6 +530,7 @@ function CommandResultView({
             {result.warnings.slice(0, 3).map((warning) => <p key={warning}>{warning}</p>)}
           </div>
         ) : null}
+        <ActionProposalCard proposal={result.actionProposal} />
       </ResultShell>
     )
   }
@@ -445,6 +540,7 @@ function CommandResultView({
       <ResultShell icon={<ShieldCheck className="size-4" />} title={result.title}>
         <PreferenceChips preference={result.nextPreference} />
         <p className="text-xs leading-5 tm-muted">{result.message}</p>
+        <ActionProposalCard proposal={result.actionProposal} />
         <Button className="min-h-10 px-3 text-xs" onClick={onRequestWrite} variant="secondary">确认保存偏好</Button>
       </ResultShell>
     )
@@ -476,6 +572,7 @@ function CommandResultView({
             {Array.from(new Set(result.warnings)).slice(0, 5).map((warning) => <p key={warning}>{warning}</p>)}
           </div>
         ) : null}
+        <ActionProposalCard proposal={result.actionProposal} />
         <Button className="min-h-10 px-3 text-xs" disabled={!selectedOption} onClick={onRequestWrite} variant="secondary">确认应用重排</Button>
       </ResultShell>
     )
@@ -526,11 +623,30 @@ function AiPreviewView({
           {aiPreview.warnings.slice(0, 4).map((warning) => <p key={warning}>{warning}</p>)}
         </div>
       ) : null}
+      <ActionProposalCard proposal={aiPreview.actionProposal} />
       <div className="grid grid-cols-2 gap-2">
         <Button className="min-h-10 px-3 text-xs" onClick={onDiscard} variant="secondary">放弃</Button>
         <Button className="min-h-10 px-3 text-xs" disabled={!aiPreview.preview.hasWritePayload} onClick={onApply}>应用修改</Button>
       </div>
     </ResultShell>
+  )
+}
+
+function ActionProposalCard({ proposal }: { proposal?: GlobalAiActionProposal }) {
+  if (!proposal) return null
+  return (
+    <div className="space-y-1 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5" data-testid="global-ai-action-proposal">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="break-words font-semibold text-on-surface [overflow-wrap:anywhere]">{proposal.title}</p>
+          <p className="tm-muted">{proposal.message}</p>
+        </div>
+        <span className="shrink-0 rounded-lg bg-surface px-2 py-1 text-[11px] font-semibold text-primary">
+          {proposal.requiresConfirmation ? '需确认' : '入口'}
+        </span>
+      </div>
+      <p className="tm-muted">动作来源：Unified Intelligence · {proposal.actionLabel}</p>
+    </div>
   )
 }
 
@@ -607,13 +723,13 @@ function formatItemChange(change: TripReplanDiff['itemChanges'][number]) {
   return '无变化'
 }
 
-async function applyReplanPreview(result: GlobalAiReplanPreviewResult, selectedOption: TripReplanOption | null) {
+async function applyReplanPreview(result: GlobalAiReplanPreviewResult, selectedOption: TripReplanOption | null): Promise<TripReplanRecord> {
   if (!selectedOption) throw new Error('请选择一个重排方案。')
   const event = await createTripDisruptionEvent(result.eventDraft)
   const record = await createTripReplanPreviewForEvent(event.id)
   const option = record.options.find((candidate) => candidate.strategy === selectedOption.strategy) ?? record.options[0]
   if (!option) throw new Error('没有可应用的重排方案。')
-  await applyTripReplanOption(record.id, option.id)
+  return applyTripReplanOption(record.id, option.id)
 }
 
 function buildWriteConfirmBody(result: GlobalAiInteractionResult | null, selectedOption: TripReplanOption | null) {
@@ -625,4 +741,53 @@ function buildWriteConfirmBody(result: GlobalAiInteractionResult | null, selecte
     return `将创建突发事件和重排记录，并应用「${selectedOption?.title ?? '所选方案'}」。票据、账本和交通订单不会自动取消或退款，可整次撤销。`
   }
   return '确认写入当前预览。'
+}
+
+function buildPreferenceAppliedChange(itemId: string, title: string): TripIntelligenceAppliedChange {
+  const now = Date.now()
+  return {
+    actionType: 'global_ai_preference_updated',
+    detail: '已更新重排偏好；不会立即改变现有行程时间。',
+    id: `global-ai:preference:${hashString(`${itemId}:${now}`)}`,
+    occurredAt: now,
+    source: { id: 'global_ai_preference', kind: 'operations', label: 'Global AI' },
+    targetId: itemId,
+    targetType: 'item',
+    title,
+  }
+}
+
+function mapAiTripEditAppliedChanges(changes: AiTripEditAppliedChange[]): TripIntelligenceAppliedChange[] {
+  const now = Date.now()
+  return changes.map((change, index) => ({
+    actionType: `global_ai_patch_${change.action}`,
+    detail: '已通过 AI 修改预览写入，写入前经过用户确认。',
+    id: `global-ai:patch:${hashString(`${change.action}:${change.itemId ?? change.dayId ?? index}:${change.title}:${now}`)}`,
+    occurredAt: now,
+    source: { id: 'ai_trip_edit', kind: 'operations', label: 'AI Trip Edit' },
+    targetId: change.itemId ?? change.dayId,
+    targetType: change.itemId ? 'item' : 'day',
+    title: change.title,
+  }))
+}
+
+function getRouteScopeFallback(route: RouteId) {
+  if (route === 'inbox') return '旅行材料输入'
+  if (route === 'ledger') return '账本'
+  if (route === 'documents') return '资料'
+  if (route === 'tickets') return '票据'
+  if (route === 'day') return 'Day'
+  if (route === 'item') return '当前行程点'
+  if (route === 'trip') return '当前旅行'
+  if (route === 'shared-trip') return '同行'
+  return '全部旅行'
+}
+
+function hashString(input: string) {
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
 }

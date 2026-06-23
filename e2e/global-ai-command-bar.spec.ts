@@ -10,6 +10,7 @@ test('全局 AI 在无旅行上下文时离线回答能力问题', async ({ page
   })
 
   await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
+  await expect(page.getByTestId('global-ai-context-label')).toContainText('全部旅行')
   await page.getByLabel('全局 AI 指令').fill('你能做什么？')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -37,6 +38,7 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
   await page.getByRole('button', { name: /抵达与涩谷/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page.getByTestId('global-ai-context-label')).toContainText(/Day|当前日期/)
 
   await expect(commandBar).toBeVisible()
   await expectCommandBarAboveBottomTab(page)
@@ -49,10 +51,19 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
   const result = page.getByTestId('global-ai-command-result')
   await expect(result).toContainText('What-if 重排预览')
   await expect(result).toContainText('确认应用前不会创建事件或同步云端')
+  await expect(page.getByTestId('global-ai-action-proposal')).toContainText('Unified Intelligence')
   await expect(result.getByRole('button', { name: '确认应用重排' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
+
+  await result.getByRole('button', { name: '确认应用重排' }).click()
+  await expect(page.getByTestId('global-ai-write-confirm-dialog')).toBeVisible()
+  await page.getByRole('button', { name: '确认写入' }).click()
+  await expect(page.getByText(/已应用模拟重排|已应用突发重排/)).toBeVisible()
+  await expect(await countStore(page, 'tripReplanEvents')).toBeGreaterThan(0)
+  await expect(await countStore(page, 'tripReplanRecords')).toBeGreaterThan(0)
+  await expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBeGreaterThan(0)
 })
 
 test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ page }) => {
@@ -71,6 +82,7 @@ test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ p
   await clickTripCard(tripCard)
   await page.getByRole('button', { name: /抵达与涩谷/ }).click()
   await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page.getByTestId('global-ai-context-label')).toContainText(/Day|当前日期/)
 
   await page.getByLabel('全局 AI 指令').fill('今天接下来应该先确认什么？')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()

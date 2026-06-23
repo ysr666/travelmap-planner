@@ -1090,3 +1090,73 @@ Risk: medium, because command classification affects a global surface and must n
 Stop conditions:
 
 - Stop and repair if explicit edit commands no longer open the AI send confirmation, consultation makes provider requests, local write confirmation is bypassed, or the global bar overlaps bottom navigation / map controls again.
+
+## 2026-06-23 Phase 14A - Item Detail Field Action Deck
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: turn Item Detail into a more field-ready onsite page by consolidating time, neighboring stops, route actions, place navigation, and bound tickets into a compact action deck near the top of the page.
+
+Scope:
+
+- Add a local derived Item Detail field context helper for previous/next stop labels, time range, coordinate readiness, route availability, and ticket summary.
+- Replace the current passive onsite summary with an action-oriented field deck that surfaces route-to-here, open-place, open-ticket, and previous/next stop context.
+- Keep existing map links, bottom previous/next controls, ticket preview, place lookup, content enrichment, and replan preference behavior intact.
+- Add unit and E2E coverage for the field deck and no-horizontal-overflow mobile baseline.
+- Update roadmap/project status after validation.
+
+No-go:
+
+- No schema, IndexedDB migration, cloud sync, route cache, ticket/blob storage, provider contract, AI privacy, or map provider changes.
+- No real AI, search, route, map, Cloudflare, Supabase, or provider calls.
+- No claims about live opening hours, real-time traffic, prices, closures, transit status, or recent facts.
+- No broad Item Detail redesign outside the onsite action surface.
+
+Likely files:
+
+- `src/lib/itemFieldContext.ts`
+- `src/lib/itemFieldContext.test.ts`
+- `src/pages/ItemDetailPage.tsx`
+- `src/pages/ItemDetailPage.test.tsx`
+- `e2e/item-detail.spec.ts`
+- Docs and ledger.
+
+Validation:
+
+- Focused item field context unit tests.
+- Focused Item Detail page unit tests.
+- Focused Item Detail E2E on mobile.
+- `npm run lint`, `npm run build`, `npm run test:unit`, `git diff --check`.
+
+Read-only mini-plan result:
+
+- Item Detail already has a first onsite summary, map links, tickets, place lookup, content enrichment, and replan preferences.
+- The remaining product gap is not another provider call; it is an integrated onsite action deck that answers "what do I need at this stop right now?" without forcing the traveler to scan multiple sections.
+- Safe executable scope is local derivation and presentation; all external actions remain explicit links or existing confirmation-gated flows.
+
+Risk: medium, because Item Detail is a central route and the new top surface must not overlap the fixed bottom action bar or weaken existing map/ticket/provider boundaries.
+
+Stop conditions:
+
+- Stop and repair if the field deck overlaps on 390px mobile, breaks source-view return behavior, creates provider calls, hides ticket preview access, or changes existing place lookup / content enrichment write confirmation semantics.
+
+Result:
+
+- Added `buildItemFieldContext` as a local derived model for Item Detail position, time, neighboring stops, coordinate readiness, route/place actions, and ticket summary.
+- Replaced the passive onsite summary with a field action deck that surfaces the current stop, previous/next stop context, route-to-here links, open-place links, and first bound ticket access near the top of Item Detail.
+- Kept existing bottom previous/next controls, source-view return behavior, ticket preview, place lookup, content enrichment, replan preferences, map links, provider contracts, schema, route cache, cloud sync, and AI/privacy boundaries unchanged.
+- Added focused unit coverage for field context derivation and page-level field deck assertions.
+- Extended focused Item Detail E2E to cover the field deck, route/place links, no-coordinate disabled state, top ticket preview access, and mobile no-horizontal-overflow checks.
+
+Completed validation:
+
+- `npm run test:unit -- src/lib/itemFieldContext.test.ts src/pages/ItemDetailPage.test.tsx` passed: 2 files, 11 tests.
+- `npm run lint` passed.
+- `PLAYWRIGHT_PORT=4290 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/item-detail.spec.ts` passed: 10 tests.
+- `npm run test:unit` passed: 177 files, 1403 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `git diff --check` passed.
+- Initial full E2E exposed a stale desktop smoke test id for the replaced onsite summary; after updating the smoke to `item-field-action-deck`, `PLAYWRIGHT_PORT=4292 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/desktop-beta-smoke.spec.ts` passed: 1 test.
+- `PLAYWRIGHT_PORT=4293 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 133 tests.

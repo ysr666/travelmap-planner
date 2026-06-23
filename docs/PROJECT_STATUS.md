@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
 更新时间：2026-06-23
-基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化、Phase 13B Day Map marker 卡片交互和 Phase 13C 全局 AI 咨询分流完成第一轮。
+基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化、Phase 13B Day Map marker 卡片交互、Phase 13C 全局 AI 咨询分流和 Phase 14A Item Detail 现场行动区完成第一轮。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
@@ -48,6 +48,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Trip / Item 新建编辑独立页面。
 - MapLibre 地图、OpenFreeMap 底图、编号 marker、直线连接。
 - Day Map marker 卡片：点击 marker 或站点 rail 显示轻量现场卡片，可上一/下一站、查看详情并保留地图来源上下文。
+- Item Detail 现场行动区：详情页顶部整合时间、前后站、路线到这里、打开地点、坐标状态和绑定票据入口，仍不自动调用 provider。
 - 手动道路路线 polyline，失败时回退直线。
 - 本地路线缓存 `TripMapRouteCacheDB`，缓存自动加载、失效和清理。
 - 地图 collapsed sheet 轻量化第一轮、route chip、route controls、公交近似提示。
@@ -90,6 +91,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Phase 13A：Trip Home 地图概览与入口优化第一轮。
 - Phase 13B：Day View marker 卡片交互第一轮。
 - Phase 13C：全局 AI 咨询模式第一轮。
+- Phase 14A：Item Detail 现场行动区第一轮。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
 - Search provider proxy foundation / AI trip edit patch plan foundation。
 - E2E locator hardening。
@@ -98,7 +100,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 - Trip Home 已收敛主建议层级，全旅行地图概览入口已完成第一轮；后续仍可继续做真实设备视觉 QA 和更丰富地图 provider 能力。
 - Day View marker → 轻卡片 → Item Detail 现场路径已完成第一轮；后续仍可继续做真实设备视觉 QA 和更丰富现场信息布局。
-- Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
+- Item Detail 已完成现场行动区第一轮；后续仍可继续做真实设备视觉 QA、票据紧凑展示和更高级跨时区解释。
 - Ticket Library 仍需从文件列表升级为票据画廊。
 - SwiftUI-like / iOS grouped list 设计系统尚未沉淀。
 - 时间语义仍需在后续新功能中遵守 Phase 12F 边界：旅行日期用 Trip/Day 时区，提醒/同步/版本时间用 Instant，不新增半套时间字段；后续重点是 AI ISO datetime 显式确认、跨国家高级 UI 和实时 provider facts 的来源边界。
@@ -173,7 +175,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 1. 完成 PR4 本地与远端 QA：build、lint、unit、桌面 smoke、PWA 升级、全量 E2E、GitHub Actions 和 Cloudflare production deploy。
 2. 人工补录 iPhone Safari 与 Android Chrome 实体机检查。
 3. AI ISO datetime 显式确认 / 映射设计，不允许静默截断成 plain date/time。
-4. Item Detail 2.0：面向现场查看，突出时间、地点、交通、票据与外部导航。
+4. Item Detail 2.0 已完成第一轮；后续可扩展票据紧凑展示、跨时区解释和真实设备视觉 QA。
 5. Trip Home / Day Map / 全局 AI 输入继续做真实设备视觉 QA 和 provider/mock 边界回归。
 
 后续 Map Provider 或 Transit Hints 必须复用 Phase 12F 时间语义和 Provider 加固边界。AI 新能力继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。地图和交通新能力不得把无来源实时营业时间、ETA、航班延误或交通状态包装成本地 timezone 计算结果。

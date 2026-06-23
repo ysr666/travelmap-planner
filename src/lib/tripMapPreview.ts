@@ -27,9 +27,17 @@ export type TripMapPreviewRecord = {
   item: ItineraryItem
 }
 
+export type TripMapPreviewDaySummary = {
+  coordinateCount: number
+  day: Day
+  firstRecord: TripMapPreviewRecord | null
+  itemCount: number
+}
+
 export type TripMapPreviewData = {
   coordinateCount: number
   dayCount: number
+  daySummaries: TripMapPreviewDaySummary[]
   records: TripMapPreviewRecord[]
   targetDay: Day | null
 }
@@ -57,6 +65,7 @@ export function buildTripMapPreviewData({
   selectedDay: Day | null
 }): TripMapPreviewData {
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
+  const daySummaries = getTripPreviewDaySummaries(orderedDays, itemsByDay)
   const records = getTripPreviewRecords(orderedDays, itemsByDay)
   const targetDay = chooseTripPreviewTargetDay({ days: orderedDays, itemsByDay, selectedDay })
   const coordinateDayIds = new Set(records.map((record) => record.day.id))
@@ -64,6 +73,7 @@ export function buildTripMapPreviewData({
   return {
     coordinateCount: records.length,
     dayCount: coordinateDayIds.size,
+    daySummaries,
     records,
     targetDay,
   }
@@ -180,14 +190,29 @@ export async function fetchTripPreviewRoute({
 }
 
 function getTripPreviewRecords(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): TripMapPreviewRecord[] {
-  return days.flatMap((day) =>
-    sortItineraryItemsByPlanOrder(itemsByDay[day.id] ?? [])
-      .filter(hasValidCoordinates)
-      .flatMap((item) => {
-        const coordinate = getItemLngLat(item)
-        return coordinate ? [{ coordinate, day, item }] : []
-      }),
-  )
+  return days.flatMap((day) => getTripPreviewRecordsForDay(day, itemsByDay))
+}
+
+function getTripPreviewDaySummaries(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): TripMapPreviewDaySummary[] {
+  return days.map((day) => {
+    const items = sortItineraryItemsByPlanOrder(itemsByDay[day.id] ?? [])
+    const records = getTripPreviewRecordsForDay(day, itemsByDay)
+    return {
+      coordinateCount: records.length,
+      day,
+      firstRecord: records[0] ?? null,
+      itemCount: items.length,
+    }
+  })
+}
+
+function getTripPreviewRecordsForDay(day: Day, itemsByDay: Record<string, ItineraryItem[]>): TripMapPreviewRecord[] {
+  return sortItineraryItemsByPlanOrder(itemsByDay[day.id] ?? [])
+    .filter(hasValidCoordinates)
+    .flatMap((item) => {
+      const coordinate = getItemLngLat(item)
+      return coordinate ? [{ coordinate, day, item }] : []
+    })
 }
 
 function getTripPreviewItemGroups(days: Day[], itemsByDay: Record<string, ItineraryItem[]>): ItineraryItem[][] {

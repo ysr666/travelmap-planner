@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-06-22
-基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。
+更新时间：2026-06-23
+基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化完成第一轮。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
@@ -44,6 +44,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Supabase AuthGate：未登录不能进入业务页面，保留登录前目标路由；账号验证后支持 30 天离线访问期。
 - 账号数据隔离：`TravelConsoleDB`、路线缓存和用户派生本地状态按账号 hash 分区；旧全局库可接管到账号库或保留为只读备份后仅恢复云端。
 - Trip Home / Day View / Item Detail 路由拆分。
+- Trip Home 全程地图概览：显示全旅行地图预览、按天坐标覆盖、Day Map 入口和首个有坐标地点入口，不自动调用 provider。
 - Trip / Item 新建编辑独立页面。
 - MapLibre 地图、OpenFreeMap 底图、编号 marker、直线连接。
 - 手动道路路线 polyline，失败时回退直线。
@@ -84,13 +85,14 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Phase 12C：冲突感知云端提示。
 - Phase 12E：视觉完整性纠偏与全页表单布局修复。
 - Phase 12F：时间语义收口完成，保持现有字段兼容，不做历史数据格式迁移。
+- Phase 13A：Trip Home 地图概览与入口优化第一轮。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
 - Search provider proxy foundation / AI trip edit patch plan foundation。
 - E2E locator hardening。
 
 ## 不要误判为完成
 
-- Trip Home 已收敛主建议层级，但全旅行地图概览仍可继续优化。
+- Trip Home 已收敛主建议层级，全旅行地图概览入口已完成第一轮；后续仍可继续做真实设备视觉 QA 和更丰富地图 provider 能力。
 - Day View 已有 marker card 初版与回归测试；后续仍需把交互打磨成理想的 marker → 轻卡片 → Item Detail 现场路径。
 - Item Detail 仍需变成旅行现场查看页，而不是普通信息页。
 - Ticket Library 仍需从文件列表升级为票据画廊。
@@ -165,9 +167,9 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 1. 完成 PR4 本地与远端 QA：build、lint、unit、桌面 smoke、PWA 升级、全量 E2E、GitHub Actions 和 Cloudflare production deploy。
 2. 人工补录 iPhone Safari 与 Android Chrome 实体机检查。
-3. Trip Home 地图概览与入口优化（Phase 13A），复用现有 timezone helper，不加入无来源实时事实。
-4. Day View marker-card interaction 打磨（Phase 13B）。
-5. AI ISO datetime 显式确认 / 映射设计，不允许静默截断成 plain date/time。
-6. AI 全局入口与咨询能力产品化：区分普通问答、行程内 action、provider-backed patch plan，减少“返回内容不合法”的误判。
+3. Day View marker-card interaction 打磨（Phase 13B）。
+4. AI ISO datetime 显式确认 / 映射设计，不允许静默截断成 plain date/time。
+5. AI 全局入口与咨询能力产品化：区分普通问答、行程内 action、provider-backed patch plan，减少“返回内容不合法”的误判。
+6. Trip Home 地图概览继续做真实设备视觉 QA 和地图 provider 能力增强。
 
 后续 Map Provider 或 Transit Hints 必须复用 Phase 12F 时间语义和 Provider 加固边界。AI 新能力继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。地图和交通新能力不得把无来源实时营业时间、ETA、航班延误或交通状态包装成本地 timezone 计算结果。

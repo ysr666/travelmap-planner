@@ -705,6 +705,7 @@ export function TripWorkspacePage() {
                 days={days}
                 itemsByDay={itemsByDay}
                 onItemsReordered={async () => { await refresh() }}
+                onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
                 onOpenMap={(targetDay) => openDay(targetDay, 'map')}
                 routeDataReady={loadedTripContextKey === tripContextKey}
                 selectedDay={selectedDay}

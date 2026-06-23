@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Loader2, Map as MapIcon, MapPinned, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Loader2, Map as MapIcon, MapPinned, Sparkles } from 'lucide-react'
 import { reorderDayItems } from '../../db'
 import { EMPTY_MAP_STYLE, FALLBACK_MAP_STYLE, TRIP_PREVIEW_MAP_STYLE } from '../../lib/mapConfig'
 import { GoogleMapsEngineAdapter } from '../../lib/googleMapsAdapter'
@@ -41,6 +41,7 @@ type TripMapPreviewProps = {
   days: Day[]
   itemsByDay: Record<string, ItineraryItem[]>
   onItemsReordered?: () => Promise<void> | void
+  onOpenItem?: (item: ItineraryItem) => void
   onOpenMap: (day: Day) => void
   routeDataReady?: boolean
   selectedDay: Day | null
@@ -62,6 +63,7 @@ export function TripMapPreview({
   days,
   itemsByDay,
   onItemsReordered,
+  onOpenItem,
   onOpenMap,
   routeDataReady = true,
   selectedDay,
@@ -514,6 +516,11 @@ export function TripMapPreview({
             </div>
           )}
         </div>
+        <TripMapDayEntries
+          data={data}
+          onOpenItem={onOpenItem}
+          onOpenMap={onOpenMap}
+        />
         {hasPoints ? (
           <div className="space-y-2">
             <p data-testid="trip-map-overview-note" className="text-[11px] leading-5 tm-muted">
@@ -551,6 +558,69 @@ export function TripMapPreview({
       title="应用路线顺序建议？"
     />
     </>
+  )
+}
+
+function TripMapDayEntries({
+  data,
+  onOpenItem,
+  onOpenMap,
+}: {
+  data: TripMapPreviewData
+  onOpenItem?: (item: ItineraryItem) => void
+  onOpenMap: (day: Day) => void
+}) {
+  if (data.daySummaries.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="-mx-1 overflow-x-auto px-1 pb-1 app-scrollbar" data-testid="trip-map-day-entries">
+      <div className="flex min-w-max gap-2">
+        {data.daySummaries.map((summary, index) => {
+          const isTargetDay = summary.day.id === data.targetDay?.id
+          return (
+            <div
+              className={`w-44 shrink-0 rounded-xl border p-2 ${
+                isTargetDay
+                  ? 'border-primary/35 bg-primary-container/45 dark:bg-primary/15'
+                  : 'border-outline-variant/30 bg-surface-container-low/80 dark:bg-surface-container-highest/35'
+              }`}
+              data-testid="trip-map-day-entry"
+              key={summary.day.id}
+            >
+              <button
+                aria-label={`打开 Day ${index + 1} 地图`}
+                className="flex min-h-[4.75rem] w-full flex-col items-start justify-between rounded-lg px-2 py-1.5 text-left transition hover:bg-white/45 active:scale-[0.99] dark:hover:bg-white/5 tm-focus"
+                onClick={() => onOpenMap(summary.day)}
+                type="button"
+              >
+                <span className="flex w-full items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase text-primary">Day {index + 1}</span>
+                  <MapPinned className="size-3.5 shrink-0 text-primary" />
+                </span>
+                <span className="mt-1 line-clamp-2 text-xs font-semibold leading-4 text-on-surface">{summary.day.title}</span>
+                <span className="mt-1 text-[11px] leading-4 tm-muted">{formatDayCoverage(summary)}</span>
+              </button>
+              {summary.firstRecord && onOpenItem ? (
+                <button
+                  aria-label={`查看 ${summary.firstRecord.item.title}`}
+                  className="mt-1 flex min-h-9 w-full items-center justify-between gap-2 rounded-lg bg-white/60 px-2 text-left text-[11px] font-semibold text-on-surface transition hover:bg-white/80 active:scale-[0.99] dark:bg-surface-dim/45 dark:text-outline-variant dark:hover:bg-surface-dim/70 tm-focus"
+                  data-testid="trip-map-day-first-item"
+                  onClick={() => onOpenItem(summary.firstRecord!.item)}
+                  type="button"
+                >
+                  <span className="min-w-0 truncate">{summary.firstRecord.item.title}</span>
+                  <ChevronRight className="size-3.5 shrink-0 text-outline" />
+                </button>
+              ) : (
+                <p className="mt-1 min-h-9 px-2 py-1 text-[11px] leading-4 tm-muted">补充坐标后可直达地点</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -742,6 +812,16 @@ function buildPreviewDataKey(data: TripMapPreviewData) {
   return data.records
     .map((record) => [record.day.id, record.item.id, record.coordinate.join(','), record.item.sortOrder].join(':'))
     .join('|')
+}
+
+function formatDayCoverage(summary: TripMapPreviewData['daySummaries'][number]) {
+  if (summary.itemCount === 0) {
+    return '暂无行程点'
+  }
+  if (summary.coordinateCount === 0) {
+    return `${summary.itemCount} 个行程点 · 待补坐标`
+  }
+  return `${summary.coordinateCount}/${summary.itemCount} 有坐标`
 }
 
 function formatDistance(value?: number) {

@@ -896,3 +896,67 @@ Risk: low-medium, because the merge is a single E2E diagnostic helper change but
 Stop conditions:
 
 - Stop and inspect if the merge conflicts with branch-owned E2E helpers or if Chrome-channel mobile UX/a11y still fails for a non-environmental reason.
+
+## 2026-06-23 Phase 13A - Trip Home Map Overview Entry Polish
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: make the Trip Home full-trip map overview a stronger product entry point by surfacing per-day map coverage and direct navigation into day maps / first mapped items, without adding provider calls or data-contract changes.
+
+Scope:
+
+- Extend the local trip map preview model with per-day map coverage summaries.
+- Update `TripMapPreview` to show compact per-day entries below the full-trip preview, with clear coverage text and map/detail actions.
+- Wire Trip Home to open the relevant Day Map or Item Detail from the overview.
+- Keep the existing route preview, route order suggestion, map fallback, and no-auto-provider-call behavior intact.
+
+No-go:
+
+- No real map/search/route/provider calls beyond the already explicit route preview and route-order buttons.
+- No schema, IndexedDB migration, cloud sync, route cache contract, or AI/privacy boundary changes.
+- No broad Trip Home redesign outside the map overview entry.
+
+Likely files:
+
+- `src/lib/tripMapPreview.ts`, `src/lib/tripMapPreview.test.ts`.
+- `src/components/trip/TripMapPreview.tsx`.
+- `src/pages/TripWorkspacePage.tsx`.
+- `e2e/trip-workspace.spec.ts`.
+
+Validation:
+
+- Targeted `tripMapPreview` unit tests.
+- `npm run lint`, `npm run build`, `git diff --check`.
+- Focused Trip Workspace E2E covering map overview entries and no mobile overflow.
+
+Read-only mini-plan result:
+
+- `TripMapPreview` already owns full-trip marker rendering, route preview fallback, route-order suggestion, and the `trip-map-overview` E2E surface.
+- The missing product layer is not another provider call; it is a local per-day entry surface so Trip Home can answer "which day should I open on the map?".
+- Safe executable scope is to extend the local preview model, add a compact horizontal day rail, and wire existing Day / Item routes.
+
+Result:
+
+- Extended `TripMapPreviewData` with ordered per-day coverage summaries: total items, mapped items, and first mapped item.
+- Added a compact Trip Home map day rail under the full-trip preview with Day Map buttons, coverage labels, and first mapped item shortcuts.
+- Wired Trip Home map shortcuts to existing canonical Day Map and Item Detail routes.
+- Kept route preview fetching, route-order suggestion, map fallback, route cache, provider calls, schema, cloud sync, and AI boundaries unchanged.
+- Updated roadmap and project status so Phase 13A is recorded as completed first pass.
+
+Completed validation:
+
+- `npm run test:unit -- src/lib/tripMapPreview.test.ts` passed: 1 file, 5 tests.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 176 files, 1399 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- `PLAYWRIGHT_PORT=4282 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/trip-workspace.spec.ts -g "旅行工作台可以在日程和地图视图之间切换"` passed: 1 test.
+- `PLAYWRIGHT_PORT=4283 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e:desktop-smoke` passed: 1 test.
+- `PLAYWRIGHT_PORT=4284 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 132 tests.
+
+Risk: medium, because Trip Home is a central route and the map preview touches MapLibre/Google fallback surfaces; data and provider boundaries remain unchanged.
+
+Stop conditions:
+
+- Stop and repair if per-day entries overlap the map plot, break marker rendering, trigger unexpected provider calls, or make the existing Trip Workspace / desktop smoke assertions unstable.

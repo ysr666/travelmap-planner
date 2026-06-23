@@ -90,6 +90,13 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expectTripPreviewRenderedInPlot(page, 5)
   await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
   await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
+  const mapDayEntries = mapOverview.getByTestId('trip-map-day-entry')
+  await expect(mapDayEntries).toHaveCount(2)
+  await expect(mapDayEntries.nth(0)).toContainText('Day 1')
+  await expect(mapDayEntries.nth(0)).toContainText('3/3 有坐标')
+  await expect(mapDayEntries.nth(0).getByTestId('trip-map-day-first-item')).toContainText('Hotel Metropolitan Tokyo 入住')
+  await expect(mapDayEntries.nth(1)).toContainText('Day 2')
+  await expect(mapDayEntries.nth(1)).toContainText('2/2 有坐标')
   await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
     '路线仅供预览，不会自动改行程顺序。',
   )
@@ -100,10 +107,19 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   })
   expect(noteIsOutsidePlot).toBe(true)
   await expectNoHorizontalOverflow(page)
-  await mapOverview.getByRole('button', { name: '查看地图' }).click()
+
+  await mapDayEntries.nth(1).getByRole('button', { name: '打开 Day 2 地图' }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
+  await expect(page.getByTestId('day-selector').getByRole('button', { name: /Day 2/ })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByTestId('map-sheet')).toHaveCount(0)
+  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+
+  await page.getByTestId('day-back-to-trip').click()
+  await expect(page).toHaveURL(/#\/trip\?/)
+  await page.getByTestId('trip-map-overview').getByRole('button', { name: '查看地图' }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('day-back-to-trip').click()

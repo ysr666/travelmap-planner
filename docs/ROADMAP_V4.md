@@ -29,6 +29,7 @@
 - Package 7、生产权限加固与 Companion owner policy 前向修复已部署；Companion 与真实双设备生产 smoke 完整通过，覆盖 A 上传、B 全新恢复、latest-wins 与 tombstone 传播。
 - PR1-PR3 Limited Beta 基础收口完成：全局登录与账号隔离、Phase 12F 时间语义、Provider 生产运营加固均已进入主线；Provider D1 migration、Pages env、maintenance Worker 和 production smoke 已完成。
 - PR4 QA/文档/治理分支新增桌面 1440x900 smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 模板。
+- Phase 13A：Trip Home 全程地图概览入口优化完成第一轮，地图预览下方提供按天坐标覆盖、Day Map 入口和首个有坐标地点入口。
 
 当前 canonical routes：
 
@@ -48,7 +49,7 @@
 
 ## 不要误判为完成
 
-- Trip Home 主建议层级已收敛；全旅行地图概览仍待继续优化。
+- Trip Home 主建议层级已收敛；全旅行地图概览入口已完成第一轮，后续可继续做视觉 QA 和更丰富地图 provider 能力。
 - Day View 已有 marker card 初版；后续仍需把 marker → 轻卡片 → Item Detail 现场路径做得更顺。
 - Item Detail 仍需变成旅行现场查看页。
 - Ticket Library 已升级为票据画廊并接入当前票据建议；完整票据编辑器仍未实现。
@@ -64,7 +65,7 @@
 
 - Phase 12D：Home 与全局视觉纠偏。✅ 已完成。
 - Phase 12E：Full-page form 布局修复与输入体验 QA。✅ 已完成。
-- Phase 13A：Trip Home 地图概览与入口优化。Trip Home 成为真正旅行首页，而不是纯 overview。
+- Phase 13A：Trip Home 地图概览与入口优化。✅ 已完成第一轮。
 - Phase 13B：Day View 地图点卡片交互。点击 marker 显示轻量卡片，点击卡片进入 Item Detail。
 - Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。
 - Phase 16A/B/C：Ticket Library 2.0、全屏票据预览器、Item Detail 票据紧凑展示。

@@ -12,6 +12,7 @@ import {
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
+  PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
   PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
@@ -30,6 +31,8 @@ import {
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTripOperationsSummaryRequest,
+  validateProviderProxyAssistantAnswerRequest,
+  validateProviderProxyAssistantAnswerSuccessResponse,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   validateProviderProxyExchangeRateRequest,
@@ -42,6 +45,7 @@ import {
   type ProviderProxyExistingTripImportRequest,
   type ProviderProxyTravelInboxClassifyRequest,
   type ProviderProxyAiTripEditPlanRequest,
+  type ProviderProxyAssistantAnswerRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
@@ -96,6 +100,15 @@ import {
   type AiTripEditProvider,
   type AiTripEditProviderErrorCode,
 } from './aiTripEditProvider'
+import {
+  buildAssistantAnswerProviderInput,
+  createDisabledAssistantAnswerProvider,
+  createMockAssistantAnswerProvider,
+  createOpenAiCompatibleAssistantAnswerProvider,
+  createUnavailableAssistantAnswerProvider,
+  type AssistantAnswerProvider,
+  type AssistantAnswerProviderErrorCode,
+} from './assistantAnswerProvider'
 import {
   createDisabledTravelSearchProvider,
   createMockTravelSearchProvider,
@@ -450,6 +463,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
     return handleTripOperationsSummaryRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION) {
+    return handleAssistantAnswerRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
@@ -1730,6 +1747,110 @@ function mapTripOperationsSummaryErrorCodeToStatus(code: TripOperationsSummaryPr
     case 'provider_unavailable': return 503
     case 'unsupported': return 501
     case 'invalid_response': return 502
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleAssistantAnswerRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAssistantAnswerRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const answerRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: answerRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: answerRequest.requestId,
+  })
+  if (quotaResponse) {
+    return quotaResponse
+  }
+
+  try {
+    const provider = selectAssistantAnswerProvider(env, answerRequest, fetcher)
+    const providerInput = buildAssistantAnswerProviderInput(answerRequest)
+    const result = await provider.answer(providerInput)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapAssistantAnswerErrorCodeToStatus(result.errorCode))
+    }
+    let response = result.kind === 'answer' ? result.response : null
+    if (result.kind === 'raw') {
+      const extracted = extractJsonFromAiText(result.rawText)
+      response = extracted && typeof extracted === 'object' && !Array.isArray(extracted)
+        ? validateProviderProxyAssistantAnswerSuccessResponse({
+            ...extracted as Record<string, unknown>,
+            operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+            requestId: answerRequest.requestId,
+            source: 'future_ai',
+          })
+        : null
+    }
+    if (!response) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+    return jsonResponse({
+      answer: response.answer,
+      caveats: response.caveats,
+      ok: true,
+      operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+      requestId: answerRequest.requestId,
+      source: response.source,
+      sourceCards: response.sourceCards,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION, answerRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAssistantAnswerProvider(
+  env: ProviderProxyHandlerEnv,
+  request: ProviderProxyAssistantAnswerRequest,
+  fetcher: typeof fetch,
+): AssistantAnswerProvider {
+  if (isMockMode(env)) {
+    return createMockAssistantAnswerProvider(request)
+  }
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleAssistantAnswerProvider(env, fetcher)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAssistantAnswerProvider()
+  }
+  return createDisabledAssistantAnswerProvider()
+}
+
+function mapAssistantAnswerErrorCodeToStatus(code: AssistantAnswerProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
     case 'network_error': return 502
     case 'provider_error': return 502
     default: return 502

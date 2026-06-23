@@ -1977,6 +1977,31 @@ describe('provider proxy handler trip_operations_summary', () => {
   })
 })
 
+describe('provider proxy handler assistant_answer', () => {
+  it('returns deterministic mock assistant answers without provider calls or secret leakage', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_API_KEY: 'server-secret', TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validAssistantAnswerRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-secret')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    const body = JSON.parse(text)
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'assistant_answer',
+      source: 'mock',
+    })
+    expect(body.answer).toContain('全部旅行')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+})
+
 function validEditRequest(command = '第二天太满了，帮我放松一点') {
   return {
     command,
@@ -2003,6 +2028,20 @@ function validEditRequest(command = '第二天太满了，帮我放松一点') {
     operation: 'ai_trip_edit_plan',
     quotaSessionId: 'session-edit-1',
     requestId: 'edit-1',
+  }
+}
+
+function validAssistantAnswerRequest() {
+  return {
+    context: {
+      scopeLabel: '全部旅行',
+      sourceCards: [{ id: 'account', kind: 'local_context', title: '账户摘要', detail: '1 个旅行' }],
+      summaries: [{ key: 'trip_count', label: '旅行数量', value: '1 个旅行' }],
+    },
+    operation: 'assistant_answer',
+    question: '你能做什么？',
+    quotaSessionId: 'session-assistant-1',
+    requestId: 'assistant-1',
   }
 }
 

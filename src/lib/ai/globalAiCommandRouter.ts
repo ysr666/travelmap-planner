@@ -29,6 +29,7 @@ import type {
 
 export type GlobalAiCommandIntent =
   | { kind: 'ai_trip_edit' }
+  | { kind: 'consultation' }
   | { kind: 'ledger_query' }
   | { kind: 'new_trip' }
   | { kind: 'preference_update'; preference: ItineraryReplanPreference }
@@ -95,7 +96,16 @@ export type GlobalAiTripEditResult = {
   title: string
 }
 
+export type GlobalAiConsultationResult = {
+  intent: Extract<GlobalAiCommandIntent, { kind: 'consultation' }>
+  kind: 'consultation'
+  lines: string[]
+  title: string
+  warnings: string[]
+}
+
 export type GlobalAiCommandResult =
+  | GlobalAiConsultationResult
   | GlobalAiLedgerSummaryResult
   | GlobalAiNavigationResult
   | GlobalAiPreferencePreviewResult
@@ -216,6 +226,10 @@ export async function resolveGlobalAiCommand(command: string, context: GlobalAiC
     return buildReplanPreview(command, intent, context)
   }
 
+  if (intent.kind === 'consultation') {
+    return buildConsultation(command, intent, context)
+  }
+
   if (!context.trip) {
     return {
       actionLabel: '生成新旅行',
@@ -246,7 +260,9 @@ export function parseGlobalAiCommandIntent(command: string): GlobalAiCommandInte
   const replan = parseReplanIntent(command, normalized)
   if (replan) return replan
 
-  return { kind: 'ai_trip_edit' }
+  if (isTripEditCommand(command, normalized)) return { kind: 'ai_trip_edit' }
+
+  return { kind: 'consultation' }
 }
 
 function buildReplanPreview(
@@ -333,6 +349,65 @@ function buildLedgerSummary(
     lines,
     params: { tripId: context.trip!.id },
     title: '轻量账本摘要',
+  }
+}
+
+function buildConsultation(
+  command: string,
+  intent: Extract<GlobalAiCommandIntent, { kind: 'consultation' }>,
+  context: GlobalAiCommandContext,
+): GlobalAiConsultationResult {
+  if (!context.trip) {
+    return {
+      intent,
+      kind: 'consultation',
+      lines: [
+        '我现在没有具体旅行上下文，只能做通用判断。',
+        '如果要生成新旅行，可以输入“新建行程”；如果要问某趟旅行，请先打开对应旅行。',
+      ],
+      title: '只读咨询',
+      warnings: ['本次不会发送外部 AI、搜索或地图请求，也不会写入本地数据。'],
+    }
+  }
+
+  const day = pickConsultationDay(context)
+  const dayItems = day ? sortItineraryItems(context.items.filter((item) => item.dayId === day.id)) : []
+  const upcomingItems = dayItems
+    .filter((item) => item.executionState?.status !== 'completed' && item.executionState?.status !== 'skipped')
+    .slice(0, 3)
+  const questionKind = classifyConsultation(command)
+  const lines = [
+    `我只基于「${context.trip.title}」的本地行程数据回答：${context.days.length} 天、${context.items.length} 个行程点、${context.tickets.length} 张票据、${context.ledgerExpenses.length} 笔账本记录。`,
+  ]
+
+  if (questionKind === 'food') {
+    lines.push('本地没有餐厅实时来源时，我不会编营业时间、评分或排队情况；可以先看当前日期空档，再手动确认餐厅来源。')
+    if (day) lines.push(formatDayWindowLine(day, dayItems))
+  } else if (questionKind === 'readiness') {
+    const missingTimeCount = context.items.filter((item) => !item.startTime && !item.endTime).length
+    const missingPlaceCount = context.items.filter((item) => !item.locationName && !item.address).length
+    const ticketBoundCount = context.items.filter((item) => item.ticketIds.length > 0).length
+    lines.push(`建议先确认 ${missingTimeCount} 个未定时间、${missingPlaceCount} 个未定地点，以及 ${ticketBoundCount} 个绑定票据的项目。`)
+    if (day) lines.push(formatDayWindowLine(day, dayItems))
+  } else if (questionKind === 'next') {
+    if (upcomingItems.length > 0) {
+      lines.push(`当前优先看 ${day?.title ?? day?.date ?? '当前日期'} 的后续安排：${upcomingItems.map(formatItemInline).join('；')}。`)
+    } else {
+      lines.push('当前日期没有明显的待执行项目，可以回到 Trip Home 看跨天概览和待确认事项。')
+    }
+  } else {
+    if (day) lines.push(formatDayWindowLine(day, dayItems))
+    if (upcomingItems.length > 0) lines.push(`可先关注：${upcomingItems.map(formatItemInline).join('；')}。`)
+  }
+
+  lines.push('如果你要我实际改行程，请使用“把某地点改到…”“新增…”“删除…”这类明确修改指令；那会进入 AI 修改预览和二次确认。')
+
+  return {
+    intent,
+    kind: 'consultation',
+    lines,
+    title: '只读旅行咨询',
+    warnings: ['本次没有调用外部 AI、搜索、路线或地图 provider，也不会写入 IndexedDB。'],
   }
 }
 
@@ -449,6 +524,67 @@ function isLedgerCommand(normalized: string) {
 function isSmartWorkspaceCommand(normalized: string) {
   return containsAny(normalized, ['智能整理', '整理行程', '校准地点', '补全开放时间', '补全票价', '路线顺序', '每日提示']) ||
     /\borganize\b|\bcalibrate\b/.test(normalized)
+}
+
+function isTripEditCommand(command: string, normalized: string) {
+  return containsAny(command, [
+    '帮我改',
+    '修改行程',
+    '调整行程',
+    '调整一下',
+    '改行程',
+    '改一下',
+    '改为',
+    '重新安排',
+    '重新排',
+    '重排',
+    '帮我把',
+    '帮我安排',
+    '改到',
+    '改成',
+    '挪到',
+    '移动',
+    '移到',
+    '添加',
+    '新增',
+    '加一个',
+    '加入',
+    '插入',
+    '删掉',
+    '删除',
+    '取消掉',
+    '取消这个',
+    '替换',
+    '换成',
+    '安排到',
+    '补到',
+    '延后',
+    '提前',
+  ]) || /\b(?:add|change|delete|move|remove|replace|reschedule|update)\b/.test(normalized)
+}
+
+function classifyConsultation(command: string): 'food' | 'generic' | 'next' | 'readiness' {
+  if (containsAny(command, ['吃', '餐厅', '早饭', '午饭', '晚饭', '咖啡', '喝什么', '吃什么'])) return 'food'
+  if (containsAny(command, ['确认什么', '检查什么', '注意什么', '准备什么', '漏了什么', '风险', '待办'])) return 'readiness'
+  if (containsAny(command, ['接下来', '下一步', '现在', '先做什么', '先去哪', '今天怎么走'])) return 'next'
+  return 'generic'
+}
+
+function pickConsultationDay(context: GlobalAiCommandContext) {
+  return context.currentDay ?? context.days[0]
+}
+
+function formatDayWindowLine(day: Day, items: ItineraryItem[]) {
+  if (items.length === 0) return `${day.title ?? day.date} 还没有行程点。`
+  const first = items[0]
+  const last = items[items.length - 1]
+  const windowLabel = [first.startTime, last.endTime ?? last.startTime].filter(Boolean).join('-') || '时间未定'
+  return `${day.title ?? day.date} 有 ${items.length} 个行程点，时间窗约 ${windowLabel}。`
+}
+
+function formatItemInline(item: ItineraryItem) {
+  const time = [item.startTime, item.endTime].filter(Boolean).join('-') || '时间未定'
+  return `${time} ${item.title}`
 }
 
 function extractDelayMinutes(command: string) {

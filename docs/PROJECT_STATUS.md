@@ -1,7 +1,7 @@
 # 旅图 TripMap 项目状态
 
 更新时间：2026-06-23
-基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化和 Phase 13B Day Map marker 卡片交互完成第一轮。
+基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化、Phase 13B Day Map marker 卡片交互和 Phase 13C 全局 AI 咨询分流完成第一轮。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
 Foundation/Phase-2 roadmap, including the original 13 product directions mapping: [docs/FOUNDATION_GAP_REVIEW_PHASE2.md](FOUNDATION_GAP_REVIEW_PHASE2.md).
@@ -56,6 +56,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - AI trip-plan JSON / zip 导入，含 copy 附件和本地校验预览。
 - AI Draft 页面：本地 mock 草稿、手动 JSON 草稿、provider proxy 真实草稿生成、草稿质量检查和 AI repair preview flow。
 - Trip Home AI 修改建议：一次性用户指令 → 脱敏 saved-trip context → provider proxy patch plan → 本地校验 → diff preview → 二次确认后本地事务 apply。
+- 全局 AI 输入：普通问答进入本地只读咨询，本地重排 / 偏好 / 账本走确认或摘要，明确修改才进入 provider-backed patch plan。
 - AI Privacy Guard：AI 生成 / 修复请求前按隐私设置过滤数据，默认不发送 notes、票据、cloud、route cache 或完整本地 DB。
 - DeepSeek `deepseek-v4-flash` real provider smoke：generation 和 repair 均通过 `/api/provider-proxy` 跑通，key 保持 server-side。
 - Provider proxy production hardening：生产/可信预览先拒绝无 Origin 或非 allowlist Origin，再做 IP 限流、Bearer 检查、Supabase Auth 验证、D1 kill switch、每日预算和 operation 分钟配额，最后才调用 provider。
@@ -88,6 +89,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Phase 12F：时间语义收口完成，保持现有字段兼容，不做历史数据格式迁移。
 - Phase 13A：Trip Home 地图概览与入口优化第一轮。
 - Phase 13B：Day View marker 卡片交互第一轮。
+- Phase 13C：全局 AI 咨询模式第一轮。
 - AI draft foundation / request builder / provider proxy operation / real provider adapter / privacy guard / repair guardrails。
 - Search provider proxy foundation / AI trip edit patch plan foundation。
 - E2E locator hardening。
@@ -103,7 +105,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Web search 虽已可通过 server-side Tavily env 接入，但仍只允许 AI Trip Edit 在明确搜索意图且用户确认后单次调用 `travel_search`；没有 source-bearing 结果就不声明实时信息。
 - Google Places item lookup 是手动、单行程点、确认后写入的 foundation；不是自动 enrich、批量更新、路线生成或地点详情全量同步。
 - AI thinking / reasoning 不做用户开关：当前由后端策略管理，默认保持 stable JSON mode，优先稳定结构化输出。
-- AI trip edit 是 patch plan + explicit search tool foundation：不是多轮聊天助手，不自主浏览网页，不自动应用修改，不联动 route/ticket/cloud。
+- 全局 AI 输入已区分只读咨询、confirmable local action 和 provider-backed patch plan；它仍不是多轮聊天助手，不自主浏览网页，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 云端与同步状态
 
@@ -148,6 +150,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Real AI draft repair：DeepSeek `deepseek-v4-flash` 通过 `/api/provider-proxy` smoke passed；用户确认后触发一次 repair 请求，修复草稿返回并更新 preview / JSON textarea。
 - Validation path：provider raw text → JSON extraction → `validateAiTripDraft` → preview。最终“确认导入”前不写 IndexedDB。
 - AI trip edit plan：`ai_trip_edit_plan` 已接入 provider proxy。上下文由 AI Privacy Guard 约束，默认不发送 notes、完整坐标、ticket IDs/文件/blob、cloud、route cache 或完整本地 DB；明确搜索意图可在发送确认后先调用一次 `travel_search` 并附加最多 3 条来源摘要。返回走 JSON extraction → `validateAiTripEditPatchPlan` → 本地推导 affected IDs/counts → diff preview → stale baseline check → final confirm → IndexedDB transaction apply。
+- Global AI command bar：普通咨询只读取当前本地 Trip/Day/Item/Ticket/Ledger 摘要，不调用 provider、不搜索、不写 IndexedDB；明确修改类指令才进入现有 AI Trip Edit 发送确认和 patch-plan preview。
 - Side-effect boundary：repair 前后没有 route generation/cache、ticket creation、cloud upload/delete 或 sortOrder optimization。
 - Security check：page/dist/report 不应包含 API key、key prefix、Bearer header、raw provider body、raw model output、full prompt 或 stack trace。
 - DeepSeek reasoning：当前由后端策略管理。默认、simple 和 `auto` 路径发送 `thinking: { type: "disabled" }`；复杂任务可由后端选择 high reasoning。前端没有 Settings selector、AI Draft selector、search toggle 或 localStorage 模式开关。
@@ -170,8 +173,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 1. 完成 PR4 本地与远端 QA：build、lint、unit、桌面 smoke、PWA 升级、全量 E2E、GitHub Actions 和 Cloudflare production deploy。
 2. 人工补录 iPhone Safari 与 Android Chrome 实体机检查。
 3. AI ISO datetime 显式确认 / 映射设计，不允许静默截断成 plain date/time。
-4. AI 全局入口与咨询能力产品化：区分普通问答、行程内 action、provider-backed patch plan，减少“返回内容不合法”的误判。
-5. Item Detail 2.0：面向现场查看，突出时间、地点、交通、票据与外部导航。
-6. Trip Home / Day Map 继续做真实设备视觉 QA 和地图 provider 能力增强。
+4. Item Detail 2.0：面向现场查看，突出时间、地点、交通、票据与外部导航。
+5. Trip Home / Day Map / 全局 AI 输入继续做真实设备视觉 QA 和 provider/mock 边界回归。
 
 后续 Map Provider 或 Transit Hints 必须复用 Phase 12F 时间语义和 Provider 加固边界。AI 新能力继续走 provider proxy / quota / confirmation boundary；reasoning 和 search 由后端能力演进，不做用户可见模型控制。地图和交通新能力不得把无来源实时营业时间、ETA、航班延误或交通状态包装成本地 timezone 计算结果。

@@ -35,6 +35,37 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
 })
 
+test('全局 AI 普通咨询只读回答且不触发 provider 发送', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+
+  const commandBar = page.getByTestId('global-ai-command-bar')
+  await expect(commandBar).toBeVisible()
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+  await expect(tripCard).toBeVisible()
+  await clickTripCard(tripCard)
+  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+  await expect(page).toHaveURL(/#\/day\?/)
+
+  await page.getByLabel('全局 AI 指令').fill('今天接下来应该先确认什么？')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('只读旅行咨询')
+  await expect(page.getByTestId('global-ai-consultation-result')).toContainText('只基于')
+  await expect(result).toContainText('不会写入 IndexedDB')
+  await expect(page.getByTestId('global-ai-send-confirm-dialog')).not.toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
+  await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
+})
+
 async function expectCommandBarAboveBottomTab(page: Page) {
   const commandBox = await page.getByTestId('global-ai-command-bar').boundingBox()
   const tabBox = await page.locator('nav').filter({ has: page.getByRole('button', { name: '首页' }) }).boundingBox()

@@ -1023,3 +1023,70 @@ Risk: medium, because the floating card determines map viewport padding and can 
 Stop conditions:
 
 - Stop and repair if the card overlaps map controls, pushes selected markers out of usable area, breaks return-to-map context, or weakens the no-provider-call map recenter guarantees.
+
+## 2026-06-23 Phase 13C - Global AI Consultation Mode
+
+Status: completed
+
+Branch: `feature/autonomous-iteration-20260620-navigation-search`
+
+Goal: productize the global AI command bar so harmless consultation, local confirmable actions, and provider-backed AI patch plans are clearly separated.
+
+Scope:
+
+- Add a read-only consultation intent/result to `globalAiCommandRouter`.
+- Keep explicit write-like trip-edit commands on the existing provider-backed AI patch-plan path.
+- Render consultation answers in `GlobalAiCommandBar` without send/apply confirmation and without writing local data.
+- Cover the separation with router unit tests and focused global command-bar E2E.
+- Update status/roadmap docs after validation.
+
+No-go:
+
+- No new provider proxy operation, AI patch schema, cloud sync, IndexedDB schema, route cache, search, map, ticket/blob, or AI privacy boundary changes.
+- No real AI, search, route, map, Cloudflare, Supabase, or provider calls.
+- No automatic fact claims about real-time openings, prices, closures, route ETA, or recent events without source-bearing search results.
+
+Likely files:
+
+- `src/lib/ai/globalAiCommandRouter.ts`
+- `src/lib/ai/globalAiCommandRouter.test.ts`
+- `src/components/ai/GlobalAiCommandBar.tsx`
+- `e2e/global-ai-command-bar.spec.ts`
+- Docs and ledger.
+
+Validation:
+
+- Focused router unit test.
+- Focused global AI command-bar E2E.
+- `npm run lint`, `npm run test:unit`, `npm run build`, `git diff --check`.
+
+Read-only mini-plan result:
+
+- The global bar already supports local replan previews, preference writes behind confirmation, ledger summary navigation, and provider-backed AI patch plans.
+- The weak point is default routing: ordinary trip questions fall through to `ai_trip_edit`, which can surface provider/payload errors for harmless consultation.
+- Safe executable scope is a deterministic local consultation result that summarizes current trip context and names the confirmation boundary; real provider calls remain behind explicit edit commands and existing confirmation dialogs.
+
+Result:
+
+- Added a `consultation` global AI intent/result for ordinary questions.
+- Kept explicit write-like commands such as add/change/delete/move/reschedule on the existing provider-backed AI Trip Edit patch-plan lane.
+- Rendered consultation answers in the global command bar as local, read-only results with no send confirmation, no apply action, and no IndexedDB write.
+- Added focused unit and E2E coverage proving ordinary consultation does not request `/api/provider-proxy` while what-if replan still stays preview-only.
+- Updated roadmap and project status so Phase 13C is recorded as completed first pass.
+
+Completed validation:
+
+- `npm run test:unit -- src/lib/ai/globalAiCommandRouter.test.ts` passed: 1 file, 6 tests.
+- `npm run lint` passed.
+- `PLAYWRIGHT_PORT=4287 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/global-ai-command-bar.spec.ts` passed: 2 tests.
+- `npm run test:unit` passed: 176 files, 1401 tests.
+- `npm run build` passed with the existing large-chunk warning and PWA `generateSW`.
+- Final `npm run test:unit -- src/lib/ai/globalAiCommandRouter.test.ts`, `npm run lint`, and `git diff --check` passed after the final parser keyword/doc polish.
+- Final `PLAYWRIGHT_PORT=4289 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/global-ai-command-bar.spec.ts` passed: 2 tests.
+- `PLAYWRIGHT_PORT=4288 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 133 tests.
+
+Risk: medium, because command classification affects a global surface and must not steal explicit trip-edit requests from the provider-backed preview flow.
+
+Stop conditions:
+
+- Stop and repair if explicit edit commands no longer open the AI send confirmation, consultation makes provider requests, local write confirmation is bypassed, or the global bar overlaps bottom navigation / map controls again.

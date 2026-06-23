@@ -31,6 +31,7 @@
 - PR4 QA/文档/治理分支新增桌面 1440x900 smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 模板。
 - Phase 13A：Trip Home 全程地图概览入口优化完成第一轮，地图预览下方提供按天坐标覆盖、Day Map 入口和首个有坐标地点入口。
 - Phase 13B：Day View marker 卡片交互完成第一轮，卡片提供站点 rail、明确详情 CTA、上一/下一站和与全局 AI 输入条错位的安全位置。
+- Phase 13C：全局 AI 输入咨询模式完成第一轮，普通问答留在本地只读咨询，明确修改才进入 provider-backed patch plan 和二次确认。
 
 当前 canonical routes：
 
@@ -57,8 +58,8 @@
 - SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
 - Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正、Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已进入主路径。后续功能必须复用这些边界，未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
 - AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
-- AI web search 尚未实现：当前不查询实时营业时间、票价、交通、天气、评价、活动或网页来源。
-- AI trip edit 当前只是 patch plan foundation：不是多轮聊天助手，不联网搜索，不自动应用修改，不联动 route/ticket/cloud。
+- Web search 只允许在用户确认后的受限 AI Trip Edit 搜索意图中作为 source-bearing 辅助；没有来源就不声明实时营业时间、票价、交通、天气、评价、活动或网页事实。
+- 全局 AI 输入已有本地只读咨询 / 本地重排预览 / 账本摘要 / provider-backed patch plan 分流；它仍不是多轮聊天助手，不自动应用修改，不联动 route/ticket/cloud。
 
 ## 后续路线图
 
@@ -68,6 +69,7 @@
 - Phase 12E：Full-page form 布局修复与输入体验 QA。✅ 已完成。
 - Phase 13A：Trip Home 地图概览与入口优化。✅ 已完成第一轮。
 - Phase 13B：Day View 地图点卡片交互。✅ 已完成第一轮。
+- Phase 13C：全局 AI 咨询模式。✅ 已完成第一轮。
 - Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。
 - Phase 16A/B/C：Ticket Library 2.0、全屏票据预览器、Item Detail 票据紧凑展示。
 
@@ -100,8 +102,8 @@
 
 - Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
 - Unified Trip Intelligence 基础与上下文接入已完成；后续执行扩展必须复用统一 executor / appliedChanges，不为 Ledger、Document 或 Shared Trip 新建平行中心。
-- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation。
-- 当前限制：不接入真实 web search，不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 仅为 mock/disabled foundation，不是实时来源。
+- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation，以及全局 AI 输入的本地只读咨询 / 本地 confirmable action / provider-backed patch plan 分流。
+- 当前限制：不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 只在用户确认后的 AI Trip Edit 搜索意图中作为 source-bearing 辅助，不是通用实时来源。
 - AI draft 只生成 / 修复 draft preview；AI trip edit 只生成 patch plan preview。地点、坐标、路线、交通时间、票据绑定和本地写入必须由用户确认。
 
 ### 7. AI-first future work

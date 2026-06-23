@@ -62,6 +62,8 @@ import {
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTripOperationsSummaryRequest,
+  validateProviderProxyAssistantAnswerRequest,
+  validateProviderProxyAssistantAnswerSuccessResponse,
   validateProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyTravelSearchRequest,
   type ProviderProxyTravelSearchResponse,
@@ -76,6 +78,9 @@ import {
   type ProviderProxyTripOperationsSummaryRequest,
   type ProviderProxyTripOperationsSummaryResponse,
   type ProviderProxyTripOperationsSummarySuccessResponse,
+  type ProviderProxyAssistantAnswerRequest,
+  type ProviderProxyAssistantAnswerResponse,
+  type ProviderProxyAssistantAnswerSuccessResponse,
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 import { validateAiTripDraft } from './ai/aiTripDraft'
@@ -721,6 +726,47 @@ export async function fetchProviderProxyTripOperationsSummary(
   return parsed
 }
 
+export async function fetchProviderProxyAssistantAnswer(
+  request: ProviderProxyAssistantAnswerRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyAssistantAnswerSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyAssistantAnswerRequest(requestWithSession)
+  if (!validation.ok) {
+    throw new ProviderProxyClientError(validation.error)
+  }
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: await buildProviderProxyHeaders(options),
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'assistant_answer' }))
+  }
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'assistant_answer' }), response.status)
+  }
+
+  const parsed = parseProviderProxyAssistantAnswerResponse(body)
+  if (!parsed.ok) {
+    throw new ProviderProxyClientError(parsed, response.status)
+  }
+  return parsed
+}
+
 export async function fetchProviderProxyExistingTripImport(
   request: ProviderProxyExistingTripImportRequest,
   proxyUrl: string,
@@ -1236,6 +1282,31 @@ function parseProviderProxyTripOperationsSummaryResponse(
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'trip_operations_summary' })
+}
+
+function parseProviderProxyAssistantAnswerResponse(
+  input: unknown,
+): ProviderProxyAssistantAnswerResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyAssistantAnswerSuccessResponse(record)
+    if (validation) {
+      return validation
+    }
+    return buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'assistant_answer' })
+  }
+
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: defaultProviderProxyErrorMessage(code, 'assistant_answer'),
+      operation: 'assistant_answer',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'assistant_answer' })
 }
 
 function validateProviderProxyAiTripEditPlanSuccessResponse(

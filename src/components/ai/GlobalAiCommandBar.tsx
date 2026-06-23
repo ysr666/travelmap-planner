@@ -14,18 +14,23 @@ import {
   formatMobility,
   formatPriority,
   formatWeather,
-  loadGlobalAiCommandContext,
-  resolveGlobalAiCommand,
   type GlobalAiCommandContext,
-  type GlobalAiCommandResult,
   type GlobalAiReplanPreviewResult,
 } from '../../lib/ai/globalAiCommandRouter'
+import {
+  buildAssistantAnswerFallbackAfterError,
+  loadGlobalAiInteractionContext,
+  mergeAssistantAnswerProviderResponse,
+  resolveGlobalAiInteraction,
+  type GlobalAiInteractionResult,
+} from '../../lib/ai/globalAiInteraction'
 import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, type ProviderProxyAiTripEditSearchSummary, type ProviderProxyTravelSearchRequest } from '../../lib/ai/providerProxyContract'
 import { applyTripReplanOption, createTripReplanPreviewForEvent } from '../../lib/adaptiveReplanning'
 import { emitTravelDataChanged } from '../../lib/dataEvents'
 import { navigateTo } from '../../lib/routes'
 import {
   fetchProviderProxyAiTripEditPlan,
+  fetchProviderProxyAssistantAnswer,
   fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
   ProviderProxyClientError,
@@ -75,7 +80,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [result, setResult] = useState<GlobalAiCommandResult | null>(null)
+  const [result, setResult] = useState<GlobalAiInteractionResult | null>(null)
   const [selectedReplanOptionId, setSelectedReplanOptionId] = useState<string | null>(null)
   const [pendingAi, setPendingAi] = useState<PendingAiTripEdit | null>(null)
   const [aiSendConfirmOpen, setAiSendConfirmOpen] = useState(false)
@@ -101,10 +106,12 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setResult(null)
     setAiPreview(null)
     try {
-      const context = await loadGlobalAiCommandContext(activeRoute)
-      const resolved = await resolveGlobalAiCommand(trimmedCommand, context)
+      const context = await loadGlobalAiInteractionContext(activeRoute)
+      const resolved = await resolveGlobalAiInteraction(trimmedCommand, context)
       if (resolved.kind === 'ai_trip_edit') {
         prepareAiTripEdit(context)
+      } else if (resolved.kind === 'assistant_answer') {
+        setResult(await resolveAssistantAnswer(resolved))
       } else {
         setSelectedReplanOptionId(resolved.kind === 'replan_preview' ? resolved.record.options[0]?.id ?? null : null)
         setResult(resolved)
@@ -148,6 +155,16 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       warnings: contextResult.warnings,
     })
     setAiSendConfirmOpen(true)
+  }
+
+  async function resolveAssistantAnswer(answer: Extract<GlobalAiInteractionResult, { kind: 'assistant_answer' }>) {
+    if (!providerConfig.configured || !providerConfig.proxyUrl) return answer
+    try {
+      const response = await fetchProviderProxyAssistantAnswer(answer.providerRequest, providerConfig.proxyUrl)
+      return mergeAssistantAnswerProviderResponse(answer, response)
+    } catch {
+      return buildAssistantAnswerFallbackAfterError(answer)
+    }
   }
 
   async function confirmAiSend() {
@@ -248,7 +265,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setSelectedReplanOptionId(null)
   }
 
-  function handleNavigation(result: Extract<GlobalAiCommandResult, { kind: 'navigation' }> | Extract<GlobalAiCommandResult, { kind: 'ledger_summary' }>) {
+  function handleNavigation(result: Extract<GlobalAiInteractionResult, { kind: 'navigation' }> | Extract<GlobalAiInteractionResult, { kind: 'ledger_summary' }>) {
     if (result.kind === 'ledger_summary') {
       navigateTo('ledger', result.params)
       return
@@ -366,12 +383,28 @@ function CommandResultView({
   result,
   selectedReplanOptionId,
 }: {
-  onNavigate: (result: Extract<GlobalAiCommandResult, { kind: 'navigation' }> | Extract<GlobalAiCommandResult, { kind: 'ledger_summary' }>) => void
+  onNavigate: (result: Extract<GlobalAiInteractionResult, { kind: 'navigation' }> | Extract<GlobalAiInteractionResult, { kind: 'ledger_summary' }>) => void
   onRequestWrite: () => void
   onSelectReplanOption: (optionId: string) => void
-  result: GlobalAiCommandResult
+  result: GlobalAiInteractionResult
   selectedReplanOptionId: string | null
 }) {
+  if (result.kind === 'help' || result.kind === 'assistant_answer') {
+    return (
+      <ResultShell icon={<Bot className="size-4" />} title={result.title}>
+        <div className="space-y-1 text-xs leading-5 text-on-surface-variant" data-testid={result.kind === 'help' ? 'global-ai-help-result' : 'global-ai-assistant-answer-result'}>
+          {result.answer.split('\n').map((line) => <p className="break-words [overflow-wrap:anywhere]" key={line}>{line}</p>)}
+        </div>
+        <SourceCards cards={result.sourceCards} />
+        {result.caveats.length ? (
+          <div className="space-y-1 rounded-xl bg-surface-container-high px-3 py-2 text-xs leading-5 text-on-surface-variant">
+            {result.caveats.slice(0, 4).map((caveat) => <p key={caveat}>{caveat}</p>)}
+          </div>
+        ) : null}
+      </ResultShell>
+    )
+  }
+
   if (result.kind === 'navigation') {
     return (
       <ResultShell icon={<Route className="size-4" />} title={result.title}>
@@ -449,6 +482,20 @@ function CommandResultView({
   }
 
   return null
+}
+
+function SourceCards({ cards }: { cards: Array<{ detail?: string; id: string; kind: string; title: string }> }) {
+  if (cards.length === 0) return null
+  return (
+    <div className="grid gap-2 sm:grid-cols-2" data-testid="global-ai-source-cards">
+      {cards.slice(0, 4).map((card) => (
+        <div className="rounded-xl bg-surface-container-high px-3 py-2 text-xs leading-5" key={card.id}>
+          <p className="font-semibold text-on-surface">{card.title}</p>
+          {card.detail ? <p className="tm-muted">{card.detail}</p> : null}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function AiPreviewView({
@@ -569,7 +616,7 @@ async function applyReplanPreview(result: GlobalAiReplanPreviewResult, selectedO
   await applyTripReplanOption(record.id, option.id)
 }
 
-function buildWriteConfirmBody(result: GlobalAiCommandResult | null, selectedOption: TripReplanOption | null) {
+function buildWriteConfirmBody(result: GlobalAiInteractionResult | null, selectedOption: TripReplanOption | null) {
   if (!result) return '确认写入当前预览。'
   if (result.kind === 'preference_preview') {
     return `将把重排偏好写入「${result.item.title}」。这只影响后续重排判断，不会立即改变行程时间。`

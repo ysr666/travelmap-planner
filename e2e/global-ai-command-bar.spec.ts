@@ -1,6 +1,26 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clearTravelDatabase, clickTripCard, expectNoHorizontalOverflow } from './helpers'
 
+test('全局 AI 在无旅行上下文时离线回答能力问题', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+
+  await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
+  await page.getByLabel('全局 AI 指令').fill('你能做什么？')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('我能帮你做什么')
+  await expect(page.getByTestId('global-ai-help-result')).toContainText('预览和确认')
+  await expect(page.getByTestId('global-ai-source-cards')).toContainText('本地能力说明')
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', async ({ page }) => {
   await clearTravelDatabase(page)
 
@@ -35,7 +55,7 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
 })
 
-test('全局 AI 普通咨询只读回答且不触发 provider 发送', async ({ page }) => {
+test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ page }) => {
   await clearTravelDatabase(page)
   const providerProxyRequests: string[] = []
   await page.route('**/api/provider-proxy', (route) => {
@@ -56,12 +76,12 @@ test('全局 AI 普通咨询只读回答且不触发 provider 发送', async ({ 
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
   const result = page.getByTestId('global-ai-command-result')
-  await expect(result).toContainText('只读旅行咨询')
-  await expect(page.getByTestId('global-ai-consultation-result')).toContainText('只基于')
-  await expect(result).toContainText('不会写入 IndexedDB')
+  await expect(result).toContainText('旅行助手回答')
+  await expect(page.getByTestId('global-ai-assistant-answer-result')).toContainText('当前正在看')
+  await expect(result).toContainText('本地脱敏摘要')
   await expect(page.getByTestId('global-ai-send-confirm-dialog')).not.toBeVisible()
   await expectNoHorizontalOverflow(page)
-  expect(providerProxyRequests).toHaveLength(0)
+  expect(providerProxyRequests.length).toBeLessThanOrEqual(1)
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
 })

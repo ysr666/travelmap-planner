@@ -16,6 +16,8 @@ import {
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTripOperationsSummaryRequest,
+  validateProviderProxyAssistantAnswerRequest,
+  validateProviderProxyAssistantAnswerSuccessResponse,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
 
@@ -123,6 +125,43 @@ describe('provider proxy route_order_suggestion contract', () => {
         { id: 'b', title: 'B', coordinate: { lat: 35.2, lng: 139.2 } },
       ],
     }).ok).toBe(false)
+  })
+})
+
+describe('provider proxy assistant_answer contract', () => {
+  it('accepts redacted assistant answer requests and success responses', () => {
+    const request = validateProviderProxyAssistantAnswerRequest(validAssistantAnswerRequest())
+    expect(request.ok).toBe(true)
+    if (request.ok) {
+      expect(request.request.operation).toBe('assistant_answer')
+      expect(request.request.context.scopeLabel).toBe('全部旅行')
+      expect(request.request.context.summaries[0]).toMatchObject({ key: 'trip_count' })
+    }
+
+    const response = validateProviderProxyAssistantAnswerSuccessResponse({
+      answer: '可以，我只基于脱敏摘要回答。',
+      caveats: ['不会写入。'],
+      ok: true,
+      operation: 'assistant_answer',
+      source: 'future_ai',
+      sourceCards: [{ id: 'local', kind: 'local_context', title: '本地摘要' }],
+    })
+    expect(response).toMatchObject({ ok: true, operation: 'assistant_answer', source: 'future_ai' })
+  })
+
+  it('rejects sensitive assistant answer payload fields', () => {
+    const result = validateProviderProxyAssistantAnswerRequest({
+      ...validAssistantAnswerRequest(),
+      context: {
+        ...validAssistantAnswerRequest().context,
+        rawPayload: { Authorization: 'Bearer secret', pnr: 'AB12CD' },
+      },
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.message).toContain('敏感字段')
+      expect(JSON.stringify(result.error)).not.toContain('secret')
+    }
   })
 })
 
@@ -1046,5 +1085,22 @@ function validEditSearchResults() {
     ],
     retrievedAt: '2026-01-01T00:00:00.000Z',
     source: 'mock',
+  }
+}
+
+function validAssistantAnswerRequest() {
+  return {
+    context: {
+      scopeLabel: '全部旅行',
+      sourceCards: [{ id: 'account', kind: 'local_context', title: '账户摘要', detail: '2 个旅行' }],
+      summaries: [
+        { key: 'trip_count', label: '旅行数量', value: '2 个旅行' },
+        { key: 'inbox', label: '材料输入', value: '1 条待分配材料' },
+      ],
+    },
+    locale: 'zh-CN',
+    operation: 'assistant_answer',
+    question: '你能做什么？',
+    requestId: 'assistant-1',
   }
 }

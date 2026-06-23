@@ -30,6 +30,7 @@ export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
+export const PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION = 'assistant_answer' as const
 export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
 export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_classify' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
@@ -49,11 +50,12 @@ export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
+export const PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -900,6 +902,58 @@ export type ProviderProxyTripOperationsSummaryValidationResult =
   | { ok: true; request: ProviderProxyTripOperationsSummaryRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyAssistantAnswerSourceCardKind =
+  | 'confirmed_search_source'
+  | 'local_context'
+  | 'provider_caveat'
+  | 'trip_intelligence'
+
+export type ProviderProxyAssistantAnswerSourceCard = {
+  detail?: string
+  id: string
+  kind: ProviderProxyAssistantAnswerSourceCardKind
+  title: string
+}
+
+export type ProviderProxyAssistantAnswerContextSummary = {
+  key: string
+  label: string
+  value: string
+}
+
+export type ProviderProxyAssistantAnswerContext = {
+  scopeLabel: string
+  summaries: ProviderProxyAssistantAnswerContextSummary[]
+  sourceCards: ProviderProxyAssistantAnswerSourceCard[]
+}
+
+export type ProviderProxyAssistantAnswerRequest = {
+  context: ProviderProxyAssistantAnswerContext
+  locale?: 'zh-CN' | 'en-US'
+  operation: typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION
+  question: string
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyAssistantAnswerSuccessResponse = {
+  answer: string
+  caveats: string[]
+  ok: true
+  operation: typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION
+  requestId?: string
+  source: 'mock' | 'future_ai'
+  sourceCards: ProviderProxyAssistantAnswerSourceCard[]
+}
+
+export type ProviderProxyAssistantAnswerResponse =
+  | ProviderProxyAssistantAnswerSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyAssistantAnswerValidationResult =
+  | { ok: true; request: ProviderProxyAssistantAnswerRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -926,6 +980,7 @@ const VALID_TRIP_DAILY_TIP_SECTION_KEYS = new Set<ProviderProxyTripDailyTipSecti
 const VALID_TRIP_DAILY_TIP_ROUTE_STATUSES = new Set<NonNullable<ProviderProxyTripDailyTipRequest['routeStatus']>>(['no_coordinates', 'not_enough_points', 'ready_to_generate', 'cached', 'stale_if_cache_key_changed'])
 const VALID_TRIP_OPERATIONS_PHASES = new Set<ProviderProxyTripOperationsPhase>(['pre_trip', 'travel_morning', 'traveling', 'travel_evening', 'post_trip'])
 const VALID_TRIP_OPERATIONS_SEVERITIES = new Set<ProviderProxyTripOperationsSeverity>(['low', 'medium', 'high'])
+const VALID_ASSISTANT_ANSWER_SOURCE_CARD_KINDS = new Set<ProviderProxyAssistantAnswerSourceCardKind>(['confirmed_search_source', 'local_context', 'provider_caveat', 'trip_intelligence'])
 const VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS = new Set<ExistingTripImportSourceKind>(['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'trip_plan', 'ticket_file'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
@@ -1110,6 +1165,23 @@ const FORBIDDEN_EXISTING_TRIP_IMPORT_FIELDS = new Set([
   'ticketMetas',
   'token',
 ])
+const FORBIDDEN_ASSISTANT_ANSWER_FIELDS = new Set([
+  ...FORBIDDEN_EXISTING_TRIP_IMPORT_FIELDS,
+  'attachment',
+  'attachments',
+  'documentNumber',
+  'fullText',
+  'officialUrl',
+  'orderNumber',
+  'passport',
+  'payload',
+  'pnr',
+  'raw',
+  'rawPayload',
+  'remoteRecord',
+  'secret',
+  'stack',
+])
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
@@ -1127,6 +1199,10 @@ const MAX_TRIP_DAILY_TIP_SOURCES = 12
 const MAX_TRIP_DAILY_TIP_TEXT = 700
 const MAX_TRIP_OPERATIONS_RECOMMENDATIONS = 5
 const MAX_TRIP_OPERATIONS_TEXT = 220
+const MAX_ASSISTANT_ANSWER_QUESTION_LENGTH = 1000
+const MAX_ASSISTANT_ANSWER_CONTEXT_SUMMARIES = 12
+const MAX_ASSISTANT_ANSWER_SOURCE_CARDS = 8
+const MAX_ASSISTANT_ANSWER_TEXT = 900
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -1446,6 +1522,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前执行建议摘要暂不支持。'
     if (code === 'invalid_response') return '执行建议摘要服务返回的内容无法解析。'
     return '执行建议摘要服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION) {
+    if (code === 'quota_exceeded') return '今日 AI 助手问答次数已达上限。'
+    if (code === 'invalid_request') return 'AI 助手问答请求无效。'
+    if (code === 'provider_error') return 'AI 助手问答服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 助手问答暂不支持。'
+    if (code === 'invalid_response') return 'AI 助手问答服务返回的内容无法解析。'
+    return 'AI 助手问答服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
     if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
@@ -1906,6 +1991,21 @@ function tripOperationsSummaryInvalidRequest(
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function assistantAnswerInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyAssistantAnswerValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
       requestId,
     }),
     ok: false,
@@ -3196,6 +3296,72 @@ export function validateProviderProxyTripOperationsSummaryRequest(input: unknown
   }
 }
 
+export function validateProviderProxyAssistantAnswerRequest(input: unknown): ProviderProxyAssistantAnswerValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION) {
+    return assistantAnswerInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+
+  const forbiddenFieldPath = findForbiddenRequestFieldPath(record, FORBIDDEN_ASSISTANT_ANSWER_FIELDS)
+  if (forbiddenFieldPath) {
+    return assistantAnswerInvalidRequest('AI 助手问答请求包含不允许的敏感字段。', requestId)
+  }
+
+  const question = readRequiredTrimmedString(record.question, MAX_ASSISTANT_ANSWER_QUESTION_LENGTH)
+  if (!question) {
+    return assistantAnswerInvalidRequest('请输入要咨询的问题。', requestId)
+  }
+
+  if (record.locale !== undefined && record.locale !== 'zh-CN' && record.locale !== 'en-US') {
+    return assistantAnswerInvalidRequest('AI 助手问答语言设置无效。', requestId)
+  }
+
+  const contextRecord = readRecord(record.context)
+  const scopeLabel = readRequiredTrimmedString(contextRecord.scopeLabel, 80)
+  if (!scopeLabel) {
+    return assistantAnswerInvalidRequest('AI 助手问答缺少上下文标签。', requestId)
+  }
+
+  if (!Array.isArray(contextRecord.summaries) || contextRecord.summaries.length > MAX_ASSISTANT_ANSWER_CONTEXT_SUMMARIES) {
+    return assistantAnswerInvalidRequest(`AI 助手问答上下文最多支持 ${MAX_ASSISTANT_ANSWER_CONTEXT_SUMMARIES} 条摘要。`, requestId)
+  }
+  const summaries: ProviderProxyAssistantAnswerContextSummary[] = []
+  for (const rawSummary of contextRecord.summaries) {
+    const summaryRecord = readRecord(rawSummary)
+    const key = readRequiredTrimmedString(summaryRecord.key, 80)
+    const label = readRequiredTrimmedString(summaryRecord.label, 80)
+    const value = readRequiredTrimmedString(summaryRecord.value, 260)
+    if (!key || !label || !value) {
+      return assistantAnswerInvalidRequest('AI 助手问答上下文摘要无效。', requestId)
+    }
+    summaries.push({ key, label, value })
+  }
+
+  if (!Array.isArray(contextRecord.sourceCards) || contextRecord.sourceCards.length > MAX_ASSISTANT_ANSWER_SOURCE_CARDS) {
+    return assistantAnswerInvalidRequest(`AI 助手问答来源卡最多支持 ${MAX_ASSISTANT_ANSWER_SOURCE_CARDS} 条。`, requestId)
+  }
+  const sourceCards: ProviderProxyAssistantAnswerSourceCard[] = []
+  for (const rawCard of contextRecord.sourceCards) {
+    const card = readAssistantAnswerSourceCard(rawCard)
+    if (!card) return assistantAnswerInvalidRequest('AI 助手问答来源卡无效。', requestId)
+    sourceCards.push(card)
+  }
+
+  return {
+    ok: true,
+    request: {
+      context: { scopeLabel, sourceCards, summaries },
+      locale: record.locale === 'en-US' ? 'en-US' : 'zh-CN',
+      operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+      question,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+    },
+  }
+}
+
 function readTripOperationsRecommendation(
   input: unknown,
 ): { ok: true; recommendation: ProviderProxyTripOperationsRecommendationInput } | { message: string; ok: false } {
@@ -3221,6 +3387,45 @@ function readTripOperationsRecommendation(
       title,
       type,
     },
+  }
+}
+
+export function validateProviderProxyAssistantAnswerSuccessResponse(input: unknown): ProviderProxyAssistantAnswerSuccessResponse | null {
+  const record = readRecord(input)
+  if (record.operation !== PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION || record.ok !== true) return null
+  if (record.source !== 'mock' && record.source !== 'future_ai') return null
+  const answer = readRequiredTrimmedString(record.answer, MAX_ASSISTANT_ANSWER_TEXT)
+  if (!answer) return null
+  const caveats = Array.isArray(record.caveats)
+    ? record.caveats.map((value) => readRequiredTrimmedString(value, 240)).filter((value): value is string => Boolean(value))
+    : []
+  const sourceCards = Array.isArray(record.sourceCards)
+    ? record.sourceCards.map(readAssistantAnswerSourceCard).filter((card): card is ProviderProxyAssistantAnswerSourceCard => Boolean(card))
+    : []
+  if (sourceCards.length > MAX_ASSISTANT_ANSWER_SOURCE_CARDS) return null
+  return {
+    answer,
+    caveats: caveats.slice(0, 4),
+    ok: true,
+    operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+    requestId: readOptionalString(record.requestId, 128),
+    source: record.source,
+    sourceCards,
+  }
+}
+
+function readAssistantAnswerSourceCard(input: unknown): ProviderProxyAssistantAnswerSourceCard | null {
+  const record = readRecord(input)
+  const id = readRequiredTrimmedString(record.id, 120)
+  const title = readRequiredTrimmedString(record.title, 140)
+  if (!id || !title || !VALID_ASSISTANT_ANSWER_SOURCE_CARD_KINDS.has(record.kind as ProviderProxyAssistantAnswerSourceCardKind)) {
+    return null
+  }
+  return {
+    detail: readOptionalString(record.detail, 260),
+    id,
+    kind: record.kind as ProviderProxyAssistantAnswerSourceCardKind,
+    title,
   }
 }
 

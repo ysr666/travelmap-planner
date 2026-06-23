@@ -8,6 +8,7 @@ import {
   fetchProviderProxyAiTripDraft,
   fetchProviderProxyAiTripDraftRefine,
   fetchProviderProxyAiTripEditPlan,
+  fetchProviderProxyAssistantAnswer,
   fetchProviderProxyPlaceLookup,
   fetchProviderProxyTravelSearch,
   fetchProviderProxyTripOperationsSummary,
@@ -753,6 +754,44 @@ describe('provider proxy ai_trip_edit_plan client', () => {
       code: 'provider_unavailable',
       status: 503,
     })
+  })
+})
+
+describe('provider proxy assistant_answer client', () => {
+  it('posts a redacted assistant answer request and parses the structured response', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body).toMatchObject({
+        operation: 'assistant_answer',
+        question: '你能做什么？',
+      })
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer access-token')
+      return new Response(JSON.stringify({
+        answer: '我可以回答旅行问题。',
+        caveats: ['不会写入。'],
+        ok: true,
+        operation: 'assistant_answer',
+        source: 'future_ai',
+        sourceCards: [{ id: 'local', kind: 'local_context', title: '本地摘要' }],
+      }))
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAssistantAnswer({
+      context: {
+        scopeLabel: '全部旅行',
+        sourceCards: [{ id: 'local', kind: 'local_context', title: '本地摘要' }],
+        summaries: [{ key: 'trip_count', label: '旅行数量', value: '1 个旅行' }],
+      },
+      operation: 'assistant_answer',
+      question: '你能做什么？',
+    }, '/api/provider-proxy', {
+      accessToken: 'access-token',
+      fetcher,
+      storage: memoryStorage(),
+    })
+
+    expect(result).toMatchObject({ ok: true, operation: 'assistant_answer', source: 'future_ai' })
   })
 })
 

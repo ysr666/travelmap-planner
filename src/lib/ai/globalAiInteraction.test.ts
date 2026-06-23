@@ -57,6 +57,17 @@ describe('globalAiInteraction', () => {
     expect(result.actionProposal?.suggestion.action?.mode).toBe('confirm_required')
   })
 
+  it('can force write-like commands into ordinary assistant answers for recovery', async () => {
+    const result = await resolveGlobalAiInteraction('帮我把上午安排改一下', context(), {
+      forceMode: 'assistant_answer',
+    })
+
+    expect(result.kind).toBe('assistant_answer')
+    if (result.kind !== 'assistant_answer') return
+    expect(result.providerRequest.operation).toBe('assistant_answer')
+    expect(JSON.stringify(result.providerRequest)).not.toContain('patchPlan')
+  })
+
   it('merges provider answers and falls back locally after provider failures', async () => {
     const draft = await resolveGlobalAiInteraction('我今天应该先确认什么？', context())
     expect(draft.kind).toBe('assistant_answer')

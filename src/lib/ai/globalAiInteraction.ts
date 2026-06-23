@@ -29,6 +29,8 @@ export type GlobalAiInteractionMode =
   | 'local_query'
   | 'navigation'
 
+export type GlobalAiInteractionContextMode = 'account' | 'current_page'
+
 export type GlobalAiInteractionContext = GlobalAiCommandContext & {
   accountSummary: GlobalAiAccountSummary
   pageContextTools: GlobalAiPageContextTool[]
@@ -64,6 +66,17 @@ export type GlobalAiAssistantAnswerResult = {
   source: 'fallback' | ProviderProxyAssistantAnswerSuccessResponse['source']
   sourceCards: ProviderProxyAssistantAnswerSourceCard[]
   title: string
+}
+
+export type GlobalAiSourceCard = ProviderProxyAssistantAnswerSourceCard
+
+export type GlobalAiFailureRecord = {
+  errorCode: string
+  failureStage: 'context' | 'provider' | 'render' | 'schema_validation' | 'write'
+  mode: GlobalAiInteractionMode
+  occurredAt: number
+  operation: string
+  schemaVersion: string
 }
 
 export type GlobalAiPageContextKind =
@@ -132,9 +145,10 @@ export async function loadGlobalAiInteractionContext(
 export async function resolveGlobalAiInteraction(
   command: string,
   context: GlobalAiInteractionContext,
+  options: { forceMode?: Extract<GlobalAiInteractionMode, 'assistant_answer'> } = {},
 ): Promise<GlobalAiInteractionResult> {
   const capability = getGlobalAiCapabilityAnswer(command)
-  if (capability) {
+  if (capability && options.forceMode !== 'assistant_answer') {
     return {
       ...capability,
       kind: 'help',
@@ -143,7 +157,7 @@ export async function resolveGlobalAiInteraction(
   }
 
   const intent = parseGlobalAiCommandIntent(command)
-  if (intent.kind === 'consultation') {
+  if (intent.kind === 'consultation' || options.forceMode === 'assistant_answer') {
     const providerRequest = buildAssistantAnswerProviderRequest(command, context)
     const fallbackAnswer = buildLocalAssistantFallback(command, context)
     return {

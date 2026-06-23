@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Bot, CheckCircle2, Loader2, ReceiptText, Route, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react'
+import { Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { createTripDisruptionEvent, updateItineraryItem } from '../../db'
 import {
   applyAiTripEditPatchPlanToDb,
@@ -27,6 +27,8 @@ import {
   mergeAssistantAnswerProviderResponse,
   resolveGlobalAiInteraction,
   type GlobalAiActionProposal,
+  type GlobalAiFailureRecord,
+  type GlobalAiInteractionContextMode,
   type GlobalAiInteractionResult,
 } from '../../lib/ai/globalAiInteraction'
 import { PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION, type ProviderProxyAiTripEditSearchSummary, type ProviderProxyTravelSearchRequest } from '../../lib/ai/providerProxyContract'
@@ -74,6 +76,15 @@ type AiTripEditPreviewState = {
   warnings: string[]
 }
 
+type ConversationMessage = {
+  createdAt: number
+  id: string
+  sourceCardCount?: number
+  text: string
+  tone?: 'error' | 'normal' | 'success'
+  type: 'assistant' | 'user'
+}
+
 const HIDDEN_ROUTES = new Set<RouteId>([
   'item/edit',
   'item/new',
@@ -94,6 +105,11 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [success, setSuccess] = useState<string | null>(null)
   const [result, setResult] = useState<GlobalAiInteractionResult | null>(null)
   const [contextLabel, setContextLabel] = useState(getRouteScopeFallback(activeRoute))
+  const [contextMode, setContextMode] = useState<GlobalAiInteractionContextMode>('current_page')
+  const [expanded, setExpanded] = useState(false)
+  const [conversation, setConversation] = useState<ConversationMessage[]>([])
+  const [failureRecords, setFailureRecords] = useState<GlobalAiFailureRecord[]>([])
+  const [lastFailedCommand, setLastFailedCommand] = useState<string | null>(null)
   const [selectedReplanOptionId, setSelectedReplanOptionId] = useState<string | null>(null)
   const [pendingAi, setPendingAi] = useState<PendingAiTripEdit | null>(null)
   const [aiSendConfirmOpen, setAiSendConfirmOpen] = useState(false)
@@ -106,13 +122,16 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const selectedReplanOption = result?.kind === 'replan_preview'
     ? result.record.options.find((option) => option.id === selectedReplanOptionId) ?? result.record.options[0]
     : null
-  const panelOpen = Boolean(error || success || result || aiPreview || loading)
+  const panelOpen = Boolean(expanded || error || success || result || aiPreview || loading)
 
   useEffect(() => {
     let cancelled = false
     async function refreshContextLabel() {
       try {
-        const context = await loadGlobalAiInteractionContext(activeRoute)
+        const context = await loadGlobalAiInteractionContext(
+          contextMode === 'account' ? 'home' : activeRoute,
+          contextMode === 'account' ? '#/home' : window.location.hash,
+        )
         if (!cancelled) setContextLabel(context.scopeLabel)
       } catch {
         if (!cancelled) setContextLabel(getRouteScopeFallback(activeRoute))
@@ -124,44 +143,82 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       cancelled = true
       window.removeEventListener('hashchange', refreshContextLabel)
     }
-  }, [activeRoute])
+  }, [activeRoute, contextMode])
 
   if (hidden) return null
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!trimmedCommand || loading) return
+    await runCommand(trimmedCommand)
+  }
+
+  async function runCommand(commandText: string, options: { forceAssistant?: boolean } = {}) {
+    const submittedCommand = commandText.trim()
+    if (!submittedCommand || loading) return
     setLoading(true)
     setError(null)
     setSuccess(null)
     setResult(null)
     setAiPreview(null)
+    setLastFailedCommand(null)
+    appendConversationMessage({ text: submittedCommand, type: 'user' })
     try {
-      const context = await loadGlobalAiInteractionContext(activeRoute)
-      const resolved = await resolveGlobalAiInteraction(trimmedCommand, context)
+      const context = await loadGlobalAiInteractionContext(
+        contextMode === 'account' ? 'home' : activeRoute,
+        contextMode === 'account' ? '#/home' : window.location.hash,
+      )
+      setContextLabel(context.scopeLabel)
+      const resolved = await resolveGlobalAiInteraction(submittedCommand, context, {
+        forceMode: options.forceAssistant ? 'assistant_answer' : undefined,
+      })
       if (resolved.kind === 'ai_trip_edit') {
-        prepareAiTripEdit(context, resolved.actionProposal)
+        if (prepareAiTripEdit(context, submittedCommand, resolved.actionProposal)) {
+          appendConversationMessage({
+            sourceCardCount: resolved.actionProposal?.sourceCards.length,
+            text: '已准备生成 AI 修改预览，发送前需要你确认。',
+            type: 'assistant',
+          })
+        }
       } else if (resolved.kind === 'assistant_answer') {
-        setResult(await resolveAssistantAnswer(resolved))
+        const answer = await resolveAssistantAnswer(resolved)
+        setResult(answer)
+        appendConversationMessage({
+          sourceCardCount: answer.sourceCards.length,
+          text: answer.answer,
+          type: 'assistant',
+        })
       } else {
         setSelectedReplanOptionId(resolved.kind === 'replan_preview' ? resolved.record.options[0]?.id ?? null : null)
         setResult(resolved)
+        appendConversationMessage({
+          sourceCardCount: getInteractionSourceCardCount(resolved),
+          text: summarizeInteractionResult(resolved),
+          type: 'assistant',
+        })
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'AI 指令处理失败。')
+      const message = caught instanceof Error ? caught.message : 'AI 指令处理失败。'
+      setError(message)
+      setLastFailedCommand(submittedCommand)
+      recordFailure({ errorCode: caught instanceof ProviderProxyClientError ? caught.code : 'unknown', failureStage: 'render', mode: 'assistant_answer', operation: 'global_ai_interaction' })
+      appendConversationMessage({ text: message, tone: 'error', type: 'assistant' })
     } finally {
       setLoading(false)
     }
   }
 
-  function prepareAiTripEdit(context: GlobalAiCommandContext, actionProposal?: GlobalAiActionProposal) {
+  function prepareAiTripEdit(context: GlobalAiCommandContext, commandText: string, actionProposal?: GlobalAiActionProposal) {
     if (!context.trip) {
       setError('当前没有打开具体旅行。')
-      return
+      setLastFailedCommand(commandText)
+      recordFailure({ errorCode: 'missing_trip', failureStage: 'context', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
+      return false
     }
     if (!providerConfig.configured || !providerConfig.proxyUrl) {
       setError('当前未配置 AI 修改服务。')
-      return
+      setLastFailedCommand(commandText)
+      recordFailure({ errorCode: 'provider_unconfigured', failureStage: 'provider', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
+      return false
     }
     const contextResult = buildAiTripEditContext({
       days: context.days,
@@ -171,7 +228,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     })
     if (!contextResult.ok) {
       setError(contextResult.errors.join(' '))
-      return
+      setLastFailedCommand(commandText)
+      recordFailure({ errorCode: 'context_invalid', failureStage: 'context', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
+      return false
     }
     setPendingAi({
       actionProposal,
@@ -180,13 +239,14 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         items: context.items,
         trip: context.trip,
       }),
-      command: trimmedCommand,
+      command: commandText,
       context: contextResult.context,
-      searchRequest: buildAiTripEditSearchRequest(trimmedCommand, contextResult.context),
+      searchRequest: buildAiTripEditSearchRequest(commandText, contextResult.context),
       tripId: context.trip.id,
       warnings: contextResult.warnings,
     })
     setAiSendConfirmOpen(true)
+    return true
   }
 
   async function resolveAssistantAnswer(answer: Extract<GlobalAiInteractionResult, { kind: 'assistant_answer' }>) {
@@ -232,6 +292,11 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         tripId: pendingAi.tripId,
         warnings: Array.from(new Set([...warnings, ...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])),
       })
+      appendConversationMessage({
+        sourceCardCount: pendingAi.actionProposal?.sourceCards.length,
+        text: '已生成 AI 修改预览，确认前不会写入。',
+        type: 'assistant',
+      })
       setAiSendConfirmOpen(false)
     } catch (caught) {
       if (caught instanceof ProviderProxyClientError && caught.code === 'invalid_response') {
@@ -251,15 +316,30 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
             tripId: pendingAi.tripId,
             warnings: Array.from(new Set([...warnings, 'AI 输出结构异常，已自动重试一次。', ...(response.warnings ?? []), ...(response.patchPlan.warnings ?? [])])),
           })
+          recordFailure({ errorCode: 'invalid_response', failureStage: 'schema_validation', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
+          appendConversationMessage({
+            sourceCardCount: pendingAi.actionProposal?.sourceCards.length,
+            text: 'AI 输出结构异常，已自动修复并生成预览。',
+            type: 'assistant',
+          })
           setAiSendConfirmOpen(false)
           return
         } catch {
           setError('我理解了你的需求，但没能生成可应用修改。你可以重新生成，或改成普通咨询。')
+          setLastFailedCommand(pendingAi.command)
+          recordFailure({ errorCode: 'invalid_response', failureStage: 'schema_validation', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
+          appendConversationMessage({
+            text: '我理解了你的需求，但没能生成可应用修改。你可以重新生成，或改成普通咨询。',
+            tone: 'error',
+            type: 'assistant',
+          })
           setAiSendConfirmOpen(false)
           return
         }
       }
       setError(caught instanceof ProviderProxyClientError ? caught.message : 'AI 修改建议生成失败。')
+      setLastFailedCommand(pendingAi.command)
+      recordFailure({ errorCode: caught instanceof ProviderProxyClientError ? caught.code : 'unknown', failureStage: 'provider', mode: 'action_proposal', operation: 'ai_trip_edit_plan' })
       setAiSendConfirmOpen(false)
     } finally {
       setLoading(false)
@@ -290,10 +370,12 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         title: aiPreview.actionProposal?.title ?? 'AI 修改已应用',
       })
       setSuccess(`已应用 ${result.appliedOperationCount} 项修改。`)
+      appendConversationMessage({ text: `已应用 ${result.appliedOperationCount} 项修改。`, tone: 'success', type: 'assistant' })
       clearInteraction()
       setAiApplyConfirmOpen(false)
     } catch {
       setError('应用 AI 修改方案失败。')
+      recordFailure({ errorCode: 'write_failed', failureStage: 'write', mode: 'action_proposal', operation: 'ai_trip_edit_apply' })
       setAiApplyConfirmOpen(false)
     } finally {
       setApplying(false)
@@ -320,6 +402,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         })
         emitTravelDataChanged()
         setSuccess(`已更新「${result.item.title}」重排偏好。`)
+        appendConversationMessage({ text: `已更新「${result.item.title}」重排偏好。`, tone: 'success', type: 'assistant' })
         clearInteraction()
       } else if (result.kind === 'replan_preview') {
         const record = await applyReplanPreview(result, selectedReplanOption)
@@ -334,11 +417,13 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           title: result.actionProposal?.title ?? 'Live Mode 重排已应用',
         })
         setSuccess(result.hypothetical ? '已应用模拟重排，并保存为一次可撤销记录。' : '已应用突发重排，并保存为一次可撤销记录。')
+        appendConversationMessage({ text: '已应用重排，并写入统一完成记录。', tone: 'success', type: 'assistant' })
         clearInteraction()
       }
       setWriteConfirmOpen(false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '写入失败。')
+      recordFailure({ errorCode: 'write_failed', failureStage: 'write', mode: 'action_proposal', operation: 'global_ai_write' })
       setWriteConfirmOpen(false)
     } finally {
       setApplying(false)
@@ -351,6 +436,29 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setAiPreview(null)
     setPendingAi(null)
     setSelectedReplanOptionId(null)
+  }
+
+  function appendConversationMessage(input: Omit<ConversationMessage, 'createdAt' | 'id'>) {
+    const now = Date.now()
+    setConversation((current) => [
+      ...current,
+      {
+        createdAt: now,
+        id: `global-ai-message:${now}:${current.length}`,
+        ...input,
+      },
+    ].slice(-12))
+  }
+
+  function recordFailure(input: Omit<GlobalAiFailureRecord, 'occurredAt' | 'schemaVersion'>) {
+    setFailureRecords((current) => [
+      ...current,
+      {
+        occurredAt: Date.now(),
+        schemaVersion: 'global_ai_interaction.v1',
+        ...input,
+      },
+    ].slice(-8))
   }
 
   function handleNavigation(result: Extract<GlobalAiInteractionResult, { kind: 'navigation' }> | Extract<GlobalAiInteractionResult, { kind: 'ledger_summary' }>) {
@@ -374,8 +482,38 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       >
         {panelOpen ? (
           <div className="pointer-events-auto mb-2 max-h-[52dvh] overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface/95 p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] backdrop-blur-xl app-scrollbar">
+            {expanded ? (
+              <ConversationPanel
+                contextMode={contextMode}
+                failureRecords={failureRecords}
+                messages={conversation}
+                onClear={() => {
+                  setConversation([])
+                  setFailureRecords([])
+                  setError(null)
+                  setSuccess(null)
+                  setResult(null)
+                  setAiPreview(null)
+                }}
+                onContextModeChange={setContextMode}
+              />
+            ) : null}
             {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在处理指令…" /> : null}
-            {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p> : null}
+            {error ? (
+              <div className="space-y-2">
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p>
+                <FailureRecovery
+                  canRetry={Boolean(lastFailedCommand)}
+                  onClear={() => {
+                    setError(null)
+                    setLastFailedCommand(null)
+                  }}
+                  onConsult={() => lastFailedCommand && void runCommand(lastFailedCommand, { forceAssistant: true })}
+                  onHome={() => navigateTo('home')}
+                  onRetry={() => lastFailedCommand && void runCommand(lastFailedCommand)}
+                />
+              </div>
+            ) : null}
             {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
             {result ? (
               <CommandResultView
@@ -404,9 +542,14 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           className="pointer-events-auto flex min-h-12 items-center gap-2 rounded-2xl border border-outline-variant/35 bg-surface/95 px-2 py-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.16)] backdrop-blur-xl"
           onSubmit={(event) => void handleSubmit(event)}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Sparkles className="size-4" />
-          </span>
+          <button
+            aria-label={expanded ? '收起 AI 会话' : '展开 AI 会话'}
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition active:scale-95"
+            onClick={() => setExpanded((value) => !value)}
+            type="button"
+          >
+            {expanded ? <ChevronDown className="size-4" /> : <MessagesSquare className="size-4" />}
+          </button>
           <input
             aria-label="全局 AI 指令"
             className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
@@ -581,6 +724,96 @@ function CommandResultView({
   return null
 }
 
+function ConversationPanel({
+  contextMode,
+  failureRecords,
+  messages,
+  onClear,
+  onContextModeChange,
+}: {
+  contextMode: GlobalAiInteractionContextMode
+  failureRecords: GlobalAiFailureRecord[]
+  messages: ConversationMessage[]
+  onClear: () => void
+  onContextModeChange: (mode: GlobalAiInteractionContextMode) => void
+}) {
+  return (
+    <div className="mb-3 space-y-3 rounded-xl bg-surface-container px-3 py-3" data-testid="global-ai-conversation-panel">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-on-surface">
+          <Bot className="size-4 text-primary" />
+          <span>AI 会话</span>
+        </div>
+        <button
+          aria-label="清空 AI 会话"
+          className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container-high"
+          onClick={onClear}
+          type="button"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface p-1 text-xs font-semibold" data-testid="global-ai-context-switch">
+        {([
+          ['current_page', '当前页面'],
+          ['account', '全部旅行'],
+        ] as const).map(([mode, label]) => (
+          <button
+            className={`min-h-11 rounded-lg px-2 transition ${contextMode === mode ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant'}`}
+            key={mode}
+            onClick={() => onContextModeChange(mode)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-2" data-testid="global-ai-conversation-messages">
+        {messages.length === 0 ? (
+          <p className="rounded-xl bg-surface px-3 py-2 text-xs leading-5 tm-muted">本轮会话只保存在当前页面内，刷新后会清空。</p>
+        ) : messages.slice(-6).map((message) => (
+          <div
+            className={`rounded-xl px-3 py-2 text-xs leading-5 ${message.type === 'user' ? 'bg-primary/10 text-on-surface' : message.tone === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200' : message.tone === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-surface text-on-surface-variant'}`}
+            key={message.id}
+          >
+            <p className="mb-1 text-[11px] font-semibold">{message.type === 'user' ? '你' : '助手'}</p>
+            <p className="line-clamp-4 break-words [overflow-wrap:anywhere]">{message.text}</p>
+            {message.sourceCardCount ? <p className="mt-1 text-[11px] tm-muted">来源卡 {message.sourceCardCount} 张</p> : null}
+          </div>
+        ))}
+      </div>
+      {failureRecords.length > 0 ? (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" data-testid="global-ai-failure-count">
+          本轮记录了 {failureRecords.length} 次脱敏失败计数，仅包含 operation、mode、阶段和错误码。
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function FailureRecovery({
+  canRetry,
+  onClear,
+  onConsult,
+  onHome,
+  onRetry,
+}: {
+  canRetry: boolean
+  onClear: () => void
+  onConsult: () => void
+  onHome: () => void
+  onRetry: () => void
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2" data-testid="global-ai-failure-recovery">
+      <Button className="min-h-11 px-3 text-xs" disabled={!canRetry} icon={<RotateCcw className="size-4" />} onClick={onRetry} variant="secondary">重试</Button>
+      <Button className="min-h-11 px-3 text-xs" disabled={!canRetry} icon={<Bot className="size-4" />} onClick={onConsult} variant="secondary">改为咨询</Button>
+      <Button className="min-h-11 px-3 text-xs" icon={<Route className="size-4" />} onClick={onHome} variant="secondary">打开首页</Button>
+      <Button className="min-h-11 px-3 text-xs" icon={<Trash2 className="size-4" />} onClick={onClear} variant="secondary">清除错误</Button>
+    </div>
+  )
+}
+
 function SourceCards({ cards }: { cards: Array<{ detail?: string; id: string; kind: string; title: string }> }) {
   if (cards.length === 0) return null
   return (
@@ -741,6 +974,22 @@ function buildWriteConfirmBody(result: GlobalAiInteractionResult | null, selecte
     return `将创建突发事件和重排记录，并应用「${selectedOption?.title ?? '所选方案'}」。票据、账本和交通订单不会自动取消或退款，可整次撤销。`
   }
   return '确认写入当前预览。'
+}
+
+function summarizeInteractionResult(result: GlobalAiInteractionResult) {
+  if (result.kind === 'help' || result.kind === 'assistant_answer') return result.answer
+  if (result.kind === 'navigation') return result.message
+  if (result.kind === 'ledger_summary') return result.lines.join(' ')
+  if (result.kind === 'consultation') return result.lines.join(' ')
+  if (result.kind === 'preference_preview') return `${result.title}：${result.message}`
+  if (result.kind === 'replan_preview') return `${result.title}：${result.warnings[0] ?? '已生成预览，确认前不会写入。'}`
+  if (result.kind === 'ai_trip_edit') return result.message
+  return '已生成结果。'
+}
+
+function getInteractionSourceCardCount(result: GlobalAiInteractionResult) {
+  if (result.kind === 'help' || result.kind === 'assistant_answer') return result.sourceCards.length
+  return result.actionProposal?.sourceCards.length
 }
 
 function buildPreferenceAppliedChange(itemId: string, title: string): TripIntelligenceAppliedChange {

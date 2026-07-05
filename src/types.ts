@@ -2,6 +2,14 @@ export type TransportMode = 'walk' | 'transit' | 'bus' | 'car' | 'train' | 'flig
 export type TimeZoneSource = 'device' | 'provider' | 'manual' | 'imported'
 export type TicketScope = 'trip' | 'item' | 'unassigned'
 export type TicketStorageMode = 'copy' | 'reference' | 'external'
+export type TicketSharedVisibility =
+  | {
+      mode: 'all'
+    }
+  | {
+      memberIds: string[]
+      mode: 'assigned'
+    }
 export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticket' | 'hotel_booking' | 'restaurant_reservation' | 'transport_booking' | 'other'
 export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
 export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
@@ -276,6 +284,7 @@ export type TicketMeta = {
   mimeType: string
   size: number
   note?: string
+  sharedVisibility?: TicketSharedVisibility
   createdAt: number
   updatedAt: number
 }
@@ -524,13 +533,28 @@ export type SharedTripInvite = {
   revokedAt?: string
 }
 
+export type SharedTripMemberProfile = {
+  birthday?: string
+  emergencyContact?: string
+  identityDocument?: string
+  insurance?: string
+  legalName?: string
+  notes?: string
+  passport?: string
+  room?: string
+  seat?: string
+  visa?: string
+}
+
 export type SharedTripMember = {
+  assignedTicketSummaries?: SharedTicketSummary[]
   ownerId: string
   sharedTripId: string
   userId: string
   displayName?: string
   email?: string
   permission: CompanionPermission
+  profile?: SharedTripMemberProfile
   joinedAt: string
   updatedAt: string
   removedAt?: string

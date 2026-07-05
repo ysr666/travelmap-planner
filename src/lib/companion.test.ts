@@ -2,6 +2,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  buildAssignedTicketSummariesForMember,
   addSharedTripComment,
   buildSharedTripProjection,
   canCompanionCollaborate,
@@ -11,11 +12,15 @@ import {
   getCompanionPermissionRank,
   loadCompanionSharedTrip,
   loadOwnerSharedTripState,
+  normalizeTicketSharedVisibility,
+  openSharedTripTicketFile,
   publishSharedTripFromLocal,
+  removeSharedTripMember,
   submitSharedTripMutation,
   syncSharedTripForOwner,
+  updateSharedTripMemberProfile,
 } from './companion'
-import { createDay, createItineraryItem, createTicketMeta, createTrip, getItineraryItem, listTripDisruptionEventsByTrip } from '../db'
+import { createDay, createItineraryItem, createTicketMeta, createTrip, getItineraryItem, listTripDisruptionEventsByTrip, saveTicketBlob, updateItineraryItem, updateTicketMeta } from '../db'
 import { db } from '../db/database'
 import type { ItineraryItem } from '../types'
 
@@ -28,6 +33,14 @@ beforeEach(async () => {
 })
 
 describe('companion permissions', () => {
+  it('keeps an explicit empty assigned ticket visibility as shared with nobody', () => {
+    expect(normalizeTicketSharedVisibility({ memberIds: [], mode: 'assigned' })).toEqual({
+      memberIds: [],
+      mode: 'assigned',
+    })
+    expect(normalizeTicketSharedVisibility(undefined)).toEqual({ mode: 'all' })
+  })
+
   it('ranks read comment and collaborate permissions', () => {
     expect(getCompanionPermissionRank('read')).toBe(1)
     expect(getCompanionPermissionRank('comment')).toBe(2)
@@ -102,6 +115,77 @@ describe('shared trip projection', () => {
     expect(projection.schemaVersion).toBe(2)
     expect(projection.items[0]).toMatchObject({ ticketSummaryIds: ['ticket_1'] })
     expect(projection.ticketSummaries[0]).toMatchObject({ title: '美术馆门票', fileType: 'pdf' })
+  })
+
+  it('does not expose fallback ticket text or member-assigned summaries in the global projection', () => {
+    const trip = {
+      createdAt: 1,
+      destination: '东京',
+      endDate: '2026-04-03',
+      id: 'trip_1',
+      startDate: '2026-04-01',
+      title: '东京旅行',
+      updatedAt: 1,
+    }
+    const day = {
+      date: '2026-04-01',
+      id: 'day_1',
+      sortOrder: 1,
+      title: '第一天',
+      tripId: trip.id,
+    }
+    const item: ItineraryItem = {
+      createdAt: 1,
+      dayId: day.id,
+      id: 'item_1',
+      sortOrder: 1,
+      ticketIds: ['ticket_public', 'ticket_juan'],
+      title: '集合',
+      tripId: trip.id,
+      updatedAt: 1,
+    }
+    const tickets = [{
+      createdAt: 1,
+      externalUrl: 'https://tickets.example/order-secret',
+      fileName: 'secret-public-ticket.pdf',
+      fileType: 'pdf' as const,
+      id: 'ticket_public',
+      mimeType: 'application/pdf',
+      note: 'PUBLIC-PNR-112233',
+      size: 123,
+      storageMode: 'external' as const,
+      ticketCategory: 'train_ticket' as const,
+      tripId: trip.id,
+      updatedAt: 1,
+    }, {
+      createdAt: 2,
+      fileName: 'juan-private-ticket.pdf',
+      fileType: 'pdf' as const,
+      id: 'ticket_juan',
+      itemId: item.id,
+      mimeType: 'application/pdf',
+      sharedVisibility: { memberIds: ['member_juan'], mode: 'assigned' as const },
+      size: 456,
+      storageMode: 'copy' as const,
+      ticketCategory: 'flight_ticket' as const,
+      title: 'JUAN 专属机票',
+      tripId: trip.id,
+      updatedAt: 2,
+    }]
+
+    const projection = buildSharedTripProjection({ days: [day], items: [item], tickets, trip })
+
+    expect(projection.ticketSummaries).toHaveLength(1)
+    expect(projection.ticketSummaries[0]).toMatchObject({ id: 'ticket_public', title: '火车票' })
+    expect(projection.items[0].ticketSummaryIds).toEqual(['ticket_public'])
+    expect(JSON.stringify(projection)).not.toContain('secret-public-ticket.pdf')
+    expect(JSON.stringify(projection)).not.toContain('https://tickets.example/order-secret')
+    expect(JSON.stringify(projection)).not.toContain('PUBLIC-PNR-112233')
+    expect(JSON.stringify(projection)).not.toContain('JUAN 专属机票')
+    expect(buildAssignedTicketSummariesForMember(tickets, 'member_juan')).toEqual([
+      expect.objectContaining({ id: 'ticket_juan', itemId: item.id, title: 'JUAN 专属机票' }),
+    ])
+    expect(buildAssignedTicketSummariesForMember(tickets, 'member_dongjun')).toEqual([])
   })
 
   it('includes the latest applied replan summary without exposing snapshots', () => {
@@ -196,6 +280,183 @@ describe('companion fixture flow', () => {
     expect(bundle.comments[0]).toMatchObject({ body: '我已到集合点', displayName: '小叶' })
   })
 
+  it('keeps member profiles and assigned ticket summaries scoped to the selected companion', async () => {
+    const { item, trip } = await seedTrip()
+    const assignedTicket = await createTicketMeta({
+      fileName: 'juan-ticket.pdf',
+      fileType: 'pdf',
+      itemId: item.id,
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 3,
+      storageMode: 'copy',
+      ticketCategory: 'flight_ticket',
+      title: 'JUAN 机票',
+      tripId: trip.id,
+    })
+    await saveTicketBlob(assignedTicket.id, new Blob(['JUAN-PDF'], { type: 'application/pdf' }))
+    await updateItineraryItem(item.id, { ticketIds: [assignedTicket.id] })
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    const { sharedTrip } = await publishSharedTripFromLocal(trip.id)
+    const invite = await createSharedTripInvite({ permission: 'read', sharedTripId: sharedTrip.id })
+
+    setFixtureUser('member_juan', 'juan@example.com')
+    await claimSharedTripInvite(invite.token, 'JUAN')
+    setFixtureUser('member_dongjun', 'dongjun@example.com')
+    await claimSharedTripInvite(invite.token, 'DONGJUN')
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    await updateSharedTripMemberProfile(sharedTrip.id, 'member_juan', {
+      birthday: '1990-01-02',
+      emergencyContact: '妈妈 13800000000',
+      passport: '护照已核对',
+      room: '1208',
+      seat: '12A',
+      visa: '签证已确认',
+    })
+    await updateTicketMeta(assignedTicket.id, {
+      itemId: item.id,
+      scope: 'item',
+      sharedVisibility: { memberIds: ['member_juan'], mode: 'assigned' },
+      ticketCategory: 'flight_ticket',
+      title: 'JUAN 机票',
+    })
+    await publishSharedTripFromLocal(trip.id)
+
+    setFixtureUser('member_juan', 'juan@example.com')
+    const juanBundle = await loadCompanionSharedTrip(sharedTrip.id)
+    expect(juanBundle.member?.profile).toMatchObject({ birthday: '1990-01-02', passport: '护照已核对', seat: '12A' })
+    expect(juanBundle.sharedTrip.projection.ticketSummaries).toContainEqual(
+      expect.objectContaining({ id: assignedTicket.id, title: 'JUAN 机票' }),
+    )
+    expect(juanBundle.sharedTrip.projection.items[0].ticketSummaryIds).toEqual([assignedTicket.id])
+    const juanFile = await openSharedTripTicketFile(sharedTrip.id, assignedTicket.id)
+    expect(juanFile).toMatchObject({
+      fileName: 'juan-ticket.pdf',
+      mimeType: 'application/pdf',
+      ticketId: assignedTicket.id,
+      title: 'JUAN 机票',
+    })
+    expect(juanFile.blob).toBeTruthy()
+
+    setFixtureUser('member_dongjun', 'dongjun@example.com')
+    const dongjunBundle = await loadCompanionSharedTrip(sharedTrip.id)
+    expect(JSON.stringify(dongjunBundle.sharedTrip.projection)).not.toContain('JUAN 机票')
+    expect(dongjunBundle.sharedTrip.projection.ticketSummaries).not.toContainEqual(
+      expect.objectContaining({ id: assignedTicket.id }),
+    )
+    expect(dongjunBundle.sharedTrip.projection.items[0].ticketSummaryIds).toEqual([])
+    await expect(openSharedTripTicketFile(sharedTrip.id, assignedTicket.id)).rejects.toThrow('没有权限查看这张票据原件')
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    const ownerState = await loadOwnerSharedTripState(trip.id)
+    const juanMember = ownerState.configured && ownerState.signedIn
+      ? ownerState.members.find((member) => member.userId === 'member_juan')
+      : null
+    expect(juanMember?.profile).toMatchObject({ room: '1208', visa: '签证已确认' })
+    expect(juanMember?.assignedTicketSummaries).toEqual([
+      expect.objectContaining({ id: assignedTicket.id, title: 'JUAN 机票' }),
+    ])
+    expect(ownerState.configured && ownerState.signedIn ? ownerState.ticketFileEvents : []).toContainEqual(
+      expect.objectContaining({
+        eventType: 'file_opened',
+        fileName: 'juan-ticket.pdf',
+        ticketId: assignedTicket.id,
+        userId: 'member_juan',
+      }),
+    )
+  })
+
+  it('treats an empty assigned ticket visibility as not visible to any companion', async () => {
+    const { item, trip } = await seedTrip()
+    const privateTicket = await createTicketMeta({
+      fileName: 'private-ticket.pdf',
+      fileType: 'pdf',
+      itemId: item.id,
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 3,
+      storageMode: 'copy',
+      ticketCategory: 'flight_ticket',
+      title: '暂不共享票据',
+      tripId: trip.id,
+    })
+    await saveTicketBlob(privateTicket.id, new Blob(['PRIVATE-PDF'], { type: 'application/pdf' }))
+    await updateItineraryItem(item.id, { ticketIds: [privateTicket.id] })
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    const { sharedTrip } = await publishSharedTripFromLocal(trip.id)
+    const invite = await createSharedTripInvite({ permission: 'read', sharedTripId: sharedTrip.id })
+
+    setFixtureUser('member_juan', 'juan@example.com')
+    await claimSharedTripInvite(invite.token, 'JUAN')
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    await updateTicketMeta(privateTicket.id, {
+      itemId: item.id,
+      scope: 'item',
+      sharedVisibility: { memberIds: [], mode: 'assigned' },
+      ticketCategory: 'flight_ticket',
+      title: '暂不共享票据',
+    })
+    await publishSharedTripFromLocal(trip.id)
+
+    setFixtureUser('member_juan', 'juan@example.com')
+    const bundle = await loadCompanionSharedTrip(sharedTrip.id)
+    expect(JSON.stringify(bundle.sharedTrip.projection)).not.toContain('暂不共享票据')
+    expect(bundle.sharedTrip.projection.ticketSummaries).not.toContainEqual(
+      expect.objectContaining({ id: privateTicket.id }),
+    )
+    expect(bundle.sharedTrip.projection.items[0].ticketSummaryIds).toEqual([])
+    await expect(openSharedTripTicketFile(sharedTrip.id, privateTicket.id)).rejects.toThrow('没有权限查看这张票据原件')
+  })
+
+  it('records ticket original grant revocation when the owner removes a member', async () => {
+    const { trip } = await seedTrip()
+    const publicTicket = await createTicketMeta({
+      fileName: 'shared-ticket.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 3,
+      storageMode: 'copy',
+      ticketCategory: 'flight_ticket',
+      title: '共享机票',
+      tripId: trip.id,
+    })
+    await saveTicketBlob(publicTicket.id, new Blob(['SHARED-PDF'], { type: 'application/pdf' }))
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    const { sharedTrip } = await publishSharedTripFromLocal(trip.id)
+    const invite = await createSharedTripInvite({ permission: 'read', sharedTripId: sharedTrip.id })
+
+    setFixtureUser('member_juan', 'juan@example.com')
+    await claimSharedTripInvite(invite.token, 'JUAN')
+
+    setFixtureUser('owner_1', 'owner@example.com')
+    await publishSharedTripFromLocal(trip.id)
+    await removeSharedTripMember(sharedTrip.id, 'member_juan')
+
+    const ownerState = await loadOwnerSharedTripState(trip.id)
+    const events = ownerState.configured && ownerState.signedIn ? ownerState.ticketFileEvents : []
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        eventType: 'grant_synced',
+        fileName: 'shared-ticket.pdf',
+        ticketId: publicTicket.id,
+        userId: 'member_juan',
+      }),
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        eventType: 'grant_revoked',
+        fileName: 'shared-ticket.pdf',
+        ticketId: publicTicket.id,
+        userId: 'member_juan',
+      }),
+    )
+  })
+
   it('lets the owner apply safe collaborator itinerary mutations', async () => {
     const { item, trip } = await seedTrip()
     setFixtureUser('owner_1', 'owner@example.com')
@@ -216,7 +477,7 @@ describe('companion fixture flow', () => {
     setFixtureUser('owner_1', 'owner@example.com')
     const ownerState = await loadOwnerSharedTripState(trip.id)
     expect(ownerState.configured && ownerState.signedIn ? ownerState.mutations.filter((mutation) => mutation.status === 'pending') : []).toHaveLength(1)
-    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 1, conflicts: 0, published: true })
+    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 1, conflicts: 0, pendingReview: 0, published: true })
     await expect(getItineraryItem(item.id)).resolves.toMatchObject({
       startTime: '10:30',
       title: '协作修改后的美术馆',
@@ -237,7 +498,7 @@ describe('companion fixture flow', () => {
     })
 
     setFixtureUser('owner_1', 'owner@example.com')
-    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 1, conflicts: 0, published: true })
+    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 1, conflicts: 0, pendingReview: 0, published: true })
     const events = await listTripDisruptionEventsByTrip(trip.id)
     expect(events[0]).toMatchObject({
       delayMinutes: 20,
@@ -263,7 +524,7 @@ describe('companion fixture flow', () => {
     })
 
     setFixtureUser('owner_1', 'owner@example.com')
-    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 0, conflicts: 0, published: true })
+    await expect(syncSharedTripForOwner(trip.id)).resolves.toMatchObject({ applied: 0, conflicts: 0, pendingReview: 1, published: true })
     const ownerState = await loadOwnerSharedTripState(trip.id)
     const pending = ownerState.configured && ownerState.signedIn
       ? ownerState.mutations.filter((mutation) => mutation.mutationType === 'request_replan_undo' && mutation.status === 'pending')

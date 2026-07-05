@@ -6,7 +6,13 @@ revoke all on schema tripmap_private from public, anon, authenticated;
 grant usage on schema tripmap_private to authenticated, service_role;
 
 alter function public.set_updated_at() set schema tripmap_private;
-alter function public.rls_auto_enable() set schema tripmap_private;
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'alter function public.rls_auto_enable() set schema tripmap_private';
+  end if;
+end;
+$$;
 alter function public.invoke_tripmap_due_reminders() set schema tripmap_private;
 alter function public.claim_travel_inbox_source(uuid, text, integer) set schema tripmap_private;
 alter function public.release_travel_inbox_source_claim(uuid, text) set schema tripmap_private;
@@ -19,7 +25,13 @@ alter function public.companion_confirm_meeting(uuid, text, text) set schema tri
 alter function public.companion_submit_mutation(uuid, text, jsonb) set schema tripmap_private;
 
 alter function tripmap_private.set_updated_at() set search_path = '';
-alter function tripmap_private.rls_auto_enable() set search_path = 'pg_catalog';
+do $$
+begin
+  if to_regprocedure('tripmap_private.rls_auto_enable()') is not null then
+    execute 'alter function tripmap_private.rls_auto_enable() set search_path = pg_catalog';
+  end if;
+end;
+$$;
 alter function tripmap_private.claim_travel_inbox_source(uuid, text, integer) set search_path = '';
 alter function tripmap_private.release_travel_inbox_source_claim(uuid, text) set search_path = '';
 alter function tripmap_private.companion_permission_rank(text) set search_path = '';

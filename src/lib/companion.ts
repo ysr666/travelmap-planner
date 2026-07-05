@@ -3,6 +3,8 @@ import {
   createTripDisruptionEvent,
   deleteItineraryItemCascade,
   getItineraryItem,
+  getTicketBlob,
+  getTicketMeta,
   getTrip,
   listDaysByTrip,
   listItemsByDay,
@@ -13,10 +15,11 @@ import {
   reorderDayItems,
   setItineraryItemExecutionState,
   updateItineraryItem,
+  updateTicketMeta,
 } from '../db'
 import { createId } from '../db/ids'
 import { getCurrentSession, getCurrentUser } from './cloudBackup'
-import { getTicketCategoryLabel, getTicketDisplayTitle } from './tickets'
+import { getTicketCategoryLabel, getTicketScope } from './tickets'
 import { requireSupabaseClient, getSupabaseConfigStatus } from './supabaseClient'
 import type {
   CompanionActivityType,
@@ -34,10 +37,12 @@ import type {
   SharedTripInvite,
   SharedTripMeetingConfirmation,
   SharedTripMember,
+  SharedTripMemberProfile,
   SharedTripMutation,
   SharedTripMutationStatus,
   SharedTripMutationType,
   SharedTripProjection,
+  TicketSharedVisibility,
   TicketMeta,
   TripReplanRecord,
   Trip,
@@ -47,6 +52,7 @@ const CLOUD_FIXTURE_KEY = 'tripmap:e2e:cloud-fixture'
 const INVITE_TOKEN_BYTES = 24
 const MAX_COMMENT_LENGTH = 500
 const MAX_MUTATION_TEXT_LENGTH = 300
+const MAX_PROFILE_TEXT_LENGTH = 160
 
 export type OwnerSharedTripState =
   | {
@@ -67,6 +73,7 @@ export type OwnerSharedTripState =
       mutations: SharedTripMutation[]
       sharedTrip: SharedTrip | null
       signedIn: true
+      ticketFileEvents: SharedTripTicketFileEvent[]
     }
 
 export type CompanionSharedTripBundle = {
@@ -94,6 +101,29 @@ export type ApplySharedTripMutationResult = {
   mutationId: string
   status: SharedTripMutationStatus
   message: string
+}
+
+export type SharedTripTicketFileAccess = {
+  blob: Blob
+  fileName: string
+  mimeType: string
+  ticketId: string
+  title: string
+}
+
+export type SharedTripTicketFileEventType = 'grant_synced' | 'grant_revoked' | 'file_opened'
+
+export type SharedTripTicketFileEvent = {
+  actorUserId?: string
+  createdAt: string
+  eventType: SharedTripTicketFileEventType
+  fileName?: string
+  id: string
+  mimeType?: string
+  ownerId: string
+  sharedTripId: string
+  ticketId: string
+  userId: string
 }
 
 export type SharedTripMutationDraft =
@@ -180,6 +210,7 @@ type CompanionFixture = {
   sharedInviteRows?: SharedTripInvite[]
   sharedMemberRows?: SharedTripMember[]
   sharedMutationRows?: SharedTripMutation[]
+  sharedTicketFileEventRows?: SharedTripTicketFileEvent[]
   sharedTripRows?: SharedTrip[]
   user?: {
     email?: string
@@ -212,11 +243,13 @@ type SharedInviteRow = {
 }
 
 type SharedMemberRow = {
+  assigned_ticket_summaries?: unknown
   display_name?: string | null
   email?: string | null
   joined_at: string
   owner_id: string
   permission: CompanionPermission
+  profile?: unknown
   removed_at?: string | null
   shared_trip_id: string
   updated_at: string
@@ -270,6 +303,37 @@ type SharedMutationRow = {
   user_id: string
 }
 
+type CompanionTicketBlobRow = {
+  deleted_at?: string | null
+  file_name?: string | null
+  mime_type?: string | null
+  sha256?: string | null
+  size?: number | null
+  storage_path?: string | null
+  ticket_id: string
+}
+
+type SharedTicketFileGrantRow = {
+  file_name?: string | null
+  mime_type?: string | null
+  sha256?: string | null
+  size?: number | null
+  storage_path?: string | null
+}
+
+type SharedTicketFileEventRow = {
+  actor_user_id?: string | null
+  created_at: string
+  event_type: SharedTripTicketFileEventType
+  file_name?: string | null
+  id: string
+  mime_type?: string | null
+  owner_id: string
+  shared_trip_id: string
+  ticket_id: string
+  user_id: string
+}
+
 export function getCompanionPermissionRank(permission: CompanionPermission | null | undefined) {
   if (permission === 'collaborate') return 3
   if (permission === 'comment') return 2
@@ -289,6 +353,38 @@ export function getCompanionPermissionLabel(permission: CompanionPermission) {
   if (permission === 'collaborate') return '可协作'
   if (permission === 'comment') return '可评论'
   return '只读'
+}
+
+export function normalizeTicketSharedVisibility(value: unknown): TicketSharedVisibility {
+  const record = asRecord(value)
+  if (record.mode !== 'assigned') {
+    return { mode: 'all' }
+  }
+  const memberIds = uniqueStrings(Array.isArray(record.memberIds) ? record.memberIds : [])
+  return { memberIds, mode: 'assigned' }
+}
+
+export function normalizeSharedTripMemberProfile(value: unknown): SharedTripMemberProfile {
+  const record = asRecord(value)
+  const profile: SharedTripMemberProfile = {}
+  for (const key of [
+    'birthday',
+    'emergencyContact',
+    'identityDocument',
+    'insurance',
+    'legalName',
+    'notes',
+    'passport',
+    'room',
+    'seat',
+    'visa',
+  ] as const) {
+    const normalized = readOptionalLimitedText(record[key], key === 'notes' ? MAX_COMMENT_LENGTH : MAX_PROFILE_TEXT_LENGTH)
+    if (normalized) {
+      profile[key] = normalized
+    }
+  }
+  return profile
 }
 
 export function buildSharedTripProjection({
@@ -332,23 +428,61 @@ export function buildSharedTripProjection({
     ticketSummaries,
     trip: { ...trip },
     warnings: [
-      '共享视图不包含票据文件、加密旅行资料、云端同步状态、路线缓存或 provider 原始结果。',
+      '共享视图只包含主人授权给同行人的行程、资料摘要和票据原件入口；云端同步状态、路线缓存和 provider 原始结果不会共享。',
+      '按同行人分配的票据和资料只会出现在对应同行人的视图中，未授权同行不可见。',
     ],
   }
 }
 
 export function buildSharedTicketSummaries(tickets: TicketMeta[]): SharedTicketSummary[] {
   return [...tickets]
+    .filter((ticket) => normalizeTicketSharedVisibility(ticket.sharedVisibility).mode === 'all')
     .sort((first, second) => first.createdAt - second.createdAt || first.id.localeCompare(second.id))
-    .map((ticket) => ({
-      fileType: ticket.fileType,
-      id: ticket.id,
-      itemId: ticket.itemId,
-      scope: ticket.scope,
-      storageMode: ticket.storageMode ?? 'copy',
-      ticketCategory: ticket.ticketCategory,
-      title: getTicketDisplayTitle(ticket) || getTicketCategoryLabel(ticket),
-    }))
+    .map(toSharedTicketSummary)
+}
+
+export function buildAssignedTicketSummariesForMember(tickets: TicketMeta[], memberId: string): SharedTicketSummary[] {
+  return [...tickets]
+    .filter((ticket) => {
+      const visibility = normalizeTicketSharedVisibility(ticket.sharedVisibility)
+      return visibility.mode === 'assigned' && visibility.memberIds.includes(memberId)
+    })
+    .sort((first, second) => first.createdAt - second.createdAt || first.id.localeCompare(second.id))
+    .map(toSharedTicketSummary)
+}
+
+export function applyMemberTicketVisibilityToProjection(
+  projection: SharedTripProjection,
+  member: SharedTripMember | null,
+): SharedTripProjection {
+  const assignedSummaries = normalizeAssignedTicketSummaries(member?.assignedTicketSummaries)
+  if (assignedSummaries.length === 0) {
+    return {
+      ...projection,
+      items: projection.items.map((item) => ({ ...item })),
+      ticketSummaries: [...projection.ticketSummaries],
+    }
+  }
+
+  const ticketSummaries = dedupeTicketSummaries([...projection.ticketSummaries, ...assignedSummaries])
+  const visibleTicketIds = new Set(ticketSummaries.map((ticket) => ticket.id))
+  const assignedByItem = new Map<string, string[]>()
+  for (const ticket of assignedSummaries) {
+    if (!ticket.itemId) continue
+    assignedByItem.set(ticket.itemId, [...(assignedByItem.get(ticket.itemId) ?? []), ticket.id])
+  }
+
+  return {
+    ...projection,
+    items: projection.items.map((item) => ({
+      ...item,
+      ticketSummaryIds: uniqueStrings([
+        ...item.ticketSummaryIds,
+        ...(assignedByItem.get(item.id) ?? []),
+      ]).filter((ticketId) => visibleTicketIds.has(ticketId)),
+    })),
+    ticketSummaries,
+  }
 }
 
 export function companionInviteTokenFromUrl(value: string) {
@@ -385,6 +519,31 @@ export async function hasCompanionSession() {
   return Boolean(await getCurrentSession().catch(() => null))
 }
 
+export function subscribeToSharedTripRealtime(sharedTripId: string, onChange: () => void) {
+  if (!sharedTripId) return () => undefined
+  const fixture = readCompanionFixture()
+  if (fixture?.user && typeof window !== 'undefined') {
+    const timer = window.setInterval(onChange, 3000)
+    return () => window.clearInterval(timer)
+  }
+
+  const client = requireSupabaseClient()
+  const channel = client
+    .channel(`companion-shared-trip:${sharedTripId}`)
+    .on('postgres_changes', { event: '*', filter: `id=eq.${sharedTripId}`, schema: 'public', table: 'companion_shared_trips' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_shared_members' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_shared_comments' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_meeting_confirmations' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_shared_mutations' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_shared_activities' }, onChange)
+    .on('postgres_changes', { event: '*', filter: `shared_trip_id=eq.${sharedTripId}`, schema: 'public', table: 'companion_ticket_file_events' }, onChange)
+    .subscribe()
+
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
 export async function publishSharedTripFromLocal(tripId: string) {
   const [trip, days, items, tickets, replanEvents, replanRecords] = await Promise.all([
     getTrip(tripId),
@@ -403,9 +562,10 @@ export async function publishSharedTripFromLocal(tripId: string) {
   const now = new Date().toISOString()
   const fixture = readCompanionFixture()
   if (fixture?.user) {
+    const existingTripId = fixture.sharedTripRows?.find((row) => row.ownerId === user.id && row.tripId === trip.id)?.id
     const nextTrip: SharedTrip = {
       createdAt: now,
-      id: fixture.sharedTripRows?.find((row) => row.ownerId === user.id && row.tripId === trip.id)?.id ?? createId('shared_trip'),
+      id: existingTripId ?? createId('shared_trip'),
       ownerId: user.id,
       projection,
       projectionUpdatedAt: now,
@@ -413,12 +573,27 @@ export async function publishSharedTripFromLocal(tripId: string) {
       tripId: trip.id,
       updatedAt: now,
     }
+    const sharedMemberRows = (fixture.sharedMemberRows ?? []).map((member) =>
+      member.sharedTripId === nextTrip.id && !member.removedAt
+        ? { ...member, assignedTicketSummaries: buildAssignedTicketSummariesForMember(tickets, member.userId), updatedAt: now }
+        : member,
+    )
+    const grantEvents = await buildFixtureTicketFileGrantEvents(
+      nextTrip.id,
+      user.id,
+      tickets,
+      sharedMemberRows.filter((member) => member.sharedTripId === nextTrip.id && !member.removedAt),
+      fixture.sharedTicketFileEventRows ?? [],
+      now,
+    )
     writeCompanionFixture({
       ...fixture,
       sharedActivityRows: [
         buildFixtureActivity(nextTrip.id, user.id, 'published', '更新了共享行程'),
         ...(fixture.sharedActivityRows ?? []),
       ],
+      sharedMemberRows,
+      sharedTicketFileEventRows: [...grantEvents, ...(fixture.sharedTicketFileEventRows ?? [])],
       sharedTripRows: upsertById(fixture.sharedTripRows ?? [], nextTrip),
     })
     return { sharedTrip: nextTrip, warnings: projection.warnings }
@@ -439,6 +614,8 @@ export async function publishSharedTripFromLocal(tripId: string) {
   if (error) throw new Error('发布共享行程失败：' + error.message)
 
   const sharedTrip = mapSharedTripRow(data as SharedTripRow)
+  const members = await syncAssignedTicketSummariesForMembers(sharedTrip.id, tickets)
+  await syncCompanionTicketFileGrantsForMembers(sharedTrip.id, trip.id, user.id, tickets, members)
   await client.from('companion_shared_activities').insert({
     activity_type: 'published',
     body: '更新了共享行程',
@@ -470,6 +647,7 @@ export async function loadOwnerSharedTripState(tripId: string): Promise<OwnerSha
       mutations: sharedTrip ? sortMutations((fixture.sharedMutationRows ?? []).filter((row) => row.sharedTripId === sharedTrip.id)) : [],
       sharedTrip,
       signedIn: true,
+      ticketFileEvents: sharedTrip ? sortTicketFileEvents((fixture.sharedTicketFileEventRows ?? []).filter((row) => row.sharedTripId === sharedTrip.id)) : [],
     }
   }
 
@@ -491,17 +669,22 @@ export async function loadOwnerSharedTripState(tripId: string): Promise<OwnerSha
       mutations: [],
       sharedTrip: null,
       signedIn: true,
+      ticketFileEvents: [],
     }
   }
 
-  const [invites, members, activities, mutations] = await Promise.all([
+  const [invites, members, activities, mutations, ticketFileEvents] = await Promise.all([
     client.from('companion_shared_invites').select('*').eq('shared_trip_id', sharedTrip.id).order('created_at', { ascending: false }),
     client.from('companion_shared_members').select('*').eq('shared_trip_id', sharedTrip.id).is('removed_at', null).order('joined_at', { ascending: false }),
     client.from('companion_shared_activities').select('*').eq('shared_trip_id', sharedTrip.id).order('created_at', { ascending: false }).limit(50),
     client.from('companion_shared_mutations').select('*').eq('shared_trip_id', sharedTrip.id).order('created_at', { ascending: false }).limit(50),
+    client.from('companion_ticket_file_events').select('*').eq('shared_trip_id', sharedTrip.id).order('created_at', { ascending: false }).limit(50),
   ])
   for (const result of [invites, members, activities, mutations]) {
     if (result.error) throw new Error('读取共享动态失败：' + result.error.message)
+  }
+  if (ticketFileEvents.error && !isMissingCompanionTicketFileGrantError(ticketFileEvents.error)) {
+    throw new Error('读取票据原件审计失败：' + ticketFileEvents.error.message)
   }
 
   return {
@@ -512,6 +695,7 @@ export async function loadOwnerSharedTripState(tripId: string): Promise<OwnerSha
     mutations: (mutations.data ?? []).map((row) => mapMutationRow(row as SharedMutationRow)),
     sharedTrip,
     signedIn: true,
+    ticketFileEvents: (ticketFileEvents.data ?? []).map((row) => mapTicketFileEventRow(row as SharedTicketFileEventRow)),
   }
 }
 
@@ -609,10 +793,54 @@ export async function updateSharedTripMemberPermission(
   if (error) throw new Error('更新同行权限失败：' + error.message)
 }
 
+export async function updateSharedTripMemberProfile(
+  sharedTripId: string,
+  userId: string,
+  profileInput: SharedTripMemberProfile,
+) {
+  const profile = normalizeSharedTripMemberProfile(profileInput)
+  const fixture = readCompanionFixture()
+  if (fixture?.user) {
+    writeCompanionFixture({
+      ...fixture,
+      sharedMemberRows: (fixture.sharedMemberRows ?? []).map((member) =>
+        member.sharedTripId === sharedTripId && member.userId === userId
+          ? { ...member, profile, updatedAt: new Date().toISOString() }
+          : member,
+      ),
+    })
+    return
+  }
+  const { error } = await requireSupabaseClient()
+    .from('companion_shared_members')
+    .update({ profile })
+    .eq('shared_trip_id', sharedTripId)
+    .eq('user_id', userId)
+  if (error) throw new Error('保存同行资料失败：' + error.message)
+}
+
+export async function updateTicketSharedVisibility(
+  ticketId: string,
+  visibilityInput: TicketSharedVisibility,
+) {
+  const ticket = await getTicketMeta(ticketId)
+  if (!ticket) throw new Error('票据不存在。')
+  const visibility = normalizeTicketSharedVisibility(visibilityInput)
+  await updateTicketMeta(ticket.id, {
+    itemId: ticket.itemId,
+    note: ticket.note,
+    scope: getTicketScope(ticket),
+    sharedVisibility: visibility.mode === 'assigned' ? visibility : undefined,
+    ticketCategory: ticket.ticketCategory,
+    title: ticket.title,
+  })
+}
+
 export async function removeSharedTripMember(sharedTripId: string, userId: string) {
   const now = new Date().toISOString()
   const fixture = readCompanionFixture()
   if (fixture?.user) {
+    const revokeEvents = buildFixtureTicketFileRevocationEvents(sharedTripId, fixture.user.id, userId, fixture.sharedTicketFileEventRows ?? [], now)
     writeCompanionFixture({
       ...fixture,
       sharedMemberRows: (fixture.sharedMemberRows ?? []).map((member) =>
@@ -620,10 +848,14 @@ export async function removeSharedTripMember(sharedTripId: string, userId: strin
           ? { ...member, removedAt: now, updatedAt: now }
           : member,
       ),
+      sharedTicketFileEventRows: [...revokeEvents, ...(fixture.sharedTicketFileEventRows ?? [])],
     })
     return
   }
-  const { error } = await requireSupabaseClient()
+  const user = await requireCompanionUser()
+  const client = requireSupabaseClient()
+  await revokeCompanionTicketFileGrantsForMember(client, sharedTripId, user.id, userId, now)
+  const { error } = await client
     .from('companion_shared_members')
     .update({ removed_at: now })
     .eq('shared_trip_id', sharedTripId)
@@ -647,12 +879,15 @@ export async function claimSharedTripInvite(token: string, displayName?: string)
     if (!sharedTrip) throw new Error('共享旅行不存在。')
     const now = new Date().toISOString()
     if (sharedTrip.ownerId !== user.id) {
+      const existingMember = (fixture.sharedMemberRows ?? []).find((row) => row.sharedTripId === sharedTrip.id && row.userId === user.id)
       const member: SharedTripMember = {
+        assignedTicketSummaries: existingMember?.assignedTicketSummaries,
         displayName: displayName?.trim() || user.email || '同行人',
         email: user.email,
-        joinedAt: now,
+        joinedAt: existingMember?.joinedAt ?? now,
         ownerId: sharedTrip.ownerId,
         permission: invite.permission,
+        profile: existingMember?.profile,
         sharedTripId: sharedTrip.id,
         updatedAt: now,
         userId: user.id,
@@ -692,13 +927,17 @@ export async function loadCompanionSharedTrip(sharedTripId: string): Promise<Com
       ? ownerAsMember(sharedTrip, user)
       : (fixture.sharedMemberRows ?? []).find((row) => row.sharedTripId === sharedTripId && row.userId === user.id && !row.removedAt) ?? null
     if (!member) throw new Error('你还没有加入这趟共享旅行。')
+    const visibleSharedTrip = {
+      ...sharedTrip,
+      projection: applyMemberTicketVisibilityToProjection(sharedTrip.projection, member),
+    }
     return {
       activities: sortActivities((fixture.sharedActivityRows ?? []).filter((row) => row.sharedTripId === sharedTripId)),
       comments: sortComments((fixture.sharedCommentRows ?? []).filter((row) => row.sharedTripId === sharedTripId && !row.deletedAt)),
       confirmations: (fixture.sharedConfirmationRows ?? []).filter((row) => row.sharedTripId === sharedTripId),
       member,
       mutations: sortMutations((fixture.sharedMutationRows ?? []).filter((row) => row.sharedTripId === sharedTripId)),
-      sharedTrip,
+      sharedTrip: visibleSharedTrip,
     }
   }
 
@@ -726,13 +965,86 @@ export async function loadCompanionSharedTrip(sharedTripId: string): Promise<Com
       ? mapMemberRow(member.data as SharedMemberRow)
       : null
   if (!activeMember) throw new Error('你还没有加入这趟共享旅行。')
+  const visibleSharedTrip = {
+    ...sharedTrip,
+    projection: applyMemberTicketVisibilityToProjection(sharedTrip.projection, activeMember),
+  }
   return {
     activities: (activities.data ?? []).map((row) => mapActivityRow(row as SharedActivityRow)),
     comments: (comments.data ?? []).map((row) => mapCommentRow(row as SharedCommentRow)),
     confirmations: (confirmations.data ?? []).map((row) => mapConfirmationRow(row as SharedConfirmationRow)),
     member: activeMember,
     mutations: (mutations.data ?? []).map((row) => mapMutationRow(row as SharedMutationRow)),
-    sharedTrip,
+    sharedTrip: visibleSharedTrip,
+  }
+}
+
+export async function openSharedTripTicketFile(
+  sharedTripId: string,
+  ticketId: string,
+): Promise<SharedTripTicketFileAccess> {
+  const bundle = await loadCompanionSharedTrip(sharedTripId)
+  const summary = bundle.sharedTrip.projection.ticketSummaries.find((ticket) => ticket.id === ticketId)
+  if (!summary) {
+    throw new Error('没有权限查看这张票据原件。')
+  }
+  if (summary.storageMode !== 'copy') {
+    throw new Error('这张票据不是可共享的本地副本。')
+  }
+
+  const fixture = readCompanionFixture()
+  if (fixture?.user) {
+    const record = await getTicketBlob(ticketId)
+    if (!record?.blob) {
+      throw new Error('主人尚未同步这张票据原件。')
+    }
+    const meta = await getTicketMeta(ticketId)
+    appendFixtureTicketFileEvent({
+      actorUserId: fixture.user.id,
+      eventType: 'file_opened',
+      fileName: meta?.fileName,
+      mimeType: meta?.mimeType || record.blob.type,
+      ownerId: bundle.sharedTrip.ownerId,
+      sharedTripId,
+      ticketId,
+      userId: fixture.user.id,
+    })
+    return {
+      blob: record.blob,
+      fileName: meta?.fileName || `${summary.title || 'ticket'}.${summary.fileType === 'pdf' ? 'pdf' : 'file'}`,
+      mimeType: meta?.mimeType || record.blob.type || 'application/octet-stream',
+      ticketId,
+      title: summary.title,
+    }
+  }
+
+  const client = requireSupabaseClient()
+  const { data, error } = await client.rpc('companion_get_ticket_file_grant', {
+    target_shared_trip_id: sharedTripId,
+    target_ticket_id: ticketId,
+  })
+  if (error) {
+    if (isMissingCompanionTicketFileGrantError(error)) {
+      throw new Error('票据原件授权表尚未部署，暂时无法打开原件。')
+    }
+    throw new Error('读取票据原件授权失败：' + error.message)
+  }
+  const first = (Array.isArray(data) ? data[0] : data) as SharedTicketFileGrantRow | undefined
+  const storagePath = first?.storage_path?.trim()
+  if (!storagePath) {
+    throw new Error('主人尚未同步这张票据原件。')
+  }
+
+  const downloaded = await client.storage.from('trip-backups').download(storagePath)
+  if (downloaded.error) {
+    throw new Error('下载票据原件失败：' + downloaded.error.message)
+  }
+  return {
+    blob: downloaded.data,
+    fileName: first?.file_name || `${summary.title || 'ticket'}.${summary.fileType === 'pdf' ? 'pdf' : 'file'}`,
+    mimeType: first?.mime_type || downloaded.data.type || 'application/octet-stream',
+    ticketId,
+    title: summary.title,
   }
 }
 
@@ -940,18 +1252,25 @@ export async function submitSharedTripMutation(sharedTripId: string, draft: Shar
 export async function syncSharedTripForOwner(tripId: string) {
   const state = await loadOwnerSharedTripState(tripId)
   if (!state.configured || !state.signedIn || !state.sharedTrip) {
-    return { applied: 0, conflicts: 0, published: false }
+    return { applied: 0, conflicts: 0, pendingReview: 0, published: false }
   }
 
   let applied = 0
   let conflicts = 0
-  for (const mutation of state.mutations.filter((item) => item.status === 'pending' && item.mutationType !== 'request_replan_undo').reverse()) {
+  const pendingMutations = state.mutations.filter((item) => item.status === 'pending')
+  const autoProcessableMutations = pendingMutations.filter((item) => item.mutationType !== 'request_replan_undo')
+  for (const mutation of autoProcessableMutations.reverse()) {
     const result = await applySharedTripMutationToLocal(tripId, mutation)
     if (result.status === 'applied') applied += 1
     if (result.status === 'conflict' || result.status === 'rejected') conflicts += 1
   }
   await publishSharedTripFromLocal(tripId)
-  return { applied, conflicts, published: true }
+  return {
+    applied,
+    conflicts,
+    pendingReview: pendingMutations.length - autoProcessableMutations.length,
+    published: true,
+  }
 }
 
 export async function applySharedTripMutationToLocal(
@@ -1240,11 +1559,13 @@ function mapInviteRow(row: SharedInviteRow): SharedTripInvite {
 
 function mapMemberRow(row: SharedMemberRow): SharedTripMember {
   return {
+    assignedTicketSummaries: normalizeAssignedTicketSummaries(row.assigned_ticket_summaries),
     displayName: row.display_name ?? undefined,
     email: row.email ?? undefined,
     joinedAt: row.joined_at,
     ownerId: row.owner_id,
     permission: normalizePermission(row.permission),
+    profile: normalizeSharedTripMemberProfile(row.profile),
     removedAt: row.removed_at ?? undefined,
     sharedTripId: row.shared_trip_id,
     updatedAt: row.updated_at,
@@ -1307,6 +1628,21 @@ function mapMutationRow(row: SharedMutationRow): SharedTripMutation {
   }
 }
 
+function mapTicketFileEventRow(row: SharedTicketFileEventRow): SharedTripTicketFileEvent {
+  return {
+    actorUserId: row.actor_user_id ?? undefined,
+    createdAt: row.created_at,
+    eventType: row.event_type,
+    fileName: row.file_name ?? undefined,
+    id: row.id,
+    mimeType: row.mime_type ?? undefined,
+    ownerId: row.owner_id,
+    sharedTripId: row.shared_trip_id,
+    ticketId: row.ticket_id,
+    userId: row.user_id,
+  }
+}
+
 function normalizePermission(value: unknown): CompanionPermission {
   return value === 'collaborate' || value === 'comment' || value === 'read' ? value : 'read'
 }
@@ -1352,6 +1688,123 @@ function buildFixtureActivity(
   }
 }
 
+async function buildFixtureTicketFileGrantEvents(
+  sharedTripId: string,
+  ownerId: string,
+  tickets: TicketMeta[],
+  members: SharedTripMember[],
+  existingEvents: SharedTripTicketFileEvent[],
+  now: string,
+) {
+  const desired = new Map<string, { fileName?: string; mimeType?: string; ticketId: string; userId: string }>()
+  for (const ticket of tickets.filter((item) => (item.storageMode ?? 'copy') === 'copy')) {
+    const record = await getTicketBlob(ticket.id)
+    if (!record?.blob) continue
+    for (const member of visibleMembersForTicket(ticket, members)) {
+      desired.set(ticketFileGrantKey(member.userId, ticket.id), {
+        fileName: ticket.fileName,
+        mimeType: ticket.mimeType || record.blob.type,
+        ticketId: ticket.id,
+        userId: member.userId,
+      })
+    }
+  }
+
+  const current = new Map<string, { fileName?: string; mimeType?: string; ticketId: string; userId: string; visible: boolean }>()
+  for (const event of sortTicketFileEvents(existingEvents).reverse()) {
+    if (event.sharedTripId !== sharedTripId) continue
+    if (event.eventType !== 'grant_synced' && event.eventType !== 'grant_revoked') continue
+    current.set(ticketFileGrantKey(event.userId, event.ticketId), {
+      fileName: event.fileName,
+      mimeType: event.mimeType,
+      ticketId: event.ticketId,
+      userId: event.userId,
+      visible: event.eventType === 'grant_synced',
+    })
+  }
+
+  const events: SharedTripTicketFileEvent[] = []
+  for (const grant of desired.values()) {
+    const state = current.get(ticketFileGrantKey(grant.userId, grant.ticketId))
+    if (state?.visible) continue
+    events.push({
+      actorUserId: ownerId,
+      createdAt: now,
+      eventType: 'grant_synced',
+      fileName: grant.fileName,
+      id: createId('ticket_file_event'),
+      mimeType: grant.mimeType,
+      ownerId,
+      sharedTripId,
+      ticketId: grant.ticketId,
+      userId: grant.userId,
+    })
+  }
+  for (const state of current.values()) {
+    if (!state.visible) continue
+    if (desired.has(ticketFileGrantKey(state.userId, state.ticketId))) continue
+    events.push({
+      actorUserId: ownerId,
+      createdAt: now,
+      eventType: 'grant_revoked',
+      fileName: state.fileName,
+      id: createId('ticket_file_event'),
+      mimeType: state.mimeType,
+      ownerId,
+      sharedTripId,
+      ticketId: state.ticketId,
+      userId: state.userId,
+    })
+  }
+  return events
+}
+
+function buildFixtureTicketFileRevocationEvents(
+  sharedTripId: string,
+  ownerId: string,
+  userId: string,
+  existingEvents: SharedTripTicketFileEvent[],
+  now: string,
+) {
+  const current = new Map<string, SharedTripTicketFileEvent & { visible: boolean }>()
+  for (const event of sortTicketFileEvents(existingEvents).reverse()) {
+    if (event.sharedTripId !== sharedTripId || event.userId !== userId) continue
+    if (event.eventType !== 'grant_synced' && event.eventType !== 'grant_revoked') continue
+    current.set(ticketFileGrantKey(event.userId, event.ticketId), {
+      ...event,
+      visible: event.eventType === 'grant_synced',
+    })
+  }
+  return [...current.values()]
+    .filter((event) => event.visible)
+    .map((event) => ({
+      actorUserId: ownerId,
+      createdAt: now,
+      eventType: 'grant_revoked' as const,
+      fileName: event.fileName,
+      id: createId('ticket_file_event'),
+      mimeType: event.mimeType,
+      ownerId,
+      sharedTripId,
+      ticketId: event.ticketId,
+      userId,
+    }))
+}
+
+function appendFixtureTicketFileEvent(input: Omit<SharedTripTicketFileEvent, 'createdAt' | 'id'>) {
+  const fixture = readCompanionFixture()
+  if (!fixture?.user) return
+  const event: SharedTripTicketFileEvent = {
+    ...input,
+    createdAt: new Date().toISOString(),
+    id: createId('ticket_file_event'),
+  }
+  writeCompanionFixture({
+    ...fixture,
+    sharedTicketFileEventRows: [event, ...(fixture.sharedTicketFileEventRows ?? [])].slice(0, 100),
+  })
+}
+
 function sortInvites(rows: SharedTripInvite[]) {
   return [...rows].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
 }
@@ -1370,6 +1823,294 @@ function sortActivities(rows: SharedTripActivity[]) {
 
 function sortMutations(rows: SharedTripMutation[]) {
   return [...rows].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
+}
+
+function sortTicketFileEvents(rows: SharedTripTicketFileEvent[]) {
+  return [...rows].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
+}
+
+async function syncAssignedTicketSummariesForMembers(sharedTripId: string, tickets: TicketMeta[]) {
+  const client = requireSupabaseClient()
+  const { data, error } = await client
+    .from('companion_shared_members')
+    .select('*')
+    .eq('shared_trip_id', sharedTripId)
+    .is('removed_at', null)
+  if (error) throw new Error('同步同行票据分配失败：' + error.message)
+
+  const members = (data ?? []).map((row) => mapMemberRow(row as SharedMemberRow))
+  await Promise.all(members.map(async (member) => {
+    const { error: updateError } = await client
+      .from('companion_shared_members')
+      .update({ assigned_ticket_summaries: buildAssignedTicketSummariesForMember(tickets, member.userId) })
+      .eq('shared_trip_id', sharedTripId)
+      .eq('user_id', member.userId)
+    if (updateError) throw new Error('同步同行票据分配失败：' + updateError.message)
+  }))
+  return members
+}
+
+async function revokeCompanionTicketFileGrantsForMember(
+  client: ReturnType<typeof requireSupabaseClient>,
+  sharedTripId: string,
+  ownerId: string,
+  userId: string,
+  revokedAt: string,
+) {
+  const { data, error } = await client
+    .from('companion_ticket_file_grants')
+    .select('ticket_id,file_name,mime_type')
+    .eq('shared_trip_id', sharedTripId)
+    .eq('user_id', userId)
+    .is('revoked_at', null)
+  if (error) {
+    if (isMissingCompanionTicketFileGrantError(error)) return
+    throw new Error('撤销同行票据原件授权失败：' + error.message)
+  }
+  const rows = (data ?? []) as Array<{ file_name?: string | null; mime_type?: string | null; ticket_id: string }>
+  if (rows.length === 0) return
+
+  const { error: updateError } = await client
+    .from('companion_ticket_file_grants')
+    .update({ revoked_at: revokedAt })
+    .eq('shared_trip_id', sharedTripId)
+    .eq('user_id', userId)
+    .is('revoked_at', null)
+  if (updateError) {
+    if (isMissingCompanionTicketFileGrantError(updateError)) return
+    throw new Error('撤销同行票据原件授权失败：' + updateError.message)
+  }
+
+  const { error: eventError } = await client
+    .from('companion_ticket_file_events')
+    .insert(rows.map((row) => ({
+      actor_user_id: ownerId,
+      event_type: 'grant_revoked',
+      file_name: row.file_name ?? null,
+      mime_type: row.mime_type ?? null,
+      owner_id: ownerId,
+      shared_trip_id: sharedTripId,
+      ticket_id: row.ticket_id,
+      user_id: userId,
+    })))
+  if (eventError && !isMissingCompanionTicketFileGrantError(eventError)) {
+    throw new Error('记录同行票据原件撤销审计失败：' + eventError.message)
+  }
+}
+
+async function syncCompanionTicketFileGrantsForMembers(
+  sharedTripId: string,
+  tripId: string,
+  ownerId: string,
+  tickets: TicketMeta[],
+  members: SharedTripMember[],
+) {
+  const client = requireSupabaseClient()
+  const copyTickets = tickets.filter((ticket) => (ticket.storageMode ?? 'copy') === 'copy')
+  const activeMembers = members.filter((member) => !member.removedAt)
+
+  const { data: blobRows, error: blobError } = await client
+    .from('cloud_ticket_blobs')
+    .select('ticket_id,storage_path,sha256,mime_type,size,file_name,deleted_at')
+    .eq('user_id', ownerId)
+    .eq('trip_id', tripId)
+    .is('deleted_at', null)
+  if (blobError) {
+    if (isMissingCompanionTicketFileGrantError(blobError)) return
+    throw new Error('同步同行票据原件授权失败：' + blobError.message)
+  }
+
+  const blobByTicketId = new Map<string, CompanionTicketBlobRow>()
+  for (const row of (blobRows ?? []) as CompanionTicketBlobRow[]) {
+    if (row.storage_path) blobByTicketId.set(row.ticket_id, row)
+  }
+
+  const grantRows = copyTickets.flatMap((ticket) => {
+    const blob = blobByTicketId.get(ticket.id)
+    if (!blob?.storage_path) return []
+    return visibleMembersForTicket(ticket, activeMembers).map((member) => ({
+      file_name: blob.file_name || ticket.fileName || null,
+      mime_type: blob.mime_type || ticket.mimeType || null,
+      owner_id: ownerId,
+      revoked_at: null,
+      sha256: blob.sha256 || null,
+      shared_trip_id: sharedTripId,
+      size: typeof blob.size === 'number' ? blob.size : null,
+      storage_path: blob.storage_path,
+      ticket_id: ticket.id,
+      user_id: member.userId,
+    }))
+  })
+
+  const activeKeys = new Set(grantRows.map((row) => ticketFileGrantKey(row.user_id, row.ticket_id)))
+  const { data: existingGrantRows, error: existingGrantError } = await client
+    .from('companion_ticket_file_grants')
+    .select('user_id,ticket_id,revoked_at,file_name,mime_type')
+    .eq('shared_trip_id', sharedTripId)
+  if (existingGrantError) {
+    if (isMissingCompanionTicketFileGrantError(existingGrantError)) return
+    throw new Error('同步同行票据原件授权失败：' + existingGrantError.message)
+  }
+
+  const existingActive = new Set(
+    ((existingGrantRows ?? []) as Array<{ revoked_at?: string | null; ticket_id: string; user_id: string }>)
+      .filter((row) => !row.revoked_at)
+      .map((row) => ticketFileGrantKey(row.user_id, row.ticket_id)),
+  )
+  const grantEvents = grantRows
+    .filter((row) => !existingActive.has(ticketFileGrantKey(row.user_id, row.ticket_id)))
+    .map((row) => ({
+      actor_user_id: ownerId,
+      event_type: 'grant_synced',
+      file_name: row.file_name,
+      mime_type: row.mime_type,
+      owner_id: ownerId,
+      shared_trip_id: sharedTripId,
+      ticket_id: row.ticket_id,
+      user_id: row.user_id,
+    }))
+  const staleGrantRows = ((existingGrantRows ?? []) as Array<{ file_name?: string | null; mime_type?: string | null; revoked_at?: string | null; ticket_id: string; user_id: string }>)
+    .filter((row) => !row.revoked_at && !activeKeys.has(ticketFileGrantKey(row.user_id, row.ticket_id)))
+
+  if (staleGrantRows.length > 0) {
+    await Promise.all(staleGrantRows.map(async (row) => {
+      const { error } = await client
+        .from('companion_ticket_file_grants')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('shared_trip_id', sharedTripId)
+        .eq('user_id', row.user_id)
+        .eq('ticket_id', row.ticket_id)
+      if (error) {
+        if (isMissingCompanionTicketFileGrantError(error)) return
+        throw new Error('同步同行票据原件授权失败：' + error.message)
+      }
+    }))
+    grantEvents.push(...staleGrantRows.map((row) => ({
+      actor_user_id: ownerId,
+      event_type: 'grant_revoked',
+      file_name: row.file_name ?? null,
+      mime_type: row.mime_type ?? null,
+      owner_id: ownerId,
+      shared_trip_id: sharedTripId,
+      ticket_id: row.ticket_id,
+      user_id: row.user_id,
+    })))
+  }
+
+  if (grantRows.length > 0) {
+    const { error: upsertError } = await client
+      .from('companion_ticket_file_grants')
+      .upsert(grantRows, { onConflict: 'shared_trip_id,user_id,ticket_id' })
+    if (upsertError) {
+      if (isMissingCompanionTicketFileGrantError(upsertError)) return
+      throw new Error('同步同行票据原件授权失败：' + upsertError.message)
+    }
+  }
+
+  if (grantEvents.length > 0) {
+    const { error: eventError } = await client
+      .from('companion_ticket_file_events')
+      .insert(grantEvents)
+    if (eventError && !isMissingCompanionTicketFileGrantError(eventError)) {
+      throw new Error('记录同行票据原件审计失败：' + eventError.message)
+    }
+  }
+}
+
+function ticketFileGrantKey(userId: string, ticketId: string) {
+  return `${userId}\u0000${ticketId}`
+}
+
+function visibleMembersForTicket(ticket: TicketMeta, members: SharedTripMember[]) {
+  const visibility = normalizeTicketSharedVisibility(ticket.sharedVisibility)
+  if (visibility.mode === 'all') return members
+  const memberIds = new Set(visibility.memberIds)
+  return members.filter((member) => memberIds.has(member.userId))
+}
+
+function isMissingCompanionTicketFileGrantError(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? ''
+  return error.code === '42P01'
+    || error.code === 'PGRST202'
+    || error.code === 'PGRST205'
+    || message.includes('companion_ticket_file_grants')
+    || message.includes('companion_ticket_file_events')
+    || message.includes('companion_get_ticket_file_grant')
+    || message.includes('cloud_ticket_blobs')
+}
+
+function toSharedTicketSummary(ticket: TicketMeta): SharedTicketSummary {
+  return {
+    fileType: ticket.fileType,
+    id: ticket.id,
+    itemId: ticket.itemId,
+    scope: ticket.scope,
+    storageMode: ticket.storageMode ?? 'copy',
+    ticketCategory: ticket.ticketCategory,
+    title: getSafeSharedTicketTitle(ticket),
+  }
+}
+
+function getSafeSharedTicketTitle(ticket: TicketMeta) {
+  const explicitTitle = readOptionalLimitedText(ticket.title, MAX_MUTATION_TEXT_LENGTH)
+  return explicitTitle || getTicketCategoryLabel(ticket)
+}
+
+function normalizeAssignedTicketSummaries(value: unknown): SharedTicketSummary[] {
+  if (!Array.isArray(value)) return []
+  return dedupeTicketSummaries(value.flatMap((entry) => {
+    const summary = normalizeAssignedTicketSummary(entry)
+    return summary ? [summary] : []
+  }))
+}
+
+function normalizeAssignedTicketSummary(value: unknown): SharedTicketSummary | null {
+  const record = asRecord(value)
+  const id = readOptionalShortString(record.id)
+  if (!id) return null
+  const fileType = record.fileType === 'image' || record.fileType === 'pdf' || record.fileType === 'other'
+    ? record.fileType
+    : 'other'
+  const storageMode = record.storageMode === 'reference' || record.storageMode === 'external' || record.storageMode === 'copy'
+    ? record.storageMode
+    : 'copy'
+  const scope = record.scope === 'trip' || record.scope === 'item' || record.scope === 'unassigned'
+    ? record.scope
+    : undefined
+  const ticketCategory = typeof record.ticketCategory === 'string'
+    ? record.ticketCategory as TicketMeta['ticketCategory']
+    : undefined
+  return {
+    fileType,
+    id,
+    itemId: readOptionalShortString(record.itemId),
+    scope,
+    storageMode,
+    ticketCategory,
+    title: readOptionalLimitedText(record.title, MAX_MUTATION_TEXT_LENGTH) || getTicketCategoryLabel({ ticketCategory }),
+  }
+}
+
+function dedupeTicketSummaries(summaries: SharedTicketSummary[]) {
+  const seen = new Set<string>()
+  return summaries.filter((summary) => {
+    if (seen.has(summary.id)) return false
+    seen.add(summary.id)
+    return true
+  })
+}
+
+function uniqueStrings(values: unknown[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    result.push(normalized)
+  }
+  return result
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

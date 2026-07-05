@@ -32,6 +32,7 @@ type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTicketMetaInput = {
   itemId?: string
   note?: string
+  sharedVisibility?: TicketMeta['sharedVisibility']
   scope: TicketScope
   ticketCategory?: TicketMeta['ticketCategory']
   title?: string
@@ -426,6 +427,7 @@ export async function updateTicketMeta(
         itemId: nextItemId,
         note: input.note,
         scope: input.scope,
+        sharedVisibility: input.sharedVisibility,
         ticketCategory: input.ticketCategory,
         title: input.title,
         updatedAt: now,

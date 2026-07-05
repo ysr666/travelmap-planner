@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CalendarDays, Check, Clock3, MessageCircle, Navigation, Plus, ShieldCheck, Ticket, UsersRound } from 'lucide-react'
+import { CalendarDays, Check, Clock3, Download, ExternalLink, IdCard, Loader2, MessageCircle, Navigation, Plus, ShieldCheck, Ticket, UsersRound, X } from 'lucide-react'
 import {
   addSharedTripComment,
   canCompanionCollaborate,
@@ -9,8 +9,10 @@ import {
   getCompanionPermissionLabel,
   hasCompanionSession,
   loadCompanionSharedTrip,
+  openSharedTripTicketFile,
   recordSharedTripView,
   submitSharedTripMutation,
+  subscribeToSharedTripRealtime,
   type CompanionSharedTripBundle,
 } from '../lib/companion'
 import { getCurrentSession, signInWithEmailOtp, verifyEmailOtp } from '../lib/cloudBackup'
@@ -25,6 +27,7 @@ import type {
   CompanionPermission,
   ItineraryItem,
   SharedItineraryItem,
+  SharedTripMemberProfile,
   SharedTicketSummary,
   SharedTripComment,
   TicketMeta,
@@ -34,6 +37,13 @@ import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 
+type SharedTicketFilePreviewState = {
+  fileName: string
+  mimeType: string
+  objectUrl: string
+  title: string
+}
+
 export function SharedTripPage() {
   const params = getRouteParams()
   const inviteToken = params.get('invite') ?? ''
@@ -42,10 +52,12 @@ export function SharedTripPage() {
   const [sessionReady, setSessionReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filePreview, setFilePreview] = useState<SharedTicketFilePreviewState | null>(null)
+  const [openingTicketId, setOpeningTicketId] = useState<string | null>(null)
   const viewRecordedRef = useRef('')
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true)
     setError(null)
     try {
       const configured = getSupabaseConfigStatus()
@@ -84,7 +96,7 @@ export function SharedTripPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '打开共享旅行失败。')
     } finally {
-      setLoading(false)
+      if (!options?.silent) setLoading(false)
     }
   }, [inviteToken, sharedTripId])
 
@@ -93,10 +105,40 @@ export function SharedTripPage() {
     return () => window.clearTimeout(timeout)
   }, [refresh])
 
+  useEffect(() => {
+    if (!bundle?.sharedTrip.id) return undefined
+    return subscribeToSharedTripRealtime(bundle.sharedTrip.id, () => void refresh({ silent: true }))
+  }, [bundle?.sharedTrip.id, refresh])
+
+  useEffect(() => {
+    return () => {
+      if (filePreview?.objectUrl) URL.revokeObjectURL(filePreview.objectUrl)
+    }
+  }, [filePreview?.objectUrl])
+
   async function handleAuthenticated() {
     const session = await getCurrentSession().catch(() => null)
     setSessionReady(Boolean(session))
     await refresh()
+  }
+
+  async function handleOpenTicketFile(ticket: SharedTicketSummary) {
+    if (!bundle) return
+    setOpeningTicketId(ticket.id)
+    setError(null)
+    try {
+      const file = await openSharedTripTicketFile(bundle.sharedTrip.id, ticket.id)
+      setFilePreview({
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        objectUrl: URL.createObjectURL(file.blob),
+        title: file.title,
+      })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '打开票据原件失败。')
+    } finally {
+      setOpeningTicketId(null)
+    }
   }
 
   if (loading) {
@@ -150,13 +192,15 @@ export function SharedTripPage() {
       <Card className="flex flex-wrap items-center justify-between gap-3" variant="grouped">
         <div>
           <p className="text-xs font-semibold text-primary">同行人视角</p>
-          <p className="mt-1 text-sm tm-muted">{getCompanionPermissionLabel(permission)}</p>
+          <p className="mt-1 text-sm tm-muted">{getCompanionPermissionLabel(permission)} · 协作动态会实时刷新，授权票据原件可直接打开。</p>
         </div>
         <span className="inline-flex min-h-9 items-center gap-1 rounded-full bg-surface-container-high px-3 text-xs font-semibold text-on-surface-variant">
           <ShieldCheck className="size-3.5" />
           已登录
         </span>
       </Card>
+
+      <MemberProfileSummary profile={bundle.member?.profile} />
 
       <CompanionLiveCard
         permission={permission}
@@ -166,7 +210,11 @@ export function SharedTripPage() {
         projection={projection}
       />
 
-      <TicketSummaryPanel ticketSummaries={projection.ticketSummaries} />
+      <TicketSummaryPanel
+        onOpenTicketFile={handleOpenTicketFile}
+        openingTicketId={openingTicketId}
+        ticketSummaries={projection.ticketSummaries}
+      />
 
       {projection.days.map((day) => (
         <Card className="space-y-3" data-testid="shared-trip-day" key={day.id} variant="grouped">
@@ -215,6 +263,13 @@ export function SharedTripPage() {
             </div>
           ))}
         </Card>
+      ) : null}
+
+      {filePreview ? (
+        <SharedTicketFilePreview
+          preview={filePreview}
+          onClose={() => setFilePreview(null)}
+        />
       ) : null}
 
     </div>
@@ -290,6 +345,41 @@ function SharedTripLoginPanel({ inviteToken, onAuthenticated }: { inviteToken: s
         {sent ? '验证并加入' : '发送邮箱验证码'}
       </Button>
       {error ? <Notice tone="error">{error}</Notice> : null}
+    </Card>
+  )
+}
+
+function MemberProfileSummary({ profile }: { profile?: SharedTripMemberProfile }) {
+  const fields = [
+    ['证件姓名', profile?.legalName],
+    ['生日', profile?.birthday],
+    ['护照', profile?.passport],
+    ['签证', profile?.visa],
+    ['保险', profile?.insurance],
+    ['身份证件', profile?.identityDocument],
+    ['座位', profile?.seat],
+    ['房间', profile?.room],
+    ['紧急联系人', profile?.emergencyContact],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]))
+
+  if (fields.length === 0 && !profile?.notes) {
+    return null
+  }
+
+  return (
+    <Card className="space-y-3" data-testid="shared-trip-member-profile" variant="grouped">
+      <div className="flex items-center gap-2">
+        <IdCard className="size-4 text-primary" />
+        <h3 className="text-base font-semibold text-on-surface">我的同行资料</h3>
+      </div>
+      {fields.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {fields.map(([label, value]) => (
+            <InfoCell icon={<IdCard className="size-3.5" />} key={label} label={label} value={value} />
+          ))}
+        </div>
+      ) : null}
+      {profile?.notes ? <p className="rounded-lg bg-surface-container-low px-3 py-2 text-sm tm-muted">{profile.notes}</p> : null}
     </Card>
   )
 }
@@ -537,23 +627,97 @@ function CreateItemForm({ dayId, onChanged, sharedTripId }: { dayId: string; onC
   )
 }
 
-function TicketSummaryPanel({ ticketSummaries }: { ticketSummaries: SharedTicketSummary[] }) {
+function TicketSummaryPanel({
+  onOpenTicketFile,
+  openingTicketId,
+  ticketSummaries,
+}: {
+  onOpenTicketFile: (ticket: SharedTicketSummary) => void
+  openingTicketId: string | null
+  ticketSummaries: SharedTicketSummary[]
+}) {
   return (
     <Card className="space-y-3" data-testid="shared-trip-ticket-summary" variant="grouped">
       <div className="flex items-center gap-2">
         <Ticket className="size-4 text-primary" />
-        <h3 className="text-base font-semibold text-on-surface">重要票据摘要</h3>
+        <h3 className="text-base font-semibold text-on-surface">重要票据</h3>
       </div>
-      {ticketSummaries.length === 0 ? <p className="text-sm tm-muted">主人还没有共享票据摘要。</p> : null}
+      <p className="text-xs leading-5 tm-muted">只显示主人授权给你的票据。可共享副本会提供原件入口，未授权同行不会看到。</p>
+      {ticketSummaries.length === 0 ? <p className="text-sm tm-muted">主人还没有共享给你的票据。</p> : null}
       <div className="grid gap-2">
         {ticketSummaries.map((ticket) => (
-          <div className="rounded-lg bg-surface-container-low px-3 py-2" key={ticket.id}>
-            <p className="text-sm font-semibold text-on-surface">{ticket.title}</p>
-            <p className="text-xs tm-muted">{ticket.fileType.toUpperCase()} · {ticket.storageMode === 'copy' ? '文件由主人保管' : '摘要'}</p>
+          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-container-low px-3 py-2" key={ticket.id}>
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-sm font-semibold text-on-surface">{ticket.title}</p>
+              <p className="text-xs tm-muted">{ticket.fileType.toUpperCase()} · {ticket.storageMode === 'copy' ? '已授权原件' : '外部引用'}</p>
+            </div>
+            {ticket.storageMode === 'copy' ? (
+              <Button
+                disabled={openingTicketId === ticket.id}
+                icon={openingTicketId === ticket.id ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />}
+                onClick={() => onOpenTicketFile(ticket)}
+                variant="secondary"
+              >
+                打开原件
+              </Button>
+            ) : null}
           </div>
         ))}
       </div>
     </Card>
+  )
+}
+
+function SharedTicketFilePreview({
+  onClose,
+  preview,
+}: {
+  onClose: () => void
+  preview: SharedTicketFilePreviewState
+}) {
+  const isImage = preview.mimeType.startsWith('image/')
+  const isPdf = preview.mimeType === 'application/pdf'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" data-testid="shared-trip-ticket-file-preview">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-surface shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-outline-variant/30 px-4 py-3">
+          <Ticket className="size-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-base font-semibold text-on-surface">{preview.title}</h3>
+            <p className="truncate text-xs tm-muted">{preview.fileName}</p>
+          </div>
+          <a
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant/40 px-3 text-xs font-semibold text-primary"
+            download={preview.fileName}
+            href={preview.objectUrl}
+          >
+            <Download className="size-3.5" />
+            下载原件
+          </a>
+          <button
+            aria-label="关闭票据预览"
+            className="inline-flex size-10 items-center justify-center rounded-lg text-on-surface-variant tm-focus hover:bg-surface-container-high"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-surface-container-low p-3">
+          {isImage ? (
+            <img alt={preview.title} className="mx-auto max-h-[72vh] max-w-full rounded-lg bg-surface object-contain" src={preview.objectUrl} />
+          ) : isPdf ? (
+            <iframe className="h-[72vh] w-full rounded-lg bg-surface" data-testid="shared-trip-ticket-file-frame" src={preview.objectUrl} title={preview.title} />
+          ) : (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg bg-surface p-6 text-center">
+              <Ticket className="size-8 text-primary" />
+              <p className="text-sm font-semibold text-on-surface">{preview.fileName}</p>
+              <a className="text-sm font-semibold text-primary" href={preview.objectUrl} rel="noreferrer" target="_blank">打开原件</a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

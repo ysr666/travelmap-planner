@@ -1,20 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Copy, Link2, Loader2, RefreshCw, ShieldCheck, UserRoundPlus, UsersRound, XCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, Copy, IdCard, Link2, Loader2, RefreshCw, Save, ShieldCheck, TicketCheck, UserRoundPlus, UsersRound, XCircle } from 'lucide-react'
 import {
   createSharedTripInvite,
   getCompanionPermissionLabel,
   loadOwnerSharedTripState,
+  normalizeSharedTripMemberProfile,
+  normalizeTicketSharedVisibility,
   publishSharedTripFromLocal,
   removeSharedTripMember,
   revokeSharedTripInvite,
+  subscribeToSharedTripRealtime,
   syncSharedTripForOwner,
+  updateSharedTripMemberProfile,
   updateSharedTripMemberPermission,
+  updateTicketSharedVisibility,
   type OwnerSharedTripState,
+  type SharedTripTicketFileEvent,
 } from '../../lib/companion'
 import { navigateTo } from '../../lib/routes'
+import { getTicketCategoryLabel, getTicketDisplayTitle } from '../../lib/tickets'
 import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../../lib/tripIntelligence'
 import { useTripIntelligencePersistence } from '../../hooks/useTripIntelligencePersistence'
-import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, SharedTripMutation, TicketMeta, Trip } from '../../types'
+import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, SharedTripMember, SharedTripMemberProfile, SharedTripMutation, TicketMeta, TicketSharedVisibility, Trip } from '../../types'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
@@ -40,12 +47,27 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [memberProfileDrafts, setMemberProfileDrafts] = useState<Record<string, SharedTripMemberProfile>>({})
+  const [ticketVisibilityDrafts, setTicketVisibilityDrafts] = useState<Record<string, TicketSharedVisibility>>({})
+  const autoSyncAttemptedKeyRef = useRef('')
+  const autoSyncInFlightRef = useRef(false)
+  const autoPublishSnapshotKeyRef = useRef('')
+  const autoPublishInFlightRef = useRef(false)
+  const autoPublishMemberKeyRef = useRef<string | null>(null)
   const { restoreSuggestionState, setSuggestionState, suggestionStates } = useTripIntelligencePersistence(trip.id)
 
   const itemCount = useMemo(() => Object.values(itemsByDay).reduce((sum, items) => sum + items.length, 0), [itemsByDay])
   const pendingMutationCount = state?.configured && state.signedIn
     ? state.mutations.filter((mutation) => mutation.status === 'pending').length
     : 0
+  const autoProcessableMutationKey = useMemo(() => {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip) return ''
+    return state.mutations
+      .filter((mutation) => mutation.status === 'pending' && mutation.mutationType !== 'request_replan_undo')
+      .map((mutation) => `${mutation.id}:${mutation.updatedAt}`)
+      .sort()
+      .join('|')
+  }, [state])
   const sharedTripIntelligenceModel = useMemo(() => buildTripIntelligenceModel({
     sharedMutations: state?.configured && state.signedIn ? state.mutations : [],
     suggestionStates,
@@ -54,14 +76,43 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   const hiddenSharedTripSuggestions = sharedTripIntelligenceModel.allSuggestions.filter((suggestion) =>
     suggestion.scope === 'shared_trip' && (suggestion.status === 'ignored' || suggestion.status === 'later'),
   )
+  const memberProfileDraftsWithDefaults = useMemo(() => {
+    if (!state?.configured || !state.signedIn) return {}
+    const next: Record<string, SharedTripMemberProfile> = {}
+    for (const member of state.members) {
+      next[member.userId] = memberProfileDrafts[member.userId] ?? normalizeSharedTripMemberProfile(member.profile)
+    }
+    return next
+  }, [memberProfileDrafts, state])
+  const ticketVisibilityDraftsWithDefaults = useMemo(() => {
+    const next: Record<string, TicketSharedVisibility> = {}
+    for (const ticket of tickets) {
+      next[ticket.id] = ticketVisibilityDrafts[ticket.id] ?? normalizeTicketSharedVisibility(ticket.sharedVisibility)
+    }
+    return next
+  }, [ticketVisibilityDrafts, tickets])
+  const ownerSnapshotKey = useMemo(() => buildOwnerSnapshotKey({ days, itemsByDay, tickets, trip }), [days, itemsByDay, tickets, trip])
+  const activeMemberKey = useMemo(() => {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip) return ''
+    return state.members
+      .map((member) => member.userId)
+      .sort()
+      .join('|')
+  }, [state])
+  const memberRosterNeedsRefresh = useMemo(() => {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip) return false
+    const projectedAt = Date.parse(state.sharedTrip.projectionUpdatedAt)
+    return state.members.some((member) => Date.parse(member.joinedAt) > projectedAt)
+  }, [state])
+  const realtimeSharedTripId = state?.configured && state.signedIn ? state.sharedTrip?.id : undefined
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       setState(await loadOwnerSharedTripState(trip.id))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '读取同行共享状态失败。')
     }
-  }
+  }, [trip.id])
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +121,116 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
       .catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : '读取同行共享状态失败。') })
     return () => { cancelled = true }
   }, [trip.id])
+
+  useEffect(() => {
+    if (!realtimeSharedTripId) return undefined
+    return subscribeToSharedTripRealtime(realtimeSharedTripId, () => void refresh())
+  }, [realtimeSharedTripId, refresh])
+
+  useEffect(() => {
+    if (!autoProcessableMutationKey || autoSyncInFlightRef.current) return undefined
+    if (autoSyncAttemptedKeyRef.current === autoProcessableMutationKey) return undefined
+    autoSyncAttemptedKeyRef.current = autoProcessableMutationKey
+    autoSyncInFlightRef.current = true
+    let cancelled = false
+    setBusy('auto-sync')
+    setError(null)
+    setMessage(null)
+    void syncSharedTripForOwner(trip.id)
+      .then((result) => {
+        if (cancelled) return
+        const pendingReview = result.pendingReview ?? 0
+        setMessage(`已自动处理同行更改：应用 ${result.applied} 项，需主人确认 ${pendingReview} 项，冲突 ${result.conflicts} 项。`)
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : '自动处理同行更改失败。')
+      })
+      .finally(() => {
+        autoSyncInFlightRef.current = false
+        if (!cancelled) {
+          void refresh().finally(() => setBusy(null))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [autoProcessableMutationKey, refresh, trip.id])
+
+  useEffect(() => {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip || !ownerSnapshotKey) return undefined
+    if (!autoPublishSnapshotKeyRef.current) {
+      autoPublishSnapshotKeyRef.current = ownerSnapshotKey
+      return undefined
+    }
+    if (autoPublishSnapshotKeyRef.current === ownerSnapshotKey || autoPublishInFlightRef.current) return undefined
+
+    let cancelled = false
+    const nextSnapshotKey = ownerSnapshotKey
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      autoPublishInFlightRef.current = true
+      setBusy('auto-publish')
+      setError(null)
+      setMessage(null)
+      void publishSharedTripFromLocal(trip.id)
+        .then(() => {
+          autoPublishSnapshotKeyRef.current = nextSnapshotKey
+          if (!cancelled) setMessage('主人更新已自动同步到同行共享。')
+        })
+        .catch((caught) => {
+          if (!cancelled) setError(caught instanceof Error ? caught.message : '自动同步主人更新失败。')
+        })
+        .finally(() => {
+          autoPublishInFlightRef.current = false
+          if (!cancelled) {
+            void refresh().finally(() => setBusy(null))
+          }
+        })
+    }, 800)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [ownerSnapshotKey, refresh, state, trip.id])
+
+  useEffect(() => {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip) return undefined
+    const initialRefresh = autoPublishMemberKeyRef.current === null && memberRosterNeedsRefresh
+    if (autoPublishMemberKeyRef.current === null) {
+      autoPublishMemberKeyRef.current = activeMemberKey
+      if (!memberRosterNeedsRefresh) return undefined
+    }
+    if (autoPublishInFlightRef.current) return undefined
+    if (!initialRefresh && autoPublishMemberKeyRef.current === activeMemberKey) return undefined
+
+    let cancelled = false
+    const nextMemberKey = activeMemberKey
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      autoPublishInFlightRef.current = true
+      setBusy('auto-publish')
+      setError(null)
+      setMessage(null)
+      void publishSharedTripFromLocal(trip.id)
+        .then(() => {
+          autoPublishMemberKeyRef.current = nextMemberKey
+          if (!cancelled) setMessage('同行成员变化已自动同步票据授权。')
+        })
+        .catch((caught) => {
+          if (!cancelled) setError(caught instanceof Error ? caught.message : '自动同步同行授权失败。')
+        })
+        .finally(() => {
+          autoPublishInFlightRef.current = false
+          if (!cancelled) {
+            void refresh().finally(() => setBusy(null))
+          }
+        })
+    }, 800)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [activeMemberKey, memberRosterNeedsRefresh, refresh, state, trip.id])
 
   async function runAction(key: string, action: () => Promise<void>) {
     setBusy(key)
@@ -88,7 +249,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   async function handlePublish() {
     await runAction('publish', async () => {
       await publishSharedTripFromLocal(trip.id)
-      setMessage('已更新同行共享版本。')
+      setMessage('已更新同行共享版本，并同步票据原件授权。')
     })
   }
 
@@ -114,7 +275,44 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   async function handleSync() {
     await runAction('sync', async () => {
       const result = await syncSharedTripForOwner(trip.id)
-      setMessage(`同行同步完成：应用 ${result.applied} 项，需处理 ${result.conflicts} 项。`)
+      const pendingReview = result.pendingReview ?? 0
+      setMessage(`同行同步完成：应用 ${result.applied} 项，需主人确认 ${pendingReview} 项，冲突 ${result.conflicts} 项；共享视图和票据授权已自动刷新。`)
+    })
+  }
+
+  function updateMemberProfileDraft(userId: string, base: SharedTripMemberProfile, patch: Partial<SharedTripMemberProfile>) {
+    setMemberProfileDrafts((current) => ({
+      ...current,
+      [userId]: normalizeSharedTripMemberProfile({
+        ...base,
+        ...(current[userId] ?? {}),
+        ...patch,
+      }),
+    }))
+  }
+
+  function updateTicketVisibilityDraft(ticketId: string, nextVisibility: TicketSharedVisibility) {
+    setTicketVisibilityDrafts((current) => ({
+      ...current,
+      [ticketId]: nextVisibility.mode === 'assigned'
+        ? { memberIds: [...new Set(nextVisibility.memberIds)], mode: 'assigned' }
+        : { mode: 'all' },
+    }))
+  }
+
+  async function handleSaveMemberProfile(member: SharedTripMember) {
+    if (!state?.configured || !state.signedIn || !state.sharedTrip) return
+    await runAction(`profile:${member.userId}`, async () => {
+      await updateSharedTripMemberProfile(state.sharedTrip!.id, member.userId, memberProfileDraftsWithDefaults[member.userId] ?? {})
+      setMessage('同行资料已保存。')
+    })
+  }
+
+  async function handleSaveTicketVisibility(ticket: TicketMeta) {
+    await runAction(`ticket:${ticket.id}`, async () => {
+      await updateTicketSharedVisibility(ticket.id, ticketVisibilityDraftsWithDefaults[ticket.id] ?? { mode: 'all' })
+      await publishSharedTripFromLocal(trip.id)
+      setMessage(`「${getTicketDisplayTitle(ticket)}」的同行可见性已保存，并已自动同步共享版本。`)
     })
   }
 
@@ -146,7 +344,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
             <h3 className="text-base font-semibold text-on-surface">同行共享</h3>
           </div>
           <p className="mt-1 text-xs leading-5 tm-muted">
-            只共享行程投影、票据摘要和同行动态；票据文件、加密资料、云同步状态和 provider 数据不会进入共享视图。
+            同行动态通过实时通道刷新；票据和同行资料可按成员精确授权，保存分配后会自动更新共享版本和原件授权。同行提交的普通修改会自动进入主人端处理流并回写共享视图，需主人判断的请求仍保留确认入口。
           </p>
         </div>
         {state?.configured && state.signedIn && state.sharedTrip ? (
@@ -184,7 +382,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
           <div className="grid gap-2 text-xs sm:grid-cols-3">
             <SummaryCell label="共享天数" value={`${days.length} 天`} />
             <SummaryCell label="行程点" value={`${itemCount} 个`} />
-            <SummaryCell label="票据摘要" value={`${tickets.length} 条`} />
+            <SummaryCell label="可分配票据" value={`${tickets.length} 条`} />
           </div>
 
           {sharedTripSuggestions.length > 0 || hiddenSharedTripSuggestions.length > 0 ? (
@@ -209,12 +407,16 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
             </Button>
             {state.sharedTrip ? (
               <Button
-                disabled={busy === 'sync'}
-                icon={busy === 'sync' ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                disabled={busy === 'sync' || busy === 'auto-sync'}
+                icon={busy === 'sync' || busy === 'auto-sync' || busy === 'auto-publish' ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
                 onClick={() => void handleSync()}
                 variant="secondary"
               >
-                同步同行更改{pendingMutationCount ? `（${pendingMutationCount}）` : ''}
+                {busy === 'auto-sync'
+                  ? '自动处理同行更改中'
+                  : busy === 'auto-publish'
+                    ? '自动同步主人更新中'
+                    : `处理同行更改${pendingMutationCount ? `（${pendingMutationCount}）` : ''}`}
               </Button>
             ) : null}
           </div>
@@ -255,33 +457,35 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
               <Collapsible title={`同行人（${state.members.length}）`}>
                 <div className="space-y-2" data-testid="shared-trip-members">
                   {state.members.length === 0 ? <p className="text-xs tm-muted">还没有同行人加入。</p> : null}
-                  {state.members.map((member) => (
-                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-container-low px-3 py-2" key={member.userId}>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-on-surface">{member.displayName || member.email || '同行人'}</p>
-                        <p className="text-xs tm-muted">{member.email || member.userId}</p>
-                      </div>
-                      <select
-                        className="min-h-11 rounded-lg border border-outline-variant/40 bg-surface px-2 text-xs font-semibold"
-                        onChange={(event) => {
-                          void runAction(`member:${member.userId}`, () =>
-                            updateSharedTripMemberPermission(state.sharedTrip!.id, member.userId, event.currentTarget.value as CompanionPermission),
-                          )
-                        }}
-                        value={member.permission}
-                      >
-                        {permissionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                      <Button
-                        icon={<XCircle className="size-4" />}
-                        onClick={() => void runAction(`remove:${member.userId}`, () => removeSharedTripMember(state.sharedTrip!.id, member.userId))}
-                        variant="ghost"
-                      >
-                        移除
-                      </Button>
-                    </div>
-                  ))}
+                  {state.members.map((member) => {
+                    const draft = memberProfileDraftsWithDefaults[member.userId] ?? {}
+                    return (
+                      <MemberProfileCard
+                        busy={busy}
+                        draft={draft}
+                        key={member.userId}
+                        member={member}
+                        onChange={(patch) => updateMemberProfileDraft(member.userId, draft, patch)}
+                        onPermissionChange={(permission) => void runAction(`member:${member.userId}`, () =>
+                          updateSharedTripMemberPermission(state.sharedTrip!.id, member.userId, permission),
+                        )}
+                        onRemove={() => void runAction(`remove:${member.userId}`, () => removeSharedTripMember(state.sharedTrip!.id, member.userId))}
+                        onSave={() => void handleSaveMemberProfile(member)}
+                      />
+                    )
+                  })}
                 </div>
+              </Collapsible>
+
+              <Collapsible title={`票据分配（${tickets.length}）`}>
+                <TicketAssignmentList
+                  busy={busy}
+                  members={state.members}
+                  onChange={updateTicketVisibilityDraft}
+                  onSave={(ticket) => void handleSaveTicketVisibility(ticket)}
+                  tickets={tickets}
+                  visibilityDrafts={ticketVisibilityDraftsWithDefaults}
+                />
               </Collapsible>
 
               <Collapsible title={`共享链接（${state.invites.length}）`}>
@@ -306,6 +510,10 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
 
               <Collapsible title={`同行人动态（${state.activities.length}）`}>
                 <ActivityList activities={state.activities} />
+              </Collapsible>
+
+              <Collapsible title={`票据原件审计（${state.ticketFileEvents.length}）`}>
+                <TicketFileAuditList events={state.ticketFileEvents} />
               </Collapsible>
 
               <Collapsible title={`协作修改（${state.mutations.length}）`}>
@@ -336,6 +544,244 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-surface-container-high/60 px-3 py-2">
       <p className="text-[11px] font-semibold uppercase text-on-surface-variant">{label}</p>
       <p className="mt-1 text-sm font-semibold text-on-surface">{value}</p>
+    </div>
+  )
+}
+
+function buildOwnerSnapshotKey({
+  days,
+  itemsByDay,
+  tickets,
+  trip,
+}: {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  tickets: TicketMeta[]
+  trip: Trip
+}) {
+  const itemKey = Object.values(itemsByDay)
+    .flat()
+    .map((item) => [
+      item.id,
+      item.dayId,
+      item.sortOrder,
+      item.updatedAt,
+      item.ticketIds.join(','),
+    ].join(':'))
+    .sort()
+    .join('|')
+  const dayKey = [...days]
+    .map((day) => [day.id, day.date, day.sortOrder, day.title, day.timeZone ?? ''].join(':'))
+    .sort()
+    .join('|')
+  const ticketKey = [...tickets]
+    .map((ticket) => {
+      const visibility = normalizeTicketSharedVisibility(ticket.sharedVisibility)
+      return [
+        ticket.id,
+        ticket.itemId ?? '',
+        ticket.scope ?? '',
+        ticket.storageMode ?? '',
+        ticket.updatedAt,
+        visibility.mode === 'assigned'
+          ? `assigned:${[...visibility.memberIds].sort().join(',')}`
+          : 'all',
+      ].join(':')
+    })
+    .sort()
+    .join('|')
+  return [
+    trip.id,
+    trip.updatedAt,
+    dayKey,
+    itemKey,
+    ticketKey,
+  ].join('\n')
+}
+
+function MemberProfileCard({
+  busy,
+  draft,
+  member,
+  onChange,
+  onPermissionChange,
+  onRemove,
+  onSave,
+}: {
+  busy: string | null
+  draft: SharedTripMemberProfile
+  member: SharedTripMember
+  onChange: (patch: Partial<SharedTripMemberProfile>) => void
+  onPermissionChange: (permission: CompanionPermission) => void
+  onRemove: () => void
+  onSave: () => void
+}) {
+  return (
+    <div className="space-y-3 rounded-lg bg-surface-container-low px-3 py-3" data-testid="shared-trip-member-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-on-surface">{member.displayName || member.email || '同行人'}</p>
+          <p className="text-xs tm-muted">{member.email || member.userId}</p>
+        </div>
+        <select
+          className="min-h-11 rounded-lg border border-outline-variant/40 bg-surface px-2 text-xs font-semibold"
+          onChange={(event) => onPermissionChange(event.currentTarget.value as CompanionPermission)}
+          value={member.permission}
+        >
+          {permissionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <Button icon={<XCircle className="size-4" />} onClick={onRemove} variant="ghost">
+          移除
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
+        <IdCard className="size-4 text-primary" />
+        同行资料
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ProfileInput label="证件姓名" onChange={(value) => onChange({ legalName: value })} value={draft.legalName ?? ''} />
+        <ProfileInput label="生日" onChange={(value) => onChange({ birthday: value })} type="date" value={draft.birthday ?? ''} />
+        <ProfileInput label="护照" onChange={(value) => onChange({ passport: value })} value={draft.passport ?? ''} />
+        <ProfileInput label="签证" onChange={(value) => onChange({ visa: value })} value={draft.visa ?? ''} />
+        <ProfileInput label="保险" onChange={(value) => onChange({ insurance: value })} value={draft.insurance ?? ''} />
+        <ProfileInput label="身份证件" onChange={(value) => onChange({ identityDocument: value })} value={draft.identityDocument ?? ''} />
+        <ProfileInput label="座位" onChange={(value) => onChange({ seat: value })} value={draft.seat ?? ''} />
+        <ProfileInput label="房间" onChange={(value) => onChange({ room: value })} value={draft.room ?? ''} />
+        <ProfileInput label="紧急联系人" onChange={(value) => onChange({ emergencyContact: value })} value={draft.emergencyContact ?? ''} />
+      </div>
+      <label className="block text-xs font-semibold text-on-surface-variant">
+        同行备注
+        <textarea
+          className="mt-1 min-h-20 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm text-on-surface"
+          onChange={(event) => onChange({ notes: event.currentTarget.value })}
+          value={draft.notes ?? ''}
+        />
+      </label>
+      <Button
+        disabled={busy === `profile:${member.userId}`}
+        icon={busy === `profile:${member.userId}` ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+        onClick={onSave}
+        variant="secondary"
+      >
+        保存资料
+      </Button>
+    </div>
+  )
+}
+
+function ProfileInput({
+  label,
+  onChange,
+  type = 'text',
+  value,
+}: {
+  label: string
+  onChange: (value: string) => void
+  type?: string
+  value: string
+}) {
+  return (
+    <label className="block text-xs font-semibold text-on-surface-variant">
+      {label}
+      <input
+        className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm text-on-surface"
+        onChange={(event) => onChange(event.currentTarget.value)}
+        type={type}
+        value={value}
+      />
+    </label>
+  )
+}
+
+function TicketAssignmentList({
+  busy,
+  members,
+  onChange,
+  onSave,
+  tickets,
+  visibilityDrafts,
+}: {
+  busy: string | null
+  members: SharedTripMember[]
+  onChange: (ticketId: string, visibility: TicketSharedVisibility) => void
+  onSave: (ticket: TicketMeta) => void
+  tickets: TicketMeta[]
+  visibilityDrafts: Record<string, TicketSharedVisibility>
+}) {
+  return (
+    <div className="space-y-2" data-testid="shared-trip-ticket-assignments">
+      {tickets.length === 0 ? <p className="text-xs tm-muted">还没有票据可分配。</p> : null}
+      {tickets.map((ticket) => {
+        const visibility = visibilityDrafts[ticket.id] ?? normalizeTicketSharedVisibility(ticket.sharedVisibility)
+        const selectedIds = visibility.mode === 'assigned' ? new Set(visibility.memberIds) : new Set<string>()
+        return (
+          <div className="space-y-3 rounded-lg bg-surface-container-low px-3 py-3" data-testid="shared-trip-ticket-assignment" key={ticket.id}>
+            <div className="flex items-start gap-2">
+              <TicketCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-semibold text-on-surface">{getTicketDisplayTitle(ticket)}</p>
+                <p className="text-xs tm-muted">{getTicketCategoryLabel(ticket)} · {ticket.fileType.toUpperCase()}</p>
+              </div>
+            </div>
+            <label className="block text-xs font-semibold text-on-surface-variant">
+              共享给
+              <select
+                className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm text-on-surface"
+                onChange={(event) => {
+                  if (event.currentTarget.value === 'assigned') {
+                    onChange(ticket.id, { memberIds: visibility.mode === 'assigned' ? visibility.memberIds : [], mode: 'assigned' })
+                    return
+                  }
+                  onChange(ticket.id, { mode: 'all' })
+                }}
+                value={visibility.mode}
+              >
+                <option value="all">所有同行</option>
+                <option value="assigned">指定同行</option>
+              </select>
+            </label>
+            {visibility.mode === 'assigned' ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {members.length === 0 ? <p className="text-xs tm-muted">还没有同行人可选择。</p> : null}
+                  {members.map((member) => {
+                    const checked = selectedIds.has(member.userId)
+                    return (
+                      <label className="flex min-h-11 items-center gap-2 rounded-lg bg-surface px-3 text-xs font-semibold text-on-surface-variant" key={member.userId}>
+                        <input
+                          checked={checked}
+                          onChange={(event) => {
+                            const nextIds = event.currentTarget.checked
+                              ? [...selectedIds, member.userId]
+                              : [...selectedIds].filter((id) => id !== member.userId)
+                            onChange(ticket.id, { memberIds: nextIds, mode: 'assigned' })
+                          }}
+                          type="checkbox"
+                        />
+                        <span className="min-w-0 truncate">{member.displayName || member.email || member.userId}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {selectedIds.size === 0 ? (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+                    当前不会共享给任何同行。
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            <Button
+              disabled={busy === `ticket:${ticket.id}`}
+              icon={busy === `ticket:${ticket.id}` ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              onClick={() => onSave(ticket)}
+              variant="secondary"
+            >
+              保存分配
+            </Button>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -406,6 +852,23 @@ function ActivityList({ activities }: { activities: SharedTripActivity[] }) {
   )
 }
 
+function TicketFileAuditList({ events }: { events: SharedTripTicketFileEvent[] }) {
+  return (
+    <div className="space-y-2" data-testid="shared-trip-ticket-file-audit">
+      {events.length === 0 ? <p className="text-xs tm-muted">还没有票据原件授权或打开记录。</p> : null}
+      {events.map((event) => (
+        <div className="rounded-lg bg-surface-container-low px-3 py-2" key={event.id}>
+          <p className="text-sm font-semibold text-on-surface">{ticketFileEventLabel(event.eventType)}</p>
+          <p className="mt-0.5 break-words text-xs leading-5 tm-muted">
+            {event.fileName || event.ticketId} · 同行 {event.userId}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold text-on-surface-variant">{formatDateTime(event.createdAt)}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function MutationList({ mutations }: { mutations: SharedTripMutation[] }) {
   return (
     <div className="space-y-2" data-testid="shared-trip-mutations">
@@ -447,6 +910,12 @@ function mutationStatusLabel(status: SharedTripMutation['status']) {
   if (status === 'conflict') return '存在冲突'
   if (status === 'rejected') return '未应用'
   return '待处理'
+}
+
+function ticketFileEventLabel(type: SharedTripTicketFileEvent['eventType']) {
+  if (type === 'grant_synced') return '已授权票据原件'
+  if (type === 'grant_revoked') return '已撤销票据原件授权'
+  return '打开了票据原件'
 }
 
 function formatDateTime(value: string) {

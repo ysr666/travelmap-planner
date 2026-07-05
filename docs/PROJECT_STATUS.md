@@ -1,6 +1,6 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-06-23
+更新时间：2026-07-05
 基线：Unified Trip Intelligence Packages 1-7、全局登录与账号数据隔离、Phase 12F 时间语义、Provider 生产运营加固已完成。PR4 分支新增桌面 Beta smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 治理模板。Phase 13A Trip Home 地图概览入口优化、Phase 13B Day Map marker 卡片交互、Phase 13C 全局 AI 咨询分流、Phase 14A Item Detail 现场行动区和 Phase 16A Ticket Library 现场筛选完成第一轮。
 
 Limited beta readiness checklist: [docs/LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md).
@@ -10,7 +10,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 
 旅图是产品化阶段的出国旅行管理工具，目标是用 Trip Home、Day View、票据、账本和共享旅行等上下文回答“现在要确认什么 / 现在该做什么”。核心数据仍先写入浏览器 IndexedDB；离线可用、PWA app shell、Supabase 账号同步和 zip 归档是底层能力，而不是主产品叙事。业务页面需要登录，已联网验证设备获得 30 天离线访问期，退出登录会关闭当前账号数据空间。
 
-它不是订票软件、完整导航软件、实时同步产品或多人协作工具。AI 与地图服务只做辅助，最终写入仍应由用户确认。
+它不是订票软件、完整导航软件或实时搜索产品。账号云同步仍是单账号对象同步，不是多人云端编辑；Shared Trip 已提供同行动态实时刷新、成员资料、按人票据授权与原件访问审计、主人本地更新自动发布、普通同行修改自动处理和需判断请求的主人确认流。AI 与地图服务只做辅助，最终写入仍应由用户确认。
 
 ## 当前 canonical routes
 
@@ -50,6 +50,7 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - Day Map marker 卡片：点击 marker 或站点 rail 显示轻量现场卡片，可上一/下一站、查看详情并保留地图来源上下文。
 - Item Detail 现场行动区：详情页顶部整合时间、前后站、路线到这里、打开地点、坐标状态和绑定票据入口，仍不自动调用 provider。
 - Ticket Library 现场筛选：票据总览数字可直接筛选保存文件、仅记录位置、外部链接、此设备离线可用、未分类和全部票据，预览器沿用筛选后的线性上下文。
+- Shared Trip 同行协作：同行动态实时刷新；主人可维护同行资料库，按成员分配票据与原件授权，同行只看到被授权内容，指定名单为空表示不共享给任何同行；票据原件授权、撤销和打开请求进入主人审计列表；主人本地更新会在已开启共享后自动发布，普通同行修改自动进入主人端处理流并回写共享视图，撤销重排等需判断请求保留主人确认。
 - 手动道路路线 polyline，失败时回退直线。
 - 本地路线缓存 `TripMapRouteCacheDB`，缓存自动加载、失效和清理。
 - 地图 collapsed sheet 轻量化第一轮、route chip、route controls、公交近似提示。
@@ -125,11 +126,12 @@ Foundation/Phase-2 roadmap, including the original 13 product directions mapping
 - 对象同步会先拉取账号对象，再推送此设备 outbox；不同对象和不同字段会自动合并，同一字段双边修改或删除/更新冲突要求用户确认。
 - 旧版多条云端记录和旧版恢复出的离线缓存可能仍存在；当前版本不会自动迁移、合并、删除或清理这些历史数据。
 - 删除本地旅行不会删除云端同步记录；删除云端记录必须走手动确认。
-- 当前不是实时表同步或实时协作；对象删除使用 tombstone 同步。
+- 账号对象同步不是实时表同步或多人编辑；对象删除使用 tombstone 同步。Shared Trip 的同行实时通道独立于账号对象同步。
 - intelligence applied changes 按 dedupeKey 去重展示；suggestion state 使用 latest `updatedAt` wins。清空历史、恢复建议与 retention prune 都同步 tombstone。
 - Package 7 migration `20260620060942_persistent_trip_intelligence_sync.sql`、权限加固 migration `20260620074105_harden_production_boundaries.sql` 和 Companion owner `RETURNING` 前向修复 `20260620135038_allow_owner_select_companion_projection.sql` 均已部署生产。
-- 生产检查确认公开 Companion/Inbox RPC 为 invoker 薄入口，私有实现固定 `search_path`，15 个更新时间 trigger、RLS event trigger、reminder cron、9 条依赖 policy 和 8 个外键索引均保持有效；security advisor 只剩刻意 deny-all 的 connector secrets 表提示及 Free 计划无法开启的泄露密码保护。
-- Companion 真实账号生产 smoke 与双设备 intelligence smoke 均完整通过并清理测试数据。双设备验证覆盖设备 A 忽略/完成与上传、设备 B 全新 IndexedDB 恢复、建议不重复、完成历史恢复、latest-wins 和 tombstone 删除传播。登录 refresh session 仅以 `0600` 权限缓存在仓库外，两个设备与 Companion 复用同一次登录。
+- Shared Trip 成员资料、成员级票据摘要、真实票据原件授权/审计和空指定名单语义的 migration `20260705093000_companion_member_profiles_ticket_visibility.sql` 已部署生产；`20260705132000_fix_companion_ticket_grant_policy_recursion.sql` 已修复授权 grant policy 与票据 blob policy 的递归。本地 `db reset`、本地/linked lint、post-DDL SQL 检查、生产 Realtime smoke、生产 collaborator mutation smoke 和生产真实账号 JUAN/DONGJUN 可见性 smoke 均通过。
+- 生产检查确认公开 Companion/Inbox RPC 为 invoker 薄入口，私有实现固定 `search_path`，15 个更新时间 trigger、RLS event trigger、reminder cron、9 条依赖 policy 和 8 个外键索引均保持有效；security advisor 只剩 Free 计划无法开启的泄露密码保护 warning，performance advisor 只新增 `cloud_ticket_blobs` owner/companion 双 SELECT policy warning。
+- Companion 真实账号生产 smoke、JUAN/DONGJUN 按人票据可见性 smoke 与双设备 intelligence smoke 均完整通过并清理测试数据。双设备验证覆盖设备 A 忽略/完成与上传、设备 B 全新 IndexedDB 恢复、建议不重复、完成历史恢复、latest-wins 和 tombstone 删除传播。登录 refresh session 仅以 `0600` 权限缓存在仓库外，两个设备与 Companion 复用同一次登录。
 - 长期协议升级路线已记录在 `docs/SUPABASE_CLOUD_BACKUP.md`；未来仍需 per-device 操作审计、队列调试工具和协议迁移工具。
 
 ## 数据与缓存边界

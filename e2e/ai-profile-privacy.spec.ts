@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createDemoTripViaUi, expectNoHorizontalOverflow } from './helpers'
+import { createDemoTripViaUi, expectNoHorizontalOverflow, openDetailsSection } from './helpers'
 
 test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page }) => {
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
@@ -10,6 +10,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
   await page.reload({ waitUntil: 'domcontentloaded' })
 
+  await openDetailsSection(page, '旅行偏好')
   const profileSection = page.getByTestId('travel-profile-section')
   await expect(profileSection).toBeVisible()
   await expect(profileSection).toContainText('设备内运行')
@@ -31,10 +32,11 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
     reminderLevel: 'detailed',
   })
 
+  await openDetailsSection(page, 'AI 与隐私')
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
-  await expect(privacySection).toContainText('AI 与隐私')
   await expect(privacySection).toContainText('本地检查只读')
+  await expect(privacySection).toContainText('收件箱只在你开启或确认后发送提取文本')
   await expect(privacySection).toContainText('票据图片/PDF')
 
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
@@ -50,6 +52,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, '旅行偏好')
   await expect(page.getByTestId('travel-profile-pace-relaxed')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-transport-walking')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-meal-protection')).toHaveAttribute('aria-checked', 'false')
@@ -57,10 +60,12 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   await expect(page.getByTestId('travel-profile-night-return')).toHaveValue('22:00')
   await expect(page.getByTestId('travel-profile-reminder-detailed')).toHaveAttribute('aria-pressed', 'true')
 
+  await openDetailsSection(page, 'AI 与隐私')
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileNames')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileContent')).toBeDisabled()
 
+  await openDetailsSection(page, '外观')
   await page.getByTestId('appearance-mode-dark').click()
   await expect(page.locator('html')).toHaveClass(/dark/)
   await expect(profileSection).toBeVisible()

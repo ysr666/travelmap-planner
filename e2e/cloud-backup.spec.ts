@@ -5,6 +5,7 @@ import {
   expectNoHorizontalOverflow,
   forceSupabaseFixture,
   forceSupabaseUnconfigured,
+  openDetailsSection,
   seedTravelRecords,
 } from './helpers'
 
@@ -12,6 +13,7 @@ test('设置页 Supabase 未配置时显示云端同步提示且不显示登录�
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, '云端同步')
   const cloudSection = page.getByTestId('cloud-backup-section')
 
   await expect(cloudSection).toBeVisible()
@@ -356,6 +358,7 @@ test('设置页只显示通用路线服务状态和缓存管理', async ({ page 
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
+  await openDetailsSection(page, '路线服务')
   await expect(page.getByTestId('routing-settings-section')).toBeVisible()
   await expect(page.getByText('高级与迁移', { exact: true })).toBeVisible()
   await expect(page.getByTestId('routing-settings-section')).toContainText(/路线服务由旅图提供|路线服务暂不可用/)

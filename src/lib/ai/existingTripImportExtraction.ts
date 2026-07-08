@@ -1,5 +1,6 @@
 import { parseTripPlanFile } from '../tripPlanImport'
 import type { ExistingTripImportApplyFile, ExistingTripImportSourceKind, ExistingTripImportSourceSummary } from './existingTripImport'
+import type JSZipType from 'jszip'
 
 export type ExistingTripImportOcrLanguage =
   | 'chi_sim'
@@ -60,12 +61,14 @@ export type ExistingTripImportExtractionResult = {
 export const DEFAULT_EXISTING_TRIP_IMPORT_OCR_LANGUAGES: ExistingTripImportOcrLanguage[] = ['chi_sim', 'chi_tra', 'eng']
 export const OPTIONAL_EXISTING_TRIP_IMPORT_OCR_LANGUAGES: ExistingTripImportOcrLanguage[] = ['jpn', 'kor', 'tha', 'spa', 'por', 'rus', 'fra', 'ara']
 export const EXISTING_TRIP_IMPORT_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
-export const EXISTING_TRIP_IMPORT_MAX_FILE_COUNT = 8
+export const EXISTING_TRIP_IMPORT_MAX_FILE_COUNT = 60
 export const EXISTING_TRIP_IMPORT_MAX_PDF_PAGES = 8
+const MAX_REQUEST_SOURCE_COUNT = 60
+const MAX_REQUEST_TEXT_LENGTH = 60_000
 const MIN_PDF_TEXT_CHARS_PER_PAGE = 40
 const MAX_SOURCE_TEXT_LENGTH = 12_000
 
-const SUPPORTED_TEXT_EXTENSIONS = /\.(txt|eml|html?|json)$/i
+const SUPPORTED_TEXT_EXTENSIONS = /\.(txt|eml|html?|json|csv)$/i
 
 export async function extractExistingTripImportSources({
   files = [],
@@ -147,6 +150,9 @@ export async function extractExistingTripImportSources({
       } else if (kind === 'image') {
         onProgress?.({ fileName: file.name, message: '本地 OCR 识别图片', sourceId, stage: 'ocr' })
         text = await ocrAdapter({ file, languages, sourceId })
+      } else if (kind === 'spreadsheet') {
+        onProgress?.({ fileName: file.name, message: '读取表格内容', sourceId, stage: 'text' })
+        text = await extractSpreadsheetText(file)
       } else {
         text = await file.text().catch(() => '')
         sourceWarnings.push('文件类型无法完全识别，已按文本尝试读取。')
@@ -281,14 +287,16 @@ async function resolveDefaultOcrLanguageUrl(language: ExistingTripImportOcrLangu
 }
 
 export function buildExistingTripImportRequestSources(sources: ExistingTripImportSourceSummary[]) {
-  return sources.slice(0, 12).map((source) => ({
+  const selected = sources.slice(0, MAX_REQUEST_SOURCE_COUNT)
+  const perSourceTextLength = Math.max(800, Math.min(4_000, Math.floor(MAX_REQUEST_TEXT_LENGTH / Math.max(1, selected.length))))
+  return selected.map((source) => ({
     fileName: source.fileName,
     id: source.id,
     kind: source.kind,
     label: source.label,
     mimeType: source.mimeType,
     size: source.size,
-    text: clampSourceText(source.text, 4_000),
+    text: clampSourceText(source.text, perSourceTextLength),
     warnings: source.warnings?.slice(0, 5),
   }))
 }
@@ -298,6 +306,7 @@ function inferSourceKind(file: File): ExistingTripImportSourceKind {
   const mime = file.type.toLowerCase()
   if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
   if (mime.startsWith('image/')) return 'image'
+  if (isSpreadsheetFile(name, mime)) return 'spreadsheet'
   if (name.endsWith('.zip')) return 'trip_plan'
   if (name.endsWith('.json')) return 'trip_plan'
   if (mime.includes('html') || /\.html?$/i.test(name)) return 'html'
@@ -311,10 +320,139 @@ function inferMimeType(fileName: string) {
   if (lowerName.endsWith('.pdf')) return 'application/pdf'
   if (lowerName.endsWith('.json')) return 'application/json'
   if (lowerName.endsWith('.zip')) return 'application/zip'
+  if (lowerName.endsWith('.csv')) return 'text/csv'
+  if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  if (lowerName.endsWith('.xls')) return 'application/vnd.ms-excel'
   if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html'
   if (lowerName.endsWith('.eml')) return 'message/rfc822'
   if (lowerName.endsWith('.txt')) return 'text/plain'
   return 'application/octet-stream'
+}
+
+function isSpreadsheetFile(name: string, mime: string) {
+  return /\.(csv|xlsx|xlsm|xls)$/i.test(name)
+    || mime === 'text/csv'
+    || mime.includes('spreadsheet')
+    || mime.includes('excel')
+}
+
+async function extractSpreadsheetText(file: File) {
+  const name = file.name.toLowerCase()
+  if (name.endsWith('.csv') || file.type.toLowerCase() === 'text/csv') {
+    return file.text()
+  }
+  if (!/\.(xlsx|xlsm)$/i.test(name)) {
+    return ''
+  }
+  const JSZip = (await import('jszip')).default
+  const zip = await JSZip.loadAsync(await file.arrayBuffer())
+  const sharedStrings = await readSharedStrings(zip)
+  const workbookSheets = await readWorkbookSheets(zip)
+  const lines: string[] = []
+  for (const sheet of workbookSheets.slice(0, 12)) {
+    const xml = await zip.file(sheet.path)?.async('text')
+    if (!xml) continue
+    const rows = readWorksheetRows(xml, sharedStrings)
+    if (!rows.length) continue
+    lines.push(`工作表：${sheet.name}`)
+    for (const row of rows.slice(0, 160)) {
+      lines.push(row.join(' | '))
+    }
+  }
+  return normalizeExtractedText(lines.join('\n'))
+}
+
+async function readSharedStrings(zip: JSZipType) {
+  const xml = await zip.file('xl/sharedStrings.xml')?.async('text')
+  if (!xml) return []
+  const strings: string[] = []
+  for (const match of xml.matchAll(/<si\b[\s\S]*?<\/si>/gi)) {
+    const node = match[0] ?? ''
+    let value = ''
+    for (const textMatch of node.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)) {
+      value += decodeXml(textMatch[1] ?? '')
+    }
+    strings.push(value)
+  }
+  return strings
+}
+
+async function readWorkbookSheets(zip: JSZipType) {
+  const workbookXml = await zip.file('xl/workbook.xml')?.async('text')
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('text')
+  if (!workbookXml || !relsXml) return []
+  const relTargetById = new Map<string, string>()
+  for (const match of relsXml.matchAll(/<Relationship\b[^>]*>/gi)) {
+    const rel = match[0] ?? ''
+    relTargetById.set(getXmlAttr(rel, 'Id'), normalizeWorkbookRelationshipTarget(getXmlAttr(rel, 'Target')))
+  }
+  const sheets: Array<{ name: string; path: string }> = []
+  let index = 0
+  for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/gi)) {
+    index += 1
+    const sheet = match[0] ?? ''
+    sheets.push({
+      name: decodeXml(getXmlAttr(sheet, 'name')) || `Sheet ${index}`,
+      path: relTargetById.get(getXmlAttr(sheet, 'r:id')) ?? `xl/worksheets/sheet${index}.xml`,
+    })
+  }
+  return sheets
+}
+
+function readWorksheetRows(xml: string, sharedStrings: string[]) {
+  const rows: string[][] = []
+  for (const rowMatch of xml.matchAll(/<row\b[\s\S]*?<\/row>/gi)) {
+    const row = rowMatch[0] ?? ''
+    const cells: string[] = []
+    for (const cellMatch of row.matchAll(/<c\b[\s\S]*?<\/c>/gi)) {
+      const value = readSpreadsheetCellXml(cellMatch[0] ?? '', sharedStrings).trim()
+      if (value) cells.push(value)
+    }
+    if (cells.length) rows.push(cells)
+  }
+  return rows
+}
+
+function readSpreadsheetCellXml(cell: string, sharedStrings: string[]) {
+  const type = getXmlAttr(cell.match(/<c\b[^>]*>/i)?.[0] ?? '', 't')
+  const value = decodeXml(cell.match(/<v>([\s\S]*?)<\/v>/i)?.[1] ?? '')
+  if (type === 's') return sharedStrings[Number(value)] ?? ''
+  if (type === 'inlineStr') {
+    let inline = ''
+    for (const match of cell.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)) {
+      inline += decodeXml(match[1] ?? '')
+    }
+    return inline
+  }
+  return stripXmlTags(value)
+}
+
+function normalizeWorkbookRelationshipTarget(target: string) {
+  if (!target) return ''
+  if (target.startsWith('/')) return target.replace(/^\/+/, '')
+  if (target.startsWith('xl/')) return target
+  return `xl/${target.replace(/^\.?\//, '')}`
+}
+
+function getXmlAttr(tag: string, name: string) {
+  return tag.match(new RegExp(`(?:^|\\s)${escapeRegExp(name)}=["']([^"']*)["']`, 'i'))?.[1] ?? ''
+}
+
+function stripXmlTags(value: string) {
+  return decodeXml(value.replace(/<[^>]+>/g, ' '))
+}
+
+function decodeXml(value: string) {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function extractHtmlText(html: string) {

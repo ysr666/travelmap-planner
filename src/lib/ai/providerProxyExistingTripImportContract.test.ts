@@ -85,7 +85,7 @@ describe('validateProviderProxyExistingTripImportRequest', () => {
 
   it('rejects too much extracted text', () => {
     const request = validRequest()
-    request.sources = Array.from({ length: 7 }, (_, index) => ({
+    request.sources = Array.from({ length: 16 }, (_, index) => ({
       id: `source:${index}`,
       kind: 'text_file',
       label: `file ${index}`,

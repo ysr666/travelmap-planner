@@ -367,17 +367,6 @@ export function TravelDocumentCenterPage() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
 
-      {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
-        <DocumentIntelligencePanel
-          hiddenSuggestions={hiddenDocumentSuggestions}
-          onAction={handleDocumentSuggestion}
-          onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
-          onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
-          onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
-          suggestions={documentSuggestions}
-        />
-      ) : null}
-
       {activeTab !== 'attachments' ? (
         <VaultAccessPanel
           busy={busy}
@@ -393,14 +382,6 @@ export function TravelDocumentCenterPage() {
           unlocked={vaultUnlocked}
         />
       ) : null}
-
-      <CloudControls
-        busy={busy}
-        conflicts={syncConflicts}
-        onEnablePush={() => void handleEnablePush()}
-        onResolve={handleResolveConflict}
-        onSync={() => void handleCloudSync()}
-      />
 
       {activeTab === 'documents' && vaultUnlocked ? (
         <DocumentsPanel
@@ -434,6 +415,30 @@ export function TravelDocumentCenterPage() {
           <EmptyState body="先创建或选择旅行，再保存该旅行的票据附件。" icon={<FileText className="size-6" />} title="尚未选择旅行" />
         )
       ) : null}
+
+      {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
+        <DocumentIntelligencePanel
+          hiddenSuggestions={hiddenDocumentSuggestions}
+          onAction={handleDocumentSuggestion}
+          onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+          onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+          onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
+          suggestions={documentSuggestions}
+        />
+      ) : null}
+
+      <details className="rounded-xl border border-outline-variant/30 bg-surface-container px-3 py-2" open={syncConflicts.length > 0}>
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">同步</summary>
+        <div className="mt-3">
+          <CloudControls
+            busy={busy}
+            conflicts={syncConflicts}
+            onEnablePush={() => void handleEnablePush()}
+            onResolve={handleResolveConflict}
+            onSync={() => void handleCloudSync()}
+          />
+        </div>
+      </details>
 
       <ConfirmDialog
         body={migrationTicket ? `将复制「${migrationTicket.title || migrationTicket.fileName}」及其本地文件到端到端加密资料库。转换完成前不会修改原票据。` : ''}
@@ -484,38 +489,44 @@ function DocumentIntelligencePanel({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-on-surface">资料建议</h3>
-          <p className="text-xs leading-5 tm-muted">只显示已脱敏的资料类型、状态和数量；具体内容仍在原有流程中确认。</p>
         </div>
         <span className="rounded-full bg-primary-container px-2 py-1 text-xs font-semibold text-on-primary-container">{suggestions.length} 项</span>
       </div>
-      <div className="space-y-2">
-        {suggestions.map((suggestion) => (
-          <div className="flex min-h-11 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-1" key={suggestion.id}>
-            <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="travel-document-intelligence-action" onClick={() => onAction(suggestion)} type="button">
-              <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : suggestion.severity === 'medium' ? 'text-amber-600' : 'text-primary'}`} />
-              <span className="min-w-0 flex-1">
-                <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
-                <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
-              </span>
-              <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
-            </button>
-            <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
-          </div>
-        ))}
-        {hiddenSuggestions.length > 0 ? (
-          <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
-            <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏资料建议（{hiddenSuggestions.length}）</summary>
-            <div className="mt-2 space-y-1">
-              {hiddenSuggestions.map((suggestion) => (
-                <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
-                  <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
-                  <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
-                </div>
-              ))}
+      <details className="group rounded-lg border border-outline-variant/30 bg-surface-container-low">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-primary marker:hidden select-none [&::-webkit-details-marker]:hidden tm-focus">
+          <span>查看建议</span>
+          <span className="text-xs tm-muted group-open:hidden">展开</span>
+          <span className="hidden text-xs tm-muted group-open:inline">收起</span>
+        </summary>
+        <div className="space-y-2 border-t border-outline-variant/20 p-2">
+          {suggestions.map((suggestion) => (
+            <div className="flex min-h-11 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-1" key={suggestion.id}>
+              <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="travel-document-intelligence-action" onClick={() => onAction(suggestion)} type="button">
+                <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : suggestion.severity === 'medium' ? 'text-amber-600' : 'text-primary'}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+                  <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+              </button>
+              <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
             </div>
-          </details>
-        ) : null}
-      </div>
+          ))}
+          {hiddenSuggestions.length > 0 ? (
+            <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+              <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold tm-muted">已隐藏资料建议（{hiddenSuggestions.length}）</summary>
+              <div className="mt-2 space-y-1">
+                {hiddenSuggestions.map((suggestion) => (
+                  <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                    <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                    <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      </details>
     </Card>
   )
 }

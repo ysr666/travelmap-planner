@@ -611,53 +611,12 @@ export function TripWorkspacePage() {
               />
             </section>
 
-            {isTripIntelligenceStateLoaded && readinessModel && tripOperationsModel ? (
-              <TripOperationsPanel
-                activeInboxPreview={tripOperationsInboxPreview}
-                allItems={allItems}
-                dailyTipModel={dailyTipModel}
-                days={days}
-                intelligenceModel={tripIntelligenceModel}
-                itemsByDay={itemsByDay}
-                model={tripOperationsModel}
-                localState={tripOperationsLocalState}
-                onChanged={handleTripOperationsChanged}
-                onLocalStateChange={handleTripOperationsLocalStateChange}
-                onSuggestionStateChange={(suggestion, status) => {
-                  void setTripIntelligenceSuggestionState({ status, suggestion })
-                }}
-                onSuggestionStateRestore={(suggestionKey) => {
-                  void restoreTripIntelligenceSuggestionState(suggestionKey)
-                }}
-                readinessModel={readinessModel}
-                tickets={ticketMetas}
-                trip={trip}
-              />
-            ) : null}
-
-            <section className="flex flex-col gap-stack-gap">
-              {isTripIntelligenceStateLoaded && liveDay && tripOperationsModel ? (
-                <TripLiveModeCard
-                  allItems={allItems}
-                  compact
-                  day={liveDay}
-                  days={days}
-                  items={itemsByDay[liveDay.id] ?? []}
-                  localState={tripOperationsLocalState}
-                  now={liveNow}
-                  onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
-                  onLocalStateChange={handleTripOperationsLocalStateChange}
-                  onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
-                  onOpenMap={() => openDay(liveDay, 'map')}
-                  onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
-                  onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
-                  operationsRecommendations={tripOperationsModel.activeRecommendations}
-                  routeDay={liveRouteDay}
-                  tickets={ticketMetas}
-                  trip={trip}
-                />
-              ) : null}
-            </section>
+            <DailyItineraryList
+              days={days}
+              itemsByDay={itemsByDay}
+              onOpenDay={(day) => openDay(day, 'schedule')}
+              selectedDayId={selectedDay?.id}
+            />
 
             <section className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
@@ -731,13 +690,6 @@ export function TripWorkspacePage() {
               />
             </section>
 
-            <DailyItineraryList
-              days={days}
-              itemsByDay={itemsByDay}
-              onOpenDay={(day) => openDay(day, 'schedule')}
-              selectedDayId={selectedDay?.id}
-            />
-
             <FocusDayTimelinePreview
               focus={tripHomeFocus}
               onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
@@ -777,6 +729,52 @@ export function TripWorkspacePage() {
               title="更多工具与详情"
             >
               <div className="space-y-4" data-testid="trip-home-secondary-tools">
+                {isTripIntelligenceStateLoaded && liveDay && tripOperationsModel ? (
+                  <TripLiveModeCard
+                    allItems={allItems}
+                    compact
+                    day={liveDay}
+                    days={days}
+                    items={itemsByDay[liveDay.id] ?? []}
+                    localState={tripOperationsLocalState}
+                    now={liveNow}
+                    onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
+                    onLocalStateChange={handleTripOperationsLocalStateChange}
+                    onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
+                    onOpenMap={() => openDay(liveDay, 'map')}
+                    onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
+                    onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
+                    operationsRecommendations={tripOperationsModel.activeRecommendations}
+                    routeDay={liveRouteDay}
+                    tickets={ticketMetas}
+                    trip={trip}
+                  />
+                ) : null}
+
+                {isTripIntelligenceStateLoaded && readinessModel && tripOperationsModel ? (
+                  <TripOperationsPanel
+                    activeInboxPreview={tripOperationsInboxPreview}
+                    allItems={allItems}
+                    dailyTipModel={dailyTipModel}
+                    days={days}
+                    intelligenceModel={tripIntelligenceModel}
+                    itemsByDay={itemsByDay}
+                    model={tripOperationsModel}
+                    localState={tripOperationsLocalState}
+                    onChanged={handleTripOperationsChanged}
+                    onLocalStateChange={handleTripOperationsLocalStateChange}
+                    onSuggestionStateChange={(suggestion, status) => {
+                      void setTripIntelligenceSuggestionState({ status, suggestion })
+                    }}
+                    onSuggestionStateRestore={(suggestionKey) => {
+                      void restoreTripIntelligenceSuggestionState(suggestionKey)
+                    }}
+                    readinessModel={readinessModel}
+                    tickets={ticketMetas}
+                    trip={trip}
+                  />
+                ) : null}
+
                 <div id="trip-tools-ledger-section">
                   <LedgerSummaryCard trip={trip} />
                 </div>

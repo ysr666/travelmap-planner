@@ -189,6 +189,7 @@ test('Package 6 同行冲突建议脱敏且不会自动执行', async ({ page })
   await expect(intelligence).toContainText('同行更改存在冲突')
   await expect(intelligence).not.toContainText('SECRET-COMPANION-NOTE-112233')
   await expect(intelligence).not.toContainText('SECRET-REJECTED-REASON-445566')
+  await intelligence.locator('summary').filter({ hasText: '查看建议' }).click()
   await expect(intelligence.getByRole('button', { name: /稍后处理/ })).toBeVisible()
   await expect(intelligence.getByRole('button', { name: /忽略建议/ })).toHaveCount(0)
 

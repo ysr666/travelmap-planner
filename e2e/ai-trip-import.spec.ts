@@ -5,11 +5,13 @@ import {
   expectNoHorizontalOverflow,
   forceRouteProxyFixture,
   forceSupabaseUnconfigured,
+  openDetailsSection,
 } from './helpers'
 
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 async function openAiTripImportSection(page: Page) {
+  await openDetailsSection(page, 'AI 生成行程')
   await expect(page.getByRole('heading', { name: 'AI 行程包与应用内生成' })).toBeVisible()
 }
 

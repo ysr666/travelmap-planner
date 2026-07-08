@@ -195,6 +195,12 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           text: summarizeInteractionResult(resolved),
           type: 'assistant',
         })
+        if (shouldAutoExecuteNavigation(resolved)) {
+          window.setTimeout(() => {
+            handleNavigation(resolved)
+            setCommand('')
+          }, 0)
+        }
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'AI 指令处理失败。'
@@ -486,7 +492,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[5rem]' : 'bottom-4'}`}
+        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[4.75rem]' : 'bottom-4'}`}
         data-testid="global-ai-command-bar"
       >
         {panelOpen ? (
@@ -992,6 +998,10 @@ function summarizeInteractionResult(result: GlobalAiInteractionResult) {
   if (result.kind === 'replan_preview') return `${result.title}：${result.warnings[0] ?? '方案已准备好，确认后写入。'}`
   if (result.kind === 'ai_trip_edit') return result.message
   return '已生成结果。'
+}
+
+function shouldAutoExecuteNavigation(result: GlobalAiInteractionResult): result is Extract<GlobalAiInteractionResult, { kind: 'navigation' }> {
+  return result.kind === 'navigation' && result.autoExecute === true
 }
 
 function getInteractionSourceCardCount(result: GlobalAiInteractionResult) {

@@ -20,7 +20,7 @@ export function SettingsMapsPage() {
               </div>
               <span className="font-body-lg text-body-lg text-on-surface">在线状态</span>
             </div>
-            <span className="font-label-sm text-label-sm text-on-secondary-container">在线</span>
+            <span className="font-label-sm text-label-sm text-on-secondary-fixed">在线</span>
           </div>
           <div className="h-[1px] bg-outline-variant/30 ml-[60px]" />
           <div className="flex items-center justify-between p-4 bg-surface-container">

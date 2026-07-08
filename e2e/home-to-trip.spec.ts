@@ -6,7 +6,6 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
 
   const banner = page.getByRole('banner')
   await expect(banner.getByRole('heading', { name: '旅图' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '随身管家' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

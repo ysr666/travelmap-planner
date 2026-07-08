@@ -222,6 +222,18 @@ export function getHashParam(url: string, key: string) {
   return new URLSearchParams(query).get(key)
 }
 
+export async function openDetailsSection(page: Page, title: string) {
+  const section = page.locator('details').filter({
+    has: page.locator('summary').filter({ hasText: title }),
+  }).first()
+  await expect(section.locator('summary')).toBeVisible()
+  const isOpen = await section.evaluate((element) => (element as HTMLDetailsElement).open)
+  if (!isOpen) {
+    await section.locator('summary').click()
+  }
+  return section
+}
+
 export async function getFirstTripDayAndItemIds(page: Page, tripId: string) {
   return page.evaluate(async (targetTripId) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

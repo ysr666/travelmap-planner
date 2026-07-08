@@ -91,11 +91,7 @@ test('交通票据先本机预览再应用到订单表单', async ({ page }) => 
 
 test('旧票据地址兼容跳转到资料中心附件页', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
-  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })).toBeVisible()
-  await page.evaluate((targetTripId) => {
-    window.location.hash = `/tickets?tripId=${targetTripId}`
-  }, tripId)
+  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(new RegExp(`#/documents\\?tripId=${tripId}&tab=attachments`))
   await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '暂无票据' })).toBeVisible()
@@ -123,6 +119,7 @@ test('Package 6 资料建议保持脱敏且过期风险只能稍后处理', asyn
   await expect(suggestions).toContainText('签证已过期')
   await expect(suggestions).not.toContainText('绝不能出现在资料建议里的护照标题')
   await expect(suggestions).not.toContainText('SECRET-PASSPORT-998877')
+  await suggestions.locator('summary').filter({ hasText: '查看建议' }).click()
   await expect(suggestions.getByRole('button', { name: /稍后处理/ })).toBeVisible()
   await expect(suggestions.getByRole('button', { name: /忽略建议/ })).toHaveCount(0)
 

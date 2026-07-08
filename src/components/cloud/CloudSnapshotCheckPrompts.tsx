@@ -189,7 +189,7 @@ function VersionContextDetail({ result }: { result: CloudSnapshotCheckResult }) 
 
   return (
     <details className="group text-xs">
-      <summary className="flex cursor-pointer items-center gap-1 text-outline transition hover:text-on-surface-variant select-none marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer items-center gap-1 text-outline transition hover:text-on-surface-variant select-none marker:hidden [&::-webkit-details-marker]:hidden">
         <Info className="size-3" />
         <span>为什么会出现此提醒？</span>
         <ChevronRight className="size-3 transition-transform group-open:rotate-90" />

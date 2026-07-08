@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  openDetailsSection,
 } from './helpers'
 
 const layoutViewports = [
@@ -31,7 +32,7 @@ test('Phase 11 shared action and status surfaces avoid overflow on mobile and de
     await expectNoHorizontalOverflow(page)
 
     await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { name: '安装与离线' })).toBeVisible()
+    await openDetailsSection(page, '安装与离线')
     await expect(page.locator('main')).toContainText('地图和外部路线需要网络')
     await expectNoHorizontalOverflow(page)
   }

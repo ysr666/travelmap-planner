@@ -357,7 +357,7 @@ function LedgerIntelligencePanel({
         ))}
         {hiddenSuggestions.length > 0 ? (
           <details className="rounded-lg border border-outline-variant/20 px-3 py-2" data-testid="ledger-hidden-intelligence">
-            <summary className="cursor-pointer text-xs font-semibold text-on-surface-variant">已隐藏建议（{hiddenSuggestions.length}）</summary>
+            <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-on-surface-variant">已隐藏建议（{hiddenSuggestions.length}）</summary>
             <div className="mt-2 space-y-1">
               {hiddenSuggestions.map((suggestion) => (
                 <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>

@@ -31,7 +31,7 @@ export function DaySelector({ days, selectedDayId, density = 'regular', getDayHr
           const content = (
             <>
               <span className={`block font-semibold ${isCompact ? 'text-[11px]' : 'text-sm'}`}>Day {index + 1}</span>
-              <span className={`block ${isCompact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-on-primary' : 'text-on-surface-variant'}`}>
+              <span className={`block ${isCompact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-white' : 'text-on-surface-variant'}`}>
                 {formatShortDay(day.date)}
               </span>
             </>

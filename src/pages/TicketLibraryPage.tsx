@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -151,6 +151,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const tripId = tripIdOverride ?? params.get('tripId')
   const initialItemId = params.get('itemId')
   const initialTicketId = params.get('ticketId')
+  const initialTicketQuery = params.get('ticketQuery') ?? ''
   const openedInitialTicket = useRef<string | null>(null)
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
@@ -169,6 +170,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [externalUrl, setExternalUrl] = useState('')
   const [bindingTarget, setBindingTarget] = useState<BindingTarget>('trip')
   const [filter, setFilter] = useState<TicketFilter>('all')
+  const [searchQuery, setSearchQuery] = useState(initialTicketQuery)
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [editingTicket, setEditingTicket] = useState<TicketMeta | null>(null)
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
@@ -219,7 +221,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }, [days, items])
 
   const filteredTickets = useMemo(() => {
+    const normalizedSearchQuery = normalizeTicketSearchQuery(searchQuery)
     return tickets.filter((ticket) => {
+      if (normalizedSearchQuery && !ticketMatchesSearch(ticket, normalizedSearchQuery, itemById)) {
+        return false
+      }
+
       if (filter === 'all') {
         return true
       }
@@ -246,7 +253,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       return ticket.fileType === filter
     })
-  }, [filter, ticketBlobPresence, tickets])
+  }, [filter, itemById, searchQuery, ticketBlobPresence, tickets])
   const ticketLibraryStats = useMemo(
     () => buildTicketLibraryStats(tickets, ticketBlobPresence),
     [ticketBlobPresence, tickets],
@@ -354,6 +361,11 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     const timeout = window.setTimeout(() => void refreshLibrary(), 0)
     return () => window.clearTimeout(timeout)
   }, [refreshLibrary])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setSearchQuery(initialTicketQuery), 0)
+    return () => window.clearTimeout(timeout)
+  }, [initialTicketQuery])
 
   useEffect(() => {
     if (!initialTicketId || openedInitialTicket.current === initialTicketId) return
@@ -953,6 +965,16 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       <section className="space-y-3">
         <SectionHeader title="票据库" />
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
+          <input
+            aria-label="搜索票据"
+            className={`${FIELD_INPUT_CLASS} pl-9`}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜索票据、地点或订单"
+            value={searchQuery}
+          />
+        </label>
         <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
           {filterOptions.map((option) => (
             <button
@@ -990,7 +1012,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             title="暂无票据"
           />
         ) : (
-          <div className="space-y-5" data-testid="ticket-gallery">
+          <div className="space-y-5" data-testid="ticket-gallery" id="ticket-gallery">
             {gallerySections.map((section) => (
               <div className="space-y-3" data-testid="ticket-gallery-section" key={section.id}>
                 <div className="flex items-end justify-between gap-3">
@@ -1374,6 +1396,47 @@ function getTicketFilterLabel(filter: TicketFilter) {
   }
 }
 
+function normalizeTicketSearchQuery(value: string) {
+  return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function ticketMatchesSearch(
+  ticket: TicketMeta,
+  normalizedQuery: string,
+  itemById: Map<string, ItineraryItem>,
+) {
+  const item = ticket.itemId ? itemById.get(ticket.itemId) : undefined
+  const haystack = normalizeTicketSearchQuery([
+    getTicketDisplayTitle(ticket),
+    ticket.fileName,
+    ticket.note,
+    describeTicketMetaLine(ticket),
+    item?.title,
+    item?.locationName,
+    item?.address,
+  ].filter(Boolean).join(' '))
+  const searchGroups = buildTicketSearchGroups(normalizedQuery)
+  return searchGroups.length === 0 || searchGroups.some((group) =>
+    group.some((term) => haystack.includes(term)),
+  )
+}
+
+function buildTicketSearchGroups(normalizedQuery: string) {
+  return normalizedQuery
+    .split(/[\s,，。；;、]+/)
+    .filter(Boolean)
+    .map((term) => {
+      if (term === '爱丁堡') return ['爱丁堡', 'edinburgh']
+      if (term === '伦敦') return ['伦敦', 'london']
+      if (term === '剑桥') return ['剑桥', 'cambridge']
+      if (term === '牛津') return ['牛津', 'oxford']
+      if (term === '曼彻斯特') return ['曼彻斯特', 'manchester']
+      if (term === '酒店') return ['酒店', 'hotel', 'royal']
+      if (term === '门票') return ['门票', 'ticket', 'castle']
+      return [term]
+    })
+}
+
 function buildTicketGallerySections(
   tickets: TicketMeta[],
   itemById: Map<string, ItineraryItem>,
@@ -1450,7 +1513,7 @@ function TicketCard({
   return (
     <Card variant="grouped" className="flex flex-col overflow-hidden p-2.5" data-testid="ticket-card">
       <button
-        aria-label={`查看${displayTitle}`}
+        aria-label={`预览${displayTitle}`}
         className="flex min-h-0 flex-1 flex-col text-left transition active:scale-[0.99] tm-focus"
         onClick={onPreview}
         type="button"

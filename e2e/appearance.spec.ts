@@ -4,6 +4,7 @@ import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
   mockMapStyle,
+  openDetailsSection,
 } from './helpers'
 
 test('设置页可以切换外观模式并在刷新后保留', async ({ page }) => {
@@ -11,7 +12,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
   const html = page.locator('html')
-  await expect(page.getByTestId('appearance-settings').getByRole('heading', { name: '外观', level: 2 })).toBeVisible()
+  await openDetailsSection(page, '外观')
   await expect(page.getByTestId('appearance-mode-system')).toHaveAttribute('aria-pressed', 'true')
   await expectNoHorizontalOverflow(page)
 
@@ -21,6 +22,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   expect(await page.evaluate(() => window.localStorage.getItem('tripmap:appearance'))).toBe('dark')
 
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, '外观')
   await expect(html).toHaveClass(/dark/)
   await expect(page.getByTestId('appearance-mode-dark')).toHaveAttribute('aria-pressed', 'true')
 
@@ -39,6 +41,7 @@ test('设置页可以切换外观模式并在刷新后保留', async ({ page }) 
   await expectNoHorizontalOverflow(page)
 
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, '外观')
   await page.getByTestId('appearance-mode-light').click()
   await expect.poll(async () => (await html.getAttribute('class')) ?? '').not.toContain('dark')
   await expect(page.getByTestId('appearance-mode-light')).toHaveAttribute('aria-pressed', 'true')
@@ -54,7 +57,7 @@ test('设置页展示 PWA 生命周期状态和网络能力边界', async ({ pag
   await clearTravelDatabase(page)
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('heading', { name: '安装与离线' })).toBeVisible()
+  await openDetailsSection(page, '安装与离线')
   await expect(page.locator('main')).toContainText(/应用更新：(等待注册|已启用|应用外壳可离线打开|有新版本可更新|更新检查失败|当前浏览器不支持应用更新控制)/)
   await expect(page.locator('main')).toContainText(/当前版本：v\d+\.\d+\.\d+/)
   await expect(page.locator('main')).toContainText('地图和外部路线需要网络')

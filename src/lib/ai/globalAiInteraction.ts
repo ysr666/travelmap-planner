@@ -196,7 +196,7 @@ export function buildAssistantAnswerFallbackAfterError(
   return {
     ...draft,
     answer: draft.fallbackAnswer,
-    caveats: ['我先根据当前资料回答。', ...draft.caveats].slice(0, 2),
+    caveats: [...draft.caveats, '我先根据当前资料回答。'].slice(0, 2),
     source: 'fallback',
   }
 }
@@ -611,9 +611,6 @@ function buildActionProposalSuggestion({
 }
 
 function buildLocalAssistantFallback(command: string, context: GlobalAiInteractionContext) {
-  const ticketLookupAnswer = buildLocalTicketLookupAnswer(command, context)
-  if (ticketLookupAnswer) return ticketLookupAnswer
-
   const summaries = buildAssistantContextSummaries(context)
   if (context.trip) {
     const current = context.currentItem
@@ -628,165 +625,6 @@ function buildLocalAssistantFallback(command: string, context: GlobalAiInteracti
   }
   return `我现在在「${context.scopeLabel}」。当前资料：${summaries.slice(1, 4).map((summary) => `${summary.label} ${summary.value}`).join('；')}。`
 }
-
-function buildLocalTicketLookupAnswer(command: string, context: GlobalAiInteractionContext) {
-  if (!context.trip || context.tickets.length === 0) return null
-  const normalized = normalizeLookupText(command)
-  const wantsTicketLookup = containsLookupAny(normalized, [
-    'ticket',
-    'booking',
-    'order',
-    'voucher',
-    'pdf',
-    '票据',
-    '门票',
-    '订单',
-    '酒店',
-    '机票',
-    '保险',
-    '凭证',
-    '文件',
-  ])
-  const lookupVerb = containsLookupAny(normalized, ['find', 'search', 'show', 'list', 'where', '找', '查', '看', '列出', '有没有', '在哪', '给我'])
-  if (!wantsTicketLookup || !lookupVerb) return null
-
-  const itemById = new Map(context.items.map((item) => [item.id, item]))
-  const lookupTerms = buildTicketLookupTerms(command)
-  const categoryKinds = buildTicketLookupCategoryKinds(normalized)
-  const hasSpecificTerm = lookupTerms.some((term) => term.length >= 2)
-  const matched = context.tickets
-    .map((ticket) => {
-      const item = ticket.itemId ? itemById.get(ticket.itemId) : undefined
-      const haystack = normalizeLookupText([
-        ticket.title,
-        ticket.fileName,
-        ticket.ticketCategory,
-        ticket.scope,
-        item?.title,
-        item?.locationName,
-        item?.address,
-      ].filter(Boolean).join(' '))
-      const termScore = lookupTerms.reduce((score, term) => score + (haystack.includes(term) ? 2 : 0), 0)
-      const categoryScore = scoreTicketLookupCategory(ticket, haystack, categoryKinds)
-      return { item, score: termScore + categoryScore, termScore, ticket }
-    })
-    .filter((candidate) => candidate.score > 0 && (!hasSpecificTerm || candidate.termScore > 0 || candidate.score >= 3))
-    .sort((first, second) => second.score - first.score || formatTicketTitle(first.ticket).localeCompare(formatTicketTitle(second.ticket), 'zh-CN'))
-
-  if (matched.length === 0) {
-    return `当前旅行里没找到匹配的票据。可以打开票据库再按标题或文件名搜。`
-  }
-
-  const lines = matched.slice(0, 5).map((candidate, index) => {
-    const title = formatTicketTitle(candidate.ticket)
-    const binding = candidate.item ? `，绑定：${candidate.item.title}` : '，绑定：整个旅行'
-    const category = formatTicketCategory(candidate.ticket.ticketCategory)
-    return `${index + 1}. ${title}${category ? `（${category}）` : ''}${binding}`
-  })
-  const suffix = matched.length > lines.length ? `；还有 ${matched.length - lines.length} 个。` : '。'
-  return `找到 ${matched.length} 个：${lines.join('；')}${suffix}`
-}
-
-function buildTicketLookupTerms(command: string) {
-  const normalized = normalizeLookupText(command)
-  const terms = new Set<string>()
-  for (const [source, aliases] of Object.entries(ticketLookupAliases)) {
-    if (normalized.includes(source)) aliases.forEach((alias) => terms.add(normalizeLookupText(alias)))
-  }
-  normalized
-    .split(/[^a-z0-9\u4e00-\u9fa5]+/u)
-    .map((term) => term.trim())
-    .filter((term) => term.length >= 2 && !ticketLookupStopWords.has(term))
-    .forEach((term) => terms.add(term))
-  return [...terms].filter((term) => !ticketLookupStopWords.has(term))
-}
-
-function buildTicketLookupCategoryKinds(normalized: string) {
-  const kinds = new Set<'admission' | 'flight' | 'hotel' | 'insurance' | 'ticket'>()
-  if (containsLookupAny(normalized, ['门票', 'ticket', '入场', '景点'])) kinds.add('admission')
-  if (containsLookupAny(normalized, ['酒店', 'hotel', '住宿', '入住'])) kinds.add('hotel')
-  if (containsLookupAny(normalized, ['机票', 'flight', '航班', '电子票'])) kinds.add('flight')
-  if (containsLookupAny(normalized, ['保险', 'insurance', '保单'])) kinds.add('insurance')
-  if (containsLookupAny(normalized, ['票据', '凭证', '订单', '文件', 'pdf', 'booking', 'order', 'voucher'])) kinds.add('ticket')
-  return kinds
-}
-
-function scoreTicketLookupCategory(
-  ticket: GlobalAiInteractionContext['tickets'][number],
-  haystack: string,
-  kinds: Set<'admission' | 'flight' | 'hotel' | 'insurance' | 'ticket'>,
-) {
-  if (kinds.size === 0) return 0
-  let score = 0
-  const category = normalizeLookupText(ticket.ticketCategory ?? '')
-  if (kinds.has('admission') && (category.includes('admission') || category.includes('ticket') || haystack.includes('门票'))) score += 1
-  if (kinds.has('hotel') && (category.includes('hotel') || haystack.includes('hotel') || haystack.includes('酒店'))) score += 1
-  if (kinds.has('flight') && (category.includes('flight') || haystack.includes('flight') || haystack.includes('emirates') || haystack.includes('机票'))) score += 1
-  if (kinds.has('insurance') && (category.includes('insurance') || haystack.includes('insurance') || haystack.includes('保险') || haystack.includes('保单'))) score += 1
-  if (kinds.has('ticket')) score += 1
-  return score
-}
-
-function formatTicketTitle(ticket: GlobalAiInteractionContext['tickets'][number]) {
-  return ticket.title?.trim() || ticket.fileName
-}
-
-function formatTicketCategory(category: string | undefined) {
-  if (!category) return ''
-  if (category.includes('admission')) return '门票'
-  if (category.includes('hotel')) return '酒店订单'
-  if (category.includes('flight')) return '机票'
-  if (category.includes('insurance')) return '保险'
-  return ''
-}
-
-function normalizeLookupText(value: string) {
-  return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-function containsLookupAny(text: string, patterns: string[]) {
-  return patterns.some((pattern) => text.includes(pattern))
-}
-
-const ticketLookupAliases: Record<string, string[]> = {
-  爱丁堡: ['edinburgh'],
-  剑桥: ['cambridge'],
-  曼彻斯特: ['manchester'],
-  牛津: ['oxford'],
-  伦敦: ['london'],
-}
-
-const ticketLookupStopWords = new Set([
-  'booking',
-  'current',
-  'find',
-  'hotel',
-  'list',
-  'order',
-  'pdf',
-  'search',
-  'show',
-  'ticket',
-  'voucher',
-  'where',
-  '一下',
-  '以及',
-  '当前',
-  '当前行程',
-  '当前旅行',
-  '找一下',
-  '文件',
-  '有没有',
-  '相关',
-  '行程',
-  '订单',
-  '资料',
-  '这个',
-  '酒店',
-  '里面',
-  '门票',
-  '附近',
-])
 
 function formatUpcomingTrips(trips: GlobalAiAccountSummary['upcomingTrips']) {
   if (trips.length === 0) return '暂无即将开始或进行中的旅行'

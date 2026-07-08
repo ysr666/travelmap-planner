@@ -57,6 +57,42 @@ describe('globalAiCommandRouter', () => {
     })
   })
 
+  it('routes ticket lookup commands straight into the ticket gallery with a matched ticket', async () => {
+    const context = buildContext()
+    context.tickets = [
+      {
+        createdAt: 1,
+        fileName: 'edinburgh-castle-ticket.pdf',
+        fileType: 'pdf',
+        id: 'ticket_castle',
+        mimeType: 'application/pdf',
+        scope: 'item',
+        size: 1024,
+        storageMode: 'copy',
+        ticketCategory: 'admission_ticket',
+        title: '爱丁堡城堡门票',
+        tripId: context.trip!.id,
+        updatedAt: 1,
+      },
+    ]
+
+    const intent = parseGlobalAiCommandIntent('找一下爱丁堡的门票')
+    expect(intent).toMatchObject({ kind: 'ticket_lookup' })
+
+    const result = await resolveGlobalAiCommand('找一下爱丁堡的门票', context)
+    expect(result).toMatchObject({
+      autoExecute: true,
+      kind: 'navigation',
+      params: {
+        tab: 'attachments',
+        ticketId: 'ticket_castle',
+        tripId: context.trip!.id,
+      },
+      route: 'documents',
+      title: '票据已定位',
+    })
+  })
+
   it('keeps ordinary questions in a read-only local consultation lane', async () => {
     const intent = parseGlobalAiCommandIntent('今天接下来应该先确认什么？')
     expect(intent).toEqual({ kind: 'consultation' })

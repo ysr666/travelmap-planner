@@ -32,6 +32,23 @@ describe('extractExistingTripImportSources', () => {
     expect(result.sources[0].text).not.toContain('secret')
   })
 
+  it('extracts readable rows from xlsx files', async () => {
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+    zip.file('xl/workbook.xml', '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="汇算" sheetId="1" r:id="rId1"/></sheets></workbook>')
+    zip.file('xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>')
+    zip.file('xl/sharedStrings.xml', '<sst><si><t>门票</t></si><si><t>爱丁堡城堡</t></si><si><t>£38</t></si></sst>')
+    zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c t="s"><v>0</v></c><c t="s"><v>1</v></c><c t="s"><v>2</v></c></row></sheetData></worksheet>')
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const file = new File([blob], 'budget.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+    const result = await extractExistingTripImportSources({ files: [file] })
+
+    expect(result.sources[0]).toMatchObject({ kind: 'spreadsheet', fileName: 'budget.xlsx' })
+    expect(result.sources[0].text).toContain('工作表：汇算')
+    expect(result.sources[0].text).toContain('门票 | 爱丁堡城堡 | £38')
+  })
+
   it('uses the PDF adapter and preserves warnings without OCR in the test path', async () => {
     const pdfAdapter: ExistingTripImportPdfAdapter = vi.fn(async () => ({
       pageCount: 2,

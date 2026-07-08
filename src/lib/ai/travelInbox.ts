@@ -370,6 +370,7 @@ export function describeTravelInboxSourceKind(kind: TravelInboxSourceKind) {
   if (kind === 'html') return 'HTML'
   if (kind === 'pdf') return 'PDF'
   if (kind === 'image') return '图片'
+  if (kind === 'spreadsheet') return '表格'
   if (kind === 'trip_plan') return '行程包'
   return '票据文件'
 }
@@ -379,6 +380,7 @@ export function inferTravelInboxSourceKind(fileName: string, mimeType = ''): Tra
   const mime = mimeType.toLowerCase()
   if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
   if (mime.startsWith('image/')) return 'image'
+  if (isSpreadsheetFile(name, mime)) return 'spreadsheet'
   if (name.endsWith('.zip') || name.endsWith('.json')) return 'trip_plan'
   if (mime.includes('html') || /\.html?$/i.test(name)) return 'html'
   if (name.endsWith('.eml') || mime.includes('message/rfc822')) return 'email'
@@ -389,8 +391,15 @@ export function inferTravelInboxSourceKind(fileName: string, mimeType = ''): Tra
 function inferTravelInboxCategory(kind: ExistingTripImportSourceKind): TravelInboxEntryCategory {
   if (kind === 'ticket_file' || kind === 'image') return 'ticket'
   if (kind === 'trip_plan') return 'mixed'
-  if (kind === 'pasted_text' || kind === 'email' || kind === 'html' || kind === 'pdf' || kind === 'text_file') return 'unclassified'
+  if (kind === 'pasted_text' || kind === 'email' || kind === 'html' || kind === 'pdf' || kind === 'spreadsheet' || kind === 'text_file') return 'unclassified'
   return 'unclassified'
+}
+
+function isSpreadsheetFile(name: string, mime: string) {
+  return /\.(csv|xlsx|xlsm|xls)$/i.test(name)
+    || mime === 'text/csv'
+    || mime.includes('spreadsheet')
+    || mime.includes('excel')
 }
 
 function readStorageValue(key: string) {

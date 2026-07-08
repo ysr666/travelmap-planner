@@ -16,6 +16,50 @@ import {
 } from './providerProxyClient'
 
 describe('provider proxy client config', () => {
+  it('defaults to same-origin provider proxy on deployed origins', () => {
+    const originalWindow = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { location: { hostname: 'travelmap-planner.pages.dev' } },
+    })
+
+    try {
+      expect(getProviderProxyConfig({ env: {}, storage: null })).toMatchObject({
+        configured: true,
+        provider: 'openrouteservice',
+        proxyUrl: '/api/provider-proxy',
+        source: 'proxy',
+      })
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      })
+    }
+  })
+
+  it('does not infer same-origin provider proxy on local dev origins', () => {
+    const originalWindow = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { location: { hostname: '127.0.0.1' } },
+    })
+
+    try {
+      expect(getProviderProxyConfig({ env: {}, storage: null })).toMatchObject({
+        configured: false,
+        provider: null,
+        proxyUrl: null,
+        source: 'none',
+      })
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      })
+    }
+  })
+
   it('selects proxy mode only with URL and concrete provider', () => {
     expect(getProviderProxyConfig({
       env: {
@@ -51,7 +95,7 @@ describe('provider proxy client config', () => {
     })
   })
 
-  it('lets explicit empty local override disable env proxy config', () => {
+  it('ignores blank local overrides and keeps env proxy config', () => {
     const storage = memoryStorage({
       [PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY]: '',
       [PROVIDER_PROXY_DEV_URL_STORAGE_KEY]: '',
@@ -64,10 +108,10 @@ describe('provider proxy client config', () => {
       },
       storage,
     })).toMatchObject({
-      configured: false,
-      provider: null,
-      proxyUrl: null,
-      source: 'none',
+      configured: true,
+      provider: 'openrouteservice',
+      proxyUrl: '/api/provider-proxy',
+      source: 'proxy',
     })
   })
 })

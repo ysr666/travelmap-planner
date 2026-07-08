@@ -37,25 +37,34 @@ export function TicketThumbnail({
 }) {
   const visual = getTicketDisplayMeta(ticket)
   const storageMode = getTicketStorageMode(ticket)
-  const shouldLoadImage = ticket.fileType === 'image' && storageMode === 'copy'
+  const shouldLoadPreview = (ticket.fileType === 'image' || ticket.fileType === 'pdf') && storageMode === 'copy'
 
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [imageError, setImageError] = useState(false)
+  const [preview, setPreview] = useState<{ ticketId: string; url: string } | null>(null)
+  const [previewErrorTicketId, setPreviewErrorTicketId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!shouldLoadImage) {
+    if (!shouldLoadPreview) {
       return
     }
 
     let cancelled = false
     let currentUrl: string | null = null
 
-    void getTicketBlob(ticket.id).then((record) => {
+    void getTicketBlob(ticket.id).then(async (record) => {
       if (cancelled || !record?.blob) return
-      const url = URL.createObjectURL(record.blob)
-      currentUrl = url
-      setObjectUrl(url)
-      setImageError(false)
+      if (ticket.fileType === 'image') {
+        const url = URL.createObjectURL(record.blob)
+        currentUrl = url
+        setPreview({ ticketId: ticket.id, url })
+        setPreviewErrorTicketId(null)
+        return
+      }
+      const url = await renderPdfFirstPageThumbnail(record.blob)
+      if (cancelled) return
+      setPreview({ ticketId: ticket.id, url })
+      setPreviewErrorTicketId(null)
+    }).catch(() => {
+      if (!cancelled) setPreviewErrorTicketId(ticket.id)
     })
 
     return () => {
@@ -64,22 +73,22 @@ export function TicketThumbnail({
         URL.revokeObjectURL(currentUrl)
       }
     }
-  }, [ticket.id, shouldLoadImage])
+  }, [ticket.fileType, ticket.id, shouldLoadPreview])
 
-  const showImage = shouldLoadImage && objectUrl && !imageError
+  const showPreview = shouldLoadPreview && preview?.ticketId === ticket.id && previewErrorTicketId !== ticket.id
 
   return (
     <div
       className={`relative overflow-hidden rounded-xl ring-1 ring-slate-100 dark:ring-slate-800 ${className}`}
     >
-      {showImage ? (
+      {showPreview ? (
         <>
           <img
             alt={ticket.title || ticket.fileName || '票据缩略图'}
             className="size-full object-cover"
             loading="lazy"
-            onError={() => setImageError(true)}
-            src={objectUrl}
+            onError={() => setPreviewErrorTicketId(ticket.id)}
+            src={preview.url}
           />
           <span className="absolute bottom-1 left-1 rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white backdrop-blur-sm">
             {visual.typeLabel}
@@ -93,4 +102,22 @@ export function TicketThumbnail({
       )}
     </div>
   )
+}
+
+async function renderPdfFirstPageThumbnail(blob: Blob) {
+  const pdfjs = await import('pdfjs-dist')
+  const workerModule = await import('pdfjs-dist/build/pdf.worker.mjs?url')
+  pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default
+  const loadingTask = pdfjs.getDocument({ data: await blob.arrayBuffer() })
+  const pdf = await loadingTask.promise
+  const page = await pdf.getPage(1)
+  const baseViewport = page.getViewport({ scale: 1 })
+  const largestSide = Math.max(baseViewport.width, baseViewport.height)
+  const scale = largestSide > 0 ? Math.min(1.8, Math.max(0.7, 420 / largestSide)) : 1
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(viewport.width)
+  canvas.height = Math.ceil(viewport.height)
+  await page.render({ canvas, viewport }).promise
+  return canvas.toDataURL('image/png')
 }

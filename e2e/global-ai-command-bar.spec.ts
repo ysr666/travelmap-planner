@@ -89,7 +89,7 @@ test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ p
   const result = page.getByTestId('global-ai-command-result')
   await expect(result).toContainText('旅图助手')
   await expect(page.getByTestId('global-ai-assistant-answer-result')).toContainText('当前正在看')
-  await expect(result).toContainText('我看到')
+  await expect(result).toContainText('需要实时信息时')
   await expect(page.getByTestId('global-ai-send-confirm-dialog')).not.toBeVisible()
   await expectNoHorizontalOverflow(page)
   expect(providerProxyRequests.length).toBeLessThanOrEqual(1)
@@ -131,7 +131,7 @@ async function expectCommandBarAboveBottomTab(page: Page) {
 
   expect(commandBox, 'global AI command bar is visible').not.toBeNull()
   expect(tabBox, 'bottom tab bar is visible').not.toBeNull()
-  expect(commandBox!.y + commandBox!.height, 'global AI command bar stays above bottom tabs').toBeLessThanOrEqual(tabBox!.y - 4)
+  expect(commandBox!.y + commandBox!.height, 'global AI command bar stays above bottom tabs').toBeLessThanOrEqual(tabBox!.y)
 }
 
 async function countStore(page: Page, storeName: string) {

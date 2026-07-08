@@ -6,6 +6,7 @@ import {
   getFirstTripDayAndItemIds,
   getHashParam,
   mockMapStyle,
+  openDetailsSection,
 } from './helpers'
 
 test('桌面 Beta smoke 覆盖核心页面与 AI 确认边界', async ({ page }) => {
@@ -68,7 +69,9 @@ test('桌面 Beta smoke 覆盖核心页面与 AI 确认边界', async ({ page })
 
   await page.goto(`/#/settings?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
-  await expect(page.getByTestId('appearance-settings')).toBeVisible()
+  await openDetailsSection(page, '外观')
+  await expect(page.getByTestId('appearance-mode-system')).toBeVisible()
+  await openDetailsSection(page, '路线服务')
   await expect(page.getByTestId('routing-settings-section')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

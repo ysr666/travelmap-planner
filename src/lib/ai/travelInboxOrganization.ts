@@ -219,7 +219,7 @@ export function isDeterministicTripMatch(text: string, trip: Trip) {
 }
 
 function normalizeSourceKind(value: string): TravelInboxSourceKind {
-  return ['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'trip_plan', 'ticket_file'].includes(value) ? value as TravelInboxSourceKind : 'email'
+  return ['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'spreadsheet', 'trip_plan', 'ticket_file'].includes(value) ? value as TravelInboxSourceKind : 'email'
 }
 function normalizeStatus(value: string, fallback?: TravelInboxAccountSource['status']): TravelInboxAccountSource['status'] {
   return ['queued', 'extracting', 'classifying', 'needs_assignment', 'building_preview', 'preview_ready', 'error'].includes(value) ? value as TravelInboxAccountSource['status'] : fallback ?? 'queued'

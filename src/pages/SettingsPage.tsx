@@ -32,7 +32,6 @@ import {
 } from '../components/ui/FormField'
 import { InlineStatus } from '../components/ui/InlineStatus'
 import { ListRow } from '../components/ui/ListRow'
-import { SectionHeader } from '../components/ui/SectionHeader'
 import {
   getStoredAiPrivacySettings,
   saveAiPrivacySettings,
@@ -630,8 +629,7 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <section className="space-y-3" data-testid="appearance-settings">
-        <SectionHeader title="外观" />
+      <Collapsible subtitle={`当前：${resolvedMode === 'dark' ? '黑夜' : '白天'}`} title="外观">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
@@ -666,16 +664,16 @@ export function SettingsPage() {
             })}
           </div>
         </Card>
-      </section>
+      </Collapsible>
 
-      <Collapsible defaultOpen subtitle="节奏、交通和提醒" title="旅行偏好">
+      <Collapsible subtitle="节奏、交通和提醒" title="旅行偏好">
         <TravelProfileSettings
           onChange={updateTravelProfile}
           profile={travelProfile}
         />
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="AI 可读取哪些内容" title="AI 与隐私">
+      <Collapsible subtitle="AI 可读取哪些内容" title="AI 与隐私">
         <AiPrivacySettingsPanel
           autoExpenseAiBusy={autoExpenseAiBusy}
           autoExpenseAiEnabled={autoExpenseAiEnabled}
@@ -688,8 +686,7 @@ export function SettingsPage() {
         />
       </Collapsible>
 
-      <section className="space-y-3">
-        <SectionHeader title="安装与离线" />
+      <Collapsible subtitle="主屏幕、版本和离线状态" title="安装与离线">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
@@ -751,10 +748,10 @@ export function SettingsPage() {
             </InlineStatus>
           ) : null}
         </Card>
-      </section>
+      </Collapsible>
 
       <Collapsible
-        defaultOpen
+        defaultOpen={shouldOpenCloudBackup}
         key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
         subtitle="账号同步、队列和冲突"
         title="云端同步"
@@ -804,7 +801,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="生成或导入行程" title="AI 生成行程">
+      <Collapsible subtitle="生成或导入行程" title="AI 生成行程">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
@@ -888,7 +885,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="路线服务与缓存" title="路线服务">
+      <Collapsible subtitle="路线服务与缓存" title="路线服务">
         <RouteServiceSettings
           config={routingConfig}
           cacheError={routeCacheError}

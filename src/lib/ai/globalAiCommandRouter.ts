@@ -10,6 +10,7 @@ import {
 import { buildTripReplanPreview } from '../adaptiveReplanning'
 import { sortItineraryItems } from '../itinerary'
 import { formatLedgerMoney } from '../ledger'
+import { getTicketCategoryLabel, getTicketDisplayTitle } from '../tickets'
 import type {
   Day,
   ItineraryItem,
@@ -32,9 +33,22 @@ export type GlobalAiCommandIntent =
   | { kind: 'consultation' }
   | { kind: 'ledger_query' }
   | { kind: 'new_trip' }
+  | { kind: 'page_navigation'; target: GlobalAiPageNavigationTarget }
   | { kind: 'preference_update'; preference: ItineraryReplanPreference }
   | { kind: 'replan'; delayMinutes?: number; disruptionKind: TripDisruptionKind; hypothetical: boolean }
   | { kind: 'smart_workspace' }
+  | { kind: 'ticket_lookup'; query: string }
+
+export type GlobalAiPageNavigationTarget =
+  | 'documents'
+  | 'home'
+  | 'inbox'
+  | 'ledger'
+  | 'map'
+  | 'search'
+  | 'settings'
+  | 'tickets'
+  | 'trip'
 
 export type GlobalAiCommandContext = {
   activeRoute: RouteId
@@ -51,6 +65,7 @@ export type GlobalAiCommandContext = {
 
 export type GlobalAiNavigationResult = {
   actionLabel: string
+  autoExecute?: boolean
   intent: GlobalAiCommandIntent
   kind: 'navigation'
   message: string
@@ -152,9 +167,19 @@ export async function loadGlobalAiCommandContext(activeRoute: RouteId, hash = wi
 
 export async function resolveGlobalAiCommand(command: string, context: GlobalAiCommandContext): Promise<GlobalAiCommandResult> {
   const intent = parseGlobalAiCommandIntent(command)
+  if (intent.kind === 'ticket_lookup') {
+    if (!context.trip) return missingTripNavigation(intent)
+    return buildTicketLookupNavigation(command, intent, context)
+  }
+
+  if (intent.kind === 'page_navigation') {
+    return buildPageNavigation(intent, context)
+  }
+
   if (intent.kind === 'new_trip') {
     return {
       actionLabel: '打开 AI 生成',
+      autoExecute: true,
       intent,
       kind: 'navigation',
       message: '我会打开 AI 行程草稿页，先生成草案再确认导入。',
@@ -167,6 +192,7 @@ export async function resolveGlobalAiCommand(command: string, context: GlobalAiC
     if (!context.trip) return missingTripNavigation(intent)
     return {
       actionLabel: '打开智能整理',
+      autoExecute: true,
       intent,
       kind: 'navigation',
       message: '地点、路线、开放时间和提示仍会进入可勾选预览，不会直接写入。',
@@ -252,6 +278,11 @@ export function parseGlobalAiCommandIntent(command: string): GlobalAiCommandInte
   const normalized = normalizeCommand(command)
   const preference = parsePreferenceIntent(command)
   if (preference) return { kind: 'preference_update', preference }
+
+  const ticketLookup = parseTicketLookupIntent(command, normalized)
+  if (ticketLookup) return ticketLookup
+  const pageNavigation = parsePageNavigationIntent(command, normalized)
+  if (pageNavigation) return pageNavigation
 
   if (isNewTripCommand(normalized)) return { kind: 'new_trip' }
   if (isLedgerCommand(normalized)) return { kind: 'ledger_query' }
@@ -414,11 +445,99 @@ function buildConsultation(
 function missingTripNavigation(intent: GlobalAiCommandIntent): GlobalAiNavigationResult {
   return {
     actionLabel: '回到首页',
+    autoExecute: true,
     intent,
     kind: 'navigation',
     message: '这个指令需要先打开一个具体旅行。',
     route: 'home',
     title: '缺少旅行上下文',
+  }
+}
+
+function buildTicketLookupNavigation(
+  command: string,
+  intent: Extract<GlobalAiCommandIntent, { kind: 'ticket_lookup' }>,
+  context: GlobalAiCommandContext,
+): GlobalAiNavigationResult {
+  const matches = findTicketLookupMatches(command, context)
+  const firstMatch = matches[0]
+  const params: Record<string, string> = {
+    tab: 'attachments',
+    tripId: context.trip!.id,
+  }
+  if (firstMatch) params.ticketId = firstMatch.ticket.id
+  if (intent.query) params.ticketQuery = intent.query
+  return {
+    actionLabel: firstMatch ? '打开票据' : '打开票据库',
+    autoExecute: true,
+    intent,
+    kind: 'navigation',
+    message: firstMatch
+      ? `找到 ${matches.length} 张，已打开「${getTicketDisplayTitle(firstMatch.ticket)}」。`
+      : '没有精确匹配，已打开票据画廊。',
+    params,
+    route: 'documents',
+    scrollTargetId: firstMatch ? undefined : 'ticket-gallery',
+    title: '票据已定位',
+  }
+}
+
+function buildPageNavigation(
+  intent: Extract<GlobalAiCommandIntent, { kind: 'page_navigation' }>,
+  context: GlobalAiCommandContext,
+): GlobalAiNavigationResult {
+  const tripParams = context.trip ? { tripId: context.trip.id } : undefined
+  if (intent.target === 'tickets') {
+    if (!context.trip) return missingTripNavigation(intent)
+    return {
+      actionLabel: '打开票据库',
+      autoExecute: true,
+      intent,
+      kind: 'navigation',
+      message: '已打开票据画廊。',
+      params: { tab: 'attachments', tripId: context.trip.id },
+      route: 'documents',
+      scrollTargetId: 'ticket-gallery',
+      title: '票据画廊',
+    }
+  }
+  if (intent.target === 'documents') {
+    return {
+      actionLabel: '打开资料',
+      autoExecute: true,
+      intent,
+      kind: 'navigation',
+      message: '已打开资料中心。',
+      params: context.trip ? { tab: 'documents', tripId: context.trip.id } : { tab: 'documents' },
+      route: 'documents',
+      title: '资料中心',
+    }
+  }
+  if (intent.target === 'map') {
+    if (!context.trip) return missingTripNavigation(intent)
+    const day = context.currentDay ?? context.days[0]
+    return {
+      actionLabel: '打开地图',
+      autoExecute: true,
+      intent,
+      kind: 'navigation',
+      message: '已打开当前行程地图。',
+      params: day ? { dayId: day.id, tripId: context.trip.id, view: 'map' } : { tripId: context.trip.id },
+      route: day ? 'day' : 'trip',
+      title: '行程地图',
+    }
+  }
+  if (intent.target === 'ledger' && !context.trip) return missingTripNavigation(intent)
+  if (intent.target === 'trip' && !context.trip) return missingTripNavigation(intent)
+  return {
+    actionLabel: '打开',
+    autoExecute: true,
+    intent,
+    kind: 'navigation',
+    message: `已打开${pageNavigationLabel(intent.target)}。`,
+    params: intent.target === 'ledger' || intent.target === 'trip' ? tripParams : undefined,
+    route: intent.target,
+    title: pageNavigationLabel(intent.target),
   }
 }
 
@@ -525,6 +644,117 @@ function isLedgerCommand(normalized: string) {
 function isSmartWorkspaceCommand(normalized: string) {
   return containsAny(normalized, ['智能整理', '整理行程', '校准地点', '补全开放时间', '补全票价', '路线顺序', '每日提示']) ||
     /\borganize\b|\bcalibrate\b/.test(normalized)
+}
+
+function parseTicketLookupIntent(command: string, normalized: string): Extract<GlobalAiCommandIntent, { kind: 'ticket_lookup' }> | null {
+  const asksForTicket = containsAny(command, ['票据', '门票', '订单', '凭证', 'pdf', 'PDF', '酒店确认']) ||
+    /\b(?:ticket|tickets|booking|voucher|pdf|receipt)\b/.test(normalized)
+  if (!asksForTicket) return null
+  const lookupVerb = containsAny(command, ['找', '查', '看', '打开', '定位', '给我', '在哪', '哪里']) ||
+    /\b(?:find|show|open|search|list)\b/.test(normalized)
+  if (!lookupVerb) return null
+  return { kind: 'ticket_lookup', query: buildTicketLookupQuery(command) }
+}
+
+function parsePageNavigationIntent(_command: string, normalized: string): Extract<GlobalAiCommandIntent, { kind: 'page_navigation' }> | null {
+  const navigationVerb = containsAny(normalized, ['打开', '去', '跳到', '进入', '看看', '查看']) ||
+    /\b(?:open|go to|show|view)\b/.test(normalized)
+  if (!navigationVerb) return null
+  if (containsAny(normalized, ['票据', '门票', '订单', '附件', 'ticket'])) return { kind: 'page_navigation', target: 'tickets' }
+  if (containsAny(normalized, ['资料', '证件', '文档', 'documents'])) return { kind: 'page_navigation', target: 'documents' }
+  if (containsAny(normalized, ['收件箱', 'inbox'])) return { kind: 'page_navigation', target: 'inbox' }
+  if (containsAny(normalized, ['账本', '费用', 'ledger'])) return { kind: 'page_navigation', target: 'ledger' }
+  if (containsAny(normalized, ['地图', 'map'])) return { kind: 'page_navigation', target: 'map' }
+  if (containsAny(normalized, ['设置', 'settings'])) return { kind: 'page_navigation', target: 'settings' }
+  if (containsAny(normalized, ['搜索', 'search'])) return { kind: 'page_navigation', target: 'search' }
+  if (containsAny(normalized, ['首页', '主页', 'home'])) return { kind: 'page_navigation', target: 'home' }
+  if (containsAny(normalized, ['行程', '总览', 'trip'])) return { kind: 'page_navigation', target: 'trip' }
+  return null
+}
+
+function findTicketLookupMatches(command: string, context: GlobalAiCommandContext) {
+  const terms = buildTicketLookupTerms(command)
+  const wantedCategories = buildTicketLookupCategories(command)
+  return context.tickets
+    .map((ticket) => {
+      const haystack = normalizeCommand([
+        getTicketDisplayTitle(ticket),
+        ticket.fileName,
+        ticket.note,
+        getTicketCategoryLabel(ticket),
+        describeTicketLookupBinding(ticket, context),
+      ].filter(Boolean).join(' '))
+      const termScore = terms.reduce((score, term) => score + (haystack.includes(term) ? 2 : 0), 0)
+      const categoryScore = wantedCategories.includes(ticket.ticketCategory ?? 'other') ? 4 : 0
+      const score = termScore + categoryScore
+      return { score, ticket }
+    })
+    .filter((match) => match.score > 0 || (terms.length === 0 && wantedCategories.length === 0))
+    .sort((first, second) => second.score - first.score || getTicketDisplayTitle(first.ticket).localeCompare(getTicketDisplayTitle(second.ticket)))
+}
+
+function buildTicketLookupQuery(command: string) {
+  const query = command
+    .replace(/找一下|找下|帮我找|查一下|查下|看一下|看下|打开|定位|给我/g, ' ')
+    .replace(/票据|门票|订单|凭证|酒店确认|pdf|PDF/g, ' ')
+    .replace(/[的和与、]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return query || command.trim()
+}
+
+function buildTicketLookupTerms(command: string) {
+  const normalized = normalizeCommand(command)
+  const terms = new Set<string>()
+  const query = normalizeCommand(buildTicketLookupQuery(command))
+  query.split(/[\s,，。；;、]+/).filter((term) => term.length >= 2).forEach((term) => terms.add(term))
+  const aliases: Array<[string[], string[]]> = [
+    [['爱丁堡'], ['edinburgh', '爱丁堡']],
+    [['伦敦'], ['london', '伦敦']],
+    [['剑桥'], ['cambridge', '剑桥']],
+    [['牛津'], ['oxford', '牛津']],
+    [['曼彻斯特'], ['manchester', '曼彻斯特']],
+    [['城堡'], ['castle', '城堡']],
+    [['酒店'], ['hotel', 'royal', '酒店']],
+    [['保险'], ['insurance', '保险']],
+    [['机票', '航班'], ['flight', 'emirates', '机票', '航班']],
+  ]
+  aliases.forEach(([needles, mapped]) => {
+    if (needles.some((needle) => normalized.includes(normalizeCommand(needle)))) {
+      mapped.forEach((term) => terms.add(normalizeCommand(term)))
+    }
+  })
+  return [...terms].filter((term) => !['票据', '门票', '订单', '凭证', 'ticket', 'tickets', 'booking', 'pdf'].includes(term))
+}
+
+function buildTicketLookupCategories(command: string): Array<NonNullable<TicketMeta['ticketCategory']>> {
+  const categories: Array<NonNullable<TicketMeta['ticketCategory']>> = []
+  if (containsAny(command, ['门票', '入场', '景点票', 'ticket'])) categories.push('admission_ticket')
+  if (containsAny(command, ['酒店', '住宿', '入住', 'hotel'])) categories.push('hotel_booking')
+  if (containsAny(command, ['机票', '航班', '登机', 'flight'])) categories.push('flight_ticket')
+  if (containsAny(command, ['火车', 'train'])) categories.push('train_ticket')
+  if (containsAny(command, ['保险', '保单', 'insurance'])) categories.push('other')
+  return categories
+}
+
+function describeTicketLookupBinding(ticket: TicketMeta, context: GlobalAiCommandContext) {
+  if (ticket.itemId) {
+    const item = context.items.find((candidate) => candidate.id === ticket.itemId)
+    if (item) return [item.title, item.locationName, item.address].filter(Boolean).join(' ')
+  }
+  return context.trip?.title ?? ''
+}
+
+function pageNavigationLabel(target: GlobalAiPageNavigationTarget) {
+  if (target === 'documents') return '资料中心'
+  if (target === 'home') return '首页'
+  if (target === 'inbox') return '收件箱'
+  if (target === 'ledger') return '账本'
+  if (target === 'map') return '地图'
+  if (target === 'search') return '搜索'
+  if (target === 'settings') return '设置'
+  if (target === 'tickets') return '票据画廊'
+  return '行程'
 }
 
 function isTripEditCommand(command: string, normalized: string) {

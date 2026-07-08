@@ -46,9 +46,8 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
   }
   const fingerprints = { ...connector.fileFingerprints }
   const created: TravelInboxAccountSource[] = []
-  for await (const [name, handle] of connector.directoryHandle.entries()) {
-    if (handle.kind !== 'file' || !isSupportedFileName(name)) continue
-    const file = await handle.getFile()
+  for await (const { file, name } of walkDirectory(connector.directoryHandle)) {
+    if (!isSupportedFileName(name)) continue
     if (file.size > 20 * 1024 * 1024) continue
     const fingerprint = `${file.size}:${file.lastModified}:${await sha256Blob(file)}`
     if (fingerprints[name] === fingerprint) continue
@@ -58,13 +57,13 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
       connectorId: connector.id,
       connectorKind: 'local_folder',
       createdAt: now,
-      fileName: file.name,
+      fileName: name,
       id: createId('account_inbox'),
-      label: file.name,
+      label: name,
       mimeType: file.type || 'application/octet-stream',
       receivedAt: file.lastModified || now,
       size: file.size,
-      sourceKind: inferKind(file),
+      sourceKind: inferKind(file, name),
       status: 'queued',
       updatedAt: now,
       warnings: [],
@@ -79,15 +78,28 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
   return created
 }
 
-function inferKind(file: File): TravelInboxAccountSource['sourceKind'] {
-  const name = file.name.toLowerCase()
+async function* walkDirectory(directoryHandle: FileSystemDirectoryHandle, prefix = ''): AsyncGenerator<{ file: File; name: string }> {
+  for await (const [entryName, handle] of directoryHandle.entries()) {
+    const name = prefix ? `${prefix}/${entryName}` : entryName
+    if (handle.kind === 'file') {
+      yield { file: await handle.getFile(), name }
+      continue
+    }
+    if (typeof handle.entries !== 'function') continue
+    yield* walkDirectory(handle, name)
+  }
+}
+
+function inferKind(file: File, fileName = file.name): TravelInboxAccountSource['sourceKind'] {
+  const name = fileName.toLowerCase()
   if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
   if (file.type.startsWith('image/')) return 'image'
+  if (/\.(csv|xlsx|xlsm|xls)$/i.test(name) || file.type.includes('spreadsheet') || file.type.includes('excel')) return 'spreadsheet'
   if (name.endsWith('.eml')) return 'email'
   if (name.endsWith('.html') || name.endsWith('.htm')) return 'html'
   return 'text_file'
 }
-function isSupportedFileName(name: string) { return /\.(txt|eml|html?|pdf|png|jpe?g|webp|json|zip)$/i.test(name) }
+function isSupportedFileName(name: string) { return /\.(txt|eml|html?|pdf|png|jpe?g|webp|json|zip|csv|xlsx|xlsm|xls)$/i.test(name) }
 function getDeviceId() {
   const key = 'tripmap:device-id'
   const existing = window.localStorage.getItem(key)

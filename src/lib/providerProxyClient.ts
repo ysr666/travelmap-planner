@@ -117,10 +117,10 @@ export function getProviderProxyConfig(
   const env = options.env ?? readProviderProxyEnv()
   const storage = options.storage ?? getBrowserStorage()
   const proxyUrl = normalizeProxyUrl(
-    readStorageValue(storage, PROVIDER_PROXY_DEV_URL_STORAGE_KEY) ?? env.VITE_ROUTE_PROXY_URL,
+    readStorageValue(storage, PROVIDER_PROXY_DEV_URL_STORAGE_KEY) ?? env.VITE_ROUTE_PROXY_URL ?? inferSameOriginProviderProxyUrl(),
   )
   const provider = normalizeProxyProvider(
-    readStorageValue(storage, PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY) ?? env.VITE_ROUTE_PROXY_PROVIDER,
+    readStorageValue(storage, PROVIDER_PROXY_DEV_PROVIDER_STORAGE_KEY) ?? env.VITE_ROUTE_PROXY_PROVIDER ?? inferDefaultProxyProvider(proxyUrl),
   )
 
   return {
@@ -1969,6 +1969,17 @@ function normalizeProxyUrl(value?: string | null) {
   return trimmed || null
 }
 
+function inferSameOriginProviderProxyUrl() {
+  if (typeof window === 'undefined') return null
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return null
+  return '/api/provider-proxy'
+}
+
+function inferDefaultProxyProvider(proxyUrl: string | null) {
+  return proxyUrl ? 'openrouteservice' : null
+}
+
 function normalizeErrorCode(value: string): ProviderProxyErrorCode {
   if (
     value === 'invalid_request' ||
@@ -1986,7 +1997,8 @@ function normalizeErrorCode(value: string): ProviderProxyErrorCode {
 
 function readStorageValue(storage: Storage | null | undefined, key: string) {
   try {
-    return storage?.getItem(key) ?? null
+    const value = storage?.getItem(key)?.trim()
+    return value || null
   } catch {
     return null
   }

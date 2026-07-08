@@ -981,7 +981,7 @@ const VALID_TRIP_DAILY_TIP_ROUTE_STATUSES = new Set<NonNullable<ProviderProxyTri
 const VALID_TRIP_OPERATIONS_PHASES = new Set<ProviderProxyTripOperationsPhase>(['pre_trip', 'travel_morning', 'traveling', 'travel_evening', 'post_trip'])
 const VALID_TRIP_OPERATIONS_SEVERITIES = new Set<ProviderProxyTripOperationsSeverity>(['low', 'medium', 'high'])
 const VALID_ASSISTANT_ANSWER_SOURCE_CARD_KINDS = new Set<ProviderProxyAssistantAnswerSourceCardKind>(['confirmed_search_source', 'local_context', 'provider_caveat', 'trip_intelligence'])
-const VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS = new Set<ExistingTripImportSourceKind>(['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'trip_plan', 'ticket_file'])
+const VALID_EXISTING_TRIP_IMPORT_SOURCE_KINDS = new Set<ExistingTripImportSourceKind>(['pasted_text', 'text_file', 'email', 'html', 'pdf', 'image', 'spreadsheet', 'trip_plan', 'ticket_file'])
 const ROUTE_ORDER_ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'dayId',
   'items',
@@ -1210,9 +1210,9 @@ const AI_TRIP_EDIT_SEARCH_RESULT_ALLOWED_FIELDS = new Set(['title', 'url', 'disp
 const MAX_EXISTING_TRIP_IMPORT_DAYS = 120
 const MAX_EXISTING_TRIP_IMPORT_ITEMS = 1000
 const MAX_EXISTING_TRIP_IMPORT_EXISTING_TICKETS = 1000
-const MAX_EXISTING_TRIP_IMPORT_SOURCES = 12
+const MAX_EXISTING_TRIP_IMPORT_SOURCES = 60
 const MAX_EXISTING_TRIP_IMPORT_SOURCE_TEXT_LENGTH = 4000
-const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 24000
+const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 60000
 const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
 const MAX_TRAVEL_INBOX_CLASSIFY_TRIPS = 30
 const VALID_TRAVEL_INBOX_CATEGORIES = new Set<TravelInboxEntryCategory>(['unclassified', 'itinerary', 'ticket', 'note', 'mixed'])

@@ -807,32 +807,41 @@ function SharedTripIntelligencePanel({
         <h4 className="text-sm font-semibold text-on-surface">同行待处理</h4>
         <span className="text-xs font-semibold text-primary">{suggestions.length} 项</span>
       </div>
-      {suggestions.map((suggestion) => (
-        <div className="flex min-h-11 items-center gap-1 rounded-lg bg-surface px-1" key={suggestion.id}>
-          <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="shared-trip-intelligence-action" onClick={() => onAction(suggestion)} type="button">
-            <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
-            <span className="min-w-0 flex-1">
-              <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
-              <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
-            </span>
-            <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
-          </button>
-          <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
-        </div>
-      ))}
-      {hiddenSuggestions.length > 0 ? (
-        <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
-          <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏同行建议（{hiddenSuggestions.length}）</summary>
-          <div className="mt-2 space-y-1">
-            {hiddenSuggestions.map((suggestion) => (
-              <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
-                <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
-                <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+      <details className="group rounded-lg border border-outline-variant/30 bg-surface-container">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-primary marker:hidden select-none [&::-webkit-details-marker]:hidden tm-focus">
+          <span>查看建议</span>
+          <span className="text-xs tm-muted group-open:hidden">展开</span>
+          <span className="hidden text-xs tm-muted group-open:inline">收起</span>
+        </summary>
+        <div className="space-y-2 border-t border-outline-variant/20 p-2">
+          {suggestions.map((suggestion) => (
+            <div className="flex min-h-11 items-center gap-1 rounded-lg bg-surface px-1" key={suggestion.id}>
+              <button className="flex min-h-11 min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left tm-focus" data-testid="shared-trip-intelligence-action" onClick={() => onAction(suggestion)} type="button">
+                <AlertTriangle className={`mt-0.5 size-4 shrink-0 ${suggestion.severity === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</span>
+                  <span className="mt-0.5 block break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-primary">{suggestion.action?.label ?? '查看'}</span>
+              </button>
+              <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
+            </div>
+          ))}
+          {hiddenSuggestions.length > 0 ? (
+            <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+              <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold tm-muted">已隐藏同行建议（{hiddenSuggestions.length}）</summary>
+              <div className="mt-2 space-y-1">
+                {hiddenSuggestions.map((suggestion) => (
+                  <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                    <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                    <RestoreTripIntelligenceSuggestionButton onRestore={onRestore} suggestion={suggestion} />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </details>
-      ) : null}
+            </details>
+          ) : null}
+        </div>
+      </details>
     </div>
   )
 }

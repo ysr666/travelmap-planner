@@ -175,6 +175,11 @@ export function TripOperationsPanel({
   const summaryMessage = intelligenceModel
     ? buildIntelligenceSummaryMessage(intelligenceModel.summary)
     : model.summary.message
+  const compactSummaryLabel = intelligenceModel
+    ? `${intelligenceModel.summary.totalCount} 项建议 · ${intelligenceModel.summary.needsConfirmationCount} 项待确认`
+    : model.summary.totalCount > 0
+      ? `${model.summary.totalCount} 项建议 · ${model.summary.highRiskCount} 项高风险`
+      : '暂无待办'
   const visibleBatchableRecommendations = visibleIntelligenceSuggestions
     ? visibleIntelligenceSuggestions
       .map((suggestion) => getOperationsRecommendationForSuggestion(suggestion))
@@ -581,7 +586,7 @@ export function TripOperationsPanel({
 
   return (
     <>
-      <Card className="space-y-4" data-testid="trip-operations-panel" variant="grouped">
+      <Card className="space-y-3" data-testid="trip-operations-panel" variant="grouped">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -593,9 +598,21 @@ export function TripOperationsPanel({
                 <h3 className="text-base font-semibold text-on-surface">现在建议做什么</h3>
               </div>
             </div>
-            <p className="mt-2 text-sm leading-6 tm-muted" data-testid="trip-operations-summary">{summaryMessage}</p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <span className="shrink-0 rounded-full bg-surface-container-high px-2.5 py-1 text-xs font-semibold tm-muted">
+            {compactSummaryLabel}
+          </span>
+        </div>
+
+        <details className="group rounded-lg border border-outline-variant/30 bg-surface-container-low">
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-primary marker:hidden select-none [&::-webkit-details-marker]:hidden tm-focus">
+            <span>查看建议</span>
+            <span className="text-xs tm-muted group-open:hidden">展开</span>
+            <span className="hidden text-xs tm-muted group-open:inline">收起</span>
+          </summary>
+          <div className="space-y-4 border-t border-outline-variant/20 p-3">
+            <p className="text-sm leading-6 tm-muted" data-testid="trip-operations-summary">{summaryMessage}</p>
+            <div className="flex shrink-0 flex-wrap gap-2">
             <button
               aria-pressed={aiSummaryEnabled}
               className={`inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-xs font-semibold tm-focus ${aiSummaryEnabled ? 'border-primary/30 bg-primary/10 text-primary' : 'border-outline-variant/30 bg-surface-container-high text-on-surface-variant'}`}
@@ -615,8 +632,7 @@ export function TripOperationsPanel({
             >
               生成摘要
             </Button>
-          </div>
-        </div>
+            </div>
 
         {!hasVisibleSuggestions ? (
           <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -790,6 +806,8 @@ export function TripOperationsPanel({
             </div>
           </Collapsible>
         ) : null}
+          </div>
+        </details>
       </Card>
 
       <ConfirmDialog

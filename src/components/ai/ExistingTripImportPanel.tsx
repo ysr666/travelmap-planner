@@ -235,7 +235,7 @@ export function ExistingTripImportPanel({
           <input
             ref={fileInputRef}
             aria-label="上传旅行导入文件"
-            accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip"
+            accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip,.csv,.xlsx,.xlsm,.xls"
             className="sr-only"
             multiple
             onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
@@ -256,7 +256,7 @@ export function ExistingTripImportPanel({
               ))}
             </div>
           ) : (
-            <p className="mt-1 text-center text-xs tm-muted">支持 .txt/.eml/.html/.pdf/image/*/.json/.zip，单文件 20MB。</p>
+            <p className="mt-1 text-center text-xs tm-muted">支持 .txt/.eml/.html/.pdf/image/*/.json/.zip/.xlsx，最多 60 个文件。</p>
           )}
         </div>
         <Button

@@ -660,7 +660,7 @@ export function TravelInboxPanel({
           <input
             ref={fileInputRef}
             aria-label="上传收件箱文件"
-            accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip"
+            accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip,.csv,.xlsx,.xlsm,.xls"
             className="sr-only"
             multiple
             onChange={(event) => {
@@ -678,7 +678,7 @@ export function TravelInboxPanel({
             <FileUp className="size-4" />
             添加文件
           </button>
-          <p className="mt-1 text-center text-xs tm-muted">支持 .txt/.eml/.html/.pdf/image/*/.json/.zip，单文件 20MB。</p>
+          <p className="mt-1 text-center text-xs tm-muted">支持 .txt/.eml/.html/.pdf/image/*/.json/.zip/.xlsx，最多 60 个文件。</p>
         </div>
         <Button
           disabled={!pastedText.trim() || isExtracting}
@@ -769,39 +769,48 @@ export function TravelInboxPanel({
 
       {expenseSuggestions.length > 0 || hiddenExpenseSuggestions.length > 0 ? (
         <section className="space-y-2 rounded-xl border border-outline-variant/30 bg-surface-container-high p-3" data-testid="travel-inbox-expense-suggestions">
-          <div>
+          <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-on-surface">费用草稿建议</p>
-            <p className="mt-1 text-xs leading-5 tm-muted">只从已提取文本识别；确认后生成待审核草稿，不会自动计入支出。</p>
+            <span className="rounded-full bg-surface-container px-2 py-1 text-xs font-semibold tm-muted">{expenseSuggestions.length} 项</span>
           </div>
-          {expenseSuggestions.map((suggestion) => (
-            <div className="flex flex-col gap-2 rounded-lg bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between" key={suggestion.key}>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-on-surface">{suggestion.title}</p>
-                <p className="mt-0.5 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button className="min-h-11 px-3 text-xs" disabled={expenseActionId === suggestion.id} onClick={() => prepareExpenseDraft(suggestion)} variant="secondary">生成草稿</Button>
-                <TripIntelligenceSuggestionControls
-                  onIgnore={(target) => void setSuggestionState({ status: 'ignored', suggestion: target })}
-                  onLater={(target) => void setSuggestionState({ status: 'later', suggestion: target })}
-                  suggestion={suggestion}
-                />
-              </div>
-            </div>
-          ))}
-          {hiddenExpenseSuggestions.length > 0 ? (
-            <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold tm-muted">已隐藏费用建议（{hiddenExpenseSuggestions.length}）</summary>
-              <div className="mt-2 space-y-2">
-                {hiddenExpenseSuggestions.map((suggestion) => (
-                  <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
-                    <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
-                    <Button className="min-h-11 px-3 text-xs" onClick={() => void restoreSuggestionState(suggestion.key)} variant="ghost">恢复</Button>
+          <details className="group rounded-lg border border-outline-variant/30 bg-surface-container-low">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-primary marker:hidden select-none [&::-webkit-details-marker]:hidden tm-focus">
+              <span>查看建议</span>
+              <span className="text-xs tm-muted group-open:hidden">展开</span>
+              <span className="hidden text-xs tm-muted group-open:inline">收起</span>
+            </summary>
+            <div className="space-y-2 border-t border-outline-variant/20 p-2">
+              {expenseSuggestions.map((suggestion) => (
+                <div className="flex flex-col gap-2 rounded-lg bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between" key={suggestion.key}>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-on-surface">{suggestion.title}</p>
+                    <p className="mt-0.5 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
                   </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button className="min-h-11 px-3 text-xs" disabled={expenseActionId === suggestion.id} onClick={() => prepareExpenseDraft(suggestion)} variant="secondary">生成草稿</Button>
+                    <TripIntelligenceSuggestionControls
+                      onIgnore={(target) => void setSuggestionState({ status: 'ignored', suggestion: target })}
+                      onLater={(target) => void setSuggestionState({ status: 'later', suggestion: target })}
+                      suggestion={suggestion}
+                    />
+                  </div>
+                </div>
+              ))}
+              {hiddenExpenseSuggestions.length > 0 ? (
+                <details className="rounded-lg border border-outline-variant/20 px-3 py-2">
+                  <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold tm-muted">已隐藏费用建议（{hiddenExpenseSuggestions.length}）</summary>
+                  <div className="mt-2 space-y-2">
+                    {hiddenExpenseSuggestions.map((suggestion) => (
+                      <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
+                        <span className="min-w-0 truncate text-xs tm-muted">{suggestion.title}</span>
+                        <Button className="min-h-11 px-3 text-xs" onClick={() => void restoreSuggestionState(suggestion.key)} variant="ghost">恢复</Button>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          </details>
         </section>
       ) : null}
 
@@ -1328,6 +1337,9 @@ function inferMimeType(fileName: string) {
   if (kind === 'pdf') return 'application/pdf'
   if (kind === 'trip_plan' && fileName.toLowerCase().endsWith('.json')) return 'application/json'
   if (kind === 'trip_plan') return 'application/zip'
+  if (kind === 'spreadsheet' && fileName.toLowerCase().endsWith('.csv')) return 'text/csv'
+  if (kind === 'spreadsheet' && /\.(xlsx|xlsm)$/i.test(fileName)) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  if (kind === 'spreadsheet') return 'application/vnd.ms-excel'
   if (kind === 'html') return 'text/html'
   if (kind === 'email') return 'message/rfc822'
   if (kind === 'text_file') return 'text/plain'

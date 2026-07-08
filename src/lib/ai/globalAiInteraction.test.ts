@@ -27,68 +27,6 @@ describe('globalAiInteraction', () => {
     expect(JSON.stringify(result.providerRequest)).not.toContain('Authorization')
   })
 
-  it('answers ticket lookup commands from local ticket metadata', async () => {
-    const result = await resolveGlobalAiInteraction('找一下爱丁堡的门票和酒店订单', context({
-      activeRoute: 'documents',
-      items: [{
-        createdAt: 1,
-        dayId: 'day_1',
-        id: 'item_castle',
-        sortOrder: 1,
-        ticketIds: ['ticket_castle'],
-        title: 'Edinburgh Castle',
-        tripId: 'trip_1',
-        updatedAt: 1,
-      }, {
-        createdAt: 1,
-        dayId: 'day_1',
-        id: 'item_hotel',
-        sortOrder: 2,
-        ticketIds: ['ticket_hotel'],
-        title: 'Leonardo Royal Edinburgh 办理入住',
-        tripId: 'trip_1',
-        updatedAt: 1,
-      }],
-      scopeLabel: '资料 / 东京旅行',
-      tickets: [{
-        createdAt: 1,
-        fileName: '2026-07-19_1030_EdinburghCastle.pdf',
-        fileType: 'pdf',
-        id: 'ticket_castle',
-        itemId: 'item_castle',
-        mimeType: 'application/pdf',
-        scope: 'item',
-        size: 1024,
-        storageMode: 'copy',
-        ticketCategory: 'admission_ticket',
-        title: 'Edinburgh Castle 门票',
-        tripId: 'trip_1',
-        updatedAt: 1,
-      }, {
-        createdAt: 1,
-        fileName: 'Edinburgh_Leonardo_Royal_Ctrip.pdf',
-        fileType: 'pdf',
-        id: 'ticket_hotel',
-        itemId: 'item_hotel',
-        mimeType: 'application/pdf',
-        scope: 'item',
-        size: 1024,
-        storageMode: 'copy',
-        ticketCategory: 'hotel_booking',
-        title: 'Leonardo Royal Edinburgh 酒店确认',
-        tripId: 'trip_1',
-        updatedAt: 1,
-      }],
-    }))
-
-    expect(result.kind).toBe('assistant_answer')
-    if (result.kind !== 'assistant_answer') return
-    expect(result.answer).toContain('找到 2 个')
-    expect(result.answer).toContain('Edinburgh Castle 门票')
-    expect(result.answer).toContain('Leonardo Royal Edinburgh 酒店确认')
-    expect(result.answer).not.toContain('突发情况重排')
-  })
-
   it('includes page context tools in assistant answer requests', async () => {
     const result = await resolveGlobalAiInteraction('我现在应该注意什么？', context({
       activeRoute: 'ledger',

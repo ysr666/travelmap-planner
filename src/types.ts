@@ -799,7 +799,7 @@ export type TicketBlobSyncState = {
   updatedAt: number
 }
 
-export type TravelInboxSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'trip_plan' | 'ticket_file'
+export type TravelInboxSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'spreadsheet' | 'trip_plan' | 'ticket_file'
 export type TravelInboxEntryStatus = 'ready' | 'recognizing' | 'previewed' | 'error'
 export type TravelInboxEntryCategory = 'unclassified' | 'itinerary' | 'ticket' | 'note' | 'mixed'
 export type TravelInboxPreviewStatus = 'ready' | 'applying' | 'applied' | 'discarded'

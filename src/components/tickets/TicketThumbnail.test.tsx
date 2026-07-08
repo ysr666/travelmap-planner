@@ -29,16 +29,19 @@ function makeTicket(overrides: Partial<TicketMeta> = {}): TicketMeta {
 }
 
 describe('TicketThumbnail logic', () => {
-  it('shouldLoadImage returns true only for image + copy tickets', () => {
+  it('loads visual previews for copied image and PDF tickets', () => {
     const imageCopy = makeTicket({ fileType: 'image', storageMode: 'copy' })
     const imageRef = makeTicket({ fileType: 'image', storageMode: 'reference' })
     const pdfCopy = makeTicket({ fileType: 'pdf', storageMode: 'copy' })
     const external = makeTicket({ fileType: 'other', storageMode: 'external' })
 
-    expect(getTicketStorageMode(imageCopy) === 'copy' && imageCopy.fileType === 'image').toBe(true)
-    expect(getTicketStorageMode(imageRef) === 'copy' && imageRef.fileType === 'image').toBe(false)
-    expect(getTicketStorageMode(pdfCopy) === 'copy' && pdfCopy.fileType === 'image').toBe(false)
-    expect(getTicketStorageMode(external) === 'copy' && external.fileType === 'image').toBe(false)
+    const canLoadPreview = (ticket: TicketMeta) =>
+      getTicketStorageMode(ticket) === 'copy' && (ticket.fileType === 'image' || ticket.fileType === 'pdf')
+
+    expect(canLoadPreview(imageCopy)).toBe(true)
+    expect(canLoadPreview(imageRef)).toBe(false)
+    expect(canLoadPreview(pdfCopy)).toBe(true)
+    expect(canLoadPreview(external)).toBe(false)
   })
 
   it('displays correct type labels for each ticket type', () => {

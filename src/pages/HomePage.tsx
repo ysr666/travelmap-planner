@@ -8,7 +8,6 @@ import {
   MapPin,
   Plus,
   Settings,
-  Sparkles,
   Trash2,
 } from 'lucide-react'
 import {
@@ -234,14 +233,14 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
             <Clock3 className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-on-primary">
+            <p className="text-xs font-semibold text-white">
               {focusDay ? formatShortDateWithWeekday(focusDay.date) : '旅行准备'}
             </p>
             <p className="mt-0.5 break-words text-sm font-semibold text-white">
               {nextItem ? nextItem.title : overview.preparationLabel}
             </p>
             {nextItem ? (
-              <p className="mt-0.5 text-xs text-on-primary">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
+              <p className="mt-0.5 text-xs text-white">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
             ) : null}
           </div>
         </div>
@@ -352,9 +351,6 @@ function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
         <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => navigateTo('trip/new')}>
           新建旅行
         </Button>
-        <Button className="w-full border-secondary/30 bg-secondary-container text-on-secondary-container" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
-          AI 生成行程
-        </Button>
         <Button
           className="w-full"
           icon={<FolderLock className="size-4" />}
@@ -363,10 +359,18 @@ function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
         >
           旅行资料
         </Button>
-        <Button className="w-full" icon={<Download className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
-          导入恢复
-        </Button>
       </div>
+      <details className="rounded-lg border border-outline-variant/70 bg-surface-container px-3 py-2">
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">更多</summary>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button className="w-full" onClick={() => navigateTo('ai-draft')} variant="secondary">
+            AI 生成行程
+          </Button>
+          <Button className="w-full" icon={<Download className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
+            导入恢复
+          </Button>
+        </div>
+      </details>
     </section>
   )
 }

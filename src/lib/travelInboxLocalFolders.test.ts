@@ -30,6 +30,26 @@ describe('travel inbox local folder scanning', () => {
     expect(await db.travelInboxAccountSources.count()).toBe(2)
   })
 
+  it('scans supported files inside nested folders', async () => {
+    const nested = directoryHandle(async function* () {
+      yield ['hotel.pdf', fileHandle(() => new File(['pdf'], 'hotel.pdf', { type: 'application/pdf' }))]
+    })
+    const handle = directoryHandle(async function* () {
+      yield ['nested', nested]
+    })
+    const connector = makeConnector(handle)
+    vi.spyOn(db.travelInboxLocalConnectors, 'update').mockResolvedValue(1)
+
+    expect(await scanTravelInboxLocalFolder(connector)).toHaveLength(1)
+    await expect(db.travelInboxAccountSources.toArray()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fileName: 'nested/hotel.pdf',
+        label: 'nested/hotel.pdf',
+        sourceKind: 'pdf',
+      }),
+    ]))
+  })
+
   it('marks the connector as error when read permission is revoked', async () => {
     const handle = directoryHandle(async function* () {}, 'denied')
     const connector = makeConnector(handle)

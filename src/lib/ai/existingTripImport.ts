@@ -8,7 +8,7 @@ import { recordTripWriteForSync } from '../tripSyncQueue'
 import type { Day, ItineraryItem, TicketBlob, TicketCategory, TicketMeta, TicketScope, TransportMode, Trip } from '../../types'
 
 export type ExistingTripImportConfidence = 'high' | 'medium' | 'low'
-export type ExistingTripImportSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'trip_plan' | 'ticket_file'
+export type ExistingTripImportSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'spreadsheet' | 'trip_plan' | 'ticket_file'
 
 export type ExistingTripImportSourceSummary = {
   id: string

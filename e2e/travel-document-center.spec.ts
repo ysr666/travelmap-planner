@@ -91,7 +91,11 @@ test('交通票据先本机预览再应用到订单表单', async ({ page }) => 
 
 test('旧票据地址兼容跳转到资料中心附件页', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })).toBeVisible()
+  await page.evaluate((targetTripId) => {
+    window.location.hash = `/tickets?tripId=${targetTripId}`
+  }, tripId)
   await expect(page).toHaveURL(new RegExp(`#/documents\\?tripId=${tripId}&tab=attachments`))
   await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '暂无票据' })).toBeVisible()

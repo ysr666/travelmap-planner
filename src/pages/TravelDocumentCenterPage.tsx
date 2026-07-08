@@ -338,7 +338,7 @@ export function TravelDocumentCenterPage() {
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus">本地优先 · 敏感资料端到端加密</p>
+            <p className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus">安全资料</p>
             <h2 className="mt-1 text-xl font-semibold text-on-surface">旅行资料中心</h2>
             <p className="mt-1 text-sm leading-6 tm-muted">集中管理证件、大交通订单和原有票据附件。</p>
           </div>

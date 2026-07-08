@@ -41,7 +41,7 @@ describe('PwaLifecycleBanner', () => {
     })
 
     expect(container?.textContent).toContain('当前离线')
-    expect(container?.textContent).toContain('地图、路线、搜索和云端同步需要网络')
+    expect(container?.textContent).toContain('已缓存内容可查看')
   })
 
   it('runs the pending update action from the update banner', async () => {

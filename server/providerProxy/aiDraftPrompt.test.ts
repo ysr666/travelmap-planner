@@ -58,6 +58,17 @@ describe('buildAiTripDraftPrompt', () => {
     expect(prompt).toContain('transportation suggestions between adjacent items')
   })
 
+  it('uses compact mode for long trips to avoid truncated provider output', () => {
+    const prompt = buildAiTripDraftPrompt(validRequest({
+      endDate: '2025-04-12',
+    }))
+
+    expect(prompt).toContain('Long trip compact mode')
+    expect(prompt).toContain('Use at most 2 items per day')
+    expect(prompt).toContain('Omit "tips" unless essential')
+    expect(prompt).not.toContain('1-3 practical daily tips')
+  })
+
   it('truncates free text fields to embed limit', () => {
     const longText = 'x'.repeat(AI_DRAFT_MAX_FREE_TEXT_EMBED_CHARS + 100)
     const prompt = buildAiTripDraftPrompt(validRequest({

@@ -96,7 +96,7 @@ export function ExistingTripImportPanel({
     setCheckedDiffIds([])
     setWarnings([])
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setIsExtracting(true)
@@ -126,7 +126,7 @@ export function ExistingTripImportPanel({
   async function handleConfirmRecognize() {
     if (!providerConfig.proxyUrl) {
       setConfirmRecognizeOpen(false)
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setConfirmRecognizeOpen(false)
@@ -215,11 +215,11 @@ export function ExistingTripImportPanel({
             <h3 className="text-base font-semibold text-on-surface">AI 识别导入</h3>
           </div>
           <p className="mt-1 text-sm leading-6 tm-muted">
-            粘贴行程、订单邮件或上传 PDF/图片/票据，本地提取后再确认发送文本生成追加/合并预览。
+            粘贴或上传行程材料，先生成追加/合并预览。
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium tm-muted">
-          {providerConfig.configured ? 'provider proxy 已配置' : 'provider proxy 未配置'}
+          {providerConfig.configured ? '可识别' : '服务未连接'}
         </span>
       </div>
 
@@ -312,7 +312,7 @@ export function ExistingTripImportPanel({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-on-surface">导入预览</p>
-              <p className="text-xs tm-muted">最终确认前不会写入本地旅行。已选择 {selectedCount} 项。</p>
+              <p className="text-xs tm-muted">已选择 {selectedCount} 项，应用后写入旅行。</p>
             </div>
             <Button
               disabled={selectedCount === 0 || isApplying}
@@ -351,22 +351,24 @@ export function ExistingTripImportPanel({
       ) : null}
 
       <ConfirmDialog
-        body={`本地提取/OCR 不上传文件。确认后会发送 ${sources.length} 段提取文本给 provider proxy 的 ${PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION}，最多 1 次 AI 请求；确认应用前不会写入 DB。`}
+        body={`将发送 ${sources.length} 段提取文本给 AI 识别。原始文件不会上传，结果会先给你预览。`}
         confirmLabel="确认识别"
         onCancel={() => setConfirmRecognizeOpen(false)}
         onConfirm={handleConfirmRecognize}
         open={confirmRecognizeOpen}
         testId="existing-trip-import-recognize-confirm"
+        tone="default"
         title="发送提取文本给 AI 识别？"
       />
       <ConfirmDialog
-        body={`将应用 ${selectedCount} 项已勾选建议，创建/更新当前旅行的日期、行程点、票据和备注。应用前会检查本地行程是否变化；确认写入后，登录状态下会自动同步。`}
+        body={`将应用 ${selectedCount} 项已勾选建议，更新日期、行程点、票据和备注。写入前会检查行程是否变化。`}
         confirmLabel="确认应用"
         loading={isApplying}
         onCancel={() => setConfirmApplyOpen(false)}
         onConfirm={handleApply}
         open={confirmApplyOpen}
         testId="existing-trip-import-apply-confirm"
+        tone="default"
         title="应用导入预览？"
       />
     </Card>

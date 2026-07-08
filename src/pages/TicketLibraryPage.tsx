@@ -129,19 +129,19 @@ const storageOptions: Array<{ value: TicketStorageMode; label: string; descripti
   {
     value: 'copy',
     label: '保存票据文件',
-    description: '立即可看；登录后随旅行自动同步，离线缓存可用。',
+    description: '可离线查看，登录后自动同步。',
     icon: <Upload className="size-4" />,
   },
   {
     value: 'reference',
     label: '仅记录文件位置',
-    description: '不占浏览器空间，但不能直接打开本地路径。',
+    description: '适合已在相册、网盘或文件 App 里保存的材料。',
     icon: <MapPinned className="size-4" />,
   },
   {
     value: 'external',
     label: '添加外部链接',
-    description: '适合网盘、邮箱或订单网页链接。',
+    description: '适合网盘、邮箱或订单网页。',
     icon: <Link2 className="size-4" />,
   },
 ]
@@ -792,12 +792,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
           <h2 className="mt-1 text-xl font-semibold text-on-surface dark:text-on-surface">票据和订单</h2>
           <p className="mt-2 text-sm leading-6 tm-muted">
-            可保存票据文件以便离线查看；登录后会随旅行自动同步，也可只记录文件位置或外部链接。
+            保存二维码、PDF、订单链接和取票位置。
           </p>
         </div>
 
         <div className="rounded-xl bg-amber-50/80 px-3 py-3 text-sm leading-6 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
-          清除浏览器数据、私密浏览、系统清理或长期未使用都可能导致此设备离线缓存不可用。登录并同步完成后，账号数据是长期来源；重要旅行仍可按需导出 zip 归档。
+          设备清理可能影响离线缓存；登录同步后可重新取回。
         </div>
 
         {storageEstimate ? (
@@ -825,7 +825,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           </div>
           <div>
             <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">添加票据</h3>
-            <p className="text-xs tm-muted">票据文件单个建议不超过 20MB。</p>
+            <p className="text-xs tm-muted">图片、PDF、位置或链接。</p>
           </div>
         </div>
 
@@ -1090,7 +1090,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       <ConfirmDialog
         body={pendingExpenseDraft
-          ? `将为「${getTicketDisplayTitle(pendingExpenseDraft.ticket)}」生成一条待确认费用草稿。不会自动确认、不会计入结算，也不会读取或上传票据文件内容。`
+          ? `将为「${getTicketDisplayTitle(pendingExpenseDraft.ticket)}」生成一条待确认费用草稿。不会自动计入结算。`
           : '将生成一条待确认费用草稿。'}
         cancelLabel="暂不生成"
         confirmLabel="生成草稿"
@@ -1102,6 +1102,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         }}
         onConfirm={() => void confirmCreateExpenseDraft()}
         open={Boolean(pendingExpenseDraft)}
+        tone="default"
         title="从票据生成费用草稿？"
       />
     </div>
@@ -1253,7 +1254,7 @@ function TicketLibraryOverview({
           <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">票据总览</h3>
           <p className="mt-1 text-sm leading-6 tm-muted">
             {stats.totalCount > 0
-              ? `${stats.totalCount} 张票据，${stats.cachedCopyCount} 张 copy 文件此设备可离线打开。`
+              ? `${stats.totalCount} 张票据，${stats.cachedCopyCount} 张可离线打开。`
               : '还没有保存票据。'}
           </p>
         </div>
@@ -1491,6 +1492,7 @@ function TicketCard({
 
       <ActionToolbar align="between" ariaLabel={`${displayTitle} 操作`} className="mt-2 border-t tm-row pt-2">
         <button
+          aria-label={`查看${displayTitle}`}
           className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
           onClick={onPreview}
           type="button"

@@ -86,7 +86,7 @@ describe('globalAiInteraction', () => {
 
     const fallback = buildAssistantAnswerFallbackAfterError(draft)
     expect(fallback.source).toBe('fallback')
-    expect(fallback.caveats.join(' ')).toContain('本地脱敏摘要')
+    expect(fallback.caveats.join(' ')).toContain('当前资料')
   })
 })
 

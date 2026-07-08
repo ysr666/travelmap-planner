@@ -13,6 +13,7 @@ type ConfirmDialogProps = {
   cancelLabel?: string
   loading?: boolean
   icon?: ReactNode
+  tone?: 'default' | 'danger'
   testId?: string
   onCancel: () => void
   onConfirm: () => void
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   cancelLabel = '取消',
   loading = false,
   icon,
+  tone = 'danger',
   testId,
   onCancel,
   onConfirm,
@@ -58,10 +60,10 @@ export function ConfirmDialog({
       role="dialog"
       tabIndex={-1}
     >
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl tm-surface">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg tm-surface">
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-50/80 text-red-500 dark:bg-red-500/10 dark:text-red-400">
+            <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${tone === 'danger' ? 'bg-red-50/80 text-red-500 dark:bg-red-500/10 dark:text-red-400' : 'bg-primary-fixed text-primary dark:bg-primary/15 dark:text-primary-fixed-dim'}`}>
               {icon || <AlertTriangle className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
@@ -84,10 +86,10 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            className="text-error dark:text-red-300 ring-red-100"
+            className={tone === 'danger' ? 'text-error dark:text-red-300 ring-red-100' : ''}
             loading={loading}
             onClick={onConfirm}
-            variant="secondary"
+            variant={tone === 'danger' ? 'secondary' : 'primary'}
           >
             {confirmLabel}
           </Button>

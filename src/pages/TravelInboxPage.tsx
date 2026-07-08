@@ -129,7 +129,7 @@ export function TravelInboxPage() {
   }
 
   async function connectGmail() {
-    if (!autoAiConsent) { setError('请先确认持续拉取和自动 AI 整理授权。'); return }
+    if (!autoAiConsent) { setError('请先开启自动整理。'); return }
     await run('gmail', async () => {
       const result = await getGmailAuthorizationUrl({ autoAiEnabled: true, backfillDays, labelId: gmailLabelId.trim() || 'INBOX', name: 'Gmail' })
       window.location.assign(result.authorizationUrl)
@@ -137,7 +137,7 @@ export function TravelInboxPage() {
   }
 
   async function connectImap() {
-    if (!autoAiConsent) { setError('请先确认持续拉取和自动 AI 整理授权。'); return }
+    if (!autoAiConsent) { setError('请先开启自动整理。'); return }
     await run('imap', async () => {
       await createImapConnector({ ...imap, autoAiEnabled: true, backfillDays })
       setImap({ folder: 'INBOX', host: '', name: '', password: '', username: '' })
@@ -149,14 +149,14 @@ export function TravelInboxPage() {
   return (
     <div className="space-y-5 px-4 pb-28 pt-24" data-testid="travel-inbox-page">
       <section>
-        <p className="text-xs font-semibold uppercase tracking-wider text-primary">Travel Inbox</p>
+        <p className="text-xs font-semibold text-primary">收件箱</p>
         <h2 className="mt-1 text-2xl font-bold text-on-surface">旅行收件箱</h2>
-        <p className="mt-2 text-sm leading-6 tm-muted">把订单邮件、PDF、截图和票据集中到待整理来源。本地提取后只发送文本给 AI，写入旅行前仍需确认。</p>
+        <p className="mt-2 text-sm leading-6 tm-muted">邮件、PDF、截图和票据先集中到这里，再确认整理进旅行。</p>
       </section>
 
       {focusedEntryId ? (
         <Card className="space-y-3 border-primary/40" data-testid="travel-inbox-focused-entry" variant="grouped">
-          <div><p className="text-xs font-semibold text-primary">账单原始来源</p><h3 className="mt-1 font-semibold text-on-surface">{focusedEntry?.label ?? '来源已不可用'}</h3></div>
+          <div><p className="text-xs font-semibold text-primary">来源内容</p><h3 className="mt-1 font-semibold text-on-surface">{focusedEntry?.label ?? '来源已不可用'}</h3></div>
           {focusedEntry ? <><p className="text-xs tm-muted">{focusedEntry.fileName || focusedEntry.sourceKind} · {new Date(focusedEntry.createdAt).toLocaleString('zh-CN')}</p><pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-container-high p-3 text-xs leading-5 text-on-surface">{focusedEntry.extractedText || '该来源没有可显示的提取文本。'}</pre></> : null}
           {focusedEntryMissing ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">原始来源已经删除，账单仍保留来源摘要。</p> : null}
         </Card>
@@ -171,7 +171,7 @@ export function TravelInboxPage() {
 
       <Card className="space-y-4" variant="grouped">
         <div className="flex items-center justify-between gap-3">
-          <div><h3 className="font-semibold text-on-surface">来源连接器</h3><p className="text-xs tm-muted">邮箱后台拉取；本地文件夹在此浏览器打开时扫描。</p></div>
+          <div><h3 className="font-semibold text-on-surface">来源连接器</h3><p className="text-xs tm-muted">邮箱自动同步；本地文件夹在打开旅图时扫描。</p></div>
           <Button icon={<RefreshCw className="size-4" />} onClick={() => void run('refresh', async () => { for (const connector of localConnectors) await scanTravelInboxLocalFolder(connector); if (connectorConfig.configured) await refreshCloudTravelInboxSources() })} variant="ghost">刷新</Button>
         </div>
 
@@ -179,14 +179,14 @@ export function TravelInboxPage() {
           <div className="space-y-3 rounded-xl bg-surface-container-high p-3">
             <label className="flex items-start gap-3 text-sm">
               <input checked={autoAiConsent} className="mt-1 size-4" onChange={(event) => setAutoAiConsent(event.target.checked)} type="checkbox" />
-              <span><strong className="block text-on-surface">允许持续拉取并自动 AI 整理</strong><span className="mt-1 block text-xs tm-muted">原文件私有暂存；应用打开后本地提取，只把文本发送给 AI。最终写入仍需确认。</span></span>
+              <span><strong className="block text-on-surface">自动整理新材料</strong><span className="mt-1 block text-xs tm-muted">只发送提取文本；写入前会让你确认。</span></span>
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-on-surface">首次同步<select className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 text-sm font-normal" onChange={(event) => setBackfillDays(Number(event.target.value) as 0 | 7 | 30)} value={backfillDays}><option value={0}>从连接时刻开始</option><option value={7}>回捞最近 7 天</option><option value={30}>回捞最近 30 天</option></select></label>
               <Input label="Gmail 标签 ID" placeholder="INBOX" value={gmailLabelId} onChange={setGmailLabelId} />
             </div>
           </div>
-        ) : <p className="rounded-xl bg-surface-container-high p-3 text-sm tm-muted">连接器后端未配置，现有手动上传和本地文件夹仍可使用。</p>}
+        ) : <p className="rounded-xl bg-surface-container-high p-3 text-sm tm-muted">邮箱同步暂不可用，手动上传和本地文件夹仍可使用。</p>}
 
         <div className="grid gap-2 sm:grid-cols-3">
           {connectorConfig.configured ? <Button disabled={busy === 'gmail'} icon={<Mail className="size-4" />} onClick={() => void connectGmail()} variant="secondary">连接 Gmail</Button> : null}
@@ -218,7 +218,7 @@ export function TravelInboxPage() {
       </Card>
 
       <Card className="space-y-3" variant="grouped">
-        <div><h3 className="font-semibold text-on-surface">待整理来源</h3><p className="text-xs tm-muted">高置信唯一匹配会自动生成预览，其余来源由你选择旅行。</p></div>
+        <div><h3 className="font-semibold text-on-surface">待整理来源</h3><p className="text-xs tm-muted">确认目标旅行后生成整理预览。</p></div>
         {sources.length === 0 ? <EmptyState icon={<Inbox className="size-6" />} title="还没有来源" body="连接邮箱或本地文件夹后，新材料会出现在这里。" /> : sources.map((source) => (
           <SourceRow
             busy={busy === `source:${source.id}`}

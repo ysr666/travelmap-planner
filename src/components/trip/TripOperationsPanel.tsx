@@ -542,7 +542,7 @@ export function TripOperationsPanel({
 
   async function generateAiSummary() {
     if (!aiSummaryEnabled || !providerConfig.proxyUrl) {
-      if (aiSummaryEnabled) setOperationError('当前未配置 provider proxy。')
+      if (aiSummaryEnabled) setOperationError('旅图服务未连接。')
       return
     }
     if (model.recommendations.length === 0) {

@@ -657,8 +657,7 @@ function buildRepairConfirmBody(
   ].filter(Boolean)
   return [
     `将执行：${parts.length > 0 ? parts.join('、') : '暂无可执行项'}。`,
-    `预计 provider/路线请求 ${providerRequestCount} 次；票据重试只改本地上传状态。确认前不会调用路线、AI、搜索或云端服务，也不会写入旅行内容。`,
-    '内容补充和每日提示只会生成预览，仍需在结果区再次确认应用。',
+    `预计联网/路线请求 ${providerRequestCount} 次。内容补充和每日提示会先给你预览。`,
   ].join('\n')
 }
 

@@ -40,6 +40,9 @@ describe('globalAiCommandRouter', () => {
   })
 
   it('routes ledger and smart workspace commands into existing surfaces', async () => {
+    const newTripIntent = parseGlobalAiCommandIntent('帮我新建一个英国行程')
+    expect(newTripIntent).toEqual({ kind: 'new_trip' })
+
     const ledger = await resolveGlobalAiCommand('这趟旅行一共花了多少钱？', buildContext())
     expect(ledger.kind).toBe('ledger_summary')
     if (ledger.kind === 'ledger_summary') {

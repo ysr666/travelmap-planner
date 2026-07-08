@@ -79,7 +79,7 @@ describe('Button', () => {
       root?.render(<Button variant="primary">主要</Button>)
     })
     const button = container?.querySelector('button')
-    expect(button?.className).toContain('bg-primary-container')
+    expect(button?.className).toContain('bg-primary')
   })
 
   it('renders secondary variant', async () => {
@@ -238,7 +238,7 @@ describe('Card', () => {
       root?.render(<Card data-testid="card">内容</Card>)
     })
     const card = container?.querySelector('[data-testid="card"]')
-    expect(card?.className).toContain('rounded-xl')
+    expect(card?.className).toContain('rounded-lg')
     expect(card?.className).toContain('bg-surface-container')
   })
 
@@ -247,7 +247,7 @@ describe('Card', () => {
       root?.render(<Card variant="grouped" data-testid="card">内容</Card>)
     })
     const card = container?.querySelector('[data-testid="card"]')
-    expect(card?.className).toContain('rounded-xl')
+    expect(card?.className).toContain('rounded-lg')
   })
 
   it('renders flat variant', async () => {

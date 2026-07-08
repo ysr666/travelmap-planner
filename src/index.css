@@ -3,56 +3,56 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #004a9f;
-  --color-primary-shadow: rgba(0, 74, 159, 0.18);
-  --color-primary-shadow-lg: rgba(0, 74, 159, 0.22);
-  --color-primary-container: #0058bc;
-  --color-primary-fixed: #d8e2ff;
-  --color-primary-fixed-dim: #adc6ff;
-  --color-inverse-primary: #adc6ff;
+  --color-primary: #0e7c73;
+  --color-primary-shadow: rgba(14, 124, 115, 0.16);
+  --color-primary-shadow-lg: rgba(14, 124, 115, 0.22);
+  --color-primary-container: #0e7c73;
+  --color-primary-fixed: #ddf3ef;
+  --color-primary-fixed-dim: #b6e2da;
+  --color-inverse-primary: #7ed6ca;
   --color-on-primary: #ffffff;
-  --color-secondary: #4c4aca;
-  --color-secondary-container: #6664e4;
-  --color-tertiary: #9e3d00;
-  --color-tertiary-container: #c64f00;
+  --color-secondary: #c85d4b;
+  --color-secondary-container: #fae8e2;
+  --color-tertiary: #9a6500;
+  --color-tertiary-container: #fff1d6;
   --color-error: #ba1a1a;
   --color-error-container: #ffdad6;
-  --color-outline: #717786;
-  --color-outline-variant: #c1c6d7;
-  --color-surface: #f5f6f8;
-  --color-surface-dim: #d9dadc;
-  --color-surface-bright: #f8f9fb;
-  --color-surface-tint: #004a9f;
-  --color-surface-variant: #e1e2e4;
+  --color-outline: #6f807b;
+  --color-outline-variant: #d7e4e1;
+  --color-surface: #f3f8f7;
+  --color-surface-dim: #dfeae7;
+  --color-surface-bright: #fbfdfc;
+  --color-surface-tint: #0e7c73;
+  --color-surface-variant: #e6efed;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f3f4f6;
-  --color-surface-container: #edeef0;
-  --color-surface-container-high: #e7e8ea;
-  --color-surface-container-highest: #e1e2e4;
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #303846;
-  --color-on-background: #191c1e;
-  --color-on-primary-container: #fefcff;
+  --color-surface-container-low: #f7fbfa;
+  --color-surface-container: #ffffff;
+  --color-surface-container-high: #f3f8f7;
+  --color-surface-container-highest: #e6efed;
+  --color-on-surface: #142520;
+  --color-on-surface-variant: #4f625d;
+  --color-on-background: #142520;
+  --color-on-primary-container: #ffffff;
   --color-on-secondary: #ffffff;
-  --color-on-secondary-container: #fffbff;
-  --color-on-secondary-fixed: #0c006a;
-  --color-on-secondary-fixed-variant: #3631b4;
+  --color-on-secondary-container: #4b1f17;
+  --color-on-secondary-fixed: #4b1f17;
+  --color-on-secondary-fixed-variant: #7a3528;
   --color-on-tertiary: #ffffff;
-  --color-on-tertiary-container: #fffbff;
-  --color-on-tertiary-fixed: #351000;
-  --color-on-tertiary-fixed-variant: #7c2e00;
+  --color-on-tertiary-container: #5b3a00;
+  --color-on-tertiary-fixed: #3f2800;
+  --color-on-tertiary-fixed-variant: #7a4f00;
   --color-on-error: #ffffff;
   --color-on-error-container: #93000a;
-  --color-on-primary-fixed: #001a41;
-  --color-on-primary-fixed-variant: #004493;
-  --color-inverse-surface: #2e3132;
-  --color-inverse-on-surface: #f0f1f3;
-  --color-secondary-fixed: #e2dfff;
-  --color-secondary-fixed-dim: #c2c1ff;
-  --color-tertiary-fixed: #ffdbcc;
-  --color-tertiary-fixed-dim: #ffb595;
-  --color-background: #f8f9fb;
-  --color-map-bg: #eaf2f9;
+  --color-on-primary-fixed: #073c37;
+  --color-on-primary-fixed-variant: #0e7c73;
+  --color-inverse-surface: #243833;
+  --color-inverse-on-surface: #f3f8f7;
+  --color-secondary-fixed: #fae8e2;
+  --color-secondary-fixed-dim: #f0c7bd;
+  --color-tertiary-fixed: #fff1d6;
+  --color-tertiary-fixed-dim: #f5d598;
+  --color-background: #eef5f4;
+  --color-map-bg: #dcebe8;
   --font-headline: "Plus Jakarta Sans";
   --font-body: "Inter";
   --font-headline-md: "Plus Jakarta Sans";
@@ -69,18 +69,18 @@
   --text-body-md--font-weight: 400;
   --text-headline-lg-mobile: 26px;
   --text-headline-lg-mobile--line-height: 32px;
-  --text-headline-lg-mobile--letter-spacing: -0.01em;
+  --text-headline-lg-mobile--letter-spacing: 0;
   --text-headline-lg-mobile--font-weight: 700;
   --text-body-lg: 17px;
   --text-body-lg--line-height: 24px;
   --text-body-lg--font-weight: 400;
   --text-headline-lg: 32px;
   --text-headline-lg--line-height: 40px;
-  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-lg--letter-spacing: 0;
   --text-headline-lg--font-weight: 700;
   --text-label-sm: 13px;
   --text-label-sm--line-height: 16px;
-  --text-label-sm--letter-spacing: 0.05em;
+  --text-label-sm--letter-spacing: 0;
   --text-label-sm--font-weight: 500;
   --spacing-gutter: 16px;
   --spacing-margin-desktop: 32px;
@@ -94,24 +94,24 @@
 
 :root {
   color: var(--color-on-surface);
-  background: #f8f9fb;
+  background: #eef5f4;
   color-scheme: light;
   --tm-surface-bg: #ffffff;
-  --tm-surface-border: rgba(241, 245, 249, 0.90);
-  --tm-surface-shadow: 0 1px 3px rgba(47, 65, 88, 0.04);
+  --tm-surface-border: rgba(215, 228, 225, 0.95);
+  --tm-surface-shadow: 0 10px 24px rgba(20, 37, 32, 0.06);
   --tm-group-bg: #ffffff;
-  --tm-group-border: rgba(241, 245, 249, 0.90);
-  --tm-row-border: rgba(241, 245, 249, 0.90);
-  --tm-field-bg: rgba(255, 255, 255, 0.92);
-  --tm-field-border: rgba(226, 232, 240, 0.90);
-  --tm-chip-bg: rgba(241, 245, 249, 0.85);
-  --tm-chip-color: rgb(71 85 105);
-  --tm-separator-border: rgba(241, 245, 249, 0.90);
-  --tm-info-bg: rgba(241, 245, 249, 0.60);
-  --tm-info-border: rgba(241, 245, 249, 0.50);
-  --tm-html-bg: #e1e2e4;
-  --tm-body-gradient: linear-gradient(180deg, var(--color-surface) 0%, #f0f2f5 100%);
-  --tm-scrollbar: rgba(108, 123, 146, 0.35);
+  --tm-group-border: rgba(215, 228, 225, 0.95);
+  --tm-row-border: rgba(215, 228, 225, 0.85);
+  --tm-field-bg: rgba(255, 255, 255, 0.96);
+  --tm-field-border: rgba(215, 228, 225, 0.95);
+  --tm-chip-bg: rgba(221, 243, 239, 0.90);
+  --tm-chip-color: #0e7c73;
+  --tm-separator-border: rgba(215, 228, 225, 0.85);
+  --tm-info-bg: rgba(221, 243, 239, 0.50);
+  --tm-info-border: rgba(215, 228, 225, 0.80);
+  --tm-html-bg: #dfeae7;
+  --tm-body-gradient: linear-gradient(180deg, #eef5f4 0%, #f6faf9 100%);
+  --tm-scrollbar: rgba(79, 98, 93, 0.30);
   font-family:
     "Inter", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -128,6 +128,7 @@
 html {
   min-width: 320px;
   background: var(--tm-html-bg);
+  overscroll-behavior: none;
 }
 
 body {
@@ -135,78 +136,79 @@ body {
   min-height: 100svh;
   margin: 0;
   overflow-x: hidden;
+  overscroll-behavior: none;
   background: var(--tm-body-gradient);
 }
 
 .dark {
-  color: #e7edf6;
-  background: #07111f;
+  color: #eef7f5;
+  background: #07110f;
   color-scheme: dark;
-  --color-primary: #aac7ff;
-  --color-primary-shadow: rgba(170, 199, 255, 0.20);
-  --color-primary-shadow-lg: rgba(170, 199, 255, 0.28);
-  --color-primary-container: #3e90ff;
-  --color-primary-fixed: #d6e3ff;
-  --color-primary-fixed-dim: #aac7ff;
-  --color-inverse-primary: #005db8;
-  --color-on-primary: #003064;
-  --color-secondary: #47e266;
-  --color-secondary-container: #09bf49;
-  --color-tertiary: #ffb691;
-  --color-tertiary-container: #eb6a12;
+  --color-primary: #7ed6ca;
+  --color-primary-shadow: rgba(126, 214, 202, 0.18);
+  --color-primary-shadow-lg: rgba(126, 214, 202, 0.24);
+  --color-primary-container: #0e7c73;
+  --color-primary-fixed: #173f39;
+  --color-primary-fixed-dim: #245e56;
+  --color-inverse-primary: #0e7c73;
+  --color-on-primary: #073c37;
+  --color-secondary: #f0a093;
+  --color-secondary-container: #4d2119;
+  --color-tertiary: #ffd58a;
+  --color-tertiary-container: #4a3307;
   --color-error: #ffb4ab;
   --color-error-container: #93000a;
-  --color-outline: #8b91a0;
-  --color-outline-variant: #414754;
-  --color-surface: #131315;
-  --color-surface-dim: #131315;
-  --color-surface-bright: #39393b;
-  --color-surface-variant: #353437;
-  --color-surface-container-lowest: #0e0e10;
-  --color-surface-container-low: #1b1b1d;
-  --color-surface-container: #1f1f21;
-  --color-surface-container-high: #2a2a2c;
-  --color-surface-container-highest: #353437;
-  --color-on-surface: #e4e2e4;
-  --color-on-surface-variant: #c0c6d6;
-  --color-on-background: #e4e2e4;
-  --color-on-primary-container: #002957;
-  --color-on-secondary: #003910;
-  --color-on-secondary-container: #004615;
-  --color-on-secondary-fixed: #002106;
-  --color-on-secondary-fixed-variant: #00531a;
-  --color-on-tertiary: #552000;
-  --color-on-tertiary-container: #4a1b00;
+  --color-outline: #8da09b;
+  --color-outline-variant: #30433f;
+  --color-surface: #101a17;
+  --color-surface-dim: #08120f;
+  --color-surface-bright: #273a35;
+  --color-surface-variant: #243530;
+  --color-surface-container-lowest: #07110f;
+  --color-surface-container-low: #0d1815;
+  --color-surface-container: #111f1b;
+  --color-surface-container-high: #182925;
+  --color-surface-container-highest: #223631;
+  --color-on-surface: #eef7f5;
+  --color-on-surface-variant: #b8cbc6;
+  --color-on-background: #eef7f5;
+  --color-on-primary-container: #ffffff;
+  --color-on-secondary: #4b1f17;
+  --color-on-secondary-container: #ffd8cf;
+  --color-on-secondary-fixed: #ffd8cf;
+  --color-on-secondary-fixed-variant: #f0a093;
+  --color-on-tertiary: #3f2800;
+  --color-on-tertiary-container: #ffe7bd;
   --color-on-tertiary-fixed: #341100;
   --color-on-tertiary-fixed-variant: #793100;
   --color-on-error: #690005;
   --color-on-error-container: #ffdad6;
-  --color-on-primary-fixed: #001b3e;
-  --color-on-primary-fixed-variant: #00468d;
-  --color-inverse-surface: #e4e2e4;
-  --color-inverse-on-surface: #303032;
-  --color-secondary-fixed: #6cff82;
-  --color-secondary-fixed-dim: #47e266;
-  --color-tertiary-fixed: #ffdbcb;
-  --color-tertiary-fixed-dim: #ffb691;
-  --color-background: #131315;
-  --color-map-bg: #152333;
-  --tm-surface-bg: rgba(15, 23, 42, 0.88);
-  --tm-surface-border: rgba(51, 65, 85, 0.65);
-  --tm-surface-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  --tm-group-bg: rgba(15, 23, 42, 0.72);
-  --tm-group-border: rgba(51, 65, 85, 0.50);
-  --tm-row-border: rgba(51, 65, 85, 0.45);
-  --tm-field-bg: rgba(15, 23, 42, 0.70);
-  --tm-field-border: rgba(51, 65, 85, 0.65);
-  --tm-chip-bg: rgba(51, 65, 85, 0.45);
-  --tm-chip-color: rgb(203 213 225);
-  --tm-separator-border: rgba(51, 65, 85, 0.45);
-  --tm-info-bg: rgba(30, 41, 59, 0.50);
-  --tm-info-border: rgba(51, 65, 85, 0.40);
-  --tm-html-bg: #07111f;
-  --tm-body-gradient: linear-gradient(180deg, #101827 0%, #0b1220 100%);
-  --tm-scrollbar: rgba(148, 163, 184, 0.45);
+  --color-on-primary-fixed: #d9fff8;
+  --color-on-primary-fixed-variant: #7ed6ca;
+  --color-inverse-surface: #eef7f5;
+  --color-inverse-on-surface: #142520;
+  --color-secondary-fixed: #4d2119;
+  --color-secondary-fixed-dim: #7a3b30;
+  --color-tertiary-fixed: #4a3307;
+  --color-tertiary-fixed-dim: #7a560e;
+  --color-background: #07110f;
+  --color-map-bg: #10241f;
+  --tm-surface-bg: rgba(17, 31, 27, 0.92);
+  --tm-surface-border: rgba(48, 67, 63, 0.80);
+  --tm-surface-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+  --tm-group-bg: rgba(17, 31, 27, 0.86);
+  --tm-group-border: rgba(48, 67, 63, 0.70);
+  --tm-row-border: rgba(48, 67, 63, 0.62);
+  --tm-field-bg: rgba(13, 24, 21, 0.86);
+  --tm-field-border: rgba(48, 67, 63, 0.80);
+  --tm-chip-bg: rgba(23, 63, 57, 0.75);
+  --tm-chip-color: #bff4ec;
+  --tm-separator-border: rgba(48, 67, 63, 0.62);
+  --tm-info-bg: rgba(23, 63, 57, 0.55);
+  --tm-info-border: rgba(48, 67, 63, 0.72);
+  --tm-html-bg: #07110f;
+  --tm-body-gradient: linear-gradient(180deg, #07110f 0%, #0d1815 100%);
+  --tm-scrollbar: rgba(184, 203, 198, 0.35);
   --border-glass-color: #38383a;
   --font-headline-md: "Plus Jakarta Sans";
   --font-body-md: "Inter";
@@ -251,7 +253,7 @@ body {
 .tm-field {
   background: var(--tm-field-bg);
   border: 1px solid var(--tm-field-border);
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
 }
 
 .tm-muted {
@@ -272,12 +274,18 @@ body {
 }
 
 .tm-focus:focus-visible {
-  outline: 2px solid rgb(56 149 255);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 .tm-separator {
   border-bottom: 1px solid var(--tm-separator-border);
+}
+
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl {
+  border-radius: 0.5rem;
 }
 
 /* ── Base resets ───────────────────────────────────────────────── */
@@ -295,14 +303,18 @@ button {
 
 #root {
   min-height: 100svh;
+  overscroll-behavior: none;
 }
 
 .app-viewport {
   height: 100dvh;
   min-height: 100svh;
+  overscroll-behavior: contain;
 }
 
 .app-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--tm-scrollbar) transparent;
 }

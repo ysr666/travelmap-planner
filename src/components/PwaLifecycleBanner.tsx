@@ -33,12 +33,12 @@ export function PwaLifecycleBanner({ topAppBar }: { topAppBar: boolean }) {
 
   const topClass = topAppBar ? 'top-16' : 'top-3'
   const toneClass = showUpdate
-    ? 'border-sky-200/80 bg-sky-50/95 text-sky-900 shadow-[0_10px_28px_rgba(14,116,144,0.16)] dark:border-sky-800/70 dark:bg-sky-950/90 dark:text-sky-100'
+    ? 'border-outline-variant/80 bg-primary-fixed/95 text-on-surface shadow-[0_10px_28px_rgba(14,124,115,0.16)] dark:border-primary/50 dark:bg-primary/20 dark:text-primary-fixed'
     : 'border-amber-200/80 bg-amber-50/95 text-amber-950 shadow-[0_10px_28px_rgba(180,83,9,0.16)] dark:border-amber-800/70 dark:bg-amber-950/90 dark:text-amber-100'
 
   return (
     <div
-      className={`absolute inset-x-3 ${topClass} z-50 rounded-xl border px-3 py-2 backdrop-blur ${toneClass}`}
+      className={`absolute inset-x-3 ${topClass} z-50 rounded-lg border px-3 py-2 backdrop-blur ${toneClass}`}
       data-testid="pwa-lifecycle-banner"
     >
       <div className="flex items-start gap-2">
@@ -52,13 +52,13 @@ export function PwaLifecycleBanner({ topAppBar }: { topAppBar: boolean }) {
           <p className="mt-0.5 text-[11px] leading-4">
             {updateError ?? (showUpdate
               ? '更新会在确认后重启应用。'
-              : '已缓存旅行和票据可查看；地图、路线、搜索和云端同步需要网络。')}
+              : '已缓存内容可查看；在线后同步。')}
           </p>
         </div>
         {showUpdate ? (
           <ActionToolbar align="end" ariaLabel="应用更新操作" className="shrink-0">
             <button
-              className="min-h-9 rounded-lg bg-white px-2 text-[11px] font-bold text-sky-800 active:scale-[0.98] disabled:opacity-60 dark:bg-sky-200 dark:text-sky-950"
+              className="min-h-9 rounded-lg bg-white px-2 text-[11px] font-bold text-primary active:scale-[0.98] disabled:opacity-60 dark:bg-primary-fixed dark:text-primary"
               disabled={isApplyingUpdate}
               onClick={() => void handleApplyUpdate()}
               type="button"

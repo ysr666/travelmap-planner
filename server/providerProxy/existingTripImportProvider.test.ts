@@ -8,6 +8,7 @@ import {
   createMockExistingTripImportProvider,
   normalizeExistingTripImportProviderOutput,
 } from './existingTripImportProvider'
+import { EXISTING_TRIP_IMPORT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
 
 function request(): ProviderProxyExistingTripImportRequest {
   return {
@@ -39,6 +40,8 @@ describe('existing trip import provider', () => {
 
     expect(input.prompt).toContain('只能基于下方 extracted sources')
     expect(input.prompt).toContain('不要编造')
+    expect(input.prompt).toContain('多材料或长行程时保持输出紧凑')
+    expect(input.maxOutputTokens).toBe(EXISTING_TRIP_IMPORT_MAX_OUTPUT_TOKENS_HINT)
     expect(input.prompt).not.toContain('Authorization')
     expect(input.reasoningMode).toBe('off')
   })

@@ -610,8 +610,7 @@ describe('TicketLibraryPage', () => {
     await act(async () => {
       await vi.runAllTimersAsync()
     })
-    const previewButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((button) => button.textContent?.includes('查看'))
+    const previewButton = container?.querySelector<HTMLButtonElement>('button[aria-label="查看收据"]')
     await act(async () => {
       previewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })

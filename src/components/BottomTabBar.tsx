@@ -17,7 +17,7 @@ const tabs = [
 
 export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-16 items-center justify-between border-t-[0.5px] border-outline-variant/30 bg-surface-dim/80 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+    <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-[4.75rem] items-center justify-between border-t-[0.5px] border-outline-variant/70 bg-surface/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">
       {tabs.map((tab) => {
         const Icon = tab.icon
         const isActive = getActiveTab(activeRoute) === tab.id
@@ -25,9 +25,9 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
           <button
             key={tab.id}
             aria-label={tab.label}
-            className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1 py-1 transition active:scale-90 tm-focus ${
+            className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-lg px-1 py-1 transition active:scale-95 tm-focus ${
               isActive
-                ? 'text-primary bg-primary-container/10'
+                ? 'bg-primary-fixed text-primary'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
             onClick={() => navigateToTab(tab.id, lastTripId)}

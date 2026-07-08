@@ -142,7 +142,7 @@ describe('TripReadinessCenterPanel', () => {
     expect(checkboxes.some((checkbox) => checkbox.disabled)).toBe(true)
 
     await clickTestId('trip-readiness-batch-button')
-    expect(getByTestId('trip-readiness-repair-confirm-dialog').textContent).toContain('确认前不会调用')
+    expect(getByTestId('trip-readiness-repair-confirm-dialog').textContent).toContain('预计联网/路线请求')
     expect(mocks.generateRoutes).toHaveBeenCalledTimes(0)
     expect(mocks.retryTicketBlobUpload).toHaveBeenCalledTimes(0)
     expect(mocks.generateContent).toHaveBeenCalledTimes(0)

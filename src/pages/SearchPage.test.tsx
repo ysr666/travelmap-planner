@@ -70,7 +70,7 @@ describe('SearchPage', () => {
   it('renders the expanded local search surface', async () => {
     await act(async () => root?.render(<SearchPage />))
 
-    expect(container?.textContent).toContain('本机旅行、行程、票据、交通与账本')
+    expect(container?.textContent).toContain('地点、票据、账单、交通')
     expect(container?.querySelector('input[type="search"]')).toBeTruthy()
     expect(container?.querySelector('[data-testid="search-filter-transport"]')).toBeTruthy()
     expect(container?.querySelector('[data-testid="search-filter-ledger"]')).toBeTruthy()
@@ -78,7 +78,7 @@ describe('SearchPage', () => {
 
   it('renders empty state when no local records exist', async () => {
     await act(async () => root?.render(<SearchPage />))
-    expect(container?.textContent).toContain('还没有可搜索的本机旅行数据')
+    expect(container?.textContent).toContain('还没有可搜索内容')
   })
 
   it('renders trip results', async () => {

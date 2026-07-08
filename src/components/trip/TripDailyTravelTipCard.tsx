@@ -133,7 +133,7 @@ export function TripDailyTravelTipCard({
 
       {!providerConfig.configured ? (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
-          当前未配置 provider proxy，仍会显示本地汇总。
+          服务未连接，先显示本地汇总。
         </p>
       ) : null}
       {model.warnings.map((warning) => (
@@ -177,7 +177,7 @@ export function TripDailyTravelTipCard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-on-surface dark:text-on-surface">增强提示预览</p>
-              <p className="mt-1 text-xs tm-muted">搜索 {preview.requestCounts.travelSearch} 次 · AI 汇总 {preview.requestCounts.aiSynthesis} 次</p>
+              <p className="mt-1 text-xs tm-muted">来源 {preview.requestCounts.travelSearch} · 汇总 {preview.requestCounts.aiSynthesis}</p>
             </div>
             <Button icon={<CheckCircle2 className="size-4" />} loading={saving} onClick={() => setConfirmSaveOpen(true)} variant="primary">
               保存到旅行备注
@@ -210,7 +210,7 @@ export function TripDailyTravelTipCard({
       ) : null}
 
       <ConfirmDialog
-        body={`将针对 ${model.subtitle} 生成增强提示。\n最多会调用 ${model.searchTargets.length} 次 travel_search 和 1 次 trip_daily_tip。\n结果只进入预览，不会写入行程点、路线缓存、票据或云端。`}
+        body={`将为 ${model.subtitle} 联网生成今日提示。预计查询 ${model.searchTargets.length} 个来源，结果会先给你预览。`}
         cancelLabel="暂不生成"
         confirmLabel="确认生成"
         icon={<Sparkles className="size-5" />}
@@ -220,10 +220,11 @@ export function TripDailyTravelTipCard({
         }}
         onConfirm={() => void handleGenerate()}
         open={confirmGenerateOpen}
+        tone="default"
         title="生成增强今日提示？"
       />
       <ConfirmDialog
-        body={`将把当前增强提示追加到旅行备注。\n不会覆盖已有旅行备注，不会写入行程点、路线缓存、票据或云端。若旅行备注在预览后已变化，将要求重新生成。`}
+        body="将把当前提示追加到旅行备注，不会覆盖已有内容。若备注已变化，会让你重新生成。"
         cancelLabel="暂不保存"
         confirmLabel="确认保存"
         icon={<NotebookPen className="size-5" />}
@@ -233,6 +234,7 @@ export function TripDailyTravelTipCard({
         }}
         onConfirm={() => void handleSave()}
         open={confirmSaveOpen}
+        tone="default"
         title="保存到旅行备注？"
       />
     </Card>

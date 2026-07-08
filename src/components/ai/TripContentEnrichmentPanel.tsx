@@ -54,7 +54,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
 
   async function handleGenerate() {
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setIsGenerating(true)
@@ -116,16 +116,16 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">内容补充</h3>
           <p className="mt-1 text-xs leading-5 tm-muted">
-            优先使用 Google Places，再用官网/购票来源补足，确认后才写入行程点详情。
+            补齐景点介绍、开放时间、票价和官网。
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2 text-center">
         <EnrichmentMetric label="候选" value={targets.length} />
-        <EnrichmentMetric label="Places" value={estimate.placeLookup + estimate.placeDetails} />
-        <EnrichmentMetric label="搜索" value={estimate.travelSearch} />
-        <EnrichmentMetric label="AI" value={estimate.aiSynthesis} />
+        <EnrichmentMetric label="地点" value={estimate.placeLookup + estimate.placeDetails} />
+        <EnrichmentMetric label="来源" value={estimate.travelSearch} />
+        <EnrichmentMetric label="汇总" value={estimate.aiSynthesis} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -140,7 +140,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
           补充景点内容
         </Button>
         {!providerConfig.configured ? (
-          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</span>
+          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">服务未连接</span>
         ) : null}
         {targets.length > TRIP_CONTENT_ENRICHMENT_MAX_ITEMS ? (
           <span className="text-xs tm-muted">本次最多处理 {TRIP_CONTENT_ENRICHMENT_MAX_ITEMS} 个</span>
@@ -150,7 +150,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
       {isGenerating ? (
         <p className="flex items-center gap-2 rounded-xl bg-violet-50/80 px-3 py-2 text-xs leading-5 text-violet-700 dark:bg-violet-500/10 dark:text-violet-200" data-testid="trip-content-enrichment-loading">
           <Loader2 className="size-3.5 animate-spin" />
-          正在生成内容补充预览…
+          正在补充内容…
         </p>
       ) : null}
 
@@ -197,7 +197,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
       ) : null}
 
       <ConfirmDialog
-        body={`将发起 provider proxy 请求以生成内容补充预览：预计最多 ${estimate.placeLookup} 次地点查询、${estimate.placeDetails} 次 Places 详情、${estimate.travelSearch} 次来源搜索、${estimate.aiSynthesis} 次 AI 来源内总结。确认前不会发出请求，不会写入本地旅行。`}
+        body={`将联网补齐景点资料。预计查询 ${estimate.placeLookup + estimate.placeDetails + estimate.travelSearch} 次，AI 汇总 ${estimate.aiSynthesis} 次。结果会先给你预览。`}
         cancelLabel="暂不补充"
         confirmLabel="确认补充"
         icon={<WandSparkles className="size-5" />}
@@ -208,11 +208,12 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
         onConfirm={() => void handleGenerate()}
         open={confirmGenerateOpen}
         testId="trip-content-enrichment-confirm-dialog"
+        tone="default"
         title="补充景点内容？"
       />
 
       <ConfirmDialog
-        body={`将把已勾选的 ${selectedCount} 个内容补充写入行程点详情。若行程在预览后已变化，将要求重新生成。不会创建票据、路线缓存或云端写入。`}
+        body={`将把已勾选的 ${selectedCount} 个内容写入行程点详情。若行程已变化，会让你重新生成。`}
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<WandSparkles className="size-5" />}
@@ -223,6 +224,7 @@ export function TripContentEnrichmentPanel({ allItems, days, onApplied, trip }: 
         onConfirm={() => void handleApply()}
         open={confirmApplyOpen}
         testId="trip-content-enrichment-apply-dialog"
+        tone="default"
         title="应用内容补充？"
       />
     </Card>
@@ -251,7 +253,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
 
   async function handleGenerate() {
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setIsGenerating(true)
@@ -309,7 +311,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
 
   async function handleRefreshSources() {
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setIsRefreshingSources(true)
@@ -393,7 +395,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
           </Button>
         </div>
         {!providerConfig.configured ? (
-          <p className="mt-3 text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</p>
+          <p className="mt-3 text-xs font-medium text-amber-800 dark:text-amber-200">服务未连接</p>
         ) : null}
       </div>
 
@@ -440,7 +442,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p> : null}
 
       <ConfirmDialog
-        body={`将为「${item.title}」发起内容补充请求：最多 ${estimate.placeLookup} 次地点查询、${estimate.placeDetails} 次 Places 详情、${estimate.travelSearch} 次来源搜索、${estimate.aiSynthesis} 次 AI 来源内总结。确认前不会发出请求，不会写入本地旅行。`}
+        body={`将联网补齐「${item.title}」的景点资料。预计查询 ${estimate.placeLookup + estimate.placeDetails + estimate.travelSearch} 次，AI 汇总 ${estimate.aiSynthesis} 次。结果会先给你预览。`}
         cancelLabel="暂不补充"
         confirmLabel="确认补充"
         icon={<WandSparkles className="size-5" />}
@@ -451,11 +453,12 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
         onConfirm={() => void handleGenerate()}
         open={confirmGenerateOpen}
         testId="item-content-enrichment-confirm-dialog"
+        tone="default"
         title="补充此景点内容？"
       />
 
       <ConfirmDialog
-        body="将把预览内容写入此行程点详情。若行程在预览后已变化，将要求重新生成。"
+        body="将把预览内容写入此行程点详情。若行程已变化，会让你重新生成。"
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<WandSparkles className="size-5" />}
@@ -466,11 +469,12 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
         onConfirm={() => void handleApply()}
         open={confirmApplyOpen}
         testId="item-content-enrichment-apply-dialog"
+        tone="default"
         title="应用内容补充？"
       />
 
       <ConfirmDialog
-        body={`将为「${item.title}」刷新开放时间、票价和官网来源：最多 ${sourceRefreshEstimate.placeLookup} 次地点查询、${sourceRefreshEstimate.placeDetails} 次 Places 详情、${sourceRefreshEstimate.travelSearch} 次来源搜索，0 次 AI。确认前不会发出请求，不会写入本地旅行。`}
+        body={`将刷新「${item.title}」的开放时间、票价和官网。预计查询 ${sourceRefreshEstimate.placeLookup + sourceRefreshEstimate.placeDetails + sourceRefreshEstimate.travelSearch} 次，结果会先给你预览。`}
         cancelLabel="暂不刷新"
         confirmLabel="确认刷新"
         icon={<RefreshCw className="size-5" />}
@@ -481,11 +485,12 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
         onConfirm={() => void handleRefreshSources()}
         open={confirmSourceRefreshOpen}
         testId="item-content-source-refresh-confirm-dialog"
+        tone="default"
         title="刷新来源？"
       />
 
       <ConfirmDialog
-        body="将只更新此行程点内容补充中的开放时间、票价和官网来源。介绍、注意事项和推荐停留时长会保留；若行程点已变化，将要求重新刷新。"
+        body="将只更新开放时间、票价和官网。介绍和停留建议会保留。"
         cancelLabel="暂不更新"
         confirmLabel="确认更新"
         icon={<RefreshCw className="size-5" />}
@@ -496,6 +501,7 @@ export function ItemContentEnrichmentCard({ day, item, onApplied, trip }: ItemCo
         onConfirm={() => void handleApplySourceRefresh()}
         open={confirmSourceRefreshApplyOpen}
         testId="item-content-source-refresh-apply-dialog"
+        tone="default"
         title="更新来源？"
       />
     </section>

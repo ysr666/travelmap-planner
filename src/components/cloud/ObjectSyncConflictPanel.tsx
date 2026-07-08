@@ -106,7 +106,7 @@ export function ObjectSyncConflictPanel({ tripId }: ObjectSyncConflictPanelProps
           <p className="text-sm font-semibold">处理对象同步冲突</p>
           <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">
             {conflicts.length > 0
-              ? `${conflicts.length} 个对象需要选择字段版本。确认前不会写入此设备，也不会推送账号数据。`
+              ? `${conflicts.length} 个对象需要选择保留版本。`
               : '正在检查对象同步冲突。'}
           </p>
         </div>
@@ -220,7 +220,7 @@ export function ObjectSyncConflictPanel({ tripId }: ObjectSyncConflictPanelProps
       ))}
 
       <ConfirmDialog
-        body="将按当前选择写入此设备，并把结果加入同步队列。确认前不会改动本地数据，也不会推送账号数据。"
+        body="将按当前选择写入此设备，并把结果加入同步队列。"
         confirmLabel="确认应用"
         icon={<GitMerge className="size-5" />}
         loading={isApplying}
@@ -230,6 +230,7 @@ export function ObjectSyncConflictPanel({ tripId }: ObjectSyncConflictPanelProps
         onConfirm={() => void handleApplyConfirmed()}
         open={Boolean(applyTarget)}
         testId="object-sync-conflict-confirm-dialog"
+        tone="default"
         title="应用冲突解决方案？"
       />
     </section>

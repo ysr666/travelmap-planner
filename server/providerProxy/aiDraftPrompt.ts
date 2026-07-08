@@ -16,6 +16,7 @@ export type AiDraftProviderInput = {
 export function buildAiTripDraftPrompt(request: ProviderProxyAiTripDraftRequest): string {
   const dates = listPlainDateRangeInclusive(request.startDate, request.endDate)
   const dayCount = dates.length
+  const compactMode = dayCount > 7
 
   const sections: string[] = []
 
@@ -70,10 +71,20 @@ export function buildAiTripDraftPrompt(request: ProviderProxyAiTripDraftRequest)
     + 'Each item has "title", optional "locationName", "address", "lat", "lng", "startTime" (HH:mm), "endTime" (HH:mm), "previousTransportMode", "previousTransportDurationMinutes", "previousTransportNote", "note".',
   )
 
+  if (compactMode) {
+    sections.push(
+      'Long trip compact mode: keep the JSON complete and compact. '
+      + 'Use at most 2 items per day. Omit "tips" unless essential. '
+      + 'Omit "address", "lat", "lng", "previousTransportNote", and "note" unless they are essential. '
+      + 'Keep every item title under 32 characters and every note under 30 Chinese characters. '
+      + 'Do not spend tokens on explanations or repeated context.',
+    )
+  }
+
   sections.push(
     'Constraints: '
     + 'Dates must be YYYY-MM-DD. Times must be HH:mm. '
-    + 'Every day should have a theme title and 1-3 practical daily tips. '
+    + (compactMode ? 'Every day should have a theme title. ' : 'Every day should have a theme title and 1-3 practical daily tips. ')
     + 'Items should include specific place names when possible, a realistic time plan, and transportation suggestions between adjacent items. '
     + 'Do NOT include tickets, routes, cloud fields, sync metadata, provider metadata, API keys, or transit line numbers. '
     + 'Do NOT reorder or optimize the itinerary. '

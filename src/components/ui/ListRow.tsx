@@ -4,11 +4,11 @@ import { ChevronRight } from 'lucide-react'
 export type IconTone = 'sky' | 'emerald' | 'amber' | 'violet' | 'rose'
 
 const iconToneClasses: Record<IconTone, string> = {
-  sky: 'bg-sky-100/80 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
-  emerald: 'bg-emerald-100/80 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
-  amber: 'bg-amber-100/80 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
-  violet: 'bg-violet-100/80 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
-  rose: 'bg-rose-100/80 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
+  sky: 'bg-primary-fixed text-primary dark:bg-primary/15 dark:text-primary-fixed-dim',
+  emerald: 'bg-primary-fixed text-primary dark:bg-primary/15 dark:text-primary-fixed-dim',
+  amber: 'bg-tertiary-container text-tertiary dark:bg-amber-500/15 dark:text-amber-300',
+  violet: 'bg-secondary-container text-secondary dark:bg-secondary/15 dark:text-secondary-fixed-dim',
+  rose: 'bg-secondary-container text-secondary dark:bg-secondary/15 dark:text-secondary-fixed-dim',
 }
 
 type ListRowProps = {
@@ -29,7 +29,7 @@ export function ListRow({ icon, title, detail, meta, onClick, separator = false,
   const content = (
     <>
       {icon ? (
-        <div className={`flex size-10 shrink-0 items-center justify-center rounded-full ${iconClasses}`}>
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconClasses}`}>
           {icon}
         </div>
       ) : null}

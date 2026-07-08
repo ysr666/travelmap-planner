@@ -10,17 +10,17 @@ export function SectionHeader({ eyebrow, title, action, onAction }: SectionHeade
     <div className="flex items-end justify-between gap-4">
       <div>
         {eyebrow ? (
-          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+          <p className="text-xs font-semibold text-on-surface-variant">
             {eyebrow}
           </p>
         ) : null}
-        <h2 className={`font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider ${eyebrow ? 'mt-0.5' : ''}`}>
+        <h2 className={`text-sm font-semibold text-on-surface ${eyebrow ? 'mt-0.5' : ''}`}>
           {title}
         </h2>
       </div>
       {action ? (
         <button
-          className="min-h-11 rounded-xl px-3 py-2 text-sm font-semibold text-sky-600 transition hover:bg-sky-50/80 active:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/10 dark:active:bg-sky-500/10 tm-focus"
+          className="min-h-11 rounded-lg px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary-fixed active:bg-primary-fixed-dim dark:text-primary-fixed-dim dark:hover:bg-primary/10 dark:active:bg-primary/15 tm-focus"
           onClick={onAction}
           type="button"
         >

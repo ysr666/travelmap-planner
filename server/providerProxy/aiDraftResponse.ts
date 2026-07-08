@@ -1,23 +1,13 @@
 import { validateAiTripDraft, type AiTripDraft } from '../../src/lib/ai/aiTripDraft'
+import { extractJsonFromAiText } from './aiJson'
 
 export type AiDraftExtractionResult =
   | { ok: true; draft: AiTripDraft }
   | { ok: false; errorCode: 'invalid_response'; message: string }
 
 export function extractAiDraftJson(rawText: string): unknown | null {
-  const trimmed = rawText.trim()
-  if (!trimmed) return null
-
-  if (trimmed.startsWith('{')) {
-    return tryParseJson(trimmed)
-  }
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-  if (fencedMatch?.[1]) {
-    return tryParseJson(fencedMatch[1].trim())
-  }
-
-  return null
+  const parsed = extractJsonFromAiText(rawText)
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
 }
 
 export function normalizeAiDraftProviderOutput(rawText: string): AiDraftExtractionResult {
@@ -32,12 +22,4 @@ export function normalizeAiDraftProviderOutput(rawText: string): AiDraftExtracti
   }
 
   return { ok: true, draft: validation.draft }
-}
-
-function tryParseJson(text: string): unknown | null {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
 }

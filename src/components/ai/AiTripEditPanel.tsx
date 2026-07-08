@@ -60,8 +60,8 @@ export function AiTripEditPanel({
   const searchIntent = useMemo(() => detectAiTripEditSearchIntent(trimmedCommand), [trimmedCommand])
   const canGenerate = Boolean(providerConfig.configured && trimmedCommand && !isGenerating)
   const sendConfirmBody = pendingSearchRequest
-    ? '将把已脱敏的旅行、日期和行程项信息发送给 AI 服务，可能消耗服务额度。此请求可能需要联网搜索；确认后会先通过旅图服务查询一次，搜索不可用时不会声称已查询实时网页信息。AI 只会返回修改方案，不会直接修改旅行。'
-    : '将把已脱敏的旅行、日期和行程项信息发送给 AI 服务，可能消耗服务额度。AI 只会返回修改方案，不会直接修改旅行。当前不会联网搜索或查询实时网页信息。'
+    ? '将把旅行摘要发送给 AI，并先查询一次相关来源。AI 只返回修改方案，应用前会让你确认。'
+    : '将把旅行摘要发送给 AI。AI 只返回修改方案，应用前会让你确认。'
 
   function prepareSendConfirm() {
     setError(null)
@@ -184,7 +184,7 @@ export function AiTripEditPanel({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-100">AI 修改建议</h3>
           <p className="mt-1 text-xs leading-5 tm-muted">
-            AI 只会生成修改方案，确认前不会改动行程。联网搜索能力将通过旅图服务提供，当前仍不会自动查询网页或实时票价。
+            说出想改什么，旅图先给修改预览。
           </p>
         </div>
       </div>
@@ -300,11 +300,12 @@ export function AiTripEditPanel({
         onConfirm={() => void handleConfirmSend()}
         open={confirmSendOpen}
         testId="ai-trip-edit-send-confirm-dialog"
+        tone="default"
         title="发送给 AI 生成修改方案？"
       />
 
       <ConfirmDialog
-        body="将把这些修改写入当前旅行。不会联网搜索或查询网页，不会生成路线，不会创建票据。确认写入后，登录状态下会自动同步。"
+        body="将把这些修改写入当前旅行。确认写入后，登录状态下会自动同步。"
         cancelLabel="暂不应用"
         confirmLabel="确认应用"
         icon={<Wand2 className="size-5" />}
@@ -315,6 +316,7 @@ export function AiTripEditPanel({
         onConfirm={() => void handleConfirmApply()}
         open={confirmApplyOpen}
         testId="ai-trip-edit-apply-confirm-dialog"
+        tone="default"
         title="应用 AI 修改方案？"
       />
     </Card>

@@ -141,7 +141,7 @@ describe('SmartTripWorkspacePanel', () => {
     expect(document.body.textContent).toContain('智能整理此行程')
     await clickButton('智能整理此行程')
     expect(fetchMock).toHaveBeenCalledTimes(0)
-    expect(document.body.textContent).toContain('预计最多')
+    expect(document.body.textContent).toContain('预计查询')
 
     await clickButton('确认整理')
     expect(document.body.textContent).toContain('正在整理行程预览')

@@ -209,6 +209,6 @@ describe('TripDailyTravelTipCard', () => {
       )
     })
 
-    expect(container?.textContent).toContain('provider proxy')
+    expect(container?.textContent).toContain('服务未连接')
   })
 })

@@ -191,7 +191,7 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('旅行材料输入 · 待确认建议')
+    expect(container?.textContent).toContain('旅行材料')
   })
 
   it('renders empty state when no entries', async () => {
@@ -244,7 +244,7 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('自动 AI 识别')
+    expect(container?.textContent).toContain('自动识别')
   })
 
   it('renders with entries', async () => {
@@ -347,7 +347,7 @@ describe('TravelInboxPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('旅行材料输入 · 待确认建议')
+    expect(container?.textContent).toContain('旅行材料')
   })
 
   it('offers a confirm-only draft for assigned local expense evidence without writing on render', async () => {

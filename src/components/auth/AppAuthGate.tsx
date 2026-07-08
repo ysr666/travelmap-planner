@@ -188,17 +188,19 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
       <AuthSurface>
         <Card className="space-y-4" data-testid="account-data-migration">
           <div className="flex items-start gap-3">
-            <Database className="mt-0.5 size-6 shrink-0 text-primary" />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary">
+              <Database className="size-5" />
+            </span>
             <div>
-              <h1 className="text-xl font-bold text-on-surface">选择这个账号的数据来源</h1>
-              <p className="mt-1 text-sm leading-6 text-on-surface-variant">旧本机数据不会自动归到任何账号，也不会被删除。</p>
+              <h1 className="text-xl font-bold text-on-surface">选择数据来源</h1>
+              <p className="mt-1 text-sm leading-6 text-on-surface-variant">本机数据会保留。</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <DataCount label="本机旅行" value={state.localTrips} />
             <DataCount label="云端旅行" value={state.cloudTrips} />
           </div>
-          <p className="text-xs leading-5 text-on-surface-variant">本机另有 {state.localMaterials} 条日程、票据、账本或资料记录。</p>
+          <p className="text-xs leading-5 text-on-surface-variant">本机还有 {state.localMaterials} 条资料。</p>
           <Button className="w-full" onClick={() => void takeOverLocalData(state.user)}>接管本机数据</Button>
           <Button className="w-full" onClick={() => void restoreCloudOnly(state.user)} variant="secondary">仅恢复云端</Button>
         </Card>
@@ -212,8 +214,10 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
     return (
       <AuthSurface>
         <Card className="space-y-4 text-center">
-          <ShieldCheck className="mx-auto size-8 text-primary" />
-          <h1 className="text-xl font-bold text-on-surface">暂时无法进入旅图</h1>
+          <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-primary-fixed text-primary">
+            <ShieldCheck className="size-6" />
+          </span>
+          <h1 className="text-xl font-bold text-on-surface">无法进入旅图</h1>
           <p className="text-sm leading-6 text-on-surface-variant">{state.message}</p>
           <Button className="w-full" onClick={() => void initialize()} variant="secondary">重试</Button>
         </Card>
@@ -224,22 +228,25 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
   return (
     <AuthSurface>
       <div className="space-y-6">
-        <div className="text-center">
-          <MapPinned className="mx-auto size-10 text-primary" />
-          <h1 className="mt-3 text-2xl font-bold text-on-surface">登录旅图</h1>
-          <p className="mt-2 text-sm leading-6 text-on-surface-variant">旅行数据跟随账号同步。验证一次后，本设备可离线使用 30 天。</p>
+        <div>
+          <span className="flex size-12 items-center justify-center rounded-lg bg-primary text-on-primary shadow-[0_8px_18px_var(--color-primary-shadow)]">
+            <MapPinned className="size-6" />
+          </span>
+          <p className="mt-5 text-sm font-semibold text-primary">账号同步</p>
+          <h1 className="mt-1 text-2xl font-bold text-on-surface">登录旅图</h1>
+          <p className="mt-2 text-sm leading-6 text-on-surface-variant">邮箱验证后进入，之后可离线使用。</p>
         </div>
         <Card className="space-y-4" data-testid="app-auth-login">
           {state.error ? <AuthMessage tone="error">{state.error}</AuthMessage> : null}
           {state.message ? <AuthMessage>{state.message}</AuthMessage> : null}
           <label className="block">
             <span className="text-sm font-semibold text-on-surface">邮箱</span>
-            <input aria-label="登录邮箱" className="mt-2 h-12 w-full rounded-xl border border-outline-variant/40 bg-surface px-3 text-on-surface outline-none focus:border-primary" inputMode="email" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
+            <input aria-label="登录邮箱" className="mt-2 h-12 w-full rounded-lg border border-outline-variant/70 bg-surface px-3 text-on-surface outline-none transition focus:border-primary focus:ring-4 focus:ring-primary-fixed" inputMode="email" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
           </label>
           <Button className="w-full" icon={<Mail className="size-4" />} loading={busy} onClick={() => void sendOtp()}>发送验证码</Button>
           <label className="block">
             <span className="text-sm font-semibold text-on-surface">验证码</span>
-            <input aria-label="登录验证码" className="mt-2 h-12 w-full rounded-xl border border-outline-variant/40 bg-surface px-3 text-on-surface outline-none focus:border-primary" inputMode="numeric" onChange={(event) => setOtp(event.target.value)} type="text" value={otp} />
+            <input aria-label="登录验证码" className="mt-2 h-12 w-full rounded-lg border border-outline-variant/70 bg-surface px-3 text-on-surface outline-none transition focus:border-primary focus:ring-4 focus:ring-primary-fixed" inputMode="numeric" onChange={(event) => setOtp(event.target.value)} type="text" value={otp} />
           </label>
           <Button className="w-full" icon={<KeyRound className="size-4" />} loading={busy} onClick={() => void verifyOtp()} variant="secondary">验证并进入</Button>
         </Card>
@@ -257,9 +264,9 @@ function AuthStatus({ label }: { label: string }) {
 }
 
 function DataCount({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-xl bg-surface-container-low p-3"><p className="text-xs text-on-surface-variant">{label}</p><p className="mt-1 text-xl font-bold text-on-surface">{value}</p></div>
+  return <div className="rounded-lg bg-surface-container-high p-3"><p className="text-xs text-on-surface-variant">{label}</p><p className="mt-1 text-xl font-bold text-on-surface">{value}</p></div>
 }
 
 function AuthMessage({ children, tone = 'info' }: { children: ReactNode; tone?: 'error' | 'info' }) {
-  return <p className={`rounded-xl px-3 py-2 text-sm leading-6 ${tone === 'error' ? 'bg-error-container text-on-error-container' : 'bg-primary-container text-on-primary-container'}`}>{children}</p>
+  return <p className={`rounded-lg px-3 py-2 text-sm leading-6 ${tone === 'error' ? 'bg-error-container text-on-error-container' : 'bg-primary-fixed text-primary'}`}>{children}</p>
 }

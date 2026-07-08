@@ -40,9 +40,6 @@ import {
   updateTravelInboxPreviewRecord,
 } from '../../lib/ai/travelInbox'
 import {
-  PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
-} from '../../lib/ai/providerProxyContract'
-import {
   fetchProviderProxyExistingTripImport,
   getProviderProxyConfig,
   ProviderProxyClientError,
@@ -333,7 +330,7 @@ export function TravelInboxPanel({
       return
     }
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setIsRecognizing(true)
@@ -626,14 +623,14 @@ export function TravelInboxPanel({
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Inbox className="size-4" />
             </div>
-            <h3 className="text-base font-semibold text-on-surface">旅行材料输入 · 待确认建议</h3>
+          <h3 className="text-base font-semibold text-on-surface">旅行材料</h3>
           </div>
           <p className="mt-1 text-sm leading-6 tm-muted">
-            粘贴邮件、PDF、截图或票据，本地提取/OCR 后自动整理成行程点、票据、备注和绑定建议。
+            粘贴或上传订单，旅图会整理成可确认的建议。
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium tm-muted">
-          {providerConfig.configured ? 'provider proxy 已配置' : 'provider proxy 未配置'}
+          {providerConfig.configured ? '可识别' : '服务未连接'}
         </span>
       </div>
 
@@ -646,8 +643,8 @@ export function TravelInboxPanel({
             type="checkbox"
           />
           <span className="min-w-0">
-            <span className="block font-semibold">提取后自动 AI 识别</span>
-            <span className="mt-0.5 block text-xs leading-5 tm-muted">默认关闭。开启后只会发送提取文本，不上传原始文件。</span>
+            <span className="block font-semibold">自动识别</span>
+            <span className="mt-0.5 block text-xs leading-5 tm-muted">只发送提取文本，写入前仍会确认。</span>
           </span>
         </label>
       </div>
@@ -828,7 +825,7 @@ export function TravelInboxPanel({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-on-surface">整理建议</p>
-              <p className="text-xs tm-muted">最终确认前不会写入旅行。已选择 {selectedCount} 项。</p>
+              <p className="text-xs tm-muted">已选择 {selectedCount} 项，应用后写入旅行。</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -915,23 +912,25 @@ export function TravelInboxPanel({
       ) : null}
 
       <ConfirmDialog
-        body={`本地提取/OCR 不上传文件。确认后会发送 ${readyEntries.length} 段提取文本给 provider proxy 的 ${PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION}，最多 1 次 AI 请求；确认应用前不会写入旅行。`}
+        body={`将发送 ${readyEntries.length} 段提取文本给 AI 识别。原始文件不会上传，结果会先给你预览。`}
         confirmLabel="确认识别"
         loading={isRecognizing}
         onCancel={() => setConfirmRecognizeOpen(false)}
         onConfirm={() => void handleConfirmRecognize()}
         open={confirmRecognizeOpen}
         testId="travel-inbox-recognize-confirm"
+        tone="default"
         title="发送收件箱文本给 AI 识别？"
       />
       <ConfirmDialog
-        body={`将应用 ${selectedCount} 项已勾选建议，创建/更新当前旅行的日期、行程点、票据和备注。写入后会进入自动同步队列；收件箱原文和源文件缓存会从待处理区清理。`}
+        body={`将应用 ${selectedCount} 项已勾选建议，更新日期、行程点、票据和备注。写入后会自动同步。`}
         confirmLabel="确认应用"
         loading={isApplying}
         onCancel={() => setConfirmApplyOpen(false)}
         onConfirm={() => void handleApply()}
         open={confirmApplyOpen}
         testId="travel-inbox-apply-confirm"
+        tone="default"
         title="应用收件箱预览？"
       />
       <ConfirmDialog
@@ -945,6 +944,7 @@ export function TravelInboxPanel({
         onConfirm={() => void confirmExpenseDraft()}
         open={Boolean(pendingExpenseDraft)}
         testId="travel-inbox-expense-confirm"
+        tone="default"
         title="从旅行材料生成费用草稿？"
       />
     </Card>

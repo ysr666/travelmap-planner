@@ -10,9 +10,9 @@ type CardProps = HTMLAttributes<HTMLDivElement> & {
 }
 
 const variantClasses: Record<CardVariant, string> = {
-  default: 'rounded-xl bg-surface-container border border-outline-variant/30 shadow-sm',
-  grouped: 'rounded-xl bg-surface-container border border-outline-variant/30',
-  flat: 'rounded-xl bg-surface-container border border-transparent',
+  default: 'rounded-lg border border-outline-variant/70 bg-surface-container shadow-[0_10px_24px_rgba(20,37,32,0.05)]',
+  grouped: 'rounded-lg border border-outline-variant/70 bg-surface-container',
+  flat: 'rounded-lg border border-transparent bg-surface-container',
 }
 
 const paddingClasses: Record<CardPadding, string> = {

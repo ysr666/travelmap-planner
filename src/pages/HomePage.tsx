@@ -19,7 +19,6 @@ import {
   listTicketsByTrip,
   listTrips,
 } from '../db'
-import { AppVersion } from '../components/AppVersion'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -114,16 +113,16 @@ export function HomePage() {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-section-gap px-4 pb-36 pt-24">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pb-40 pt-24">
         <header className="flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">旅图</h2>
-            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">你的旅行现场控制台</p>
-            <AppVersion className="mt-1 text-left text-on-surface-variant" suffix="本地优先" />
+            <p className="text-sm font-semibold text-primary">旅图管家</p>
+            <h2 className="mt-1 font-headline-lg-mobile text-headline-lg-mobile text-on-surface">随身管家</h2>
+            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">旅行、票据和提醒都在这里。</p>
           </div>
           <button
             aria-label="设置"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95 tm-focus"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant/70 bg-surface-container text-on-surface-variant shadow-[0_1px_2px_rgba(20,37,32,0.04)] transition hover:text-primary active:scale-95 tm-focus"
             onClick={() => navigateTo('settings')}
             title="设置"
             type="button"
@@ -193,10 +192,10 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
   const { focusDay, nextItem, stats, trip } = overview
   return (
     <section
-      className="overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container"
+      className="overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container shadow-[0_14px_32px_rgba(20,37,32,0.08)]"
       data-testid="home-primary-trip"
     >
-      <div className="space-y-4 p-5" data-testid="trip-card">
+      <div className="space-y-4 p-4" data-testid="trip-card">
         <div className="flex items-start justify-between gap-3">
           <button
             className="min-w-0 flex-1 text-left active:opacity-80 tm-focus"
@@ -215,7 +214,7 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
           </button>
           <button
             aria-label={`删除${trip.title}`}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant/60 bg-surface text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
             onClick={() => onDelete(trip)}
             title="删除旅行"
             type="button"
@@ -224,25 +223,25 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
           </button>
         </div>
 
-        <div className="grid grid-cols-3 divide-x divide-outline-variant/30 border-y border-outline-variant/30 py-3">
+        <div className="grid grid-cols-3 gap-2">
           <TripStat label="日程" value={`${stats.dayCount} 天`} />
           <TripStat label="行程点" value={`${stats.itemCount} 个`} />
           <TripStat label="票据" value={`${stats.ticketCount} 张`} />
         </div>
 
-        <div className="flex items-start gap-3" data-testid="home-primary-next-step">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
+        <div className="flex items-start gap-3 rounded-lg bg-primary p-4 text-on-primary" data-testid="home-primary-next-step">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white">
             <Clock3 className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-on-surface-variant">
+            <p className="text-xs font-semibold text-white/75">
               {focusDay ? formatShortDateWithWeekday(focusDay.date) : '旅行准备'}
             </p>
-            <p className="mt-0.5 break-words text-sm font-semibold text-on-surface">
+            <p className="mt-0.5 break-words text-sm font-semibold text-white">
               {nextItem ? nextItem.title : overview.preparationLabel}
             </p>
             {nextItem ? (
-              <p className="mt-0.5 text-xs text-on-surface-variant">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
+              <p className="mt-0.5 text-xs text-white/75">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
             ) : null}
           </div>
         </div>
@@ -269,7 +268,7 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
 
 function TripStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-2 text-center">
+    <div className="rounded-lg bg-surface-container-high px-2 py-3 text-center">
       <p className="font-headline-md text-headline-md text-on-surface">{value}</p>
       <p className="mt-0.5 text-[11px] font-semibold text-on-surface-variant">{label}</p>
     </div>
@@ -287,8 +286,8 @@ function TripSection({
 }) {
   return (
     <section className="space-y-3">
-      <h3 className="font-headline-md text-headline-md text-on-surface">{title}</h3>
-      <div className="overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container">
+      <h3 className="text-base font-semibold text-on-surface">{title}</h3>
+      <div className="overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container">
         {overviews.map((overview, index) => (
           <TripPortfolioRow
             key={overview.trip.id}
@@ -313,15 +312,15 @@ function TripPortfolioRow({
 }) {
   const { trip } = overview
   return (
-    <div className={`flex items-center gap-2 px-2 ${separator ? 'border-b border-outline-variant/30' : ''}`}>
+    <div className={`flex items-center gap-2 px-2 ${separator ? 'border-b border-outline-variant/70' : ''}`}>
       <button
         aria-label={`打开${trip.title}`}
-        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition hover:bg-surface-container-high/50 active:scale-[0.99] tm-focus"
+        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition hover:bg-surface-container-high active:scale-[0.99] tm-focus"
         data-testid="trip-card"
         onClick={() => navigateTo('trip', { tripId: trip.id })}
         type="button"
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-variant text-lg">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-lg">
           {getTripEmoji(trip)}
         </span>
         <span className="min-w-0 flex-1">
@@ -348,12 +347,12 @@ function TripPortfolioRow({
 function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
   return (
     <section className="space-y-3">
-      <h3 className="font-headline-md text-headline-md text-on-surface">开始</h3>
+      <h3 className="text-base font-semibold text-on-surface">常用</h3>
       <div className="grid grid-cols-2 gap-2">
         <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => navigateTo('trip/new')}>
           新建旅行
         </Button>
-        <Button className="w-full" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
+        <Button className="w-full border-secondary/30 bg-secondary-container text-secondary" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
           AI 生成行程
         </Button>
         <Button
@@ -365,7 +364,7 @@ function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
           旅行资料
         </Button>
         <Button className="w-full" icon={<Download className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
-          导入/恢复
+          导入恢复
         </Button>
       </div>
     </section>
@@ -374,7 +373,7 @@ function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
 
 function HomeLoading() {
   return (
-    <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container p-5">
+    <div className="space-y-3 rounded-lg border border-outline-variant/70 bg-surface-container p-5">
       <SkeletonLine className="w-1/3" />
       <SkeletonLine className="w-2/3" />
       <SkeletonLine className="w-full" />
@@ -384,8 +383,8 @@ function HomeLoading() {
 }
 
 function getStatusClassName(status: HomeTripOverview['status']) {
-  const base = 'inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-semibold'
-  if (status === 'ongoing') return `${base} bg-primary-container text-on-primary-container`
+  const base = 'inline-flex min-h-6 items-center rounded-lg px-2.5 text-xs font-semibold'
+  if (status === 'ongoing') return `${base} bg-primary text-on-primary`
   if (status === 'completed') return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300`
   return `${base} bg-surface-container-high text-on-surface-variant`
 }

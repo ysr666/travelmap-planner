@@ -48,23 +48,23 @@ export function AppShell({ activeRoute, children, lastTripId, title }: AppShellP
   const showGlobalAiCommand = shouldShowGlobalAiCommand(activeRoute)
 
   return (
-    <div className="app-viewport relative mx-auto flex w-full max-w-[600px] flex-col overflow-hidden bg-background">
+    <div className="app-viewport relative mx-auto flex w-full max-w-[600px] flex-col overflow-hidden bg-background text-on-surface">
       {showTopAppBar ? (
-        <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center gap-3 border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl">
+        <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center gap-3 border-b-[0.5px] border-outline-variant/70 bg-surface/95 px-4 backdrop-blur-xl">
           <button
             aria-label="返回首页"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high/50 active:scale-95"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
             onClick={() => navigateTo('home')}
             type="button"
           >
             <Map className="size-5" />
           </button>
-          <h1 className="min-w-0 flex-1 truncate text-center font-headline-md text-headline-md font-bold text-on-surface">
+          <h1 className="min-w-0 flex-1 truncate text-center text-lg font-semibold text-on-surface">
             {title || '旅图'}
           </h1>
           <button
             aria-label="设置"
-            className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-outline-variant/30 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95"
+            className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95 tm-focus"
             onClick={() => navigateTo('settings')}
             type="button"
           >
@@ -183,15 +183,15 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
   ]
 
   return (
-    <nav className={`rounded-xl bg-surface-container border border-outline-variant/30 p-1.5 ${className}`}>
+    <nav className={`rounded-lg border border-outline-variant/70 bg-surface-container p-1.5 ${className}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (
             <button
-              className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition active:scale-[0.98] ${
+              className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition active:scale-[0.98] tm-focus ${
                 item.active
-                  ? 'bg-primary-container text-on-primary-container shadow-sm'
+                  ? 'bg-primary text-on-primary shadow-sm'
                   : 'text-on-surface-variant active:bg-surface-container-high/50'
               }`}
               key={item.id}

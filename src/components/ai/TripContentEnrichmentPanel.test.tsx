@@ -55,7 +55,7 @@ describe('TripContentEnrichmentPanel', () => {
 
     await clickButton('补充景点内容')
     expect(fetchMock).toHaveBeenCalledTimes(0)
-    expect(document.body.textContent).toContain('预计最多')
+    expect(document.body.textContent).toContain('预计查询')
 
     await clickButton('确认补充')
     await waitForText('内容预览')
@@ -127,7 +127,7 @@ describe('TripContentEnrichmentPanel', () => {
 
     await clickButton('刷新来源')
     expect(fetchMock).toHaveBeenCalledTimes(0)
-    expect(document.body.textContent).toContain('0 次 AI')
+    expect(document.body.textContent).toContain('结果会先给你预览')
     await clickButton('暂不刷新')
     expect(fetchMock).toHaveBeenCalledTimes(0)
 

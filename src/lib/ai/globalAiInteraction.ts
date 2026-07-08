@@ -162,14 +162,14 @@ export async function resolveGlobalAiInteraction(
     const fallbackAnswer = buildLocalAssistantFallback(command, context)
     return {
       answer: fallbackAnswer,
-      caveats: ['这是本地降级回答；需要实时信息时必须先确认来源。'],
+      caveats: ['需要实时信息时，我会先让你确认来源。'],
       fallbackAnswer,
       kind: 'assistant_answer',
       mode: 'assistant_answer',
       providerRequest,
       source: 'fallback',
       sourceCards: context.sourceCards,
-      title: context.trip ? '旅行助手回答' : '全局助手回答',
+      title: '旅图助手',
     }
   }
 
@@ -196,7 +196,7 @@ export function buildAssistantAnswerFallbackAfterError(
   return {
     ...draft,
     answer: draft.fallbackAnswer,
-    caveats: ['AI 助手问答暂不可用，已改用本地脱敏摘要回答。', ...draft.caveats].slice(0, 4),
+    caveats: ['我先根据当前资料回答。', ...draft.caveats].slice(0, 2),
     source: 'fallback',
   }
 }
@@ -618,12 +618,12 @@ function buildLocalAssistantFallback(command: string, context: GlobalAiInteracti
       : context.currentDay
         ? `当前正在看「${context.currentDay.title ?? context.currentDay.date}」。`
         : `当前正在看「${context.trip.title}」。`
-    return `${current} 我能基于本地脱敏摘要回答：${summaries.slice(1, 5).map((summary) => `${summary.label} ${summary.value}`).join('；')}。如果你要我实际修改，请使用明确的修改指令并确认预览。`
+    return `${current} 我看到：${summaries.slice(1, 4).map((summary) => `${summary.label} ${summary.value}`).join('；')}。要修改行程，直接说想怎么改。`
   }
   if (command.includes('新建') || command.includes('生成')) {
-    return '可以输入“新建行程”打开 AI 行程草稿；生成后仍需要预览并确认导入。'
+    return '打开 AI 生成行程后，我会先生成草案，再让你确认导入。'
   }
-  return `我现在在「${context.scopeLabel}」上下文，只会使用账户级脱敏摘要：${summaries.slice(1, 5).map((summary) => `${summary.label} ${summary.value}`).join('；')}。`
+  return `我现在在「${context.scopeLabel}」。当前资料：${summaries.slice(1, 4).map((summary) => `${summary.label} ${summary.value}`).join('；')}。`
 }
 
 function formatUpcomingTrips(trips: GlobalAiAccountSummary['upcomingTrips']) {

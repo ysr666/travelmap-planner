@@ -125,7 +125,7 @@ export function SmartTripWorkspacePanel({
     setError(null)
     setSuccessMessage(null)
     if (!providerConfig.proxyUrl) {
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
     setConfirmSendOpen(true)
@@ -134,7 +134,7 @@ export function SmartTripWorkspacePanel({
   async function handleConfirmSend() {
     if (!providerConfig.proxyUrl) {
       setConfirmSendOpen(false)
-      setError('当前未配置 provider proxy。')
+      setError('旅图服务未连接。')
       return
     }
 
@@ -352,7 +352,7 @@ export function SmartTripWorkspacePanel({
           智能整理此行程
         </Button>
         {!providerConfig.configured ? (
-          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">当前未配置 provider proxy</span>
+          <span className="text-xs font-medium text-amber-800 dark:text-amber-200">服务未连接</span>
         ) : null}
       </div>
 
@@ -1019,9 +1019,8 @@ function buildSendConfirmBody({
   searchCount: number
 }) {
   return [
-    `将通过 provider proxy 生成整理预览，预计最多 ${estimatedRequestCount} 次请求。`,
-    `地点校准 ${placeCount} 次，路线顺序 ${routeDayCount} 次，开放时间/票价搜索 ${searchCount} 次。`,
-    '确认后只生成可勾选 diff，不会直接写入旅行；不会创建票据或清除路线缓存。',
+    `将整理地点、路线顺序、开放时间和票价。预计查询 ${estimatedRequestCount} 次。`,
+    `地点 ${placeCount}、路线 ${routeDayCount}、来源 ${searchCount}。结果会先给你预览。`,
   ].join('\n')
 }
 
@@ -1034,9 +1033,8 @@ function buildStageConfirmBody({
 }) {
   const label = type ? getSmartTripWorkspaceDiffCategoryLabel(type) : '该类别'
   return [
-    `将重新生成${label}预览，预计最多 ${requestCount} 次 provider proxy 请求。`,
-    '确认前不会发送请求；成功后只替换该类别建议，其他类别会保留。',
-    '如果该类别 provider 全部失败，将保留上一版建议并显示警告。',
+    `将重新生成${label}预览，预计查询 ${requestCount} 次。`,
+    '成功后只替换这一类建议，其他内容保留。',
   ].join('\n')
 }
 

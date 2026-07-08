@@ -157,7 +157,7 @@ export async function resolveGlobalAiCommand(command: string, context: GlobalAiC
       actionLabel: '打开 AI 生成',
       intent,
       kind: 'navigation',
-      message: '我会带你到 AI 行程草稿页，生成后仍需预览并确认导入。',
+      message: '我会打开 AI 行程草稿页，先生成草案再确认导入。',
       route: 'ai-draft',
       title: '生成新旅行',
     }
@@ -513,6 +513,7 @@ function parseReplanIntent(command: string, normalized: string): Extract<GlobalA
 
 function isNewTripCommand(normalized: string) {
   return containsAny(normalized, ['生成新行程', '新建行程', '新旅行', 'ai 生成行程', 'ai生成行程']) ||
+    (containsAny(normalized, ['新建', '创建', '生成']) && containsAny(normalized, ['行程', '旅行'])) ||
     /\bnew\s+trip\b/.test(normalized)
 }
 

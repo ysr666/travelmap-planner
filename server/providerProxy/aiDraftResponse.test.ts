@@ -81,6 +81,24 @@ describe('normalizeAiDraftProviderOutput', () => {
     }
   })
 
+  it('extracts JSON from provider text wrappers', () => {
+    const result = normalizeAiDraftProviderOutput(`
+Here is the itinerary JSON:
+{
+  "title": "东京之旅",
+  "destination": "东京",
+  "startDate": "2025-04-01",
+  "endDate": "2025-04-01",
+  "days": [{ "date": "2025-04-01", "items": [{ "title": "浅草寺" }] }]
+}
+`)
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.draft.days).toHaveLength(1)
+    }
+  })
+
   it('returns invalid_response for JSON that fails validateAiTripDraft', () => {
     const result = normalizeAiDraftProviderOutput('{"title": ""}')
     expect(result.ok).toBe(false)

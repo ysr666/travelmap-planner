@@ -847,6 +847,7 @@ export function TripWorkspacePage() {
         onConfirm={() => void handleConfirmGenerateRoutes()}
         open={routeGenerationConfirmOpen}
         testId="route-generation-confirm-dialog"
+        tone="default"
         title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
       />
     </>
@@ -901,7 +902,7 @@ function TripHomeFocusPanel({
       <Card className="space-y-3" data-testid="trip-home-focus" variant="grouped">
         <div className="flex items-center gap-2">
           <CalendarDays className="size-4 text-primary" />
-          <h3 className="font-headline-md text-headline-md text-on-surface">下一步</h3>
+          <h3 className="text-base font-semibold text-on-surface">下一步</h3>
         </div>
         <p className="font-body-md text-body-md text-on-surface-variant">生成每日行程后开始安排地点。</p>
       </Card>
@@ -914,15 +915,15 @@ function TripHomeFocusPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-primary">
             <CalendarDays className="size-4" />
-            <span className="font-label-sm text-label-sm">{focus.label}</span>
+            <span className="text-xs font-semibold">{focus.label}</span>
           </div>
-          <h3 className="mt-1 font-headline-md text-headline-md text-on-surface">{focus.day.title || `第 ${focus.dayIndex + 1} 天`}</h3>
+          <h3 className="mt-1 text-base font-semibold text-on-surface">{focus.day.title || `第 ${focus.dayIndex + 1} 天`}</h3>
           <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">
             {formatDate(focus.day.date)} · {focus.items.length} 个行程点
           </p>
         </div>
         <button
-          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-high px-3 text-xs font-semibold text-primary transition hover:bg-surface-container-highest active:scale-[0.98]"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-outline-variant/70 bg-surface-container-high px-3 text-xs font-semibold text-primary transition hover:bg-surface-container-highest active:scale-[0.98] tm-focus"
           onClick={() => onOpenDay(focus.day, 'schedule')}
           type="button"
         >
@@ -933,27 +934,27 @@ function TripHomeFocusPanel({
 
       {focus.nextItem ? (
         <button
-          className="flex w-full items-start gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-high p-3 text-left transition hover:bg-surface-container-highest active:scale-[0.99]"
+          className="flex w-full items-start gap-3 rounded-lg bg-primary p-4 text-left text-on-primary transition active:scale-[0.99] tm-focus"
           data-testid="trip-home-next-item"
           onClick={() => onOpenItem(focus.nextItem as ItineraryItem)}
           type="button"
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white">
             <Clock3 className="size-5" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold text-on-surface">{focus.nextItem.title}</span>
-            <span className="mt-1 block text-sm text-on-surface-variant">
+            <span className="block truncate font-semibold text-white">{focus.nextItem.title}</span>
+            <span className="mt-1 block text-sm text-white/75">
               {describeItemTime(focus.nextItem)}
               {focus.nextItem.locationName ? ` · ${focus.nextItem.locationName}` : ''}
             </span>
           </span>
-          <ChevronRight className="mt-2 size-4 shrink-0 text-outline" />
+          <ChevronRight className="mt-2 size-4 shrink-0 text-white/70" />
         </button>
       ) : (
-        <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-high px-3 py-4">
+        <div className="rounded-lg border border-dashed border-outline-variant/70 bg-surface-container-high px-3 py-4">
           <p className="text-sm font-medium text-on-surface">这一天还没有行程点。</p>
-          <p className="mt-1 text-sm text-on-surface-variant">先添加地点，再补交通、票据和路线预览。</p>
+          <p className="mt-1 text-sm text-on-surface-variant">先加一个地点。</p>
         </div>
       )}
 
@@ -998,19 +999,19 @@ function TripHomeQuickActions({
   return (
     <Card className="space-y-3" data-testid="trip-home-quick-actions" variant="grouped">
       <div>
-        <h3 className="font-headline-md text-headline-md text-on-surface">旅行工具</h3>
-        <p className="mt-1 text-sm text-on-surface-variant">{mappedItemCount}/{totalItemCount} 个行程点有地图坐标</p>
+        <h3 className="text-base font-semibold text-on-surface">工具</h3>
+        <p className="mt-1 text-sm text-on-surface-variant">地图坐标 {mappedItemCount}/{totalItemCount}</p>
       </div>
-      <div className="divide-y divide-outline-variant/30 overflow-hidden rounded-xl border border-outline-variant/30">
+      <div className="divide-y divide-outline-variant/70 overflow-hidden rounded-lg border border-outline-variant/70">
         <TripHomeActionRow
-          detail="粘贴、上传或整理本次旅行材料"
+          detail="粘贴、上传、整理"
           icon={<Inbox className="size-4" />}
           label="添加材料"
           onClick={onOpenTravelInbox}
           testId="trip-action-travel-inbox"
         />
         <TripHomeActionRow
-          detail="连接器与账号材料"
+          detail="账号材料"
           icon={<Inbox className="size-4" />}
           label="账号收件箱"
           onClick={onOpenAccountInbox}
@@ -1031,7 +1032,7 @@ function TripHomeQuickActions({
           testId="trip-action-route-preparation"
         />
         <TripHomeActionRow
-          detail="预算、费用和结算"
+          detail="费用和结算"
           icon={<WalletCards className="size-4" />}
           label="旅行账本"
           onClick={onOpenLedger}
@@ -1057,12 +1058,12 @@ function TripHomeActionRow({
 }) {
   return (
     <button
-      className="flex min-h-14 w-full items-center gap-3 bg-surface-container px-3 text-left transition hover:bg-surface-container-high active:scale-[0.99]"
+      className="flex min-h-14 w-full items-center gap-3 bg-surface-container px-3 text-left transition hover:bg-surface-container-high active:scale-[0.99] tm-focus"
       data-testid={testId}
       onClick={onClick}
       type="button"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-container/70 text-primary">{icon}</span>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold text-on-surface">{label}</span>
         <span className="mt-0.5 block truncate text-xs text-on-surface-variant">{detail}</span>
@@ -1089,7 +1090,7 @@ function FocusDayTimelinePreview({
     <section className="flex flex-col gap-stack-gap" data-testid="trip-home-focus-timeline">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-headline-md text-headline-md text-on-surface">焦点日安排</h3>
+          <h3 className="text-base font-semibold text-on-surface">今天安排</h3>
           <p className="mt-1 text-sm text-on-surface-variant">
             第 {focus.dayIndex + 1} 天 · {formatDate(focus.day.date)}
           </p>
@@ -1102,10 +1103,10 @@ function FocusDayTimelinePreview({
       {focus.items.length === 0 ? (
         <Card className="space-y-2" variant="grouped">
           <p className="text-sm font-semibold text-on-surface">暂无行程点</p>
-          <p className="text-sm leading-6 text-on-surface-variant">添加第一个地点后，这里会按时间线展示当天安排。</p>
+          <p className="text-sm leading-6 text-on-surface-variant">添加地点后会显示时间线。</p>
         </Card>
       ) : (
-        <div className="relative overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container">
+        <div className="relative overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container">
           <div className="absolute bottom-5 left-[2.15rem] top-5 w-px bg-outline-variant/40" />
           {focus.items.map((item, index) => {
             const isLast = index === focus.items.length - 1
@@ -1133,7 +1134,7 @@ function FocusDayTimelinePreview({
                       </span>
                     </span>
                     {item.ticketIds.length > 0 ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-container/70 px-2 py-1 text-xs font-semibold text-primary">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary-fixed px-2 py-1 text-xs font-semibold text-primary">
                         <Ticket className="size-3" />
                         {item.ticketIds.length}
                       </span>
@@ -1390,5 +1391,5 @@ function describeRouteGenerationResult(result: RouteGenerationBatchResult) {
 
 function buildRouteGenerationConfirmBody(preparation: TripRoutePreparation | null) {
   const count = preparation?.targetDayIds.length ?? 0
-  return `将调用路线服务生成路线预览，可能消耗 API 次数。只为有足够坐标的日期生成（共 ${count} 天），不会自动调整行程顺序，不会生成公交/地铁线路号。`
+  return `将为 ${count} 天生成路线预览。只用已有坐标，不会自动调整行程顺序。`
 }

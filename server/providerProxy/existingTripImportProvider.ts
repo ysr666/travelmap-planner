@@ -11,6 +11,7 @@ import type {
 } from '../../src/lib/ai/existingTripImport'
 import { extractJsonFromAiText } from './aiJson'
 import type { AiBackendReasoningMode } from './aiReasoningPolicy'
+import { EXISTING_TRIP_IMPORT_MAX_OUTPUT_TOKENS_HINT } from './aiDraftLimits'
 
 export type ExistingTripImportProviderErrorCode = Extract<ProviderProxyErrorCode, 'provider_unavailable' | 'provider_error' | 'network_error' | 'unsupported' | 'invalid_response' | 'quota_exceeded'>
 
@@ -51,13 +52,15 @@ export function buildExistingTripImportProviderInput(
   requestId?: string,
 ): ExistingTripImportProviderInput {
   return {
-    maxOutputTokens: 3000,
+    maxOutputTokens: EXISTING_TRIP_IMPORT_MAX_OUTPUT_TOKENS_HINT,
     prompt: [
       '你是 TripMap 的现有旅行导入识别助手，只输出 JSON。',
       '你只能基于下方 extracted sources 识别日期、时间、地点、交通、票据和备注；不要编造输入文本之外的票据、地点、开放时间或价格。',
       '当前旅行摘要只用于匹配现有日期/行程点，不能输出 route/cache/cloud/ticket blob/provider metadata 操作。',
       '若能高置信合并到现有行程点，填写 targetItemId；低置信不要强行合并。',
       '票据候选只能来自明确订单、门票、航班、火车、酒店确认、二维码/凭证等文本；sourceFileId 必须引用来源 id。',
+      '多材料或长行程时保持输出紧凑：每天最多 3 个核心行程点，每个 reason 不超过 20 个中文字符，note 仅保留会影响执行的提醒。',
+      '必须返回完整可解析 JSON；如果内容太多，优先保留日期、固定时间、酒店、交通、门票，省略低置信 notes。',
       '输出中文 reason，短句。不要输出 Markdown、解释文字或代码块。',
       '输出 schema：{"days":[{"candidateId":"d1","date":"YYYY-MM-DD","title":"...","confidence":"medium","reason":"...","sourceIds":["..."]}],"items":[{"candidateId":"i1","date":"YYYY-MM-DD","title":"...","startTime":"HH:mm","endTime":"HH:mm","locationName":"...","address":"...","transportMode":"walk","previousTransportMode":"transit","previousTransportDurationMinutes":30,"previousTransportNote":"...","note":"...","targetItemId":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"tickets":[{"candidateId":"t1","title":"...","date":"YYYY-MM-DD","itemTitle":"...","targetItemId":"...","sourceFileId":"...","fileName":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"notes":[{"candidateId":"n1","text":"...","date":"YYYY-MM-DD","confidence":"medium","reason":"...","sourceIds":["..."]}],"warnings":["..."]}',
       `requestId: ${requestId ?? request.requestId ?? 'unknown'}`,

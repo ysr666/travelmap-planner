@@ -59,7 +59,7 @@ export function BottomSheet({
       }}
     >
       <div
-        className="flex w-full flex-col overflow-hidden rounded-3xl tm-surface"
+        className="flex w-full flex-col overflow-hidden rounded-lg tm-surface"
         style={{ maxHeight }}
       >
         {showHandle ? (
@@ -75,7 +75,7 @@ export function BottomSheet({
             </h3>
             <button
               aria-label="关闭"
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
               ref={closeButtonRef}
               type="button"
@@ -87,7 +87,7 @@ export function BottomSheet({
           <div className="shrink-0 px-4 pb-2 text-right">
             <button
               aria-label="关闭"
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-surface-container/80 text-on-surface-variant transition hover:bg-surface-container-high/60 dark:bg-surface-container-highest/60 dark:text-outline dark:hover:bg-surface-container-high/50 tm-focus"
               onClick={onClose}
               ref={closeButtonRef}
               type="button"

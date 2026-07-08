@@ -1241,7 +1241,7 @@ export function AiDraftPage() {
           填写旅行偏好，生成可预览、可修改、可确认导入的完整行程草案
         </p>
         <p className="text-xs tm-muted">
-          生成草案不会写入本地旅行；确认导入后才会创建行程
+          先生成草案，确认后创建行程
         </p>
       </div>
 
@@ -1987,13 +1987,14 @@ export function AiDraftPage() {
       <ConfirmDialog
         open={showConfirm}
         title="最终导入检查"
-        body={`请确认即将创建的本地旅行。\n确认前不会写入本地旅行，也不会调用路线、地点、搜索、AI、票据或云端服务。`}
+        body="将创建一个新旅行。路线、票据和资料可稍后继续补充。"
         confirmLabel="确认导入"
         cancelLabel="取消"
         loading={importing}
         onCancel={() => setShowConfirm(false)}
         onConfirm={handleConfirmImport}
         testId="ai-draft-import-confirm-dialog"
+        tone="default"
       >
         {draftImportCheck ? <AiDraftImportCheckPanel check={draftImportCheck} /> : null}
       </ConfirmDialog>

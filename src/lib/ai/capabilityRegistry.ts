@@ -44,8 +44,8 @@ export function getGlobalAiCapabilityAnswer(command: string): GlobalAiCapability
   }
   if (matchesAny(command, ['会自动写入吗', '会不会自动写入', '自动修改', '隐私', '安全吗'])) {
     return {
-      answer: '不会。AI 修改、费用草稿、重排等写入都需要先预览，再由你确认。普通问答只使用脱敏摘要，不读取资料库明文、票据 blob 或 provider 原始 payload。',
-      caveats: ['如果你选择发送给 AI provider，会先走脱敏上下文和 provider proxy 的账号/配额边界。'],
+      answer: '不会。AI 修改、费用草稿、重排等写入都需要先预览，再由你确认。普通问答不会读取资料库明文或票据文件。',
+      caveats: ['需要联网处理时，会先走确认流程。'],
       sourceCards: [{ id: 'capability:privacy', kind: 'provider_caveat', title: '隐私边界', detail: '普通问答不拥有数据库写权限。' }],
       title: 'AI 写入和隐私',
     }

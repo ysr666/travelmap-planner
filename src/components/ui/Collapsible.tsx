@@ -13,7 +13,7 @@ export function Collapsible({ title, subtitle, defaultOpen = false, children }: 
 
   return (
     <details
-      className="group rounded-2xl tm-group"
+      className="group rounded-lg tm-group"
       open={defaultOpen}
       ref={detailsRef}
     >

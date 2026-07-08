@@ -117,7 +117,7 @@ export function PlaceSearchInput({
       <span className="text-sm font-semibold text-on-surface">{label}</span>
       <div className="mt-2 flex gap-2">
         <select
-          className="h-11 shrink-0 rounded-xl border border-outline-variant/30 bg-white px-2 text-sm text-on-surface outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-outline-variant/30 dark:bg-surface-dim/70 dark:text-on-surface dark:focus:border-sky-500 dark:focus:ring-sky-500/15"
+          className="h-11 shrink-0 rounded-lg border border-outline-variant/70 bg-white px-2 text-sm text-on-surface outline-none transition focus:border-primary focus:ring-4 focus:ring-primary-fixed dark:border-outline-variant/50 dark:bg-surface-dim/70 dark:text-on-surface dark:focus:border-primary dark:focus:ring-primary/15"
           onChange={(event) => setCountry(event.target.value)}
           value={country}
         >
@@ -129,7 +129,7 @@ export function PlaceSearchInput({
         </select>
         <input
           ref={inputRef}
-          className="h-11 min-w-0 flex-1 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-outline-variant/30 dark:bg-surface-dim/70 dark:text-on-surface dark:placeholder:text-on-surface-variant dark:focus:border-sky-500 dark:focus:ring-sky-500/15"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-outline-variant/70 bg-white px-3 text-sm text-on-surface outline-none transition placeholder:text-outline-variant focus:border-primary focus:ring-4 focus:ring-primary-fixed dark:border-outline-variant/50 dark:bg-surface-dim/70 dark:text-on-surface dark:placeholder:text-on-surface-variant dark:focus:border-primary dark:focus:ring-primary/15"
           onChange={(event) => onChange(event.target.value)}
           placeholder={ready ? placeholder : '加载中...'}
           type="text"

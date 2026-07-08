@@ -605,8 +605,9 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-section-gap px-4 pb-32 pt-24">
+    <div className="mx-auto max-w-3xl space-y-5 px-4 pb-40 pt-24">
       <div className="mb-2">
+        <p className="text-sm font-semibold text-primary">控制中心</p>
         <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
           设置
         </h2>
@@ -638,9 +639,7 @@ export function SettingsPage() {
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">外观</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
-                当前显示为{resolvedMode === 'dark' ? '黑夜模式' : '白天模式'}。
-              </p>
+              <p className="mt-1 text-sm leading-6 tm-muted">当前是{resolvedMode === 'dark' ? '黑夜' : '白天'}。</p>
             </div>
           </div>
 
@@ -650,10 +649,10 @@ export function SettingsPage() {
               return (
                 <button
                   aria-pressed={active}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
+                  className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg px-2 text-center text-xs font-semibold transition active:scale-[0.98] tm-focus ${
                     active
                       ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
-                      : 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70'
+                      : 'bg-surface-container-high text-on-surface-variant ring-1 ring-outline-variant/70'
                   }`}
                   data-testid={`appearance-mode-${option.value}`}
                   key={option.value}
@@ -669,14 +668,14 @@ export function SettingsPage() {
         </Card>
       </section>
 
-      <Collapsible defaultOpen subtitle="未来 AI 简报会参考的本机偏好" title="旅行偏好">
+      <Collapsible defaultOpen subtitle="节奏、交通和提醒" title="旅行偏好">
         <TravelProfileSettings
           onChange={updateTravelProfile}
           profile={travelProfile}
         />
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="控制 AI 行程生成和修复时可发送的数据范围" title="AI 与隐私">
+      <Collapsible defaultOpen subtitle="AI 可读取哪些内容" title="AI 与隐私">
         <AiPrivacySettingsPanel
           autoExpenseAiBusy={autoExpenseAiBusy}
           autoExpenseAiEnabled={autoExpenseAiEnabled}
@@ -690,17 +689,15 @@ export function SettingsPage() {
       </Collapsible>
 
       <section className="space-y-3">
-        <SectionHeader title="PWA 和离线使用" />
+        <SectionHeader title="安装与离线" />
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">可添加到 iPhone 主屏幕</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
-                在 iPhone Safari 打开本页面，点分享按钮，再选择“添加到主屏幕”。发现新版本后，应用会先提示再重启。
-              </p>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">主屏幕 App</h3>
+              <p className="mt-1 text-sm leading-6 tm-muted">Safari 分享菜单里添加到主屏幕。</p>
             </div>
           </div>
 
@@ -721,11 +718,11 @@ export function SettingsPage() {
             />
             <InfoPill
               icon={<Database className="size-4" />}
-              text="旅行会先写入此设备离线缓存；登录后数据和票据会按设置自动同步。"
+              text="旅行先保存在此设备；登录后自动同步。"
             />
             <InfoPill
               icon={<AlertTriangle className="size-4" />}
-              text="地图底图和外部 Apple/Google Maps 路线需要网络；本应用不会缓存外部地图资源。"
+              text="地图和外部路线需要网络。"
               tone="warning"
             />
           </div>
@@ -759,13 +756,13 @@ export function SettingsPage() {
       <Collapsible
         defaultOpen
         key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
-        subtitle="账号同步状态、自动同步队列和冲突方向确认"
+        subtitle="账号同步、队列和冲突"
         title="云端同步"
       >
         <CloudBackupPanel trip={null} />
       </Collapsible>
 
-      <Collapsible subtitle="zip 归档用于迁移或手动留存，不是主同步路径" title="高级与迁移">
+      <Collapsible subtitle="导入、恢复、迁移" title="高级与迁移">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
@@ -773,7 +770,7 @@ export function SettingsPage() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">导入 zip 归档</h3>
-              <p className="text-sm tm-muted">选择之前导出的 travelmap zip 归档，用于迁移或旧设备恢复。</p>
+              <p className="text-sm tm-muted">选择之前导出的 zip。</p>
             </div>
           </div>
 
@@ -781,7 +778,7 @@ export function SettingsPage() {
             <span className={FIELD_LABEL_CLASS}>归档文件</span>
             <input
               accept=".zip,application/zip,application/x-zip-compressed"
-              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700 dark:text-slate-200 dark:file:bg-sky-950/45 dark:file:text-sky-300"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-fixed file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary dark:text-slate-200 dark:file:bg-primary/15 dark:file:text-primary-fixed-dim"
               key={fileInputKey}
               onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
               type="file"
@@ -807,7 +804,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="在应用内生成或导入 AI 行程" title="AI 生成行程">
+      <Collapsible defaultOpen subtitle="生成或导入行程" title="AI 生成行程">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
@@ -815,25 +812,22 @@ export function SettingsPage() {
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 行程包与应用内生成</h3>
-              <p className="mt-1 text-sm leading-6 tm-muted">
-                你可以在应用内填写偏好生成完整行程，也可以使用 ChatGPT、Claude、Gemini、DeepSeek
-                或其他工具生成符合开放格式的 trip-plan.json / trip-plan.zip 后在本地导入。
-              </p>
+              <p className="mt-1 text-sm leading-6 tm-muted">生成新行程，或导入 trip-plan.json / zip。</p>
             </div>
           </div>
 
           <div className="grid gap-2">
             <InfoPill
               icon={<FileJson className="size-4" />}
-              text="AI 行程包用于新建旅行；完整 zip 归档仍请使用“高级与迁移”入口。"
+              text="AI 行程包用于新建旅行。"
             />
             <InfoPill
               icon={<Sparkles className="size-4" />}
-              text="要把订单邮件、PDF、图片或票据追加/合并到现有旅行，请进入该旅行总览使用“旅行收件箱”。"
+              text="订单和票据追加到现有旅行，请用旅行收件箱。"
             />
             <InfoPill
               icon={<AlertTriangle className="size-4" />}
-              text="AI 生成内容可能不准确，导入前请人工核对日期、地点、坐标和交通时间。"
+              text="导入前核对日期、地点、坐标和交通。"
               tone="warning"
             />
           </div>
@@ -843,7 +837,7 @@ export function SettingsPage() {
             <input
               aria-label="选择 AI 行程包文件"
               accept=".json,.zip,application/json,application/zip,application/x-zip-compressed"
-              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-violet-700 dark:text-slate-200 dark:file:bg-violet-950/45 dark:file:text-violet-300"
+              className="mt-2 block w-full tm-field px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-secondary-container file:px-3 file:py-2 file:text-sm file:font-semibold file:text-secondary dark:text-slate-200 dark:file:bg-secondary/15 dark:file:text-secondary-fixed-dim"
               data-testid="ai-trip-plan-file-input"
               key={tripPlanFileInputKey}
               onChange={(event) => void handleTripPlanFileChange(event.target.files?.[0] ?? null)}
@@ -885,7 +879,7 @@ export function SettingsPage() {
           <p className="pt-1 text-center">
             <button
               type="button"
-              className="min-h-[44px] px-4 py-2.5 text-sm font-semibold text-sky-600 underline underline-offset-2 dark:text-sky-400"
+              className="min-h-[44px] px-4 py-2.5 text-sm font-semibold text-primary underline underline-offset-2"
               onClick={() => navigateTo('ai-draft')}
             >
               打开 AI 生成行程 →
@@ -894,7 +888,7 @@ export function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Collapsible defaultOpen subtitle="旅图路线服务与缓存管理" title="路线服务">
+      <Collapsible defaultOpen subtitle="路线服务与缓存" title="路线服务">
         <RouteServiceSettings
           config={routingConfig}
           cacheError={routeCacheError}
@@ -906,7 +900,7 @@ export function SettingsPage() {
         />
       </Collapsible>
 
-      <Collapsible subtitle="IndexedDB 用量与持久化状态" title="设备存储">
+      <Collapsible subtitle="离线缓存和持久化" title="设备存储">
         <Card variant="grouped" className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -1010,21 +1004,19 @@ function TravelProfileSettings({
     <section className="space-y-3" data-testid="travel-profile-section">
       <Card variant="grouped" className="space-y-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary ring-1 ring-primary/10 dark:bg-primary/15 dark:text-primary-fixed-dim">
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">旅行偏好</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">
-              这些偏好只保存在当前浏览器，用于后续 AI 简报、建议和本地节奏判断。
-            </p>
+            <p className="mt-1 text-sm leading-6 tm-muted">给 AI 和本地提醒参考。</p>
           </div>
         </div>
 
         <div className="grid gap-2">
           <InfoPill
             icon={<ShieldCheck className="size-4" />}
-            text="当前本地检查仍只在设备内运行，不会上传数据，也不会调用外部 AI。"
+            text="本地检查只在设备内运行。"
             tone="success"
           />
         </div>
@@ -1062,7 +1054,7 @@ function TravelProfileSettings({
 
         <ToggleRow
           checked={profile.mealTimeProtection}
-          description="后续 AI 建议应尽量保留正常吃饭时间；当前不会推断餐厅或路线。"
+          description="建议行程时尽量保留吃饭时间。"
           onChange={(checked) => onChange({ mealTimeProtection: checked })}
           testId="travel-profile-meal-protection"
           title="保护饭点"
@@ -1106,8 +1098,8 @@ function TravelProfileSettings({
           </div>
         </div>
 
-        <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          当前只会把“旅行节奏”用于保守的安排密度阈值；不会新增路线、用餐或时间推断。
+        <p className="rounded-lg bg-surface-container-high px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/70">
+          当前只影响安排密度和提醒强度。
         </p>
       </Card>
     </section>
@@ -1137,26 +1129,24 @@ function AiPrivacySettingsPanel({
     <section className="space-y-3" data-testid="ai-privacy-section">
       <Card variant="grouped" className="space-y-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary ring-1 ring-primary/10 dark:bg-primary/15 dark:text-primary-fixed-dim">
             <ShieldCheck className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 与隐私</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">
-              这些开关控制 AI 行程生成和修复时通过旅图服务发送的数据范围；本地检查不会上传数据，也不会调用外部 AI。
-            </p>
+            <p className="mt-1 text-sm leading-6 tm-muted">控制 AI 可以读取的范围。</p>
           </div>
         </div>
 
         <div className="grid gap-2">
           <InfoPill
             icon={<Sparkles className="size-4" />}
-            text="当前本地检查只读取设备内的结构化行程信息，且保持只读。"
+            text="本地检查只读。"
             tone="success"
           />
           <InfoPill
             icon={<AlertTriangle className="size-4" />}
-            text="旅行收件箱会在此设备本地提取/OCR 文件；只有开启或确认 AI 识别后才发送提取文本。"
+            text="收件箱只在你开启或确认后发送提取文本。"
             tone="warning"
           />
         </div>
@@ -1184,7 +1174,7 @@ function AiPrivacySettingsPanel({
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行收件箱</p>
           <ToggleRow
             checked={travelInboxAutoRecognize}
-            description="默认关闭。开启后，新增收件材料完成本地提取/OCR 后，会自动发送提取文本给 AI 识别；原始文件不会上传。"
+            description="开启后，新材料提取完成会自动交给 AI 识别。原始文件不上传。"
             onChange={onTravelInboxAutoRecognizeChange}
             testId="travel-inbox-auto-recognize-setting"
             title="提取后自动 AI 识别"
@@ -1195,7 +1185,7 @@ function AiPrivacySettingsPanel({
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行账单档案</p>
           <ToggleRow
             checked={autoExpenseAiEnabled}
-            description="本地规则无法完整识别时，自动发送已脱敏的提取文本补全候选字段。不会发送票据文件、订单号、邮箱、用户 ID 或云数据；AI 不能单独确认费用。"
+            description="本地规则不够时，用脱敏文本补全候选字段。"
             disabled={autoExpenseAiBusy}
             onChange={onAutoExpenseAiChange}
             testId="ledger-auto-ai-setting"
@@ -1204,8 +1194,8 @@ function AiPrivacySettingsPanel({
           {autoExpenseAiMessage ? <p className="text-xs tm-muted">{autoExpenseAiMessage}</p> : null}
         </div>
 
-        <p className="rounded-xl bg-slate-50/75 px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:ring-slate-800/70">
-          行程隐私和收件箱开关保存在当前浏览器；账单自动 AI 授权会在登录后同步到账号设置，不进入旅行备份或同行共享。
+        <p className="rounded-lg bg-surface-container-high px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/70">
+          隐私开关保存在当前浏览器；账单 AI 授权登录后同步到账号。
         </p>
       </Card>
     </section>
@@ -1228,10 +1218,10 @@ function OptionButton({
   return (
     <button
       aria-pressed={active}
-      className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-center text-xs font-semibold transition active:scale-[0.98] ${
+      className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-center text-xs font-semibold transition active:scale-[0.98] tm-focus ${
         active
           ? 'bg-primary text-white shadow-[0_6px_16px_var(--color-primary-shadow)]'
-          : 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/45 dark:text-slate-300 dark:ring-slate-800/70'
+          : 'bg-surface-container-high text-on-surface-variant ring-1 ring-outline-variant/70'
       }`}
       data-testid={testId}
       onClick={onClick}
@@ -1261,7 +1251,7 @@ function ToggleRow({
   return (
     <button
       aria-checked={checked}
-      className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-100/80 bg-slate-50/75 px-3 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 tm-focus dark:border-slate-800/70 dark:bg-slate-900/45"
+      className="flex w-full items-start justify-between gap-3 rounded-lg border border-outline-variant/70 bg-surface-container-high px-3 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 tm-focus"
       data-testid={testId}
       disabled={disabled}
       onClick={() => onChange(!checked)}
@@ -1269,7 +1259,7 @@ function ToggleRow({
       type="button"
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+        <span className="block text-sm font-semibold text-on-surface">{title}</span>
         <span className="mt-1 block text-xs leading-5 tm-muted">{description}</span>
       </span>
       <span
@@ -1308,21 +1298,19 @@ function RouteServiceSettings({
     <section className="space-y-3" data-testid="routing-settings-section">
       <Card variant="grouped" className="space-y-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary ring-1 ring-primary/10 dark:bg-primary/15 dark:text-primary-fixed-dim">
             <Route className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">路线服务</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">
-              地图默认使用直线连接。路线服务可用时，可以在地图页手动生成道路路线。
-            </p>
+            <p className="mt-1 text-sm leading-6 tm-muted">用于生成道路路线。</p>
           </div>
         </div>
 
         <div className="grid gap-2">
           <InfoPill
             icon={<AlertTriangle className="size-4" />}
-            text="生成道路路线会发送相邻地点坐标；路线仅供参考，不包含实时交通。"
+            text="生成路线会发送相邻地点坐标。"
             tone="warning"
           />
         </div>
@@ -1331,20 +1319,16 @@ function RouteServiceSettings({
           当前状态：<span className="font-semibold text-slate-800 dark:text-slate-100">{configLabel}</span>
         </div>
 
-        <p className="text-xs leading-5 tm-muted">
-          旅图不会要求你填写 Google、OpenRouteService 或 AI provider key。
-        </p>
+        <p className="text-xs leading-5 tm-muted">服务密钥由旅图后端管理。</p>
 
-        <div className="space-y-3 rounded-2xl border border-slate-100/80 bg-slate-50/75 p-3 dark:border-slate-800/70 dark:bg-slate-900/40">
+        <div className="space-y-3 rounded-lg border border-outline-variant/70 bg-surface-container-high p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h4 className="text-sm font-semibold text-slate-950 dark:text-slate-100">路线缓存</h4>
-              <p className="mt-1 text-xs leading-5 tm-muted">
-                只缓存道路路线 polyline，不缓存地图瓦片，也不会进入 zip 归档或账号同步。
-              </p>
+              <p className="mt-1 text-xs leading-5 tm-muted">只缓存路线，不缓存地图瓦片。</p>
             </div>
             <span
-              className="shrink-0 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-950/60 dark:text-slate-300 dark:ring-slate-800"
+              className="shrink-0 rounded-lg bg-surface px-2.5 py-1 text-xs font-semibold text-on-surface-variant ring-1 ring-outline-variant/70"
               data-testid="route-cache-count"
             >
               {cacheStats ? `${cacheStats.count} 条` : '读取中'}
@@ -1716,13 +1700,13 @@ function InfoPill({
   tone?: 'neutral' | 'success' | 'warning'
 }) {
   const styles = {
-    neutral: 'bg-slate-50/75 text-slate-600 ring-1 ring-slate-100/70 dark:bg-slate-900/40 dark:text-slate-300 dark:ring-slate-800/70',
+    neutral: 'bg-surface-container-high text-on-surface-variant ring-1 ring-outline-variant/70',
     success: 'bg-emerald-50/80 text-emerald-700 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50',
     warning: 'bg-amber-50/80 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
   }[tone]
 
   return (
-    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-6 ${styles}`}>
+    <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm leading-6 ${styles}`}>
       <span className="mt-1 shrink-0">{icon}</span>
       <span>{text}</span>
     </div>

@@ -8,8 +8,8 @@ test('账号旅行收件箱在连接器后端未配置时保留本地能力', as
 
   await expect(page.getByTestId('travel-inbox-page')).toBeVisible()
   await expect(page.getByRole('heading', { name: '旅行收件箱' })).toBeVisible()
-  await expect(page.getByText('连接器后端未配置')).toBeVisible()
-  await expect(page.getByRole('button', { name: '收件箱' })).toHaveClass(/text-primary/)
+  await expect(page.getByText('邮箱同步暂不可用')).toBeVisible()
+  await expect(page.getByRole('button', { name: '收件箱' })).toHaveClass(/text-on-primary-fixed/)
   await expect(page.getByRole('button', { name: '连接 Gmail' })).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })

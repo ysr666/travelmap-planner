@@ -1299,7 +1299,7 @@ function TicketStat({
       onClick={() => onSelect(filter)}
       type="button"
     >
-      <p className={`truncate text-[11px] ${active ? 'text-on-primary-container/90' : 'tm-muted'}`}>{label}</p>
+      <p className={`truncate text-[11px] ${active ? 'text-on-primary-container' : 'tm-muted'}`}>{label}</p>
       <p className={`mt-1 text-lg font-bold ${active ? 'text-on-primary-container' : 'text-on-surface dark:text-on-surface'}`}>{value}</p>
     </button>
   )

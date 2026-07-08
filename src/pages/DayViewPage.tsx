@@ -640,7 +640,7 @@ function DayContextIntelligenceCard({
           <p className="text-sm font-semibold text-on-surface">今天要处理</p>
           <p className="mt-0.5 text-xs leading-5 tm-muted">只显示和当天、行程点、票据或 Live Mode 有关的建议。</p>
         </div>
-        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{suggestions.length} 项</span>
+        <span className="rounded-full bg-primary-fixed px-2 py-1 text-xs font-semibold text-on-primary-fixed">{suggestions.length} 项</span>
       </div>
       <div className="divide-y divide-outline-variant/20 rounded-lg bg-surface-container-high/55">
         {suggestions.map((suggestion) => (
@@ -691,7 +691,7 @@ function getDaySuggestionIcon(suggestion: TripIntelligenceSuggestion) {
 function getDaySuggestionIconTone(suggestion: TripIntelligenceSuggestion) {
   if (suggestion.severity === 'high') return 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200'
   if (suggestion.severity === 'medium') return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'
-  return 'bg-primary/10 text-primary'
+  return 'bg-primary-fixed text-on-primary-fixed'
 }
 
 function openDaySuggestion(

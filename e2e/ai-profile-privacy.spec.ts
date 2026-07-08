@@ -33,8 +33,8 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
 
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
-  await expect(privacySection).toContainText('AI 行程生成和修复')
-  await expect(privacySection).toContainText('不会调用外部 AI')
+  await expect(privacySection).toContainText('AI 与隐私')
+  await expect(privacySection).toContainText('本地检查只读')
   await expect(privacySection).toContainText('票据图片/PDF')
 
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')

@@ -31,8 +31,8 @@ test('Phase 11 shared action and status surfaces avoid overflow on mobile and de
     await expectNoHorizontalOverflow(page)
 
     await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { name: 'PWA 和离线使用' })).toBeVisible()
-    await expect(page.locator('main')).toContainText('地图底图和外部 Apple/Google Maps 路线需要网络')
+    await expect(page.getByRole('heading', { name: '安装与离线' })).toBeVisible()
+    await expect(page.locator('main')).toContainText('地图和外部路线需要网络')
     await expectNoHorizontalOverflow(page)
   }
 })

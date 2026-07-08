@@ -118,7 +118,7 @@ test('设置页对象同步字段冲突需要确认后才写入', async ({ page 
   await panel.getByText('账号版本').click()
   await panel.getByRole('button', { name: '应用解决方案' }).click()
   const dialog = page.getByTestId('object-sync-conflict-confirm-dialog')
-  await expect(dialog).toContainText('确认前不会改动本地数据')
+  await expect(dialog).toContainText('将按当前选择写入此设备')
   await expect.poll(async () => readLocalItemTitle(page, localItem.id)).toBe('此设备标题')
 
   await dialog.getByRole('button', { name: '确认应用' }).click()

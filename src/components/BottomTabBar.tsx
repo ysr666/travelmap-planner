@@ -27,7 +27,7 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
             aria-label={tab.label}
             className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-lg px-1 py-1 transition active:scale-95 tm-focus ${
               isActive
-                ? 'bg-primary-fixed text-primary'
+                ? 'bg-primary-fixed text-on-primary-fixed'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
             onClick={() => navigateToTab(tab.id, lastTripId)}

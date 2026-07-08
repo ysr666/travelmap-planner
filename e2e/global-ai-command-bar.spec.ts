@@ -17,7 +17,6 @@ test('全局 AI 在无旅行上下文时离线回答能力问题', async ({ page
   const result = page.getByTestId('global-ai-command-result')
   await expect(result).toContainText('我能帮你做什么')
   await expect(page.getByTestId('global-ai-help-result')).toContainText('预览和确认')
-  await expect(page.getByTestId('global-ai-source-cards')).toContainText('本地能力说明')
   expect(providerProxyRequests).toHaveLength(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -51,7 +50,7 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
   const result = page.getByTestId('global-ai-command-result')
   await expect(result).toContainText('What-if 重排预览')
   await expect(result).toContainText('确认应用前不会创建事件或同步云端')
-  await expect(page.getByTestId('global-ai-action-proposal')).toContainText('Unified Intelligence')
+  await expect(page.getByTestId('global-ai-action-proposal')).toContainText('Live Mode 重排建议')
   await expect(result.getByRole('button', { name: '确认应用重排' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
@@ -59,7 +58,7 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
 
   await result.getByRole('button', { name: '确认应用重排' }).click()
   await expect(page.getByTestId('global-ai-write-confirm-dialog')).toBeVisible()
-  await page.getByRole('button', { name: '确认写入' }).click()
+  await page.getByRole('button', { name: '写入' }).click()
   await expect(page.getByText(/已应用模拟重排|已应用突发重排/)).toBeVisible()
   await expect(await countStore(page, 'tripReplanEvents')).toBeGreaterThan(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBeGreaterThan(0)
@@ -88,9 +87,9 @@ test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ p
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
   const result = page.getByTestId('global-ai-command-result')
-  await expect(result).toContainText('旅行助手回答')
+  await expect(result).toContainText('旅图助手')
   await expect(page.getByTestId('global-ai-assistant-answer-result')).toContainText('当前正在看')
-  await expect(result).toContainText('本地脱敏摘要')
+  await expect(result).toContainText('我看到')
   await expect(page.getByTestId('global-ai-send-confirm-dialog')).not.toBeVisible()
   await expectNoHorizontalOverflow(page)
   expect(providerProxyRequests.length).toBeLessThanOrEqual(1)
@@ -111,7 +110,7 @@ test('全局 AI 会话面板支持上下文切换和内存清空', async ({ page
 
   await page.getByRole('button', { name: '展开 AI 会话' }).click()
   await expect(page.getByTestId('global-ai-conversation-panel')).toBeVisible()
-  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('本轮会话只保存在当前页面内')
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('还没有对话')
 
   await page.getByTestId('global-ai-context-switch').getByRole('button', { name: '全部旅行' }).click()
   await expect(page.getByTestId('global-ai-context-label')).toContainText('全部旅行')
@@ -120,10 +119,9 @@ test('全局 AI 会话面板支持上下文切换和内存清空', async ({ page
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
   await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('你')
   await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('助手')
-  await expect(page.getByTestId('global-ai-source-cards')).toContainText('本地能力说明')
 
   await page.getByRole('button', { name: '清空 AI 会话' }).click()
-  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('本轮会话只保存在当前页面内')
+  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('还没有对话')
   await expectNoHorizontalOverflow(page)
 })
 

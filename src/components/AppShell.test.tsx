@@ -53,7 +53,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
     const homeButton = container?.querySelector('button[aria-label="首页"]')
-    expect(homeButton?.className).toContain('text-primary')
+    expect(homeButton?.className).toContain('text-on-primary-fixed')
   })
 
   it('navigates on click', async () => {
@@ -83,7 +83,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="day" />)
     })
     const tripButton = container?.querySelector('button[aria-label="行程"]')
-    expect(tripButton?.className).toContain('text-primary')
+    expect(tripButton?.className).toContain('text-on-primary-fixed')
   })
 
   it('reopens the last trip from a global route', async () => {
@@ -119,7 +119,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="settings/privacy" />)
     })
     const settingsButton = container?.querySelector('button[aria-label="设置"]')
-    expect(settingsButton?.className).toContain('text-primary')
+    expect(settingsButton?.className).toContain('text-on-primary-fixed')
   })
 })
 

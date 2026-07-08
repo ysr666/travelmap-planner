@@ -257,7 +257,7 @@ test.describe('AI Trip Builder Page', () => {
     const header = page.getByTestId('ai-draft-page-header')
     await expect(header.getByRole('heading', { name: 'AI 生成行程' })).toBeVisible()
     await expect(header).toContainText('生成可预览、可修改、可确认导入的完整行程草案')
-    await expect(header).toContainText('确认导入后才会创建行程')
+    await expect(header).toContainText('先生成草案，确认后创建行程')
   })
 
   test('shows request builder section', async ({ page }) => {
@@ -747,7 +747,7 @@ test.describe('AI Trip Builder Page', () => {
     const dialog = page.getByTestId('ai-draft-import-confirm-dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByRole('heading', { name: '最终导入检查' })).toBeVisible()
-    await expect(dialog).toContainText('确认前不会写入本地旅行')
+    await expect(dialog).toContainText('将创建一个新旅行')
     await expect(dialog).toContainText('东京五日游')
     await expect(dialog.getByTestId('ai-draft-import-check')).toContainText('2 天')
     await expect(dialog.getByTestId('ai-draft-import-check')).toContainText('4 个')

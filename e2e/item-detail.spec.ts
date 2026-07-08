@@ -725,7 +725,7 @@ test('行程点详情景点内容来源刷新需确认后才更新三块来源',
 
   await card.getByRole('button', { name: '刷新来源' }).click()
   const confirmDialog = page.getByTestId('item-content-source-refresh-confirm-dialog')
-  await expect(confirmDialog).toContainText('0 次 AI')
+  await expect(confirmDialog).toContainText('结果会先给你预览')
   expect(placeLookupRequests).toBe(0)
   expect(placeDetailsRequests).toBe(0)
   expect(travelSearchRequests).toBe(0)

@@ -486,7 +486,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[4.75rem]' : 'bottom-4'}`}
+        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[5rem]' : 'bottom-4'}`}
         data-testid="global-ai-command-bar"
       >
         {panelOpen ? (

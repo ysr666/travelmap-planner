@@ -234,14 +234,14 @@ function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => vo
             <Clock3 className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-white/75">
+            <p className="text-xs font-semibold text-on-primary">
               {focusDay ? formatShortDateWithWeekday(focusDay.date) : '旅行准备'}
             </p>
             <p className="mt-0.5 break-words text-sm font-semibold text-white">
               {nextItem ? nextItem.title : overview.preparationLabel}
             </p>
             {nextItem ? (
-              <p className="mt-0.5 text-xs text-white/75">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
+              <p className="mt-0.5 text-xs text-on-primary">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
             ) : null}
           </div>
         </div>
@@ -352,7 +352,7 @@ function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
         <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => navigateTo('trip/new')}>
           新建旅行
         </Button>
-        <Button className="w-full border-secondary/30 bg-secondary-container text-secondary" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
+        <Button className="w-full border-secondary/30 bg-secondary-container text-on-secondary-container" icon={<Sparkles className="size-4" />} onClick={() => navigateTo('ai-draft')} variant="secondary">
           AI 生成行程
         </Button>
         <Button

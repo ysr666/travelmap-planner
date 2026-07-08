@@ -391,7 +391,7 @@ describe('TripWorkspacePage', () => {
     expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).not.toBeNull()
   })
 
-  it('shows the embedded travel inbox when extracted material is ready', async () => {
+  it('keeps ready material in the secondary tool entry instead of expanding the inbox by default', async () => {
     mocks.listTravelInboxEntriesByTrip.mockResolvedValue([
       {
         createdAt: 100,
@@ -407,9 +407,10 @@ describe('TripWorkspacePage', () => {
     ])
 
     await renderWorkspacePage()
-    await waitForSelector('[data-testid="travel-inbox-panel"]')
+    await waitForSelector('[data-testid="trip-home-quick-actions"]')
 
-    expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="trip-action-travel-inbox"]')).not.toBeNull()
   })
 
   it('handles missing trip gracefully', async () => {

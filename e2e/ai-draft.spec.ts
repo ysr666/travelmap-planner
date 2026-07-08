@@ -884,6 +884,7 @@ test.describe('AI Trip Builder Page', () => {
     await page.waitForURL(/#\/trip\?/)
     await expect(page).toHaveURL(/postImportRoutePrompt=1/)
 
+    await openDetailsSection(page, '更多工具与详情')
     const panel = page.getByTestId('import-route-generation-panel')
     await expect(panel).toBeVisible()
     await expect(panel.getByTestId('import-route-generation-summary')).toContainText('已找到 1 天可生成路线')
@@ -907,6 +908,7 @@ test.describe('AI Trip Builder Page', () => {
     await page.waitForURL(/#\/trip/)
     await expect(page.locator('h1').filter({ hasText: '东京五日游' })).toBeVisible()
     await expect(page.getByText('旅行备注')).toBeVisible()
+    await openDetailsSection(page, '旅行备注')
     await expect(page.getByText('AI 生成每日提示')).toBeVisible()
   })
 

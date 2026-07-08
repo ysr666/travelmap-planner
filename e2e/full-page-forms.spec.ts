@@ -3,6 +3,7 @@ import {
   clearTravelDatabase,
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  openDetailsSection,
 } from './helpers'
 
 async function getDemoIds(page: import('@playwright/test').Page, tripId: string) {
@@ -74,6 +75,7 @@ test('新建旅行页面可以创建旅行并跳转到工作台', async ({ page 
 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
   await expect(page.locator('h2').filter({ hasText: '测试旅行' })).toBeVisible()
+  await openDetailsSection(page, '更多工具与详情')
   await expect(page.getByTestId('trip-map-overview')).toContainText('行程地图预览')
   await expect(page.getByTestId('trip-map-overview')).toContainText('还没有可显示的坐标')
   await expect(page.getByTestId('trip-map-overview')).toContainText('补充坐标')

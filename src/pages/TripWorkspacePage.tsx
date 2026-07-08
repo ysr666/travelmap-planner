@@ -427,7 +427,7 @@ export function TripWorkspacePage() {
     [overviewItems],
   )
   const hasInboxAttention = hasTripHomeInboxAttention(tripOperationsInboxSummary, tripOperationsInboxPreview)
-  const showTravelInboxPanel = travelInboxManualOpen || hasInboxAttention
+  const showTravelInboxPanel = travelInboxManualOpen || Boolean(tripOperationsInboxPreview)
   const sharedTripNeedsAttention = sharedTripMutations.some((mutation) => mutation.status === 'pending' || mutation.status === 'conflict')
 
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
@@ -611,82 +611,12 @@ export function TripWorkspacePage() {
               />
             </section>
 
-            <DailyItineraryList
-              days={days}
-              itemsByDay={itemsByDay}
-              onOpenDay={(day) => openDay(day, 'schedule')}
-              selectedDayId={selectedDay?.id}
-            />
-
             <section className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-                <TripHomeFocusPanel
-                  focus={tripHomeFocus}
-                  onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
-                  onOpenDay={(targetDay, targetView) => openDay(targetDay, targetView)}
-                  onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
-                />
-                <TripHomeQuickActions
-                  mappedItemCount={mappedItemCount}
-                  onOpenAccountInbox={() => navigateTo('inbox')}
-                  onOpenLedger={() => navigateTo('ledger', { tripId: trip.id })}
-                  onOpenRoutePreparation={() => openToolSection('route-preparation-panel')}
-                  onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
-                  onOpenTravelInbox={openTravelInboxPanel}
-                  routePreparation={routePreparation}
-                  routePreparationLoading={routePreparationLoading}
-                  ticketCount={ticketMetas.length}
-                  totalItemCount={overviewItems.length}
-                />
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-stack-gap" data-testid="trip-home-map-overview">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="font-headline-md text-headline-md text-on-surface">全程地图</h3>
-                  <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
-                    {describeTripMapCoverage(overviewItems.length, mappedItemCount)}
-                  </p>
-                </div>
-                {selectedDay ? (
-                  <Button
-                    className="min-h-11 shrink-0 px-3 text-xs"
-                    icon={<MapPinned className="size-3.5" />}
-                    onClick={() => openDay(selectedDay, 'map')}
-                    variant="secondary"
-                  >
-                    打开地图
-                  </Button>
-                ) : null}
-              </div>
-              <TripMapPreview
-                days={days}
-                itemsByDay={itemsByDay}
-                onItemsReordered={async () => { await refresh() }}
-                onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
-                onOpenMap={(targetDay) => openDay(targetDay, 'map')}
-                routeDataReady={loadedTripContextKey === tripContextKey}
-                selectedDay={selectedDay}
-                tripId={trip.id}
-              />
-            </section>
-
-            <section className="flex flex-col gap-stack-gap">
-              <TripDailyTravelTipCard
-                days={days}
-                itemsByDay={itemsByDay}
-                onOpenContentEnrichment={() => document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                onOpenDay={(targetDay) => openDay(targetDay, 'schedule')}
-                onOpenRouteGeneration={() => {
-                  if (routePreparation?.canGenerate) {
-                    setRouteGenerationConfirmOpen(true)
-                  }
-                }}
-                onSaved={async () => { await refresh() }}
-                routePreparation={routePreparation}
-                trip={trip}
-                tripCheck={tripCheckResult}
+              <TripHomeFocusPanel
+                focus={tripHomeFocus}
+                onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
+                onOpenDay={(targetDay, targetView) => openDay(targetDay, targetView)}
+                onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
               />
             </section>
 
@@ -694,6 +624,13 @@ export function TripWorkspacePage() {
               focus={tripHomeFocus}
               onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
+            />
+
+            <DailyItineraryList
+              days={days}
+              itemsByDay={itemsByDay}
+              onOpenDay={(day) => openDay(day, 'schedule')}
+              selectedDayId={selectedDay?.id}
             />
 
             {showTravelInboxPanel ? (
@@ -711,24 +648,85 @@ export function TripWorkspacePage() {
               </div>
             ) : null}
 
-            <div className="flex min-w-0 justify-end">
-              <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
-            </div>
-            <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
-            {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
-            {dismissedImportRoutePromptTripId !== trip.id && (hasPostImportRoutePrompt || completedImportRoutePromptTripId === trip.id) ? (
-              <ImportRouteGenerationPanel
-                onDismiss={() => clearPostImportRoutePrompt({ hide: true })}
-                onGenerated={() => clearPostImportRoutePrompt({ hide: false })}
-                showDismiss
-                tripId={trip.id}
-              />
-            ) : null}
             <Collapsible
-              subtitle={sharedTripNeedsAttention ? '同行共享有待处理变更；其他工具保持二级入口。' : '账本、同行共享、出行前检查、AI 工具和路线准备。'}
+              subtitle={hasInboxAttention ? '有材料待处理；地图、票据、账本、AI 和同步都在这里。' : sharedTripNeedsAttention ? '同行共享有待处理变更；其他工具保持二级入口。' : '地图、票据、账本、AI、同步和出行前检查。'}
               title="更多工具与详情"
             >
               <div className="space-y-4" data-testid="trip-home-secondary-tools">
+                <TripHomeQuickActions
+                  mappedItemCount={mappedItemCount}
+                  onOpenAccountInbox={() => navigateTo('inbox')}
+                  onOpenLedger={() => navigateTo('ledger', { tripId: trip.id })}
+                  onOpenRoutePreparation={() => openToolSection('route-preparation-panel')}
+                  onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
+                  onOpenTravelInbox={openTravelInboxPanel}
+                  routePreparation={routePreparation}
+                  routePreparationLoading={routePreparationLoading}
+                  ticketCount={ticketMetas.length}
+                  totalItemCount={overviewItems.length}
+                />
+
+                <section className="flex flex-col gap-stack-gap" data-testid="trip-home-map-overview">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-headline-md text-headline-md text-on-surface">全程地图</h3>
+                      <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
+                        {describeTripMapCoverage(overviewItems.length, mappedItemCount)}
+                      </p>
+                    </div>
+                    {selectedDay ? (
+                      <Button
+                        className="min-h-11 shrink-0 px-3 text-xs"
+                        icon={<MapPinned className="size-3.5" />}
+                        onClick={() => openDay(selectedDay, 'map')}
+                        variant="secondary"
+                      >
+                        打开地图
+                      </Button>
+                    ) : null}
+                  </div>
+                  <TripMapPreview
+                    days={days}
+                    itemsByDay={itemsByDay}
+                    onItemsReordered={async () => { await refresh() }}
+                    onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
+                    onOpenMap={(targetDay) => openDay(targetDay, 'map')}
+                    routeDataReady={loadedTripContextKey === tripContextKey}
+                    selectedDay={selectedDay}
+                    tripId={trip.id}
+                  />
+                </section>
+
+                <TripDailyTravelTipCard
+                  days={days}
+                  itemsByDay={itemsByDay}
+                  onOpenContentEnrichment={() => document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  onOpenDay={(targetDay) => openDay(targetDay, 'schedule')}
+                  onOpenRouteGeneration={() => {
+                    if (routePreparation?.canGenerate) {
+                      setRouteGenerationConfirmOpen(true)
+                    }
+                  }}
+                  onSaved={async () => { await refresh() }}
+                  routePreparation={routePreparation}
+                  trip={trip}
+                  tripCheck={tripCheckResult}
+                />
+
+                <div className="flex min-w-0 justify-end">
+                  <AutoSnapshotBackupStatus tripId={trip.id} visibility="active-only" />
+                </div>
+                <CloudSnapshotCheckPrompts maxItems={1} tripId={trip.id} variant="trip" />
+                {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
+                {dismissedImportRoutePromptTripId !== trip.id && (hasPostImportRoutePrompt || completedImportRoutePromptTripId === trip.id) ? (
+                  <ImportRouteGenerationPanel
+                    onDismiss={() => clearPostImportRoutePrompt({ hide: true })}
+                    onGenerated={() => clearPostImportRoutePrompt({ hide: false })}
+                    showDismiss
+                    tripId={trip.id}
+                  />
+                ) : null}
+
                 {isTripIntelligenceStateLoaded && liveDay && tripOperationsModel ? (
                   <TripLiveModeCard
                     allItems={allItems}
@@ -811,15 +809,17 @@ export function TripWorkspacePage() {
             </Collapsible>
 
             {trip.notes ? (
-              <Card className="flex items-start gap-3" variant="grouped">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50/80 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">
-                  <NotebookText className="size-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">旅行备注</h3>
-                  <p className="mt-1 text-sm leading-6 tm-muted">{trip.notes}</p>
-                </div>
-              </Card>
+              <Collapsible title="旅行备注">
+                <Card className="flex items-start gap-3" variant="grouped">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50/80 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">
+                    <NotebookText className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">备注内容</h3>
+                    <p className="mt-1 text-sm leading-6 tm-muted">{trip.notes}</p>
+                  </div>
+                </Card>
+              </Collapsible>
             ) : null}
 
             <div id="trip-sync-archive-section">
@@ -942,12 +942,12 @@ function TripHomeFocusPanel({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate font-semibold text-white">{focus.nextItem.title}</span>
-            <span className="mt-1 block text-sm text-white/75">
+            <span className="mt-1 block text-sm text-white">
               {describeItemTime(focus.nextItem)}
               {focus.nextItem.locationName ? ` · ${focus.nextItem.locationName}` : ''}
             </span>
           </span>
-          <ChevronRight className="mt-2 size-4 shrink-0 text-white/70" />
+          <ChevronRight className="mt-2 size-4 shrink-0 text-white" />
         </button>
       ) : (
         <div className="rounded-lg border border-dashed border-outline-variant/70 bg-surface-container-high px-3 py-4">

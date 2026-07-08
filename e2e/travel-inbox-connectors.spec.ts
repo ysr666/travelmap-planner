@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clearTravelDatabase, createDemoTripViaUi, expectNoHorizontalOverflow, forceSupabaseUnconfigured } from './helpers'
+import { clearTravelDatabase, createDemoTripViaUi, expectNoHorizontalOverflow, forceSupabaseUnconfigured, openDetailsSection } from './helpers'
 
 test('账号旅行收件箱在连接器后端未配置时保留本地能力', async ({ page }) => {
   await clearTravelDatabase(page)
@@ -19,6 +19,7 @@ test('Trip Home 用轻量入口保留材料输入并可进入账号总收件箱'
   await page.getByTestId('day-back-to-trip').click()
 
   await expect(page.getByTestId('travel-inbox-panel')).toHaveCount(0)
+  await openDetailsSection(page, '更多工具与详情')
   await expect(page.getByTestId('trip-action-travel-inbox')).toBeVisible()
   await page.getByTestId('trip-action-account-inbox').click()
   await expect(page).toHaveURL(/#\/inbox/)

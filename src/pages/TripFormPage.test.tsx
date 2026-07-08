@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getTrip: vi.fn().mockResolvedValue(null),
   updateTrip: vi.fn().mockResolvedValue(undefined),
   ensureDaysForTrip: vi.fn().mockResolvedValue([]),
+  inferTimeZoneFromPlaceQuery: vi.fn().mockResolvedValue({ source: 'provider', timeZone: 'Asia/Tokyo' }),
 }))
 
 vi.mock('../lib/routes', () => ({
@@ -29,6 +30,10 @@ vi.mock('../db', () => ({
 
 vi.mock('../lib/dates', () => ({
   ensureDaysForTrip: mocks.ensureDaysForTrip,
+}))
+
+vi.mock('../lib/timeZoneInference', () => ({
+  inferTimeZoneFromPlaceQuery: mocks.inferTimeZoneFromPlaceQuery,
 }))
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
@@ -49,6 +54,7 @@ beforeEach(() => {
   mocks.getTrip.mockResolvedValue(null)
   mocks.updateTrip.mockResolvedValue(undefined)
   mocks.ensureDaysForTrip.mockResolvedValue([])
+  mocks.inferTimeZoneFromPlaceQuery.mockResolvedValue({ source: 'provider', timeZone: 'Asia/Tokyo' })
 })
 
 afterEach(() => {
@@ -103,6 +109,29 @@ describe('TripFormPage', () => {
     })
 
     expect(container?.textContent).toContain('编辑旅行')
+  })
+
+  it('does not infer time zone just from loading an existing trip destination', async () => {
+    mocks.routeFromHash.mockReturnValue('trip/edit')
+    mocks.getRouteParams.mockReturnValue(new URLSearchParams({ tripId: 'trip_1' }))
+    mocks.getTrip.mockResolvedValue({
+      id: 'trip_1',
+      title: '东京旅行',
+      destination: '东京',
+      startDate: '2026-04-01',
+      endDate: '2026-04-05',
+      createdAt: 100,
+      updatedAt: 100,
+    })
+
+    await act(async () => {
+      root?.render(<TripFormPage />)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700)
+    })
+
+    expect(mocks.inferTimeZoneFromPlaceQuery).not.toHaveBeenCalled()
   })
 
   it('renders error when edit trip not found', async () => {

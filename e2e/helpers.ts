@@ -226,10 +226,11 @@ export async function openDetailsSection(page: Page, title: string) {
   const section = page.locator('details').filter({
     has: page.locator('summary').filter({ hasText: title }),
   }).first()
-  await expect(section.locator('summary')).toBeVisible()
+  const summary = section.locator(':scope > summary')
+  await expect(summary).toBeVisible()
   const isOpen = await section.evaluate((element) => (element as HTMLDetailsElement).open)
   if (!isOpen) {
-    await section.locator('summary').click()
+    await summary.click()
   }
   return section
 }

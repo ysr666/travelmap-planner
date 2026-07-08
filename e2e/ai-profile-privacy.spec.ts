@@ -83,6 +83,7 @@ test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async (
   await expectNoHorizontalOverflow(page)
 
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, '更多工具与详情')
   const localCheck = page.getByTestId('local-trip-check-card')
   await expect(localCheck).toBeVisible()
   await expect(localCheck).toContainText('行程体检')
@@ -91,6 +92,7 @@ test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async (
   await expectNoHorizontalOverflow(page)
 
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, 'AI 与隐私')
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByTestId('ai-privacy-allowFullNotes')).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByTestId('ai-privacy-allowTicketFileContent')).toBeDisabled()

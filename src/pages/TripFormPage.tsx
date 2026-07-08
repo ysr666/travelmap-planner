@@ -47,6 +47,7 @@ export function TripFormPage() {
   const [timeZoneMessage, setTimeZoneMessage] = useState<string | null>(null)
   const [timeZoneManuallyEdited, setTimeZoneManuallyEdited] = useState(false)
   const [trip, setTrip] = useState<Trip | null>(null)
+  const [loadedEditDestination, setLoadedEditDestination] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isEdit || !tripId) return
@@ -60,6 +61,7 @@ export function TripFormPage() {
         return
       }
       setTrip(found)
+      setLoadedEditDestination(found.destination.trim())
       setForm({
         title: found.title,
         destination: found.destination,
@@ -80,6 +82,7 @@ export function TripFormPage() {
     if (timeZoneManuallyEdited) return
     const destination = form.destination.trim()
     if (!destination) return
+    if (isEdit && loadedEditDestination !== null && destination === loadedEditDestination) return
 
     const controller = new AbortController()
     const timeout = window.setTimeout(() => {
@@ -103,7 +106,7 @@ export function TripFormPage() {
       controller.abort()
       window.clearTimeout(timeout)
     }
-  }, [form.destination, timeZoneManuallyEdited])
+  }, [form.destination, isEdit, loadedEditDestination, timeZoneManuallyEdited])
 
   if (isEdit && !tripId) {
     return (

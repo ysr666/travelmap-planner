@@ -634,37 +634,44 @@ function DayContextIntelligenceCard({
   }
 
   return (
-    <Card className="space-y-3" data-testid="day-intelligence-card" variant="grouped">
+    <Card className="space-y-2" data-testid="day-intelligence-card" variant="grouped">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-on-surface">今天要处理</p>
-          <p className="mt-0.5 text-xs leading-5 tm-muted">只显示和当天、行程点、票据或 Live Mode 有关的建议。</p>
         </div>
         <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-on-primary-fixed dark:text-primary-fixed-dim">{suggestions.length} 项</span>
       </div>
-      <div className="divide-y divide-outline-variant/20 rounded-lg bg-surface-container-high/55">
-        {suggestions.map((suggestion) => (
-          <div className="flex min-h-16 items-start gap-3 px-3 py-3" data-testid="day-intelligence-suggestion" key={suggestion.id}>
-            <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${getDaySuggestionIconTone(suggestion)}`}>
-              {getDaySuggestionIcon(suggestion)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</p>
-              <p className="mt-0.5 line-clamp-2 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+      {suggestions[0] ? (
+        <p className="line-clamp-1 text-xs leading-5 tm-muted">{suggestions[0].title}</p>
+      ) : null}
+      <details className="rounded-lg bg-surface-container-high/55 px-3 py-2">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-on-surface marker:hidden">
+          <span>查看处理项</span>
+          <span className="tm-muted">{suggestions.length + hiddenSuggestions.length} 项</span>
+        </summary>
+        <div className="mt-2 divide-y divide-outline-variant/20">
+          {suggestions.map((suggestion) => (
+            <div className="flex min-h-16 items-start gap-3 px-0 py-3" data-testid="day-intelligence-suggestion" key={suggestion.id}>
+              <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${getDaySuggestionIconTone(suggestion)}`}>
+                {getDaySuggestionIcon(suggestion)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">{suggestion.title}</p>
+                <p className="mt-0.5 line-clamp-2 break-words text-xs leading-5 tm-muted [overflow-wrap:anywhere]">{suggestion.message}</p>
+              </div>
+              <Button
+                className="shrink-0 px-3 text-xs"
+                onClick={() => openDaySuggestion(suggestion, { dayId, itemById, tripId })}
+                variant="secondary"
+              >
+                {suggestion.action?.label ?? '查看'}
+              </Button>
+              <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
             </div>
-            <Button
-              className="shrink-0 px-3 text-xs"
-              onClick={() => openDaySuggestion(suggestion, { dayId, itemById, tripId })}
-              variant="secondary"
-            >
-              {suggestion.action?.label ?? '查看'}
-            </Button>
-            <TripIntelligenceSuggestionControls onIgnore={onIgnore} onLater={onLater} suggestion={suggestion} />
-          </div>
-        ))}
-        {hiddenSuggestions.length > 0 ? (
-          <details className="px-3 py-2">
-            <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold tm-muted">已隐藏建议（{hiddenSuggestions.length}）</summary>
+          ))}
+          {hiddenSuggestions.length > 0 ? (
+            <details className="py-2">
+              <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold tm-muted">已隐藏建议（{hiddenSuggestions.length}）</summary>
             <div className="mt-2 space-y-1">
               {hiddenSuggestions.map((suggestion) => (
                 <div className="flex min-h-11 items-center justify-between gap-2" key={suggestion.key}>
@@ -673,9 +680,10 @@ function DayContextIntelligenceCard({
                 </div>
               ))}
             </div>
-          </details>
-        ) : null}
-      </div>
+            </details>
+          ) : null}
+        </div>
+      </details>
     </Card>
   )
 }

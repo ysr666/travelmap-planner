@@ -28,6 +28,11 @@ describe('provider proxy diagnostics', () => {
       },
       retrievedAt: '2026-06-02T01:02:03.000Z',
       security: {
+        authConfig: {
+          configured: false,
+          hasSupabaseAnonKey: false,
+          hasSupabaseUrl: false,
+        },
         authRequired: false,
         budgetAlertsConfigured: false,
         durableQuotaConfigured: false,
@@ -69,6 +74,11 @@ describe('provider proxy diagnostics', () => {
       TRIPMAP_PROVIDER_QUOTA_D1: { prepare() {} },
     }, '2026-06-02T01:02:03.000Z')
     expect(response.security).toEqual({
+      authConfig: {
+        configured: false,
+        hasSupabaseAnonKey: false,
+        hasSupabaseUrl: false,
+      },
       authRequired: true,
       budgetAlertsConfigured: false,
       durableQuotaConfigured: true,

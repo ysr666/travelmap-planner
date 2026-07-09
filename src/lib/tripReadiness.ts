@@ -20,6 +20,7 @@ export type TripReadinessIssueType =
 export type TripReadinessSeverity = 'low' | 'medium' | 'high'
 
 export type TripReadinessActionKind =
+  | 'lookup_place'
   | 'navigate_item'
   | 'navigate_tickets'
   | 'generate_routes'
@@ -68,9 +69,11 @@ export type TripReadinessRepairPreview = {
   dailyTipRequested: boolean
   excludedIssueIds: string[]
   issueIds: string[]
+  placeItemIds: string[]
   requestCounts: {
     contentPreviewTargets: number
     dailyTipPreview: number
+    placeLookup: number
     routeGeneration: number
     ticketUploadRetry: number
     totalProviderRequests: number
@@ -136,16 +139,16 @@ export function buildTripReadinessModel({
 
     if (finding.ruleId === 'missing_coordinate' || finding.ruleId === 'invalid_coordinate') {
       addIssue({
-        actionKind: 'navigate_item',
-        actionLabel: '补全地点',
-        canBatchFix: false,
+        actionKind: 'lookup_place',
+        actionLabel: '智能补地点',
+        canBatchFix: Boolean(itemId),
         dayId,
-        defaultSelected: false,
+        defaultSelected: Boolean(itemId),
         evidence: nonEmptyEvidence(evidence, item?.title ? [`${item.title} 缺少可用于地图和导航的坐标。`] : []),
         id: `readiness-missing-coordinate-${itemId ?? finding.id}`,
         itemId,
-        message: finding.message,
-        requiresPreview: false,
+        message: '可用地点服务自动匹配地址和坐标，确认后一键写入。',
+        requiresPreview: true,
         severity: 'medium',
         title: finding.title,
         type: 'missing_coordinate',
@@ -388,6 +391,7 @@ export function buildTripReadinessRepairPreview(
   const routeDayIds = new Set<string>()
   const ticketIds = new Set<string>()
   const contentItemIds = new Set<string>()
+  const placeItemIds = new Set<string>()
   let dailyTipRequested = false
 
   for (const issue of model.issues) {
@@ -401,6 +405,9 @@ export function buildTripReadinessRepairPreview(
     issueIds.push(issue.id)
     if (issue.actionKind === 'generate_routes' && issue.dayId) {
       routeDayIds.add(issue.dayId)
+    }
+    if (issue.actionKind === 'lookup_place' && issue.itemId) {
+      placeItemIds.add(issue.itemId)
     }
     if (issue.actionKind === 'retry_ticket_upload' && issue.ticketId) {
       ticketIds.add(issue.ticketId)
@@ -416,18 +423,21 @@ export function buildTripReadinessRepairPreview(
   const routeDayIdList = [...routeDayIds]
   const ticketIdList = [...ticketIds]
   const contentItemIdList = [...contentItemIds]
+  const placeItemIdList = [...placeItemIds]
 
   return {
     contentItemIds: contentItemIdList,
     dailyTipRequested,
     excludedIssueIds,
     issueIds,
+    placeItemIds: placeItemIdList,
     requestCounts: {
       contentPreviewTargets: contentItemIdList.length,
       dailyTipPreview: dailyTipRequested ? 1 : 0,
+      placeLookup: placeItemIdList.length,
       routeGeneration: routeDayIdList.length,
       ticketUploadRetry: ticketIdList.length,
-      totalProviderRequests: routeDayIdList.length + contentItemIdList.length + (dailyTipRequested ? 1 : 0),
+      totalProviderRequests: routeDayIdList.length + placeItemIdList.length + contentItemIdList.length + (dailyTipRequested ? 1 : 0),
     },
     routeDayIds: routeDayIdList,
     ticketIds: ticketIdList,
@@ -436,9 +446,10 @@ export function buildTripReadinessRepairPreview(
 
 function canIncludeIssueInRepairPreview(issue: TripReadinessIssue, mode: TripReadinessRepairPreviewMode) {
   if (mode === 'batch') {
-    return issue.canBatchFix && issue.severity === 'low'
+    return issue.canBatchFix && issue.severity !== 'high'
   }
   return issue.requiresPreview && (
+    issue.actionKind === 'lookup_place' ||
     issue.actionKind === 'generate_routes' ||
     issue.actionKind === 'retry_ticket_upload' ||
     issue.actionKind === 'generate_content_preview' ||
@@ -531,7 +542,7 @@ function buildReadinessSummary(issues: TripReadinessIssue[]): TripReadinessSumma
   const totalCount = issues.length
   const highRiskCount = issues.filter((issue) => issue.severity === 'high').length
   const selectedCount = issues.filter((issue) => issue.defaultSelected).length
-  const fixableCount = issues.filter((issue) => issue.canBatchFix && issue.severity === 'low').length
+  const fixableCount = issues.filter((issue) => issue.canBatchFix && issue.severity !== 'high').length
   const status: TripReadinessStatus = highRiskCount > 0 ? 'high_risk' : totalCount > 0 ? 'needs_attention' : 'ready'
   return {
     fixableCount,
@@ -540,7 +551,7 @@ function buildReadinessSummary(issues: TripReadinessIssue[]): TripReadinessSumma
       ? '未发现明显阻塞项，仍建议人工核对关键预订信息。'
       : highRiskCount > 0
         ? `发现 ${totalCount} 项准备问题，其中 ${highRiskCount} 个高风险问题需要优先处理。`
-        : `发现 ${totalCount} 项可处理内容，可先批量修复低风险项。`,
+        : `发现 ${totalCount} 项可处理内容，可一键处理可自动修复项。`,
     selectedCount,
     status,
     statusLabel: status === 'ready'
@@ -624,4 +635,3 @@ function sortDays(days: Day[]) {
 function sortItems(items: ItineraryItem[]) {
   return [...items].sort((first, second) => first.sortOrder - second.sortOrder || first.createdAt - second.createdAt)
 }
-

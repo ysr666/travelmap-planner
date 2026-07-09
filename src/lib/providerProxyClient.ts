@@ -864,13 +864,20 @@ export class ProviderProxyClientError extends Error {
   readonly status?: number
 
   constructor(error: ProviderProxyErrorResponse, status?: number) {
-    super(error.message || defaultProviderProxyErrorMessage(error.code))
+    super(getProviderProxyClientErrorMessage(error, status))
     this.name = 'ProviderProxyClientError'
     this.code = error.code
     this.details = error.details
     this.provider = error.provider
     this.status = status
   }
+}
+
+function getProviderProxyClientErrorMessage(error: ProviderProxyErrorResponse, status?: number) {
+  if ((status === 401 || status === 403) && error.code === 'invalid_request') {
+    return '请先登录云端账号，或稍后重试 provider 服务。'
+  }
+  return error.message || defaultProviderProxyErrorMessage(error.code, error.operation)
 }
 
 function parseProviderProxyResponse(input: unknown): ProviderProxyRoutePreviewResponse {

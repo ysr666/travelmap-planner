@@ -10,11 +10,13 @@ import type { Day, ItineraryItem, Trip } from '../../types'
 
 const mocks = vi.hoisted(() => ({
   applyContent: vi.fn(),
+  fetchPlaceLookup: vi.fn(),
   generateContent: vi.fn(),
   generateDailyTip: vi.fn(),
   generateRoutes: vi.fn(),
   retryTicketBlobUpload: vi.fn(),
   saveDailyTip: vi.fn(),
+  updateItineraryItem: vi.fn(),
 }))
 
 vi.mock('../../lib/ai/tripContentEnrichment', () => ({
@@ -40,12 +42,17 @@ vi.mock('../../lib/cloudObjectSync', () => ({
 }))
 
 vi.mock('../../lib/providerProxyClient', () => ({
+  fetchProviderProxyPlaceLookup: mocks.fetchPlaceLookup,
   getProviderProxyConfig: vi.fn(() => ({
     configured: true,
     provider: 'google',
     proxyUrl: '/api/provider-proxy',
     source: 'proxy',
   })),
+}))
+
+vi.mock('../../db', () => ({
+  updateItineraryItem: mocks.updateItineraryItem,
 }))
 
 vi.mock('../../lib/routeGeneration', () => ({
@@ -80,6 +87,21 @@ beforeEach(() => {
     skippedCount: 0,
   })
   mocks.retryTicketBlobUpload.mockResolvedValue(undefined)
+  mocks.fetchPlaceLookup.mockResolvedValue({
+    ok: true,
+    operation: 'place_lookup',
+    results: [{
+      displayName: '西湖风景名胜区',
+      formattedAddress: '浙江省杭州市西湖区',
+      location: { lat: 30.25, lng: 120.16 },
+      placeId: 'places/west-lake',
+      provider: 'google_places',
+      retrievedAt: '2026-06-01T00:00:00.000Z',
+    }],
+    retrievedAt: '2026-06-01T00:00:00.000Z',
+    source: 'google_places',
+  })
+  mocks.updateItineraryItem.mockResolvedValue({ ...item, lat: 30.25, lng: 120.16, locationName: '西湖风景名胜区' })
   mocks.generateContent.mockResolvedValue({
     baselineFingerprint: 'content-base',
     checkedIds: ['content:item_1'],
@@ -138,7 +160,7 @@ describe('TripReadinessCenterPanel', () => {
 
     expect(getByTestId('trip-readiness-status').textContent).toContain('有 1 个高风险问题')
     const checkboxes = [...document.body.querySelectorAll<HTMLInputElement>('[data-testid="trip-readiness-issue-checkbox"]')]
-    expect(checkboxes.filter((checkbox) => checkbox.checked)).toHaveLength(4)
+    expect(checkboxes.filter((checkbox) => checkbox.checked)).toHaveLength(5)
     expect(checkboxes.some((checkbox) => checkbox.disabled)).toBe(true)
 
     await clickTestId('trip-readiness-batch-button')
@@ -155,11 +177,20 @@ describe('TripReadinessCenterPanel', () => {
       targetDayIds: ['day_1'],
       tripId: 'trip_1',
     }))
+    expect(mocks.fetchPlaceLookup).toHaveBeenCalledWith(expect.objectContaining({
+      operation: 'place_lookup',
+      query: expect.stringContaining('西湖'),
+    }), '/api/provider-proxy')
+    expect(mocks.updateItineraryItem).toHaveBeenCalledWith('item_1', expect.objectContaining({
+      lat: 30.25,
+      lng: 120.16,
+      locationName: '西湖风景名胜区',
+    }))
     expect(mocks.retryTicketBlobUpload).toHaveBeenCalledWith('ticket_pending')
     expect(mocks.retryTicketBlobUpload).not.toHaveBeenCalledWith('ticket_error')
     expect(mocks.generateContent).toHaveBeenCalledTimes(1)
     expect(mocks.generateDailyTip).toHaveBeenCalledTimes(1)
-    expect(onChanged).toHaveBeenCalledTimes(0)
+    expect(onChanged).toHaveBeenCalledTimes(1)
     expect(getByTestId('trip-readiness-content-preview').textContent).toContain('确认后才会写入')
     expect(getByTestId('trip-readiness-daily-tip-preview').textContent).toContain('确认后写入旅行备注')
 
@@ -170,7 +201,7 @@ describe('TripReadinessCenterPanel', () => {
     expect(mocks.applyContent).toHaveBeenCalledWith('trip_1', expect.any(Array), ['content:item_1'], {
       expectedBaselineFingerprint: 'content-base',
     })
-    expect(onChanged).toHaveBeenCalledTimes(1)
+    expect(onChanged).toHaveBeenCalledTimes(2)
 
     await clickTestId('trip-readiness-save-daily-tip-button')
     expect(mocks.saveDailyTip).toHaveBeenCalledTimes(0)
@@ -180,7 +211,7 @@ describe('TripReadinessCenterPanel', () => {
       expectedBaselineFingerprint: 'daily-base',
       tripId: 'trip_1',
     }))
-    expect(onChanged).toHaveBeenCalledTimes(2)
+    expect(onChanged).toHaveBeenCalledTimes(3)
   })
 })
 
@@ -262,6 +293,21 @@ const model: TripReadinessModel = {
       type: 'ticket_unsynced',
     },
     {
+      actionKind: 'lookup_place',
+      actionLabel: '智能补地点',
+      canBatchFix: true,
+      dayId: day.id,
+      defaultSelected: true,
+      evidence: ['缺少坐标。'],
+      id: 'issue-place',
+      itemId: item.id,
+      message: '可用地点服务自动匹配地址和坐标。',
+      requiresPreview: true,
+      severity: 'medium',
+      title: '缺少地点坐标',
+      type: 'missing_coordinate',
+    },
+    {
       actionKind: 'generate_routes',
       actionLabel: '生成路线',
       canBatchFix: true,
@@ -320,13 +366,13 @@ const model: TripReadinessModel = {
     },
   ],
   summary: {
-    fixableCount: 4,
+    fixableCount: 5,
     highRiskCount: 1,
-    message: '发现 5 项准备问题，其中 1 个高风险问题需要优先处理。',
-    selectedCount: 4,
+    message: '发现 6 项准备问题，其中 1 个高风险问题需要优先处理。',
+    selectedCount: 5,
     status: 'high_risk',
     statusLabel: '有 1 个高风险问题',
-    totalCount: 5,
+    totalCount: 6,
   },
 }
 

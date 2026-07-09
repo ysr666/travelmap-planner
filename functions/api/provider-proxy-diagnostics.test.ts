@@ -25,6 +25,9 @@ describe('provider proxy diagnostics function', () => {
         placeLookup: { configured: false, provider: 'unconfigured' },
         routeOrder: { configured: false, provider: 'unconfigured' },
       },
+      security: {
+        authConfig: { configured: false },
+      },
     })
   })
 

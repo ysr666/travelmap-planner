@@ -44,6 +44,11 @@ export type ProviderProxyDiagnosticsResponse = {
   }
   retrievedAt: string
   security: {
+    authConfig: {
+      configured: boolean
+      hasSupabaseAnonKey: boolean
+      hasSupabaseUrl: boolean
+    }
     authRequired: boolean
     budgetAlertsConfigured: boolean
     durableQuotaConfigured: boolean
@@ -70,6 +75,8 @@ export function buildProviderProxyDiagnosticsResponse(
   const aiProvider = normalizeAiProvider(env.TRIPMAP_AI_PROVIDER)
   const hasOpenRouteServiceApiKey = hasSecret(env.OPENROUTESERVICE_API_KEY)
   const environment = normalizeEnvironment(env.TRIPMAP_PROVIDER_PROXY_ENV)
+  const hasSupabaseUrl = hasSecret(env.TRIPMAP_SUPABASE_URL) || hasSecret(env.VITE_SUPABASE_URL)
+  const hasSupabaseAnonKey = hasSecret(env.TRIPMAP_SUPABASE_ANON_KEY) || hasSecret(env.VITE_SUPABASE_ANON_KEY)
 
   return {
     googleMaps,
@@ -113,6 +120,11 @@ export function buildProviderProxyDiagnosticsResponse(
     },
     retrievedAt: normalizeRetrievedAt(now),
     security: {
+      authConfig: {
+        configured: hasSupabaseUrl && hasSupabaseAnonKey,
+        hasSupabaseAnonKey,
+        hasSupabaseUrl,
+      },
       authRequired: environment !== 'development' || env.TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH === '1' || env.TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH === 'true',
       budgetAlertsConfigured: Boolean(env.TRIPMAP_PROVIDER_ALERT_EMAIL && hasSecret(env.TRIPMAP_PROVIDER_ALERT_FROM)),
       durableQuotaConfigured: Boolean(env.TRIPMAP_PROVIDER_QUOTA_D1),

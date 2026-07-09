@@ -370,11 +370,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute bottom-6 left-gutter right-gutter">
-          <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2">{item.title}</h1>
+          <h1 className="mb-2 break-words font-headline-lg-mobile text-headline-lg-mobile text-on-surface [overflow-wrap:anywhere]">{item.title}</h1>
           {item.locationName ? (
-            <div className="inline-flex items-center gap-2 text-on-surface-variant font-body-md text-body-md bg-surface/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/30">
-              <Clock3 className="size-4" />
-              <span>{describeItemTime(item)} · {item.locationName}</span>
+            <div className="inline-flex max-w-full items-start gap-2 rounded-full border border-outline-variant/30 bg-surface/50 px-3 py-1.5 font-body-md text-body-md text-on-surface-variant backdrop-blur-md">
+              <Clock3 className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{describeItemTime(item)} · {item.locationName}</span>
             </div>
           ) : null}
         </div>
@@ -589,8 +589,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 <button className="flex w-full min-w-0 items-start gap-3 rounded-xl bg-white px-3 py-3 text-left ring-1 ring-outline-variant/30 transition hover:ring-sky-200 active:scale-[0.99] tm-focus dark:bg-surface-dim/70 dark:ring-outline-variant/30 dark:hover:ring-sky-800" data-testid="item-place-lookup-result" key={candidate.placeId} onClick={() => setPendingPlaceCandidate(candidate)} type="button">
                   <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary"><MapPinned className="size-5" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block break-words font-body-lg text-body-lg text-on-surface">{candidate.displayName}</span>
-                    <span className="mt-0.5 block break-words font-body-md text-body-md text-on-surface-variant">{candidate.formattedAddress}</span>
+                    <span className="block break-words font-body-lg text-body-lg text-on-surface [overflow-wrap:anywhere]">{candidate.displayName}</span>
+                    <span className="mt-0.5 block break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{candidate.formattedAddress}</span>
                     {candidate.googleMapsUri ? <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary"><ExternalLink className="size-3" />Google Maps</span> : null}
                   </span>
                 </button>
@@ -692,7 +692,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             {tickets.slice(0, 3).map((ticket) => (
               <button
                 key={ticket.id}
-                className="ticket-cutout relative min-w-[260px] flex-shrink-0 bg-surface-container-high border border-outline-variant/30 rounded-xl overflow-hidden shadow-lg active:scale-[0.98] transition-transform duration-200 cursor-pointer text-left"
+                className="ticket-cutout relative w-[calc(100vw-2rem)] max-w-[260px] flex-shrink-0 cursor-pointer overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-high text-left shadow-lg transition-transform duration-200 active:scale-[0.98] sm:w-[260px]"
                 data-testid="item-ticket-entry"
                 onClick={() => setPreviewTicket(ticket)}
                 type="button"
@@ -705,8 +705,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                     </div>
                     <span className="px-2 py-1 rounded bg-secondary-container/20 text-secondary-fixed-dim font-label-sm text-[11px] border border-secondary-container/30">已生效</span>
                   </div>
-                  <h3 className="font-headline-md text-headline-md text-on-surface mb-1">{getTicketDisplayTitle(ticket)}</h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">{getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
+                  <h3 className="mb-1 line-clamp-3 break-words font-headline-md text-headline-md text-on-surface [overflow-wrap:anywhere]">{getTicketDisplayTitle(ticket)}</h3>
+                  <p className="mb-6 break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
                   <div className="border-t border-dashed border-outline-variant/50 w-full my-3" />
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-body-md text-body-md text-on-surface-variant">点击预览</span>

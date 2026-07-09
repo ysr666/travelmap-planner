@@ -100,10 +100,10 @@ export function TripReadinessCenterPanel({
     low: model.issues.filter((issue) => issue.severity === 'low'),
     medium: model.issues.filter((issue) => issue.severity === 'medium'),
   }), [model.issues])
-  const selectedLowFixableCount = batchPreview.issueIds.length
+  const selectedFixableCount = batchPreview.issueIds.length
 
   function toggleIssue(issue: TripReadinessIssue) {
-    if (!issue.canBatchFix || issue.severity !== 'low') {
+    if (!issue.canBatchFix || issue.severity === 'high') {
       return
     }
     const selected = checkedIds.includes(issue.id)
@@ -130,6 +130,7 @@ export function TripReadinessCenterPanel({
 
   function handleIssueAction(issue: TripReadinessIssue) {
     if (
+      issue.actionKind === 'lookup_place' ||
       issue.actionKind === 'generate_routes' ||
       issue.actionKind === 'retry_ticket_upload' ||
       issue.actionKind === 'generate_content_preview' ||
@@ -184,6 +185,9 @@ export function TripReadinessCenterPanel({
         setStoredDailyTipPreview(trip.id, result.dailyTipPreview, setDailyTipPreviewState)
       }
       setStoredRepairResult(trip.id, cloneRepairResult(result), setRepairResultState)
+      if (result.placeUpdatedItemIds.length > 0) {
+        await onChanged({ refreshTripData: true })
+      }
 
       setPendingPreview(null)
     } catch (caught) {
@@ -277,49 +281,55 @@ export function TripReadinessCenterPanel({
             <span>路线、票据、内容和同步状态暂未发现明显阻塞项。</span>
           </div>
         ) : (
-          <div className="space-y-4">
-            <IssueGroup
-              checkedIds={checkedIds}
-              dayById={dayById}
-              issues={groups.high}
-              label="高风险"
-              onAction={handleIssueAction}
-              onToggle={toggleIssue}
-            />
-            <IssueGroup
-              checkedIds={checkedIds}
-              dayById={dayById}
-              issues={groups.medium}
-              label="建议处理"
-              onAction={handleIssueAction}
-              onToggle={toggleIssue}
-            />
-            <IssueGroup
-              checkedIds={checkedIds}
-              dayById={dayById}
-              issues={groups.low}
-              label="低风险"
-              onAction={handleIssueAction}
-              onToggle={toggleIssue}
-            />
-          </div>
+          <details className="group rounded-xl border border-outline-variant/30 bg-surface-container-high/35 px-3 py-2">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-on-surface marker:hidden">
+              <span>查看问题明细</span>
+              <span className="tm-muted">{model.issues.length} 项</span>
+            </summary>
+            <div className="mt-2 space-y-4">
+              <IssueGroup
+                checkedIds={checkedIds}
+                dayById={dayById}
+                issues={groups.high}
+                label="高风险"
+                onAction={handleIssueAction}
+                onToggle={toggleIssue}
+              />
+              <IssueGroup
+                checkedIds={checkedIds}
+                dayById={dayById}
+                issues={groups.medium}
+                label="建议处理"
+                onAction={handleIssueAction}
+                onToggle={toggleIssue}
+              />
+              <IssueGroup
+                checkedIds={checkedIds}
+                dayById={dayById}
+                issues={groups.low}
+                label="低风险"
+                onAction={handleIssueAction}
+                onToggle={toggleIssue}
+              />
+            </div>
+          </details>
         )}
 
         {model.issues.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 tm-muted" data-testid="trip-readiness-selected-summary">
-              已选择 {selectedLowFixableCount} 项低风险修复，高风险不会进入批量静默处理。
+              已选择 {selectedFixableCount} 项自动修复，高风险仍需手动确认。
             </p>
             <Button
               className="min-h-11 px-3 text-xs"
               data-testid="trip-readiness-batch-button"
-              disabled={selectedLowFixableCount === 0 || isRepairing}
+              disabled={selectedFixableCount === 0 || isRepairing}
               icon={isRepairing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
               loading={isRepairing}
               onClick={openBatchConfirm}
               variant="secondary"
             >
-              批量修复 {selectedLowFixableCount} 项
+              一键智能修复
             </Button>
           </div>
         ) : null}
@@ -333,6 +343,12 @@ export function TripReadinessCenterPanel({
               </p>
             ))}
             {repairResult.ticketErrors.map((message, index) => (
+              <p className="flex items-start gap-2 text-amber-700 dark:text-amber-200" key={`${message}-${index}`}>
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <span>{message}</span>
+              </p>
+            ))}
+            {repairResult.placeErrors.map((message, index) => (
               <p className="flex items-start gap-2 text-amber-700 dark:text-amber-200" key={`${message}-${index}`}>
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <span>{message}</span>
@@ -494,6 +510,9 @@ function IssueGroup({
 function cloneRepairResult(result: RepairResult): RepairResult {
   return {
     messages: [...result.messages],
+    placeErrors: [...result.placeErrors],
+    placeLookupCount: result.placeLookupCount,
+    placeUpdatedItemIds: [...result.placeUpdatedItemIds],
     retriedTicketIds: [...result.retriedTicketIds],
     routeResult: result.routeResult,
     ticketErrors: [...result.ticketErrors],
@@ -566,7 +585,7 @@ function IssueRow({
   onAction: (issue: TripReadinessIssue) => void
   onToggle: (issue: TripReadinessIssue) => void
 }) {
-  const selectable = issue.canBatchFix && issue.severity === 'low'
+  const selectable = issue.canBatchFix && issue.severity !== 'high'
   return (
     <div
       className="rounded-xl border border-outline-variant/30 bg-surface-container-high/40 px-3 py-2"
@@ -648,9 +667,10 @@ function buildRepairConfirmBody(
     .filter((item): item is ItineraryItem => Boolean(item))
   const contentCounts = estimateTripContentEnrichmentRequestCounts(contentTargets)
   const dailyTipRequestCount = preview.dailyTipRequested && dailyTipModel ? dailyTipModel.searchTargets.length + 1 : 0
-  const providerRequestCount = preview.routeDayIds.length + contentCounts.total + dailyTipRequestCount
+  const providerRequestCount = preview.routeDayIds.length + preview.placeItemIds.length + contentCounts.total + dailyTipRequestCount
   const parts = [
     preview.routeDayIds.length > 0 ? `生成 ${preview.routeDayIds.length} 天路线缓存` : '',
+    preview.placeItemIds.length > 0 ? `补全 ${preview.placeItemIds.length} 个地点坐标` : '',
     preview.ticketIds.length > 0 ? `重试 ${preview.ticketIds.length} 张票据上传` : '',
     preview.contentItemIds.length > 0 ? `生成 ${Math.min(preview.contentItemIds.length, TRIP_CONTENT_ENRICHMENT_MAX_ITEMS)} 个景点内容预览` : '',
     preview.dailyTipRequested ? '生成每日旅行提示预览' : '',
@@ -700,6 +720,7 @@ function issueIcon(issue: TripReadinessIssue) {
 }
 
 function actionIcon(issue: TripReadinessIssue) {
+  if (issue.actionKind === 'lookup_place') return <MapPin className="size-3.5" />
   if (issue.actionKind === 'generate_routes') return <Route className="size-3.5" />
   if (issue.actionKind === 'retry_ticket_upload' || issue.actionKind === 'navigate_tickets') return <Ticket className="size-3.5" />
   if (issue.actionKind === 'generate_content_preview' || issue.actionKind === 'generate_daily_tip_preview') return <Sparkles className="size-3.5" />

@@ -86,6 +86,7 @@ describe('tripReadiness', () => {
 
     const batch = buildTripReadinessRepairPreview(model, model.issues.map((issue) => issue.id), 'batch')
     expect(batch.routeDayIds).toEqual([seed.day.id])
+    expect(batch.placeItemIds).toEqual([])
     expect(batch.ticketIds).toEqual([seed.pendingTicket.id])
     expect(batch.dailyTipRequested).toBe(true)
     expect(batch.contentItemIds).toEqual(expect.arrayContaining([seed.farStart.id, seed.farEnd.id]))
@@ -95,6 +96,30 @@ describe('tripReadiness', () => {
     const single = buildTripReadinessRepairPreview(model, [highTicketIssue?.id ?? ''], 'single')
     expect(single.ticketIds).toEqual([seed.errorTicket.id])
     expect(single.excludedIssueIds).toEqual([])
+  })
+
+  it('includes missing coordinates in one-click repair preview', () => {
+    const seed = buildSeed()
+    const model = buildTripReadinessModel({
+      allItems: [seed.missingCoordinate],
+      days: [seed.day],
+      itemsByDay: { [seed.day.id]: [seed.missingCoordinate] },
+      routePreparation: null,
+      ticketBlobSyncStates: [],
+      tickets: [],
+      trip: seed.trip,
+      tripCheck: tripCheckFixture(seed),
+    })
+    const missingPlaceIssue = model.issues.find((issue) => issue.type === 'missing_coordinate')
+
+    expect(missingPlaceIssue).toMatchObject({
+      actionKind: 'lookup_place',
+      canBatchFix: true,
+      defaultSelected: true,
+    })
+    const batch = buildTripReadinessRepairPreview(model, model.issues.map((issue) => issue.id), 'batch')
+    expect(batch.placeItemIds).toEqual([seed.missingCoordinate.id])
+    expect(batch.requestCounts.placeLookup).toBe(1)
   })
 
   it('maps daily tip markers and cloud conflict severity', () => {

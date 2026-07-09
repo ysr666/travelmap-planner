@@ -64,6 +64,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(() => null),
   getSupabaseConfigStatus: vi.fn(() => ({ configured: false })),
   clearSyncedTicketBlobCache: vi.fn(),
+  refreshTicketBlobSyncStatesFromCloud: vi.fn(),
   restoreTicketBlobCacheFromCloud: vi.fn(),
   retryTicketBlobUpload: vi.fn(),
   getTicketBlobSyncState: vi.fn(() => null),
@@ -133,6 +134,7 @@ vi.mock('../lib/cloudBackup', () => ({
 
 vi.mock('../lib/cloudObjectSync', () => ({
   clearSyncedTicketBlobCache: mocks.clearSyncedTicketBlobCache,
+  refreshTicketBlobSyncStatesFromCloud: mocks.refreshTicketBlobSyncStatesFromCloud,
   restoreTicketBlobCacheFromCloud: mocks.restoreTicketBlobCacheFromCloud,
   retryTicketBlobUpload: mocks.retryTicketBlobUpload,
 }))

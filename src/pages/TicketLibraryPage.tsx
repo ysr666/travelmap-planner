@@ -67,6 +67,7 @@ import {
 } from '../lib/cloudBackup'
 import {
   clearSyncedTicketBlobCache,
+  refreshTicketBlobSyncStatesFromCloud,
   restoreTicketBlobCacheFromCloud,
   retryTicketBlobUpload,
 } from '../lib/cloudObjectSync'
@@ -390,6 +391,9 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         }
         return
       }
+      if (isCloudSignedIn && tripId) {
+        await refreshTicketBlobSyncStatesFromCloud(tripId).catch(() => undefined)
+      }
 
       const nextPresence: TicketBlobPresenceState = {}
       const nextSyncStates: TicketBlobSyncStateMap = {}
@@ -413,7 +417,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     return () => {
       isActive = false
     }
-  }, [tickets, tripSyncEntry])
+  }, [isCloudSignedIn, tickets, tripId, tripSyncEntry])
 
   useEffect(() => {
     const refreshTripSyncEntry = () => {
@@ -1073,6 +1077,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           onIntelligenceSuggestionIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
           onIntelligenceSuggestionLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
           onIntelligenceSuggestionRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
+          blobSyncState={ticketBlobSyncStates[previewTicket.id]}
+          blobSyncStates={ticketBlobSyncStates}
           ticket={previewTicket}
           tickets={filteredTickets}
         />
@@ -1519,6 +1525,7 @@ function TicketCard({
         type="button"
       >
         <TicketThumbnail
+          blobSyncState={blobSyncState}
           className="aspect-[4/3] w-full"
           ticket={ticket}
         />

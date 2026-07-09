@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { FileArchive, FileImage, FileText, Link2, MapPinned } from 'lucide-react'
 import { getTicketBlob } from '../../db'
+import { restoreTicketBlobCacheFromCloud } from '../../lib/cloudObjectSync'
 import { getTicketDisplayMeta, type TicketDisplayIconKind, type TicketDisplayToneKey } from '../../lib/ticketDisplay'
 import { getTicketStorageMode } from '../../lib/tickets'
-import type { TicketMeta } from '../../types'
+import type { TicketBlobSyncState, TicketMeta } from '../../types'
 
 const thumbnailToneClasses: Record<TicketDisplayToneKey, string> = {
   amber: 'bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50',
@@ -30,9 +31,11 @@ function renderThumbnailIcon(iconKind: TicketDisplayIconKind) {
 
 export function TicketThumbnail({
   ticket,
+  blobSyncState,
   className = '',
 }: {
   ticket: TicketMeta
+  blobSyncState?: TicketBlobSyncState
   className?: string
 }) {
   const visual = getTicketDisplayMeta(ticket)
@@ -51,7 +54,15 @@ export function TicketThumbnail({
     let currentUrl: string | null = null
 
     void getTicketBlob(ticket.id).then(async (record) => {
-      if (cancelled || !record?.blob) return
+      if (cancelled) return
+      if (!record?.blob && canRestoreSyncedBlob(blobSyncState)) {
+        await restoreTicketBlobCacheFromCloud(ticket.id)
+        record = await getTicketBlob(ticket.id)
+      }
+      if (cancelled || !record?.blob) {
+        setPreviewErrorTicketId(ticket.id)
+        return
+      }
       if (ticket.fileType === 'image') {
         const url = URL.createObjectURL(record.blob)
         currentUrl = url
@@ -73,7 +84,7 @@ export function TicketThumbnail({
         URL.revokeObjectURL(currentUrl)
       }
     }
-  }, [ticket.fileType, ticket.id, shouldLoadPreview])
+  }, [blobSyncState, ticket.fileType, ticket.id, shouldLoadPreview])
 
   const showPreview = shouldLoadPreview && preview?.ticketId === ticket.id && previewErrorTicketId !== ticket.id
 
@@ -102,6 +113,12 @@ export function TicketThumbnail({
       )}
     </div>
   )
+}
+
+function canRestoreSyncedBlob(blobSyncState?: TicketBlobSyncState) {
+  return blobSyncState?.uploadStatus === 'synced'
+    && blobSyncState.cacheStatus !== 'cached'
+    && Boolean(blobSyncState.cloudStoragePath)
 }
 
 async function renderPdfFirstPageThumbnail(blob: Blob) {

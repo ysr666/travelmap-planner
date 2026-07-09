@@ -241,6 +241,19 @@ export async function restoreTicketBlobCacheFromCloud(ticketId: string) {
   emitTravelDataChanged()
 }
 
+export async function refreshTicketBlobSyncStatesFromCloud(tripId: string) {
+  const fixture = readE2eCloudFixture()
+  if (fixture?.user) {
+    await applyCloudTicketBlobRows((fixture.ticketBlobRows ?? [])
+      .filter((row) => row.user_id === fixture.user!.id && row.trip_id === tripId)
+      .map(mapFixtureTicketBlobRow))
+    return
+  }
+
+  const user = await requireCurrentObjectSyncUser()
+  await applyCloudTicketBlobRows(await fetchCloudTicketBlobRows(tripId, user.id))
+}
+
 export async function retryTicketBlobUpload(ticketId: string) {
   const ticket = await getTicketMeta(ticketId)
   const blobRecord = await getTicketBlob(ticketId)

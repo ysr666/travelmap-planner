@@ -7,6 +7,10 @@ vi.mock('../../db', () => ({
   getTicketBlob: vi.fn(),
 }))
 
+vi.mock('../../lib/cloudObjectSync', () => ({
+  restoreTicketBlobCacheFromCloud: vi.fn(),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
 })

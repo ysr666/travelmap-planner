@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Copy, ExternalLink, FileArchive, LoaderCircle, Pencil, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { getTicketBlob } from '../db'
+import { restoreTicketBlobCacheFromCloud } from '../lib/cloudObjectSync'
 import {
   describeTicketMetaLine,
   getTicketDisplayTitle,
@@ -9,7 +10,7 @@ import {
   isValidExternalUrl,
   ticketStorageModeLabels,
 } from '../lib/tickets'
-import type { TicketMeta } from '../types'
+import type { TicketBlobSyncState, TicketMeta } from '../types'
 import type { TripIntelligenceSuggestion } from '../lib/tripIntelligence'
 import { TicketThumbnail } from './tickets/TicketThumbnail'
 import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from './trip/TripIntelligenceSuggestionControls'
@@ -23,6 +24,8 @@ type TicketPreviewProps = {
   onIntelligenceSuggestionIgnore?: (suggestion: TripIntelligenceSuggestion) => void
   onIntelligenceSuggestionLater?: (suggestion: TripIntelligenceSuggestion) => void
   onIntelligenceSuggestionRestore?: (suggestion: TripIntelligenceSuggestion) => void
+  blobSyncState?: TicketBlobSyncState
+  blobSyncStates?: Record<string, TicketBlobSyncState | undefined>
   ticket: TicketMeta
   onClose: () => void
   onChangeTicket?: (ticket: TicketMeta) => void
@@ -48,6 +51,8 @@ export function TicketPreview({
   onIntelligenceSuggestionIgnore,
   onIntelligenceSuggestionLater,
   onIntelligenceSuggestionRestore,
+  blobSyncState,
+  blobSyncStates,
   ticket,
   onClose,
   onChangeTicket,
@@ -129,7 +134,11 @@ export function TicketPreview({
     async function loadBlob() {
       if (storageMode !== 'copy') return
       try {
-        const record = await getTicketBlob(ticket.id)
+        let record = await getTicketBlob(ticket.id)
+        if (!record?.blob && canRestoreSyncedBlob(blobSyncState)) {
+          await restoreTicketBlobCacheFromCloud(ticket.id)
+          record = await getTicketBlob(ticket.id)
+        }
         if (!record) {
           throw new Error('离线缓存不可用，可能尚未同步到此设备或浏览器缓存已被清理。请重新同步账号数据或重新上传票据。')
         }
@@ -152,7 +161,7 @@ export function TicketPreview({
 
     void loadBlob()
     return () => { isActive = false; if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl) }
-  }, [storageMode, ticket.id])
+  }, [blobSyncState, storageMode, ticket.id])
 
   // --- Keyboard ---
   useEffect(() => {
@@ -346,7 +355,7 @@ export function TicketPreview({
                 onClick={() => onChangeTicket?.(t)}
                 type="button"
               >
-                <TicketThumbnail className="size-7 shrink-0 rounded" ticket={t} />
+                <TicketThumbnail blobSyncState={blobSyncStates?.[t.id]} className="size-7 shrink-0 rounded" ticket={t} />
                 <span className="max-w-[5rem] truncate">
                   {idx + 1} {t.title || t.fileName || '票据'}
                 </span>
@@ -478,6 +487,12 @@ export function TicketPreview({
     </div>,
     document.body,
   )
+}
+
+function canRestoreSyncedBlob(blobSyncState?: TicketBlobSyncState) {
+  return blobSyncState?.uploadStatus === 'synced'
+    && blobSyncState.cacheStatus !== 'cached'
+    && Boolean(blobSyncState.cloudStoragePath)
 }
 
 /* ── Reference preview (content only, actions in bottom bar) ── */

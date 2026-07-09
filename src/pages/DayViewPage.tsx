@@ -645,7 +645,7 @@ function DayContextIntelligenceCard({
         <p className="line-clamp-1 text-xs leading-5 tm-muted">{suggestions[0].title}</p>
       ) : null}
       <details className="rounded-lg bg-surface-container-high/55 px-3 py-2">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-on-surface marker:hidden">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-on-surface marker:hidden">
           <span>查看处理项</span>
           <span className="tm-muted">{suggestions.length + hiddenSuggestions.length} 项</span>
         </summary>

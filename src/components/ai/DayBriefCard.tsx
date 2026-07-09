@@ -34,7 +34,7 @@ export function DayBriefCard({ brief }: { brief: DayBrief }) {
 
       <p className="line-clamp-1 text-xs leading-5 tm-muted">{brief.status.message}</p>
       <details className="rounded-xl border border-outline-variant/25 bg-surface-container-high/35 px-3 py-2">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-on-surface marker:hidden">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-on-surface marker:hidden">
           <span>查看提醒</span>
           <span className="tm-muted">{brief.reminders.length + brief.topFindings.length} 项</span>
         </summary>

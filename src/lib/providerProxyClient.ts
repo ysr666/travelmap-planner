@@ -936,7 +936,7 @@ function parseProviderProxyExchangeRateResponse(input: unknown): ProviderProxyEx
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'exchange_rate'),
+      message: readProviderProxyErrorMessage(record, code, 'exchange_rate'),
       operation: 'exchange_rate',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -991,7 +991,7 @@ function parseProviderProxyRouteOrderSuggestionResponse(
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'route_order_suggestion'),
+      message: readProviderProxyErrorMessage(record, code, 'route_order_suggestion'),
       operation: 'route_order_suggestion',
       provider: isProviderProxyConcreteProvider(record.provider) ? record.provider : undefined,
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
@@ -1166,7 +1166,7 @@ function parseProviderProxyTravelSearchResponse(input: unknown): ProviderProxyTr
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'travel_search'),
+      message: readProviderProxyErrorMessage(record, code, 'travel_search'),
       operation: 'travel_search',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1189,7 +1189,7 @@ function parseProviderProxyPlaceLookupResponse(input: unknown): ProviderProxyPla
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'place_lookup'),
+      message: readProviderProxyErrorMessage(record, code, 'place_lookup'),
       operation: 'place_lookup',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1212,7 +1212,7 @@ function parseProviderProxyPlaceDetailsResponse(input: unknown): ProviderProxyPl
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'place_details'),
+      message: readProviderProxyErrorMessage(record, code, 'place_details'),
       operation: 'place_details',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1238,7 +1238,7 @@ function parseProviderProxyTripContentEnrichmentResponse(
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'trip_content_enrichment'),
+      message: readProviderProxyErrorMessage(record, code, 'trip_content_enrichment'),
       operation: 'trip_content_enrichment',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1264,7 +1264,7 @@ function parseProviderProxyTripDailyTipResponse(
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'trip_daily_tip'),
+      message: readProviderProxyErrorMessage(record, code, 'trip_daily_tip'),
       operation: 'trip_daily_tip',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1289,7 +1289,7 @@ function parseProviderProxyTripOperationsSummaryResponse(
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'trip_operations_summary'),
+      message: readProviderProxyErrorMessage(record, code, 'trip_operations_summary'),
       operation: 'trip_operations_summary',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -1314,7 +1314,7 @@ function parseProviderProxyAssistantAnswerResponse(
     const code = normalizeErrorCode(record.code)
     return buildProviderProxyErrorResponse({
       code,
-      message: defaultProviderProxyErrorMessage(code, 'assistant_answer'),
+      message: readProviderProxyErrorMessage(record, code, 'assistant_answer'),
       operation: 'assistant_answer',
       requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
     })
@@ -2056,6 +2056,16 @@ function normalizeErrorCode(value: string): ProviderProxyErrorCode {
     return value
   }
   return 'provider_error'
+}
+
+function readProviderProxyErrorMessage(
+  record: Record<string, unknown>,
+  code: ProviderProxyErrorCode,
+  operation?: ProviderProxyOperation,
+) {
+  const message = typeof record.message === 'string' ? record.message.trim() : ''
+  if (code === 'invalid_request' && message) return message
+  return defaultProviderProxyErrorMessage(code, operation)
 }
 
 function readStorageValue(storage: Storage | null | undefined, key: string) {

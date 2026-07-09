@@ -632,6 +632,26 @@ describe('provider proxy place_lookup client', () => {
     })
   })
 
+  it('preserves safe place lookup validation messages from the proxy', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        code: 'invalid_request',
+        message: '地点查询地区必须是 2 位国家或地区代码。',
+        ok: false,
+        operation: 'place_lookup',
+      }), { status: 400 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '伦敦',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: '地点查询地区必须是 2 位国家或地区代码。',
+      status: 400,
+    })
+  })
+
   it('validates and sends a place lookup payload without provider secrets', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string)

@@ -603,7 +603,7 @@ function ReplanDiffPreview({ record, selectedOptionId }: { record: TripReplanRec
 
 function StagePill({ stage }: { stage: TripLiveStage }) {
   const warning = stage === 'next_due'
-  return <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${warning ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-primary/10 text-primary'}`}>{warning ? <AlertTriangle className="size-3.5" /> : <Navigation className="size-3.5" />}{stageText(stage)}</span>
+  return <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${warning ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-primary/10 text-on-primary-fixed dark:text-primary-fixed-dim'}`}>{warning ? <AlertTriangle className="size-3.5" /> : <Navigation className="size-3.5" />}{stageText(stage)}</span>
 }
 
 function stageText(stage: TripLiveStage) {

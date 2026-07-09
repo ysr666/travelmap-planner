@@ -31,7 +31,7 @@ test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({
     await putIndexedDbMarker(page)
     await writeServiceWorkerVersion(appDir, 'v2')
     await activateUpdatedServiceWorker(page)
-    await page.reload({ waitUntil: 'networkidle' })
+    await reloadAfterServiceWorkerActivation(page)
     await ensureServiceWorkerController(page)
 
     await expect.poll(() => readServiceWorkerVersion(page), { timeout: 10_000 }).toBe('v2')
@@ -110,9 +110,21 @@ async function ensureServiceWorkerController(page: Page) {
     return Boolean(navigator.serviceWorker.controller)
   })
   if (!hasController) {
-    await page.reload({ waitUntil: 'networkidle' })
+    await reloadAfterServiceWorkerActivation(page)
   }
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 10_000 })
+}
+
+async function reloadAfterServiceWorkerActivation(page: Page) {
+  try {
+    await page.reload({ waitUntil: 'networkidle' })
+  } catch (caught) {
+    const message = String(caught instanceof Error ? caught.message : caught)
+    if (!message.includes('ERR_ABORTED') && !message.includes('frame was detached')) {
+      throw caught
+    }
+    await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
+  }
 }
 
 async function activateUpdatedServiceWorker(page: Page) {

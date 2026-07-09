@@ -586,6 +586,52 @@ describe('provider proxy travel_search client', () => {
 })
 
 describe('provider proxy place_lookup client', () => {
+  it('uses a stored Supabase session token when the provider client needs auth', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer stored-access-token')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+        results: [],
+        source: 'mock',
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '伦敦',
+    }, '/api/provider-proxy', {
+      fetcher,
+      storage: memoryStorage({
+        'sb-rfpcooafakuvgrdlfxpg-auth-token': JSON.stringify({
+          access_token: 'stored-access-token',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      }),
+    })
+  })
+
+  it('shows an account auth message instead of a request-invalid message', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        code: 'invalid_request',
+        message: 'Provider proxy authentication is required.',
+        ok: false,
+        operation: 'place_lookup',
+      }), { status: 401 })
+    }) as unknown as typeof fetch
+
+    await expect(fetchProviderProxyPlaceLookup({
+      operation: 'place_lookup',
+      query: '伦敦',
+    }, '/api/provider-proxy', { fetcher })).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: '请先登录或刷新云端账号后再使用 AI / 地点服务。',
+      status: 401,
+    })
+  })
+
   it('validates and sends a place lookup payload without provider secrets', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string)

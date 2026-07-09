@@ -874,8 +874,15 @@ export class ProviderProxyClientError extends Error {
 }
 
 function getProviderProxyClientErrorMessage(error: ProviderProxyErrorResponse, status?: number) {
-  if ((status === 401 || status === 403) && error.code === 'invalid_request') {
-    return '请先登录云端账号，或稍后重试 provider 服务。'
+  if (
+    error.code === 'invalid_request' &&
+    (
+      status === 401 ||
+      status === 403 ||
+      /auth|authentication|登录|云端账号/i.test(error.message ?? '')
+    )
+  ) {
+    return '请先登录或刷新云端账号后再使用 AI / 地点服务。'
   }
   return error.message || defaultProviderProxyErrorMessage(error.code, error.operation)
 }
@@ -1960,11 +1967,60 @@ async function resolveProviderProxyAccessToken(options: ProviderProxyClientOptio
   if (options.accessToken !== undefined) return options.accessToken?.trim() || null
   if (options.accessTokenProvider) return (await options.accessTokenProvider())?.trim() || null
   if (isE2eAuthBypassEnabled()) return 'tripmap-e2e-access-token'
+  const storage = options.storage ?? getBrowserStorage()
   const client = getSupabaseClient()
-  if (!client) return null
+  if (!client) return readStoredSupabaseAccessToken(storage)
   const { data, error } = await client.auth.getSession()
-  if (error) return null
-  return data.session?.access_token ?? null
+  if (error) return readStoredSupabaseAccessToken(storage)
+  return data.session?.access_token ?? readStoredSupabaseAccessToken(storage)
+}
+
+function readStoredSupabaseAccessToken(storage: Storage | null) {
+  if (!storage) return null
+  try {
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue
+      const token = readAccessTokenFromStoredSession(storage.getItem(key))
+      if (token) return token
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function readAccessTokenFromStoredSession(raw: string | null) {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return readAccessTokenFromSessionRecord(parsed)
+  } catch {
+    return null
+  }
+}
+
+function readAccessTokenFromSessionRecord(input: unknown): string | null {
+  const record = readRecord(input)
+  const direct = readFreshAccessToken(record)
+  if (direct) return direct
+  const currentSession = readFreshAccessToken(readRecord(record.currentSession))
+  if (currentSession) return currentSession
+  return readFreshAccessToken(readRecord(record.session))
+}
+
+function readFreshAccessToken(record: Record<string, unknown>) {
+  const token = typeof record.access_token === 'string' ? record.access_token.trim() : ''
+  if (!token) return null
+  const expiresAt = typeof record.expires_at === 'number'
+    ? record.expires_at
+    : typeof record.expires_at === 'string'
+      ? Number.parseInt(record.expires_at, 10)
+      : undefined
+  if (Number.isFinite(expiresAt) && (expiresAt as number) > 0 && (expiresAt as number) * 1000 <= Date.now() + 30_000) {
+    return null
+  }
+  return token
 }
 
 function normalizeProxyProvider(value?: string | null): ProviderProxyConcreteProvider | null {

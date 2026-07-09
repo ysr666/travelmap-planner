@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -215,6 +215,7 @@ export function ItemDetailPage() {
 }
 
 export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdated, onBack, sourceView }: ItemDetailContentProps) {
+  const defaultPlaceLookupQuery = buildPlaceLookupQuery(item)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
@@ -222,12 +223,15 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [isPlaceLookupOpen, setIsPlaceLookupOpen] = useState(false)
-  const [placeLookupQuery, setPlaceLookupQuery] = useState(() => buildPlaceLookupQuery(item))
+  const [placeLookupQuery, setPlaceLookupQuery] = useState(() => defaultPlaceLookupQuery)
   const [placeLookupResults, setPlaceLookupResults] = useState<ProviderProxyPlaceLookupResult[]>([])
   const [placeLookupError, setPlaceLookupError] = useState<string | null>(null)
   const [isPlaceLookupLoading, setIsPlaceLookupLoading] = useState(false)
   const [pendingPlaceCandidate, setPendingPlaceCandidate] = useState<ProviderProxyPlaceLookupResult | null>(null)
   const [isApplyingPlaceLookup, setIsApplyingPlaceLookup] = useState(false)
+  const placeLookupAutoSearchKeyRef = useRef<string | null>(null)
+  const placeLookupInFlightKeyRef = useRef<string | null>(null)
+  const placeLookupCompletedKeyRef = useRef<string | null>(null)
   const [preferenceForm, setPreferenceForm] = useState(() => buildPreferenceFormState(item.replanPreference))
   const [isSavingPreference, setIsSavingPreference] = useState(false)
   const [preferenceMessage, setPreferenceMessage] = useState<string | null>(null)
@@ -276,11 +280,15 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     }
   }
 
-  async function searchPlaceCandidates() {
-    const query = placeLookupQuery.trim()
+  async function searchPlaceCandidates(queryOverride?: string) {
+    const query = (queryOverride ?? placeLookupQuery).trim()
     if (!query) {
       setPlaceLookupError('请输入地点名称或地址。')
       setPlaceLookupResults([])
+      return
+    }
+    const requestKey = `${item.id}|${query}`
+    if (placeLookupInFlightKeyRef.current === requestKey || placeLookupCompletedKeyRef.current === requestKey) {
       return
     }
 
@@ -288,9 +296,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     if (!config.proxyUrl) {
       setPlaceLookupError('当前未配置地点查询服务。')
       setPlaceLookupResults([])
+      placeLookupCompletedKeyRef.current = requestKey
       return
     }
 
+    placeLookupInFlightKeyRef.current = requestKey
     setIsPlaceLookupLoading(true)
     setPlaceLookupError(null)
     try {
@@ -308,6 +318,8 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       setPlaceLookupResults([])
       setPlaceLookupError(caught instanceof ProviderProxyClientError ? caught.message : '地点查询失败，请稍后再试。')
     } finally {
+      placeLookupInFlightKeyRef.current = null
+      placeLookupCompletedKeyRef.current = requestKey
       setIsPlaceLookupLoading(false)
     }
   }
@@ -438,8 +450,18 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
               onClick={() => {
                 setIsPlaceLookupOpen((open) => {
                   const next = !open
-                  if (next && !placeLookupQuery.trim()) {
-                    setPlaceLookupQuery(buildPlaceLookupQuery(item))
+                  if (next) {
+                    const nextQuery = placeLookupQuery.trim() || defaultPlaceLookupQuery
+                    if (!placeLookupQuery.trim()) {
+                      setPlaceLookupQuery(nextQuery)
+                    }
+                    const autoSearchKey = `${item.id}|${nextQuery}`
+                    if (nextQuery && placeLookupAutoSearchKeyRef.current !== autoSearchKey) {
+                      placeLookupAutoSearchKeyRef.current = autoSearchKey
+                      window.setTimeout(() => {
+                        void searchPlaceCandidates(nextQuery)
+                      }, 0)
+                    }
                   }
                   return next
                 })
@@ -572,7 +594,11 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 className="min-h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm font-medium text-on-surface outline-none transition placeholder:text-outline focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-outline-variant/30 dark:bg-surface-dim dark:text-on-surface dark:focus:border-sky-700 dark:focus:ring-sky-900/40"
                 data-testid="item-place-lookup-query"
                 maxLength={200}
-                onChange={(event) => setPlaceLookupQuery(event.currentTarget.value)}
+                onChange={(event) => {
+                  placeLookupInFlightKeyRef.current = null
+                  placeLookupCompletedKeyRef.current = null
+                  setPlaceLookupQuery(event.currentTarget.value)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') { event.preventDefault(); void searchPlaceCandidates() }
                 }}
@@ -580,7 +606,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 value={placeLookupQuery}
               />
             </label>
-            <Button className="shrink-0 px-3" data-testid="item-place-lookup-search" disabled={!placeLookupQuery.trim()} icon={<Search className="size-4" />} loading={isPlaceLookupLoading} onClick={() => void searchPlaceCandidates()} variant="primary">搜索</Button>
+            <Button className="shrink-0 px-3" data-testid="item-place-lookup-search" disabled={!placeLookupQuery.trim() || isPlaceLookupLoading} icon={<Search className="size-4" />} loading={isPlaceLookupLoading} onClick={() => void searchPlaceCandidates()} variant="primary">搜索</Button>
           </div>
           {placeLookupError ? <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm font-medium leading-5 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" data-testid="item-place-lookup-error">{placeLookupError}</div> : null}
           {placeLookupResults.length > 0 ? (

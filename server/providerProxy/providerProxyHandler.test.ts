@@ -78,6 +78,12 @@ describe('provider proxy handler HTTP safety', () => {
       request: secureJsonRequest(validRequest()),
     })
     expect(invalidBearer.status).toBe(401)
+    expect(await invalidBearer.json()).toMatchObject({
+      code: 'invalid_request',
+      message: '云端账号登录已过期，请重新登录后再使用 AI / 地点服务。',
+      operation: 'route_preview',
+      ok: false,
+    })
     expect(authVerifier).toHaveBeenCalledTimes(1)
   })
 

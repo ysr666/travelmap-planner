@@ -334,10 +334,24 @@ export async function handleProviderProxyRequest({
     })
   }
 
+  let body: unknown
+  try {
+    body = JSON.parse(bodyText)
+  } catch {
+    return jsonResponse(buildProviderProxyErrorResponse({ code: 'invalid_request' }), 400, corsHeaders)
+  }
+  const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+  const operation = bodyRecord.operation
+  const responseOperation = typeof operation === 'string' ? operation as ProviderProxyOperation : undefined
+
   const ip = getProviderRequestIp(request)
   if (!ip && shouldRequireProviderAuth(env, environment)) {
     return jsonResponse(
-      buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy request identity is unavailable.' }),
+      buildProviderProxyErrorResponse({
+        code: 'invalid_request',
+        message: '请刷新页面后重试 provider 服务。',
+        operation: responseOperation,
+      }),
       403,
       corsHeaders,
     )
@@ -359,7 +373,11 @@ export async function handleProviderProxyRequest({
     const accessToken = extractBearerToken(request)
     if (!accessToken) {
       return jsonResponse(
-        buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy authentication is required.' }),
+        buildProviderProxyErrorResponse({
+          code: 'invalid_request',
+          message: '请先登录或刷新云端账号后再使用 AI / 地点服务。',
+          operation: responseOperation,
+        }),
         401,
         corsHeaders,
       )
@@ -367,23 +385,17 @@ export async function handleProviderProxyRequest({
     const verified = await authVerifier({ accessToken, env, fetcher })
     if (!verified.ok) {
       return jsonResponse(
-        buildProviderProxyErrorResponse({ code: 'invalid_request', message: 'Provider proxy authentication failed.' }),
+        buildProviderProxyErrorResponse({
+          code: 'invalid_request',
+          message: '云端账号登录已过期，请重新登录后再使用 AI / 地点服务。',
+          operation: responseOperation,
+        }),
         401,
         corsHeaders,
       )
     }
     accountId = verified.userId
   }
-
-  let body: unknown
-  try {
-    body = JSON.parse(bodyText)
-  } catch {
-    return jsonResponse(buildProviderProxyErrorResponse({ code: 'invalid_request' }), 400, corsHeaders)
-  }
-
-  const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : {}
-  const operation = bodyRecord.operation
   const operationGroup = getProviderOperationGroup(typeof operation === 'string' ? operation : undefined)
   const control = await checkProviderControl({ env, group: operationGroup, nowMs, storage: selectedOperationsStorage })
   if (!control.enabled) {

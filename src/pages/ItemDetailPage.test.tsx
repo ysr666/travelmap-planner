@@ -59,8 +59,8 @@ const mocks = vi.hoisted(() => ({
     icon: '📍',
     label: '地点',
   })),
-  getProviderProxyConfig: vi.fn(() => ({ baseUrl: '' })),
-  fetchProviderProxyPlaceLookup: vi.fn().mockResolvedValue({ ok: true, result: null }),
+  getProviderProxyConfig: vi.fn(() => ({ proxyUrl: '/api/provider-proxy' })),
+  fetchProviderProxyPlaceLookup: vi.fn().mockResolvedValue({ ok: true, results: [] }),
 }))
 
 vi.mock('../lib/routes', () => ({
@@ -283,6 +283,40 @@ describe('ItemDetailPage', () => {
     const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
       .find((b) => b.textContent?.includes('删除'))
     expect(deleteButton).toBeTruthy()
+  })
+
+  it('starts place lookup when opening the place lookup panel', async () => {
+    mocks.fetchProviderProxyPlaceLookup.mockResolvedValue({
+      ok: true,
+      results: [{
+        displayName: '伦敦',
+        formattedAddress: '英国伦敦',
+        location: { lat: 51.5074, lng: -0.1278 },
+        placeId: 'places/london',
+        provider: 'google_places',
+        retrievedAt: '2026-07-09T00:00:00.000Z',
+      }],
+    })
+
+    await act(async () => {
+      root?.render(<ItemDetailPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="item-place-lookup-toggle"]')?.click()
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    expect(mocks.fetchProviderProxyPlaceLookup).toHaveBeenCalledWith(expect.objectContaining({
+      operation: 'place_lookup',
+      query: expect.stringContaining('浅草寺'),
+    }), '/api/provider-proxy')
+    expect(container?.textContent).toContain('英国伦敦')
   })
 
   it('renders field action deck with scoped ticket access', async () => {

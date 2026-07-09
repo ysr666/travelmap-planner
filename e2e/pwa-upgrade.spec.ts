@@ -104,11 +104,22 @@ async function startStaticServer(rootDir: string) {
 }
 
 async function ensureServiceWorkerController(page: Page) {
-  const hasController = await page.evaluate(async () => {
-    if (!('serviceWorker' in navigator)) throw new Error('service worker is unavailable')
-    await navigator.serviceWorker.ready
-    return Boolean(navigator.serviceWorker.controller)
-  })
+  let hasController = false
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      hasController = await page.evaluate(async () => {
+        if (!('serviceWorker' in navigator)) throw new Error('service worker is unavailable')
+        await navigator.serviceWorker.ready
+        return Boolean(navigator.serviceWorker.controller)
+      })
+      break
+    } catch (caught) {
+      if (!isServiceWorkerNavigationRaceError(caught) || attempt === 2) {
+        throw caught
+      }
+      await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
+    }
+  }
   if (!hasController) {
     await reloadAfterServiceWorkerActivation(page)
   }
@@ -119,12 +130,18 @@ async function reloadAfterServiceWorkerActivation(page: Page) {
   try {
     await page.reload({ waitUntil: 'networkidle' })
   } catch (caught) {
-    const message = String(caught instanceof Error ? caught.message : caught)
-    if (!message.includes('ERR_ABORTED') && !message.includes('frame was detached')) {
+    if (!isServiceWorkerNavigationRaceError(caught)) {
       throw caught
     }
     await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
   }
+}
+
+function isServiceWorkerNavigationRaceError(caught: unknown) {
+  const message = String(caught instanceof Error ? caught.message : caught)
+  return message.includes('ERR_ABORTED')
+    || message.includes('Execution context was destroyed')
+    || message.includes('frame was detached')
 }
 
 async function activateUpdatedServiceWorker(page: Page) {

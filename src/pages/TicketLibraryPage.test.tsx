@@ -421,6 +421,47 @@ describe('TicketLibraryPage', () => {
     expect(container?.querySelector('[data-testid="ticket-preview"]')).toBeNull()
   })
 
+  it('opens a ticket when AI navigates to the already active attachment route', async () => {
+    window.history.replaceState(null, '', '/?qa=efcf42a#/documents?tripId=trip_1&tab=attachments')
+    mocks.getRouteParams.mockImplementation(() => new URLSearchParams(window.location.hash.replace(/^#\/?/, '').split('?')[1] ?? ''))
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_ai',
+        tripId: 'trip_1',
+        title: 'Edinburgh Castle 门票',
+        fileName: 'castle.pdf',
+        fileType: 'pdf',
+        storageMode: 'reference',
+        scope: 'item',
+        itemId: 'item_1',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage embedded tripIdOverride="trip_1" />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('tripmap:same-route-navigation', {
+        detail: {
+          params: { tab: 'attachments', ticketId: 'ticket_ai', ticketQuery: '爱丁堡', tripId: 'trip_1' },
+          route: 'documents',
+        },
+      }))
+    })
+
+    const searchInput = Array.from(container?.querySelectorAll('input') ?? [])
+      .find((input) => input.placeholder === '搜索票据、地点或订单')
+    expect(container?.querySelector('[data-testid="ticket-preview"]')?.textContent).toContain('Edinburgh Castle 门票')
+    expect(searchInput?.value).toBe('爱丁堡')
+    expect(window.location.hash).toContain('ticketId=ticket_ai')
+  })
+
   it('renders filter buttons', async () => {
     await act(async () => {
       root?.render(<TicketLibraryPage />)

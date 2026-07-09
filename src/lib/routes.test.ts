@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getCanonicalHashRedirect, getRouteParams, navigateTo, routeFromHash } from './routes'
 
 afterEach(() => {
@@ -112,5 +112,21 @@ describe('navigateTo', () => {
   it('sets hash without params', () => {
     navigateTo('settings')
     expect(window.location.hash).toBe('#/settings')
+  })
+
+  it('emits a same-route event when navigating to the current hash', () => {
+    const listener = vi.fn()
+    window.location.hash = '#/documents?tripId=abc&tab=attachments&ticketId=ticket_1'
+    window.addEventListener('tripmap:same-route-navigation', listener)
+
+    navigateTo('documents', { tab: 'attachments', ticketId: 'ticket_1', tripId: 'abc' })
+
+    expect(window.location.hash).toBe('#/documents?tab=attachments&ticketId=ticket_1&tripId=abc')
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      params: { tab: 'attachments', ticketId: 'ticket_1', tripId: 'abc' },
+      route: 'documents',
+    })
+    window.removeEventListener('tripmap:same-route-navigation', listener)
   })
 })

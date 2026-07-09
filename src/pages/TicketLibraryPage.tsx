@@ -403,6 +403,26 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }, [initialTicketId, previewTicket?.id, tickets])
 
   useEffect(() => {
+    function handleSameRouteNavigation(event: Event) {
+      const detail = (event as CustomEvent<{ params?: Record<string, string>; route?: string }>).detail
+      if (detail?.route !== 'documents' && detail?.route !== 'tickets') return
+      const navParams = detail.params
+      const ticketId = navParams?.ticketId
+      if (!ticketId) return
+      if (typeof navParams.ticketQuery === 'string') {
+        setSearchQuery(navParams.ticketQuery)
+      }
+      const ticket = tickets.find((candidate) => candidate.id === ticketId)
+      if (ticket) {
+        openTicketPreview(ticket)
+      }
+    }
+
+    window.addEventListener('tripmap:same-route-navigation', handleSameRouteNavigation)
+    return () => window.removeEventListener('tripmap:same-route-navigation', handleSameRouteNavigation)
+  }, [openTicketPreview, tickets])
+
+  useEffect(() => {
     let isActive = true
 
     async function refreshTicketBlobPresence() {

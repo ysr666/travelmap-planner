@@ -90,7 +90,27 @@ export function getRouteParams(hash = window.location.hash) {
 
 export function navigateTo(route: RouteId, params?: Record<string, string>) {
   const query = params ? `?${new URLSearchParams(params).toString()}` : ''
+  const nextHash = `#/${route}${query}`
+  if (isCurrentRouteTarget(route, params)) {
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`)
+    }
+    window.dispatchEvent(new CustomEvent('tripmap:same-route-navigation', {
+      detail: { params, route },
+    }))
+    return
+  }
   window.location.hash = `/${route}${query}`
+}
+
+function isCurrentRouteTarget(route: RouteId, params?: Record<string, string>) {
+  if (routeFromHash(window.location.hash) !== route) return false
+  const currentParams = getRouteParams(window.location.hash)
+  const nextParams = new URLSearchParams(params)
+  const currentEntries = [...currentParams.entries()].sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey))
+  const nextEntries = [...nextParams.entries()].sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey))
+  if (currentEntries.length !== nextEntries.length) return false
+  return currentEntries.every(([key, value], index) => key === nextEntries[index][0] && value === nextEntries[index][1])
 }
 
 function buildHash(route: RouteId, params: URLSearchParams) {

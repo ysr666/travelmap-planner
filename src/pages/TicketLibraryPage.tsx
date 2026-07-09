@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
@@ -153,7 +153,6 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const initialItemId = params.get('itemId')
   const initialTicketId = params.get('ticketId')
   const initialTicketQuery = params.get('ticketQuery') ?? ''
-  const openedInitialTicket = useRef<string | null>(null)
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
   const [items, setItems] = useState<ItineraryItem[]>([])
@@ -304,6 +303,31 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     [initialItemId],
   )
 
+  const updateTicketRouteParam = useCallback((ticketId: string | null) => {
+    if (typeof window === 'undefined') return
+    const rawHash = window.location.hash.replace(/^#\/?/, '')
+    const [rawPath = '', rawQuery = ''] = rawHash.split('?')
+    const nextPath = rawPath || (embedded ? 'documents' : 'tickets')
+    const nextParams = new URLSearchParams(rawQuery)
+    if (ticketId) {
+      nextParams.set('ticketId', ticketId)
+    } else {
+      nextParams.delete('ticketId')
+    }
+    const nextQuery = nextParams.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/${nextPath}${nextQuery ? `?${nextQuery}` : ''}`)
+  }, [embedded])
+
+  const openTicketPreview = useCallback((ticket: TicketMeta) => {
+    setPreviewTicket(ticket)
+    updateTicketRouteParam(ticket.id)
+  }, [updateTicketRouteParam])
+
+  const closeTicketPreview = useCallback(() => {
+    setPreviewTicket(null)
+    updateTicketRouteParam(null)
+  }, [updateTicketRouteParam])
+
   const refreshLibrary = useCallback(async () => {
     if (!tripId) {
       setTrip(null)
@@ -369,15 +393,14 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }, [initialTicketQuery])
 
   useEffect(() => {
-    if (!initialTicketId || openedInitialTicket.current === initialTicketId) return
+    if (!initialTicketId || previewTicket?.id === initialTicketId) return
     const ticket = tickets.find((candidate) => candidate.id === initialTicketId)
     if (!ticket) return
     const timeout = window.setTimeout(() => {
-      openedInitialTicket.current = initialTicketId
       setPreviewTicket(ticket)
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [initialTicketId, tickets])
+  }, [initialTicketId, previewTicket?.id, tickets])
 
   useEffect(() => {
     let isActive = true
@@ -597,7 +620,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     try {
       await deleteTicket(ticket.id)
       if (previewTicket?.id === ticket.id) {
-        setPreviewTicket(null)
+        closeTicketPreview()
       }
       setPendingDeleteTicket(null)
       await refreshLibrary()
@@ -688,7 +711,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       navigateTo('documents', { tab: 'attachments', ticketId: ticket.id, tripId: trip.id })
       return
     }
-    setPreviewTicket(null)
+    closeTicketPreview()
     if (suggestion.action?.kind === 'ticket_open_binding_existing_flow') {
       setFilter('unassigned')
       setActionMessage('已定位到未绑定票据；现阶段不会自动改写绑定。')
@@ -732,7 +755,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   function openTicketEditor(ticket: TicketMeta) {
     setActionError(null)
     setActionMessage(null)
-    setPreviewTicket(null)
+    closeTicketPreview()
     setEditingTicket(ticket)
   }
 
@@ -1047,7 +1070,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
                         onClearCache={() => void handleClearTicketCache(ticket)}
                         onDelete={() => setPendingDeleteTicket(ticket)}
                         onEdit={() => openTicketEditor(ticket)}
-                        onPreview={() => setPreviewTicket(ticket)}
+                        onPreview={() => openTicketPreview(ticket)}
                         onRestoreCache={() => void handleRestoreTicketCache(ticket)}
                         onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
                         syncView={syncView}
@@ -1070,8 +1093,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           intelligenceActionBusyId={ticketIntelligenceActionId}
           intelligenceSuggestions={ticketIntelligenceModel.forTicket(previewTicket.id)}
           key={previewTicket.id}
-          onChangeTicket={setPreviewTicket}
-          onClose={() => setPreviewTicket(null)}
+          onChangeTicket={openTicketPreview}
+          onClose={closeTicketPreview}
           onEditTicket={openTicketEditor}
           onIntelligenceSuggestionAction={handleTicketIntelligenceAction}
           onIntelligenceSuggestionIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}

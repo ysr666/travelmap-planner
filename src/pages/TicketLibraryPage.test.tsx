@@ -160,15 +160,19 @@ vi.mock('../components/TicketPreview', () => ({
   TicketPreview: ({
     intelligenceSuggestions = [],
     onIntelligenceSuggestionAction,
+    onClose,
     onEditTicket,
     ticket,
   }: {
     intelligenceSuggestions?: Array<{ action?: { label?: string }; id: string; title: string }>
     onIntelligenceSuggestionAction?: (suggestion: { id: string }) => void
+    onClose?: () => void
     onEditTicket?: (ticket: { id: string }) => void
     ticket: { id: string; title?: string }
   }) => (
     <div data-testid="ticket-preview">
+      <span>{ticket.title}</span>
+      <button onClick={onClose} type="button">关闭预览</button>
       <button onClick={() => onEditTicket?.(ticket)} type="button">编辑票据</button>
       {intelligenceSuggestions.map((suggestion) => (
         <button
@@ -213,6 +217,8 @@ beforeEach(() => {
   root = createRoot(container)
   vi.clearAllMocks()
   // Re-set default mock return values after clearAllMocks
+  window.history.replaceState(null, '', '/')
+  mocks.getRouteParams.mockReturnValue(new URLSearchParams({ tripId: 'trip_1' }))
   mocks.getTrip.mockResolvedValue({
     id: 'trip_1',
     title: '东京旅行',
@@ -335,6 +341,84 @@ describe('TicketLibraryPage', () => {
     })
 
     expect(container?.textContent).toContain('票据库')
+  })
+
+  it('opens the routed ticket preview after the attachment gallery loads', async () => {
+    mocks.getRouteParams.mockReturnValue(new URLSearchParams({
+      ticketId: 'ticket_route',
+      ticketQuery: '爱丁堡',
+      tripId: 'trip_1',
+    }))
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_route',
+        tripId: 'trip_1',
+        title: 'Edinburgh Castle 门票',
+        fileName: 'castle.pdf',
+        fileType: 'pdf',
+        storageMode: 'reference',
+        scope: 'item',
+        itemId: 'item_1',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    const searchInput = Array.from(container?.querySelectorAll('input') ?? [])
+      .find((input) => input.placeholder === '搜索票据、地点或订单')
+    expect(container?.querySelector('[data-testid="ticket-preview"]')?.textContent).toContain('Edinburgh Castle 门票')
+    expect(searchInput?.value).toBe('爱丁堡')
+  })
+
+  it('clears ticketId from the hash when closing a routed preview', async () => {
+    window.history.replaceState(null, '', '/?qa=575845a#/documents?tripId=trip_1&tab=attachments&ticketId=ticket_route&ticketQuery=%E7%88%B1%E4%B8%81%E5%A0%A1')
+    mocks.getRouteParams.mockImplementation(() => new URLSearchParams(window.location.hash.replace(/^#\/?/, '').split('?')[1] ?? ''))
+    mocks.listTicketsByTrip.mockResolvedValue([
+      {
+        id: 'ticket_route',
+        tripId: 'trip_1',
+        title: 'Edinburgh Castle 门票',
+        fileName: 'castle.pdf',
+        fileType: 'pdf',
+        storageMode: 'reference',
+        scope: 'item',
+        itemId: 'item_1',
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<TicketLibraryPage embedded tripIdOverride="trip_1" />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+
+    const closeButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent === '关闭预览')
+    expect(closeButton).toBeTruthy()
+    await act(async () => {
+      closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(window.location.hash).toContain('#/documents?')
+    expect(window.location.hash).toContain('ticketQuery=')
+    expect(window.location.hash).not.toContain('ticketId=')
+    expect(container?.querySelector('[data-testid="ticket-preview"]')).toBeNull()
   })
 
   it('renders filter buttons', async () => {

@@ -12,6 +12,7 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
+  maxFailures: process.env.CI ? 10 : 0,
   retries: process.env.CI ? 1 : 0,
   workers: playwrightWorkers,
   reporter: process.env.CI
@@ -21,7 +22,6 @@ export default defineConfig({
     baseURL: playwrightBaseUrl,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
-    video: 'retain-on-failure',
     ...(playwrightChannel ? { channel: playwrightChannel } : {}),
     ...(playwrightProxy ? {
       proxy: {

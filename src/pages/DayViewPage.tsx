@@ -8,6 +8,7 @@ import { DayTimelineView } from '../components/trip/DayTimelineView'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Collapsible } from '../components/ui/Collapsible'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
@@ -560,39 +561,50 @@ export function DayViewPage() {
               />
             </section>
 
-            {isTripIntelligenceStateLoaded ? (
-              <DayContextIntelligenceCard
-                dayId={selectedDay.id}
-                hiddenSuggestions={hiddenDayIntelligenceSuggestions}
-                itemById={dayContextItemById}
-                onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
-                onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
-                onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
-                suggestions={dayIntelligenceSuggestions}
-                tripId={trip.id}
-              />
-            ) : null}
+            <Collapsible
+              subtitle={dayIntelligenceSuggestions.length > 0
+                ? `${dayIntelligenceSuggestions.length} 项待处理`
+                : '实时行程与提醒'}
+              testId="day-support-tools"
+              title="今日助手"
+            >
+              <div className="space-y-stack-gap">
+                {isTripIntelligenceStateLoaded ? (
+                  <DayContextIntelligenceCard
+                    dayId={selectedDay.id}
+                    hiddenSuggestions={hiddenDayIntelligenceSuggestions}
+                    itemById={dayContextItemById}
+                    onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+                    onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+                    onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
+                    suggestions={dayIntelligenceSuggestions}
+                    tripId={trip.id}
+                  />
+                ) : null}
 
-            {isTripIntelligenceStateLoaded ? <TripLiveModeCard
-              allItems={allItems.length > 0 ? allItems : items}
-              day={selectedDay}
-              days={days}
-              items={items}
-              localState={tripOperationsLocalState}
-              now={liveNow}
-              onChanged={handleLiveModeChanged}
-              onLocalStateChange={handleTripOperationsLocalStateChange}
-              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
-              onOpenMap={() => handleSwitchView('map')}
-              onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
-              onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
-              operationsRecommendations={tripOperationsModel.activeRecommendations}
-              routeDay={selectedRouteDay}
-              tickets={tickets}
-              trip={trip}
-            /> : null}
+                {isTripIntelligenceStateLoaded ? <TripLiveModeCard
+                  allItems={allItems.length > 0 ? allItems : items}
+                  compact
+                  day={selectedDay}
+                  days={days}
+                  items={items}
+                  localState={tripOperationsLocalState}
+                  now={liveNow}
+                  onChanged={handleLiveModeChanged}
+                  onLocalStateChange={handleTripOperationsLocalStateChange}
+                  onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
+                  onOpenMap={() => handleSwitchView('map')}
+                  onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
+                  onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
+                  operationsRecommendations={tripOperationsModel.activeRecommendations}
+                  routeDay={selectedRouteDay}
+                  tickets={tickets}
+                  trip={trip}
+                /> : null}
 
-            {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
+                {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
+              </div>
+            </Collapsible>
 
             <DayTimelineView
               compact

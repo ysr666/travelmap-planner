@@ -93,6 +93,39 @@ describe('globalAiCommandRouter', () => {
     })
   })
 
+  it('opens the full gallery for a broad ticket command without applying the command as a filter', async () => {
+    const context = buildContext()
+    context.tickets = [{
+      createdAt: 1,
+      fileName: 'ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket_1',
+      mimeType: 'application/pdf',
+      scope: 'trip',
+      size: 1024,
+      storageMode: 'copy',
+      tripId: context.trip!.id,
+      updatedAt: 1,
+    }]
+
+    const result = await resolveGlobalAiCommand('打开票据', context)
+
+    expect(result).toMatchObject({
+      autoExecute: true,
+      kind: 'navigation',
+      params: {
+        tab: 'attachments',
+        tripId: context.trip!.id,
+      },
+      route: 'documents',
+      scrollTargetId: 'ticket-gallery',
+    })
+    if (result.kind === 'navigation') {
+      expect(result.params).not.toHaveProperty('ticketId')
+      expect(result.params).not.toHaveProperty('ticketQuery')
+    }
+  })
+
   it('keeps ordinary questions in a read-only local consultation lane', async () => {
     const intent = parseGlobalAiCommandIntent('今天接下来应该先确认什么？')
     expect(intent).toEqual({ kind: 'consultation' })

@@ -23,6 +23,7 @@ import { TripNav } from '../components/AppShell'
 import { ActionToolbar } from '../components/ui/ActionToolbar'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import {
@@ -845,7 +846,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       {!embedded ? <Card variant="grouped" className="space-y-3">
         <div>
           <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
@@ -877,17 +878,24 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         stats={ticketLibraryStats}
       />
 
-      <Card variant="grouped" className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
-            <Upload className="size-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">添加票据</h3>
-            <p className="text-xs tm-muted">图片、PDF、位置或链接。</p>
-          </div>
-        </div>
+      {actionError ? (
+        <InlineStatus role="alert" size="md" tone="error">
+          {actionError}
+        </InlineStatus>
+      ) : null}
+      {actionMessage ? (
+        <InlineStatus role="status" size="md" tone="success">
+          {actionMessage}
+        </InlineStatus>
+      ) : null}
 
+      <Collapsible
+        className="order-2"
+        subtitle="图片、PDF、位置或链接"
+        testId="ticket-add-panel"
+        title="添加票据"
+      >
+        <div className="space-y-3">
         <div className="grid grid-cols-1 gap-2">
           {storageOptions.map((option) => (
             <button
@@ -989,17 +997,6 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           />
         </label>
 
-        {actionError ? (
-          <InlineStatus role="alert" size="md" tone="error">
-            {actionError}
-          </InlineStatus>
-        ) : null}
-        {actionMessage ? (
-          <InlineStatus role="status" size="md" tone="success">
-            {actionMessage}
-          </InlineStatus>
-        ) : null}
-
         <Button
           className="w-full"
           icon={<Upload className="size-4" />}
@@ -1008,9 +1005,10 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         >
           保存票据
         </Button>
-      </Card>
+        </div>
+      </Collapsible>
 
-      <section className="space-y-3">
+      <section className="order-1 space-y-3">
         <SectionHeader title="票据库" />
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
@@ -1042,7 +1040,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           </span>
           {filter !== 'all' ? (
             <button
-              className="flex size-9 shrink-0 items-center justify-center rounded-full text-primary transition active:scale-95 tm-focus"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition active:scale-95 tm-focus"
               onClick={() => setFilter('all')}
               type="button"
             >
@@ -1234,7 +1232,7 @@ function TicketMetadataEditor({
           </div>
           <button
             aria-label="关闭编辑"
-            className="flex size-10 shrink-0 items-center justify-center rounded-full tm-chip tm-focus"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full tm-chip tm-focus"
             disabled={isSaving}
             onClick={onCancel}
             type="button"

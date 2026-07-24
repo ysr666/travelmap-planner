@@ -16,6 +16,7 @@ vi.mock('../lib/routes', () => ({
 }))
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
+vi.stubGlobal('__APP_COMMIT_SHA__', 'abcdef12')
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -185,6 +186,7 @@ describe('AppVersion', () => {
       root?.render(<AppVersion />)
     })
     expect(container?.textContent).toContain('旅图 v0.0.0-test')
+    expect(container?.textContent).toContain('abcdef12')
   })
 
   it('renders custom label', async () => {

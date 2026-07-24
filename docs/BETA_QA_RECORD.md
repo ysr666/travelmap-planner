@@ -1,6 +1,27 @@
 # Limited Beta QA 记录
 
-日期：2026-07-05
+最新记录：2026-07-24
+
+## 2026-07-24 Release Candidate 收尾
+
+- `npm run typecheck`：通过；覆盖前端、Pages provider runtime 和 Travel Inbox Worker。
+- `npm run lint`：通过。
+- `npm run test:unit`：通过，180 个文件、1447 个测试。
+- `npm run build`：通过；保留既有大 chunk 警告。
+- `npm run test:e2e:pwa-upgrade`：通过，1 个测试。
+- `npm run test:e2e -- --workers=1`：通过，137 个测试，约 5.3 分钟。
+- `git diff --check`：通过。
+- Supabase 空库全量 migration reset：通过；账号 AI 偏好恢复 migration 与三个 Companion 票据外键索引 migration 均成功应用。
+- Supabase 生产核验：账号 AI 偏好表存在、4 条 RLS 存在、trigger 指向 `tripmap_private`、authenticated CRUD 授权存在。
+- Supabase advisors：三个缺失外键索引已消除；剩余 leaked-password protection、fail-closed secrets table、双 SELECT policy 和低使用率索引记录为后续项。
+
+本轮全量自动化覆盖新增的 UI 收敛、票据画廊顺序、真实图片缩略图、全局 AI 票据直达与自动收起、长文本防溢出、PWA 用户确认更新、provider runtime typecheck 和 CI artifacts。
+
+远端 GitHub Actions、Cloudflare Pages 同 SHA 结果在本提交推送后复核。实体机结果仍不得由自动化假填。
+
+---
+
+历史记录：2026-07-05
 
 ## 自动化基线
 

@@ -22,3 +22,8 @@ This project uses a compact, local-first mobile app surface. Product copy is Chi
 - Do not rely on drag-only controls. Provide buttons for ordering and keyboard/touch workflows.
 - Do not claim offline support for maps, routes, search, provider calls, or cloud sync unless a real local cache exists for that capability.
 - Destructive, sync, storage, and update actions must be confirmation-gated or user-triggered.
+- Put the user's primary object first: itinerary timeline before advice, ticket gallery before add/edit forms, and setting categories before their controls.
+- Secondary intelligence, diagnostics, reminders, setup forms, and level-two settings default to a single compact disclosure row. Opening one surface must not expand unrelated surfaces.
+- Keep disclosure labels short and state-bearing. The expanded content owns its detail copy; the collapsed row must not summarize a paragraph.
+- A completed global AI navigation action closes the AI panel and focuses the destination. Do not leave an answer panel covering the page it just opened.
+- Long ticket names, locations, addresses, and imported filenames must wrap inside the mobile viewport. Flex children carrying user content need `min-width: 0`.

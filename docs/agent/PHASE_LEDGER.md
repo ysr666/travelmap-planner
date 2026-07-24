@@ -1227,3 +1227,50 @@ Completed validation:
 - Initial full E2E exposed two UX issues: active Ticket Library stat labels had insufficient contrast, and Trip Home map overview first-item shortcuts were 36px touch targets. Both were repaired within this phase.
 - `PLAYWRIGHT_PORT=4297 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e -- e2e/mobile-ux-a11y.spec.ts` passed: 1 test after repair.
 - `PLAYWRIGHT_PORT=4298 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_REUSE_SERVER=0 npm run test:e2e` passed: 133 tests.
+
+## 2026-07-24 Release Candidate Closeout
+
+Status: completed locally; remote same-SHA verification follows the authorized `main` push.
+
+Goal:
+
+- Close the CI build failure, simplify the remaining high-density mobile surfaces, complete direct global-AI navigation behavior, reconcile the Supabase release schema, and replace stale status/planning documents with one current baseline.
+
+Scope:
+
+- UI consistency audit across Day, Item, Ticket Library, Settings/PWA, and the global AI surface.
+- Frontend plus provider runtime type coverage, Playwright CI diagnostics, and PWA update semantics.
+- Supabase read-only production audit, local empty-database migration validation, and forward-only production repair for confirmed schema/index gaps.
+- Current status, readiness, release notes, design rules, QA evidence, and post-beta roadmap.
+
+No-go:
+
+- No automatic AI writes, no unconfirmed ticket/cloud deletion, no provider secrets in browser code or reports, no destructive migration, and no unsupported realtime claims.
+
+Result:
+
+- Collapsed secondary Day/live/settings/add-ticket surfaces while keeping timeline and gallery first.
+- Added real ticket thumbnail coverage, mobile long-text containment, and 44px close/reset controls.
+- Made global AI ticket navigation direct, query-aware, focus-safe, and self-closing.
+- Changed PWA activation to user-confirmed refresh and exposed the short deployment SHA.
+- Fixed the missing provider operation type and added real typecheck coverage for Pages runtime and Travel Inbox Worker.
+- Restored the missing companion migration history file.
+- Added and deployed forward migrations for account AI preferences plus three Companion ticket foreign-key indexes.
+- Replaced stale project status, readiness, release notes, and roadmap documents.
+
+Validation:
+
+- `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed.
+- `npm run test:unit` passed: 180 files, 1447 tests.
+- PWA upgrade passed: 1 test.
+- Full Playwright passed: 137 tests in approximately 5.3 minutes.
+- Supabase local empty-database reset passed.
+- Production SQL confirmed account AI preference table, four RLS policies, private trigger, and authenticated CRUD grants.
+- Security/performance advisors rerun after DDL; the newly reported missing foreign-key indexes were repaired.
+
+Residual:
+
+- Physical iPhone Safari/iOS PWA and Android Chrome recording.
+- Bundle splitting for app, MapLibre, OCR/PDF.
+- Supabase leaked-password protection decision and preview-tested consolidation of duplicate ticket SELECT policies.
+- Universal AI Action Gateway v1 for arbitrary supported natural-language task composition.

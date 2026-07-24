@@ -459,7 +459,8 @@ function buildTicketLookupNavigation(
   intent: Extract<GlobalAiCommandIntent, { kind: 'ticket_lookup' }>,
   context: GlobalAiCommandContext,
 ): GlobalAiNavigationResult {
-  const matches = findTicketLookupMatches(command, context)
+  const broadLookup = !intent.query && buildTicketLookupCategories(command).length === 0
+  const matches = broadLookup ? [] : findTicketLookupMatches(command, context)
   const firstMatch = matches[0]
   const params: Record<string, string> = {
     tab: 'attachments',
@@ -700,7 +701,7 @@ function buildTicketLookupQuery(command: string) {
     .replace(/[的和与、]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return query || command.trim()
+  return query
 }
 
 function buildTicketLookupTerms(command: string) {

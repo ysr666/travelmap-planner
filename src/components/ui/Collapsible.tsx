@@ -6,14 +6,24 @@ type CollapsibleProps = {
   subtitle?: string
   defaultOpen?: boolean
   children: ReactNode
+  className?: string
+  testId?: string
 }
 
-export function Collapsible({ title, subtitle, defaultOpen = false, children }: CollapsibleProps) {
+export function Collapsible({
+  title,
+  subtitle,
+  defaultOpen = false,
+  children,
+  className = '',
+  testId,
+}: CollapsibleProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
 
   return (
     <details
-      className="group rounded-lg tm-group"
+      className={`group rounded-lg tm-group ${className}`}
+      data-testid={testId}
       open={defaultOpen}
       ref={detailsRef}
     >

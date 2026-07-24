@@ -21,6 +21,56 @@ test('全局 AI 在无旅行上下文时离线回答能力问题', async ({ page
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 查找票据后直接打开画廊目标并收起结果面板', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+  await expect(tripCard).toBeVisible()
+  await clickTripCard(tripCard)
+  const tripId = new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('tripId')
+  expect(tripId).toBeTruthy()
+
+  await page.evaluate(async (nextTripId) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('ticketMetas', 'readwrite')
+      transaction.objectStore('ticketMetas').put({
+        createdAt: Date.now(),
+        fileName: 'edinburgh-castle-ticket.pdf',
+        fileType: 'pdf',
+        id: 'ticket-ai-edinburgh',
+        mimeType: 'application/pdf',
+        referenceLocation: '测试票据位置',
+        scope: 'trip',
+        size: 1024,
+        storageMode: 'reference',
+        title: '爱丁堡城堡门票',
+        tripId: nextTripId,
+        updatedAt: Date.now(),
+      })
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入票据失败'))
+    })
+  }, tripId!)
+
+  await page.getByLabel('全局 AI 指令').fill('找一下爱丁堡的门票')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  await expect(page).toHaveURL(/#\/documents\?/)
+  await expect(page).toHaveURL(/tab=attachments/)
+  await expect(page).toHaveURL(/ticketId=ticket-ai-edinburgh/)
+  await expect(page.getByTestId('ticket-gallery')).toContainText('爱丁堡城堡门票')
+  await expect(page.getByTestId('global-ai-command-result')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', async ({ page }) => {
   await clearTravelDatabase(page)
 

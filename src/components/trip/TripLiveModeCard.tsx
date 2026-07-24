@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
   Loader2,
   Map,
@@ -342,12 +343,12 @@ export function TripLiveModeCard({
 
   return (
     <>
-      <Card className="space-y-4" data-testid="trip-live-mode-card" id="trip-live-mode-card" variant="grouped">
+      <LiveModeSurface compact={compact} model={model}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Navigation className="size-4" /></span>
-              <h3 className="text-base font-semibold text-on-surface">Trip Live Mode</h3>
+              <h3 className="text-base font-semibold text-on-surface">实时行程</h3>
               <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-xs font-semibold text-on-surface-variant">当前 {model.currentTimeLabel}</span>
             </div>
             <p className="mt-1 text-xs leading-5 tm-muted">本地时钟与已有数据实时重算，不包含实时交通、实时开闭园或位置追踪。</p>
@@ -472,7 +473,7 @@ export function TripLiveModeCard({
           <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-high/45 p-3" data-testid="trip-live-replan-preview">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-xs font-semibold text-on-surface">Trip Disruption & Adaptive Replanning</p>
+                <p className="text-xs font-semibold text-on-surface">突发情况与智能重排</p>
                 <p className="mt-1 text-xs leading-5 tm-muted">{replanRecord.status === 'applied' ? '已应用，可整次撤销。' : replanRecord.status === 'undone' ? '这次重排已撤销。' : '选择一个方案后再确认写入。'}</p>
               </div>
               {replanRecord.status === 'applied' ? (
@@ -519,7 +520,7 @@ export function TripLiveModeCard({
             </div>
           </Collapsible>
         ) : null}
-      </Card>
+      </LiveModeSurface>
 
       <ConfirmDialog
         body="将把脱敏后的旅行、日期和行程点信息发送给 AI 服务。只返回结构化修改方案，不会直接写入，也不会自动联网搜索。"
@@ -562,6 +563,50 @@ export function TripLiveModeCard({
 }
 
 const ACTIVE_REPLAN_RECORD_STATUSES = new Set<TripReplanRecord['status']>(['preview', 'applied', 'conflict'])
+
+function LiveModeSurface({
+  children,
+  compact,
+  model,
+}: {
+  children: ReactNode
+  compact: boolean
+  model: ReturnType<typeof buildTripLiveModel>
+}) {
+  if (!compact) {
+    return (
+      <Card className="space-y-4" data-testid="trip-live-mode-card" id="trip-live-mode-card" variant="grouped">
+        {children}
+      </Card>
+    )
+  }
+
+  return (
+    <details className="group" data-testid="trip-live-mode-card" id="trip-live-mode-card">
+      <summary
+        className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-lg px-4 py-3 tm-group marker:hidden [&::-webkit-details-marker]:hidden tm-focus"
+        data-testid="trip-live-mode-toggle"
+      >
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Navigation className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-on-surface">实时行程</span>
+            <span className="truncate text-[11px] font-semibold tm-muted">
+              {stageText(model.stage)} · {model.currentTimeLabel}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs tm-muted">{model.title}</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-outline transition-transform group-open:rotate-90 dark:text-on-surface-variant" />
+      </summary>
+      <Card className="mt-2 space-y-4" data-testid="trip-live-mode-card-content" variant="grouped">
+        {children}
+      </Card>
+    </details>
+  )
+}
 
 function selectLatestActiveReplanRecord(records: TripReplanRecord[], dayId: string) {
   return records

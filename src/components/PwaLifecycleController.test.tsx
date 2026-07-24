@@ -80,6 +80,7 @@ describe('PwaLifecycleController', () => {
       registerOptions?.onNeedRefresh?.()
     })
     expect(getPwaLifecycleState()).toMatchObject({ status: 'update-ready' })
+    expect(mocks.updateSW).not.toHaveBeenCalled()
 
     await applyPendingPwaUpdate()
     expect(mocks.updateSW).toHaveBeenCalledWith(true)

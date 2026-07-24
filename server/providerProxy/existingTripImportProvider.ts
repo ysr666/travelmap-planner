@@ -382,18 +382,19 @@ function requestOpenAiCompatibleExistingTripImport({
   }).then(async (response) => {
     clearTimeout(timeout)
     if (!response.ok) {
-      return { errorCode: 'provider_error', ok: false }
+      return { errorCode: 'provider_error' as const, ok: false as const }
     }
     const body = await response.json().catch(() => null)
     const rawText = readOpenAiCompatibleText(body)
     if (!rawText) {
-      return { errorCode: 'invalid_response', ok: false }
+      return { errorCode: 'invalid_response' as const, ok: false as const }
     }
-    return { ok: true, rawText }
+    return { ok: true as const, rawText }
   }).catch((caught) => {
     clearTimeout(timeout)
     const name = caught && typeof caught === 'object' && 'name' in caught ? String((caught as { name?: unknown }).name) : ''
-    return { errorCode: name === 'AbortError' ? 'network_error' : 'provider_error', ok: false }
+    const errorCode: ExistingTripImportProviderErrorCode = name === 'AbortError' ? 'network_error' : 'provider_error'
+    return { errorCode, ok: false as const }
   })
 }
 

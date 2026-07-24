@@ -252,7 +252,7 @@ Now:
 - AI trip edit planning can use the proxy after user confirmation and only returns a patch plan preview; applying the patch requires a second local confirmation.
 - AI Trip Edit may call `travel_search` once after send confirmation when explicit search intent is detected, then attach compact source summaries to the edit-plan request.
 - `travel_search` can use mock/disabled mode or the server-side Tavily adapter when `TRIPMAP_SEARCH_PROVIDER=tavily` and `TRIPMAP_SEARCH_API_KEY` are configured.
-- Item Detail can manually call `place_lookup` when the user opens the lookup panel and clicks search; selecting a candidate still requires a confirmation before updating that single item.
+- Item Detail calls `place_lookup` once when the user opens “查找地点信息”; retry remains explicit, and selecting a candidate still requires confirmation before updating that single item.
 - Travel Ledger can call `exchange_rate` while saving an expense, with local date/currency-pair caching and manual-rate fallback.
 - Travel Ledger can call `ai_expense_extract` at most once per confirmed batch preview; the response remains a preview until the user creates drafts.
 

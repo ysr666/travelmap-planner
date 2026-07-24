@@ -52,6 +52,7 @@ import {
   type ProviderProxyPlaceDetailsRequest,
   type ProviderProxyPlaceDetailsResponse,
   type ProviderProxyPlaceDetailsSuccessResponse,
+  type ProviderProxyOperation,
   type ProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyRouteOrderSuggestionResponse,
   type ProviderProxyRouteOrderSuggestionSuccessResponse,

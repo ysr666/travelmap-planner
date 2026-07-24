@@ -81,7 +81,7 @@ LIMIT 20
   return (result.results ?? []).flatMap((row) => {
     const environment = readEnvironment(row.environment)
     const group = readGroup(row.group_name)
-    const threshold = row.threshold === 70 || row.threshold === 90 ? row.threshold : undefined
+    const threshold = readAlertThreshold(row.threshold)
     const createdAt = readInteger(row.created_at)
     return typeof row.id === 'string' && environment && group && threshold && createdAt !== undefined
       ? [{ createdAt, environment, group, id: row.id, threshold }]
@@ -105,4 +105,8 @@ function readInteger(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
   if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Math.trunc(Number(value))
   return undefined
+}
+
+function readAlertThreshold(value: unknown): 70 | 90 | undefined {
+  return value === 70 || value === 90 ? value : undefined
 }

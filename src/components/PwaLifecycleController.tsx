@@ -39,10 +39,9 @@ export function PwaLifecycleController() {
         onNeedRefresh() {
           if (updateServiceWorker) {
             setPwaUpdateAction(() => updateServiceWorker?.(true))
-            void updateServiceWorker(true)
           }
           setPwaLifecycleState({
-            message: '发现新版本，正在自动更新。',
+            message: '发现新版本，可在确认后更新并重启。',
             serviceWorkerSupported: true,
             status: 'update-ready',
           })

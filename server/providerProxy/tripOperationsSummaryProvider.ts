@@ -107,7 +107,7 @@ export function createOpenAiCompatibleTripOperationsSummaryProvider(
 
   return {
     name: 'openai_compatible',
-    async summarize(request, input): Promise<TripOperationsSummaryProviderResult> {
+    async summarize(_request, input): Promise<TripOperationsSummaryProviderResult> {
       if (!apiKey || !baseUrl || !model) {
         return { errorCode: 'provider_unavailable', message: 'AI provider environment is not fully configured.', ok: false }
       }

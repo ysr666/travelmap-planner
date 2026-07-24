@@ -84,6 +84,18 @@ describe('TripLiveModeCard', () => {
     expect(mocks.fetchPlan).not.toHaveBeenCalled()
   })
 
+  it('keeps the compact live summary collapsed until the user opens it', async () => {
+    await render(vi.fn().mockResolvedValue(undefined), vi.fn(), item, { compact: true })
+    const details = container.querySelector<HTMLDetailsElement>('[data-testid="trip-live-mode-card"]')
+    expect(details?.open).toBe(false)
+    expect(details?.querySelector('[data-testid="trip-live-mode-toggle"]')?.textContent).toContain('实时行程')
+
+    await act(async () => {
+      details?.querySelector<HTMLElement>('summary')?.click()
+    })
+    expect(details?.open).toBe(true)
+  })
+
   it('marks the target complete and refreshes the page data', async () => {
     const onChanged = vi.fn().mockResolvedValue(undefined)
     const onLocalStateChange = vi.fn()
@@ -230,11 +242,12 @@ async function render(
   onOpenItem = vi.fn(),
   target = item,
   options: {
+    compact?: boolean
     onLocalStateChange?: (state: ReturnType<typeof createEmptyTripOperationsLocalState>) => void
   } = {},
 ) {
   await act(async () => {
-    root.render(<TripLiveModeCard allItems={[target]} day={day} days={[day]} items={[target]} localState={createEmptyTripOperationsLocalState()} now={new Date('2026-06-13T00:30:00Z')} onChanged={onChanged} onLocalStateChange={options.onLocalStateChange} onOpenItem={onOpenItem} onOpenMap={vi.fn()} onOpenOperation={vi.fn()} onOpenTickets={vi.fn()} trip={trip} />)
+    root.render(<TripLiveModeCard allItems={[target]} compact={options.compact} day={day} days={[day]} items={[target]} localState={createEmptyTripOperationsLocalState()} now={new Date('2026-06-13T00:30:00Z')} onChanged={onChanged} onLocalStateChange={options.onLocalStateChange} onOpenItem={onOpenItem} onOpenMap={vi.fn()} onOpenOperation={vi.fn()} onOpenTickets={vi.fn()} trip={trip} />)
   })
 }
 

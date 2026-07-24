@@ -11,11 +11,17 @@ const reuseExistingServer = !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERV
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 1 : 0,
   workers: playwrightWorkers,
-  reporter: [['list']],
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+    : [['list']],
   use: {
     baseURL: playwrightBaseUrl,
+    screenshot: 'only-on-failure',
     trace: 'on-first-retry',
+    video: 'retain-on-failure',
     ...(playwrightChannel ? { channel: playwrightChannel } : {}),
     ...(playwrightProxy ? {
       proxy: {

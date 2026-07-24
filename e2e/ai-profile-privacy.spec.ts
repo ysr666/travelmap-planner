@@ -76,6 +76,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
 test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
 
+  await openDetailsSection(page, '今日助手')
   const dayBrief = page.getByTestId('day-local-brief-card')
   await expect(dayBrief).toBeVisible()
   await expect(dayBrief).toContainText('本地检查')

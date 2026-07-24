@@ -2961,7 +2961,10 @@ export function validateProviderProxyAiExpenseQueryRequest(input: unknown): Prov
   return { ok: true, request: { operation: PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION, question, quotaSessionId: readOptionalString(record.quotaSessionId, 160), requestId, rows } }
 }
 
-export function validateProviderProxyAiExpenseQueryResponsePlan(input: unknown) {
+export function validateProviderProxyAiExpenseQueryResponsePlan(input: unknown): {
+  plan: LedgerQueryPlan
+  presentation: 'summary' | 'list' | 'grouped'
+} | undefined {
   const record = readRecord(input)
   const allowedKeys = new Set(['ok', 'operation', 'source', 'requestId', 'plan', 'presentation'])
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) return undefined

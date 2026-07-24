@@ -329,10 +329,11 @@ export function selectProviderOperationsStorage(
 
 export function selectProviderBudgetAlertSender(env: Record<string, unknown>): ProviderBudgetAlertSender | undefined {
   const binding = env.TRIPMAP_PROVIDER_ALERT_EMAIL as { send?: (input: unknown) => Promise<unknown> } | undefined
+  const send = binding?.send
   const from = readString(env.TRIPMAP_PROVIDER_ALERT_FROM)
-  if (!binding?.send || !from) return undefined
+  if (!send || !from) return undefined
   return async (input) => {
-    await binding.send({
+    await send({
       from,
       subject: `[TripMap] Provider ${input.group} budget reached ${input.threshold}%`,
       text: `Environment: ${input.environment}\nGroup: ${input.group}\nThreshold: ${input.threshold}%\nTime: ${input.occurredAt}`,

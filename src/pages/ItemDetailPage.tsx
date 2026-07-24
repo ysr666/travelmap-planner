@@ -409,9 +409,9 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
             <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary mr-4 group-hover:bg-primary-container/30 transition-colors">
               <MapPin className="size-5" />
             </div>
-            <div className="flex-1">
-              <div className="font-body-lg text-body-lg text-on-surface">{item.locationName || '地点未填写'}</div>
-              <div className="font-body-md text-body-md text-on-surface-variant mt-0.5">{item.address || ''}</div>
+            <div className="min-w-0 flex-1">
+              <div className="break-words font-body-lg text-body-lg text-on-surface [overflow-wrap:anywhere]">{item.locationName || '地点未填写'}</div>
+              <div className="mt-0.5 break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{item.address || ''}</div>
               <div className="font-label-sm text-label-sm text-on-surface-variant mt-1">
                 {hasCoordinates ? `${item.lat?.toFixed(5)}, ${item.lng?.toFixed(5)}` : '暂无坐标'}
               </div>

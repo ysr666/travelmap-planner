@@ -20,6 +20,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
 
   await expect(page.getByRole('heading', { name: '当天日程' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })).toBeVisible()
+  await openDaySupportTools(page)
   const dayBrief = page.getByTestId('day-local-brief-card')
   await expect(dayBrief).toBeVisible()
   await expect(dayBrief).toContainText('当日简报')
@@ -393,8 +394,9 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
 
   const liveBriefing = page.getByTestId('trip-live-mode-card')
+  await openTripLiveDetails(page)
   await expect(liveBriefing).toBeVisible()
-  await expect(liveBriefing).toContainText('Trip Live Mode')
+  await expect(liveBriefing.getByTestId('trip-live-mode-toggle')).toContainText('实时行程')
   await expect(liveBriefing).toContainText('当前 10:05')
   await expect(liveBriefing).toContainText('现在该去：西湖门票预约入场')
   await expect(liveBriefing).toContainText('不包含实时交通')
@@ -415,6 +417,7 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   expect(providerProxyRequests).toBe(0)
 
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+  await openTripLiveDetails(page)
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '地图' }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
@@ -422,6 +425,7 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   expect(providerProxyRequests).toBe(0)
 
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+  await openTripLiveDetails(page)
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '票据' }).click()
   await expect(page).toHaveURL(/#\/documents\?/)
   await expect(page).toHaveURL(/tab=attachments/)
@@ -430,6 +434,7 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   await expectNoHorizontalOverflow(page)
 
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
+  await openTripLiveDetails(page)
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '已完成' }).click()
   await expect(page.getByTestId('trip-live-mode-card')).toContainText('已处理行程点')
   await page.goto('/#/trip?tripId=trip-live-briefing', { waitUntil: 'domcontentloaded' })
@@ -455,6 +460,29 @@ async function openPanelDetails(panel: Locator, title: string) {
     await summary.click()
   }
   return summary.locator('xpath=..')
+}
+
+async function openTripLiveDetails(page: Page) {
+  await openDaySupportTools(page)
+  const card = page.getByTestId('trip-live-mode-card')
+  const content = card.getByTestId('trip-live-mode-card-content')
+  await expect(card).toBeVisible()
+  await expect(content).toHaveCount(1)
+  const isOpen = await card.evaluate((element) => (element as HTMLDetailsElement).open)
+  if (!isOpen) {
+    await card.getByTestId('trip-live-mode-toggle').click()
+  }
+  await expect(content).toBeVisible()
+}
+
+async function openDaySupportTools(page: Page) {
+  const details = page.getByTestId('day-support-tools')
+  await expect(details).toHaveCount(1)
+  const isOpen = await details.evaluate((element) => (element as HTMLDetailsElement).open)
+  if (!isOpen) {
+    await details.locator('summary').first().click()
+  }
+  await expect(details).toHaveAttribute('open', '')
 }
 
 async function expireTripIntelligenceLaterStates(page: Page) {

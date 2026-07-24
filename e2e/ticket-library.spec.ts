@@ -229,6 +229,12 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('ticket-gallery')).toBeVisible()
+  await expect(page.getByTestId('ticket-add-panel')).not.toHaveAttribute('open', '')
+  const galleryBox = await page.getByTestId('ticket-gallery').boundingBox()
+  const addPanelBox = await page.getByTestId('ticket-add-panel').boundingBox()
+  expect(galleryBox).not.toBeNull()
+  expect(addPanelBox).not.toBeNull()
+  expect(galleryBox!.y).toBeLessThan(addPanelBox!.y)
   await expect(page.getByTestId('ticket-card')).toHaveCount(4)
   await expect(page.getByTestId('ticket-gallery')).toContainText('酒店订单 PDF')
   await expect(page.getByTestId('ticket-gallery')).toContainText('位置')

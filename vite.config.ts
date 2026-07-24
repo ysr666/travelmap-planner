@@ -16,6 +16,12 @@ const packageMetadata = JSON.parse(
 const packageVersion = packageMetadata.version ?? process.env.npm_package_version ?? '0.0.0'
 const tripMapBuild = packageMetadata.tripMapBuild
 const appVersion = tripMapBuild === undefined ? packageVersion : `${packageVersion}.${tripMapBuild}`
+const appCommitSha = (
+  process.env.CF_PAGES_COMMIT_SHA
+  ?? process.env.GITHUB_SHA
+  ?? process.env.VITE_APP_COMMIT_SHA
+  ?? ''
+).trim().slice(0, 8)
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -51,13 +57,14 @@ export default defineConfig({
     },
   },
   define: {
+    __APP_COMMIT_SHA__: JSON.stringify(appCommitSha),
     __APP_VERSION__: JSON.stringify(appVersion),
   },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       injectRegister: null,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'push-handler.js'],
       manifest: {
@@ -88,8 +95,6 @@ export default defineConfig({
       },
       workbox: {
         cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
         navigateFallback: 'index.html',
         runtimeCaching: [],

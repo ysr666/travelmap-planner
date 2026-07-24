@@ -1,18 +1,29 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { TicketMeta } from '../../types'
 import { getTicketStorageMode } from '../../lib/tickets'
 import { getTicketDisplayMeta } from '../../lib/ticketDisplay'
+import { TicketThumbnail } from './TicketThumbnail'
+
+const mocks = vi.hoisted(() => ({
+  getTicketBlob: vi.fn(),
+  restoreTicketBlobCacheFromCloud: vi.fn(),
+}))
 
 vi.mock('../../db', () => ({
-  getTicketBlob: vi.fn(),
+  getTicketBlob: mocks.getTicketBlob,
 }))
 
 vi.mock('../../lib/cloudObjectSync', () => ({
-  restoreTicketBlobCacheFromCloud: vi.fn(),
+  restoreTicketBlobCacheFromCloud: mocks.restoreTicketBlobCacheFromCloud,
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getTicketBlob.mockResolvedValue(undefined)
 })
 
 function makeTicket(overrides: Partial<TicketMeta> = {}): TicketMeta {
@@ -33,6 +44,36 @@ function makeTicket(overrides: Partial<TicketMeta> = {}): TicketMeta {
 }
 
 describe('TicketThumbnail logic', () => {
+  it('renders the copied image blob as the thumbnail', async () => {
+    const container = document.createElement('div')
+    const root: Root = createRoot(container)
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ticket-thumbnail')
+    const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    mocks.getTicketBlob.mockResolvedValue({
+      blob: new Blob(['image'], { type: 'image/png' }),
+      ticketId: 'ticket-1',
+      updatedAt: Date.now(),
+    })
+
+    await act(async () => {
+      root.render(<TicketThumbnail ticket={makeTicket()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const image = container.querySelector('img')
+    expect(image?.getAttribute('src')).toBe('blob:ticket-thumbnail')
+    expect(image?.getAttribute('alt')).toBe('Test Ticket')
+    expect(createObjectUrl).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      root.unmount()
+    })
+    createObjectUrl.mockRestore()
+    revokeObjectUrl.mockRestore()
+  })
+
   it('loads visual previews for copied image and PDF tickets', () => {
     const imageCopy = makeTicket({ fileType: 'image', storageMode: 'copy' })
     const imageRef = makeTicket({ fileType: 'image', storageMode: 'reference' })

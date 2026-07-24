@@ -1,160 +1,105 @@
 # 旅图 TripMap 路线图 v4
 
-本文档以 `/Users/ysradmin/Downloads/tripmap_future_design_direction_v4.md` 为新版产品方向来源，取代旧版“13 条产品修正”的整理方式。v4 的核心判断是：旅图接下来不是继续堆新功能，而是先修正前几轮 AI 改动带来的设计偏差。
+更新时间：2026-07-24
 
-## 核心纠偏
+## 北极星
 
-- 轻量化不是删内容。必要信息要保留，空壳 card、chip、分栏和无意义留白要删除。
-- 独立页面不等于表单完成。新建 / 编辑页面需要继续做移动端布局、重叠、错误提示和键盘场景 QA。
-- 路由拆分不等于交互完成。Trip Home / Day View / Item Detail 已拆开，但 Day View 仍未完成理想的“marker → 轻卡片 → Item Detail”地图交互。
-- 继续保持离线可用、本机先落盘。IndexedDB 是此设备离线缓存与首写层；Supabase 优先做旅行对象同步和票据 Blob 同步，不是实时表同步。
-- AI 和地图 API 只做辅助。AI draft generation / repair 只更新草稿 preview，用户确认后才写入；server-only provider keys 通过后端 proxy 保存；不缓存商业地图瓦片。
+旅图的主体验是“打开就看到行程，需要时一句话完成明确任务”。路线图不再按页面堆功能，而按用户旅程、AI 动作闭环、可靠性和发布证据推进。
 
-## 已完成基线
+长期不变的边界：
 
-- Phase 11.6：地图 collapsed sheet 轻量化第一轮完成。
-- Phase 12-pre-A/B：Home / Overview 有用标签恢复，Trip 更多菜单简化完成。
-- Phase 12-pre-C：Trip / Item 新建编辑独立页面完成。
-- Phase 12-pre-D：Trip Home / Day View 拆分实施计划完成。
-- Phase 12-pre-E：共享数据加载与路由拆分铺垫完成。
-- Phase 12-pre-F：Trip Home / Day View / Item Detail 导航回归检查完成。
-- Phase 12A：自动云端同步基础完成。
-- Phase 12B：PWA 启动云端同步检查完成。
-- Phase 12C：冲突感知云端提示与操作链路完成。
-- Phase 12E：视觉完整性纠偏与全页表单布局修复完成。
-- AI draft request builder、provider proxy operation、DeepSeek real provider smoke、AI Privacy Guard、AI repair guardrails、search provider proxy foundation、AI trip edit patch plan foundation 完成。
-- E2E locator hardening 完成。
-- Unified Trip Intelligence Packages 1-7 完成：统一建议/动作/完成记录、Trip Home 收敛、Day/Live、Ticket/Inbox/Finance、Document/Shared Trip、IndexedDB v10 与跨设备对象同步。
-- Finance 接收端改造完成：移除后台来源扫描，Ticket/Inbox 费用证据必须确认后生成 `draft + needs_review`。
-- Package 7、生产权限加固与 Companion owner policy 前向修复已部署；Companion 与真实双设备生产 smoke 完整通过，覆盖 A 上传、B 全新恢复、latest-wins 与 tombstone 传播。
-- PR1-PR3 Limited Beta 基础收口完成：全局登录与账号隔离、Phase 12F 时间语义、Provider 生产运营加固均已进入主线；Provider D1 migration、Pages env、maintenance Worker 和 production smoke 已完成。
-- PR4 QA/文档/治理分支新增桌面 1440x900 smoke、真实构建 PWA 升级 smoke、Beta 用户指南、发布说明、QA 记录和 PR 模板。
-- Phase 13A：Trip Home 全程地图概览入口优化完成第一轮，地图预览下方提供按天坐标覆盖、Day Map 入口和首个有坐标地点入口。
-- Phase 13B：Day View marker 卡片交互完成第一轮，卡片提供站点 rail、明确详情 CTA、上一/下一站和与全局 AI 输入条错位的安全位置。
-- Phase 13C：全局 AI 输入咨询模式完成第一轮，普通问答留在本地只读咨询，明确修改才进入 provider-backed patch plan 和二次确认。
-- Phase 14A：Item Detail 现场行动区完成第一轮，详情页顶部整合时间、前后站、外部地图/路线、坐标状态和绑定票据入口。
-- Phase 16A：Ticket Library 现场筛选完成第一轮，票据总览数字可直接筛选文件、位置、链接、离线可用、未分类和全部票据。
+- 核心页面优先显示行程、地图、地点和票据；建议、资料诊断、设置和新增表单默认收起。
+- IndexedDB 仍是本地首写层；Supabase 是账号同步与共享能力，不伪装成无冲突实时协作。
+- AI 写入、搜索、路线、云端删除和敏感文件操作按风险确认。
+- 无来源不声明实时事实；provider secret 不进入浏览器。
+- 新能力必须复用现有 action executor、provider proxy、privacy guard 和时间语义。
 
-当前 canonical routes：
+## Phase 0：Limited Beta 收尾
 
-```text
-#/home
-#/trip?tripId=...
-#/day?tripId=...&dayId=...&view=schedule|map
-#/item?tripId=...&dayId=...&itemId=...
-#/trip/new
-#/trip/edit?tripId=...
-#/item/new?tripId=...&dayId=...
-#/item/edit?tripId=...&dayId=...&itemId=...
-#/tickets
-#/settings
-#/ai-draft
-```
+目标：让当前主线成为可复现、可回滚、同一提交可验证的发布候选。
 
-## 不要误判为完成
+已完成：
 
-- Trip Home 主建议层级已收敛；全旅行地图概览入口已完成第一轮，后续可继续做视觉 QA 和更丰富地图 provider 能力。
-- Day View marker → 轻卡片 → Item Detail 现场路径已完成第一轮；后续可继续做真实设备视觉 QA 和更丰富现场信息布局。
-- Item Detail 已完成现场行动区第一轮；后续仍可继续做真实设备视觉 QA、票据紧凑展示和更高级跨时区解释。
-- Ticket Library 已升级为票据画廊、元数据编辑器和现场筛选第一轮；后续仍可继续做全屏票据预览器和更细的票据分类。
-- SwiftUI-like / iOS grouped list 风格还没有形成系统规范。
-- Phase 12F 时间语义已完成第一轮收口：PlainDate、WallClockTime、Instant、IANA 时区、DST 自动校正、Trip/Day/Item timezone、跨时区 item range、selected-day / Trip status 和 cloud version timestamp guardrails 已进入主路径。后续功能必须复用这些边界，未来仍需 AI ISO datetime 显式确认和跨国家高级 UI。
-- AI reasoning 不做用户开关：当前由后端策略自动选择，默认保持 stable JSON mode。
-- Web search 只允许在用户确认后的受限 AI Trip Edit 搜索意图中作为 source-bearing 辅助；没有来源就不声明实时营业时间、票价、交通、天气、评价、活动或网页事实。
-- 全局 AI 输入已有本地只读咨询 / 本地重排预览 / 账本摘要 / provider-backed patch plan 分流；它仍不是多轮聊天助手，不自动应用修改，不联动 route/ticket/cloud。
+- 核心页面信息层级收敛：每日助手、实时状态、设置二级项和新增票据默认折叠。
+- 票据画廊前置、真实图片缩略图、长文本移动端防溢出。
+- 全局 AI 的票据直达、完成后收起、宽泛“打开票据”进入画廊。
+- 地点查询、行程一键修复和 provider 错误语义回归。
+- PWA 改为用户确认刷新；构建显示版本与短提交 SHA。
+- CI 覆盖前端、Pages runtime 和 Worker TypeScript，E2E 保留失败 artifacts。
+- Supabase 账号 AI 偏好 migration、RLS、授权和外键索引补齐。
+- 本地 typecheck/lint/unit/build/PWA/full E2E 全绿。
 
-## 后续路线图
+退出条件：
 
-### 1. Trip / Day / Item / Ticket UX completion
+- `main` 同一 SHA 的 GitHub Actions 与 Cloudflare Pages 全绿。
+- 生产 provider diagnostics 无缺失绑定或 kill switch 异常。
+- iPhone Safari 与 Android Chrome 实体机 QA 有明确通过/阻塞记录。
 
-- Phase 12D：Home 与全局视觉纠偏。✅ 已完成。
-- Phase 12E：Full-page form 布局修复与输入体验 QA。✅ 已完成。
-- Phase 13A：Trip Home 地图概览与入口优化。✅ 已完成第一轮。
-- Phase 13B：Day View 地图点卡片交互。✅ 已完成第一轮。
-- Phase 13C：全局 AI 咨询模式。✅ 已完成第一轮。
-- Phase 14A：Item Detail 2.0。面向现场查看，突出时间、地点、交通、票据与外部导航。✅ 已完成第一轮。
-- Phase 16A：Ticket Library 2.0 现场筛选。✅ 已完成第一轮。
-- Phase 16B/C：全屏票据预览器、Item Detail 票据紧凑展示。
+## Phase 1：真实设备与 Beta 运营
 
-### 2. SwiftUI-like design system
+周期：1-2 周。
 
-- Phase 15A：建立 `docs/DESIGN_SYSTEM.md`。
-- 方向：iOS / SwiftUI grouped list、自然 section header、少卡片套卡片、少装饰 chip、按钮层级清楚。
-- 目标：去 AI 味，让后续页面有一致的 spacing、radius、shadow、warning、sheet 和 form 规范。
+- iPhone Safari、iOS 主屏 PWA、Android Chrome 回归登录、导入、Trip/Day/Item、票据、更新和离线恢复。
+- 使用 Beta 账号完成一套真实英国行程导入与日常查看测试，记录 provider 请求数和失败语义。
+- 增加 release smoke 清单：登录、地点候选、AI 预览、票据原件、云同步、更新提示、回滚。
+- 建立最小隐私安全的错误遥测，只记录 operation、状态码、阶段、耗时和部署 SHA。
+- 明确 Beta 反馈入口、严重级别和回滚负责人。
 
-### 3. Map UX
+退出条件：连续两个生产版本无 P0/P1 数据丢失、越权、更新死循环或核心 provider 全面不可用。
 
-- Phase 17A：一键回到行程范围与用户位置。
-- Phase 17B：marker / route line 缩放适配。
-- Phase 17C：emoji / category marker foundation。
-- 边界：不重写 MapLibre 生命周期，不破坏 route chip、route cache、ORS fallback、bottom sheet snap。
+## Phase 2：Universal AI Action Gateway
 
-### 4. Map provider / cache
+周期：2-4 周。
 
-- Phase 18A：Map Provider Foundation。
-- 建立底图、地点搜索、geocoding、routing provider 和 key management 分层。
-- 可缓存用户确认坐标、placeId、简化候选和 route polyline；不缓存商业地图瓦片、Google 原始完整响应或大量自动预取数据。
+目标：让全局 AI 从有限命令路由升级为统一、可审计的产品动作入口，同时保持 UI 简单。
 
-### 5. Import route generation
+- 建立 versioned action registry：动作 schema、权限、风险等级、preview、confirm、execute、undo。
+- 所有页面动作通过稳定 deep link/selection contract 返回目标页面、对象和焦点位置。
+- 支持多步骤计划，但每一步都经过本地能力检查；不能执行时给出一个短原因和可完成的下一步。
+- 搜索结果必须携带来源与时间；地点、路线、AI、票据、云同步使用各自 quota 和 privacy policy。
+- 为跨模块事务增加 idempotency、partial failure、重试和操作历史。
+- 先覆盖高频任务：找/开票据、补地点、修复行程、调整时间、生成路线预览、创建费用草稿、打开资料。
 
-- Phase 19A：Import Route Generation Queue。
-- AI / zip 导入后只提示用户生成路线，不静默消耗 API。
-- 生成结果写入本地 route cache，不进入 zip、Supabase 或 trip-plan schema。
+退出条件：高频动作 E2E 覆盖、无未确认写入、可恢复部分失败、动作日志不含敏感数据。
 
-### 6. AI-native travel intelligence
+## Phase 3：性能与 PWA 可靠性
 
-- Phase 20A：AI Trip Generation / Repair Provider Baseline。✅ 已完成基础接入。
-- Unified Trip Intelligence 基础与上下文接入已完成；后续执行扩展必须复用统一 executor / appliedChanges，不为 Ledger、Document 或 Shared Trip 新建平行中心。
-- 当前可用：本地 mock、真实 provider generation、草稿质量检查、真实 provider repair、AI Privacy Guard、ConfirmDialog write boundary、AI trip edit patch plan preview/apply foundation，以及全局 AI 输入的本地只读咨询 / 本地 confirmable action / provider-backed patch plan 分流。
-- 当前限制：不提供 thinking mode UI 或搜索开关，不读取票据图片/PDF/OCR，不做多轮 AI chat，不自动编辑已保存旅行。`travel_search` 只在用户确认后的 AI Trip Edit 搜索意图中作为 source-bearing 辅助，不是通用实时来源。
-- AI draft 只生成 / 修复 draft preview；AI trip edit 只生成 patch plan preview。地点、坐标、路线、交通时间、票据绑定和本地写入必须由用户确认。
+周期：2-3 周。
 
-### 7. AI-first future work
+- 按路由拆分主应用，延迟加载 MapLibre、OCR/PDF、导入和低频设置模块。
+- 建立 bundle budget、首屏加载和交互时间基线，CI 对显著回归报警。
+- 优化 service worker precache，验证从多个历史版本升级和 IndexedDB 保留。
+- 增加弱网、离线、恢复在线、旧标签页和多标签页升级测试。
+- 补充生产缓存头、静态资源不可变版本和部署 SHA 诊断。
 
-#### Backend Reasoning Policy Evolution
+退出条件：核心行程首屏不被地图/OCR包阻塞，PWA 升级无强制循环或数据丢失。
 
-- 不做用户可见的模型控制开关；用户只表达旅行意图，后端按任务复杂度选择处理方式。
-- 默认保持 fast / stable JSON mode，优先结构化输出和低延迟。
-- 复杂任务可由后端自动提升 reasoning 强度，并在 provider proxy 内保持 provider-specific request shape。
-- 若未来需要向用户提示成本或耗时，应以任务级提示表达，不暴露 provider 参数或 AI key。
+## Phase 4：账号数据与运营加固
 
-#### Search Provider Proxy Foundation
+周期：2-4 周。
 
-- Web search 必须是独立 provider proxy operation，不混入 draft repair。
-- 当前 `travel_search` foundation 已保留合同和独立 `search|` quota，但默认无真实 provider 时返回 `provider_unavailable`；mock mode 仅返回 example 域名模拟结果。
-- 未来真实 provider 返回内容需要 title、URL、displayUrl、domain、snippet、retrievedAt、sourceType、confidence 和摘要。
-- UI 必须展示来源和时间，不能把实时营业时间、票价或交通状态伪装成模型常识。
-- 搜索请求和 AI 请求应有独立 quota、normalized errors 和 no-secret boundary。
+- 在 Supabase 预览分支合并 `cloud_ticket_blobs` 等价 SELECT policy，消除重复 permissive policy。
+- 评估并启用 leaked-password protection；保留 `travel_inbox_connector_secrets` fail-closed。
+- 建立 migration history reconciliation，统一 CLI/MCP 生成版本与仓库文件记录。
+- 增加同步队列诊断、设备/操作审计、失败重试和协议迁移工具。
+- 为导入、同步、票据文件和 Companion 增加恢复演练与数据完整性检查。
 
-#### AI Trip Edit Agent
+退出条件：advisors 无未解释高风险项，迁移可从空库重建，生产恢复步骤完成演练。
 
-- Foundation 已实现：用户用自然语言说明如何修改已保存旅行，AI 输出 patch / diff，而不是直接写 IndexedDB。
-- Patch 必须经过 schema validation、冲突检查、预览和二次用户确认。
-- 当前只支持 granular 白名单操作：item title/time/location/note/transport、add/remove/move/reorder、day title。
-- 默认不得读取 notes、坐标、票据图片/PDF/OCR、ticket filename/blob、cloud token/status、route cache、provider key、URL 或完整本地 DB。
-- 后续再评估 richer diff、undo/history、search-assisted edits 和多轮 chat；这些都不能绕过 preview/confirm write boundary。
+## Phase 5：旅行能力扩展
 
-#### Durable Quota And Abuse Controls
+周期：4-8 周，按 Beta 反馈排序。
 
-- D1-backed provider quota 和生产加固已实现：生产/可信预览按 method/body size、Origin、edge IP、Bearer、Supabase Auth、kill switch、D1 quota、provider 的顺序处理。
-- 已启用账号/IP/全局 daily budgets，preview 使用 25% 独立 namespace，`provider_controls` 可即时关闭 `global`、`ai`、`search`、`place`、`route`、`fx`。
-- `tripmap-provider-maintenance` hourly cron 已部署，负责清理过期 minute rows、8 天前 daily rows、30 天前 alert rows，并恢复过期自动预算控制。
-- Cloudflare 免费前提下未配置可发送 Email Service 时，预算告警保留 pending 记录；100% 硬限制和 kill switch 不依赖邮件。
+- 票据：更快的全屏预览、可控 OCR、二维码/关键信息抽取、隐私分级。
+- 地图：更清晰的行程范围、用户位置、marker 分类、批量候选确认和导入后路线队列。
+- Inbox/资料：来源连接器运营化、重复检测、旅行归属确认和可撤销导入。
+- 时间：AI ISO datetime 显式映射、跨时区交通解释和 DST 边界 UI。
+- Shared Trip：更完整的主人审计、冲突处理和成员权限说明。
 
-## 长期边界
+## 接下来五项
 
-- 用户可见文案保持中文。
-- IndexedDB 仍是此设备离线缓存与首写层。
-- 旅行日期 / 时间语义遵循 `docs/TIMEZONE_AUDIT.md`；基础 timezone 字段已存在，后续不要新增半套字段、自动回填历史数据或静默截断 ISO datetime。
-- Supabase 是账号数据同步，不是实时表同步；当前优先同步 Trip / Day / Item / TicketMeta 对象和 copy 票据 Blob。
-- 同步采用 pull-before-push 增量对象同步；不同对象和不同字段可自动合并，同一字段双边修改时提示用户选择字段版本。
-- 设置页只做轻量同步队列摘要和登录后同步方向提示，不暴露 snapshot 路径或 Storage 细节。
-- 旧版多条云端记录、旧 `snapshot.json` 和旧版恢复出的离线缓存可能仍存在；保留为兼容与迁移路径。
-- zip 归档是可选离线归档能力。
-- 长期同步路线见 `docs/SUPABASE_CLOUD_BACKUP.md`：对象同步、票据 Blob 独立上传、字段级冲突面板和轻量队列摘要已进入主路径；后续仍需设备/操作审计、队列调试工具和协议迁移工具。
-- OpenRouteService / Google Routes / AI provider secrets 只放在后端运行时环境，不进入前端 bundle、IndexedDB、zip、Supabase 或 trip-plan。浏览器可见的 Google Maps JS 渲染 key 必须按 referrer 限制。
-- DeepSeek `deepseek-v4-flash` 当前用于真实 AI draft generation / repair smoke；reasoning 由后端策略管理，默认保持 stable JSON mode，不提供用户开关。
-- 当前 AI 不能把搜索当作模型常识。`travel_search` 可以在 server-side Tavily env 可用时作为来源化搜索 provider，但仅限用户确认后的单次辅助流程；没有来源就不得声称知道实时营业时间、票价、闭馆、交通中断、近期评价或活动。
-- 不缓存商业地图瓦片，不修改 PWA service worker 做瓦片离线缓存。
-- 390px 移动端宽度是基础验收线。
-- 1440x900 桌面 Beta smoke 和真实构建 PWA 升级 smoke 是新增 QA 基线；实体机 Safari/Android 检查需要人工记录。
+1. 完成当前 `main` 同 SHA 的 CI、Cloudflare 和 production diagnostics。
+2. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
+3. 设计并实现 Universal AI Action Gateway v1 合同和三个高频动作。
+4. 拆分 MapLibre/OCR/PDF 低频 chunk，并加入 bundle budget。
+5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

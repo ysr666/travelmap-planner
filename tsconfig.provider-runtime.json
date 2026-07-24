@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "types": ["node", "vite/client"],
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "functions/api/**/*.ts",
+    "server/providerProxy/**/*.ts",
+    "workers/provider-maintenance/**/*.ts"
+  ],
+  "exclude": ["**/*.test.ts"]
+}

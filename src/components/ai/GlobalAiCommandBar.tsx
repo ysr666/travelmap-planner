@@ -199,6 +199,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           window.setTimeout(() => {
             handleNavigation(resolved)
             setCommand('')
+            dismissPanel()
           }, 0)
         }
       }
@@ -483,9 +484,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     }
     navigateTo(result.route, result.params)
     if (result.scrollTargetId) {
-      window.setTimeout(() => {
-        document.getElementById(result.scrollTargetId!)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 250)
+      scrollToNavigationTarget(result.scrollTargetId)
     }
   }
 
@@ -500,7 +499,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
             <div className="mb-2 flex justify-end">
               <button
                 aria-label="收起 AI 结果"
-                className="flex size-9 items-center justify-center rounded-lg text-on-surface-variant transition active:scale-95 tm-focus"
+                className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant transition active:scale-95 tm-focus"
                 disabled={loading || applying}
                 onClick={dismissPanel}
                 type="button"
@@ -580,7 +579,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
             className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
             maxLength={1000}
             onChange={(event) => setCommand(event.currentTarget.value)}
-            placeholder="告诉我你想怎么改"
+            placeholder="告诉我你想做什么"
             value={command}
           />
           <button
@@ -1007,6 +1006,16 @@ function shouldAutoExecuteNavigation(result: GlobalAiInteractionResult): result 
 function getInteractionSourceCardCount(result: GlobalAiInteractionResult) {
   if (result.kind === 'help' || result.kind === 'assistant_answer') return result.sourceCards.length
   return result.actionProposal?.sourceCards.length
+}
+
+function scrollToNavigationTarget(targetId: string, attempt = 0) {
+  const target = document.getElementById(targetId)
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  if (attempt >= 9) return
+  window.setTimeout(() => scrollToNavigationTarget(targetId, attempt + 1), 100)
 }
 
 function buildPreferenceAppliedChange(itemId: string, title: string): TripIntelligenceAppliedChange {

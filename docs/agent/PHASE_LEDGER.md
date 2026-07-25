@@ -1498,3 +1498,71 @@ Residual:
 
 - The 94.6 KiB Provider contract remains shared because core local validation and multiple feature models depend on it.
 - A future per-operation contract split must preserve local rejection of unknown fields, sensitive fields, invalid plans, and malformed Provider responses.
+
+## 2026-07-26 Phase 3E - PWA Multi-Tab Update And Runtime Recovery
+
+Status: completed locally.
+
+Branch: `feature/pwa-update-resilience`
+
+Goal:
+
+- Prove that a waiting PWA update does not reload an existing tab before confirmation, that one confirmed update moves all open tabs to the same version, and that interrupted first-use asset downloads recover without caching partial content.
+
+Scope:
+
+- Extend the real built-distribution PWA test server with deterministic update and interrupted-download controls.
+- Cover two-tab waiting, explicit activation, cross-tab controller convergence, page reload behavior, and IndexedDB preservation.
+- Cover a failed first request for an on-demand asset, a successful retry, runtime-cache population, and full offline reuse.
+- Change application lifecycle code only if the built artifact violates the update contract.
+
+No-go:
+
+- No real Provider, map, search, route, AI, cloud, or external network calls.
+- No changes to IndexedDB schema, Service Worker update consent, Provider contracts, or user-visible navigation.
+- No automatic activation or reload before explicit update confirmation.
+
+Likely files:
+
+- `e2e/pwa-upgrade.spec.ts`
+- `src/components/PwaLifecycleController.tsx` and focused tests only if required by the failing built-dist evidence.
+- `docs/PROJECT_STATUS.md`
+- `docs/ROADMAP_V4.md`
+- `docs/agent/PHASE_LEDGER.md`
+
+Validation:
+
+- Focused built-dist PWA upgrade tests.
+- Typecheck, lint, full unit suite, production build, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: Service Worker activation is shared by an origin, so the tests must distinguish consent-gated activation from the expected controller change in already-open tabs.
+
+Stop conditions:
+
+- Stop and repair if an update activates before confirmation, tabs remain on mixed controllers after confirmation, local IndexedDB data changes, a partial response enters the runtime cache, or offline core navigation regresses.
+
+Result:
+
+- Added a two-tab real-build upgrade test that holds v2 in `waiting` while both tabs continue on v1 without reloading.
+- The existing prompt-mode Workbox lifecycle already converges both tabs on v2 after one explicit `更新并重启` confirmation, so no application lifecycle behavior changed.
+- The same test verifies both documents reload onto the new controller and the shared IndexedDB marker remains intact.
+- The built-dist server can now interrupt a selected asset response after one-third of the body, allowing the runtime-cache test to prove that incomplete content is not cached.
+- A later full download is cached exactly once and returns the same complete byte length while offline.
+- Service Worker version and document-load probes now retry only the expected execution-context race caused by the confirmed cross-tab reload.
+
+Validation:
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1472 tests.
+- `npm run build` passed; bundle budget passed at 848.3 KiB initial JS, 244.8 KiB gzip, and 2261.2 KiB/94-entry precache.
+- Focused built-dist PWA tests passed: 3 tests; a three-repeat stability run passed 9/9.
+- The first full serial E2E run exposed an expected `controllerchange` navigation race in the new probe; after the scoped retry repair, the final run passed all 142 tests in approximately 5.5 minutes.
+- `git diff --check` passed.
+
+Residual:
+
+- Multiple historical release versions, offline edits followed by online sync recovery, and storage-quota pressure still need separate matrices.
+- Physical iPhone Safari/iOS PWA and Android Chrome weak-network evidence remains part of Beta QA.

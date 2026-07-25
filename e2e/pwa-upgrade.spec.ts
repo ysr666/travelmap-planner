@@ -45,6 +45,63 @@ test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({
   }
 })
 
+test('PWA 更新在确认前保持等待，确认后所有标签切换到同一版本', async ({ context }) => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-multi-tab-'))
+  const appDir = join(tempDir, 'app')
+  let server: Server | null = null
+
+  try {
+    await cp(builtDistDir, appDir, { recursive: true })
+    await writeServiceWorkerVersion(appDir, 'v1')
+    const staticServer = await startStaticServer(appDir)
+    server = staticServer.server
+    await context.addInitScript(() => {
+      const key = 'tripmap-pwa-document-loads'
+      const nextCount = Number(window.sessionStorage.getItem(key) ?? '0') + 1
+      window.sessionStorage.setItem(key, String(nextCount))
+    })
+
+    const firstPage = await context.newPage()
+    const secondPage = await context.newPage()
+    await firstPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(firstPage)
+    await secondPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(secondPage)
+    await expect.poll(() => readServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v1')
+    await expect.poll(() => readServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v1')
+
+    await putIndexedDbMarker(firstPage)
+    const firstLoadsBeforeUpdate = await readDocumentLoadCount(firstPage)
+    const secondLoadsBeforeUpdate = await readDocumentLoadCount(secondPage)
+
+    await writeServiceWorkerVersion(appDir, 'v2')
+    await prepareUpdatedServiceWorker(firstPage)
+    await expect.poll(() => hasWaitingServiceWorker(secondPage), { timeout: 10_000 }).toBe(true)
+    await expect(firstPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+    await expect(secondPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+
+    await firstPage.waitForTimeout(500)
+    expect(await readDocumentLoadCount(firstPage)).toBe(firstLoadsBeforeUpdate)
+    expect(await readDocumentLoadCount(secondPage)).toBe(secondLoadsBeforeUpdate)
+    expect(await readServiceWorkerVersion(firstPage)).toBe('v1')
+    expect(await readServiceWorkerVersion(secondPage)).toBe('v1')
+
+    await firstPage.getByRole('button', { name: '更新并重启' }).click()
+    await expect.poll(() => readServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v2')
+    await expect.poll(() => readServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v2')
+    await expect.poll(() => readDocumentLoadCount(firstPage), { timeout: 10_000 })
+      .toBeGreaterThan(firstLoadsBeforeUpdate)
+    await expect.poll(() => readDocumentLoadCount(secondPage), { timeout: 10_000 })
+      .toBeGreaterThan(secondLoadsBeforeUpdate)
+    expect(await readIndexedDbMarker(secondPage)).toBe('kept')
+  } finally {
+    if (server) {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
+    }
+    await rm(tempDir, { force: true, recursive: true })
+  }
+})
+
 test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async ({ page, context }) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-cache-'))
   const appDir = join(tempDir, 'app')
@@ -58,6 +115,10 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
       file: string
       name?: string
     }>
+    const mapAsset = Object.values(buildManifest).find((entry) => entry.name === 'maplibre')
+    expect(mapAsset?.file).toBeTruthy()
+    const mapAssetPath = `/${mapAsset?.file}`
+    const mapAssetSize = (await stat(join(appDir, mapAsset?.file ?? ''))).size
     const staticServer = await startStaticServer(appDir)
     server = staticServer.server
 
@@ -83,13 +144,47 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
     expect(providerClientCoreAsset?.file).toBeTruthy()
     expect(precacheUrls).not.toContain(`${staticServer.origin}/${providerClientCoreAsset?.file}`)
 
-    const mapAsset = Object.values(buildManifest).find((entry) => entry.name === 'maplibre')
-    expect(mapAsset?.file).toBeTruthy()
-    const mapAssetUrl = `${staticServer.origin}/${mapAsset?.file}`
-    await page.evaluate(async (url) => {
+    const mapAssetUrl = `${staticServer.origin}${mapAssetPath}`
+    expect(await readCacheUrls(
+      page,
+      (name) => name === 'tripmap-on-demand-assets-v1',
+    )).not.toContain(mapAssetUrl)
+    const requestCountBeforeInterruption = staticServer.getRequestCount(mapAssetPath)
+    staticServer.interruptNextRequest(mapAssetPath)
+    const interruptedFetch = await page.evaluate(async ({ expectedSize, url }) => {
+      try {
+        const response = await fetch(url)
+        const size = (await response.arrayBuffer()).byteLength
+        return {
+          complete: response.ok && size === expectedSize,
+          size,
+        }
+      } catch {
+        return {
+          complete: false,
+          size: 0,
+        }
+      }
+    }, { expectedSize: mapAssetSize, url: mapAssetUrl })
+    expect(interruptedFetch.complete).toBe(false)
+    expect(staticServer.getRequestCount(mapAssetPath)).toBe(requestCountBeforeInterruption + 1)
+    await page.waitForTimeout(250)
+    expect(await readCacheUrls(
+      page,
+      (name) => name === 'tripmap-on-demand-assets-v1',
+    )).not.toContain(mapAssetUrl)
+
+    const onlineResponse = await page.evaluate(async (url) => {
       const response = await fetch(url)
       if (!response.ok) throw new Error(`failed to fetch on-demand asset: ${response.status}`)
+      return {
+        ok: response.ok,
+        size: (await response.arrayBuffer()).byteLength,
+      }
     }, mapAssetUrl)
+    expect(onlineResponse.ok).toBe(true)
+    expect(onlineResponse.size).toBeGreaterThan(1_000_000)
+    expect(staticServer.getRequestCount(mapAssetPath)).toBe(requestCountBeforeInterruption + 2)
 
     await expect.poll(async () => {
       const runtimeUrls = await readCacheUrls(
@@ -112,7 +207,7 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
       }
     }, mapAssetUrl)
     expect(cachedResponse.ok).toBe(true)
-    expect(cachedResponse.size).toBeGreaterThan(1_000_000)
+    expect(cachedResponse.size).toBe(onlineResponse.size)
 
     await clickTripCard(tripCard)
     await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
@@ -159,10 +254,13 @@ ${markerEnd}
 }
 
 async function startStaticServer(rootDir: string) {
+  const requestCounts = new Map<string, number>()
+  const interruptedRequestCounts = new Map<string, number>()
   const server = createServer(async (request, response) => {
     try {
       const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
       const pathname = decodeURIComponent(requestUrl.pathname)
+      requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1)
       const requestedFile = pathname === '/' || !extname(pathname)
         ? join(rootDir, 'index.html')
         : resolve(rootDir, `.${pathname}`)
@@ -176,6 +274,19 @@ async function startStaticServer(rootDir: string) {
       if (!fileStat.isFile()) throw new Error('not a file')
 
       const body = await readFile(requestedFile)
+      if (interruptedRequestCounts.get(pathname) === requestCounts.get(pathname)) {
+        interruptedRequestCounts.delete(pathname)
+        response.writeHead(200, {
+          'Cache-Control': 'no-store',
+          'Content-Length': body.byteLength,
+          'Content-Type': getContentType(requestedFile),
+        })
+        response.flushHeaders()
+        response.write(body.subarray(0, Math.max(1, Math.floor(body.byteLength / 3))))
+        await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 25))
+        response.destroy()
+        return
+      }
       response.writeHead(200, {
         'Cache-Control': 'no-store',
         'Content-Type': getContentType(requestedFile),
@@ -191,6 +302,12 @@ async function startStaticServer(rootDir: string) {
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('failed to start PWA smoke server')
   return {
+    getRequestCount(pathname: string) {
+      return requestCounts.get(pathname) ?? 0
+    },
+    interruptNextRequest(pathname: string) {
+      interruptedRequestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1)
+    },
     origin: `http://127.0.0.1:${address.port}`,
     server,
   }
@@ -309,28 +426,92 @@ async function activateUpdatedServiceWorker(page: Page) {
   })
 }
 
-async function readServiceWorkerVersion(page: Page) {
-  return page.evaluate(async () => {
-    const controller = navigator.serviceWorker.controller
-    if (!controller) throw new Error('missing service worker controller')
+async function prepareUpdatedServiceWorker(page: Page) {
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) throw new Error('missing service worker registration')
 
-    return await new Promise<string>((resolveVersion, rejectVersion) => {
+    await registration.update()
+    await new Promise<void>((resolveWaiting, rejectWaiting) => {
       const timeout = window.setTimeout(() => {
-        navigator.serviceWorker.removeEventListener('message', handleMessage)
-        rejectVersion(new Error('service worker version timeout'))
-      }, 5000)
+        registration.removeEventListener('updatefound', handleUpdateFound)
+        rejectWaiting(new Error('updated service worker did not enter waiting state'))
+      }, 10_000)
 
-      function handleMessage(event: MessageEvent) {
-        if (event.data?.type !== 'TRIPMAP_E2E_PWA_VERSION') return
+      const resolveWhenWaiting = () => {
+        if (!registration.waiting) return
         window.clearTimeout(timeout)
-        navigator.serviceWorker.removeEventListener('message', handleMessage)
-        resolveVersion(event.data.version)
+        registration.removeEventListener('updatefound', handleUpdateFound)
+        resolveWaiting()
+      }
+      const handleUpdateFound = () => {
+        const installingWorker = registration.installing
+        if (!installingWorker) return
+        installingWorker.addEventListener('statechange', resolveWhenWaiting)
+        resolveWhenWaiting()
       }
 
-      navigator.serviceWorker.addEventListener('message', handleMessage)
-      controller.postMessage({ type: 'TRIPMAP_E2E_PWA_VERSION' })
+      registration.addEventListener('updatefound', handleUpdateFound)
+      if (registration.waiting) {
+        resolveWhenWaiting()
+        return
+      }
+      registration.installing?.addEventListener('statechange', resolveWhenWaiting)
+      resolveWhenWaiting()
     })
   })
+}
+
+async function hasWaitingServiceWorker(page: Page) {
+  return page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration()
+    return Boolean(registration?.waiting)
+  })
+}
+
+async function readDocumentLoadCount(page: Page) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await page.evaluate(() =>
+        Number(window.sessionStorage.getItem('tripmap-pwa-document-loads') ?? '0'))
+    } catch (caught) {
+      if (!isServiceWorkerNavigationRaceError(caught) || attempt === 4) throw caught
+      await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
+    }
+  }
+  throw new Error('document load count unavailable')
+}
+
+async function readServiceWorkerVersion(page: Page) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await page.evaluate(async () => {
+        const controller = navigator.serviceWorker.controller
+        if (!controller) throw new Error('missing service worker controller')
+
+        return await new Promise<string>((resolveVersion, rejectVersion) => {
+          const timeout = window.setTimeout(() => {
+            navigator.serviceWorker.removeEventListener('message', handleMessage)
+            rejectVersion(new Error('service worker version timeout'))
+          }, 5000)
+
+          function handleMessage(event: MessageEvent) {
+            if (event.data?.type !== 'TRIPMAP_E2E_PWA_VERSION') return
+            window.clearTimeout(timeout)
+            navigator.serviceWorker.removeEventListener('message', handleMessage)
+            resolveVersion(event.data.version)
+          }
+
+          navigator.serviceWorker.addEventListener('message', handleMessage)
+          controller.postMessage({ type: 'TRIPMAP_E2E_PWA_VERSION' })
+        })
+      })
+    } catch (caught) {
+      if (!isServiceWorkerNavigationRaceError(caught) || attempt === 4) throw caught
+      await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
+    }
+  }
+  throw new Error('service worker version unavailable')
 }
 
 async function putIndexedDbMarker(page: Page) {

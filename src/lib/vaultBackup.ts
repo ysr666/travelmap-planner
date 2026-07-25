@@ -1,4 +1,4 @@
-import JSZip from 'jszip'
+import type JSZip from 'jszip'
 import { db } from '../db/database'
 import type { VaultBlobRecord, VaultKeyState, VaultObjectRecord } from '../types'
 
@@ -12,6 +12,7 @@ type VaultBackupManifest = {
 }
 
 export async function exportEncryptedVaultBackup() {
+  const JSZip = (await import('jszip')).default
   const state = await db.vaultKeyState.orderBy('updatedAt').last()
   if (!state) throw new Error('尚未建立旅行资料库。')
   const [objects, blobs] = await Promise.all([
@@ -38,6 +39,7 @@ export async function exportEncryptedVaultBackup() {
 }
 
 export async function importEncryptedVaultBackup(file: File) {
+  const JSZip = (await import('jszip')).default
   if (await db.vaultKeyState.count()) throw new Error('当前设备已有旅行资料库，不能直接覆盖。')
   const zip = await JSZip.loadAsync(file)
   const manifest = await readJson<VaultBackupManifest>(zip, 'manifest.json')

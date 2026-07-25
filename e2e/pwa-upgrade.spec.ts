@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { clickTripCard, getHashParam } from './helpers'
 
 const builtDistDir = join(process.cwd(), 'dist')
 const markerStart = '/* tripmap e2e pwa marker:start */'
@@ -37,6 +38,93 @@ test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({
     await expect.poll(() => readServiceWorkerVersion(page), { timeout: 10_000 }).toBe('v2')
     await expect(await readIndexedDbMarker(page)).toBe('kept')
   } finally {
+    if (server) {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
+    }
+    await rm(tempDir, { force: true, recursive: true })
+  }
+})
+
+test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async ({ page, context }) => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-cache-'))
+  const appDir = join(tempDir, 'app')
+  let server: Server | null = null
+
+  try {
+    await cp(builtDistDir, appDir, { recursive: true })
+    const buildManifest = JSON.parse(
+      await readFile(join(appDir, '.vite', 'manifest.json'), 'utf8'),
+    ) as Record<string, {
+      file: string
+      name?: string
+    }>
+    const staticServer = await startStaticServer(appDir)
+    server = staticServer.server
+
+    await page.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(page)
+
+    const precacheUrls = await readCacheUrls(page, (name) => name.includes('precache'))
+    const requiredManifestKeys = [
+      'src/pages/TripWorkspacePage.tsx',
+      'src/pages/DayViewPage.tsx',
+      'src/pages/ItemDetailPage.tsx',
+      'src/pages/TicketLibraryPage.tsx',
+    ]
+    for (const manifestKey of requiredManifestKeys) {
+      expect(precacheUrls).toContain(`${staticServer.origin}/${buildManifest[manifestKey].file}`)
+    }
+    expect(precacheUrls.some((url) => /\/assets\/maplibre-.+\.js$/.test(url))).toBe(false)
+    expect(precacheUrls.some((url) => /\/assets\/pdf.+\.js$/.test(url))).toBe(false)
+    expect(precacheUrls.some((url) => /\/assets\/jszip-.+\.js$/.test(url))).toBe(false)
+
+    const mapAsset = Object.values(buildManifest).find((entry) => entry.name === 'maplibre')
+    expect(mapAsset?.file).toBeTruthy()
+    const mapAssetUrl = `${staticServer.origin}/${mapAsset?.file}`
+    await page.evaluate(async (url) => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`failed to fetch on-demand asset: ${response.status}`)
+    }, mapAssetUrl)
+
+    await expect.poll(async () => {
+      const runtimeUrls = await readCacheUrls(
+        page,
+        (name) => name === 'tripmap-on-demand-assets-v1',
+      )
+      return runtimeUrls.includes(mapAssetUrl)
+    }).toBe(true)
+
+    await page.getByRole('button', { name: '创建示例旅行' }).click()
+    const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+    await expect(tripCard).toBeVisible()
+
+    await context.setOffline(true)
+    const cachedResponse = await page.evaluate(async (url) => {
+      const response = await fetch(url)
+      return {
+        ok: response.ok,
+        size: (await response.arrayBuffer()).byteLength,
+      }
+    }, mapAssetUrl)
+    expect(cachedResponse.ok).toBe(true)
+    expect(cachedResponse.size).toBeGreaterThan(1_000_000)
+
+    await clickTripCard(tripCard)
+    await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
+    const tripId = getHashParam(page.url(), 'tripId')
+    expect(tripId).toBeTruthy()
+
+    await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+    await expect(page.getByTestId('day-selector')).toBeVisible()
+    await page.getByRole('button', { name: /明治神宫散步/ }).click()
+    await expect(page.getByTestId('item-detail-page')).toBeVisible()
+
+    await page.evaluate((currentTripId) => {
+      window.location.hash = `/documents?tripId=${currentTripId}&tab=attachments`
+    }, tripId)
+    await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+  } finally {
+    await context.setOffline(false)
     if (server) {
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
     }
@@ -292,6 +380,21 @@ async function readIndexedDbMarker(page: Page) {
       transaction.oncomplete = () => db.close()
     })
   })
+}
+
+async function readCacheUrls(page: Page, cacheNameFilter: (name: string) => boolean) {
+  const cacheNames = await page.evaluate(async () => await caches.keys())
+  const matchingCacheNames = cacheNames.filter(cacheNameFilter)
+  const urlGroups = await Promise.all(
+    matchingCacheNames.map((cacheName) =>
+      page.evaluate(async (name) => {
+        const cache = await caches.open(name)
+        const requests = await cache.keys()
+        return requests.map((request) => request.url)
+      }, cacheName),
+    ),
+  )
+  return urlGroups.flat()
 }
 
 function getContentType(filePath: string) {

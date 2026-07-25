@@ -67,7 +67,6 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: null,
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'push-handler.js'],
       manifest: {
         name: '旅图 TripMap',
         short_name: '旅图',
@@ -97,8 +96,37 @@ export default defineConfig({
       workbox: {
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        globIgnores: [
+          '**/AiDraftPage-*.js',
+          '**/GlobalAiCommandBar-*.js',
+          '**/icons/icon-*.png',
+          '**/jszip-*.js',
+          '**/manifest.webmanifest',
+          '**/maplibre-*.css',
+          '**/maplibre-*.js',
+          '**/ocr-*.js',
+          '**/pdf*.js',
+          '**/worker.min-*.js',
+        ],
         navigateFallback: 'index.html',
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, url }) =>
+              sameOrigin && url.pathname.startsWith('/assets/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tripmap-on-demand-assets-v1',
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+              expiration: {
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+                maxEntries: 80,
+                purgeOnQuotaError: true,
+              },
+            },
+          },
+        ],
         importScripts: ['/push-handler.js'],
       },
     }),

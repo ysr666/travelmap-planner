@@ -9,6 +9,7 @@ const BUDGETS = {
   entryRaw: 500 * KIB,
   initialRaw: 900 * KIB,
   initialGzip: 260 * KIB,
+  precacheRaw: 2500 * KIB,
 }
 const FORBIDDEN_INITIAL_CHUNKS = [
   ['global AI', /GlobalAiCommandBar/i],
@@ -18,6 +19,27 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   ['OCR runtime', /(?:^|[-_.])ocr(?:[-_.]|$)|tesseract/i],
   ['archive parser', /jszip/i],
 ]
+const FORBIDDEN_PRECACHE_ASSETS = [
+  ['AI draft', /^assets\/AiDraftPage-.+\.js$/],
+  ['global AI', /^assets\/GlobalAiCommandBar-.+\.js$/],
+  ['archive parser', /^assets\/jszip-.+\.js$/],
+  ['map renderer CSS', /^assets\/maplibre-.+\.css$/],
+  ['map renderer JS', /^assets\/maplibre-.+\.js$/],
+  ['OCR runtime', /^assets\/ocr-.+\.js$/],
+  ['OCR worker', /^assets\/worker\.min-.+\.js$/],
+  ['PDF parser', /^assets\/pdf.+\.js$/],
+]
+const REQUIRED_PRECACHE_ASSETS = [
+  ['application entry', /^assets\/index-.+\.js$/],
+  ['application styles', /^assets\/index-.+\.css$/],
+  ['React runtime', /^assets\/react-vendor-.+\.js$/],
+  ['Supabase runtime', /^assets\/supabase-vendor-.+\.js$/],
+  ['trip workspace', /^assets\/TripWorkspacePage-.+\.js$/],
+  ['day view', /^assets\/DayViewPage-.+\.js$/],
+  ['item detail', /^assets\/ItemDetailPage-.+\.js$/],
+  ['ticket library', /^assets\/TicketLibraryPage-.+\.js$/],
+]
+const RUNTIME_ASSET_CACHE_NAME = 'tripmap-on-demand-assets-v1'
 
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
 const entries = Object.entries(manifest).filter(([, chunk]) => chunk.isEntry)
@@ -87,11 +109,58 @@ for (const [label, pattern] of FORBIDDEN_INITIAL_CHUNKS) {
   }
 }
 
+const serviceWorkerSource = await readFile(path.join(DIST_DIR, 'sw.js'), 'utf8')
+const precacheUrls = extractPrecacheUrls(serviceWorkerSource)
+const duplicatePrecacheUrls = precacheUrls.filter(
+  (url, index) => precacheUrls.indexOf(url) !== index,
+)
+if (duplicatePrecacheUrls.length > 0) {
+  failures.push(
+    `precache contains duplicate URLs (${Array.from(new Set(duplicatePrecacheUrls)).join(', ')})`,
+  )
+}
+
+let precacheRawBytes = 0
+for (const url of new Set(precacheUrls)) {
+  const relativePath = url.replace(/^\/+/, '')
+  if (!relativePath || relativePath.includes('..')) {
+    failures.push(`precache contains an unsafe local URL (${url})`)
+    continue
+  }
+  const contents = await readFile(path.join(DIST_DIR, relativePath))
+  precacheRawBytes += contents.byteLength
+}
+
+if (precacheRawBytes > BUDGETS.precacheRaw) {
+  failures.push(
+    `precache is ${formatKib(precacheRawBytes)} (limit ${formatKib(BUDGETS.precacheRaw)})`,
+  )
+}
+
+for (const [label, pattern] of REQUIRED_PRECACHE_ASSETS) {
+  if (!precacheUrls.some((url) => pattern.test(url))) {
+    failures.push(`${label} is missing from the precache`)
+  }
+}
+
+for (const [label, pattern] of FORBIDDEN_PRECACHE_ASSETS) {
+  const match = precacheUrls.find((url) => pattern.test(url))
+  if (match) {
+    failures.push(`${label} must be cached on demand (${match})`)
+  }
+}
+
+if (!serviceWorkerSource.includes(RUNTIME_ASSET_CACHE_NAME)) {
+  failures.push(`Service Worker is missing runtime asset cache "${RUNTIME_ASSET_CACHE_NAME}"`)
+}
+
 const summary = [
   `entry ${formatKib(entryBytes)}`,
   `initial ${formatKib(initialRawBytes)}`,
   `initial gzip ${formatKib(initialGzipBytes)}`,
   `${initialChunks.length} startup chunks`,
+  `precache ${formatKib(precacheRawBytes)}`,
+  `${precacheUrls.length} precache entries`,
 ].join(', ')
 
 if (failures.length > 0) {
@@ -106,4 +175,54 @@ if (failures.length > 0) {
 
 function formatKib(bytes) {
   return `${(bytes / KIB).toFixed(1)} KiB`
+}
+
+function extractPrecacheUrls(serviceWorkerSource) {
+  const marker = 'precacheAndRoute('
+  const markerIndex = serviceWorkerSource.indexOf(marker)
+  if (markerIndex < 0) {
+    throw new Error('Generated Service Worker has no precacheAndRoute call.')
+  }
+
+  const arrayStart = serviceWorkerSource.indexOf('[', markerIndex + marker.length)
+  if (arrayStart < 0) {
+    throw new Error('Generated Service Worker has no precache manifest array.')
+  }
+
+  let depth = 0
+  let escaped = false
+  let inString = false
+  for (let index = arrayStart; index < serviceWorkerSource.length; index += 1) {
+    const character = serviceWorkerSource[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (character === '"') {
+      inString = true
+    } else if (character === '[') {
+      depth += 1
+    } else if (character === ']') {
+      depth -= 1
+      if (depth === 0) {
+        const arraySource = serviceWorkerSource.slice(arrayStart, index + 1)
+        const urlMatches = Array.from(
+          arraySource.matchAll(/(?:\burl|"url")\s*:\s*("(?:\\.|[^"\\])*")/g),
+        )
+        if (urlMatches.length === 0) {
+          throw new Error('Generated Service Worker precache manifest has no URLs.')
+        }
+        return urlMatches.map((match) => JSON.parse(match[1]))
+      }
+    }
+  }
+
+  throw new Error('Generated Service Worker precache manifest is incomplete.')
 }

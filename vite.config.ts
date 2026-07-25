@@ -26,6 +26,7 @@ const appCommitSha = (
 // https://vite.dev/config/
 export default defineConfig({
   build: {
+    manifest: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -35,9 +36,6 @@ export default defineConfig({
           }
           if (normalizedId.includes('/node_modules/jszip/')) {
             return 'jszip'
-          }
-          if (normalizedId.includes('/node_modules/pdfjs-dist/')) {
-            return 'pdf-ocr'
           }
           if (
             normalizedId.includes('/node_modules/tesseract.js/') ||
@@ -51,6 +49,9 @@ export default defineConfig({
             normalizedId.includes('/node_modules/scheduler/')
           ) {
             return 'react-vendor'
+          }
+          if (normalizedId.includes('/node_modules/@supabase/')) {
+            return 'supabase-vendor'
           }
         },
       },

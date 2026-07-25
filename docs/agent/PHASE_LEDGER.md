@@ -1274,3 +1274,86 @@ Residual:
 - Bundle splitting for app, MapLibre, OCR/PDF.
 - Supabase leaked-password protection decision and preview-tested consolidation of duplicate ticket SELECT policies.
 - Universal AI Action Gateway v1 for arbitrary supported natural-language task composition.
+
+## 2026-07-25 Universal AI Action Gateway V1
+
+Status: merged to `main` as `5477ce6`.
+
+Branch: `feature/ai-action-gateway-v1`
+
+Goal:
+
+- Replace keyword-only routing with a constrained natural-language action gateway for opening tickets, enriching places, and repairing trips.
+
+Result:
+
+- Added versioned action plan, step, definition, registry, prepared-plan, and run-result contracts.
+- Added deterministic planning plus the privacy-filtered `ai_action_plan` Provider Proxy fallback.
+- Restricted planning to `ticket.open@1`, `place.enrich@1`, and `trip.repair@1`; unknown actions, fields, cycles, sensitive values, oversized plans, and ambiguous targets fail closed.
+- Added real previews, one final confirmation for writes, travel-state fingerprints, idempotency keys, dependency ordering, partial-failure continuation, and failed-step-only retry.
+- Kept ticket metadata local, preserved Provider Proxy Auth/Origin/quota/budget/kill-switch/privacy boundaries, and retained existing command routes as compatibility adapters.
+- Kept the global AI surface compact with a short summary, collapsed detail, one primary action, and automatic dismissal after successful navigation.
+
+Validation:
+
+- Local typecheck, lint, unit, build, PWA upgrade, and full E2E passed before merge.
+- PR and merged `main` SHA passed GitHub Type Check, Build, Lint, Unit Tests, and E2E Tests.
+- Cloudflare Pages deployed the same `main` SHA successfully.
+
+Residual:
+
+- Migrate time adjustment, route preview, expense draft, and document-opening actions into the registry.
+- Add unified undo/history only after the existing action adapters share one stable transaction model.
+
+## 2026-07-25 Phase 3A - Startup Bundle Boundary And Budget
+
+Status: completed locally.
+
+Branch: `feature/pwa-bundle-budget`
+
+Goal:
+
+- Remove AI, Provider, map, and document-processing work from the static startup graph and turn the resulting limits into a CI contract.
+
+Scope:
+
+- Lazy-load the global AI command surface.
+- Split route/cache pure modeling from the Provider-backed routing client.
+- Stabilize Supabase vendor chunking and restore PDF parsing to a true dynamic import.
+- Generate a Vite manifest and validate startup chunks and byte budgets after every production build.
+- Preserve existing UI, Provider contracts, data semantics, PWA update behavior, and AI confirmation boundaries.
+
+No-go:
+
+- No real Provider calls, database schema changes, cloud configuration writes, route cache schema changes, or AI privacy expansion.
+- No visible feature expansion or new settings.
+
+Read-only baseline:
+
+- Production entry JS was 947.6 kB and statically preloaded the 422.6 kB PDF parser.
+- Global AI and Provider contracts were part of the entry graph through the global command bar and route-cache imports.
+
+Result:
+
+- Production entry JS is 476.9 kB; initial static JS is 848.2 KiB raw and 244.8 KiB gzip.
+- Global AI, Provider Proxy, MapLibre, PDF, OCR, and JSZip are absent from the static startup graph.
+- Build now fails above 500 KiB entry, 900 KiB initial raw, or 260 KiB initial gzip, and if any protected low-frequency chunk returns to startup.
+- Navigation-aborted hashed assets are treated as benign in the mobile browser audit while HTTP failures, console errors, and other request failures remain reportable.
+
+Validation:
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 184 files, 1471 tests.
+- Focused routing/AppShell unit tests passed: 3 files, 35 tests.
+- Focused global AI E2E passed: 8 tests.
+- Focused mobile UX/accessibility E2E passed: 1 test.
+- `npm run test:e2e:pwa-upgrade` passed: 1 test.
+- `npm run test:e2e` passed: 140 tests in approximately 7.8 minutes.
+- `npm run build` and the new bundle budget passed.
+
+Residual:
+
+- MapLibre remains a 1 MB-class dynamic chunk.
+- Service Worker precache is approximately 4.1 MB and needs a separate offline/weak-network design pass.
+- Physical iPhone Safari/iOS PWA and Android Chrome performance evidence is still pending.

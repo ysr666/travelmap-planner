@@ -1,5 +1,10 @@
 import Dexie, { type Table } from 'dexie'
-import { getOrderedMappableItems, mapTransportModeToRoutingProfile, type LngLat, type RoutingProvider } from './routing'
+import {
+  getOrderedMappableItems,
+  mapTransportModeToRoutingProfile,
+  type LngLat,
+  type RoutingProvider,
+} from './routingModel'
 import type { ItineraryItem } from '../types'
 
 export type RouteCacheScope = 'day-map' | 'trip-preview'

@@ -53,6 +53,86 @@ describe('AI Action Gateway runtime', () => {
     })])
   })
 
+  it('opens a registered semantic workspace target without a provider request', async () => {
+    const seed = buildSeed()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('打开资料中心')
+    expect(plan).not.toBeNull()
+
+    const prepared = await prepareAiActionPlan(plan!, context)
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(false)
+    expect(result).toMatchObject({
+      status: 'completed',
+      effects: [{
+        kind: 'navigate',
+        params: { tab: 'documents', tripId: seed.trip.id },
+        route: 'documents',
+      }],
+    })
+  })
+
+  it('previews an item time change and preserves duration until confirmed execution', async () => {
+    const seed = buildSeed()
+    seed.item.startTime = '09:00'
+    seed.item.endTime = '10:30'
+    await seedDatabase(seed)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('把第一站改到11点')
+    expect(plan).not.toBeNull()
+
+    const prepared = await prepareAiActionPlan(plan!, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: [seed.item.title],
+      hasWrite: true,
+      preview: `${seed.item.title}：09:00-10:30 → 11:00-12:30。`,
+      status: 'prepared',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      endTime: '10:30',
+      startTime: '09:00',
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result.status).toBe('completed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      endTime: '12:30',
+      startTime: '11:00',
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('blocks a prepared item time change after the trip state becomes stale', async () => {
+    const seed = buildSeed()
+    seed.item.startTime = '09:00'
+    seed.item.endTime = '10:00'
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('把第一站改到11点')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.itineraryItems.update(seed.item.id, { startTime: '08:30', updatedAt: 2 })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '旅行内容已变化，请重新生成预览。',
+      status: 'failed',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      endTime: '10:00',
+      startTime: '08:30',
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
   it('previews a sourced place candidate and writes only after execution', async () => {
     const seed = buildSeed()
     await seedDatabase(seed)

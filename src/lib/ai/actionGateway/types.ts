@@ -4,9 +4,11 @@ export const AI_ACTION_PLAN_SCHEMA_VERSION = 'ai_action_plan.v1' as const
 export const AI_ACTION_PLAN_MAX_STEPS = 6
 
 export type AiActionId =
+  | 'item.time.update@1'
   | 'place.enrich@1'
   | 'ticket.open@1'
   | 'trip.repair@1'
+  | 'workspace.open@1'
 
 export type AiActionRisk =
   | 'local_write'
@@ -26,6 +28,12 @@ export type AiActionTicketOpenArgs = {
   query?: string
 }
 
+export type AiActionItemTimeUpdateArgs = {
+  endTime?: string
+  startTime: string
+  target: string
+}
+
 export type AiActionPlaceEnrichArgs = {
   target: string
 }
@@ -35,10 +43,26 @@ export type AiActionTripRepairArgs = {
   target?: string
 }
 
+export type AiActionWorkspaceOpenTarget =
+  | 'documents'
+  | 'home'
+  | 'inbox'
+  | 'ledger'
+  | 'map'
+  | 'search'
+  | 'settings'
+  | 'trip'
+
+export type AiActionWorkspaceOpenArgs = {
+  target: AiActionWorkspaceOpenTarget
+}
+
 export type AiActionArgsById = {
+  'item.time.update@1': AiActionItemTimeUpdateArgs
   'place.enrich@1': AiActionPlaceEnrichArgs
   'ticket.open@1': AiActionTicketOpenArgs
   'trip.repair@1': AiActionTripRepairArgs
+  'workspace.open@1': AiActionWorkspaceOpenArgs
 }
 
 export type AiActionInputSchema = {

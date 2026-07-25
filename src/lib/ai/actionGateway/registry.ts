@@ -14,6 +14,17 @@ type AiActionMetadata = AiActionCatalogDescriptor & {
 }
 
 const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
+  'item.time.update@1': {
+    description: '调整一个明确行程点的开始时间；可同时设置结束时间，写入前必须确认。',
+    id: 'item.time.update@1',
+    idempotencyNamespace: 'item-time-update',
+    input: '{"target":"current_item|first_item|行程点名称","startTime":"HH:mm","endTime":"可选 HH:mm"}',
+    inputSchema: { allowedFields: ['target', 'startTime', 'endTime'], requiredFields: ['target', 'startTime'] },
+    label: '调整行程时间',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 1, retryable: false },
+    risk: 'local_write',
+  },
   'place.enrich@1': {
     description: '为一个明确的行程点查询地点候选，并在确认后补充名称、地址和坐标。',
     id: 'place.enrich@1',
@@ -46,6 +57,17 @@ const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
     requiresTrip: true,
     retryPolicy: { maxAttempts: 2, retryable: true },
     risk: 'local_write',
+  },
+  'workspace.open@1': {
+    description: '打开资料、首页、收件箱、账本、地图、搜索、设置或当前行程等受限语义页面。',
+    id: 'workspace.open@1',
+    idempotencyNamespace: 'workspace-open',
+    input: '{"target":"documents|home|inbox|ledger|map|search|settings|trip"}',
+    inputSchema: { allowedFields: ['target'], requiredFields: ['target'] },
+    label: '打开页面',
+    requiresTrip: false,
+    retryPolicy: { maxAttempts: 1, retryable: false },
+    risk: 'read_only',
   },
 }
 

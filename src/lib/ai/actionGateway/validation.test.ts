@@ -71,6 +71,79 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps item creation and same-day reordering semantic, bounded, and confirmation gated', () => {
+    expect(buildDeterministicAiActionPlan('第一天新增伦敦眼，10:00-11:00')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.create@1',
+        args: {
+          day: 'first_day',
+          endTime: '11:00',
+          startTime: '10:00',
+          title: '伦敦眼',
+        },
+        risk: 'local_write',
+      }],
+    })
+    expect(buildDeterministicAiActionPlan('把伦敦眼移到大本钟前面')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'day.items.reorder@1',
+        args: {
+          anchor: '大本钟',
+          position: 'before',
+          target: '伦敦眼',
+        },
+        risk: 'local_write',
+      }],
+    })
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'item.create@1',
+        args: {
+          coordinates: { lat: 1, lng: 2 },
+          day: 'day_internal_secret',
+          endTime: '09:00',
+          startTime: '10:00',
+          title: '非法新增',
+        },
+        id: 'create',
+      }],
+      summary: '非法新增',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'day.items.reorder@1',
+        args: {
+          position: 'before',
+          target: 'item_internal_secret',
+        },
+        id: 'reorder',
+      }],
+      summary: '非法重排',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'item.create@1',
+          args: { day: 'first_day', title: '伦敦眼' },
+          id: 'create',
+        },
+        {
+          actionId: 'day.items.reorder@1',
+          args: { position: 'last', target: '伦敦眼' },
+          dependsOn: ['create'],
+          id: 'reorder',
+        },
+      ],
+      summary: '新增后重排',
+    }).ok).toBe(false)
+  })
+
   it('keeps route generation and expense drafts bounded and confirmation gated', () => {
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
       requiresConfirmation: true,
@@ -195,6 +268,8 @@ describe('AI Action Gateway V1 contract', () => {
 
   it('publishes only the supported action catalog and detects likely provider plans', () => {
     expect(listAiActionCatalog().map((action) => action.id)).toEqual([
+      'day.items.reorder@1',
+      'item.create@1',
       'item.time.update@1',
       'ledger.expense.draft@1',
       'place.enrich@1',

@@ -1,12 +1,17 @@
 import {
+  createItineraryItemIdempotent,
   createLedgerExpenseIdempotent,
+  db,
+  getItineraryItem,
   getLedgerSettingsByTrip,
   getTrip,
+  ItineraryBaselineConflictError,
   listDaysByTrip,
   listItemsByTrip,
   listLedgerExpenses,
   listLedgerParticipants,
   listTicketsByTrip,
+  reorderDayItems,
   updateItineraryItem,
 } from '../../../db'
 import { createId } from '../../../db/ids'
@@ -74,9 +79,12 @@ import {
 } from '../../ledger'
 import {
   appendTripIntelligenceExecutionResult,
+  buildTripIntelligenceAppliedChangeRecordId,
   type TripIntelligenceAppliedChange,
 } from '../../tripIntelligence'
 import {
+  type AiActionDayItemsReorderArgs,
+  type AiActionItemCreateArgs,
   type AiActionPlaceEnrichArgs,
   type AiActionId,
   type AiActionItemTimeUpdateArgs,
@@ -117,6 +125,33 @@ type PreparedItemTimeAction = {
   kind: 'item-time'
   nextEndTime?: string
   nextStartTime: string
+}
+
+type PreparedItemCreateAction = {
+  day: Day
+  endTime?: string
+  existingItem?: ItineraryItem
+  expectedCurrentItemIds: string[]
+  itemId: string
+  kind: 'item-create'
+  operationFingerprint: string
+  sortOrder: number
+  startTime?: string
+  title: string
+  trip: Trip
+}
+
+type PreparedDayItemsReorderAction = {
+  changed: boolean
+  currentIndex: number
+  currentItemIds: string[]
+  day: Day
+  kind: 'day-items-reorder'
+  nextIndex: number
+  nextItemIds: string[]
+  operationFingerprint: string
+  target: ItineraryItem
+  trip: Trip
 }
 
 type PreparedLedgerExpenseDraftAction = {
@@ -185,6 +220,8 @@ type PreparedRoutePreviewAction = {
 }
 
 type PreparedAction =
+  | PreparedDayItemsReorderAction
+  | PreparedItemCreateAction
   | PreparedItemTimeAction
   | PreparedLedgerExpenseDraftAction
   | PreparedPlaceAction
@@ -225,6 +262,46 @@ type AiActionRuntimeDefinition = {
 }
 
 const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> = {
+  'day.items.reorder@1': {
+    execute: async (prepared) =>
+      executeDayItemsReorderAction(requirePreparedKind(prepared, 'day-items-reorder')),
+    prepare: (args, context, preparation) =>
+      prepareDayItemsReorderAction(
+        args as AiActionDayItemsReorderArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const reorder = requirePreparedKind(prepared, 'day-items-reorder')
+      return {
+        affectedLabels: [reorder.target.title],
+        hasWrite: reorder.changed,
+        text: reorder.changed
+          ? `${reorder.target.title}：第 ${reorder.currentIndex + 1} 位 → 第 ${reorder.nextIndex + 1} 位。`
+          : `${reorder.target.title} 已在目标位置。`,
+      }
+    },
+  },
+  'item.create@1': {
+    execute: async (prepared) =>
+      executeItemCreateAction(requirePreparedKind(prepared, 'item-create')),
+    prepare: (args, context, preparation) =>
+      prepareItemCreateAction(
+        args as AiActionItemCreateArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const item = requirePreparedKind(prepared, 'item-create')
+      return {
+        affectedLabels: [item.title],
+        hasWrite: !item.existingItem,
+        text: item.existingItem
+          ? `「${item.title}」已由本次操作创建，不会重复新增。`
+          : `${item.day.title}：将在末尾新增「${item.title}」${item.startTime ? ` · ${formatTimeRange(item.startTime, item.endTime)}` : ''}。`,
+      }
+    },
+  },
   'item.time.update@1': {
     execute: async (prepared) =>
       executeItemTimeAction(requirePreparedKind(prepared, 'item-time')),
@@ -646,6 +723,97 @@ async function prepareWorkspaceAction(
   return { kind: 'workspace', navigation: result }
 }
 
+async function prepareItemCreateAction(
+  args: AiActionItemCreateArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedItemCreateAction> {
+  const trip = requireTrip(context.commandContext)
+  const day = resolveExplicitDayTarget(args.day, context.commandContext)
+  const currentItems = orderItems(context.commandContext.days, context.commandContext.items)
+    .filter((item) => item.dayId === day.id)
+  const operationFingerprint = buildActionOperationFingerprint(
+    preparation.executionId,
+    preparation.idempotencyKey,
+  )
+  const itemId = buildActionItemId(preparation.executionId)
+  const existingItem = await getItineraryItem(itemId)
+  return {
+    day,
+    ...(args.endTime ? { endTime: args.endTime } : {}),
+    ...(existingItem ? { existingItem } : {}),
+    expectedCurrentItemIds: currentItems.map((item) => item.id),
+    itemId,
+    kind: 'item-create',
+    operationFingerprint,
+    sortOrder: existingItem?.sortOrder
+      ?? Math.max(0, ...currentItems.map((item) => item.sortOrder)) + 1,
+    ...(args.startTime ? { startTime: args.startTime } : {}),
+    title: args.title,
+    trip,
+  }
+}
+
+function prepareDayItemsReorderAction(
+  args: AiActionDayItemsReorderArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedDayItemsReorderAction> {
+  const trip = requireTrip(context.commandContext)
+  const explicitDay = args.day
+    ? resolveExplicitDayTarget(args.day, context.commandContext)
+    : undefined
+  const scopedDay = explicitDay ?? context.commandContext.currentDay
+  const target = scopedDay
+    ? resolveItemTargetInDay(args.target, scopedDay, context.commandContext)
+    : resolveItemTarget(args.target, context.commandContext)
+  const day = scopedDay
+    ?? context.commandContext.days.find((candidate) => candidate.id === target.dayId)
+  if (!day) throw new Error('目标日期已不存在。')
+  if (target.dayId !== day.id) throw new Error('目标行程点不在所选日期。')
+
+  const currentItems = orderItems(context.commandContext.days, context.commandContext.items)
+    .filter((item) => item.dayId === day.id)
+  const currentItemIds = currentItems.map((item) => item.id)
+  const currentIndex = currentItemIds.indexOf(target.id)
+  if (currentIndex < 0) throw new Error('目标行程点不在所选日期。')
+  const nextItemIds = currentItemIds.filter((itemId) => itemId !== target.id)
+  let insertionIndex = 0
+  if (args.position === 'last') {
+    insertionIndex = nextItemIds.length
+  } else if (args.position === 'before' || args.position === 'after') {
+    if (!args.anchor) throw new Error('请写清楚相对位置的参照行程点。')
+    const anchor = resolveItemTargetInDay(args.anchor, day, context.commandContext)
+    if (anchor.id === target.id) throw new Error('目标与参照行程点不能相同。')
+    const anchorIndex = nextItemIds.indexOf(anchor.id)
+    if (anchorIndex < 0) throw new Error('参照行程点不在所选日期。')
+    insertionIndex = anchorIndex + (args.position === 'after' ? 1 : 0)
+  }
+  nextItemIds.splice(insertionIndex, 0, target.id)
+  const nextIndex = nextItemIds.indexOf(target.id)
+  return Promise.resolve({
+    changed: nextItemIds.some((itemId, index) => itemId !== currentItemIds[index]),
+    currentIndex,
+    currentItemIds,
+    day,
+    kind: 'day-items-reorder',
+    nextIndex,
+    nextItemIds,
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    target,
+    trip,
+  })
+}
+
 function prepareItemTimeAction(
   args: AiActionItemTimeUpdateArgs,
   context: AiActionGatewayRuntimeContext,
@@ -855,6 +1023,186 @@ async function executePreparedAction(
   context: AiActionGatewayRuntimeContext,
 ): Promise<ActionExecutionResult> {
   return ACTION_RUNTIME_DEFINITIONS[actionId].execute(prepared, context)
+}
+
+async function executeActionMutationWithHistory<T>(
+  tripId: string,
+  title: string,
+  mutation: () => Promise<{
+    change: TripIntelligenceAppliedChange
+    value: T
+  }>,
+) {
+  let output: T | undefined
+  await db.transaction(
+    'rw',
+    [
+      db.days,
+      db.itineraryItems,
+      db.trips,
+      db.syncOutbox,
+      db.objectSyncStates,
+      db.tripIntelligenceAppliedChanges,
+      db.tripIntelligenceSuggestionStates,
+    ],
+    async () => {
+      const result = await mutation()
+      await appendTripIntelligenceExecutionResult(tripId, {
+        result: {
+          appliedChanges: [result.change],
+          message: 'AI 动作计划已完成。',
+          status: 'completed',
+        },
+        source: 'operations',
+        title,
+      }, result.change.occurredAt)
+      output = result.value
+    },
+  )
+  if (output === undefined) throw new Error('动作事务没有返回结果。')
+  return output
+}
+
+async function hasPersistedActionChange(tripId: string, operationFingerprint: string) {
+  const changeId = `action-gateway:${operationFingerprint}`
+  const recordId = buildTripIntelligenceAppliedChangeRecordId(tripId, changeId)
+  return Boolean(await db.tripIntelligenceAppliedChanges.get(recordId))
+}
+
+function matchesPreparedItemCreate(
+  item: ItineraryItem,
+  prepared: PreparedItemCreateAction,
+) {
+  return item.tripId === prepared.trip.id
+    && item.dayId === prepared.day.id
+    && item.title === prepared.title
+    && item.startTime === prepared.startTime
+    && item.endTime === prepared.endTime
+}
+
+async function executeItemCreateAction(
+  prepared: PreparedItemCreateAction,
+): Promise<ActionExecutionResult> {
+  if (await hasPersistedActionChange(prepared.trip.id, prepared.operationFingerprint)) {
+    const existing = await getItineraryItem(prepared.itemId)
+    if (!existing || !matchesPreparedItemCreate(existing, prepared)) {
+      throw new FreshConfirmationRequiredError('新增记录与操作历史不一致，请重新生成预览。')
+    }
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${existing.title}」已存在，未重复创建。`,
+    }
+  }
+  try {
+    const result = await executeActionMutationWithHistory(prepared.trip.id, '新增行程点', async () => {
+      const creation = await createItineraryItemIdempotent({
+        dayId: prepared.day.id,
+        ...(prepared.endTime ? { endTime: prepared.endTime } : {}),
+        sortOrder: prepared.sortOrder,
+        ...(prepared.startTime ? { startTime: prepared.startTime } : {}),
+        ticketIds: [],
+        title: prepared.title,
+        tripId: prepared.trip.id,
+      }, {
+        expectedCurrentItemIds: prepared.expectedCurrentItemIds,
+        id: prepared.itemId,
+      })
+      return {
+        change: buildAppliedChange({
+          actionType: 'global_ai_item_created',
+          detail: `已确认新增到「${prepared.day.title}」末尾。`,
+          idempotencyKey: prepared.operationFingerprint,
+          occurredAt: creation.item.createdAt,
+          targetId: creation.item.id,
+          targetType: 'item',
+          title: creation.item.title,
+        }),
+        value: creation,
+      }
+    })
+    return {
+      appliedChanges: [],
+      effects: result.created
+        ? [buildDayScheduleEffect(prepared.trip.id, prepared.day.id)]
+        : [],
+      errors: [],
+      message: result.created
+        ? `已新增「${result.item.title}」。`
+        : `「${result.item.title}」已存在，未重复创建。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+}
+
+async function executeDayItemsReorderAction(
+  prepared: PreparedDayItemsReorderAction,
+): Promise<ActionExecutionResult> {
+  if (!prepared.changed) {
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${prepared.target.title}」已在目标位置。`,
+    }
+  }
+  if (await hasPersistedActionChange(prepared.trip.id, prepared.operationFingerprint)) {
+    const freshItems = orderItems(
+      [prepared.day],
+      (await listItemsByTrip(prepared.trip.id)).filter((item) => item.dayId === prepared.day.id),
+    )
+    if (
+      freshItems.length !== prepared.nextItemIds.length
+      || !prepared.nextItemIds.every((itemId, index) => itemId === freshItems[index]?.id)
+    ) {
+      throw new FreshConfirmationRequiredError('当天顺序已变化，请重新生成预览。')
+    }
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${prepared.target.title}」已在目标位置，未重复调整。`,
+    }
+  }
+  try {
+    await executeActionMutationWithHistory(prepared.trip.id, '调整当天顺序', async () => {
+      const changedItems = await reorderDayItems(
+        prepared.day.id,
+        prepared.nextItemIds,
+        prepared.currentItemIds,
+      )
+      if (changedItems.length === 0) {
+        throw new ItineraryBaselineConflictError('当天顺序已变化，请重新生成预览。')
+      }
+      return {
+        change: buildAppliedChange({
+          actionType: 'global_ai_day_items_reordered',
+          detail: `已确认从第 ${prepared.currentIndex + 1} 位调整到第 ${prepared.nextIndex + 1} 位。`,
+          idempotencyKey: prepared.operationFingerprint,
+          targetId: prepared.target.id,
+          targetType: 'item',
+          title: prepared.target.title,
+        }),
+        value: changedItems,
+      }
+    })
+    return {
+      appliedChanges: [],
+      effects: [buildDayScheduleEffect(prepared.trip.id, prepared.day.id)],
+      errors: [],
+      message: `已调整「${prepared.target.title}」的当天顺序。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
 }
 
 async function executeItemTimeAction(
@@ -1386,6 +1734,41 @@ function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   throw new Error('没有找到目标行程点。')
 }
 
+function resolveItemTargetInDay(
+  target: string,
+  day: Day,
+  context: GlobalAiCommandContext,
+) {
+  const ordered = orderItems(context.days, context.items)
+    .filter((item) => item.dayId === day.id)
+  if (target === 'current_item') {
+    if (!context.currentItem || context.currentItem.dayId !== day.id) {
+      throw new Error('当前行程点不在所选日期。')
+    }
+    return context.currentItem
+  }
+  if (target === 'first_item') {
+    const first = ordered[0]
+    if (!first) throw new Error('所选日期还没有行程点。')
+    return first
+  }
+  const ordinal = target.match(/第\s*(\d{1,2})\s*站/)
+  if (ordinal) {
+    const item = ordered[Number(ordinal[1]) - 1]
+    if (!item) throw new Error('所选日期没有对应站点。')
+    return item
+  }
+  const normalized = normalizeText(target)
+  const matches = ordered.filter((item) =>
+    [item.title, item.locationName, item.address]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => normalized.includes(normalizeText(value)) || normalizeText(value).includes(normalized)),
+  )
+  if (matches.length === 1) return matches[0]
+  if (matches.length > 1) throw new Error('所选日期有多个匹配行程点，请写清楚名称。')
+  throw new Error('所选日期没有找到目标行程点。')
+}
+
 function resolveDayTarget(target: string | undefined, context: GlobalAiCommandContext) {
   const ordered = [...context.days]
     .sort((first, second) => first.sortOrder - second.sortOrder || first.date.localeCompare(second.date))
@@ -1412,6 +1795,17 @@ function resolveDayTarget(target: string | undefined, context: GlobalAiCommandCo
   if (matches.length === 1) return matches[0]
   if (matches.length > 1) throw new Error('找到多个匹配日期，请写清楚日期。')
   throw new Error('没有找到目标日期。')
+}
+
+function resolveExplicitDayTarget(target: string, context: GlobalAiCommandContext) {
+  if (target !== 'current_day' || context.currentDay) {
+    return resolveDayTarget(target, context)
+  }
+  const trip = requireTrip(context)
+  const today = todayInTimeZone(resolveTripTimeZone(trip))
+  const todayMatch = context.days.find((day) => day.date === today)
+  if (todayMatch) return todayMatch
+  throw new Error('当前页面没有明确日期，请写清楚第几天。')
 }
 
 function issueMatchesRepairScope(
@@ -1556,10 +1950,22 @@ function buildActionOperationFingerprint(executionId: string, idempotencyKey: st
   return `ai-action:${executionId}:${idempotencyKey}`
 }
 
+function buildActionItemId(executionId: string) {
+  return `item_${executionId.replace(/^ai_action_run_/, '').replace(/[^a-zA-Z0-9_-]/g, '_')}`
+}
+
 function buildDayMapEffect(tripId: string, dayId: string): AiActionRunEffect {
   return {
     kind: 'navigate',
     params: { dayId, tripId, view: 'map' },
+    route: 'day',
+  }
+}
+
+function buildDayScheduleEffect(tripId: string, dayId: string): AiActionRunEffect {
+  return {
+    kind: 'navigate',
+    params: { dayId, tripId, view: 'schedule' },
     route: 'day',
   }
 }

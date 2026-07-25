@@ -4,6 +4,8 @@ export const AI_ACTION_PLAN_SCHEMA_VERSION = 'ai_action_plan.v1' as const
 export const AI_ACTION_PLAN_MAX_STEPS = 6
 
 export type AiActionId =
+  | 'day.items.reorder@1'
+  | 'item.create@1'
   | 'item.time.update@1'
   | 'ledger.expense.draft@1'
   | 'place.enrich@1'
@@ -33,6 +35,20 @@ export type AiActionTicketOpenArgs = {
 export type AiActionItemTimeUpdateArgs = {
   endTime?: string
   startTime: string
+  target: string
+}
+
+export type AiActionItemCreateArgs = {
+  day: string
+  endTime?: string
+  startTime?: string
+  title: string
+}
+
+export type AiActionDayItemsReorderArgs = {
+  anchor?: string
+  day?: string
+  position: 'after' | 'before' | 'first' | 'last'
   target: string
 }
 
@@ -73,6 +89,8 @@ export type AiActionWorkspaceOpenArgs = {
 }
 
 export type AiActionArgsById = {
+  'day.items.reorder@1': AiActionDayItemsReorderArgs
+  'item.create@1': AiActionItemCreateArgs
   'item.time.update@1': AiActionItemTimeUpdateArgs
   'ledger.expense.draft@1': AiActionLedgerExpenseDraftArgs
   'place.enrich@1': AiActionPlaceEnrichArgs

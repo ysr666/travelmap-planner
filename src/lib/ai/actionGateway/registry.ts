@@ -14,6 +14,34 @@ type AiActionMetadata = AiActionCatalogDescriptor & {
 }
 
 const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
+  'day.items.reorder@1': {
+    description: '在同一天内把一个明确行程点移到首位、末位，或另一个明确行程点前后；写入前必须确认。',
+    id: 'day.items.reorder@1',
+    idempotencyNamespace: 'day-items-reorder',
+    input: '{"target":"current_item|first_item|行程点名称","position":"first|last|before|after","anchor":"before/after 时必填的行程点名称","day":"可选 current_day|first_day|第 N 天|日期标题"}',
+    inputSchema: {
+      allowedFields: ['target', 'position', 'anchor', 'day'],
+      requiredFields: ['target', 'position'],
+    },
+    label: '调整当天顺序',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 2, retryable: true },
+    risk: 'local_write',
+  },
+  'item.create@1': {
+    description: '在一个明确日期末尾新增一个基础行程点；只接受短标题和可选时间，写入前必须确认。',
+    id: 'item.create@1',
+    idempotencyNamespace: 'item-create',
+    input: '{"day":"current_day|first_day|第 N 天|日期标题","title":"行程点标题","startTime":"可选 HH:mm","endTime":"可选 HH:mm"}',
+    inputSchema: {
+      allowedFields: ['day', 'title', 'startTime', 'endTime'],
+      requiredFields: ['day', 'title'],
+    },
+    label: '新增行程点',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 2, retryable: true },
+    risk: 'local_write',
+  },
   'item.time.update@1': {
     description: '调整一个明确行程点的开始时间；可同时设置结束时间，写入前必须确认。',
     id: 'item.time.update@1',

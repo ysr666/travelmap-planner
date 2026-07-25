@@ -75,9 +75,16 @@ V1.2 已完成：
 - 登记 `ledger.expense.draft@1`，只接受短标题、正数金额、ISO 币种/日期和固定类别，始终创建 `draft` / `needs_review` 记录。
 - 路线与费用动作都使用语义目标、短预览、stale-state 保护和 Trip Intelligence 历史；Provider 不能指定路由、数据库 ID、付款或结算状态。
 
+V1.3 已完成：
+
+- 登记 `item.create@1`，只接受语义日期、短标题和可选 `HH:mm` 时间，在单次最终确认后追加基础行程点。
+- 登记 `day.items.reorder@1`，只允许把语义行程点移动到同日首尾或另一语义行程点前后，不接受数据库 ID 或跨日目标。
+- 新增、重排、对象同步 outbox 和稳定 ID Trip Intelligence 历史在同一 IndexedDB 事务提交；失败整体回滚，重试不重复核心数据。
+- 双标签页 stale baseline、跨日 anchor、未知字段、内部 ID 和未确认写入均有本地或 E2E 回归。
+
 后续：
 
-- 把增删、重排和其他高频行程编辑迁入注册表。
+- 把删除、跨日移动和其他高频行程编辑迁入注册表。
 - 统一跨模块操作历史与可撤销能力，并为更多页面补稳定 selection contract。
 - 继续保持搜索来源、时间、quota 和 privacy policy，不扩大 Provider 任意调用面。
 
@@ -151,5 +158,5 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 1. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
 2. 使用 Beta 账号完成真实英国行程导入、地点、AI、票据和云同步 smoke。
 3. 补多个历史发布版本连续升级、离线编辑后恢复在线和缓存配额压力测试。
-4. 扩展 Action Gateway 到增删、重排和其他高频行程编辑。
+4. 扩展 Action Gateway 到删除、跨日移动和其他高频行程编辑。
 5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

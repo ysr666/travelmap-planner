@@ -1,6 +1,6 @@
 # 旅图 TripMap 路线图 v4
 
-更新时间：2026-07-24
+更新时间：2026-07-25
 
 ## 北极星
 
@@ -28,6 +28,7 @@
 - CI 覆盖前端、Pages runtime 和 Worker TypeScript，E2E 保留失败 artifacts。
 - Supabase 账号 AI 偏好 migration、RLS、授权和外键索引补齐。
 - 本地 typecheck/lint/unit/build/PWA/full E2E 全绿。
+- `main` 合并提交 `5477ce6` 的 GitHub Actions 五项检查和 Cloudflare Pages 部署同 SHA 全绿。
 
 退出条件：
 
@@ -53,22 +54,40 @@
 
 目标：让全局 AI 从有限命令路由升级为统一、可审计的产品动作入口，同时保持 UI 简单。
 
-- 建立 versioned action registry：动作 schema、权限、风险等级、preview、confirm、execute、undo。
-- 所有页面动作通过稳定 deep link/selection contract 返回目标页面、对象和焦点位置。
-- 支持多步骤计划，但每一步都经过本地能力检查；不能执行时给出一个短原因和可完成的下一步。
-- 搜索结果必须携带来源与时间；地点、路线、AI、票据、云同步使用各自 quota 和 privacy policy。
-- 为跨模块事务增加 idempotency、partial failure、重试和操作历史。
-- 先覆盖高频任务：找/开票据、补地点、修复行程、调整时间、生成路线预览、创建费用草稿、打开资料。
+V1 已完成：
 
-退出条件：高频动作 E2E 覆盖、无未确认写入、可恢复部分失败、动作日志不含敏感数据。
+- 建立 versioned action registry，覆盖动作 schema、风险、上下文、prepare、preview、execute、幂等和重试。
+- 固定本地识别、必要时 AI 结构化规划、本地校验、真实预览、一次确认、依赖执行链。
+- 首批登记 `ticket.open@1`、`place.enrich@1` 和 `trip.repair@1`。
+- Provider 只能选择已登记动作和语义参数；本地拒绝未知动作/字段、循环依赖、敏感字段和歧义目标。
+- 写入保持最终确认和 stale-state 保护；支持独立步骤继续、部分失败重试和成功步骤去重。
+- 全局 AI 结果保持一句摘要、折叠步骤和一个主按钮；导航完成后自动收起。
+
+后续：
+
+- 把调整时间、路线预览、费用草稿和打开资料迁入注册表。
+- 统一跨模块操作历史与可撤销能力，并为更多页面补稳定 selection contract。
+- 继续保持搜索来源、时间、quota 和 privacy policy，不扩大 Provider 任意调用面。
+
+V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部分失败可恢复、计划和日志不含敏感数据。
 
 ## Phase 3：性能与 PWA 可靠性
 
 周期：2-3 周。
 
-- 按路由拆分主应用，延迟加载 MapLibre、OCR/PDF、导入和低频设置模块。
-- 建立 bundle budget、首屏加载和交互时间基线，CI 对显著回归报警。
-- 优化 service worker precache，验证从多个历史版本升级和 IndexedDB 保留。
+第一轮已完成：
+
+- 全局 AI 与 Provider 客户端移出静态启动图；路由缓存只依赖纯路由模型。
+- PDF 恢复为真正动态 chunk，MapLibre、OCR、PDF 和 JSZip 均不阻塞静态入口。
+- 入口 JS 从 947.6 kB 降至 476.9 kB；初始静态 JS 为 848.2 KiB，gzip 244.8 KiB。
+- 构建新增 manifest 驱动的 bundle budget，并在现有 CI `Build` 中强制执行。
+- 当前 built-dist PWA 升级继续验证 IndexedDB 保留。
+
+后续：
+
+- 优化 service worker precache，并验证从多个历史版本升级和 IndexedDB 保留。
+- 继续拆分低频导入、设置和共享能力，评估 MapLibre 按视图加载成本。
+- 建立真实设备首屏加载和交互时间基线，CI 对显著回归报警。
 - 增加弱网、离线、恢复在线、旧标签页和多标签页升级测试。
 - 补充生产缓存头、静态资源不可变版本和部署 SHA 诊断。
 
@@ -98,8 +117,8 @@
 
 ## 接下来五项
 
-1. 完成当前 `main` 同 SHA 的 CI、Cloudflare 和 production diagnostics。
-2. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
-3. 设计并实现 Universal AI Action Gateway v1 合同和三个高频动作。
-4. 拆分 MapLibre/OCR/PDF 低频 chunk，并加入 bundle budget。
+1. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
+2. 使用 Beta 账号完成真实英国行程导入、地点、AI、票据和云同步 smoke。
+3. 优化 Service Worker precache，并补弱网、离线恢复和多标签升级测试。
+4. 扩展 Action Gateway 到时间调整、路线预览、费用草稿和资料打开。
 5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

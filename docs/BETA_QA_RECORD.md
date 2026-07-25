@@ -1,6 +1,21 @@
 # Limited Beta QA 记录
 
-最新记录：2026-07-24
+最新记录：2026-07-25
+
+## 2026-07-25 AI Action Gateway 与首屏分包
+
+- `main` 合并提交 `5477ce6`：GitHub Actions 的 Type Check、Build、Lint、Unit Tests、E2E Tests 全部通过；Cloudflare Pages 同 SHA 部署通过。
+- `npm run typecheck`：通过；覆盖前端、Pages provider runtime 和 Travel Inbox Worker。
+- `npm run lint`：通过。
+- `npm run test:unit`：通过，184 个文件、1471 个测试。
+- `npm run build`：通过；bundle budget 同步通过。
+- Bundle：入口 JS 947.6 kB 降至 476.9 kB；初始静态 JS 848.2 KiB，gzip 244.8 KiB。
+- 初始静态依赖检查：全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均未进入启动图。
+- `npm run test:e2e:pwa-upgrade`：通过，1 个测试。
+- `npm run test:e2e`：通过，140 个测试，约 7.8 分钟。
+- 移动端可访问性测试已适配动态资源在整页导航时的正常 `ERR_ABORTED`；404、HTTP 错误、控制台错误和非导航资源失败仍会失败。
+
+Action Gateway V1 覆盖票据打开、地点补全和行程修复；E2E 验证只读直达、一次写入确认、stale guard、部分失败继续和只重试失败步骤。实体机结果仍不得由自动化假填。
 
 ## 2026-07-24 Release Candidate 收尾
 

@@ -1,10 +1,10 @@
 # Limited Beta Readiness
 
-更新时间：2026-07-24
+更新时间：2026-07-25
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。核心功能和自动化已完成，发布阻塞只保留同 SHA 远端验证和实体机记录；性能、通用 AI 动作网关和更深的云端运营能力列入 Beta 后续，不再混入当前发布范围。
+当前代码达到 Limited Beta Release Candidate。核心功能和自动化已完成，`main` 同 SHA 远端验证已通过；发布阻塞只保留实体机记录。通用 AI Action Gateway V1 和首轮性能拆分已完成，更深的设备性能、PWA 缓存和云端运营能力继续在 Beta 阶段推进。
 
 ## 验收矩阵
 
@@ -12,13 +12,13 @@
 | --- | --- | --- | --- |
 | Trip / Day / Item | 就绪 | 核心导航、时间轴、地图、详情和移动端溢出 E2E | 路线是预览，不是导航 |
 | Ticket Library | 就绪 | 画廊前置、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
-| 全局 AI | 就绪但有限 | 票据直达、导航、摘要、预览、确认边界 E2E | 是动作目录，不是任意自主代理 |
+| 全局 AI | V1 就绪但有限 | 票据、地点、行程修复的注册表校验、预览、确认、stale guard 和部分失败 E2E | 只能执行登记动作，不是任意自主代理 |
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | built-dist 升级和 IndexedDB 保留测试 | 地图/provider/cloud 不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 就绪 | 180/1447 unit、137 E2E、真实 runtime typecheck | 最终以 `main` 同 SHA 为准 |
+| CI / E2E | 就绪 | 184/1471 unit、140 E2E、bundle budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
 | 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
 
 ## 发布必过
@@ -46,11 +46,11 @@
 
 ## 已知非阻塞项
 
-- 主应用、MapLibre、OCR/PDF chunk 需要性能拆分。
+- MapLibre 独立 chunk 和约 4.1 MB 的 Service Worker precache 仍需优化；入口和初始静态图已有 CI budget。
 - Supabase leaked-password protection 需要计划/配置决策。
 - `cloud_ticket_blobs` 双 SELECT policy 需预览环境等价合并。
 - 低使用率索引需真实负载证据后再决定是否删除。
-- 通用 AI Action Gateway、undo/history 和多步骤事务属于后续版本。
+- Action Gateway 后续动作、统一 undo/history 和更完整的跨模块事务属于后续版本。
 
 ## 回滚
 

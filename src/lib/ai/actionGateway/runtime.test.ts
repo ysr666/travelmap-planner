@@ -3,6 +3,8 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../../db/database'
 import type { Day, ItineraryItem, TicketMeta, Trip } from '../../../types'
+import { clearRouteCache, getRouteCacheStats } from '../../routeCache'
+import * as routeGeneration from '../../routeGeneration'
 import {
   buildDeterministicAiActionPlan,
   executeAiActionPlan,
@@ -18,6 +20,7 @@ beforeEach(async () => {
   db.close()
   await db.delete()
   await db.open()
+  await clearRouteCache()
 })
 
 describe('AI Action Gateway runtime', () => {
@@ -130,6 +133,279 @@ describe('AI Action Gateway runtime', () => {
       endTime: '10:00',
       startTime: '08:30',
     })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('waits for confirmation before requesting and caching a route preview', async () => {
+    const seed = buildSeed()
+    seed.item.lat = 51.47
+    seed.item.lng = -0.4543
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      id: 'item-2',
+      lat: 51.501,
+      lng: -0.158,
+      sortOrder: 2,
+      title: '伦敦酒店入住',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(secondItem)
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/provider-proxy')
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        coordinates: Array<[number, number]>
+        segments: Array<{
+          fromCoordinateIndex: number
+          fromItemId: string
+          segmentIndex: number
+          toCoordinateIndex: number
+          toItemId: string
+        }>
+      }
+      const segments = body.segments.map((segment) => ({
+        coordinates: [
+          body.coordinates[segment.fromCoordinateIndex],
+          body.coordinates[segment.toCoordinateIndex],
+        ],
+        distanceMeters: 24000,
+        durationSeconds: 2700,
+        fromItemId: segment.fromItemId,
+        segmentIndex: segment.segmentIndex,
+        toItemId: segment.toItemId,
+      }))
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: segments.map((segment) => segment.coordinates),
+          segments,
+          status: 'road',
+          warnings: [],
+        },
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, secondItem]
+    const plan = buildDeterministicAiActionPlan('生成第一天路线预览')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: [seed.day.title],
+      hasWrite: true,
+      preview: '将为 1 天生成路线预览；确认后才调用路线服务。',
+    })
+    await expect(getRouteCacheStats()).resolves.toMatchObject({ count: 0 })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await expect(getRouteCacheStats()).resolves.toMatchObject({ count: 1 })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    expect(result.effects).toEqual([{
+      kind: 'navigate',
+      params: { dayId: seed.day.id, tripId: seed.trip.id, view: 'map' },
+      route: 'day',
+    }])
+  })
+
+  it('blocks a prepared route preview when the route configuration changes', async () => {
+    const seed = buildSeed()
+    seed.item.lat = 51.47
+    seed.item.lng = -0.4543
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      id: 'item-2',
+      lat: 51.501,
+      lng: -0.158,
+      sortOrder: 2,
+      title: '伦敦酒店入住',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(secondItem)
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/provider-proxy')
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, secondItem]
+    const prepared = await prepareAiActionPlan(
+      buildDeterministicAiActionPlan('生成第一天路线预览')!,
+      context,
+    )
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/changed-provider-proxy')
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '路线服务配置已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(getRouteCacheStats()).resolves.toMatchObject({ count: 0 })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('treats an unsaved generated route as retryable failure', async () => {
+    const seed = buildSeed()
+    seed.item.lat = 51.47
+    seed.item.lng = -0.4543
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      id: 'item-2',
+      lat: 51.501,
+      lng: -0.158,
+      sortOrder: 2,
+      title: '伦敦酒店入住',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(secondItem)
+    window.localStorage.setItem('tripmap:dev:route-proxy-provider', 'openrouteservice')
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/provider-proxy')
+    vi.spyOn(routeGeneration, 'generateRoutePreviewsForTrip').mockResolvedValue({
+      failedCount: 0,
+      generatedCount: 0,
+      outcomes: [{
+        day: seed.day,
+        lineStrings: [[[0, 0], [1, 1]]],
+        message: '单条道路路线超过当前缓存上限，已显示但未写入本地缓存。',
+        provider: 'openrouteservice',
+        saved: false,
+        status: 'generated',
+        warnings: ['单条道路路线超过当前缓存上限，已显示但未写入本地缓存。'],
+      }],
+      previewCacheSaved: false,
+      provider: 'openrouteservice',
+      skippedCount: 0,
+    })
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, secondItem]
+    const prepared = await prepareAiActionPlan(
+      buildDeterministicAiActionPlan('生成第一天路线预览')!,
+      context,
+    )
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      failedStepIds: ['generate-route-preview'],
+      requiresFreshConfirmation: false,
+      status: 'failed',
+    })
+    expect(result.steps[0].message).toContain('路线未保存')
+    await expect(getRouteCacheStats()).resolves.toMatchObject({ count: 0 })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('creates only a review-required expense draft after confirmation', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    await seedLedger(seed.trip.id)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('记一笔午餐 32.50 GBP')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['午餐'],
+      hasWrite: true,
+      preview: '午餐：£32.50 · 餐饮 · 2026-07-10；将创建待审核草稿。',
+    })
+    await expect(db.ledgerExpenses.count()).resolves.toBe(0)
+
+    const result = await executeAiActionPlan(prepared, context)
+    const expense = await db.ledgerExpenses.toCollection().first()
+
+    expect(result.status).toBe('completed')
+    expect(expense).toMatchObject({
+      amountMinor: 3250,
+      category: 'food',
+      currency: 'GBP',
+      date: '2026-07-10',
+      paymentStatus: 'unknown',
+      reviewStatus: 'needs_review',
+      status: 'draft',
+      title: '午餐',
+    })
+    expect(expense?.payerParticipantId).toBeUndefined()
+    expect(result.effects).toEqual([expect.objectContaining({
+      kind: 'navigate',
+      params: { expenseId: expense?.id, tripId: seed.trip.id },
+      route: 'ledger/expense',
+    })])
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('reuses the same expense draft for one execution but allows a new command run', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    await seedLedger(seed.trip.id)
+    const plan = buildDeterministicAiActionPlan('记一笔午餐 32.50 GBP')!
+    const firstContext = runtimeContext(seed)
+    const firstPrepared = await prepareAiActionPlan(plan, firstContext)
+
+    const [firstRun, concurrentRun] = await Promise.all([
+      executeAiActionPlan(firstPrepared, firstContext),
+      executeAiActionPlan(firstPrepared, firstContext),
+    ])
+
+    expect(firstRun.status).toBe('completed')
+    expect(concurrentRun.status).toBe('completed')
+    await expect(db.ledgerExpenses.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    const freshTrip = await db.trips.get(seed.trip.id)
+    expect(freshTrip).toBeTruthy()
+    const retrySeed = { ...seed, trip: freshTrip! }
+    const retryContext = runtimeContext(retrySeed)
+    const retryPrepared = await prepareAiActionPlan(plan, retryContext, {
+      executionId: firstPrepared.executionId,
+    })
+    expect(retryPrepared.plan.requiresConfirmation).toBe(false)
+
+    const retryRun = await executeAiActionPlan(retryPrepared, retryContext)
+
+    expect(retryRun).toMatchObject({
+      requiresFreshConfirmation: false,
+      status: 'completed',
+    })
+    expect(retryRun.steps[0].message).toContain('未重复创建')
+    await expect(db.ledgerExpenses.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+
+    const secondContext = runtimeContext({ ...seed, trip: (await db.trips.get(seed.trip.id))! })
+    const secondPrepared = await prepareAiActionPlan(plan, secondContext)
+    expect(secondPrepared.executionId).not.toBe(firstPrepared.executionId)
+    expect(secondPrepared.plan.requiresConfirmation).toBe(true)
+    await executeAiActionPlan(secondPrepared, secondContext)
+    await expect(db.ledgerExpenses.count()).resolves.toBe(2)
+  })
+
+  it('blocks an expense draft when ledger participants changed after preview', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    await seedLedger(seed.trip.id)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('记一笔午餐 32.50 GBP')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.ledgerParticipants.update('ledger-person-1', { updatedAt: 2 })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '账本设置或同行人已变化，请重新生成预览。',
+      status: 'failed',
+    })
+    await expect(db.ledgerExpenses.count()).resolves.toBe(0)
     await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
   })
 
@@ -394,7 +670,10 @@ describe('AI Action Gateway runtime', () => {
     const retryPrepared = await prepareAiActionPlan(
       validation.plan,
       context,
-      { completedStepIds: firstRun.completedStepIds },
+      {
+        completedStepIds: firstRun.completedStepIds,
+        executionId: firstPrepared.executionId,
+      },
     )
     const retryRun = await executeAiActionPlan(
       retryPrepared,
@@ -471,5 +750,28 @@ async function seedDatabase(seed: ReturnType<typeof buildSeed>) {
     await db.trips.put(seed.trip)
     await db.days.put(seed.day)
     await db.itineraryItems.put(seed.item)
+  })
+}
+
+async function seedLedger(tripId: string) {
+  await db.transaction('rw', [db.ledgerSettings, db.ledgerParticipants], async () => {
+    await db.ledgerSettings.put({
+      createdAt: 1,
+      homeCurrency: 'CNY',
+      id: 'ledger-settings-1',
+      settlementCurrency: 'CNY',
+      tripCurrency: 'GBP',
+      tripId,
+      updatedAt: 1,
+    })
+    await db.ledgerParticipants.put({
+      createdAt: 1,
+      displayName: '我',
+      id: 'ledger-person-1',
+      isSelf: true,
+      source: 'manual',
+      tripId,
+      updatedAt: 1,
+    })
   })
 }

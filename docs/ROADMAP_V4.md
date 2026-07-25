@@ -69,9 +69,15 @@ V1.1 已完成：
 - 登记 `item.time.update@1`，严格校验目标和 `HH:mm`；只改开始时间时保留有效的同日时长。
 - 时间写入复用短预览、一次最终确认、旅行状态指纹和 Trip Intelligence 历史。
 
+V1.2 已完成：
+
+- 登记 `route.preview@1`，准备阶段只检查本地坐标和缓存；一次最终确认后才请求路线服务并写入缓存。
+- 登记 `ledger.expense.draft@1`，只接受短标题、正数金额、ISO 币种/日期和固定类别，始终创建 `draft` / `needs_review` 记录。
+- 路线与费用动作都使用语义目标、短预览、stale-state 保护和 Trip Intelligence 历史；Provider 不能指定路由、数据库 ID、付款或结算状态。
+
 后续：
 
-- 把路线预览、费用草稿和其他高频行程编辑迁入注册表。
+- 把增删、重排和其他高频行程编辑迁入注册表。
 - 统一跨模块操作历史与可撤销能力，并为更多页面补稳定 selection contract。
 - 继续保持搜索来源、时间、quota 和 privacy policy，不扩大 Provider 任意调用面。
 
@@ -145,5 +151,5 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 1. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
 2. 使用 Beta 账号完成真实英国行程导入、地点、AI、票据和云同步 smoke。
 3. 补多个历史发布版本连续升级、离线编辑后恢复在线和缓存配额压力测试。
-4. 扩展 Action Gateway 到时间调整、路线预览、费用草稿和资料打开。
+4. 扩展 Action Gateway 到增删、重排和其他高频行程编辑。
 5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

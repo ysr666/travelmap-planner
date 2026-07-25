@@ -1641,3 +1641,82 @@ Residual:
 - Route preview, expense-draft creation, add/delete/reorder edits, and broader selection contracts remain on compatibility paths.
 - Cross-midnight time edits require a future date-aware action contract rather than inferring a next-day end.
 - Real Provider planning remains intentionally uncalled in this phase; contract, privacy, and failure behavior are covered with local and mocked tests.
+
+## 2026-07-26 Universal AI Action Gateway V1.2 - Route And Expense Draft
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-route-expense`
+
+Goal:
+
+- Move explicit route-preview generation and manual expense-draft creation into the registered Action Gateway while retaining one final confirmation, stale-plan protection, bounded Provider access, and short results.
+
+Scope:
+
+- Add a route-preview action with trip/day scope and semantic day targets.
+- Prepare route readiness locally; call the configured route Provider and write route cache only after confirmation.
+- Add an expense-draft action with a short title, positive decimal amount, optional ISO currency/date, and an enumerated category.
+- Resolve ledger defaults locally and always create `draft`/`needs_review` records with tracked sync and Trip Intelligence history.
+- Deterministically recognize unambiguous route generation and simple manual expense commands; unresolved commands may use the structured planner.
+- Cover strict schema rejection, prepare-time non-mutation, Provider request timing, stale-state rejection, compact mobile previews, and final navigation.
+
+No-go:
+
+- No route strings, database IDs, arbitrary categories, account data, payment, settlement, confirmed expenses, deletion, or cancellation selected by the planner.
+- No Provider call during route preparation and no expense Provider call.
+- No real AI, map, route, search, cloud, or Provider calls.
+- No IndexedDB schema, cloud contract, Provider Proxy contract, or route-cache format changes.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- Focused unit and E2E tests plus project status/roadmap/ledger.
+
+Validation:
+
+- Focused Action Gateway, ledger, route, and Provider contract tests.
+- Typecheck, lint, full unit suite, production build, focused mobile E2E, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium-high: route generation consumes bounded Provider quota and expense creation is a synced finance write, even though the resulting record stays a draft.
+
+Stop conditions:
+
+- Stop and repair if route preparation calls Provider, a route or expense writes before confirmation, an expense can become confirmed, malformed amounts/currencies/categories pass validation, or stale plans can write route/ledger state.
+
+Result:
+
+- Added `route.preview@1` with day/trip scope and semantic day targets; planning and preparation only inspect local itinerary coordinates and route-cache readiness.
+- Route Provider requests and cache writes now occur only after the single final confirmation. Successful generation records Trip Intelligence history and opens the selected day map.
+- Added `ledger.expense.draft@1` with strict title, positive decimal amount, ISO-style currency/date, and fixed-category validation.
+- Expense execution always creates a tracked `draft` / `needs_review` record with unknown payment status and no payer; the AI cannot select confirmed, paid, settled, cancelled, or arbitrary database fields.
+- Expense preparation resolves ledger defaults locally, refuses missing setup, and rechecks settings and participant fingerprints before writing.
+- Each prepared run carries a stable execution ID. Expense source fingerprints and an atomic IndexedDB check/create transaction prevent duplicate drafts during concurrent execution or retry, while a new command run can still create a distinct expense.
+- Retry compares structured confirmation flags and prepared-action fingerprints; changed route configuration or newly materialized write previews return to preview and confirmation instead of reusing an earlier approval.
+- A route response that cannot be persisted is now a retryable failure rather than a false success.
+- Deterministic planning handles explicit route generation and simple expense commands without an AI Provider request; unresolved commands remain limited to the registered catalog.
+- Added 390px E2E coverage proving route requests/cache and expense records remain absent before confirmation, details stay folded, and each plan exposes one confirmation path.
+
+Validation:
+
+- Focused Action Gateway tests passed: 26 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1483 tests.
+- `npm run build` passed; bundle budget passed at 849.0 KiB initial JS, 244.9 KiB gzip, and 2266.1 KiB/94-entry precache.
+- Focused mobile Action Gateway E2E passed: 3 tests.
+- The full serial E2E run passed all 146 tests in approximately 5.6 minutes.
+- `git diff --check` passed.
+- A read-only protected-boundary review found three retry/idempotency/cache-result defects; all three were fixed and the reviewer verified the repairs.
+
+Residual:
+
+- Add/delete/reorder edits and more complex ledger updates remain on compatibility paths.
+- Route execution intentionally uses the configured existing Provider/cache contract; this phase used mocked Provider responses and made no real calls.
+- Cross-module undo and more page-level selection contracts remain future work.

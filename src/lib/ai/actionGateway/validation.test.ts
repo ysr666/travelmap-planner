@@ -71,6 +71,55 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps route generation and expense drafts bounded and confirmation gated', () => {
+    expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'route.preview@1',
+        args: { scope: 'day', target: 'first_day' },
+        risk: 'local_write',
+      }],
+    })
+    expect(buildDeterministicAiActionPlan('记一笔午餐 32.50 GBP')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'ledger.expense.draft@1',
+        args: {
+          amount: '32.50',
+          category: 'food',
+          currency: 'GBP',
+          title: '午餐',
+        },
+        risk: 'local_write',
+      }],
+    })
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'route.preview@1',
+        args: { scope: 'trip', target: '#/day?token=secret' },
+        id: 'route',
+      }],
+      summary: '生成任意路线',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'ledger.expense.draft@1',
+        args: {
+          amount: '-32.50',
+          category: 'payment',
+          currency: 'gbp',
+          status: 'confirmed',
+          title: '非法费用',
+        },
+        id: 'expense',
+      }],
+      summary: '写入非法费用',
+    }).ok).toBe(false)
+  })
+
   it('rejects unknown actions, fields, sensitive payloads and dependency cycles', () => {
     const unknown = validateAiActionPlan({
       schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
@@ -147,7 +196,9 @@ describe('AI Action Gateway V1 contract', () => {
   it('publishes only the supported action catalog and detects likely provider plans', () => {
     expect(listAiActionCatalog().map((action) => action.id)).toEqual([
       'item.time.update@1',
+      'ledger.expense.draft@1',
       'place.enrich@1',
+      'route.preview@1',
       'ticket.open@1',
       'trip.repair@1',
       'workspace.open@1',

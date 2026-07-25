@@ -11,7 +11,9 @@ import { listAiActionCatalog } from './registry'
 import {
   AI_ACTION_PLAN_SCHEMA_VERSION,
   type AiActionItemTimeUpdateArgs,
+  type AiActionLedgerExpenseDraftArgs,
   type AiActionPlanV1,
+  type AiActionRoutePreviewArgs,
 } from './types'
 import { validateAiActionPlan } from './validation'
 
@@ -31,6 +33,12 @@ const ACTION_VERBS = [
   '移到',
   '进入',
   '查看',
+  '生成',
+  '新增',
+  '添加',
+  '记录',
+  '记一笔',
+  '创建',
 ]
 
 export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 | null {
@@ -74,7 +82,28 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  if (isTripRepairCommand(normalized)) {
+  const tripRepair = isTripRepairCommand(normalized)
+  const routePreview = tripRepair ? null : parseDeterministicRoutePreview(normalized)
+  if (routePreview) {
+    steps.push({
+      actionId: 'route.preview@1',
+      args: routePreview,
+      dependsOn: [],
+      id: 'generate-route-preview',
+    })
+  }
+
+  const expenseDraft = parseDeterministicExpenseDraft(normalized)
+  if (expenseDraft) {
+    steps.push({
+      actionId: 'ledger.expense.draft@1',
+      args: expenseDraft,
+      dependsOn: [],
+      id: 'create-expense-draft',
+    })
+  }
+
+  if (tripRepair) {
     steps.push({
       actionId: 'trip.repair@1',
       args: {
@@ -106,7 +135,7 @@ export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
-    ['票', '地点', '地址', '坐标', '行程', '路线', '问题', '建议', '资料', '文档', '账本', '地图', '设置', '时间', '开始', '结束']
+    ['票', '地点', '地址', '坐标', '行程', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
       .some((noun) => normalized.includes(noun))
 }
 
@@ -218,6 +247,93 @@ function parseDeterministicTimeUpdate(command: string): AiActionItemTimeUpdateAr
   }
 }
 
+function parseDeterministicRoutePreview(command: string): AiActionRoutePreviewArgs | null {
+  if (isHypotheticalCommand(command)) return null
+  const routeAction = ['生成', '创建', '准备', '补上', '补全'].some((value) => command.includes(value))
+  if (!command.includes('路线') || !routeAction || ['重新', '刷新'].some((value) => command.includes(value))) {
+    return null
+  }
+  if (['今天', '当天', '当前日', '这一日', '这一天'].some((value) => command.includes(value))) {
+    return { scope: 'day', target: 'current_day' }
+  }
+  if (['第一天', '首日'].some((value) => command.includes(value))) {
+    return { scope: 'day', target: 'first_day' }
+  }
+  const ordinal = command.match(/第\s*(\d{1,2})\s*天/)
+  if (ordinal) return { scope: 'day', target: `day:${Number(ordinal[1])}` }
+  const quoted = command.match(/[「“"]([^」”"]{1,80})[」”"]/)
+  if (quoted?.[1]?.trim()) return { scope: 'day', target: quoted[1].trim() }
+  return { scope: 'trip' }
+}
+
+function parseDeterministicExpenseDraft(command: string): AiActionLedgerExpenseDraftArgs | null {
+  if (isHypotheticalCommand(command) || /\d{1,2}月\d{1,2}日/.test(command)) return null
+  const actionMatch = command.match(/(?:记(?:录)?|新增|添加|创建)\s*(?:一笔|笔)?/)
+  if (!actionMatch) return null
+  const hasExpenseNoun = ['一笔', '费用', '消费', '账单', '餐', '车费', '门票', '住宿', '酒店', '保险', '购物']
+    .some((value) => command.includes(value))
+  if (!hasExpenseNoun) return null
+
+  const dateMatch = command.match(/\b\d{4}-\d{2}-\d{2}\b/)
+  const commandWithoutDate = dateMatch ? command.replace(dateMatch[0], ' ') : command
+  const amountToken = findExpenseAmountToken(commandWithoutDate)
+  if (!amountToken) return null
+  const amount = amountToken.match(/\d{1,12}(?:\.\d{1,4})?/)?.[0]
+  if (!amount || Number(amount) <= 0) return null
+
+  const title = commandWithoutDate
+    .replace(amountToken, ' ')
+    .replace(/^(?:请|麻烦|帮我|给我|替我|\s)*(?:记(?:录)?|新增|添加|创建)\s*(?:一笔|笔)?\s*/, '')
+    .replace(/(?:费用|消费|账单|草稿)\s*$/g, '')
+    .replace(/[，,。；;：:\s]+/g, ' ')
+    .trim()
+  if (!title || title.length > 100) return null
+  const currency = inferExpenseCurrency(amountToken) ?? inferExpenseCurrency(command)
+  return {
+    amount,
+    category: inferExpenseCategory(title),
+    ...(currency ? { currency } : {}),
+    ...(dateMatch ? { date: dateMatch[0] } : {}),
+    title,
+  }
+}
+
+function findExpenseAmountToken(command: string) {
+  const matches = [...command.matchAll(
+    /(?:(?:CNY|RMB|人民币|JPY|日元|GBP|英镑|USD|美元|EUR|欧元|HKD|港币|[£$€¥￥])\s*)?\d{1,12}(?:\.\d{1,4})?(?:\s*(?:CNY|RMB|人民币|元|JPY|日元|GBP|英镑|USD|美元|EUR|欧元|HKD|港币))?/gi,
+  )].map((match) => match[0])
+  const currencyMatches = matches.filter((match) => inferExpenseCurrency(match))
+  if (currencyMatches.length === 1) return currencyMatches[0]
+  if (currencyMatches.length > 1 || matches.length !== 1) return null
+  return matches[0]
+}
+
+function isHypotheticalCommand(command: string) {
+  return ['如果', '假如', '模拟', '会怎样'].some((value) => command.includes(value)) ||
+    /\bwhat\s*if\b/i.test(command)
+}
+
+function inferExpenseCurrency(value: string) {
+  if (/GBP|英镑|£/i.test(value)) return 'GBP'
+  if (/USD|美元|\$/i.test(value)) return 'USD'
+  if (/EUR|欧元|€/i.test(value)) return 'EUR'
+  if (/JPY|日元/i.test(value)) return 'JPY'
+  if (/HKD|港币/i.test(value)) return 'HKD'
+  if (/CNY|RMB|人民币|元|¥|￥/i.test(value)) return 'CNY'
+  return undefined
+}
+
+function inferExpenseCategory(value: string): NonNullable<AiActionLedgerExpenseDraftArgs['category']> {
+  if (['酒店', '住宿', '民宿'].some((keyword) => value.includes(keyword))) return 'lodging'
+  if (['打车', '出租', '地铁', '公交', '火车', '机票', '交通', '车费'].some((keyword) => value.includes(keyword))) return 'transport'
+  if (['门票', '入场', '展览'].some((keyword) => value.includes(keyword))) return 'admission'
+  if (['早餐', '午餐', '晚餐', '餐', '咖啡', '饮料'].some((keyword) => value.includes(keyword))) return 'food'
+  if (['购物', '纪念品'].some((keyword) => value.includes(keyword))) return 'shopping'
+  if (value.includes('保险')) return 'insurance'
+  if (['SIM', '流量', '电话卡', '通信'].some((keyword) => value.toUpperCase().includes(keyword.toUpperCase()))) return 'connectivity'
+  return 'other'
+}
+
 function normalizePlannerTime(value: string) {
   const normalized = value.trim().replace('：', ':')
   if (normalized.includes(':')) {
@@ -241,6 +357,8 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
     actionIds.has('workspace.open@1') ? '打开页面' : '',
     actionIds.has('ticket.open@1') ? '打开票据' : '',
     actionIds.has('item.time.update@1') ? '调整行程时间' : '',
+    actionIds.has('route.preview@1') ? '生成路线预览' : '',
+    actionIds.has('ledger.expense.draft@1') ? '创建费用草稿' : '',
     actionIds.has('place.enrich@1') ? '补全地点' : '',
     actionIds.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean)

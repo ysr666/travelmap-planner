@@ -1,13 +1,22 @@
 import {
+  createLedgerExpenseIdempotent,
+  getLedgerSettingsByTrip,
   getTrip,
   listDaysByTrip,
   listItemsByTrip,
+  listLedgerExpenses,
+  listLedgerParticipants,
   listTicketsByTrip,
   updateItineraryItem,
 } from '../../../db'
+import { createId } from '../../../db/ids'
 import type {
   Day,
   ItineraryItem,
+  LedgerExpense,
+  LedgerExpenseCategory,
+  LedgerParticipant,
+  LedgerSettings,
   TicketMeta,
   Trip,
 } from '../../../types'
@@ -55,7 +64,14 @@ import {
 } from '../../tripReadiness'
 import { retryTicketBlobUpload } from '../../cloudObjectSync'
 import { getZonedPlainDate, resolveTripTimeZone } from '../../timeZone'
+import { todayInTimeZone } from '../../timeSemantics'
 import { getStoredTravelProfile } from '../../travelProfile'
+import {
+  formatLedgerMoney,
+  ledgerCategoryLabels,
+  normalizeCurrencyCode,
+  parseMoneyInput,
+} from '../../ledger'
 import {
   appendTripIntelligenceExecutionResult,
   type TripIntelligenceAppliedChange,
@@ -64,12 +80,14 @@ import {
   type AiActionPlaceEnrichArgs,
   type AiActionId,
   type AiActionItemTimeUpdateArgs,
+  type AiActionLedgerExpenseDraftArgs,
   type AiActionManualEntry,
   type AiActionPlanV1,
   type AiActionPreparedPlan,
   type AiActionPreparedStep,
   type AiActionRunEffect,
   type AiActionRunResult,
+  type AiActionRoutePreviewArgs,
   type AiActionStepRunResult,
   type AiActionTicketOpenArgs,
   type AiActionTripRepairArgs,
@@ -99,6 +117,20 @@ type PreparedItemTimeAction = {
   kind: 'item-time'
   nextEndTime?: string
   nextStartTime: string
+}
+
+type PreparedLedgerExpenseDraftAction = {
+  amountMinor: number
+  category: LedgerExpenseCategory
+  currency: string
+  date: string
+  existingExpense?: LedgerExpense
+  itemIds: string[]
+  kind: 'ledger-expense-draft'
+  ledgerBaseline: string
+  operationFingerprint: string
+  title: string
+  trip: Trip
 }
 
 type PreparedPlaceAction = {
@@ -141,9 +173,22 @@ type PreparedTripRepairAction = {
   snapshot: TripRepairSnapshot
 }
 
+type PreparedRoutePreviewAction = {
+  days: Day[]
+  itemsByDay: Record<string, ItineraryItem[]>
+  kind: 'route-preview'
+  provider: NonNullable<TripRoutePreparation['provider']>
+  routingFingerprint: string
+  targetDays: Day[]
+  targetDayIds: string[]
+  trip: Trip
+}
+
 type PreparedAction =
   | PreparedItemTimeAction
+  | PreparedLedgerExpenseDraftAction
   | PreparedPlaceAction
+  | PreparedRoutePreviewAction
   | PreparedTicketAction
   | PreparedTripRepairAction
   | PreparedWorkspaceAction
@@ -155,6 +200,8 @@ type ActionExecutionResult = {
   message: string
 }
 
+class FreshConfirmationRequiredError extends Error {}
+
 type AiActionRuntimeDefinition = {
   execute: (
     prepared: PreparedAction,
@@ -163,7 +210,11 @@ type AiActionRuntimeDefinition = {
   prepare: (
     args: AiActionPlanV1['steps'][number]['args'],
     context: AiActionGatewayRuntimeContext,
-    baselineFingerprint?: string,
+    preparation: {
+      baselineFingerprint?: string
+      executionId: string
+      idempotencyKey: string
+    },
   ) => Promise<PreparedAction>
   preview: (prepared: PreparedAction) => {
     affectedLabels: string[]
@@ -190,16 +241,56 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
       }
     },
   },
+  'ledger.expense.draft@1': {
+    execute: async (prepared) =>
+      executeLedgerExpenseDraftAction(requirePreparedKind(prepared, 'ledger-expense-draft')),
+    prepare: (args, context, preparation) =>
+      prepareLedgerExpenseDraftAction(
+        args as AiActionLedgerExpenseDraftArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const expense = requirePreparedKind(prepared, 'ledger-expense-draft')
+      return {
+        affectedLabels: [expense.title],
+        hasWrite: !expense.existingExpense,
+        text: expense.existingExpense
+          ? `「${expense.title}」费用草稿已存在，不会重复创建。`
+          : `${expense.title}：${formatLedgerMoney(expense.amountMinor, expense.currency)} · ${ledgerCategoryLabels[expense.category]} · ${expense.date}；将创建待审核草稿。`,
+      }
+    },
+  },
   'place.enrich@1': {
     execute: async (prepared) => executePlaceAction(requirePreparedKind(prepared, 'place')),
-    prepare: (args, context, baselineFingerprint) =>
-      preparePlaceAction(args as AiActionPlaceEnrichArgs, context, baselineFingerprint),
+    prepare: (args, context, preparation) =>
+      preparePlaceAction(
+        args as AiActionPlaceEnrichArgs,
+        context,
+        preparation.baselineFingerprint,
+      ),
     preview: (prepared) => {
       const place = requirePreparedKind(prepared, 'place')
       return {
         affectedLabels: [place.item.title],
         hasWrite: true,
         text: `${place.item.title}：${place.candidate.displayName}，${place.candidate.formattedAddress}。来源：${formatPlaceSource(place.candidate.source)}。`,
+      }
+    },
+  },
+  'route.preview@1': {
+    execute: async (prepared) =>
+      executeRoutePreviewAction(requirePreparedKind(prepared, 'route-preview')),
+    prepare: (args, context) =>
+      prepareRoutePreviewAction(args as AiActionRoutePreviewArgs, context),
+    preview: (prepared) => {
+      const route = requirePreparedKind(prepared, 'route-preview')
+      return {
+        affectedLabels: route.targetDays.map((day) => day.title),
+        hasWrite: route.targetDayIds.length > 0,
+        text: route.targetDayIds.length > 0
+          ? `将为 ${route.targetDayIds.length} 天生成路线预览；确认后才调用路线服务。`
+          : '所选日期已有可用路线预览，无需重复生成。',
       }
     },
   },
@@ -221,8 +312,12 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
   'trip.repair@1': {
     execute: (prepared) =>
       executeTripRepairAction(requirePreparedKind(prepared, 'repair')),
-    prepare: (args, context, baselineFingerprint) =>
-      prepareTripRepairAction(args as AiActionTripRepairArgs, context, baselineFingerprint),
+    prepare: (args, context, preparation) =>
+      prepareTripRepairAction(
+        args as AiActionTripRepairArgs,
+        context,
+        preparation.baselineFingerprint,
+      ),
     preview: (prepared) => {
       const repair = requirePreparedKind(prepared, 'repair')
       const total = repair.preview.issueIds.length
@@ -268,8 +363,10 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
 export async function prepareAiActionPlan(
   plan: AiActionPlanV1,
   context: AiActionGatewayRuntimeContext,
-  options: { completedStepIds?: string[] } = {},
+  options: { completedStepIds?: string[]; executionId?: string } = {},
 ): Promise<AiActionPreparedPlan> {
+  const executionId = options.executionId ?? createId('ai_action_run')
+  const preparedAt = Date.now()
   const baselineFingerprint = context.commandContext.trip
     ? buildAiTripEditLocalStateFingerprint({
         days: context.commandContext.days,
@@ -286,6 +383,7 @@ export async function prepareAiActionPlan(
       preparedSteps.push({
         actionId: step.actionId,
         affectedLabels: [],
+        confirmationFingerprint: step.idempotencyKey,
         hasWrite: false,
         id: step.id,
         idempotencyKey: step.idempotencyKey,
@@ -301,6 +399,7 @@ export async function prepareAiActionPlan(
       preparedSteps.push({
         actionId: step.actionId,
         affectedLabels: [],
+        confirmationFingerprint: '',
         error: '前置步骤准备失败。',
         hasWrite: false,
         id: step.id,
@@ -313,12 +412,18 @@ export async function prepareAiActionPlan(
       continue
     }
     try {
-      preparedSteps.push(await prepareStep(step, context, baselineFingerprint))
+      preparedSteps.push(await prepareStep(
+        step,
+        context,
+        baselineFingerprint,
+        executionId,
+      ))
     } catch (caught) {
       failedIds.add(step.id)
       preparedSteps.push({
         actionId: step.actionId,
         affectedLabels: [],
+        confirmationFingerprint: '',
         error: toErrorMessage(caught, '动作准备失败。'),
         hasWrite: false,
         id: step.id,
@@ -333,12 +438,13 @@ export async function prepareAiActionPlan(
 
   return {
     baselineFingerprint,
+    executionId,
     plan: {
       ...plan,
       baselineFingerprint,
       requiresConfirmation: preparedSteps.some((step) => step.status === 'prepared' && step.hasWrite),
     },
-    preparedAt: Date.now(),
+    preparedAt,
     steps: preparedSteps,
   }
 }
@@ -355,6 +461,7 @@ export async function executeAiActionPlan(
   const results: AiActionStepRunResult[] = []
   const appliedChanges: TripIntelligenceAppliedChange[] = []
   const trip = context.commandContext.trip
+  let requiresFreshConfirmation = false
 
   if (preparedPlan.plan.requiresConfirmation && trip && preparedPlan.baselineFingerprint) {
     const fresh = await loadFreshFingerprint(trip.id)
@@ -363,6 +470,7 @@ export async function executeAiActionPlan(
         preparedPlan,
         '旅行内容已变化，请重新生成预览。',
         [...previouslyCompleted],
+        true,
       )
     }
   }
@@ -380,10 +488,11 @@ export async function executeAiActionPlan(
     const preparedStep = preparedPlan.steps.find((candidate) => candidate.id === step.id)
     if (!preparedStep || preparedStep.status === 'failed' || !preparedStep.prepared) {
       failed.add(step.id)
+      const message = preparedStep?.error ?? '动作没有可执行预览。'
       results.push({
         actionId: step.actionId,
         id: step.id,
-        message: preparedStep?.error ?? '动作没有可执行预览。',
+        message,
         status: 'failed',
       })
       continue
@@ -411,10 +520,12 @@ export async function executeAiActionPlan(
       }
     } catch (caught) {
       failed.add(step.id)
+      const message = toErrorMessage(caught, '动作执行失败。')
+      requiresFreshConfirmation ||= caught instanceof FreshConfirmationRequiredError
       results.push({
         actionId: step.actionId,
         id: step.id,
-        message: toErrorMessage(caught, '动作执行失败。'),
+        message,
         status: 'failed',
       })
     }
@@ -448,6 +559,7 @@ export async function executeAiActionPlan(
       : status === 'partial'
         ? '部分完成，可重试失败项。'
         : results[0]?.message ?? '没有动作完成。',
+    requiresFreshConfirmation,
     status,
     steps: results,
   }
@@ -466,13 +578,18 @@ export function summarizePreparedAiActionPlan(prepared: AiActionPreparedPlan) {
 async function prepareStep(
   step: AiActionPlanV1['steps'][number],
   context: AiActionGatewayRuntimeContext,
-  baselineFingerprint?: string,
+  baselineFingerprint: string | undefined,
+  executionId: string,
 ): Promise<AiActionPreparedStep> {
   if (getAiActionMetadata(step.actionId).requiresTrip && !context.commandContext.trip) {
     throw new Error('请先打开具体旅行。')
   }
   const definition = ACTION_RUNTIME_DEFINITIONS[step.actionId]
-  const prepared = await definition.prepare(step.args, context, baselineFingerprint)
+  const prepared = await definition.prepare(step.args, context, {
+    baselineFingerprint,
+    executionId,
+    idempotencyKey: step.idempotencyKey,
+  })
   const preview = definition.preview(prepared)
   return buildPreparedStep(
     step,
@@ -495,6 +612,7 @@ function buildPreparedStep(
   return {
     actionId: step.actionId,
     affectedLabels,
+    confirmationFingerprint: hashString(stableStringify(prepared)),
     hasWrite,
     id: step.id,
     idempotencyKey: step.idempotencyKey,
@@ -550,6 +668,99 @@ function prepareItemTimeAction(
     nextEndTime,
     nextStartTime: args.startTime,
   })
+}
+
+async function prepareLedgerExpenseDraftAction(
+  args: AiActionLedgerExpenseDraftArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedLedgerExpenseDraftAction> {
+  const trip = requireTrip(context.commandContext)
+  const operationFingerprint = buildActionOperationFingerprint(
+    preparation.executionId,
+    preparation.idempotencyKey,
+  )
+  const [settings, participants, expenses] = await Promise.all([
+    getLedgerSettingsByTrip(trip.id),
+    listLedgerParticipants(trip.id),
+    listLedgerExpenses(trip.id),
+  ])
+  if (!settings) throw new Error('请先在账本建立币种和预算。')
+  if (participants.length === 0) throw new Error('请先在账本添加同行人。')
+  const currency = normalizeCurrencyCode(args.currency ?? settings.tripCurrency)
+  const amountMinor = parseMoneyInput(args.amount, currency)
+  if (!amountMinor || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
+    throw new Error('费用金额无效。')
+  }
+  const today = todayInTimeZone(resolveTripTimeZone(trip))
+  const defaultDate = context.commandContext.currentDay?.date
+    ?? (today >= trip.startDate && today <= trip.endDate ? today : trip.startDate)
+  return {
+    amountMinor,
+    category: args.category ?? 'other',
+    currency,
+    date: args.date ?? defaultDate,
+    existingExpense: expenses.find((expense) =>
+      expense.source.kind === 'manual' &&
+      expense.source.fingerprint === operationFingerprint,
+    ),
+    itemIds: context.commandContext.currentItem ? [context.commandContext.currentItem.id] : [],
+    kind: 'ledger-expense-draft',
+    ledgerBaseline: buildLedgerBaseline(settings, participants),
+    operationFingerprint,
+    title: args.title,
+    trip,
+  }
+}
+
+async function prepareRoutePreviewAction(
+  args: AiActionRoutePreviewArgs,
+  context: AiActionGatewayRuntimeContext,
+): Promise<PreparedRoutePreviewAction> {
+  const trip = requireTrip(context.commandContext)
+  const config = getRoutingConfig()
+  const provider = getPersistentRouteProvider(config)
+  if (!provider) throw new Error('当前路线服务不可用。')
+  const itemsByDay = groupItemsByDay(context.commandContext.items)
+  const preparation = await loadTripRoutePreparation({
+    days: context.commandContext.days,
+    itemsByDay,
+    provider,
+    tripId: trip.id,
+  })
+  const selectedDays = args.scope === 'day'
+    ? [resolveDayTarget(args.target, context.commandContext)]
+    : preparation.days
+      .filter((entry) => entry.eligible)
+      .map((entry) => entry.day)
+  if (selectedDays.length === 0) throw new Error('没有至少包含两个坐标点的日期。')
+
+  const selectedIds = new Set(selectedDays.map((day) => day.id))
+  const targetDayIds = preparation.days
+    .filter((entry) =>
+      selectedIds.has(entry.day.id) &&
+      (entry.status === 'ready_to_generate' || entry.status === 'stale_if_cache_key_changed'),
+    )
+    .map((entry) => entry.day.id)
+  const unavailableDay = preparation.days.find((entry) =>
+    selectedIds.has(entry.day.id) && !entry.eligible,
+  )
+  if (args.scope === 'day' && unavailableDay) {
+    throw new Error(`${unavailableDay.day.title} 至少需要两个有坐标的行程点。`)
+  }
+  return {
+    days: context.commandContext.days,
+    itemsByDay,
+    kind: 'route-preview',
+    provider,
+    routingFingerprint: buildRoutingFingerprint(config),
+    targetDays: selectedDays,
+    targetDayIds,
+    trip,
+  }
 }
 
 async function preparePlaceAction(
@@ -673,6 +884,122 @@ async function executeItemTimeAction(
     effects: [],
     errors: [],
     message: `已调整「${updated.title}」的时间。`,
+  }
+}
+
+async function executeLedgerExpenseDraftAction(
+  prepared: PreparedLedgerExpenseDraftAction,
+): Promise<ActionExecutionResult> {
+  const [settings, participants, expenses] = await Promise.all([
+    getLedgerSettingsByTrip(prepared.trip.id),
+    listLedgerParticipants(prepared.trip.id),
+    listLedgerExpenses(prepared.trip.id),
+  ])
+  const existingExpense = expenses.find((expense) =>
+    expense.source.kind === 'manual' &&
+    expense.source.fingerprint === prepared.operationFingerprint,
+  )
+  if (
+    !existingExpense &&
+    (!settings || buildLedgerBaseline(settings, participants) !== prepared.ledgerBaseline)
+  ) {
+    throw new FreshConfirmationRequiredError('账本设置或同行人已变化，请重新生成预览。')
+  }
+  const creation = existingExpense
+    ? { created: false, record: existingExpense }
+    : await createLedgerExpenseIdempotent({
+        amountMinor: prepared.amountMinor,
+        category: prepared.category,
+        currency: prepared.currency,
+        date: prepared.date,
+        itemIds: prepared.itemIds,
+        orderStatus: 'active',
+        paymentStatus: 'unknown',
+        reviewStatus: 'needs_review',
+        source: {
+          fingerprint: prepared.operationFingerprint,
+          kind: 'manual',
+          label: '全局 AI 草稿',
+        },
+        splitMode: 'equal',
+        splitShares: participants.map((participant) => ({
+          participantId: participant.id,
+          weight: 1,
+        })),
+        status: 'draft',
+        title: prepared.title,
+        tripId: prepared.trip.id,
+      })
+  const expense = creation.record
+  return {
+    appliedChanges: [buildAppliedChange({
+      actionType: 'ledger_expense_draft_created',
+      detail: '已创建待审核费用草稿；付款人、分摊和汇率仍需在账本确认。',
+      idempotencyKey: prepared.operationFingerprint,
+      occurredAt: expense.createdAt,
+      targetId: expense.id,
+      targetType: 'finance',
+      title: expense.title,
+    })],
+    effects: [{
+      kind: 'navigate',
+      params: { expenseId: expense.id, tripId: prepared.trip.id },
+      route: 'ledger/expense',
+    }],
+    errors: [],
+    message: creation.created
+      ? `已创建「${expense.title}」费用草稿。`
+      : `「${expense.title}」费用草稿已存在，未重复创建。`,
+  }
+}
+
+async function executeRoutePreviewAction(
+  prepared: PreparedRoutePreviewAction,
+): Promise<ActionExecutionResult> {
+  const config = getRoutingConfig()
+  if (
+    getPersistentRouteProvider(config) !== prepared.provider ||
+    buildRoutingFingerprint(config) !== prepared.routingFingerprint
+  ) {
+    throw new FreshConfirmationRequiredError('路线服务配置已变化，请重新生成预览。')
+  }
+  const navigationDay = prepared.targetDays[0]
+  if (prepared.targetDayIds.length === 0) {
+    return {
+      appliedChanges: [],
+      effects: navigationDay ? [buildDayMapEffect(prepared.trip.id, navigationDay.id)] : [],
+      errors: [],
+      message: '所选日期已有可用路线预览。',
+    }
+  }
+  const result = await generateRoutePreviewsForTrip({
+    config,
+    days: prepared.days,
+    itemsByDay: prepared.itemsByDay,
+    targetDayIds: prepared.targetDayIds,
+    tripId: prepared.trip.id,
+  })
+  const saved = result.outcomes.filter((outcome) => outcome.saved)
+  const errors = result.outcomes
+    .filter((outcome) => !outcome.saved && outcome.status !== 'cached')
+    .map((outcome) => outcome.status === 'generated'
+      ? `${outcome.day.title} 路线未保存，可清理或调整路线缓存后重试。`
+      : `${outcome.day.title} 路线生成失败。`)
+  return {
+    appliedChanges: saved.map((outcome) => buildAppliedChange({
+      actionType: 'global_ai_route_generated',
+      detail: '已确认调用路线服务并缓存当天路线预览。',
+      targetId: outcome.day.id,
+      targetType: 'day',
+      title: outcome.day.title,
+    })),
+    effects: saved.length > 0 && navigationDay
+      ? [buildDayMapEffect(prepared.trip.id, navigationDay.id)]
+      : [],
+    errors,
+    message: saved.length > 0
+      ? `已生成 ${saved.length} 天路线预览。`
+      : '路线服务没有生成可用预览。',
   }
 }
 
@@ -1059,6 +1386,34 @@ function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   throw new Error('没有找到目标行程点。')
 }
 
+function resolveDayTarget(target: string | undefined, context: GlobalAiCommandContext) {
+  const ordered = [...context.days]
+    .sort((first, second) => first.sortOrder - second.sortOrder || first.date.localeCompare(second.date))
+  if (ordered.length === 0) throw new Error('当前旅行还没有日期。')
+  if (!target || target === 'current_day') {
+    if (context.currentDay) return context.currentDay
+    const trip = requireTrip(context)
+    const today = todayInTimeZone(resolveTripTimeZone(trip))
+    return ordered.find((day) => day.date === today) ?? ordered[0]
+  }
+  if (target === 'first_day') return ordered[0]
+  const ordinal = target.match(/^(?:day:|第\s*)(\d{1,2})(?:\s*天)?$/)
+  if (ordinal) {
+    const day = ordered[Number(ordinal[1]) - 1]
+    if (!day) throw new Error('没有找到对应日期。')
+    return day
+  }
+  const normalized = normalizeText(target)
+  const matches = ordered.filter((day) =>
+    day.date === target ||
+    normalized.includes(normalizeText(day.title)) ||
+    normalizeText(day.title).includes(normalized),
+  )
+  if (matches.length === 1) return matches[0]
+  if (matches.length > 1) throw new Error('找到多个匹配日期，请写清楚日期。')
+  throw new Error('没有找到目标日期。')
+}
+
 function issueMatchesRepairScope(
   issue: TripReadinessIssue,
   args: AiActionTripRepairArgs,
@@ -1093,6 +1448,7 @@ function failedRun(
   prepared: AiActionPreparedPlan,
   message: string,
   completedStepIds: string[] = [],
+  requiresFreshConfirmation = false,
 ): AiActionRunResult {
   const completed = new Set(completedStepIds)
   const failedStepIds = prepared.plan.steps
@@ -1103,6 +1459,7 @@ function failedRun(
     effects: [],
     failedStepIds,
     message,
+    requiresFreshConfirmation,
     status: completed.size > 0 ? 'partial' : 'failed',
     steps: prepared.plan.steps.map((step) => ({
       actionId: step.actionId,
@@ -1168,6 +1525,45 @@ function getWorkspaceNavigationCommand(target: AiActionWorkspaceOpenArgs['target
   return '打开行程总览'
 }
 
+function buildLedgerBaseline(settings: LedgerSettings, participants: LedgerParticipant[]) {
+  return JSON.stringify({
+    participants: [...participants]
+      .sort((first, second) => first.id.localeCompare(second.id))
+      .map((participant) => ({
+        id: participant.id,
+        updatedAt: participant.updatedAt,
+      })),
+    settings: {
+      homeCurrency: settings.homeCurrency,
+      id: settings.id,
+      settlementCurrency: settings.settlementCurrency,
+      tripCurrency: settings.tripCurrency,
+      updatedAt: settings.updatedAt,
+    },
+  })
+}
+
+function buildRoutingFingerprint(config: ReturnType<typeof getRoutingConfig>) {
+  return JSON.stringify({
+    configured: config.configured,
+    provider: config.provider,
+    routeProxyUrl: config.routeProxyUrl ?? '',
+    source: config.source,
+  })
+}
+
+function buildActionOperationFingerprint(executionId: string, idempotencyKey: string) {
+  return `ai-action:${executionId}:${idempotencyKey}`
+}
+
+function buildDayMapEffect(tripId: string, dayId: string): AiActionRunEffect {
+  return {
+    kind: 'navigate',
+    params: { dayId, tripId, view: 'map' },
+    route: 'day',
+  }
+}
+
 function preserveSameDayDuration(item: ItineraryItem, nextStartTime: string, day?: Day) {
   if (!item.endTime) return undefined
   if (!item.startTime || (item.endDate && day && item.endDate > day.date)) return item.endTime
@@ -1218,21 +1614,26 @@ function groupItemsByDay(items: ItineraryItem[]) {
 function buildAppliedChange({
   actionType,
   detail,
+  idempotencyKey,
+  occurredAt = Date.now(),
   targetId,
   targetType,
   title,
 }: {
   actionType: string
   detail: string
+  idempotencyKey?: string
+  occurredAt?: number
   targetId: string
   targetType: TripIntelligenceAppliedChange['targetType']
   title: string
 }): TripIntelligenceAppliedChange {
-  const occurredAt = Date.now()
   return {
     actionType,
     detail,
-    id: `action-gateway:${hashString(`${actionType}:${targetId}:${occurredAt}`)}`,
+    id: idempotencyKey
+      ? `action-gateway:${idempotencyKey}`
+      : `action-gateway:${hashString(`${actionType}:${targetId}:${occurredAt}`)}`,
     occurredAt,
     source: { id: 'ai_action_gateway', kind: 'operations', label: 'Global AI' },
     targetId,
@@ -1270,6 +1671,17 @@ function hashString(input: string) {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function toErrorMessage(error: unknown, fallback: string) {

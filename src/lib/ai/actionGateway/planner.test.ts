@@ -7,7 +7,7 @@ import {
 } from './planner'
 
 describe('AI Action Gateway planner', () => {
-  it('uses deterministic local planning for registered navigation, time, ticket, place, and repair commands', () => {
+  it('uses deterministic local planning for registered navigation, time, route, expense, ticket, place, and repair commands', () => {
     expect(buildDeterministicAiActionPlan('打开资料中心')?.steps[0]).toMatchObject({
       actionId: 'workspace.open@1',
       args: { target: 'documents' },
@@ -15,6 +15,18 @@ describe('AI Action Gateway planner', () => {
     expect(buildDeterministicAiActionPlan('把第一站改到10点30分')?.steps[0]).toMatchObject({
       actionId: 'item.time.update@1',
       args: { startTime: '10:30', target: 'first_item' },
+    })
+    expect(buildDeterministicAiActionPlan('生成第一天路线预览')?.steps[0]).toMatchObject({
+      actionId: 'route.preview@1',
+      args: { scope: 'day', target: 'first_day' },
+    })
+    expect(buildDeterministicAiActionPlan('记一笔午餐 32.50 GBP')?.steps[0]).toMatchObject({
+      actionId: 'ledger.expense.draft@1',
+      args: { amount: '32.50', category: 'food', currency: 'GBP', title: '午餐' },
+    })
+    expect(buildDeterministicAiActionPlan('记一笔 2 人午餐 32.50 GBP')?.steps[0]).toMatchObject({
+      actionId: 'ledger.expense.draft@1',
+      args: { amount: '32.50', category: 'food', currency: 'GBP', title: '2 人午餐' },
     })
     expect(buildDeterministicAiActionPlan('找一下爱丁堡的门票')?.steps[0]).toMatchObject({
       actionId: 'ticket.open@1',
@@ -95,5 +107,8 @@ describe('AI Action Gateway planner', () => {
     expect(shouldRequestAiActionPlan('伦敦天气怎么样')).toBe(false)
     expect(shouldRequestAiActionPlan('补全第一站地点信息')).toBe(false)
     expect(shouldRequestAiActionPlan('把不确定的开始时间调整好')).toBe(true)
+    expect(shouldRequestAiActionPlan('记录一笔金额还不确定的费用')).toBe(true)
+    expect(shouldRequestAiActionPlan('记一笔 2 人午餐 32.50')).toBe(true)
+    expect(shouldRequestAiActionPlan('记一笔酒店 1,000 GBP')).toBe(true)
   })
 })

@@ -82,6 +82,15 @@ export async function createLedgerExpense(input: repo.CreateLedgerExpenseInput) 
   return record
 }
 
+export async function createLedgerExpenseIdempotent(input: repo.CreateLedgerExpenseInput) {
+  const result = await repo.createLedgerExpenseIdempotent(input)
+  await enqueueObjectUpsert({ object: result.record, objectType: 'ledger_expense' })
+  markLedgerChanged(result.record.tripId, result.created
+    ? 'ledger-expense-created'
+    : 'ledger-expense-recovered')
+  return result
+}
+
 export async function updateLedgerExpense(id: string, patch: Parameters<typeof repo.updateLedgerExpense>[1]) {
   const record = await repo.updateLedgerExpense(id, patch)
   if (record) {

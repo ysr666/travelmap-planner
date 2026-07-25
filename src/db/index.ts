@@ -56,6 +56,7 @@ export {
 export {
   createLedgerBudget,
   createLedgerExpense,
+  createLedgerExpenseIdempotent,
   createLedgerParticipant,
   createLedgerSettings,
   bulkReviewLedgerExpenses,

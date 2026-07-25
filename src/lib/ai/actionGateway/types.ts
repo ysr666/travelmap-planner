@@ -1,11 +1,13 @@
-import type { RouteId } from '../../../types'
+import type { LedgerExpenseCategory, RouteId } from '../../../types'
 
 export const AI_ACTION_PLAN_SCHEMA_VERSION = 'ai_action_plan.v1' as const
 export const AI_ACTION_PLAN_MAX_STEPS = 6
 
 export type AiActionId =
   | 'item.time.update@1'
+  | 'ledger.expense.draft@1'
   | 'place.enrich@1'
+  | 'route.preview@1'
   | 'ticket.open@1'
   | 'trip.repair@1'
   | 'workspace.open@1'
@@ -34,8 +36,21 @@ export type AiActionItemTimeUpdateArgs = {
   target: string
 }
 
+export type AiActionLedgerExpenseDraftArgs = {
+  amount: string
+  category?: LedgerExpenseCategory
+  currency?: string
+  date?: string
+  title: string
+}
+
 export type AiActionPlaceEnrichArgs = {
   target: string
+}
+
+export type AiActionRoutePreviewArgs = {
+  scope: 'day' | 'trip'
+  target?: string
 }
 
 export type AiActionTripRepairArgs = {
@@ -59,7 +74,9 @@ export type AiActionWorkspaceOpenArgs = {
 
 export type AiActionArgsById = {
   'item.time.update@1': AiActionItemTimeUpdateArgs
+  'ledger.expense.draft@1': AiActionLedgerExpenseDraftArgs
   'place.enrich@1': AiActionPlaceEnrichArgs
+  'route.preview@1': AiActionRoutePreviewArgs
   'ticket.open@1': AiActionTicketOpenArgs
   'trip.repair@1': AiActionTripRepairArgs
   'workspace.open@1': AiActionWorkspaceOpenArgs
@@ -118,6 +135,7 @@ export type AiActionDefinition<
 export type AiActionPreparedStep = {
   actionId: AiActionId
   affectedLabels: string[]
+  confirmationFingerprint: string
   hasWrite: boolean
   id: string
   idempotencyKey: string
@@ -131,6 +149,7 @@ export type AiActionPreparedStep = {
 
 export type AiActionPreparedPlan = {
   baselineFingerprint?: string
+  executionId: string
   plan: AiActionPlanV1
   preparedAt: number
   steps: AiActionPreparedStep[]
@@ -159,6 +178,7 @@ export type AiActionRunResult = {
   effects: AiActionRunEffect[]
   failedStepIds: string[]
   message: string
+  requiresFreshConfirmation: boolean
   status: 'completed' | 'failed' | 'partial'
   steps: AiActionStepRunResult[]
 }

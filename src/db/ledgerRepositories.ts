@@ -100,6 +100,34 @@ export async function createLedgerExpense(input: CreateLedgerExpenseInput) {
   return expense
 }
 
+export async function createLedgerExpenseIdempotent(input: CreateLedgerExpenseInput) {
+  const fingerprint = input.source.fingerprint
+  if (!fingerprint) {
+    return { created: true, record: await createLedgerExpense(input) }
+  }
+  return db.transaction('rw', [db.ledgerExpenses, db.trips], async () => {
+    const existing = await db.ledgerExpenses
+      .where('tripId')
+      .equals(input.tripId)
+      .filter((expense) =>
+        expense.source.kind === input.source.kind &&
+        expense.source.fingerprint === fingerprint,
+      )
+      .first()
+    if (existing) return { created: false, record: existing }
+    const now = Date.now()
+    const record: LedgerExpense = {
+      ...input,
+      createdAt: now,
+      id: createId('ledger_expense'),
+      updatedAt: now,
+    }
+    await db.ledgerExpenses.add(record)
+    await db.trips.update(record.tripId, { updatedAt: now })
+    return { created: true, record }
+  })
+}
+
 export async function updateLedgerExpense(id: string, patch: Partial<Omit<LedgerExpense, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>) {
   return updateLedgerRecord(db.ledgerExpenses, id, patch)
 }

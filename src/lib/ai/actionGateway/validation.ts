@@ -16,8 +16,21 @@ import {
 const MAX_SUMMARY_LENGTH = 200
 const MAX_TARGET_LENGTH = 160
 const MAX_QUERY_LENGTH = 160
+const MAX_EXPENSE_TITLE_LENGTH = 100
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,63}$/
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+const EXPENSE_AMOUNT_PATTERN = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,4})?$/
+const CURRENCY_PATTERN = /^[A-Z]{3}$/
+const EXPENSE_CATEGORIES = new Set([
+  'admission',
+  'connectivity',
+  'food',
+  'insurance',
+  'lodging',
+  'other',
+  'shopping',
+  'transport',
+])
 const WORKSPACE_TARGETS = new Set([
   'documents',
   'home',
@@ -185,6 +198,30 @@ function validateArgs<TActionId extends AiActionId>(
       target,
     } as AiActionArgsById[TActionId]
   }
+  if (actionId === 'ledger.expense.draft@1') {
+    const title = readText(record.title, MAX_EXPENSE_TITLE_LENGTH)
+    const amount = readExpenseAmount(record.amount)
+    const currency = record.currency === undefined ? undefined : readCurrency(record.currency)
+    const date = record.date === undefined ? undefined : readPlainDate(record.date)
+    const category = record.category === undefined
+      ? undefined
+      : typeof record.category === 'string' && EXPENSE_CATEGORIES.has(record.category)
+        ? record.category
+        : undefined
+    if (!title) errors.push(`${path}.title 不能为空。`)
+    if (!amount) errors.push(`${path}.amount 必须是有效正数。`)
+    if (record.currency !== undefined && !currency) errors.push(`${path}.currency 必须是三位大写币种代码。`)
+    if (record.date !== undefined && !date) errors.push(`${path}.date 必须是有效的 YYYY-MM-DD。`)
+    if (record.category !== undefined && !category) errors.push(`${path}.category 无效。`)
+    if (!title || !amount) return null
+    return {
+      amount,
+      ...(category ? { category } : {}),
+      ...(currency ? { currency } : {}),
+      ...(date ? { date } : {}),
+      title,
+    } as AiActionArgsById[TActionId]
+  }
   if (actionId === 'place.enrich@1') {
     const target = readText(record.target, MAX_TARGET_LENGTH)
     if (!target) {
@@ -192,6 +229,19 @@ function validateArgs<TActionId extends AiActionId>(
       return null
     }
     return { target } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'route.preview@1') {
+    if (record.scope !== 'day' && record.scope !== 'trip') {
+      errors.push(`${path}.scope 无效。`)
+      return null
+    }
+    const target = readOptionalText(record.target, MAX_TARGET_LENGTH)
+    if (record.target !== undefined && !target) errors.push(`${path}.target 无效。`)
+    if (record.scope === 'trip' && target) errors.push(`${path}.target 只允许用于 day 范围。`)
+    return {
+      scope: record.scope,
+      ...(record.scope === 'day' && target ? { target } : {}),
+    } as AiActionArgsById[TActionId]
   }
   if (actionId === 'workspace.open@1') {
     if (typeof record.target !== 'string' || !WORKSPACE_TARGETS.has(record.target)) {
@@ -289,6 +339,31 @@ function readTime(input: unknown) {
   if (typeof input !== 'string') return ''
   const value = input.trim()
   return TIME_PATTERN.test(value) ? value : ''
+}
+
+function readExpenseAmount(input: unknown) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  return EXPENSE_AMOUNT_PATTERN.test(value) && Number(value) > 0 ? value : ''
+}
+
+function readCurrency(input: unknown) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  return CURRENCY_PATTERN.test(value) ? value : ''
+}
+
+function readPlainDate(input: unknown) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return ''
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1) return ''
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return day <= daysInMonth ? value : ''
 }
 
 function timeToMinutes(value: string) {

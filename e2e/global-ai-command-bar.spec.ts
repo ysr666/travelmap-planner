@@ -146,6 +146,204 @@ test('全局 AI 时间调整只在一次确认后写入并保留原时长', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 路线配置变化后重新预览确认才请求服务并写入缓存', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await forceRouteProxyFixture(page)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  let routePreviewRequests = 0
+  await page.route('**/api/provider-proxy*', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation !== 'route_preview') {
+      await route.fulfill({
+        body: JSON.stringify({ code: 'unsupported', message: 'unexpected operation', ok: false }),
+        contentType: 'application/json',
+        status: 501,
+      })
+      return
+    }
+    routePreviewRequests += 1
+    const coordinates = body.coordinates as Array<[number, number]>
+    const segments = (body.segments as Array<Record<string, number | string>>).map((segment, index) => ({
+      coordinates: [
+        coordinates[segment.fromCoordinateIndex as number],
+        coordinates[segment.toCoordinateIndex as number],
+      ],
+      distanceMeters: 24000,
+      durationSeconds: 2700,
+      fromItemId: segment.fromItemId,
+      segmentIndex: segment.segmentIndex ?? index,
+      toItemId: segment.toItemId,
+    }))
+    await route.fulfill({
+      body: JSON.stringify({
+        ok: true,
+        operation: 'route_preview',
+        provider: 'openrouteservice',
+        route: {
+          lineStrings: segments.map((segment) => segment.coordinates),
+          segments,
+          status: 'road',
+          warnings: [],
+        },
+      }),
+      contentType: 'application/json',
+    })
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-route-day',
+      sortOrder: 1,
+      title: '抵达伦敦',
+      tripId: 'gateway-route-trip',
+    }],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-route-day',
+        id: 'gateway-route-airport',
+        lat: 51.47,
+        lng: -0.4543,
+        sortOrder: 1,
+        startTime: '09:00',
+        ticketIds: [],
+        title: '伦敦希思罗机场',
+        tripId: 'gateway-route-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-route-day',
+        id: 'gateway-route-hotel',
+        lat: 51.501,
+        lng: -0.158,
+        sortOrder: 2,
+        startTime: '11:00',
+        ticketIds: [],
+        title: '伦敦酒店',
+        tripId: 'gateway-route-trip',
+        updatedAt: now,
+      },
+    ],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-route-trip',
+      startDate: '2026-07-10',
+      timeZone: 'Europe/London',
+      title: '路线动作测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-route-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('生成第一天路线预览')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('生成路线预览')
+  await expect(result).toContainText('确认后才调用路线服务')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(routePreviewRequests).toBe(0)
+  expect(await countRouteCacheEntries(page)).toBe(0)
+  await expectNoHorizontalOverflow(page)
+
+  await page.evaluate(() => {
+    window.localStorage.setItem('tripmap:dev:route-proxy-url', '/api/provider-proxy-v2')
+    window.dispatchEvent(new Event('tripmap:routing-config-changed'))
+  })
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+
+  await expect(result).toContainText('路线服务配置已变化')
+  expect(routePreviewRequests).toBe(0)
+  expect(await countRouteCacheEntries(page)).toBe(0)
+  await result.getByRole('button', { name: '重新生成预览' }).click()
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(routePreviewRequests).toBe(0)
+  expect(await countRouteCacheEntries(page)).toBe(0)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/dayId=gateway-route-day/)
+  await expect(page).toHaveURL(/view=map/)
+  await expect.poll(() => countRouteCacheEntries(page)).toBeGreaterThan(0)
+  expect(routePreviewRequests).toBe(1)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('全局 AI 费用动作只在一次确认后创建待审核草稿', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-expense-day',
+      sortOrder: 1,
+      title: '抵达伦敦',
+      tripId: 'gateway-expense-trip',
+    }],
+    itineraryItems: [],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-expense-trip',
+      startDate: '2026-07-10',
+      timeZone: 'Europe/London',
+      title: '费用动作测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await seedLedgerSetup(page, 'gateway-expense-trip')
+  await page.goto('/#/trip?tripId=gateway-expense-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('记一笔午餐 32.50 GBP')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('创建费用草稿')
+  await expect(result).toContainText('待审核草稿')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(await countStore(page, 'ledgerExpenses')).toBe(0)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/ledger\/expense\?/)
+  const expense = await readFirstStoreRecord(page, 'ledgerExpenses')
+  expect(expense).toMatchObject({
+    amountMinor: 3250,
+    category: 'food',
+    currency: 'GBP',
+    date: '2026-07-10',
+    orderStatus: 'active',
+    paymentStatus: 'unknown',
+    reviewStatus: 'needs_review',
+    status: 'draft',
+    title: '午餐',
+    tripId: 'gateway-expense-trip',
+  })
+  expect(expense.payerParticipantId).toBeUndefined()
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 地点补全显示折叠预览并在一次确认后写入', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceRouteProxyFixture(page)
@@ -487,8 +685,11 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   expect(placeLookupRequests).toBe(1)
 
   await result.getByRole('button', { name: '重试失败项' }).click()
+  await expect.poll(async () => (await readItineraryItem(page, 'gateway-combo-airport')).lat).toBeUndefined()
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
   await expect.poll(async () => (await readItineraryItem(page, 'gateway-combo-airport')).lat).toBe(51.47)
-  await expect(page.getByTestId('global-ai-action-confirm-dialog')).not.toBeVisible()
   await page.getByTestId('global-ai-action-details').getByText('查看步骤').click()
   await expect(page.getByTestId('global-ai-action-details')).toContainText('此前已完成，未重复执行')
   expect(placeLookupRequests).toBe(2)
@@ -653,6 +854,66 @@ async function readItineraryItem(page: Page, itemId: string) {
       db.close()
     }
   }, itemId)
+}
+
+async function seedLedgerSetup(page: Page, tripId: string) {
+  await page.evaluate(async (targetTripId) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(['ledgerSettings', 'ledgerParticipants'], 'readwrite')
+        const now = Date.now()
+        transaction.objectStore('ledgerSettings').put({
+          createdAt: now,
+          homeCurrency: 'CNY',
+          id: 'gateway-ledger-settings',
+          settlementCurrency: 'CNY',
+          tripCurrency: 'GBP',
+          tripId: targetTripId,
+          updatedAt: now,
+        })
+        transaction.objectStore('ledgerParticipants').put({
+          createdAt: now,
+          displayName: '我',
+          id: 'gateway-ledger-person',
+          isSelf: true,
+          source: 'manual',
+          tripId: targetTripId,
+          updatedAt: now,
+        })
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error ?? new Error('写入账本测试数据失败'))
+      })
+    } finally {
+      db.close()
+    }
+  }, tripId)
+}
+
+async function readFirstStoreRecord(page: Page, storeName: string) {
+  return page.evaluate(async (targetStoreName) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    try {
+      return await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const transaction = db.transaction(targetStoreName, 'readonly')
+        const cursorRequest = transaction.objectStore(targetStoreName).openCursor()
+        cursorRequest.onsuccess = () => resolve(
+          (cursorRequest.result?.value ?? {}) as Record<string, unknown>,
+        )
+        cursorRequest.onerror = () => reject(cursorRequest.error ?? new Error('读取测试数据失败'))
+      })
+    } finally {
+      db.close()
+    }
+  }, storeName)
 }
 
 async function updateItineraryItemTimes(

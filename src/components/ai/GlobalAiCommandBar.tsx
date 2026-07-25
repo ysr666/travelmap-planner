@@ -594,11 +594,20 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       const prepared = await prepareAiActionPlan(
         actionGateway.prepared.plan,
         runtimeContext,
-        { completedStepIds },
+        {
+          completedStepIds,
+          executionId: actionGateway.prepared.executionId,
+        },
       )
-      const stalePreview = actionGateway.run.message.includes('旅行内容已变化')
-      const needsFreshConfirmation = stalePreview ||
-        (prepared.plan.requiresConfirmation && !actionGateway.writeConfirmed)
+      const needsFreshConfirmation = prepared.plan.requiresConfirmation && (
+        actionGateway.run.requiresFreshConfirmation ||
+        !actionGateway.writeConfirmed ||
+        hasNewWritePreview(
+          actionGateway.prepared,
+          prepared,
+          actionGateway.run.failedStepIds,
+        )
+      )
       if (needsFreshConfirmation) {
         setActionGateway({
           ...actionGateway,
@@ -606,7 +615,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           context: runtimeContext,
           prepared,
           run: null,
-          writeConfirmed: stalePreview ? false : actionGateway.writeConfirmed,
+          writeConfirmed: false,
         })
         return
       }
@@ -864,6 +873,26 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   )
 }
 
+function hasNewWritePreview(
+  previous: AiActionPreparedPlan,
+  next: AiActionPreparedPlan,
+  failedStepIds: string[],
+) {
+  const failedIds = new Set(failedStepIds)
+  return next.steps.some((step) => {
+    if (!failedIds.has(step.id) || step.status !== 'prepared' || !step.hasWrite) return false
+    const previousStep = previous.steps.find((candidate) => candidate.id === step.id)
+    return (
+      !previousStep ||
+      previousStep.status !== 'prepared' ||
+      !previousStep.hasWrite ||
+      previousStep.confirmationFingerprint !== step.confirmationFingerprint ||
+      previousStep.preview !== step.preview ||
+      previousStep.affectedLabels.join('\u0000') !== step.affectedLabels.join('\u0000')
+    )
+  })
+}
+
 function ActionGatewayView({
   actionGateway,
   onConfirm,
@@ -884,7 +913,7 @@ function ActionGatewayView({
       : actionGateway.prepared.steps.length === 1
         ? actionGateway.prepared.steps[0].preview
         : `${actionGateway.prepared.plan.steps.length} 个步骤已准备好。`
-  const retryLabel = run?.message.includes('旅行内容已变化') ? '重新生成预览' : '重试失败项'
+  const retryLabel = run?.requiresFreshConfirmation ? '重新生成预览' : '重试失败项'
   const retryLimit = run
     ? Math.max(
         0,

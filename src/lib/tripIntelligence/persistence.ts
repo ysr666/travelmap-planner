@@ -116,7 +116,7 @@ export async function appendTripIntelligenceExecutionResult(
         intelligenceAppliedChanges: input.result.appliedChanges,
         now,
         source: input.source,
-        status: 'success',
+        status: input.result.status === 'completed' ? 'success' : 'partial',
         title: input.title,
       })
     : null

@@ -162,6 +162,31 @@ describe('trip intelligence persistence', () => {
     await expect(db.syncOutbox.where('objectType').equals('trip_intelligence_suggestion_state').count()).resolves.toBe(1)
   })
 
+  it('records applied changes from a partially failed action as partial history', async () => {
+    await appendTripIntelligenceExecutionResult('trip-1', {
+      result: {
+        appliedChanges: [{
+          actionType: 'global_ai_place_enriched',
+          detail: '已补全地点。',
+          id: 'change-partial',
+          occurredAt: 200,
+          source: { id: 'ai_action_gateway', kind: 'operations', label: 'Global AI' },
+          targetId: 'item-1',
+          targetType: 'item',
+          title: '第一站',
+        }],
+        message: '部分完成。',
+        status: 'failed',
+      },
+      source: 'operations',
+      title: '智能修复',
+    }, 200)
+
+    await expect(db.tripIntelligenceAppliedChanges.where('tripId').equals('trip-1').first()).resolves.toMatchObject({
+      executionStatus: 'partial',
+    })
+  })
+
   it('uses a 24-hour later window and rejects ignoring high-severity suggestions', async () => {
     const now = 1_000
     await setTripIntelligenceSuggestionState('trip-1', {

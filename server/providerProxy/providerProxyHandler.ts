@@ -13,6 +13,7 @@ import {
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
   PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+  PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
   PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION,
   PROVIDER_PROXY_EXCHANGE_RATE_OPERATION,
   PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION,
@@ -33,6 +34,8 @@ import {
   validateProviderProxyTripOperationsSummaryRequest,
   validateProviderProxyAssistantAnswerRequest,
   validateProviderProxyAssistantAnswerSuccessResponse,
+  validateProviderProxyAiActionPlanRequest,
+  validateProviderProxyAiActionPlanSuccessResponse,
   validateProviderProxyRouteOrderSuggestionRequest,
   validateProviderProxyTravelSearchRequest,
   validateProviderProxyExchangeRateRequest,
@@ -46,6 +49,7 @@ import {
   type ProviderProxyTravelInboxClassifyRequest,
   type ProviderProxyAiTripEditPlanRequest,
   type ProviderProxyAssistantAnswerRequest,
+  type ProviderProxyAiActionPlanRequest,
   type ProviderProxyConcreteProvider,
   type ProviderProxyErrorCode,
   type ProviderProxyOperation,
@@ -109,6 +113,15 @@ import {
   type AssistantAnswerProvider,
   type AssistantAnswerProviderErrorCode,
 } from './assistantAnswerProvider'
+import {
+  buildAiActionPlanProviderInput,
+  createDisabledAiActionPlanProvider,
+  createMockAiActionPlanProvider,
+  createOpenAiCompatibleAiActionPlanProvider,
+  createUnavailableAiActionPlanProvider,
+  type AiActionPlanProvider,
+  type AiActionPlanProviderErrorCode,
+} from './actionPlanProvider'
 import {
   createDisabledTravelSearchProvider,
   createMockTravelSearchProvider,
@@ -479,6 +492,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION) {
     return handleAssistantAnswerRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION) {
+    return handleAiActionPlanRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
@@ -1863,6 +1880,120 @@ function mapAssistantAnswerErrorCodeToStatus(code: AssistantAnswerProviderErrorC
   switch (code) {
     case 'provider_unavailable': return 503
     case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handleAiActionPlanRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyAiActionPlanRequest(body)
+  if (!validation.ok) {
+    return jsonResponse(validation.error, 400, corsHeaders)
+  }
+
+  const planRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: planRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: planRequest.requestId,
+  })
+  if (quotaResponse) return quotaResponse
+
+  try {
+    const provider = selectAiActionPlanProvider(env, planRequest, fetcher)
+    const result = await provider.plan(buildAiActionPlanProviderInput(planRequest))
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapAiActionPlanErrorCodeToStatus(result.errorCode))
+    }
+    let response = result.kind === 'plan' ? result.response : null
+    if (result.kind === 'raw') {
+      const extracted = extractJsonFromAiText(result.rawText)
+      response = extracted && typeof extracted === 'object' && !Array.isArray(extracted)
+        ? validateProviderProxyAiActionPlanSuccessResponse({
+            ...extracted as Record<string, unknown>,
+            ok: true,
+            operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
+            requestId: planRequest.requestId,
+            source: 'future_ai',
+          })
+        : null
+    }
+    if (response) {
+      const allowedActionIds = new Set(planRequest.availableActions.map((action) => action.id))
+      if (response.plan.steps.some((step) => !allowedActionIds.has(step.actionId))) {
+        response = null
+      }
+    }
+    if (!response) {
+      throw new ProviderProxyServerError('invalid_response', 502)
+    }
+    return jsonResponse({
+      ok: true,
+      operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
+      plan: {
+        schemaVersion: response.plan.schemaVersion,
+        steps: response.plan.steps.map((step) => ({
+          actionId: step.actionId,
+          args: step.args,
+          dependsOn: step.dependsOn,
+          id: step.id,
+        })),
+        summary: response.plan.summary,
+      },
+      requestId: planRequest.requestId,
+      source: response.source,
+    }, 200, corsHeaders)
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION, planRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectAiActionPlanProvider(
+  env: ProviderProxyHandlerEnv,
+  request: ProviderProxyAiActionPlanRequest,
+  fetcher: typeof fetch,
+): AiActionPlanProvider {
+  if (isMockMode(env)) return createMockAiActionPlanProvider(request)
+  if (env.TRIPMAP_AI_PROVIDER === 'openai_compatible') {
+    return createOpenAiCompatibleAiActionPlanProvider(env, fetcher)
+  }
+  if (!env.TRIPMAP_AI_PROVIDER_KEY?.trim()) {
+    return createUnavailableAiActionPlanProvider()
+  }
+  return createDisabledAiActionPlanProvider()
+}
+
+function mapAiActionPlanErrorCodeToStatus(code: AiActionPlanProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'unsupported': return 501
+    case 'invalid_response': return 502
     case 'network_error': return 502
     case 'provider_error': return 502
     default: return 502

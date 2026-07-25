@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validateAiTripDraft } from '../../src/lib/ai/aiTripDraft'
+import { listAiActionCatalog } from '../../src/lib/ai/actionGateway/registry'
 import { createProviderProxyMemoryQuotaStorage, type ProviderProxyQuotaMemoryEntry } from './quotaGuard'
 import { handleProviderProxyRequest } from './providerProxyHandler'
 import { createProviderOperationsMemoryStorage } from './providerOperationsGuard'
@@ -2008,6 +2009,65 @@ describe('provider proxy handler assistant_answer', () => {
   })
 })
 
+describe('provider proxy handler ai_action_plan', () => {
+  it('returns a validated mock plan without provider calls or secret leakage', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: { TRIPMAP_AI_API_KEY: 'server-secret', TRIPMAP_PROVIDER_PROXY_MOCK: '1' },
+      fetcher,
+      request: jsonRequest(validAiActionPlanRequest()),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain('server-secret')
+    expect(text).not.toContain('Authorization')
+    expect(text).not.toContain('Bearer')
+    const body = JSON.parse(text)
+    expect(body).toMatchObject({
+      ok: true,
+      operation: 'ai_action_plan',
+      plan: {
+        steps: [{ actionId: 'place.enrich@1', args: { target: 'first_item' } }],
+      },
+      source: 'mock',
+    })
+    expect(body.plan).not.toHaveProperty('planId')
+    expect(body.plan.steps[0]).not.toHaveProperty('idempotencyKey')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('rejects an action that was not offered to the provider', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: '{"schemaVersion":"ai_action_plan.v1","summary":"补全地点","steps":[{"id":"place","actionId":"place.enrich@1","args":{"target":"first_item"},"dependsOn":[]}]}',
+        },
+      }],
+    }))) as unknown as typeof fetch
+    const request = validAiActionPlanRequest()
+    request.availableActions = listAiActionCatalog().filter((action) => action.id === 'ticket.open@1')
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'server-secret',
+        TRIPMAP_AI_BASE_URL: 'https://api.example/v1',
+        TRIPMAP_AI_MODEL: 'test-model',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(request),
+    })
+
+    expect(response.status).toBe(502)
+    expect(await response.json()).toMatchObject({
+      code: 'invalid_response',
+      ok: false,
+      operation: 'ai_action_plan',
+    })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+})
+
 function validEditRequest(command = '第二天太满了，帮我放松一点') {
   return {
     command,
@@ -2048,6 +2108,20 @@ function validAssistantAnswerRequest() {
     question: '你能做什么？',
     quotaSessionId: 'session-assistant-1',
     requestId: 'assistant-1',
+  }
+}
+
+function validAiActionPlanRequest() {
+  return {
+    availableActions: listAiActionCatalog(),
+    command: '补全第一站地点信息',
+    context: {
+      scopeLabel: '当前旅行',
+      summaries: [{ key: 'trip', label: '旅行', value: '英国 12 天家庭旅行' }],
+    },
+    operation: 'ai_action_plan',
+    quotaSessionId: 'session-action-plan-1',
+    requestId: 'action-plan-1',
   }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { ArrowUpRight, Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { createTripDisruptionEvent, updateItineraryItem } from '../../db'
 import {
   applyAiTripEditPatchPlanToDb,
@@ -13,6 +13,20 @@ import {
   summarizeTravelSearchResultsForPrompt,
 } from '../../lib/ai/aiTripEditSearch'
 import { getStoredAiPrivacySettings } from '../../lib/ai/aiPrivacy'
+import {
+  buildAiActionPlanProviderRequest,
+  buildDeterministicAiActionPlan,
+  executeAiActionPlan,
+  getAiActionRetryPolicy,
+  prepareAiActionPlan,
+  shouldRequestAiActionPlan,
+  summarizePreparedAiActionPlan,
+  type AiActionGatewayRuntimeContext,
+  type AiActionManualEntry,
+  type AiActionPreparedPlan,
+  type AiActionRunEffect,
+  type AiActionRunResult,
+} from '../../lib/ai/actionGateway'
 import {
   formatFlexibility,
   formatMobility,
@@ -37,6 +51,7 @@ import { emitTravelDataChanged } from '../../lib/dataEvents'
 import { navigateTo } from '../../lib/routes'
 import {
   fetchProviderProxyAiTripEditPlan,
+  fetchProviderProxyAiActionPlan,
   fetchProviderProxyAssistantAnswer,
   fetchProviderProxyTravelSearch,
   getProviderProxyConfig,
@@ -74,6 +89,16 @@ type AiTripEditPreviewState = {
   searchResults: ProviderProxyAiTripEditSearchSummary | null
   tripId: string
   warnings: string[]
+}
+
+type AiActionGatewayState = {
+  attemptCount: number
+  command: string
+  completedStepIds: string[]
+  context: AiActionGatewayRuntimeContext
+  prepared: AiActionPreparedPlan
+  run: AiActionRunResult | null
+  writeConfirmed: boolean
 }
 
 type ConversationMessage = {
@@ -116,13 +141,15 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [aiApplyConfirmOpen, setAiApplyConfirmOpen] = useState(false)
   const [aiPreview, setAiPreview] = useState<AiTripEditPreviewState | null>(null)
   const [writeConfirmOpen, setWriteConfirmOpen] = useState(false)
+  const [actionGateway, setActionGateway] = useState<AiActionGatewayState | null>(null)
+  const [actionConfirmOpen, setActionConfirmOpen] = useState(false)
 
   const trimmedCommand = command.trim()
   const hidden = HIDDEN_ROUTES.has(activeRoute)
   const selectedReplanOption = result?.kind === 'replan_preview'
     ? result.record.options.find((option) => option.id === selectedReplanOptionId) ?? result.record.options[0]
     : null
-  const panelOpen = Boolean(expanded || error || success || result || aiPreview || loading)
+  const panelOpen = Boolean(expanded || error || success || result || aiPreview || actionGateway || loading)
 
   useEffect(() => {
     let cancelled = false
@@ -160,6 +187,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setSuccess(null)
     setResult(null)
     setAiPreview(null)
+    setActionGateway(null)
     setLastFailedCommand(null)
     appendConversationMessage({ text: submittedCommand, type: 'user' })
     try {
@@ -168,6 +196,59 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         contextMode === 'account' ? '#/home' : window.location.hash,
       )
       setContextLabel(context.scopeLabel)
+      if (!options.forceAssistant) {
+        const actionPlan = await resolveActionGatewayPlan(submittedCommand, context)
+        if (actionPlan) {
+          const runtimeContext: AiActionGatewayRuntimeContext = {
+            command: submittedCommand,
+            commandContext: context,
+            providerConfig,
+          }
+          const prepared = await prepareAiActionPlan(actionPlan, runtimeContext)
+          const summary = summarizePreparedAiActionPlan(prepared)
+          if (summary.readyCount === 0) {
+            throw new Error(prepared.steps.find((step) => step.error)?.error ?? '没有可执行的动作。')
+          }
+          if (!prepared.plan.requiresConfirmation) {
+            const actionRun = await executeAiActionPlan(prepared, runtimeContext)
+            appendConversationMessage({
+              text: actionRun.message,
+              tone: actionRun.status === 'completed' ? 'success' : 'error',
+              type: 'assistant',
+            })
+            applyActionEffects(actionRun.effects)
+            if (actionRun.status !== 'completed' || actionRun.effects.length === 0) {
+              setActionGateway({
+                attemptCount: 1,
+                command: submittedCommand,
+                completedStepIds: actionRun.completedStepIds,
+                context: runtimeContext,
+                prepared,
+                run: actionRun,
+                writeConfirmed: false,
+              })
+            } else {
+              setCommand('')
+              dismissPanel()
+            }
+          } else {
+            setActionGateway({
+              attemptCount: 0,
+              command: submittedCommand,
+              completedStepIds: [],
+              context: runtimeContext,
+              prepared,
+              run: null,
+              writeConfirmed: false,
+            })
+            appendConversationMessage({
+              text: `${prepared.plan.summary}已准备好，确认后执行。`,
+              type: 'assistant',
+            })
+          }
+          return
+        }
+      }
       const resolved = await resolveGlobalAiInteraction(submittedCommand, context, {
         forceMode: options.forceAssistant ? 'assistant_answer' : undefined,
       })
@@ -212,6 +293,25 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     } finally {
       setLoading(false)
     }
+  }
+
+  async function resolveActionGatewayPlan(
+    submittedCommand: string,
+    context: Awaited<ReturnType<typeof loadGlobalAiInteractionContext>>,
+  ) {
+    const deterministic = buildDeterministicAiActionPlan(submittedCommand)
+    if (deterministic) return deterministic
+    if (!shouldRequestAiActionPlan(submittedCommand)) return null
+    if (!providerConfig.configured || !providerConfig.proxyUrl) {
+      throw new Error('当前 AI 动作规划服务不可用。')
+    }
+    const request = buildAiActionPlanProviderRequest(
+      submittedCommand,
+      context,
+      getStoredAiPrivacySettings(),
+    )
+    const response = await fetchProviderProxyAiActionPlan(request, providerConfig.proxyUrl)
+    return response.plan
   }
 
   function prepareAiTripEdit(context: GlobalAiCommandContext, commandText: string, actionProposal?: GlobalAiActionProposal) {
@@ -437,10 +537,111 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     }
   }
 
+  async function confirmActionGateway() {
+    if (!actionGateway) return
+    setApplying(true)
+    setError(null)
+    try {
+      const actionRun = await executeAiActionPlan(
+        actionGateway.prepared,
+        actionGateway.context,
+        { completedStepIds: actionGateway.completedStepIds },
+      )
+      setActionGateway((current) => current
+        ? {
+            ...current,
+            attemptCount: current.attemptCount + 1,
+            completedStepIds: actionRun.completedStepIds,
+            run: actionRun,
+            writeConfirmed: true,
+          }
+        : current)
+      appendConversationMessage({
+        text: actionRun.message,
+        tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
+        type: 'assistant',
+      })
+      setActionConfirmOpen(false)
+      applyActionEffects(actionRun.effects)
+      if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
+        setCommand('')
+        setActionGateway(null)
+        setExpanded(false)
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '动作执行失败。')
+      setActionConfirmOpen(false)
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  async function retryActionGateway() {
+    if (!actionGateway?.run) return
+    setLoading(true)
+    setError(null)
+    try {
+      const freshContext = await loadGlobalAiInteractionContext(
+        contextMode === 'account' ? 'home' : activeRoute,
+        contextMode === 'account' ? '#/home' : window.location.hash,
+      )
+      const runtimeContext: AiActionGatewayRuntimeContext = {
+        command: actionGateway.command,
+        commandContext: freshContext,
+        providerConfig,
+      }
+      const completedStepIds = actionGateway.completedStepIds
+      const prepared = await prepareAiActionPlan(
+        actionGateway.prepared.plan,
+        runtimeContext,
+        { completedStepIds },
+      )
+      const stalePreview = actionGateway.run.message.includes('旅行内容已变化')
+      const needsFreshConfirmation = stalePreview ||
+        (prepared.plan.requiresConfirmation && !actionGateway.writeConfirmed)
+      if (needsFreshConfirmation) {
+        setActionGateway({
+          ...actionGateway,
+          completedStepIds,
+          context: runtimeContext,
+          prepared,
+          run: null,
+          writeConfirmed: stalePreview ? false : actionGateway.writeConfirmed,
+        })
+        return
+      }
+      const actionRun = await executeAiActionPlan(prepared, runtimeContext, { completedStepIds })
+      setActionGateway({
+        ...actionGateway,
+        attemptCount: actionGateway.attemptCount + 1,
+        completedStepIds: actionRun.completedStepIds,
+        context: runtimeContext,
+        prepared,
+        run: actionRun,
+      })
+      appendConversationMessage({
+        text: actionRun.message,
+        tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
+        type: 'assistant',
+      })
+      applyActionEffects(actionRun.effects)
+      if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
+        setCommand('')
+        setActionGateway(null)
+        setExpanded(false)
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '重试失败项时出错。')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function clearInteraction() {
     setCommand('')
     setResult(null)
     setAiPreview(null)
+    setActionGateway(null)
     setPendingAi(null)
     setSelectedReplanOptionId(null)
   }
@@ -451,6 +652,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setSuccess(null)
     setResult(null)
     setAiPreview(null)
+    setActionGateway(null)
     setLastFailedCommand(null)
   }
 
@@ -519,6 +721,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
                   setSuccess(null)
                   setResult(null)
                   setAiPreview(null)
+                  setActionGateway(null)
                 }}
                 onContextModeChange={setContextMode}
               />
@@ -540,6 +743,14 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
               </div>
             ) : null}
             {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
+            {actionGateway ? (
+              <ActionGatewayView
+                actionGateway={actionGateway}
+                onConfirm={() => setActionConfirmOpen(true)}
+                onManualEntry={(entry) => applyActionEffects([entry])}
+                onRetry={() => void retryActionGateway()}
+              />
+            ) : null}
             {result ? (
               <CommandResultView
                 onNavigate={handleNavigation}
@@ -594,6 +805,21 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       </div>
 
       <ConfirmDialog
+        body={actionGateway
+          ? `将执行 ${actionGateway.prepared.plan.steps.length} 个步骤，并在写入前再次校验旅行状态。`
+          : '将执行已准备的旅行任务。'}
+        cancelLabel="取消"
+        confirmLabel="确认执行"
+        icon={<ShieldCheck className="size-5" />}
+        loading={applying}
+        onCancel={() => !applying && setActionConfirmOpen(false)}
+        onConfirm={() => void confirmActionGateway()}
+        open={actionConfirmOpen}
+        testId="global-ai-action-confirm-dialog"
+        title="执行这次操作？"
+        tone="default"
+      />
+      <ConfirmDialog
         body={pendingAi?.searchRequest
           ? '我会读取脱敏后的当前旅行，并在需要实时信息时查询来源。结果先给你确认。'
           : '我会读取脱敏后的当前旅行，生成可确认的修改方案。'}
@@ -635,6 +861,82 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         tone="default"
       />
     </>
+  )
+}
+
+function ActionGatewayView({
+  actionGateway,
+  onConfirm,
+  onManualEntry,
+  onRetry,
+}: {
+  actionGateway: AiActionGatewayState
+  onConfirm: () => void
+  onManualEntry: (entry: AiActionManualEntry) => void
+  onRetry: () => void
+}) {
+  const summary = summarizePreparedAiActionPlan(actionGateway.prepared)
+  const run = actionGateway.run
+  const statusText = run
+    ? run.message
+    : summary.failedCount > 0
+      ? `已准备 ${summary.readyCount} 个步骤，${summary.failedCount} 个暂不可执行。`
+      : actionGateway.prepared.steps.length === 1
+        ? actionGateway.prepared.steps[0].preview
+        : `${actionGateway.prepared.plan.steps.length} 个步骤已准备好。`
+  const retryLabel = run?.message.includes('旅行内容已变化') ? '重新生成预览' : '重试失败项'
+  const retryLimit = run
+    ? Math.max(
+        0,
+        ...run.failedStepIds.map((stepId) => {
+          const step = actionGateway.prepared.plan.steps.find((candidate) => candidate.id === stepId)
+          if (!step) return 0
+          const policy = getAiActionRetryPolicy(step.actionId)
+          return policy.retryable ? policy.maxAttempts : 0
+        }),
+      )
+    : 0
+  const canRetry = Boolean(run && actionGateway.attemptCount < retryLimit)
+  const manualEntry = actionGateway.prepared.steps.find((step) => step.manualEntry)?.manualEntry
+  return (
+    <ResultShell icon={<Wand2 className="size-4" />} title={actionGateway.prepared.plan.summary}>
+      <p className="break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
+        {statusText}
+      </p>
+      <p className="text-[11px] font-semibold text-on-surface-variant" data-testid="global-ai-action-summary">
+        {actionGateway.prepared.plan.steps.length} 个步骤 · 影响 {summary.affectedCount} 项
+      </p>
+      <details className="min-w-0 border-t border-outline-variant/60 pt-2 text-xs" data-testid="global-ai-action-details">
+        <summary className="cursor-pointer font-semibold text-on-surface-variant">查看步骤</summary>
+        <ul className="mt-2 space-y-1.5">
+          {actionGateway.prepared.steps.map((step) => {
+            const runStep = run?.steps.find((candidate) => candidate.id === step.id)
+            return (
+              <li className="min-w-0 break-words leading-5 text-on-surface-variant [overflow-wrap:anywhere]" key={step.id}>
+                {runStep?.message ?? step.error ?? step.preview}
+              </li>
+            )
+          })}
+        </ul>
+      </details>
+      {manualEntry ? (
+        <button
+          className="flex min-h-10 w-full items-center justify-between gap-2 px-1 text-left text-xs font-semibold text-primary tm-focus"
+          onClick={() => onManualEntry(manualEntry)}
+          type="button"
+        >
+          <span className="min-w-0 truncate">{manualEntry.label}</span>
+          <ArrowUpRight className="size-4 shrink-0" />
+        </button>
+      ) : null}
+      {!run ? (
+        <Button className="min-h-10 w-full px-3 text-xs" onClick={onConfirm}>确认执行</Button>
+      ) : run.status !== 'completed' && canRetry ? (
+        <Button className="min-h-10 w-full px-3 text-xs" icon={<RotateCcw className="size-4" />} onClick={onRetry} variant="secondary">
+          {retryLabel}
+        </Button>
+      ) : null}
+    </ResultShell>
   )
 }
 
@@ -1008,13 +1310,26 @@ function getInteractionSourceCardCount(result: GlobalAiInteractionResult) {
   return result.actionProposal?.sourceCards.length
 }
 
+function applyActionEffects(effects: AiActionRunEffect[]) {
+  for (const effect of effects) {
+    if (effect.kind !== 'navigate') continue
+    navigateTo(effect.route, effect.params)
+    if (effect.scrollTargetId) scrollToNavigationTarget(effect.scrollTargetId)
+  }
+}
+
 function scrollToNavigationTarget(targetId: string, attempt = 0) {
   const target = document.getElementById(targetId)
   if (target) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    let ancestor = target.parentElement
+    while (ancestor) {
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true
+      ancestor = ancestor.parentElement
+    }
+    window.requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     return
   }
-  if (attempt >= 9) return
+  if (attempt >= 29) return
   window.setTimeout(() => scrollToNavigationTarget(targetId, attempt + 1), 100)
 }
 

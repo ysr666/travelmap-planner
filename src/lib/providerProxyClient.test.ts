@@ -9,11 +9,13 @@ import {
   fetchProviderProxyAiTripDraftRefine,
   fetchProviderProxyAiTripEditPlan,
   fetchProviderProxyAssistantAnswer,
+  fetchProviderProxyAiActionPlan,
   fetchProviderProxyPlaceLookup,
   fetchProviderProxyTravelSearch,
   fetchProviderProxyTripOperationsSummary,
   getProviderProxyConfig,
 } from './providerProxyClient'
+import { listAiActionCatalog } from './ai/actionGateway/registry'
 
 describe('provider proxy client config', () => {
   it('defaults to same-origin provider proxy on deployed origins', () => {
@@ -902,6 +904,56 @@ describe('provider proxy assistant_answer client', () => {
     })
 
     expect(result).toMatchObject({ ok: true, operation: 'assistant_answer', source: 'future_ai' })
+  })
+})
+
+describe('provider proxy ai_action_plan client', () => {
+  it('posts only redacted context and parses a validated plan', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body).toMatchObject({
+        command: '补全第一站地点信息',
+        operation: 'ai_action_plan',
+      })
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer access-token')
+      return new Response(JSON.stringify({
+        ok: true,
+        operation: 'ai_action_plan',
+        plan: {
+          schemaVersion: 'ai_action_plan.v1',
+          steps: [{
+            actionId: 'place.enrich@1',
+            args: { target: 'first_item' },
+            dependsOn: [],
+            id: 'place',
+          }],
+          summary: '补全第一站地点',
+        },
+        source: 'future_ai',
+      }))
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyAiActionPlan({
+      availableActions: listAiActionCatalog(),
+      command: '补全第一站地点信息',
+      context: {
+        scopeLabel: '当前旅行',
+        summaries: [{ key: 'trip', label: '旅行', value: '英国 12 天家庭旅行' }],
+      },
+      operation: 'ai_action_plan',
+    }, '/api/provider-proxy', {
+      accessToken: 'access-token',
+      fetcher,
+      storage: memoryStorage(),
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      operation: 'ai_action_plan',
+      plan: { requiresConfirmation: true },
+      source: 'future_ai',
+    })
   })
 })
 

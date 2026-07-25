@@ -18,6 +18,12 @@ import type {
 } from './existingTripImport'
 import type { LedgerExpenseCategory, TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
 import { validateLedgerQueryPlan, type LedgerQueryPlan } from '../ledgerArchive'
+import type {
+  AiActionCatalogDescriptor,
+  AiActionPlanV1,
+} from './actionGateway/types'
+import { listAiActionCatalog } from './actionGateway/registry'
+import { validateAiActionPlan } from './actionGateway/validation'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -31,6 +37,7 @@ export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_en
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
 export const PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION = 'assistant_answer' as const
+export const PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION = 'ai_action_plan' as const
 export const PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION = 'ai_existing_trip_import' as const
 export const PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION = 'travel_inbox_classify' as const
 export const PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION = 'route_order_suggestion' as const
@@ -51,11 +58,12 @@ export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW = 20
+export const PROVIDER_PROXY_MAX_AI_ACTION_PLAN_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -954,6 +962,37 @@ export type ProviderProxyAssistantAnswerValidationResult =
   | { ok: true; request: ProviderProxyAssistantAnswerRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
 
+export type ProviderProxyAiActionPlanContext = {
+  scopeLabel: string
+  summaries: ProviderProxyAssistantAnswerContextSummary[]
+}
+
+export type ProviderProxyAiActionPlanRequest = {
+  availableActions: AiActionCatalogDescriptor[]
+  command: string
+  context: ProviderProxyAiActionPlanContext
+  locale?: 'zh-CN' | 'en-US'
+  operation: typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION
+  quotaSessionId?: string
+  requestId?: string
+}
+
+export type ProviderProxyAiActionPlanSuccessResponse = {
+  ok: true
+  operation: typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION
+  plan: AiActionPlanV1
+  requestId?: string
+  source: 'mock' | 'future_ai'
+}
+
+export type ProviderProxyAiActionPlanResponse =
+  | ProviderProxyAiActionPlanSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyAiActionPlanValidationResult =
+  | { ok: true; request: ProviderProxyAiActionPlanRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
 const VALID_PROVIDERS = new Set<ProviderProxyProvider>(['auto', 'google', 'openrouteservice'])
 const VALID_MODES = new Set<RoutingMode>([
   'bus',
@@ -1182,6 +1221,41 @@ const FORBIDDEN_ASSISTANT_ANSWER_FIELDS = new Set([
   'secret',
   'stack',
 ])
+const AI_ACTION_PLAN_ALLOWED_TOP_LEVEL_FIELDS = new Set([
+  'availableActions',
+  'command',
+  'context',
+  'locale',
+  'operation',
+  'quotaSessionId',
+  'requestId',
+])
+const AI_ACTION_PLAN_ALLOWED_CONTEXT_FIELDS = new Set(['scopeLabel', 'summaries'])
+const AI_ACTION_PLAN_ALLOWED_SUMMARY_FIELDS = new Set(['key', 'label', 'value'])
+const AI_ACTION_PLAN_ALLOWED_ACTION_FIELDS = new Set([
+  'description',
+  'id',
+  'input',
+  'label',
+  'requiresTrip',
+  'risk',
+])
+const AI_ACTION_PLAN_SUCCESS_FIELDS = new Set([
+  'ok',
+  'operation',
+  'plan',
+  'requestId',
+  'source',
+])
+const AI_ACTION_PLAN_FLAT_SUCCESS_FIELDS = new Set([
+  'ok',
+  'operation',
+  'requestId',
+  'schemaVersion',
+  'source',
+  'steps',
+  'summary',
+])
 const MAX_TRAVEL_SEARCH_QUERY_LENGTH = 300
 const MAX_TRAVEL_SEARCH_REGION_LENGTH = 80
 const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
@@ -1203,6 +1277,8 @@ const MAX_ASSISTANT_ANSWER_QUESTION_LENGTH = 1000
 const MAX_ASSISTANT_ANSWER_CONTEXT_SUMMARIES = 12
 const MAX_ASSISTANT_ANSWER_SOURCE_CARDS = 8
 const MAX_ASSISTANT_ANSWER_TEXT = 900
+const MAX_AI_ACTION_PLAN_COMMAND_LENGTH = 1000
+const MAX_AI_ACTION_PLAN_CONTEXT_SUMMARIES = 12
 const MAX_AI_TRIP_EDIT_SEARCH_RESULTS = 3
 const MAX_AI_TRIP_EDIT_SEARCH_SNIPPET_LENGTH = 500
 const AI_TRIP_EDIT_SEARCH_ALLOWED_FIELDS = new Set(['query', 'source', 'retrievedAt', 'results', 'warnings'])
@@ -1531,6 +1607,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'unsupported') return '当前 AI 助手问答暂不支持。'
     if (code === 'invalid_response') return 'AI 助手问答服务返回的内容无法解析。'
     return 'AI 助手问答服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION) {
+    if (code === 'quota_exceeded') return '今日 AI 动作规划次数已达上限。'
+    if (code === 'invalid_request') return 'AI 动作规划请求无效。'
+    if (code === 'provider_error') return 'AI 动作规划服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前 AI 动作规划暂不支持。'
+    if (code === 'invalid_response') return 'AI 动作规划服务返回的内容无法解析。'
+    return 'AI 动作规划服务暂不可用。'
   }
   if (operation === PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION) {
     if (code === 'quota_exceeded') return '今日路线建议次数已达上限。'
@@ -2006,6 +2091,21 @@ function assistantAnswerInvalidRequest(
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function aiActionPlanInvalidRequest(
+  message: string,
+  requestId?: string,
+): ProviderProxyAiActionPlanValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
       requestId,
     }),
     ok: false,
@@ -3365,6 +3465,88 @@ export function validateProviderProxyAssistantAnswerRequest(input: unknown): Pro
   }
 }
 
+export function validateProviderProxyAiActionPlanRequest(input: unknown): ProviderProxyAiActionPlanValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION) {
+    return aiActionPlanInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  if (findDisallowedObjectFieldPath(record, AI_ACTION_PLAN_ALLOWED_TOP_LEVEL_FIELDS)) {
+    return aiActionPlanInvalidRequest('AI 动作规划请求包含未知字段。', requestId)
+  }
+  if (findForbiddenRequestFieldPath(record, FORBIDDEN_ASSISTANT_ANSWER_FIELDS)) {
+    return aiActionPlanInvalidRequest('AI 动作规划请求包含不允许的敏感字段。', requestId)
+  }
+
+  const command = readRequiredTrimmedString(record.command, MAX_AI_ACTION_PLAN_COMMAND_LENGTH)
+  if (!command) {
+    return aiActionPlanInvalidRequest('请输入要执行的旅行任务。', requestId)
+  }
+  if (record.locale !== undefined && record.locale !== 'zh-CN' && record.locale !== 'en-US') {
+    return aiActionPlanInvalidRequest('AI 动作规划语言设置无效。', requestId)
+  }
+
+  const contextRecord = readRecord(record.context)
+  if (findDisallowedObjectFieldPath(contextRecord, AI_ACTION_PLAN_ALLOWED_CONTEXT_FIELDS)) {
+    return aiActionPlanInvalidRequest('AI 动作规划上下文包含未知字段。', requestId)
+  }
+  const scopeLabel = readRequiredTrimmedString(contextRecord.scopeLabel, 80)
+  if (!scopeLabel) {
+    return aiActionPlanInvalidRequest('AI 动作规划缺少上下文标签。', requestId)
+  }
+  if (!Array.isArray(contextRecord.summaries) || contextRecord.summaries.length > MAX_AI_ACTION_PLAN_CONTEXT_SUMMARIES) {
+    return aiActionPlanInvalidRequest(`AI 动作规划上下文最多支持 ${MAX_AI_ACTION_PLAN_CONTEXT_SUMMARIES} 条摘要。`, requestId)
+  }
+  const summaries: ProviderProxyAssistantAnswerContextSummary[] = []
+  for (const rawSummary of contextRecord.summaries) {
+    const summaryRecord = readRecord(rawSummary)
+    if (findDisallowedObjectFieldPath(summaryRecord, AI_ACTION_PLAN_ALLOWED_SUMMARY_FIELDS)) {
+      return aiActionPlanInvalidRequest('AI 动作规划上下文摘要包含未知字段。', requestId)
+    }
+    const key = readRequiredTrimmedString(summaryRecord.key, 80)
+    const label = readRequiredTrimmedString(summaryRecord.label, 80)
+    const value = readRequiredTrimmedString(summaryRecord.value, 260)
+    if (!key || !label || !value) {
+      return aiActionPlanInvalidRequest('AI 动作规划上下文摘要无效。', requestId)
+    }
+    summaries.push({ key, label, value })
+  }
+
+  const canonicalActions = new Map(listAiActionCatalog().map((action) => [action.id, action]))
+  if (!Array.isArray(record.availableActions) || record.availableActions.length === 0 || record.availableActions.length > canonicalActions.size) {
+    return aiActionPlanInvalidRequest('AI 动作规划可用动作列表无效。', requestId)
+  }
+  const availableActions: AiActionCatalogDescriptor[] = []
+  const seenActionIds = new Set<string>()
+  for (const rawAction of record.availableActions) {
+    const actionRecord = readRecord(rawAction)
+    if (findDisallowedObjectFieldPath(actionRecord, AI_ACTION_PLAN_ALLOWED_ACTION_FIELDS)) {
+      return aiActionPlanInvalidRequest('AI 动作规划动作描述包含未知字段。', requestId)
+    }
+    const id = typeof actionRecord.id === 'string' ? actionRecord.id : ''
+    const canonical = canonicalActions.get(id as AiActionCatalogDescriptor['id'])
+    if (!canonical || seenActionIds.has(id)) {
+      return aiActionPlanInvalidRequest('AI 动作规划包含未知或重复动作。', requestId)
+    }
+    seenActionIds.add(id)
+    availableActions.push(canonical)
+  }
+
+  return {
+    ok: true,
+    request: {
+      availableActions,
+      command,
+      context: { scopeLabel, summaries },
+      locale: record.locale === 'en-US' ? 'en-US' : 'zh-CN',
+      operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+    },
+  }
+}
+
 function readTripOperationsRecommendation(
   input: unknown,
 ): { ok: true; recommendation: ProviderProxyTripOperationsRecommendationInput } | { message: string; ok: false } {
@@ -3414,6 +3596,30 @@ export function validateProviderProxyAssistantAnswerSuccessResponse(input: unkno
     requestId: readOptionalString(record.requestId, 128),
     source: record.source,
     sourceCards,
+  }
+}
+
+export function validateProviderProxyAiActionPlanSuccessResponse(input: unknown): ProviderProxyAiActionPlanSuccessResponse | null {
+  const record = readRecord(input)
+  if (record.operation !== PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION || record.ok !== true) return null
+  if (record.source !== 'mock' && record.source !== 'future_ai') return null
+  const allowedFields = record.plan === undefined
+    ? AI_ACTION_PLAN_FLAT_SUCCESS_FIELDS
+    : AI_ACTION_PLAN_SUCCESS_FIELDS
+  if (findDisallowedObjectFieldPath(record, allowedFields)) return null
+  const rawPlan = record.plan ?? {
+    schemaVersion: record.schemaVersion,
+    steps: record.steps,
+    summary: record.summary,
+  }
+  const validation = validateAiActionPlan(rawPlan)
+  if (!validation.ok) return null
+  return {
+    ok: true,
+    operation: PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
+    plan: validation.plan,
+    requestId: readOptionalString(record.requestId, 128),
+    source: record.source,
   }
 }
 

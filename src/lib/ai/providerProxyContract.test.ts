@@ -18,8 +18,11 @@ import {
   validateProviderProxyTripOperationsSummaryRequest,
   validateProviderProxyAssistantAnswerRequest,
   validateProviderProxyAssistantAnswerSuccessResponse,
+  validateProviderProxyAiActionPlanRequest,
+  validateProviderProxyAiActionPlanSuccessResponse,
   validateProviderProxyTravelSearchRequest,
 } from './providerProxyContract'
+import { listAiActionCatalog } from './actionGateway/registry'
 
 describe('provider proxy route preview contract', () => {
   it('accepts a minimal route preview request', () => {
@@ -162,6 +165,85 @@ describe('provider proxy assistant_answer contract', () => {
       expect(result.error.message).toContain('敏感字段')
       expect(JSON.stringify(result.error)).not.toContain('secret')
     }
+  })
+})
+
+describe('provider proxy ai_action_plan contract', () => {
+  it('normalizes the registered action catalog and a valid plan', () => {
+    const request = validateProviderProxyAiActionPlanRequest(validAiActionPlanRequest())
+    expect(request.ok).toBe(true)
+    if (request.ok) {
+      expect(request.request.availableActions).toEqual(listAiActionCatalog())
+      expect(request.request.context.summaries).toHaveLength(1)
+    }
+
+    const response = validateProviderProxyAiActionPlanSuccessResponse({
+      ok: true,
+      operation: 'ai_action_plan',
+      schemaVersion: 'ai_action_plan.v1',
+      source: 'future_ai',
+      steps: [{
+        actionId: 'place.enrich@1',
+        args: { target: 'first_item' },
+        dependsOn: [],
+        id: 'enrich-first',
+      }],
+      summary: '补全第一站地点',
+    })
+    expect(response?.plan).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{ actionId: 'place.enrich@1', risk: 'local_write' }],
+    })
+  })
+
+  it('rejects sensitive fields, unknown actions, unknown fields, and oversized plans', () => {
+    expect(validateProviderProxyAiActionPlanRequest({
+      ...validAiActionPlanRequest(),
+      context: {
+        ...validAiActionPlanRequest().context,
+        token: 'secret',
+      },
+    }).ok).toBe(false)
+    expect(validateProviderProxyAiActionPlanRequest({
+      ...validAiActionPlanRequest(),
+      databaseWrite: 'items.update',
+    }).ok).toBe(false)
+    expect(validateProviderProxyAiActionPlanRequest({
+      ...validAiActionPlanRequest(),
+      availableActions: [{
+        ...listAiActionCatalog()[0],
+        id: 'database.write@1',
+      }],
+    }).ok).toBe(false)
+
+    const oversized = validateProviderProxyAiActionPlanSuccessResponse({
+      ok: true,
+      operation: 'ai_action_plan',
+      schemaVersion: 'ai_action_plan.v1',
+      source: 'future_ai',
+      steps: Array.from({ length: 7 }, (_, index) => ({
+        actionId: 'ticket.open@1',
+        args: {},
+        dependsOn: [],
+        id: `ticket-${index}`,
+      })),
+      summary: '打开票据',
+    })
+    expect(oversized).toBeNull()
+    expect(validateProviderProxyAiActionPlanSuccessResponse({
+      databaseWrite: 'itineraryItems.update',
+      ok: true,
+      operation: 'ai_action_plan',
+      schemaVersion: 'ai_action_plan.v1',
+      source: 'future_ai',
+      steps: [{
+        actionId: 'ticket.open@1',
+        args: {},
+        dependsOn: [],
+        id: 'ticket',
+      }],
+      summary: '打开票据',
+    })).toBeNull()
   })
 })
 
@@ -1102,5 +1184,19 @@ function validAssistantAnswerRequest() {
     operation: 'assistant_answer',
     question: '你能做什么？',
     requestId: 'assistant-1',
+  }
+}
+
+function validAiActionPlanRequest() {
+  return {
+    availableActions: listAiActionCatalog(),
+    command: '补全第一站地点信息',
+    context: {
+      scopeLabel: '当前旅行',
+      summaries: [{ key: 'current_trip', label: '旅行', value: '英国 12 天家庭旅行' }],
+    },
+    locale: 'zh-CN',
+    operation: 'ai_action_plan',
+    requestId: 'action-plan-1',
   }
 }

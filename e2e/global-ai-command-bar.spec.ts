@@ -146,6 +146,156 @@ test('全局 AI 时间调整只在一次确认后写入并保留原时长', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 新增行程点只在一次确认后幂等写入', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-create-day',
+      sortOrder: 1,
+      title: '伦敦第一天',
+      tripId: 'gateway-create-trip',
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'gateway-create-day',
+      id: 'gateway-create-hotel',
+      sortOrder: 1,
+      ticketIds: [],
+      title: '伦敦酒店',
+      tripId: 'gateway-create-trip',
+      updatedAt: now,
+    }],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-create-trip',
+      startDate: '2026-07-10',
+      title: '新增动作测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-create-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('第一天新增伦敦眼，10:00-11:00')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('新增行程点')
+  await expect(result).toContainText('将在末尾新增')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(await readItineraryItemsByDay(page, 'gateway-create-day')).toHaveLength(1)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/day\?/)
+  const items = await readItineraryItemsByDay(page, 'gateway-create-day')
+  expect(items).toHaveLength(2)
+  expect(items[1]).toMatchObject({
+    endTime: '11:00',
+    sortOrder: 2,
+    startTime: '10:00',
+    title: '伦敦眼',
+    tripId: 'gateway-create-trip',
+  })
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('全局 AI 当天重排只在一次确认后改变顺序', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-reorder-day',
+      sortOrder: 1,
+      title: '伦敦第一天',
+      tripId: 'gateway-reorder-trip',
+    }],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-reorder-day',
+        id: 'gateway-reorder-hotel',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '伦敦酒店',
+        tripId: 'gateway-reorder-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-reorder-day',
+        id: 'gateway-reorder-big-ben',
+        sortOrder: 2,
+        ticketIds: [],
+        title: '大本钟',
+        tripId: 'gateway-reorder-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-reorder-day',
+        id: 'gateway-reorder-eye',
+        sortOrder: 3,
+        ticketIds: [],
+        title: '伦敦眼',
+        tripId: 'gateway-reorder-trip',
+        updatedAt: now,
+      },
+    ],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-reorder-trip',
+      startDate: '2026-07-10',
+      title: '重排动作测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-reorder-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('把伦敦眼移到大本钟前面')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('调整当天顺序')
+  await expect(result).toContainText('第 3 位 → 第 2 位')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect((await readItineraryItemsByDay(page, 'gateway-reorder-day')).map((item) => item.title))
+    .toEqual(['伦敦酒店', '大本钟', '伦敦眼'])
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/day\?/)
+  expect((await readItineraryItemsByDay(page, 'gateway-reorder-day')).map((item) => item.title))
+    .toEqual(['伦敦酒店', '伦敦眼', '大本钟'])
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 路线配置变化后重新预览确认才请求服务并写入缓存', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceRouteProxyFixture(page)
@@ -914,6 +1064,38 @@ async function readFirstStoreRecord(page: Page, storeName: string) {
       db.close()
     }
   }, storeName)
+}
+
+async function readItineraryItemsByDay(page: Page, dayId: string) {
+  return page.evaluate(async (targetDayId) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    try {
+      return await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+        const transaction = db.transaction('itineraryItems', 'readonly')
+        const cursorRequest = transaction.objectStore('itineraryItems').openCursor()
+        const items: Array<Record<string, unknown>> = []
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result
+          if (!cursor) {
+            resolve(items.sort((first, second) =>
+              Number(first.sortOrder ?? 0) - Number(second.sortOrder ?? 0),
+            ))
+            return
+          }
+          const item = cursor.value as Record<string, unknown>
+          if (item.dayId === targetDayId) items.push(item)
+          cursor.continue()
+        }
+        cursorRequest.onerror = () => reject(cursorRequest.error ?? new Error('读取行程点失败'))
+      })
+    } finally {
+      db.close()
+    }
+  }, dayId)
 }
 
 async function updateItineraryItemTimes(

@@ -16,6 +16,7 @@ import {
 const MAX_SUMMARY_LENGTH = 200
 const MAX_TARGET_LENGTH = 160
 const MAX_QUERY_LENGTH = 160
+const MAX_ITEM_TITLE_LENGTH = 100
 const MAX_EXPENSE_TITLE_LENGTH = 100
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,63}$/
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/
@@ -31,6 +32,7 @@ const EXPENSE_CATEGORIES = new Set([
   'shopping',
   'transport',
 ])
+const REORDER_POSITIONS = new Set(['after', 'before', 'first', 'last'])
 const WORKSPACE_TARGETS = new Set([
   'documents',
   'home',
@@ -124,6 +126,15 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   if (actionIds.has('place.enrich@1') && actionIds.has('trip.repair@1')) {
     errors.push('补全单个地点与整趟智能修复不能放在同一计划中。')
   }
+  if (steps.filter((step) => step.actionId === 'item.create@1').length > 1) {
+    errors.push('一个计划最多新增一个行程点。')
+  }
+  if (steps.filter((step) => step.actionId === 'day.items.reorder@1').length > 1) {
+    errors.push('一个计划最多调整一次当天顺序。')
+  }
+  if (actionIds.has('item.create@1') && actionIds.has('day.items.reorder@1')) {
+    errors.push('新增行程点与当天重排需要分两次确认。')
+  }
   if (errors.length > 0 || !summary) return { errors: Array.from(new Set(errors)), ok: false }
 
   const orderedSteps = sortStepsByDependencies(steps)
@@ -180,6 +191,58 @@ function validateArgs<TActionId extends AiActionId>(
     const query = readOptionalText(record.query, MAX_QUERY_LENGTH)
     if (record.query !== undefined && !query) errors.push(`${path}.query 无效。`)
     return (query ? { query } : {}) as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'item.create@1') {
+    const day = readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    const title = readText(record.title, MAX_ITEM_TITLE_LENGTH)
+    const startTime = record.startTime === undefined ? undefined : readTime(record.startTime)
+    const endTime = record.endTime === undefined ? undefined : readTime(record.endTime)
+    if (!day) errors.push(`${path}.day 必须是语义日期目标。`)
+    if (!title) errors.push(`${path}.title 不能为空。`)
+    if (record.startTime !== undefined && !startTime) errors.push(`${path}.startTime 必须是 HH:mm。`)
+    if (record.endTime !== undefined && !endTime) errors.push(`${path}.endTime 必须是 HH:mm。`)
+    if (!startTime && endTime) errors.push(`${path}.endTime 需要同时提供 startTime。`)
+    if (startTime && endTime && timeToMinutes(endTime) < timeToMinutes(startTime)) {
+      errors.push(`${path}.endTime 不能早于 startTime。`)
+    }
+    if (!day || !title) return null
+    return {
+      day,
+      ...(endTime ? { endTime } : {}),
+      ...(startTime ? { startTime } : {}),
+      title,
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'day.items.reorder@1') {
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const day = record.day === undefined
+      ? undefined
+      : readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    const anchor = record.anchor === undefined
+      ? undefined
+      : readSemanticTarget(record.anchor, MAX_TARGET_LENGTH)
+    const position = typeof record.position === 'string' && REORDER_POSITIONS.has(record.position)
+      ? record.position as 'after' | 'before' | 'first' | 'last'
+      : undefined
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (record.day !== undefined && !day) errors.push(`${path}.day 必须是语义日期目标。`)
+    if (!position) errors.push(`${path}.position 无效。`)
+    if ((position === 'before' || position === 'after') && !anchor) {
+      errors.push(`${path}.anchor 在 before/after 时不能为空。`)
+    }
+    if ((position === 'first' || position === 'last') && record.anchor !== undefined) {
+      errors.push(`${path}.anchor 只允许用于 before/after。`)
+    }
+    if (target && anchor && normalizeSemanticText(target) === normalizeSemanticText(anchor)) {
+      errors.push(`${path}.target 与 anchor 不能相同。`)
+    }
+    if (!target || !position) return null
+    return {
+      ...(anchor ? { anchor } : {}),
+      ...(day ? { day } : {}),
+      position,
+      target,
+    } as AiActionArgsById[TActionId]
   }
   if (actionId === 'item.time.update@1') {
     const target = readText(record.target, MAX_TARGET_LENGTH)
@@ -333,6 +396,20 @@ function readText(input: unknown, maxLength: number) {
 
 function readOptionalText(input: unknown, maxLength: number) {
   return input === undefined ? undefined : readText(input, maxLength) || undefined
+}
+
+function readSemanticTarget(input: unknown, maxLength: number) {
+  const value = readText(input, maxLength)
+  if (!value) return ''
+  if (/[?#=&]/.test(value)) return ''
+  if (/^(?:item|trip|ticket|ledger|expense)[_:-][a-z0-9_-]+$/i.test(value)) return ''
+  if (/^day[_-][a-z0-9_-]+$/i.test(value)) return ''
+  if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) return ''
+  return value
+}
+
+function normalizeSemanticText(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, '')
 }
 
 function readTime(input: unknown) {

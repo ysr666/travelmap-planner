@@ -76,6 +76,16 @@ export async function createItineraryItem(input: Parameters<typeof repo.createIt
   return item
 }
 
+export async function createItineraryItemIdempotent(
+  input: Parameters<typeof repo.createItineraryItemIdempotent>[0],
+  options: Parameters<typeof repo.createItineraryItemIdempotent>[1],
+) {
+  const result = await repo.createItineraryItemIdempotent(input, options)
+  await enqueueObjectUpsert({ object: result.item, objectType: 'item' })
+  recordTripWriteForSync(result.item.tripId, 'item-created', { emitChangeEvent: false })
+  return result
+}
+
 export async function updateItineraryItem(
   itemId: string,
   patch: Parameters<typeof repo.updateItineraryItem>[1],

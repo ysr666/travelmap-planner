@@ -28,6 +28,8 @@ type UpdateItineraryItemPatch = Partial<
   Omit<ItineraryItem, 'id' | 'tripId' | 'dayId' | 'createdAt' | 'updatedAt'>
 >
 
+export class ItineraryBaselineConflictError extends Error {}
+
 type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTicketMetaInput = {
   itemId?: string
@@ -222,6 +224,49 @@ export async function createItineraryItem(input: CreateItineraryItemInput) {
   return item
 }
 
+export async function createItineraryItemIdempotent(
+  input: CreateItineraryItemInput,
+  options: {
+    expectedCurrentItemIds: string[]
+    id: string
+  },
+) {
+  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
+    const existing = await db.itineraryItems.get(options.id)
+    if (existing) {
+      if (!matchesIdempotentItemInput(existing, input)) {
+        throw new Error('幂等新增目标与现有行程点不一致。')
+      }
+      return { created: false, item: existing }
+    }
+
+    const day = await db.days.get(input.dayId)
+    if (!day || day.tripId !== input.tripId) {
+      throw new Error('目标日期已不存在。')
+    }
+    const currentItems = sortItineraryItemsByPlanOrder(
+      await db.itineraryItems.where('dayId').equals(input.dayId).toArray(),
+    )
+    if (
+      options.expectedCurrentItemIds.length !== currentItems.length
+      || options.expectedCurrentItemIds.some((itemId, index) => itemId !== currentItems[index]?.id)
+    ) {
+      throw new ItineraryBaselineConflictError('当天行程已变化，请重新生成预览。')
+    }
+
+    const now = Date.now()
+    const item: ItineraryItem = {
+      ...input,
+      id: options.id,
+      createdAt: now,
+      updatedAt: now,
+    }
+    await db.itineraryItems.add(item)
+    await db.trips.update(item.tripId, { updatedAt: now })
+    return { created: true, item }
+  })
+}
+
 export async function listItemsByDay(dayId: string) {
   const items = await db.itineraryItems
     .where('[dayId+sortOrder]')
@@ -281,7 +326,7 @@ export async function reorderDayItems(
       currentItems.length !== orderedItemIds.length
       || orderedItemIds.some((itemId) => !currentItemIds.has(itemId))
     ) {
-      throw new Error('排序列表与当前行程不一致，请刷新后重试。')
+      throw new ItineraryBaselineConflictError('排序列表与当前行程不一致，请刷新后重试。')
     }
     if (
       expectedCurrentItemIds
@@ -290,7 +335,10 @@ export async function reorderDayItems(
         || expectedCurrentItemIds.some((itemId, index) => itemId !== currentItems[index]?.id)
       )
     ) {
-      throw new Error('当天顺序已在其他位置更新，请刷新后重试。')
+      throw new ItineraryBaselineConflictError('当天顺序已在其他位置更新，请刷新后重试。')
+    }
+    if (orderedItemIds.every((itemId, index) => itemId === currentItems[index]?.id)) {
+      return []
     }
 
     const itemById = new Map(currentItems.map((item) => [item.id, item]))
@@ -309,6 +357,18 @@ export async function reorderDayItems(
     await db.trips.update(day.tripId, { updatedAt })
     return changedItems
   })
+}
+
+function matchesIdempotentItemInput(existing: ItineraryItem, input: CreateItineraryItemInput) {
+  return existing.tripId === input.tripId
+    && existing.dayId === input.dayId
+    && existing.title === input.title
+    && existing.startTime === input.startTime
+    && existing.endTime === input.endTime
+    && existing.locationName === input.locationName
+    && existing.sortOrder === input.sortOrder
+    && existing.ticketIds.length === input.ticketIds.length
+    && existing.ticketIds.every((ticketId, index) => ticketId === input.ticketIds[index])
 }
 
 export async function deleteItineraryItemCascade(itemId: string) {

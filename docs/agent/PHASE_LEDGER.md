@@ -1569,7 +1569,7 @@ Residual:
 
 ## 2026-07-26 Universal AI Action Gateway V1.1 - Navigation And Time
 
-Status: completed locally.
+Status: merged to `main` as `edd0e95` through PR #17.
 
 Branch: `feature/action-gateway-navigation-time`
 
@@ -1644,7 +1644,7 @@ Residual:
 
 ## 2026-07-26 Universal AI Action Gateway V1.2 - Route And Expense Draft
 
-Status: completed locally.
+Status: merged to `main` as `2252fc8` through PR #18.
 
 Branch: `feature/action-gateway-route-expense`
 
@@ -1720,3 +1720,85 @@ Residual:
 - Add/delete/reorder edits and more complex ledger updates remain on compatibility paths.
 - Route execution intentionally uses the configured existing Provider/cache contract; this phase used mocked Provider responses and made no real calls.
 - Cross-module undo and more page-level selection contracts remain future work.
+
+## 2026-07-26 Universal AI Action Gateway V1.3 - Item Create And Reorder
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-item-create-reorder`
+
+Goal:
+
+- Move explicit itinerary-item creation and same-day reordering into the registered Action Gateway without exposing database IDs, arbitrary patches, or unconfirmed writes.
+
+Scope:
+
+- Add an item-create action with a semantic day target, short title, and optional validated time.
+- Append one new item through an idempotent tracked mutation; retries must not duplicate the item.
+- Add a same-day reorder action that moves one semantic item before/after another item or to the first/last position.
+- Resolve all targets locally, show compact before/after previews, and execute only after the single final confirmation.
+- Reject stale trip state and atomically reject changed day membership/order.
+- Deterministically recognize unambiguous add and reorder commands; unresolved commands may use the structured planner.
+- Cover strict schema rejection, ambiguity, idempotency, stale state, confirmation gating, compact mobile UI, and sync/history recording.
+
+No-go:
+
+- No deletion, cross-day move, arbitrary item patch, database ID, coordinate, ticket, note, cloud, payment, or Provider-selected function/route.
+- No Provider call for deterministic item creation or reordering.
+- No real AI, map, route, search, cloud, or Provider calls.
+- No IndexedDB schema, cloud contract, Provider Proxy contract, or ticket/blob changes.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- `src/db/repositories.ts`
+- `src/db/trackedMutations.ts`
+- Focused unit and E2E tests plus project status/roadmap/ledger.
+
+Validation:
+
+- Focused Action Gateway and tracked-mutation tests.
+- Typecheck, lint, full unit suite, production build, focused mobile E2E, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: both actions mutate synced itinerary data, so semantic resolution, final confirmation, idempotency, and stale-order checks must all hold.
+
+Stop conditions:
+
+- Stop and repair if planning or preparation writes data, unknown fields or IDs pass validation, a retry duplicates an item, reordering crosses days, or any write can occur after the trip/day order changes without a fresh confirmation.
+
+Result:
+
+- Added `item.create@1` with a semantic day target, short title, and optional validated same-day time range; deterministic commands append the item locally without a Provider call.
+- Added `day.items.reorder@1` with semantic target/anchor resolution and fixed first/last/before/after positions; runtime resolution is scoped to one day and rejects ambiguous or cross-day anchors.
+- Provider plans cannot provide database IDs, arbitrary patches, coordinates, notes, tickets, routes, functions, or unknown fields for either action.
+- Planning and preparation remain read-only. Both actions expose one compact preview and write only after the existing final confirmation dialog.
+- Item creation uses a stable execution-scoped item ID. Reusing the same execution cannot duplicate the item, while a separate user command can still intentionally create another item.
+- Core item mutations, item sync outbox entries, stable-ID Trip Intelligence records, and history outbox entries now commit in one IndexedDB transaction for these actions; any side-effect failure rolls back the complete operation.
+- The persisted Trip Intelligence change is also the operation marker. A retry can return idempotently only when that marker and the complete target membership/order still match.
+- Reorder checks the expected membership and order before accepting a no-op; different execution IDs racing from the same baseline result in one success and one stale-plan rejection.
+- Added 390px E2E coverage proving neither action calls Provider or writes before confirmation, details stay folded, one final confirmation is shown, and the final day order is correct.
+
+Validation:
+
+- Focused Action Gateway tests passed: 32 tests.
+- Sync/history persistence was included in a 39-test focused run.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1489 tests.
+- `npm run build` passed; bundle budget passed at 850.2 KiB initial JS, 245.3 KiB gzip, and 2270.6 KiB/94-entry precache.
+- Focused mobile Action Gateway E2E passed: 2 tests.
+- The full serial E2E run passed all 148 tests in approximately 5.7 minutes.
+- `git diff --check` passed.
+- A read-only protected-boundary review found post-commit sync/history and stale no-op defects; atomic persistence, stable operation markers, full membership comparison, and fault/concurrency tests resolved every reported issue.
+
+Residual:
+
+- Deletion and cross-day movement remain on the compatibility path because they need a higher-risk contract and clearer undo behavior.
+- A new command invocation intentionally receives a new execution ID; explicit duplicate item creation remains possible when the user separately confirms it.
+- Real Provider planning remains intentionally uncalled; schema, privacy, confirmation, idempotency, rollback, and stale-state behavior are covered locally and with mocks.

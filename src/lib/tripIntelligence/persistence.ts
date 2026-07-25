@@ -314,7 +314,7 @@ function mapExecutionRecord(
     const privacyLevel = change.source.kind === 'document' || change.targetType === 'document'
       ? 'sensitive_redacted'
       : 'private'
-    const recordId = buildAppliedChangeId(tripId, change.id)
+    const recordId = buildTripIntelligenceAppliedChangeRecordId(tripId, change.id)
     const sourceLabel = privacyLevel === 'sensitive_redacted'
       ? '资料库'
       : sanitizeAppliedChangeDetail(change.source.label)
@@ -421,7 +421,7 @@ function buildSuggestionStateId(tripId: string, suggestionKey: string) {
   return `trip-intelligence-state-${hashString(`${tripId}:${suggestionKey}`)}`
 }
 
-function buildAppliedChangeId(tripId: string, changeId: string) {
+export function buildTripIntelligenceAppliedChangeRecordId(tripId: string, changeId: string) {
   return `trip-intelligence-change-${hashString(`${tripId}:${changeId}`)}`
 }
 

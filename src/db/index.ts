@@ -1,5 +1,6 @@
 export { db } from './database'
 export {
+  ItineraryBaselineConflictError,
   getDay,
   getItineraryItem,
   getTicketBlob,
@@ -32,6 +33,7 @@ export {
   createDay,
   createDemoTrip,
   createItineraryItem,
+  createItineraryItemIdempotent,
   createTripDisruptionEvent,
   createTripReplanRecord,
   createTicketMeta,

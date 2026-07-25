@@ -78,6 +78,222 @@ describe('AI Action Gateway runtime', () => {
     })
   })
 
+  it('creates one itinerary item only after confirmation and reuses it on retry', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('第一天新增伦敦眼，10:00-11:00')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '抵达伦敦：将在末尾新增「伦敦眼」 · 10:00-11:00。',
+    })
+    await expect(db.itineraryItems.count()).resolves.toBe(1)
+
+    const [firstRun, concurrentRun] = await Promise.all([
+      executeAiActionPlan(prepared, context),
+      executeAiActionPlan(prepared, context),
+    ])
+
+    expect(firstRun.status).toBe('completed')
+    expect(concurrentRun.status).toBe('completed')
+    const items = (await db.itineraryItems.toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+    expect(items).toHaveLength(2)
+    expect(items[1]).toMatchObject({
+      dayId: seed.day.id,
+      endTime: '11:00',
+      sortOrder: 2,
+      startTime: '10:00',
+      ticketIds: [],
+      title: '伦敦眼',
+      tripId: seed.trip.id,
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+
+    const freshTrip = await db.trips.get(seed.trip.id)
+    expect(freshTrip).toBeTruthy()
+    const retryContext = runtimeContext({ ...seed, trip: freshTrip! })
+    retryContext.commandContext.items = items
+    const retryPrepared = await prepareAiActionPlan(plan, retryContext, {
+      executionId: prepared.executionId,
+    })
+
+    expect(retryPrepared.plan.requiresConfirmation).toBe(false)
+    const retryRun = await executeAiActionPlan(retryPrepared, retryContext)
+    expect(retryRun.steps[0].message).toContain('未重复创建')
+    await expect(db.itineraryItems.count()).resolves.toBe(2)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('rolls back item creation when its sync outbox cannot be committed', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('第一天新增伦敦眼')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    const outboxAdd = vi.spyOn(db.syncOutbox, 'add')
+      .mockRejectedValueOnce(new Error('outbox unavailable'))
+
+    const firstRun = await executeAiActionPlan(prepared, context)
+
+    expect(firstRun.status).toBe('failed')
+    await expect(db.itineraryItems.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+
+    outboxAdd.mockRestore()
+    const retryRun = await executeAiActionPlan(prepared, context)
+    expect(retryRun.status).toBe('completed')
+    await expect(db.itineraryItems.count()).resolves.toBe(2)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('reorders one semantic item within its day only after confirmation', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.sortOrder = 3
+    const hotel: ItineraryItem = {
+      ...seed.item,
+      id: 'item-hotel',
+      sortOrder: 1,
+      title: '伦敦酒店',
+    }
+    const bigBen: ItineraryItem = {
+      ...seed.item,
+      id: 'item-big-ben',
+      sortOrder: 2,
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.bulkPut([hotel, bigBen])
+    const context = runtimeContext(seed)
+    context.commandContext.items = [hotel, bigBen, seed.item]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const plan = buildDeterministicAiActionPlan('把伦敦眼移到大本钟前面')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '伦敦眼：第 3 位 → 第 2 位。',
+    })
+    expect((await db.itineraryItems.toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['伦敦酒店', '大本钟', '伦敦眼'])
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result.status).toBe('completed')
+    expect((await db.itineraryItems.toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['伦敦酒店', '伦敦眼', '大本钟'])
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+
+    await db.itineraryItems.put({
+      ...bigBen,
+      id: 'item-new-stop',
+      sortOrder: 4,
+      title: '新加入的站点',
+      updatedAt: 2,
+    })
+    prepared.baselineFingerprint = undefined
+    const staleRetry = await executeAiActionPlan(prepared, context)
+    expect(staleRetry).toMatchObject({
+      message: '当天顺序已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('rejects a concurrent reorder prepared from the same stale baseline', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.sortOrder = 3
+    const hotel: ItineraryItem = {
+      ...seed.item,
+      id: 'item-hotel',
+      sortOrder: 1,
+      title: '伦敦酒店',
+    }
+    const bigBen: ItineraryItem = {
+      ...seed.item,
+      id: 'item-big-ben',
+      sortOrder: 2,
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.bulkPut([hotel, bigBen])
+    const context = runtimeContext(seed)
+    context.commandContext.items = [hotel, bigBen, seed.item]
+    const plan = buildDeterministicAiActionPlan('把伦敦眼移到大本钟前面')!
+    const firstPrepared = await prepareAiActionPlan(plan, context)
+    const secondPrepared = await prepareAiActionPlan(plan, context)
+    expect(firstPrepared.executionId).not.toBe(secondPrepared.executionId)
+
+    const runs = await Promise.all([
+      executeAiActionPlan(firstPrepared, context),
+      executeAiActionPlan(secondPrepared, context),
+    ])
+
+    expect(runs.filter((run) => run.status === 'completed')).toHaveLength(1)
+    expect(runs.filter((run) => run.status === 'failed')).toHaveLength(1)
+    expect(runs.find((run) => run.status === 'failed')).toMatchObject({
+      requiresFreshConfirmation: true,
+    })
+    expect((await db.itineraryItems.toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['伦敦酒店', '伦敦眼', '大本钟'])
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('rejects a same-day reorder when its anchor belongs to another day', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    const secondDay: Day = {
+      ...seed.day,
+      date: '2026-07-11',
+      id: 'day-2',
+      sortOrder: 2,
+      title: '伦敦市区',
+    }
+    const otherDayItem: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-big-ben',
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.days.put(secondDay)
+    await db.itineraryItems.put(otherDayItem)
+    const context = runtimeContext(seed)
+    context.commandContext.days = [seed.day, secondDay]
+    context.commandContext.items = [seed.item, otherDayItem]
+    const plan = buildDeterministicAiActionPlan('第一天把伦敦眼移到大本钟前面')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(prepared.steps[0]).toMatchObject({
+      error: '所选日期没有找到目标行程点。',
+      status: 'failed',
+    })
+    expect(prepared.plan.requiresConfirmation).toBe(false)
+    expect((await db.itineraryItems.toArray()).map((item) => item.sortOrder)).toEqual([1, 1])
+  })
+
   it('previews an item time change and preserves duration until confirmed execution', async () => {
     const seed = buildSeed()
     seed.item.startTime = '09:00'

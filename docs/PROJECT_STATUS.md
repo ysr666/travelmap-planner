@@ -4,7 +4,7 @@
 
 ## 发布判断
 
-旅图当前处于 **Limited Beta Release Candidate**。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 provider proxy 已形成完整主路径；本轮完成了通用 AI 动作网关 V1、首屏依赖拆分、bundle budget 和全量自动化回归。
+旅图当前处于 **Limited Beta Release Candidate**。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 provider proxy 已形成完整主路径；本轮完成了通用 AI 动作网关 V1、首屏依赖拆分、bundle budget、PWA 多标签升级与弱网恢复自动化回归。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -73,13 +73,13 @@
 - `npm run lint`：通过。
 - `npm run test:unit`：185 个文件、1472 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
-- `npm run test:e2e:pwa-upgrade`：2 个测试通过。
-- 全量 Playwright：141 个测试通过，耗时约 4.0 分钟。
+- `npm run test:e2e:pwa-upgrade`：3 个测试通过。
+- 全量 Playwright：142 个测试通过，串行耗时约 5.5 分钟。
 - `git diff --check`：通过。
 
 生产入口 JS 从 947.6 kB 降至 476.9 kB。初始静态 JS 图为 848.2 KiB，gzip 244.8 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
-Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 31.7 KiB 的 Provider 网络执行实现改为首次使用后写入 30 天、最多 80 项的同源运行时缓存。Provider 的轻量配置、错误类型和本地合同仍随核心页面提供。构建会阻止核心代码丢失、Provider 网络执行实现或其他可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。
+Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 31.7 KiB 的 Provider 网络执行实现改为首次使用后写入 30 天、最多 80 项的同源运行时缓存。Provider 的轻量配置、错误类型和本地合同仍随核心页面提供。构建会阻止核心代码丢失、Provider 网络执行实现或其他可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认更新在用户确认前保持 waiting、确认后所有标签切换到同一版本、IndexedDB 保留，以及按需资源下载中断后不会留下残缺缓存并可重试离线使用。
 
 CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trace，并取消同分支过时运行。官方 checkout、Node setup 和失败 artifact actions 已迁移到 Node 24 运行时。应用版本显示短提交 SHA，方便确认浏览器是否运行当前部署。
 
@@ -100,8 +100,9 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 已知发布风险
 
 - iPhone Safari、Android Chrome 和安装到主屏幕后的实体机回归仍需人工完成。
-- MapLibre 独立 chunk 仍超过 1 MB，首次使用仍需网络；弱网中断恢复和多标签升级还需继续验证。
+- MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验仍待记录。
 - 浏览器旧 service worker 可能显示旧 UI；当前版本改为显式更新提示，仍需生产升级观察。
+- 多个历史发布版本连续升级尚未形成版本矩阵，当前自动化覆盖相邻两个构建版本和双标签页。
 - 真实 provider 可用性还依赖 Cloudflare env、供应商配额、区域网络和当前登录 session；自动化主要覆盖合同、边界、mock 和失败语义。
 - Action Gateway V1 只覆盖票据、地点和行程修复三个注册动作，不能声称“任意一句话都能完成所有功能”。
 

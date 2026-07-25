@@ -2,6 +2,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION,
   PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION,
+  PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
   PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION,
   PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION,
   PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW,
@@ -11,6 +12,7 @@ import {
   PROVIDER_PROXY_MAX_AI_DRAFT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_MAX_AI_ACTION_PLAN_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_COORDINATES,
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
@@ -46,6 +48,7 @@ export type ProviderProxyQuotaBucket =
   | 'ai_trip_daily_tip|'
   | 'ai_trip_operations|'
   | 'ai_assistant_answer|'
+  | 'ai_action_plan|'
   | 'ai_trip_edit|'
   | 'fx|'
   | 'ai_expense_extract|'
@@ -60,6 +63,7 @@ export type ProviderProxyQuotaLimits = {
   maxAiTripOperationsSummaryRequestsPerWindow: number
   maxAiTripEditRequestsPerWindow: number
   maxAssistantAnswerRequestsPerWindow: number
+  maxAiActionPlanRequestsPerWindow: number
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
   maxPlaceLookupRequestsPerWindow: number
@@ -153,6 +157,7 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxAiTripOperationsSummaryRequestsPerWindow: PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW,
   maxAiTripEditRequestsPerWindow: PROVIDER_PROXY_MAX_AI_TRIP_EDIT_REQUESTS_PER_WINDOW,
   maxAssistantAnswerRequestsPerWindow: PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW,
+  maxAiActionPlanRequestsPerWindow: PROVIDER_PROXY_MAX_AI_ACTION_PLAN_REQUESTS_PER_WINDOW,
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   maxPlaceLookupRequestsPerWindow: PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
@@ -379,6 +384,9 @@ export function getProviderProxyQuotaBucketConfig(
   }
   if (operation === PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION) {
     return { bucket: 'ai_assistant_answer|', maxRequests: limits.maxAssistantAnswerRequestsPerWindow }
+  }
+  if (operation === PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION) {
+    return { bucket: 'ai_action_plan|', maxRequests: limits.maxAiActionPlanRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     return { bucket: 'ai_trip_content|', maxRequests: limits.maxAiTripContentEnrichmentRequestsPerWindow }

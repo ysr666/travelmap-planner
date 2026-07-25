@@ -126,6 +126,41 @@ describe('globalAiCommandRouter', () => {
     }
   })
 
+  it('opens the filtered gallery instead of guessing when ticket matches tie', async () => {
+    const context = buildContext()
+    context.tickets = ['north', 'south'].map((suffix) => ({
+      createdAt: 1,
+      fileName: `edinburgh-${suffix}.pdf`,
+      fileType: 'pdf' as const,
+      id: `ticket_${suffix}`,
+      mimeType: 'application/pdf',
+      scope: 'trip' as const,
+      size: 1024,
+      storageMode: 'copy' as const,
+      ticketCategory: 'admission_ticket' as const,
+      title: `爱丁堡城堡门票 ${suffix}`,
+      tripId: context.trip!.id,
+      updatedAt: 1,
+    }))
+
+    const result = await resolveGlobalAiCommand('找一下爱丁堡的门票', context)
+
+    expect(result).toMatchObject({
+      autoExecute: true,
+      kind: 'navigation',
+      params: {
+        tab: 'attachments',
+        tripId: context.trip!.id,
+      },
+      route: 'documents',
+      scrollTargetId: 'ticket-gallery',
+    })
+    if (result.kind === 'navigation') {
+      expect(result.params).not.toHaveProperty('ticketId')
+      expect(result.message).toContain('2 张相关票据')
+    }
+  })
+
   it('keeps ordinary questions in a read-only local consultation lane', async () => {
     const intent = parseGlobalAiCommandIntent('今天接下来应该先确认什么？')
     expect(intent).toEqual({ kind: 'consultation' })

@@ -461,7 +461,9 @@ function buildTicketLookupNavigation(
 ): GlobalAiNavigationResult {
   const broadLookup = !intent.query && buildTicketLookupCategories(command).length === 0
   const matches = broadLookup ? [] : findTicketLookupMatches(command, context)
-  const firstMatch = matches[0]
+  const firstMatch = matches.length === 1 || (matches.length > 1 && matches[0].score > matches[1].score)
+    ? matches[0]
+    : undefined
   const params: Record<string, string> = {
     tab: 'attachments',
     tripId: context.trip!.id,
@@ -475,7 +477,9 @@ function buildTicketLookupNavigation(
     kind: 'navigation',
     message: firstMatch
       ? `找到 ${matches.length} 张，已打开「${getTicketDisplayTitle(firstMatch.ticket)}」。`
-      : '没有精确匹配，已打开票据画廊。',
+      : matches.length > 1
+        ? `找到 ${matches.length} 张相关票据，已打开票据画廊。`
+        : '没有精确匹配，已打开票据画廊。',
     params,
     route: 'documents',
     scrollTargetId: firstMatch ? undefined : 'ticket-gallery',

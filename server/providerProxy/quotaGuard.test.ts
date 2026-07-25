@@ -107,6 +107,7 @@ describe('provider proxy quota guard', () => {
     const limits = {
       maxAiDraftRepairRequestsPerWindow: 1,
       maxAiDraftRequestsPerWindow: 1,
+      maxAiActionPlanRequestsPerWindow: 1,
       maxAiExpenseExtractRequestsPerWindow: 1,
       maxAiTripContentEnrichmentRequestsPerWindow: 1,
       maxAiTripEditRequestsPerWindow: 1,
@@ -124,6 +125,7 @@ describe('provider proxy quota guard', () => {
       'ai_trip_draft_repair',
       'ai_trip_draft_refine',
       'ai_trip_edit_plan',
+      'ai_action_plan',
       'trip_content_enrichment',
       'trip_daily_tip',
       'travel_inbox_classify',
@@ -146,6 +148,7 @@ describe('provider proxy quota guard', () => {
     }
 
     expect(Array.from(store.keys()).sort()).toEqual([
+      'ai_action_plan|same-hash',
       'ai_draft_refine|same-hash',
       'ai_draft_repair|same-hash',
       'ai_draft|same-hash',

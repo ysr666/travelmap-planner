@@ -61,9 +61,16 @@ export async function createDemoTripViaUi(page: Page) {
 }
 
 export async function clickTripCard(tripCard: Locator) {
-  const openButton = tripCard.getByRole('button').filter({ hasText: '东京春日旅行' })
+  await expect(tripCard).toBeVisible()
+  const openButton = tripCard.getByRole('button', { exact: true, name: '打开旅行' })
   if (await openButton.count()) {
     await openButton.click()
+    return
+  }
+
+  const legacyOpenButton = tripCard.getByRole('button').filter({ hasText: '东京春日旅行' })
+  if (await legacyOpenButton.count()) {
+    await legacyOpenButton.first().click()
     return
   }
 

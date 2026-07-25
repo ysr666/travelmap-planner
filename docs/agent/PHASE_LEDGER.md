@@ -1357,3 +1357,65 @@ Residual:
 - MapLibre remains a 1 MB-class dynamic chunk.
 - Service Worker precache is approximately 4.1 MB and needs a separate offline/weak-network design pass.
 - Physical iPhone Safari/iOS PWA and Android Chrome performance evidence is still pending.
+
+## 2026-07-26 Phase 3B - PWA Precache And Runtime Asset Budget
+
+Status: completed locally.
+
+Branch: `fix/pwa-precache-budget`
+
+Goal:
+
+- Reduce install/update downloads without weakening the core offline trip shell or PWA data-preserving upgrade behavior.
+
+Scope:
+
+- Keep the app entry, auth/runtime vendors, Trip, Day, Item, and Ticket Library code in the precache.
+- Move MapLibre, PDF/OCR, JSZip, AI Draft, and global AI entry chunks to same-origin on-demand runtime caching.
+- Remove duplicate public-asset precache entries.
+- Extend the production build check with precache uniqueness, required-core, forbidden-optional, runtime-route, and byte budgets.
+- Add built-dist browser coverage for optional assets being absent before first use and cached after first use.
+
+No-go:
+
+- No Provider calls, cloud writes, data/schema changes, route cache changes, or AI/privacy contract changes.
+- No claim that maps, Provider operations, search, or cloud sync work offline.
+- No automatic Service Worker activation or unconfirmed page reload.
+
+Read-only mini-plan result:
+
+- The current generated Service Worker precaches 107 entries and approximately 4.1 MB.
+- MapLibre contributes about 1.1 MB, PDF about 421 kB, and AI/Provider/OCR/archive chunks add further non-core install cost.
+- Public icons, manifest, favicon, and push handler are duplicated because both `includeAssets` and Workbox globbing include them.
+- Workbox supports a same-origin `/assets/` `CacheFirst` runtime route with entry-count and age limits, so optional hashed chunks can remain available after first use.
+
+Validation:
+
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed.
+- Extended bundle/PWA budget passed: 2286.8 KiB, 92 unique precache entries.
+- `npm run test:unit` passed: 185 files, 1472 tests.
+- Focused encrypted vault/Document Center tests passed: 2 files, 3 tests.
+- `npm run test:e2e:pwa-upgrade` passed: 2 tests.
+- `npm run test:e2e` passed: 141 tests in approximately 4.0 minutes.
+
+Risk: medium, because over-filtering can make a core offline route fail while under-filtering preserves the current install cost.
+
+Stop conditions:
+
+- Stop and repair if Home/Trip/Day/Item/Ticket code leaves the precache, optional assets fail to populate runtime cache, upgrade activation changes, IndexedDB data is lost, or the generated Service Worker caches Provider/API responses.
+
+Result:
+
+- Reduced generated Service Worker precache from about 4.15 MiB/107 entries to about 2.28 MiB/92 entries.
+- Kept the app entry, Trip, Day, Item, Ticket Library, and Travel Document Center dependency graphs in the precache.
+- Moved MapLibre, PDF/OCR, JSZip, AI Draft, and global AI entry chunks to a same-origin `/assets/` `CacheFirst` cache limited to 80 entries and 30 days.
+- Removed duplicated public icon/manifest entries.
+- Made encrypted vault backup load JSZip only when export/import is requested, so ticket/document pages can open offline without loading archive code.
+- Added build failures for duplicate/oversized precache manifests, missing core chunks, optional heavy chunks returning to precache, and missing runtime cache configuration.
+- Added built-dist browser evidence for first-offline core navigation, runtime asset reuse while offline, and IndexedDB-preserving Service Worker upgrades.
+
+Residual:
+
+- Provider Proxy client/contract chunks remain in the precache because Trip Workspace and Item Detail statically import Provider-backed feature panels; moving them safely requires a separate feature-island refactor.
+- MapLibre remains a 1 MB-class first-use download.
+- Weak-network interruption recovery, multiple historical-version upgrades, and multi-tab activation remain to be covered.

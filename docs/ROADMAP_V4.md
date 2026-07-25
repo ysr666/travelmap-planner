@@ -1,6 +1,6 @@
 # 旅图 TripMap 路线图 v4
 
-更新时间：2026-07-25
+更新时间：2026-07-26
 
 ## 北极星
 
@@ -83,9 +83,15 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 - 构建新增 manifest 驱动的 bundle budget，并在现有 CI `Build` 中强制执行。
 - 当前 built-dist PWA 升级继续验证 IndexedDB 保留。
 
+第二轮已完成：
+
+- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.28 MiB/92 项。
+- 核心 Trip、Day、Item、票据和资料页继续预缓存；地图、PDF/OCR、JSZip 和 AI 重资源改为首次使用后缓存。
+- 加入预缓存唯一性、核心必需项、可选禁入项、运行时缓存和 2500 KiB 上限。
+- built-dist E2E 验证核心页面首次离线可打开、可选资源首次使用后可离线命中，以及升级保留 IndexedDB。
+
 后续：
 
-- 优化 service worker precache，并验证从多个历史版本升级和 IndexedDB 保留。
 - 继续拆分低频导入、设置和共享能力，评估 MapLibre 按视图加载成本。
 - 建立真实设备首屏加载和交互时间基线，CI 对显著回归报警。
 - 增加弱网、离线、恢复在线、旧标签页和多标签页升级测试。
@@ -119,6 +125,6 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 
 1. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
 2. 使用 Beta 账号完成真实英国行程导入、地点、AI、票据和云同步 smoke。
-3. 优化 Service Worker precache，并补弱网、离线恢复和多标签升级测试。
+3. 补弱网中断恢复、多个历史版本和多标签升级测试。
 4. 扩展 Action Gateway 到时间调整、路线预览、费用草稿和资料打开。
 5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

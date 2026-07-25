@@ -1,6 +1,18 @@
 # Limited Beta QA 记录
 
-最新记录：2026-07-25
+最新记录：2026-07-26
+
+## 2026-07-26 PWA 预缓存与按需资源
+
+- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.28 MiB/92 项。
+- MapLibre、PDF/OCR、JSZip、AI Draft 和全局 AI 不再随安装下载，首次使用后进入同源 `CacheFirst` 运行时缓存。
+- Trip、Day、Item、Ticket Library 和 Travel Document Center 保持预缓存；加密资料库备份的 JSZip 改为真正按需加载。
+- 构建检查新增预缓存唯一性、核心必需项、可选禁入项、运行时缓存名和 2500 KiB 上限。
+- `npm run typecheck`、`npm run lint`、`npm run build`：通过。
+- `npm run test:unit`：通过，185 个文件、1472 个测试。
+- `npm run test:e2e:pwa-upgrade`：通过，2 个测试。
+- `npm run test:e2e`：通过，141 个测试，约 4.0 分钟。
+- built-dist 浏览器验证：核心旅行/日程/地点/票据页面在首次离线时可打开；MapLibre 首次在线使用后可在离线状态命中运行时缓存；PWA v1 到 v2 升级继续保留 IndexedDB。
 
 ## 2026-07-25 AI Action Gateway 与首屏分包
 

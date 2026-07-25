@@ -1,7 +1,7 @@
 # Limited Beta 发布说明
 
 版本：0.4.0.1
-版本日期：2026-07-25
+版本日期：2026-07-26
 
 ## 本轮完成
 
@@ -16,13 +16,14 @@
 - CI 现在真实检查前端、Pages provider runtime 和 Travel Inbox Worker，并保留 E2E 失败 artifacts。
 - Supabase 补齐账号 AI 偏好表、RLS、私有 trigger、授权和 Companion 票据外键索引。
 - 全局 AI 与 Provider 客户端移出静态启动图，PDF 恢复按需加载，并新增 CI bundle budget。
+- Service Worker 预缓存从约 4.15 MiB 降至约 2.28 MiB；地图、PDF/OCR、JSZip 和 AI 重资源改为首次使用后缓存。
 
 ## 验证
 
 - TypeScript、lint、build 全部通过。
-- Unit：184 个文件、1471 个测试通过。
-- Playwright：140 个全量测试通过。
-- PWA built-dist 升级：1 个测试通过，IndexedDB 保留。
+- Unit：185 个文件、1472 个测试通过。
+- Playwright：141 个全量测试通过。
+- PWA built-dist：2 个测试通过，覆盖升级保留 IndexedDB、核心离线页和可选资源按需缓存。
 - Bundle：入口 JS 从 947.6 kB 降至 476.9 kB；初始静态 JS gzip 244.8 KiB。
 - Supabase 空库重建和生产 post-DDL SQL 检查通过。
 
@@ -32,7 +33,7 @@
 - 实时事实需要来源；路线是预览，不是实时导航。
 - 地图、provider、搜索和云同步不保证离线可用。
 - iPhone Safari、iOS 主屏 PWA 与 Android Chrome 实体机结果仍需人工补录。
-- MapLibre 独立 chunk 和 Service Worker 预缓存体积仍需继续优化。
+- MapLibre 首次使用仍需网络；弱网中断恢复和多标签升级仍需继续验证。
 
 ## 回滚
 

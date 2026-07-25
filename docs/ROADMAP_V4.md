@@ -85,14 +85,21 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 
 第二轮已完成：
 
-- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.28 MiB/92 项。
+- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。
 - 核心 Trip、Day、Item、票据和资料页继续预缓存；地图、PDF/OCR、JSZip 和 AI 重资源改为首次使用后缓存。
 - 加入预缓存唯一性、核心必需项、可选禁入项、运行时缓存和 2500 KiB 上限。
 - built-dist E2E 验证核心页面首次离线可打开、可选资源首次使用后可离线命中，以及升级保留 IndexedDB。
 
+第三轮已完成：
+
+- 将 Provider 客户端拆为轻量同步 facade 与 31.7 KiB 网络执行实现；只有真实 Provider 操作才动态加载网络实现。
+- Provider 配置、错误类型、本地 schema 和确认门槛保持不变，Trip/Day/Item 核心离线路径不依赖网络执行 chunk。
+- 构建和 built-dist E2E 会阻止 Provider 网络执行实现重新进入预缓存。
+- GitHub Actions 官方 checkout、setup-node 和失败 artifact actions 升级到 Node 24 运行时。
+
 后续：
 
-- 继续拆分低频导入、设置和共享能力，评估 MapLibre 按视图加载成本。
+- 继续拆分低频导入、设置和共享能力，评估 Provider 合同按操作拆分与 MapLibre 按视图加载成本。
 - 建立真实设备首屏加载和交互时间基线，CI 对显著回归报警。
 - 增加弱网、离线、恢复在线、旧标签页和多标签页升级测试。
 - 补充生产缓存头、静态资源不可变版本和部署 SHA 诊断。

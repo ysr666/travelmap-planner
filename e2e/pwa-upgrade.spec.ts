@@ -77,6 +77,11 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
     expect(precacheUrls.some((url) => /\/assets\/maplibre-.+\.js$/.test(url))).toBe(false)
     expect(precacheUrls.some((url) => /\/assets\/pdf.+\.js$/.test(url))).toBe(false)
     expect(precacheUrls.some((url) => /\/assets\/jszip-.+\.js$/.test(url))).toBe(false)
+    const providerClientCoreAsset = Object.entries(buildManifest).find(([key]) =>
+      key.endsWith('src/lib/providerProxyClientCore.ts'),
+    )?.[1]
+    expect(providerClientCoreAsset?.file).toBeTruthy()
+    expect(precacheUrls).not.toContain(`${staticServer.origin}/${providerClientCoreAsset?.file}`)
 
     const mapAsset = Object.values(buildManifest).find((entry) => entry.name === 'maplibre')
     expect(mapAsset?.file).toBeTruthy()

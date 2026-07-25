@@ -410,6 +410,10 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(page).toHaveURL(/#\/documents\?/)
+  const ticketPreview = page.getByTestId('ticket-preview')
+  await expect(ticketPreview).toBeVisible()
+  await ticketPreview.getByTestId('ticket-preview-close').click()
+  await expect(ticketPreview).toHaveCount(0)
   await expect(result).toContainText('部分完成')
   expect((await readItineraryItem(page, 'gateway-combo-airport')).lat).toBeUndefined()
   expect(placeLookupRequests).toBe(1)

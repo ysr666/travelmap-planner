@@ -78,6 +78,74 @@ test('全局 AI 查找票据后直接打开画廊目标并收起结果面板', a
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 通过注册动作直接打开资料中心且不调用 Provider', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+  await clickTripCard(tripCard)
+
+  await page.getByLabel('全局 AI 指令').fill('打开资料中心')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  await expect(page).toHaveURL(/#\/documents\?/)
+  await expect(page).toHaveURL(/tab=documents/)
+  await expect(page.getByRole('heading', { name: '旅行资料' })).toBeVisible()
+  await expect(page.getByTestId('global-ai-action-confirm-dialog')).not.toBeVisible()
+  await expect(page.getByTestId('global-ai-command-result')).toHaveCount(0)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('全局 AI 时间调整只在一次确认后写入并保留原时长', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+  const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+  await clickTripCard(tripCard)
+  const tripId = new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('tripId')
+  expect(tripId).toBeTruthy()
+  const { firstItemId } = await getFirstTripDayAndItemIds(page, tripId!)
+  await updateItineraryItemTimes(page, firstItemId, '09:00', '10:30')
+
+  await page.getByLabel('全局 AI 指令').fill('把第一站改到11点')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('调整行程时间')
+  await expect(result).toContainText('09:00-10:30 → 11:00-12:30')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  await expect.poll(async () => await readItineraryItem(page, firstItemId)).toMatchObject({
+    endTime: '10:30',
+    startTime: '09:00',
+  })
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+  const dialog = page.getByTestId('global-ai-action-confirm-dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '确认执行' }).click()
+
+  await expect(result).toContainText('已完成')
+  await expect.poll(async () => await readItineraryItem(page, firstItemId)).toMatchObject({
+    endTime: '12:30',
+    startTime: '11:00',
+  })
+  await expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBeGreaterThan(0)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 地点补全显示折叠预览并在一次确认后写入', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceRouteProxyFixture(page)
@@ -585,6 +653,41 @@ async function readItineraryItem(page: Page, itemId: string) {
       db.close()
     }
   }, itemId)
+}
+
+async function updateItineraryItemTimes(
+  page: Page,
+  itemId: string,
+  startTime: string,
+  endTime: string,
+) {
+  await page.evaluate(async ({ nextEndTime, nextStartTime, targetItemId }) => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction('itineraryItems', 'readwrite')
+        const store = transaction.objectStore('itineraryItems')
+        const itemRequest = store.get(targetItemId)
+        itemRequest.onsuccess = () => {
+          store.put({
+            ...itemRequest.result,
+            endTime: nextEndTime,
+            startTime: nextStartTime,
+            updatedAt: Date.now(),
+          })
+        }
+        itemRequest.onerror = () => reject(itemRequest.error ?? new Error('读取行程点失败'))
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error ?? new Error('更新行程点时间失败'))
+      })
+    } finally {
+      db.close()
+    }
+  }, { nextEndTime: endTime, nextStartTime: startTime, targetItemId: itemId })
 }
 
 async function countRouteCacheEntries(page: Page) {

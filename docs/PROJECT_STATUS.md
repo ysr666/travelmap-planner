@@ -44,7 +44,7 @@
 - 每日助手、实时行程、设置二级内容和新增票据表单默认收起，核心行程/画廊优先。
 - 地点查询打开后自动发起当前地点搜索，候选确认后才写入当前行程点。
 - 行程智能一键修复统一处理可自动修复的问题；高风险或需要用户判断的内容仍进入确认。
-- 全局 AI Action Gateway V1 可执行 `ticket.open@1`、`place.enrich@1` 和 `trip.repair@1`；只读动作直接完成，写入计划只要求一次最终确认。
+- 全局 AI Action Gateway 可执行票据打开、受限页面导航、地点补全、行程时间调整和一键修复；只读动作直接完成，写入计划只要求一次最终确认。
 - AI Trip Edit 使用受限 patch plan、diff、stale-state 检查和最终确认，不直接写库。
 - AI Draft generation/repair、导入预览、zip 归档和 HTML/XLSX/票据导入主路径。
 - 地图、道路路线预览、本地路线缓存和失败直线回退。
@@ -71,10 +71,10 @@
 
 - `npm run typecheck`：通过，覆盖前端、Pages provider runtime 和 Travel Inbox Worker。
 - `npm run lint`：通过。
-- `npm run test:unit`：185 个文件、1472 个测试通过。
+- `npm run test:unit`：185 个文件、1476 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：3 个测试通过。
-- 全量 Playwright：142 个测试通过，串行耗时约 5.5 分钟。
+- 全量 Playwright：144 个测试通过，串行耗时约 5.6 分钟。
 - `git diff --check`：通过。
 
 生产入口 JS 从 947.6 kB 降至 476.9 kB。初始静态 JS 图为 848.2 KiB，gzip 244.8 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
@@ -104,7 +104,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 浏览器旧 service worker 可能显示旧 UI；当前版本改为显式更新提示，仍需生产升级观察。
 - 多个历史发布版本连续升级尚未形成版本矩阵，当前自动化覆盖相邻两个构建版本和双标签页。
 - 真实 provider 可用性还依赖 Cloudflare env、供应商配额、区域网络和当前登录 session；自动化主要覆盖合同、边界、mock 和失败语义。
-- Action Gateway V1 只覆盖票据、地点和行程修复三个注册动作，不能声称“任意一句话都能完成所有功能”。
+- Action Gateway 当前覆盖五个注册动作；路线预览、费用草稿和更广泛的行程编辑仍在兼容路径，不能声称“任意一句话都能完成所有功能”。
 
 ## 文档入口
 

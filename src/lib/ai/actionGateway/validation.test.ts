@@ -33,6 +33,44 @@ describe('AI Action Gateway V1 contract', () => {
     })
   })
 
+  it('keeps workspace targets semantic and time updates confirmation gated', () => {
+    expect(buildDeterministicAiActionPlan('打开资料中心')).toMatchObject({
+      requiresConfirmation: false,
+      steps: [{
+        actionId: 'workspace.open@1',
+        args: { target: 'documents' },
+        risk: 'read_only',
+      }],
+    })
+    expect(buildDeterministicAiActionPlan('把第一站改到10点到11点30分')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.time.update@1',
+        args: { endTime: '11:30', startTime: '10:00', target: 'first_item' },
+        risk: 'local_write',
+      }],
+    })
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'workspace.open@1',
+        args: { target: '#/settings?token=secret' },
+        id: 'open',
+      }],
+      summary: '打开任意路由',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'item.time.update@1',
+        args: { endTime: '09:00', startTime: '10:00', target: 'first_item' },
+        id: 'time',
+      }],
+      summary: '写入无效时间',
+    }).ok).toBe(false)
+  })
+
   it('rejects unknown actions, fields, sensitive payloads and dependency cycles', () => {
     const unknown = validateAiActionPlan({
       schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
@@ -108,9 +146,11 @@ describe('AI Action Gateway V1 contract', () => {
 
   it('publishes only the supported action catalog and detects likely provider plans', () => {
     expect(listAiActionCatalog().map((action) => action.id)).toEqual([
+      'item.time.update@1',
       'place.enrich@1',
       'ticket.open@1',
       'trip.repair@1',
+      'workspace.open@1',
     ])
     expect(shouldRequestAiActionPlan('帮我完成这趟旅行的地点资料')).toBe(true)
     expect(shouldRequestAiActionPlan('今天应该注意什么？')).toBe(false)

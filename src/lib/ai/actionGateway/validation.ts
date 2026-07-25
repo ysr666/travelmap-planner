@@ -17,6 +17,17 @@ const MAX_SUMMARY_LENGTH = 200
 const MAX_TARGET_LENGTH = 160
 const MAX_QUERY_LENGTH = 160
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,63}$/
+const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+const WORKSPACE_TARGETS = new Set([
+  'documents',
+  'home',
+  'inbox',
+  'ledger',
+  'map',
+  'search',
+  'settings',
+  'trip',
+])
 const PLAN_FIELDS = new Set(['schemaVersion', 'summary', 'steps'])
 const STEP_FIELDS = new Set(['actionId', 'args', 'dependsOn', 'id'])
 const FORBIDDEN_FIELDS = new Set([
@@ -157,6 +168,23 @@ function validateArgs<TActionId extends AiActionId>(
     if (record.query !== undefined && !query) errors.push(`${path}.query 无效。`)
     return (query ? { query } : {}) as AiActionArgsById[TActionId]
   }
+  if (actionId === 'item.time.update@1') {
+    const target = readText(record.target, MAX_TARGET_LENGTH)
+    const startTime = readTime(record.startTime)
+    const endTime = record.endTime === undefined ? undefined : readTime(record.endTime)
+    if (!target) errors.push(`${path}.target 不能为空。`)
+    if (!startTime) errors.push(`${path}.startTime 必须是 HH:mm。`)
+    if (record.endTime !== undefined && !endTime) errors.push(`${path}.endTime 必须是 HH:mm。`)
+    if (startTime && endTime && timeToMinutes(endTime) < timeToMinutes(startTime)) {
+      errors.push(`${path}.endTime 不能早于 startTime。`)
+    }
+    if (!target || !startTime) return null
+    return {
+      ...(endTime ? { endTime } : {}),
+      startTime,
+      target,
+    } as AiActionArgsById[TActionId]
+  }
   if (actionId === 'place.enrich@1') {
     const target = readText(record.target, MAX_TARGET_LENGTH)
     if (!target) {
@@ -164,6 +192,13 @@ function validateArgs<TActionId extends AiActionId>(
       return null
     }
     return { target } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'workspace.open@1') {
+    if (typeof record.target !== 'string' || !WORKSPACE_TARGETS.has(record.target)) {
+      errors.push(`${path}.target 无效。`)
+      return null
+    }
+    return { target: record.target } as AiActionArgsById[TActionId]
   }
   const scope = record.scope
   if (scope !== 'trip' && scope !== 'day' && scope !== 'item') {
@@ -248,6 +283,17 @@ function readText(input: unknown, maxLength: number) {
 
 function readOptionalText(input: unknown, maxLength: number) {
   return input === undefined ? undefined : readText(input, maxLength) || undefined
+}
+
+function readTime(input: unknown) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  return TIME_PATTERN.test(value) ? value : ''
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
 }
 
 function stableStringify(value: unknown): string {

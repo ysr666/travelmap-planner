@@ -8,7 +8,11 @@ import {
   type ProviderProxyAiActionPlanRequest,
 } from '../providerProxyContract'
 import { listAiActionCatalog } from './registry'
-import { AI_ACTION_PLAN_SCHEMA_VERSION, type AiActionPlanV1 } from './types'
+import {
+  AI_ACTION_PLAN_SCHEMA_VERSION,
+  type AiActionItemTimeUpdateArgs,
+  type AiActionPlanV1,
+} from './types'
 import { validateAiActionPlan } from './validation'
 
 const ACTION_VERBS = [
@@ -22,6 +26,11 @@ const ACTION_VERBS = [
   '处理',
   '整理',
   '完成',
+  '调整',
+  '挪到',
+  '移到',
+  '进入',
+  '查看',
 ]
 
 export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 | null {
@@ -36,6 +45,32 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
       args: intent.query ? { query: intent.query } : {},
       dependsOn: [],
       id: 'open-ticket',
+    })
+  }
+
+  if (intent.kind === 'page_navigation') {
+    steps.push(intent.target === 'tickets'
+      ? {
+          actionId: 'ticket.open@1',
+          args: {},
+          dependsOn: [],
+          id: 'open-ticket-gallery',
+        }
+      : {
+          actionId: 'workspace.open@1',
+          args: { target: intent.target },
+          dependsOn: [],
+          id: 'open-workspace',
+        })
+  }
+
+  const timeUpdate = parseDeterministicTimeUpdate(normalized)
+  if (timeUpdate) {
+    steps.push({
+      actionId: 'item.time.update@1',
+      args: timeUpdate,
+      dependsOn: [],
+      id: 'update-item-time',
     })
   }
 
@@ -71,7 +106,8 @@ export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
-    ['票', '地点', '地址', '坐标', '行程', '路线', '问题', '建议'].some((noun) => normalized.includes(noun))
+    ['票', '地点', '地址', '坐标', '行程', '路线', '问题', '建议', '资料', '文档', '账本', '地图', '设置', '时间', '开始', '结束']
+      .some((noun) => normalized.includes(noun))
 }
 
 export function buildAiActionPlanProviderRequest(
@@ -154,10 +190,57 @@ function inferSemanticTarget(command: string) {
   return quoted?.[1]?.trim()
 }
 
+function parseDeterministicTimeUpdate(command: string): AiActionItemTimeUpdateArgs | null {
+  if (['如果', '假如', '模拟', '会怎样'].some((value) => command.includes(value)) || /\bwhat\s*if\b/i.test(command)) {
+    return null
+  }
+  const match = command.match(
+    /(?:改到|改为|调整到|调整为|挪到|移到|安排到)\s*([0-2]?\d(?:[:：][0-5]\d|[点时](?:[0-5]?\d分?)?)?)(?:\s*(?:-|—|–|至|到)\s*([0-2]?\d(?:[:：][0-5]\d|[点时](?:[0-5]?\d分?)?)?))?/,
+  )
+  if (!match || match.index === undefined) return null
+  const startTime = normalizePlannerTime(match[1])
+  const endTime = match[2] ? normalizePlannerTime(match[2]) : undefined
+  if (!startTime || (match[2] && !endTime)) return null
+
+  const semanticTarget = inferSemanticTarget(command)
+  const namedTarget = command
+    .slice(0, match.index)
+    .replace(/^(?:请|麻烦|帮我|给我|把|将)+/g, '')
+    .replace(/(?:的)?(?:开始)?时间$/g, '')
+    .replace(/[，,：:\s]+$/g, '')
+    .trim()
+  const target = semanticTarget ?? namedTarget
+  if (!target || target.length > 160) return null
+  return {
+    ...(endTime ? { endTime } : {}),
+    startTime,
+    target,
+  }
+}
+
+function normalizePlannerTime(value: string) {
+  const normalized = value.trim().replace('：', ':')
+  if (normalized.includes(':')) {
+    const [hoursText, minutesText] = normalized.split(':')
+    return formatPlannerTime(Number(hoursText), Number(minutesText))
+  }
+  const match = normalized.match(/^(\d{1,2})(?:[点时](\d{1,2})?分?)?$/)
+  if (!match) return ''
+  return formatPlannerTime(Number(match[1]), Number(match[2] ?? 0))
+}
+
+function formatPlannerTime(hours: number, minutes: number) {
+  if (!Number.isInteger(hours) || hours < 0 || hours > 23) return ''
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 59) return ''
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
 function summarizeSteps(steps: Array<Record<string, unknown>>) {
   const actionIds = new Set(steps.map((step) => step.actionId))
   const labels = [
+    actionIds.has('workspace.open@1') ? '打开页面' : '',
     actionIds.has('ticket.open@1') ? '打开票据' : '',
+    actionIds.has('item.time.update@1') ? '调整行程时间' : '',
     actionIds.has('place.enrich@1') ? '补全地点' : '',
     actionIds.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean)

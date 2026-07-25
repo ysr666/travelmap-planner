@@ -63,6 +63,7 @@ import {
 import {
   type AiActionPlaceEnrichArgs,
   type AiActionId,
+  type AiActionItemTimeUpdateArgs,
   type AiActionManualEntry,
   type AiActionPlanV1,
   type AiActionPreparedPlan,
@@ -72,6 +73,7 @@ import {
   type AiActionStepRunResult,
   type AiActionTicketOpenArgs,
   type AiActionTripRepairArgs,
+  type AiActionWorkspaceOpenArgs,
 } from './types'
 import { getAiActionMetadata } from './registry'
 
@@ -84,6 +86,19 @@ export type AiActionGatewayRuntimeContext = {
 type PreparedTicketAction = {
   kind: 'ticket'
   navigation: GlobalAiNavigationResult
+}
+
+type PreparedWorkspaceAction = {
+  kind: 'workspace'
+  navigation: GlobalAiNavigationResult
+}
+
+type PreparedItemTimeAction = {
+  changed: boolean
+  item: ItineraryItem
+  kind: 'item-time'
+  nextEndTime?: string
+  nextStartTime: string
 }
 
 type PreparedPlaceAction = {
@@ -126,7 +141,12 @@ type PreparedTripRepairAction = {
   snapshot: TripRepairSnapshot
 }
 
-type PreparedAction = PreparedPlaceAction | PreparedTicketAction | PreparedTripRepairAction
+type PreparedAction =
+  | PreparedItemTimeAction
+  | PreparedPlaceAction
+  | PreparedTicketAction
+  | PreparedTripRepairAction
+  | PreparedWorkspaceAction
 
 type ActionExecutionResult = {
   appliedChanges: TripIntelligenceAppliedChange[]
@@ -154,6 +174,22 @@ type AiActionRuntimeDefinition = {
 }
 
 const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> = {
+  'item.time.update@1': {
+    execute: async (prepared) =>
+      executeItemTimeAction(requirePreparedKind(prepared, 'item-time')),
+    prepare: (args, context) =>
+      prepareItemTimeAction(args as AiActionItemTimeUpdateArgs, context),
+    preview: (prepared) => {
+      const time = requirePreparedKind(prepared, 'item-time')
+      return {
+        affectedLabels: [time.item.title],
+        hasWrite: time.changed,
+        text: time.changed
+          ? `${time.item.title}：${formatTimeRange(time.item.startTime, time.item.endTime)} → ${formatTimeRange(time.nextStartTime, time.nextEndTime)}。`
+          : `${time.item.title} 的时间无需调整。`,
+      }
+    },
+  },
   'place.enrich@1': {
     execute: async (prepared) => executePlaceAction(requirePreparedKind(prepared, 'place')),
     prepare: (args, context, baselineFingerprint) =>
@@ -170,17 +206,7 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
   'ticket.open@1': {
     execute: async (prepared) => {
       const ticket = requirePreparedKind(prepared, 'ticket')
-      return {
-        appliedChanges: [],
-        effects: [{
-          kind: 'navigate',
-          params: ticket.navigation.params,
-          route: ticket.navigation.route,
-          scrollTargetId: ticket.navigation.scrollTargetId,
-        }],
-        errors: [],
-        message: ticket.navigation.message,
-      }
+      return executeNavigationAction(ticket.navigation)
     },
     prepare: (args, context) => prepareTicketAction(args as AiActionTicketOpenArgs, context),
     preview: (prepared) => {
@@ -218,6 +244,22 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
           : manualCount > 0
             ? `有 ${manualCount} 项需手动处理，不会自动改动。`
             : '没有发现需要修复的问题。',
+      }
+    },
+  },
+  'workspace.open@1': {
+    execute: async (prepared) => {
+      const workspace = requirePreparedKind(prepared, 'workspace')
+      return executeNavigationAction(workspace.navigation)
+    },
+    prepare: (args, context) =>
+      prepareWorkspaceAction(args as AiActionWorkspaceOpenArgs, context),
+    preview: (prepared) => {
+      const workspace = requirePreparedKind(prepared, 'workspace')
+      return {
+        affectedLabels: [workspace.navigation.title],
+        hasWrite: false,
+        text: workspace.navigation.message,
       }
     },
   },
@@ -474,6 +516,42 @@ async function prepareTicketAction(
   return { kind: 'ticket', navigation: result }
 }
 
+async function prepareWorkspaceAction(
+  args: AiActionWorkspaceOpenArgs,
+  context: AiActionGatewayRuntimeContext,
+): Promise<PreparedWorkspaceAction> {
+  const result = await resolveGlobalAiCommand(
+    getWorkspaceNavigationCommand(args.target),
+    context.commandContext,
+  )
+  if (result.kind !== 'navigation') throw new Error('无法生成页面入口。')
+  return { kind: 'workspace', navigation: result }
+}
+
+function prepareItemTimeAction(
+  args: AiActionItemTimeUpdateArgs,
+  context: AiActionGatewayRuntimeContext,
+): Promise<PreparedItemTimeAction> {
+  const item = resolveItemTarget(args.target, context.commandContext)
+  const day = context.commandContext.days.find((candidate) => candidate.id === item.dayId)
+  const nextEndTime = args.endTime ?? preserveSameDayDuration(item, args.startTime, day)
+  const spansLaterDate = Boolean(item.endDate && day && item.endDate > day.date)
+  if (
+    nextEndTime &&
+    !spansLaterDate &&
+    timeToMinutes(nextEndTime) < timeToMinutes(args.startTime)
+  ) {
+    throw new Error('结束时间不能早于开始时间。')
+  }
+  return Promise.resolve({
+    changed: item.startTime !== args.startTime || item.endTime !== nextEndTime,
+    item,
+    kind: 'item-time',
+    nextEndTime,
+    nextStartTime: args.startTime,
+  })
+}
+
 async function preparePlaceAction(
   args: AiActionPlaceEnrichArgs,
   context: AiActionGatewayRuntimeContext,
@@ -566,6 +644,50 @@ async function executePreparedAction(
   context: AiActionGatewayRuntimeContext,
 ): Promise<ActionExecutionResult> {
   return ACTION_RUNTIME_DEFINITIONS[actionId].execute(prepared, context)
+}
+
+async function executeItemTimeAction(
+  prepared: PreparedItemTimeAction,
+): Promise<ActionExecutionResult> {
+  if (!prepared.changed) {
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${prepared.item.title}」的时间无需调整。`,
+    }
+  }
+  const updated = await updateItineraryItem(prepared.item.id, {
+    ...(prepared.nextEndTime !== undefined ? { endTime: prepared.nextEndTime } : {}),
+    startTime: prepared.nextStartTime,
+  })
+  if (!updated) throw new Error('行程点已不存在，请重新生成预览。')
+  return {
+    appliedChanges: [buildAppliedChange({
+      actionType: 'global_ai_item_time_updated',
+      detail: `已确认将时间调整为 ${formatTimeRange(updated.startTime, updated.endTime)}。`,
+      targetId: updated.id,
+      targetType: 'item',
+      title: updated.title,
+    })],
+    effects: [],
+    errors: [],
+    message: `已调整「${updated.title}」的时间。`,
+  }
+}
+
+function executeNavigationAction(navigation: GlobalAiNavigationResult): ActionExecutionResult {
+  return {
+    appliedChanges: [],
+    effects: [{
+      kind: 'navigate',
+      params: navigation.params,
+      route: navigation.route,
+      scrollTargetId: navigation.scrollTargetId,
+    }],
+    errors: [],
+    message: navigation.message,
+  }
 }
 
 async function executePlaceAction(prepared: PreparedPlaceAction): Promise<ActionExecutionResult> {
@@ -934,7 +1056,7 @@ function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   )
   if (matches.length === 1) return matches[0]
   if (matches.length > 1) throw new Error('找到多个匹配行程点，请写清楚名称。')
-  throw new Error('没有找到要补全地点的行程点。')
+  throw new Error('没有找到目标行程点。')
 }
 
 function issueMatchesRepairScope(
@@ -1033,6 +1155,46 @@ function formatPlaceSource(source: string) {
   if (source === 'google_places' || source === 'google') return 'Google Places'
   if (source === 'mock') return '测试地点服务'
   return '地点服务'
+}
+
+function getWorkspaceNavigationCommand(target: AiActionWorkspaceOpenArgs['target']) {
+  if (target === 'documents') return '打开资料中心'
+  if (target === 'home') return '打开首页'
+  if (target === 'inbox') return '打开收件箱'
+  if (target === 'ledger') return '打开账本'
+  if (target === 'map') return '打开地图'
+  if (target === 'search') return '打开搜索'
+  if (target === 'settings') return '打开设置'
+  return '打开行程总览'
+}
+
+function preserveSameDayDuration(item: ItineraryItem, nextStartTime: string, day?: Day) {
+  if (!item.endTime) return undefined
+  if (!item.startTime || (item.endDate && day && item.endDate > day.date)) return item.endTime
+  const startMinutes = timeToMinutes(item.startTime)
+  const endMinutes = timeToMinutes(item.endTime)
+  if (endMinutes < startMinutes) return item.endTime
+  const nextEndMinutes = timeToMinutes(nextStartTime) + endMinutes - startMinutes
+  if (nextEndMinutes >= 24 * 60) {
+    throw new Error('调整后会跨天，请同时写清楚结束时间。')
+  }
+  return formatMinutes(nextEndMinutes)
+}
+
+function formatTimeRange(startTime?: string, endTime?: string) {
+  if (startTime && endTime) return `${startTime}-${endTime}`
+  return startTime ?? endTime ?? '时间未定'
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function formatMinutes(value: number) {
+  const hours = Math.floor(value / 60)
+  const minutes = value % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 function orderItems(days: Day[], items: ItineraryItem[]) {

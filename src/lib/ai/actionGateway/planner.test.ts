@@ -7,7 +7,15 @@ import {
 } from './planner'
 
 describe('AI Action Gateway planner', () => {
-  it('uses deterministic local planning for registered ticket, place, and repair commands', () => {
+  it('uses deterministic local planning for registered navigation, time, ticket, place, and repair commands', () => {
+    expect(buildDeterministicAiActionPlan('打开资料中心')?.steps[0]).toMatchObject({
+      actionId: 'workspace.open@1',
+      args: { target: 'documents' },
+    })
+    expect(buildDeterministicAiActionPlan('把第一站改到10点30分')?.steps[0]).toMatchObject({
+      actionId: 'item.time.update@1',
+      args: { startTime: '10:30', target: 'first_item' },
+    })
     expect(buildDeterministicAiActionPlan('找一下爱丁堡的门票')?.steps[0]).toMatchObject({
       actionId: 'ticket.open@1',
     })
@@ -86,5 +94,6 @@ describe('AI Action Gateway planner', () => {
     expect(shouldRequestAiActionPlan('请把这趟行程的问题都处理好')).toBe(true)
     expect(shouldRequestAiActionPlan('伦敦天气怎么样')).toBe(false)
     expect(shouldRequestAiActionPlan('补全第一站地点信息')).toBe(false)
+    expect(shouldRequestAiActionPlan('把不确定的开始时间调整好')).toBe(true)
   })
 })

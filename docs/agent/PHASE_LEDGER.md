@@ -1566,3 +1566,78 @@ Residual:
 
 - Multiple historical release versions, offline edits followed by online sync recovery, and storage-quota pressure still need separate matrices.
 - Physical iPhone Safari/iOS PWA and Android Chrome weak-network evidence remains part of Beta QA.
+
+## 2026-07-26 Universal AI Action Gateway V1.1 - Navigation And Time
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-navigation-time`
+
+Goal:
+
+- Move common page opening and explicit itinerary-time changes into the registered Action Gateway so natural-language commands execute through the same strict validation, short preview, confirmation, stale-plan, and history path.
+
+Scope:
+
+- Add a read-only semantic workspace navigation action with an enum target rather than a route string.
+- Add a local-write itinerary-time action with a semantic item target and validated `HH:mm` values.
+- Deterministically recognize explicit page-opening commands and unambiguous time changes; unresolved commands may still use the structured planner.
+- Preserve duration when only a new start time is supplied and the existing same-day duration is valid.
+- Cover local planning, catalog privacy, schema rejection, runtime navigation, write confirmation, stale protection, and mobile E2E.
+
+No-go:
+
+- No arbitrary route, function, database operation, item ID, token, file, or Provider payload supplied by the planner.
+- No automatic write, no bypass of the one final confirmation, and no weakening of the travel-state fingerprint.
+- No real AI, map, route, search, cloud, or Provider calls.
+- No change to IndexedDB schema, cloud sync semantics, or existing ticket/place/repair behavior.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- Focused unit and E2E tests plus project status/roadmap/ledger.
+
+Validation:
+
+- Focused Action Gateway and Provider contract tests.
+- Typecheck, lint, full unit suite, production build, focused mobile E2E, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: time edits are user data writes and must remain semantic-targeted, previewed, confirmation-gated, and rejected after any intervening trip change.
+
+Stop conditions:
+
+- Stop and repair if a navigation action accepts a route value, a time action accepts malformed or ambiguous input, any write occurs during planning/prepare, duration preservation crosses a day without explicit data, or stale plans can write.
+
+Result:
+
+- Added `workspace.open@1` with a fixed semantic target enum for documents, home, inbox, ledger, map, search, settings, and the current trip; route strings and unknown targets are rejected locally.
+- Added `item.time.update@1` with semantic item resolution and strict `HH:mm` validation.
+- A start-only change preserves a valid same-day duration; a change that would cross midnight requires an explicit end time.
+- Time preparation is read-only, the compact preview shows the before/after range, and the database write occurs only after the single final confirmation.
+- Time writes reuse the shared trip fingerprint, reject stale prepared plans, and append a Trip Intelligence applied-change record.
+- Deterministic local planning now handles explicit page-opening and time-change commands without a Provider request; unresolved requests remain constrained to the registered action catalog.
+- Added 390px E2E coverage proving semantic navigation auto-executes, time changes remain unchanged before confirmation, duration is preserved after confirmation, and neither path calls Provider Proxy.
+
+Validation:
+
+- Focused Action Gateway tests passed: 19 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1476 tests.
+- `npm run build` passed; bundle budget passed at 848.3 KiB initial JS, 244.8 KiB gzip, and 2262.9 KiB/94-entry precache.
+- Focused mobile Action Gateway E2E passed: 2 tests.
+- A focused five-repeat PWA stability run passed all 15 tests after one unrelated full-suite timing failure.
+- The final full serial E2E run passed all 144 tests in approximately 5.6 minutes.
+- `git diff --check` passed.
+
+Residual:
+
+- Route preview, expense-draft creation, add/delete/reorder edits, and broader selection contracts remain on compatibility paths.
+- Cross-midnight time edits require a future date-aware action contract rather than inferring a next-day end.
+- Real Provider planning remains intentionally uncalled in this phase; contract, privacy, and failure behavior are covered with local and mocked tests.

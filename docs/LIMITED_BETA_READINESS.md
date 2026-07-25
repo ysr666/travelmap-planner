@@ -15,7 +15,7 @@
 | 全局 AI | V1 就绪但有限 | 票据、地点、行程修复的注册表校验、预览、确认、stale guard 和部分失败 E2E | 只能执行登记动作，不是任意自主代理 |
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
-| PWA | 就绪 | built-dist 升级、IndexedDB 保留、核心离线页和可选资源按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
+| PWA | 就绪 | built-dist 升级、IndexedDB 保留、核心离线页、Provider 网络实现隔离和可选资源按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
 | CI / E2E | 就绪 | 185/1472 unit、141 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
@@ -47,6 +47,7 @@
 ## 已知非阻塞项
 
 - MapLibre 独立 chunk 首次使用仍需网络；弱网中断恢复和多标签升级仍需验证。
+- Provider 本地合同仍是共享 chunk；后续只在收益明确时按操作拆分，不能削弱本地校验。
 - Supabase leaked-password protection 需要计划/配置决策。
 - `cloud_ticket_blobs` 双 SELECT policy 需预览环境等价合并。
 - 低使用率索引需真实负载证据后再决定是否删除。

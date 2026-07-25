@@ -2,9 +2,20 @@
 
 最新记录：2026-07-26
 
+## 2026-07-26 Provider 网络执行按需边界
+
+- Provider 客户端保留 2.1 KiB facade 和 1.7 KiB 配置/错误共享层；31.7 KiB 网络执行实现只在真实操作时动态加载。
+- Service Worker 预缓存约 2.21 MiB/94 项；Provider 网络执行实现不在预缓存，核心 Trip、Day、Item 和票据路径首次离线仍可打开。
+- 构建检查同时要求 Provider 网络实现保持独立动态 chunk，并按实际 manifest 文件确认其不在预缓存。
+- `npm run typecheck`、`npm run lint`、`npm run build`：通过。
+- `npm run test:unit`：通过，185 个文件、1472 个测试。
+- `npm run test:e2e:pwa-upgrade`：通过，2 个测试。
+- `npm run test:e2e`：通过，141 个测试，约 4.1 分钟。
+- 地点候选、路线生成、内容来源、AI Draft、全局 AI Action Gateway、Auth 错误语义、预览和最终确认 E2E 均继续通过。
+
 ## 2026-07-26 PWA 预缓存与按需资源
 
-- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.28 MiB/92 项。
+- Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.28 MiB/92 项；后续 Provider 网络执行拆分进一步降至约 2.21 MiB/94 项。
 - MapLibre、PDF/OCR、JSZip、AI Draft 和全局 AI 不再随安装下载，首次使用后进入同源 `CacheFirst` 运行时缓存。
 - Trip、Day、Item、Ticket Library 和 Travel Document Center 保持预缓存；加密资料库备份的 JSZip 改为真正按需加载。
 - 构建检查新增预缓存唯一性、核心必需项、可选禁入项、运行时缓存名和 2500 KiB 上限。

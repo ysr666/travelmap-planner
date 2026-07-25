@@ -13,10 +13,10 @@
 - 行程智能一键修复继续统一处理可自动修复项，高风险内容保留确认。
 - PWA 更新改为提示用户刷新，不再在发现新版本时立即重载。
 - 设置页显示应用版本和短提交 SHA，方便确认当前部署。
-- CI 现在真实检查前端、Pages provider runtime 和 Travel Inbox Worker，并保留 E2E 失败 artifacts。
+- CI 现在真实检查前端、Pages provider runtime 和 Travel Inbox Worker，官方 Actions 使用 Node 24 运行时，并保留 E2E 失败 artifacts。
 - Supabase 补齐账号 AI 偏好表、RLS、私有 trigger、授权和 Companion 票据外键索引。
 - 全局 AI 与 Provider 客户端移出静态启动图，PDF 恢复按需加载，并新增 CI bundle budget。
-- Service Worker 预缓存从约 4.15 MiB 降至约 2.28 MiB；地图、PDF/OCR、JSZip 和 AI 重资源改为首次使用后缓存。
+- Service Worker 预缓存从约 4.15 MiB 降至约 2.21 MiB；地图、PDF/OCR、JSZip、AI 重资源和 Provider 网络执行实现改为首次使用后缓存。
 
 ## 验证
 
@@ -25,6 +25,7 @@
 - Playwright：141 个全量测试通过。
 - PWA built-dist：2 个测试通过，覆盖升级保留 IndexedDB、核心离线页和可选资源按需缓存。
 - Bundle：入口 JS 从 947.6 kB 降至 476.9 kB；初始静态 JS gzip 244.8 KiB。
+- Provider：31.7 KiB 网络执行实现独立为按需 chunk；地点、路线、搜索和 AI mock E2E 继续通过。
 - Supabase 空库重建和生产 post-DDL SQL 检查通过。
 
 ## 已知限制

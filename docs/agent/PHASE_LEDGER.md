@@ -1449,3 +1449,52 @@ Result:
 
 - `actions/checkout` now uses v6, `actions/setup-node` v6, and `actions/upload-artifact` v6.
 - All selected action releases use Node 24 and support current GitHub-hosted runners.
+
+## 2026-07-26 Phase 3D - Provider Network Client On-Demand Boundary
+
+Status: completed locally.
+
+Branch: `feature/provider-client-on-demand`
+
+Goal:
+
+- Keep core offline trip pages independent from the Provider network execution implementation without changing Provider behavior or safety contracts.
+
+Scope:
+
+- Preserve the existing `providerProxyClient` public API through a lightweight facade.
+- Keep synchronous configuration, session identity, and typed errors in a small shared module.
+- Dynamically import the full authenticated request, validation, and response-normalization implementation only when a Provider operation runs.
+- Exclude the emitted implementation chunk from the Service Worker precache and enforce the boundary from the generated manifest.
+- Extend built-dist PWA coverage to prove the implementation is absent while core Trip, Day, Item, and ticket navigation remains available offline.
+
+No-go:
+
+- No Provider contract, Auth, Origin, quota, privacy, confirmation, schema, route-cache, or cloud behavior changes.
+- No real Provider calls.
+
+Read-only baseline:
+
+- Trip Workspace and Item Detail statically reached the 31.7 KiB Provider client chunk, so Workbox had to precache it for core offline navigation.
+- The client also contained lightweight synchronous config and error behavior that core pages legitimately need.
+
+Result:
+
+- `providerProxyClient.ts` is now a 2.1 KiB compatibility facade and dynamically imports the 31.7 KiB network implementation.
+- A 1.7 KiB shared module preserves synchronous config, session IDs, and the exact `ProviderProxyClientError` identity used by callers.
+- The network implementation is absent from the precache; the generated precache is approximately 2.21 MiB/94 entries.
+- Build validation requires a dedicated dynamically imported Provider implementation and rejects its actual manifest file if it returns to the precache.
+- Existing UI, Provider request schemas, Auth headers, source-bearing results, preview/confirmation gates, stale guards, and retry behavior remain unchanged.
+
+Validation:
+
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed.
+- Provider client focused unit tests passed: 31 tests.
+- `npm run test:unit` passed: 185 files, 1472 tests.
+- `npm run test:e2e:pwa-upgrade` passed: 2 tests.
+- `npm run test:e2e` passed: 141 tests in approximately 4.1 minutes.
+
+Residual:
+
+- The 94.6 KiB Provider contract remains shared because core local validation and multiple feature models depend on it.
+- A future per-operation contract split must preserve local rejection of unknown fields, sensitive fields, invalid plans, and malformed Provider responses.

@@ -106,6 +106,7 @@ export default defineConfig({
           '**/maplibre-*.js',
           '**/ocr-*.js',
           '**/pdf*.js',
+          '**/providerProxyClientCore-*.js',
           '**/worker.min-*.js',
         ],
         navigateFallback: 'index.html',

@@ -1419,3 +1419,33 @@ Residual:
 - Provider Proxy client/contract chunks remain in the precache because Trip Workspace and Item Detail statically import Provider-backed feature panels; moving them safely requires a separate feature-island refactor.
 - MapLibre remains a 1 MB-class first-use download.
 - Weak-network interruption recovery, multiple historical-version upgrades, and multi-tab activation remain to be covered.
+
+## 2026-07-26 Phase 3C - GitHub Actions Node 24 Runtime
+
+Status: completed locally.
+
+Branch: `fix/github-actions-node24`
+
+Goal:
+
+- Remove the Node 20 action-runtime deprecation warnings emitted by otherwise successful CI runs.
+
+Scope:
+
+- Upgrade the official checkout, Node setup, and failure-artifact actions to supported Node 24 releases.
+- Preserve the Node 24 application matrix, npm cache behavior, job graph, timeouts, and E2E environment.
+
+No-go:
+
+- No application, dependency, Provider, cloud, or deployment behavior changes.
+
+Validation:
+
+- Workflow diff and YAML syntax check passed locally.
+- `git diff --check` passed.
+- GitHub-hosted PR CI is the authoritative runtime validation.
+
+Result:
+
+- `actions/checkout` now uses v6, `actions/setup-node` v6, and `actions/upload-artifact` v6.
+- All selected action releases use Node 24 and support current GitHub-hosted runners.

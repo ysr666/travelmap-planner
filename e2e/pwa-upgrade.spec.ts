@@ -39,7 +39,7 @@ test('真实构建 PWA 从 v1 升级到 v2 后保留 IndexedDB 数据', async ({
     await expect(await readIndexedDbMarker(page)).toBe('kept')
   } finally {
     if (server) {
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
+      await closeStaticServer(server)
     }
     await rm(tempDir, { force: true, recursive: true })
   }
@@ -77,6 +77,8 @@ test('PWA 更新在确认前保持等待，确认后所有标签切换到同一�
     await writeServiceWorkerVersion(appDir, 'v2')
     await prepareUpdatedServiceWorker(firstPage)
     await expect.poll(() => hasWaitingServiceWorker(secondPage), { timeout: 10_000 }).toBe(true)
+    await expect.poll(() => readWaitingServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v2')
+    await expect.poll(() => readWaitingServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v2')
     await expect(firstPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
     await expect(secondPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
 
@@ -86,17 +88,21 @@ test('PWA 更新在确认前保持等待，确认后所有标签切换到同一�
     expect(await readServiceWorkerVersion(firstPage)).toBe('v1')
     expect(await readServiceWorkerVersion(secondPage)).toBe('v1')
 
+    await firstPage.bringToFront()
     await firstPage.getByRole('button', { name: '更新并重启' }).click()
-    await expect.poll(() => readServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v2')
-    await expect.poll(() => readServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v2')
     await expect.poll(() => readDocumentLoadCount(firstPage), { timeout: 10_000 })
       .toBeGreaterThan(firstLoadsBeforeUpdate)
+    await secondPage.bringToFront()
     await expect.poll(() => readDocumentLoadCount(secondPage), { timeout: 10_000 })
       .toBeGreaterThan(secondLoadsBeforeUpdate)
+    await ensureServiceWorkerController(firstPage)
+    await ensureServiceWorkerController(secondPage)
+    expect(await readServiceWorkerVersion(firstPage)).toBe('v2')
+    expect(await readServiceWorkerVersion(secondPage)).toBe('v2')
     expect(await readIndexedDbMarker(secondPage)).toBe('kept')
   } finally {
     if (server) {
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
+      await closeStaticServer(server)
     }
     await rm(tempDir, { force: true, recursive: true })
   }
@@ -226,7 +232,7 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
   } finally {
     await context.setOffline(false)
     if (server) {
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
+      await closeStaticServer(server)
     }
     await rm(tempDir, { force: true, recursive: true })
   }
@@ -311,6 +317,19 @@ async function startStaticServer(rootDir: string) {
     origin: `http://127.0.0.1:${address.port}`,
     server,
   }
+}
+
+async function closeStaticServer(server: Server) {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) {
+        rejectClose(error)
+        return
+      }
+      resolveClose()
+    })
+    server.closeAllConnections()
+  })
 }
 
 async function ensureServiceWorkerController(page: Page) {
@@ -512,6 +531,32 @@ async function readServiceWorkerVersion(page: Page) {
     }
   }
   throw new Error('service worker version unavailable')
+}
+
+async function readWaitingServiceWorkerVersion(page: Page) {
+  return page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration()
+    const waitingWorker = registration?.waiting
+    if (!waitingWorker) throw new Error('missing waiting service worker')
+
+    return await new Promise<string>((resolveVersion, rejectVersion) => {
+      const timeout = window.setTimeout(() => {
+        navigator.serviceWorker.removeEventListener('message', handleMessage)
+        rejectVersion(new Error('waiting service worker version timeout'))
+      }, 5000)
+
+      function handleMessage(event: MessageEvent) {
+        if (event.source !== waitingWorker) return
+        if (event.data?.type !== 'TRIPMAP_E2E_PWA_VERSION') return
+        window.clearTimeout(timeout)
+        navigator.serviceWorker.removeEventListener('message', handleMessage)
+        resolveVersion(event.data.version)
+      }
+
+      navigator.serviceWorker.addEventListener('message', handleMessage)
+      waitingWorker.postMessage({ type: 'TRIPMAP_E2E_PWA_VERSION' })
+    })
+  })
 }
 
 async function putIndexedDbMarker(page: Page) {

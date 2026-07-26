@@ -135,13 +135,28 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   if (steps.filter((step) => step.actionId === 'item.move@1').length > 1) {
     errors.push('一个计划最多跨日移动一个行程点。')
   }
+  if (steps.filter((step) => step.actionId === 'item.delete@1').length > 1) {
+    errors.push('一个计划最多删除一个行程点。')
+  }
+  if (steps.filter((step) => step.actionId === 'history.undo@1').length > 1) {
+    errors.push('一个计划最多撤销一次删除。')
+  }
   const structuralActionCount = [
     'day.items.reorder@1',
     'item.create@1',
+    'item.delete@1',
     'item.move@1',
   ].filter((actionId) => actionIds.has(actionId as AiActionId)).length
   if (structuralActionCount > 1) {
-    errors.push('新增、当天重排与跨日移动需要分开确认。')
+    errors.push('新增、删除、当天重排与跨日移动需要分开确认。')
+  }
+  if (
+    actionIds.has('history.undo@1')
+    && steps.some((step) =>
+      step.actionId !== 'history.undo@1' && step.risk === 'local_write',
+    )
+  ) {
+    errors.push('撤销删除不能与其他写入动作放在同一计划中。')
   }
   if (errors.length > 0 || !summary) return { errors: Array.from(new Set(errors)), ok: false }
 
@@ -219,6 +234,41 @@ function validateArgs<TActionId extends AiActionId>(
       ...(endTime ? { endTime } : {}),
       ...(startTime ? { startTime } : {}),
       title,
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'item.delete@1') {
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const day = record.day === undefined
+      ? undefined
+      : readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (record.day !== undefined && !day) {
+      errors.push(`${path}.day 必须是语义日期目标。`)
+    }
+    if (!target) return null
+    return {
+      ...(day ? { day } : {}),
+      target,
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'history.undo@1') {
+    const target = record.target === undefined
+      ? undefined
+      : readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    if (record.kind !== 'item_delete') {
+      errors.push(`${path}.kind 只允许 item_delete。`)
+    }
+    if (record.target !== undefined && !target) {
+      errors.push(`${path}.target 必须是语义行程点名称。`)
+    }
+    if (target === 'current_item' || target === 'first_item') {
+      errors.push(`${path}.target 必须是已删除行程点名称，不能使用当前目标。`)
+    }
+    if (record.kind !== 'item_delete') return null
+    if (target === 'current_item' || target === 'first_item') return null
+    return {
+      kind: 'item_delete',
+      ...(target ? { target } : {}),
     } as AiActionArgsById[TActionId]
   }
   if (actionId === 'day.items.reorder@1') {

@@ -11,6 +11,7 @@ import {
   createLedgerSettings,
   createTicketMeta,
   createTrip,
+  deleteItineraryItemReversible,
   deleteTripCascade,
   getTicketMeta,
   getItineraryItem,
@@ -21,6 +22,7 @@ import {
   setItineraryItemExecutionState,
   updateTicketMeta,
   updateItineraryItem,
+  undoItineraryItemDeletion,
 } from './index'
 import {
   getTripAutoSnapshotStatus,
@@ -216,6 +218,82 @@ describe('tracked db mutations', () => {
     const outbox = await db.syncOutbox.toArray()
     expect(outbox).toHaveLength(3)
     expect(outbox.every((entry) => entry.objectType === 'item' && entry.operation === 'upsert')).toBe(true)
+  })
+
+  it('deletes and restores an item atomically without touching its ticket', async () => {
+    const trip = await createTrip({ destination: '伦敦', endDate: '2026-06-13', startDate: '2026-06-13', title: '伦敦' })
+    const day = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const first = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: '酒店', tripId: trip.id })
+    const target = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: '伦敦眼', tripId: trip.id })
+    const last = await createItineraryItem({ dayId: day.id, sortOrder: 3, ticketIds: [], title: '晚餐', tripId: trip.id })
+    const ticket = await createTicketMeta({
+      fileName: 'london-eye.pdf',
+      fileType: 'pdf',
+      itemId: target.id,
+      mimeType: 'application/pdf',
+      size: 3,
+      storageMode: 'reference',
+      title: '伦敦眼门票',
+      tripId: trip.id,
+    })
+    await db.syncOutbox.clear()
+
+    const deleted = await deleteItineraryItemReversible(target.id, {
+      expectedCurrentItemIds: [first.id, target.id, last.id],
+      expectedItemUpdatedAt: target.updatedAt,
+      operationFingerprint: 'tracked-delete',
+      operationRecordId: 'tracked-delete-record',
+      tripId: trip.id,
+    })
+
+    expect(deleted).toMatchObject({ deleted: true })
+    expect((await db.itineraryItems.where('dayId').equals(day.id).sortBy('sortOrder'))
+      .map((item) => [item.id, item.sortOrder]))
+      .toEqual([[first.id, 1], [last.id, 2]])
+    await expect(getTicketMeta(ticket.id)).resolves.toMatchObject({
+      id: ticket.id,
+      itemId: target.id,
+    })
+    await expect(db.tripReplanRecords.get('tracked-delete-record')).resolves.toMatchObject({
+      operationKind: 'item_delete',
+      status: 'applied',
+    })
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('item-deleted-reversibly')
+    const deleteOutbox = await db.syncOutbox.toArray()
+    expect(deleteOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectId: target.id, objectType: 'item', operation: 'delete' }),
+      expect.objectContaining({ objectId: last.id, objectType: 'item', operation: 'upsert' }),
+      expect.objectContaining({ objectId: 'tracked-delete-record', objectType: 'replan_record', operation: 'upsert' }),
+      expect.objectContaining({ objectType: 'trip_intelligence_applied_change', operation: 'upsert' }),
+    ]))
+
+    await db.syncOutbox.clear()
+    const restored = await undoItineraryItemDeletion('tracked-delete-record', {
+      expectedAppliedFingerprint: deleted?.operationRecord.appliedFingerprint,
+      tripId: trip.id,
+      undoOperationFingerprint: 'tracked-delete-undo',
+    })
+
+    expect(restored).toMatchObject({ restored: true, restoredItem: { id: target.id } })
+    expect((await db.itineraryItems.where('dayId').equals(day.id).sortBy('sortOrder'))
+      .map((item) => [item.id, item.sortOrder]))
+      .toEqual([[first.id, 1], [target.id, 2], [last.id, 3]])
+    await expect(getTicketMeta(ticket.id)).resolves.toMatchObject({
+      id: ticket.id,
+      itemId: target.id,
+    })
+    await expect(db.tripReplanRecords.get('tracked-delete-record')).resolves.toMatchObject({
+      status: 'undone',
+      undoFingerprint: expect.any(String),
+    })
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('item-deletion-undone')
+    const undoOutbox = await db.syncOutbox.toArray()
+    expect(undoOutbox.filter((entry) => entry.objectType === 'item' && entry.operation === 'upsert'))
+      .toHaveLength(3)
+    expect(undoOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectId: 'tracked-delete-record', objectType: 'replan_record', operation: 'upsert' }),
+      expect.objectContaining({ objectType: 'trip_intelligence_applied_change', operation: 'upsert' }),
+    ]))
   })
 
   it('queues every changed item after a cross-day move and records one trip write', async () => {

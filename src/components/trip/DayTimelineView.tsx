@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Plus, Save, Ticket, Trash2, X } from 'lucide-react'
-import { deleteItineraryItemCascade, reorderDayItems } from '../../db'
+import { ArrowDown, ArrowUp, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Plus, RotateCcw, Save, Ticket, Trash2, X } from 'lucide-react'
+import { deleteItineraryItemReversible, reorderDayItems, undoItineraryItemDeletion } from '../../db'
 import { navigateTo } from '../../lib/routes'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -38,6 +38,8 @@ export function DayTimelineView({
   const [pendingDeleteItem, setPendingDeleteItem] = useState<ItineraryItem | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [lastDeletion, setLastDeletion] = useState<{ recordId: string; title: string } | null>(null)
+  const [undoingRecordId, setUndoingRecordId] = useState<string | null>(null)
   const [draftItemIds, setDraftItemIds] = useState<string[]>([])
   const [orderingBaselineItemIds, setOrderingBaselineItemIds] = useState<string[]>([])
   const [isOrdering, setIsOrdering] = useState(false)
@@ -61,13 +63,43 @@ export function DayTimelineView({
     setActionError(null)
     setActionMessage(null)
     try {
-      await deleteItineraryItemCascade(item.id)
+      const result = await deleteItineraryItemReversible(item.id, {
+        expectedCurrentItemIds: items.map((candidate) => candidate.id),
+        expectedItemUpdatedAt: item.updatedAt,
+        tripId: trip.id,
+      })
       setPendingDeleteItem(null)
+      if (result) {
+        setLastDeletion({
+          recordId: result.operationRecord.id,
+          title: result.deletedItem.title,
+        })
+      }
       await onItemsChange()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '删除行程点失败')
     } finally {
       setDeletingItemId(null)
+    }
+  }
+
+  async function undoLastDeletion() {
+    if (!lastDeletion) return
+    setUndoingRecordId(lastDeletion.recordId)
+    setActionError(null)
+    try {
+      const result = await undoItineraryItemDeletion(lastDeletion.recordId, {
+        tripId: trip.id,
+      })
+      setLastDeletion(null)
+      setActionMessage(result.restored
+        ? `已恢复「${result.restoredItem.title}」及原顺序。`
+        : `「${result.restoredItem.title}」已经恢复。`)
+      await onItemsChange()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '撤销删除失败')
+    } finally {
+      setUndoingRecordId(null)
     }
   }
 
@@ -182,6 +214,24 @@ export function DayTimelineView({
       {actionMessage ? (
         <InlineStatus role="status" tone="success">
           {actionMessage}
+        </InlineStatus>
+      ) : null}
+
+      {lastDeletion ? (
+        <InlineStatus role="status" tone="success">
+          <span className="flex min-w-0 items-center justify-between gap-2">
+            <span className="truncate">已移除「{lastDeletion.title}」；关联资料保留。</span>
+            <Button
+              aria-label={`撤销删除${lastDeletion.title}`}
+              className="min-h-8 shrink-0 px-2 text-xs"
+              icon={<RotateCcw className="size-3.5" />}
+              loading={undoingRecordId === lastDeletion.recordId}
+              onClick={() => void undoLastDeletion()}
+              variant="ghost"
+            >
+              撤销
+            </Button>
+          </span>
         </InlineStatus>
       ) : null}
 
@@ -305,7 +355,7 @@ export function DayTimelineView({
       </section>
 
       <ConfirmDialog
-        body="删除后，绑定到该行程点的票据记录也会被移除。"
+        body="仅移除行程点；票据、账本和订单保留，可撤销。"
         confirmLabel="删除行程点"
         loading={Boolean(deletingItemId)}
         onCancel={() => {

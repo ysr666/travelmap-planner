@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowLeft, CalendarDays, Home, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip, updateDay } from '../db'
+import { isAdaptiveTripReplanRecord, listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
 import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
 import { DaySelector } from '../components/trip/DaySelector'
@@ -246,7 +246,7 @@ export function DayViewPage() {
     ]).then(([events, records]) => {
       if (cancelled) return
       setTripDisruptionEvents(events)
-      setTripReplanRecords(records)
+      setTripReplanRecords(records.filter(isAdaptiveTripReplanRecord))
     }).catch(() => {
       if (cancelled) return
       setTripDisruptionEvents([])
@@ -343,7 +343,7 @@ export function DayViewPage() {
         listTripReplanRecordsByTrip(trip.id),
       ])
       setTripDisruptionEvents(events)
-      setTripReplanRecords(records)
+      setTripReplanRecords(records.filter(isAdaptiveTripReplanRecord))
     } catch {
       setTripDisruptionEvents([])
       setTripReplanRecords([])
@@ -777,7 +777,11 @@ const ACTIVE_DAY_REPLAN_RECORD_STATUSES = new Set<TripReplanRecord['status']>(['
 
 function selectLatestActiveDayReplanRecord(records: TripReplanRecord[], dayId: string) {
   return records
-    .filter((record) => ACTIVE_DAY_REPLAN_RECORD_STATUSES.has(record.status) && dayReplanRecordTouchesDay(record, dayId))
+    .filter((record) =>
+      isAdaptiveTripReplanRecord(record)
+      && ACTIVE_DAY_REPLAN_RECORD_STATUSES.has(record.status)
+      && dayReplanRecordTouchesDay(record, dayId),
+    )
     .sort((left, right) => (right.updatedAt - left.updatedAt) || (right.createdAt - left.createdAt))[0] ?? null
 }
 

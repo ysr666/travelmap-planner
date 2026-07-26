@@ -1805,7 +1805,7 @@ Residual:
 
 ## 2026-07-26 Universal AI Action Gateway V1.4 - Cross-Day Item Move
 
-Status: completed locally.
+Status: merged to `main` as `d3389f5` through PR #21.
 
 Branch: `feature/action-gateway-cross-day-move`
 
@@ -1887,3 +1887,92 @@ Residual:
 - Deletion remains outside the registry until its undo and ticket-binding behavior has an explicit contract.
 - Cross-day move preserves the item's existing transport fields and ticket bindings; it does not infer new transport details.
 - Real Provider planning remains intentionally uncalled; deterministic planning, schema/privacy boundaries, confirmation, rollback, idempotency, and stale-state behavior are covered locally and with mocks.
+
+## 2026-07-26 Universal AI Action Gateway V1.5 - Reversible Item Delete And Unified Undo
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-delete-undo`
+
+Goal:
+
+- Delete one semantically selected itinerary item through the registered Action Gateway without deleting its tickets, ledger links, transport records, or blobs, and restore that deletion through one shared, durable undo contract used by AI and manual deletion.
+
+Scope:
+
+- Add `item.delete@1` with an optional semantic day and required semantic item target; no database IDs, arbitrary patches, or Provider-selected functions.
+- Add `history.undo@1` with the fixed `item_delete` kind and an optional semantic item target; resolve the latest unique applicable operation locally.
+- Preserve ticket metadata, ticket blobs, ledger references, and transport data while the item is absent.
+- Store complete before/after day snapshots in the existing synced operation-record table, with explicit operation kind, fingerprint, and item scope.
+- Atomically delete/restore the item, normalize the full day order, enqueue item and operation sync, and persist a stable Trip Intelligence marker.
+- Reject delete or undo when the relevant item/day state changed after preview; retries must never delete or restore twice.
+- Route existing manual item deletion through the same reversible service and provide a compact immediate undo affordance in the day timeline.
+- Keep one final confirmation in the global AI surface and deterministic local planning for explicit delete/undo commands.
+
+No-go:
+
+- No ticket metadata/blob deletion, booking cancellation, refund, payment, ledger mutation, transport mutation, day/trip deletion, bulk deletion, or permanent purge.
+- No Provider call for deterministic delete/undo commands.
+- No Provider-supplied record ID, item ID, route, function, snapshot, operation fingerprint, or internal status.
+- No new IndexedDB table, Supabase table, object-sync type, or production database migration.
+- No real AI, map, route, search, cloud, or Provider calls.
+
+Likely files:
+
+- `src/types.ts`
+- `src/db/repositories.ts`
+- `src/db/trackedMutations.ts`
+- `src/lib/itemDeletion.ts`
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- `server/providerProxy/actionPlanProvider.ts`
+- `src/components/trip/DayTimelineView.tsx`
+- Focused repository, sync, planner, validation, runtime, component, and E2E tests plus roadmap/status updates.
+
+Validation:
+
+- Focused reversible-delete, sync/history, Action Gateway, Provider, and component tests.
+- Typecheck, lint, full unit suite, production build, focused 390px E2E, full serial E2E, PWA upgrade coverage, and `git diff --check`.
+
+Risk:
+
+- High: deletion removes a synced core object and undo resurrects it, while tickets and financial references must remain untouched and cross-device operation history must converge.
+
+Stop conditions:
+
+- Stop and repair if any ticket/blob, ledger, booking, or transport record is deleted or changed.
+- Stop and repair if deletion/undo writes before confirmation, accepts an ID/snapshot from Provider, replays twice, ignores changed day state, or commits partial item/history/outbox state.
+- Stop and repair if generic replan UI consumes item-delete operation records as adaptive replans or if remote operation payloads lose the undo snapshot.
+
+Result:
+
+- Added `item.delete@1` and `history.undo@1` with strict semantic-only inputs, fixed local-write risk, one deletion/undo per plan, structural-write separation, and no Provider-selected IDs, snapshots, fingerprints, statuses, routes, or functions.
+- Deterministic Chinese delete and undo commands stay local. Commands involving tickets, bookings, payments, refunds, ledger entries, or whole-trip deletion remain outside the registered deletion path.
+- The reversible repository contract captures complete day/item snapshots and full-content fingerprints, compacts the remaining day order, rejects stale item/day state, and restores the exact original item order.
+- Manual and AI deletion now use the same outer IndexedDB transaction for the item mutation, changed-order item upserts, operation record, object-sync outbox/state, and Trip Intelligence history.
+- Ticket metadata, ticket blobs, ledger links, orders, and transport records remain untouched while an item is absent and remain linked after restoration.
+- Delete and undo retries verify the durable operation marker plus the full applied or restored snapshot before returning idempotently; concurrent stale executions require a fresh preview and confirmation.
+- Existing adaptive-replan consumers now explicitly ignore item-deletion operation records, while object sync preserves operation kind, scope, delete/apply fingerprints, and undo fingerprint.
+- The day timeline uses the shared reversible service and shows a compact immediate undo action. Item-detail deletion uses the same contract and both surfaces explain that related records remain.
+- Added 390px E2E coverage proving one final confirmation, no Provider call, no pre-confirmation write, preserved ticket/ledger records, exact order restoration, folded details, and no horizontal overflow.
+
+Validation:
+
+- Focused reversible-delete, sync/history, Action Gateway, Provider, component, and affected-page tests passed: 9 files and 182 tests; targeted runtime/tracked-mutation reruns passed 40 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1506 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2285.3 KiB/94-entry precache.
+- Focused 390px delete/undo E2E passed.
+- The full serial E2E run passed all 150 tests in approximately 5.8 minutes, including PWA upgrade and desktop Beta smoke coverage.
+- `git diff --check` passed.
+- A protected-boundary review found and resolved an invalid nested Dexie transaction-table argument and test-suite timing instability; the final local review found no remaining high- or medium-risk issue.
+
+Residual:
+
+- Undo is intentionally rejected after the affected day changes again; the user must generate a fresh operation instead of overwriting later edits.
+- Preserved ticket and ledger references can temporarily point to an absent item until undo, but their metadata, files, financial state, and source links remain intact.
+- Real Provider planning remains intentionally uncalled; deterministic planning, mock Provider normalization, schema/privacy boundaries, confirmation, rollback, idempotency, concurrency, and stale-state behavior are covered locally.

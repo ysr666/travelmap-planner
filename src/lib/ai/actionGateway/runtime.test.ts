@@ -155,6 +155,226 @@ describe('AI Action Gateway runtime', () => {
     await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
   })
 
+  it('deletes one item with one confirmation, preserves related data, and restores the exact order', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.sortOrder = 2
+    const hotel: ItineraryItem = {
+      ...seed.item,
+      id: 'item-hotel',
+      sortOrder: 1,
+      title: '伦敦酒店',
+    }
+    const dinner: ItineraryItem = {
+      ...seed.item,
+      id: 'item-dinner',
+      sortOrder: 3,
+      title: '晚餐',
+    }
+    const ticket: TicketMeta = {
+      createdAt: 1,
+      fileName: 'london-eye.pdf',
+      fileType: 'pdf',
+      id: 'ticket-london-eye',
+      itemId: seed.item.id,
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 100,
+      storageMode: 'copy',
+      title: '伦敦眼门票',
+      tripId: seed.trip.id,
+      updatedAt: 1,
+    }
+    await seedDatabase(seed)
+    await db.transaction(
+      'rw',
+      [db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerExpenses],
+      async () => {
+        await db.itineraryItems.bulkPut([hotel, dinner])
+        await db.ticketMetas.put(ticket)
+        await db.ticketBlobs.put({ blob: new Blob(['ticket']), ticketId: ticket.id })
+        await db.ledgerExpenses.put({
+          amountMinor: 4200,
+          category: 'admission',
+          createdAt: 1,
+          currency: 'GBP',
+          date: seed.day.date,
+          id: 'expense-london-eye',
+          itemIds: [seed.item.id],
+          source: { kind: 'ticket', sourceId: ticket.id },
+          splitMode: 'equal',
+          splitShares: [],
+          status: 'confirmed',
+          title: '伦敦眼',
+          tripId: seed.trip.id,
+          updatedAt: 1,
+        })
+      },
+    )
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed, { tickets: [ticket] })
+    context.commandContext.items = [hotel, seed.item, dinner]
+    const plan = buildDeterministicAiActionPlan('删除第一天的伦敦眼')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '抵达伦敦：移除「伦敦眼」（第 2 位）；保留 1 张票据、1 笔账本关联和订单，可撤销。',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toBeDefined()
+
+    const [firstRun, concurrentRun] = await Promise.all([
+      executeAiActionPlan(prepared, context),
+      executeAiActionPlan(prepared, context),
+    ])
+
+    expect(firstRun.status).toBe('completed')
+    expect(concurrentRun.status).toBe('completed')
+    expect((await db.itineraryItems.where('dayId').equals(seed.day.id).sortBy('sortOrder'))
+      .map((item) => [item.title, item.sortOrder]))
+      .toEqual([['伦敦酒店', 1], ['晚餐', 2]])
+    await expect(db.ticketMetas.get(ticket.id)).resolves.toMatchObject({
+      id: ticket.id,
+      itemId: seed.item.id,
+    })
+    await expect(db.ticketBlobs.get(ticket.id)).resolves.toBeDefined()
+    await expect(db.ledgerExpenses.get('expense-london-eye')).resolves.toMatchObject({
+      itemIds: [seed.item.id],
+      status: 'confirmed',
+    })
+    await expect(db.tripReplanRecords.where('tripId').equals(seed.trip.id).count())
+      .resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+
+    const freshTrip = await db.trips.get(seed.trip.id)
+    const remainingItems = await db.itineraryItems.where('tripId').equals(seed.trip.id).toArray()
+    const undoContext = runtimeContext({ ...seed, item: hotel, trip: freshTrip! }, { tickets: [ticket] })
+    undoContext.commandContext.items = remainingItems
+    const undoPlan = buildDeterministicAiActionPlan('撤销刚才的删除')!
+    const undoPrepared = await prepareAiActionPlan(undoPlan, undoContext)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(undoPrepared.plan.requiresConfirmation).toBe(true)
+    expect(undoPrepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '抵达伦敦：恢复「伦敦眼」到第 2 位；关联资料保持不变。',
+    })
+
+    const undoRun = await executeAiActionPlan(undoPrepared, undoContext)
+
+    expect(undoRun.status).toBe('completed')
+    expect((await db.itineraryItems.where('dayId').equals(seed.day.id).sortBy('sortOrder'))
+      .map((item) => [item.title, item.sortOrder]))
+      .toEqual([['伦敦酒店', 1], ['伦敦眼', 2], ['晚餐', 3]])
+    await expect(db.ticketMetas.get(ticket.id)).resolves.toMatchObject({
+      id: ticket.id,
+      itemId: seed.item.id,
+    })
+    await expect(db.ticketBlobs.get(ticket.id)).resolves.toBeDefined()
+    await expect(db.ledgerExpenses.get('expense-london-eye')).resolves.toMatchObject({
+      itemIds: [seed.item.id],
+      status: 'confirmed',
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(2)
+
+    const retryUndo = await executeAiActionPlan(undoPrepared, undoContext)
+    expect(retryUndo.status).toBe('completed')
+    expect(retryUndo.steps[0].message).toContain('未重复执行')
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(2)
+  })
+
+  it('blocks a stale deletion undo without restoring the removed item', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    const second: ItineraryItem = {
+      ...seed.item,
+      id: 'item-second',
+      sortOrder: 2,
+      title: '晚餐',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(second)
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, second]
+    const deletePlan = buildDeterministicAiActionPlan('删除伦敦眼')!
+    const deletePrepared = await prepareAiActionPlan(deletePlan, context)
+    await executeAiActionPlan(deletePrepared, context)
+
+    const freshTrip = await db.trips.get(seed.trip.id)
+    const remainingItems = await db.itineraryItems.where('tripId').equals(seed.trip.id).toArray()
+    const undoContext = runtimeContext({ ...seed, item: second, trip: freshTrip! })
+    undoContext.commandContext.items = remainingItems
+    const undoPlan = buildDeterministicAiActionPlan('撤销刚才的删除')!
+    const undoPrepared = await prepareAiActionPlan(undoPlan, undoContext)
+
+    await db.itineraryItems.update(second.id, { notes: '用户刚刚补充', updatedAt: 99 })
+    const result = await executeAiActionPlan(undoPrepared, undoContext)
+
+    expect(result).toMatchObject({
+      message: '旅行内容已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toBeUndefined()
+    await expect(db.tripReplanRecords.where('tripId').equals(seed.trip.id).first())
+      .resolves.toMatchObject({ status: 'applied' })
+  })
+
+  it('rolls back a reversible deletion when its sync outbox cannot be committed', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('删除伦敦眼')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    const outboxAdd = vi.spyOn(db.syncOutbox, 'add')
+      .mockRejectedValueOnce(new Error('outbox unavailable'))
+
+    const failed = await executeAiActionPlan(prepared, context)
+
+    expect(failed.status).toBe('failed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toBeDefined()
+    await expect(db.tripReplanRecords.count()).resolves.toBe(0)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+
+    outboxAdd.mockRestore()
+    const retry = await executeAiActionPlan(prepared, context)
+    expect(retry.status).toBe('completed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toBeUndefined()
+    await expect(db.tripReplanRecords.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('allows only one independently prepared deletion from the same baseline', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('删除伦敦眼')!
+    const firstPrepared = await prepareAiActionPlan(plan, context)
+    const secondPrepared = await prepareAiActionPlan(plan, context)
+
+    const results = await Promise.all([
+      executeAiActionPlan(firstPrepared, context),
+      executeAiActionPlan(secondPrepared, context),
+    ])
+
+    expect(results.filter((result) => result.status === 'completed')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'failed')).toHaveLength(1)
+    expect(results.find((result) => result.status === 'failed')).toMatchObject({
+      requiresFreshConfirmation: true,
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toBeUndefined()
+    await expect(db.tripReplanRecords.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
   it('reorders one semantic item within its day only after confirmation', async () => {
     const seed = buildSeed()
     seed.item.title = '伦敦眼'

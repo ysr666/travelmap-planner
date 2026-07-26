@@ -11,7 +11,9 @@ import { listAiActionCatalog } from './registry'
 import {
   AI_ACTION_PLAN_SCHEMA_VERSION,
   type AiActionDayItemsReorderArgs,
+  type AiActionHistoryUndoArgs,
   type AiActionItemCreateArgs,
+  type AiActionItemDeleteArgs,
   type AiActionItemMoveArgs,
   type AiActionItemTimeUpdateArgs,
   type AiActionLedgerExpenseDraftArgs,
@@ -43,6 +45,10 @@ const ACTION_VERBS = [
   '记录',
   '记一笔',
   '创建',
+  '删除',
+  '移除',
+  '撤销',
+  '恢复',
 ]
 
 export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 | null {
@@ -76,7 +82,17 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
         })
   }
 
-  const itemCreate = parseDeterministicItemCreate(normalized)
+  const historyUndo = parseDeterministicHistoryUndo(normalized)
+  if (historyUndo) {
+    steps.push({
+      actionId: 'history.undo@1',
+      args: historyUndo,
+      dependsOn: [],
+      id: 'undo-item-delete',
+    })
+  }
+
+  const itemCreate = historyUndo ? null : parseDeterministicItemCreate(normalized)
   if (itemCreate) {
     steps.push({
       actionId: 'item.create@1',
@@ -86,7 +102,19 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const itemMove = itemCreate ? null : parseDeterministicItemMove(normalized)
+  const itemDelete = historyUndo || itemCreate
+    ? null
+    : parseDeterministicItemDelete(normalized)
+  if (itemDelete) {
+    steps.push({
+      actionId: 'item.delete@1',
+      args: itemDelete,
+      dependsOn: [],
+      id: 'delete-item',
+    })
+  }
+
+  const itemMove = itemCreate || itemDelete ? null : parseDeterministicItemMove(normalized)
   if (itemMove) {
     steps.push({
       actionId: 'item.move@1',
@@ -96,7 +124,7 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const dayReorder = itemCreate || itemMove ? null : parseDeterministicDayReorder(normalized)
+  const dayReorder = itemCreate || itemDelete || itemMove ? null : parseDeterministicDayReorder(normalized)
   if (dayReorder) {
     steps.push({
       actionId: 'day.items.reorder@1',
@@ -106,7 +134,7 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const timeUpdate = itemCreate || itemMove ? null : parseDeterministicTimeUpdate(normalized)
+  const timeUpdate = itemCreate || itemDelete || itemMove ? null : parseDeterministicTimeUpdate(normalized)
   if (timeUpdate) {
     steps.push({
       actionId: 'item.time.update@1',
@@ -127,7 +155,7 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const expenseDraft = itemCreate ? null : parseDeterministicExpenseDraft(normalized)
+  const expenseDraft = itemCreate || itemDelete ? null : parseDeterministicExpenseDraft(normalized)
   if (expenseDraft) {
     steps.push({
       actionId: 'ledger.expense.draft@1',
@@ -169,7 +197,7 @@ export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
-    ['票', '地点', '地址', '坐标', '行程', '行程点', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
+    ['票', '地点', '地址', '坐标', '行程', '行程点', '删除', '撤销', '恢复', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
       .some((noun) => normalized.includes(noun))
 }
 
@@ -277,6 +305,62 @@ function parseDeterministicItemCreate(command: string): AiActionItemCreateArgs |
     ...(timeRange?.endTime ? { endTime: timeRange.endTime } : {}),
     ...(timeRange?.startTime ? { startTime: timeRange.startTime } : {}),
     title,
+  }
+}
+
+function parseDeterministicHistoryUndo(command: string): AiActionHistoryUndoArgs | null {
+  if (isHypotheticalCommand(command)) return null
+  const undoVerb = command.match(/撤销|恢复/)
+  if (!undoVerb || !/(?:删除|移除)/.test(command)) return null
+  if (/(?:订单|预订|付款|退款|票据|门票|账本|费用)/.test(command)) return null
+
+  const targetSource = command
+    .replace(/^(?:请|麻烦|帮我|给我|\s)+/g, '')
+    .replace(/^(?:撤销|恢复)\s*(?:刚才|刚刚|刚)?\s*(?:的)?\s*(?:删除|移除)\s*(?:的)?/g, '')
+    .replace(/^(?:撤销|恢复)\s*(?:刚才|刚刚|刚)?\s*(?:的)?\s*/g, '')
+    .replace(/^(?:删除|移除)\s*(?:的)?/g, '')
+    .replace(/(?:这个|该)?(?:行程点|站点)\s*$/g, '')
+    .replace(/[，,。；;：:\s]+$/g, '')
+    .trim()
+  if (!targetSource || /^(?:删除|移除)$/.test(targetSource)) {
+    return { kind: 'item_delete' }
+  }
+  const semanticTarget = inferSemanticTarget(targetSource)
+  const target = semanticTarget ?? cleanSemanticSelector(targetSource)
+  if (!target || target.length > 160) return null
+  return { kind: 'item_delete', target }
+}
+
+function parseDeterministicItemDelete(command: string): AiActionItemDeleteArgs | null {
+  if (isHypotheticalCommand(command)) return null
+  if (/(?:取消|退款|退票|作废)/.test(command)) return null
+  if (/(?:票据|门票|订单|预订|付款|账本|费用|整个旅行|整趟旅行)/.test(command)) {
+    return null
+  }
+  const verb = command.match(/删除|移除/)
+  if (!verb || verb.index === undefined) return null
+  const day = findPlannerDayTarget(command)
+  const beforeVerb = command.slice(0, verb.index)
+  const afterVerb = command.slice(verb.index + verb[0].length)
+  const beforeIsOnlyScope = /^(?:请|麻烦|帮我|给我|\s)*(?:从)?(?:当天|当日|当前)?行程(?:中|里|内)?\s*$/.test(beforeVerb)
+  const rawTarget = verb.index === 0 || beforeIsOnlyScope ? afterVerb : beforeVerb
+  const semanticTarget = inferSemanticTarget(rawTarget)
+  const target = semanticTarget ?? cleanSemanticSelector(rawTarget, day?.text)
+    .replace(/^的\s*/g, '')
+    .replace(/(?:从)?(?:当天|当日|当前)?行程(?:中|里|内)?\s*$/g, '')
+    .replace(/(?:这个|该)?(?:行程点|站点)\s*$/g, '')
+    .replace(/[，,。；;：:\s]+$/g, '')
+    .trim()
+  if (
+    !target
+    || target.length > 160
+    || /^(?:整个|当前)?(?:行程|旅行)$/.test(target)
+  ) {
+    return null
+  }
+  return {
+    ...(day ? { day: day.target } : {}),
+    target,
   }
 }
 
@@ -595,7 +679,9 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
   const labels = [
     actionIds.has('workspace.open@1') ? '打开页面' : '',
     actionIds.has('ticket.open@1') ? '打开票据' : '',
+    actionIds.has('history.undo@1') ? '撤销行程点删除' : '',
     actionIds.has('item.create@1') ? '新增行程点' : '',
+    actionIds.has('item.delete@1') ? '删除行程点' : '',
     actionIds.has('item.move@1') ? '跨日移动行程点' : '',
     actionIds.has('day.items.reorder@1') ? '调整当天顺序' : '',
     actionIds.has('item.time.update@1') ? '调整行程时间' : '',

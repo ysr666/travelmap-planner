@@ -8,6 +8,10 @@ import {
   markTicketBlobDeleted,
   markTicketBlobPendingUpload,
 } from '../lib/objectSyncLocal'
+import {
+  deleteItineraryItemReversible as performReversibleItemDeletion,
+  undoItineraryItemDeletion as performItemDeletionUndo,
+} from '../lib/itemDeletion'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
 import * as ledgerRepo from './ledgerRepositories'
@@ -144,13 +148,25 @@ export async function setItineraryItemExecutionState(
   })
 }
 
-export async function deleteItineraryItemCascade(itemId: string) {
-  const item = await repo.getItineraryItem(itemId)
-  await repo.deleteItineraryItemCascade(itemId)
-  if (item) {
-    await enqueueObjectDelete({ objectId: item.id, objectType: 'item', tripId: item.tripId })
-    recordTripWriteForSync(item.tripId, 'item-deleted', { emitChangeEvent: false })
-  }
+export async function deleteItineraryItemReversible(
+  itemId: string,
+  options: Parameters<typeof performReversibleItemDeletion>[1] = {},
+) {
+  return performReversibleItemDeletion(itemId, options)
+}
+
+export async function deleteItineraryItemCascade(
+  itemId: string,
+  options: Parameters<typeof performReversibleItemDeletion>[1] = {},
+) {
+  return deleteItineraryItemReversible(itemId, options)
+}
+
+export async function undoItineraryItemDeletion(
+  recordId: string,
+  options: Parameters<typeof performItemDeletionUndo>[1] = {},
+) {
+  return performItemDeletionUndo(recordId, options)
 }
 
 export async function createTicketMeta(input: Parameters<typeof repo.createTicketMeta>[0]) {

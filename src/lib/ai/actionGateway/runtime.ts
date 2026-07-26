@@ -2,10 +2,12 @@ import {
   createItineraryItemIdempotent,
   createLedgerExpenseIdempotent,
   db,
+  deleteItineraryItemReversible,
   getItineraryItem,
   getLedgerSettingsByTrip,
   getTrip,
   ItineraryBaselineConflictError,
+  listAppliedItemDeletionRecords,
   listDaysByTrip,
   listItemsByTrip,
   listLedgerExpenses,
@@ -13,6 +15,7 @@ import {
   listTicketsByTrip,
   moveItineraryItemBetweenDays,
   reorderDayItems,
+  undoItineraryItemDeletion,
   updateItineraryItem,
 } from '../../../db'
 import { createId } from '../../../db/ids'
@@ -25,6 +28,7 @@ import type {
   LedgerSettings,
   TicketMeta,
   Trip,
+  TripReplanRecord,
 } from '../../../types'
 import { buildAiTripEditLocalStateFingerprint } from '../aiTripEditApply'
 import { buildTripContext } from '../aiTripContext'
@@ -72,6 +76,7 @@ import { retryTicketBlobUpload } from '../../cloudObjectSync'
 import { getZonedPlainDate, resolveTripTimeZone } from '../../timeZone'
 import { todayInTimeZone } from '../../timeSemantics'
 import { getStoredTravelProfile } from '../../travelProfile'
+import { buildTripOperationSnapshotFingerprint } from '../../tripOperationSnapshots'
 import {
   formatLedgerMoney,
   ledgerCategoryLabels,
@@ -85,7 +90,9 @@ import {
 } from '../../tripIntelligence'
 import {
   type AiActionDayItemsReorderArgs,
+  type AiActionHistoryUndoArgs,
   type AiActionItemCreateArgs,
+  type AiActionItemDeleteArgs,
   type AiActionItemMoveArgs,
   type AiActionPlaceEnrichArgs,
   type AiActionId,
@@ -140,6 +147,31 @@ type PreparedItemCreateAction = {
   sortOrder: number
   startTime?: string
   title: string
+  trip: Trip
+}
+
+type PreparedItemDeleteAction = {
+  currentIndex: number
+  currentItemIds: string[]
+  day: Day
+  expectedBaselineFingerprint: string
+  kind: 'item-delete'
+  ledgerLinkCount: number
+  operationFingerprint: string
+  operationRecordId: string
+  target: ItineraryItem
+  ticketCount: number
+  trip: Trip
+}
+
+type PreparedHistoryUndoAction = {
+  day: Day
+  deletedItem: ItineraryItem
+  expectedAppliedFingerprint: string
+  kind: 'history-undo'
+  operationFingerprint: string
+  originalIndex: number
+  record: TripReplanRecord
   trip: Trip
 }
 
@@ -238,7 +270,9 @@ type PreparedRoutePreviewAction = {
 
 type PreparedAction =
   | PreparedDayItemsReorderAction
+  | PreparedHistoryUndoAction
   | PreparedItemCreateAction
+  | PreparedItemDeleteAction
   | PreparedItemMoveAction
   | PreparedItemTimeAction
   | PreparedLedgerExpenseDraftAction
@@ -300,6 +334,24 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
       }
     },
   },
+  'history.undo@1': {
+    execute: async (prepared) =>
+      executeHistoryUndoAction(requirePreparedKind(prepared, 'history-undo')),
+    prepare: (args, context, preparation) =>
+      prepareHistoryUndoAction(
+        args as AiActionHistoryUndoArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const undo = requirePreparedKind(prepared, 'history-undo')
+      return {
+        affectedLabels: [undo.deletedItem.title],
+        hasWrite: true,
+        text: `${undo.day.title}：恢复「${undo.deletedItem.title}」到第 ${undo.originalIndex + 1} 位；关联资料保持不变。`,
+      }
+    },
+  },
   'item.create@1': {
     execute: async (prepared) =>
       executeItemCreateAction(requirePreparedKind(prepared, 'item-create')),
@@ -317,6 +369,24 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
         text: item.existingItem
           ? `「${item.title}」已由本次操作创建，不会重复新增。`
           : `${item.day.title}：将在末尾新增「${item.title}」${item.startTime ? ` · ${formatTimeRange(item.startTime, item.endTime)}` : ''}。`,
+      }
+    },
+  },
+  'item.delete@1': {
+    execute: async (prepared) =>
+      executeItemDeleteAction(requirePreparedKind(prepared, 'item-delete')),
+    prepare: (args, context, preparation) =>
+      prepareItemDeleteAction(
+        args as AiActionItemDeleteArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const deletion = requirePreparedKind(prepared, 'item-delete')
+      return {
+        affectedLabels: [deletion.target.title],
+        hasWrite: true,
+        text: `${deletion.day.title}：移除「${deletion.target.title}」（第 ${deletion.currentIndex + 1} 位）；保留 ${deletion.ticketCount} 张票据、${deletion.ledgerLinkCount} 笔账本关联和订单，可撤销。`,
       }
     },
   },
@@ -799,6 +869,119 @@ async function prepareItemCreateAction(
   }
 }
 
+async function prepareItemDeleteAction(
+  args: AiActionItemDeleteArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedItemDeleteAction> {
+  const trip = requireTrip(context.commandContext)
+  const explicitDay = args.day
+    ? resolveExplicitDayTarget(args.day, context.commandContext)
+    : undefined
+  const target = explicitDay
+    ? resolveItemTargetInDay(args.target, explicitDay, context.commandContext)
+    : resolveItemTarget(args.target, context.commandContext)
+  const day = explicitDay
+    ?? context.commandContext.days.find((candidate) => candidate.id === target.dayId)
+  if (!day || target.dayId !== day.id) {
+    throw new Error('目标行程点的日期已不存在。')
+  }
+  const currentItems = orderItems(
+    context.commandContext.days,
+    context.commandContext.items,
+  ).filter((item) => item.dayId === day.id)
+  const currentIndex = currentItems.findIndex((item) => item.id === target.id)
+  if (currentIndex < 0) throw new Error('目标行程点不在所选日期。')
+  const ledgerExpenses = await listLedgerExpenses(trip.id)
+  const ticketIds = new Set([
+    ...target.ticketIds,
+    ...context.commandContext.tickets
+      .filter((ticket) => ticket.itemId === target.id)
+      .map((ticket) => ticket.id),
+  ])
+  return {
+    currentIndex,
+    currentItemIds: currentItems.map((item) => item.id),
+    day,
+    expectedBaselineFingerprint: buildTripOperationSnapshotFingerprint({
+      days: [day],
+      items: currentItems,
+    }),
+    kind: 'item-delete',
+    ledgerLinkCount: ledgerExpenses.filter((expense) =>
+      expense.itemIds?.includes(target.id),
+    ).length,
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    operationRecordId: createId('replan_record'),
+    target,
+    ticketCount: ticketIds.size,
+    trip,
+  }
+}
+
+async function prepareHistoryUndoAction(
+  args: AiActionHistoryUndoArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedHistoryUndoAction> {
+  const trip = requireTrip(context.commandContext)
+  const records = await listAppliedItemDeletionRecords(trip.id)
+  const matches = args.target
+    ? records.filter((record) => {
+        const deletedItem = getDeletedItemFromOperationRecord(record)
+        const target = normalizeText(args.target ?? '')
+        const title = normalizeText(deletedItem.title)
+        return title.includes(target) || target.includes(title)
+      })
+    : records.slice(0, 1)
+  if (matches.length === 0) {
+    throw new Error(args.target
+      ? `没有找到「${args.target}」的可撤销删除记录。`
+      : '当前旅行没有可撤销的行程点删除。')
+  }
+  if (matches.length > 1) {
+    throw new Error('找到多个匹配的删除记录，请写清楚行程点名称。')
+  }
+  const record = matches[0]
+  if (!record.appliedFingerprint) {
+    throw new Error('删除记录缺少可验证快照。')
+  }
+  const deletedItem = getDeletedItemFromOperationRecord(record)
+  const day = record.beforeSnapshot.days.find((candidate) =>
+    candidate.id === deletedItem.dayId,
+  )
+  if (!day) throw new Error('删除记录的日期已不存在。')
+  const originalIndex = [...record.beforeSnapshot.items]
+    .sort((first, second) =>
+      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id),
+    )
+    .findIndex((item) => item.id === deletedItem.id)
+  if (originalIndex < 0) throw new Error('删除记录缺少原始顺序。')
+
+  return {
+    day,
+    deletedItem,
+    expectedAppliedFingerprint: record.appliedFingerprint,
+    kind: 'history-undo',
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    originalIndex,
+    record,
+    trip,
+  }
+}
+
 function prepareDayItemsReorderAction(
   args: AiActionDayItemsReorderArgs,
   context: AiActionGatewayRuntimeContext,
@@ -1198,6 +1381,70 @@ function matchesPreparedItemCreate(
     && item.endTime === prepared.endTime
 }
 
+async function executeItemDeleteAction(
+  prepared: PreparedItemDeleteAction,
+): Promise<ActionExecutionResult> {
+  try {
+    const result = await deleteItineraryItemReversible(prepared.target.id, {
+      expectedBaselineFingerprint: prepared.expectedBaselineFingerprint,
+      expectedCurrentItemIds: prepared.currentItemIds,
+      expectedItemUpdatedAt: prepared.target.updatedAt,
+      historyTitle: 'AI 删除行程点',
+      operationFingerprint: prepared.operationFingerprint,
+      operationRecordId: prepared.operationRecordId,
+      tripId: prepared.trip.id,
+    })
+    if (!result) {
+      throw new FreshConfirmationRequiredError(
+        '目标行程点已不存在，请重新生成预览。',
+      )
+    }
+    return {
+      appliedChanges: [],
+      effects: result.deleted
+        ? [buildDayScheduleEffect(prepared.trip.id, prepared.day.id)]
+        : [],
+      errors: [],
+      message: result.deleted
+        ? `已移除「${result.deletedItem.title}」，关联资料保持不变。`
+        : `「${result.deletedItem.title}」已经移除，未重复执行。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+}
+
+async function executeHistoryUndoAction(
+  prepared: PreparedHistoryUndoAction,
+): Promise<ActionExecutionResult> {
+  try {
+    const result = await undoItineraryItemDeletion(prepared.record.id, {
+      expectedAppliedFingerprint: prepared.expectedAppliedFingerprint,
+      historyTitle: 'AI 撤销删除',
+      tripId: prepared.trip.id,
+      undoOperationFingerprint: prepared.operationFingerprint,
+    })
+    return {
+      appliedChanges: [],
+      effects: result.restored
+        ? [buildDayScheduleEffect(prepared.trip.id, prepared.day.id)]
+        : [],
+      errors: [],
+      message: result.restored
+        ? `已恢复「${result.restoredItem.title}」及原顺序。`
+        : `「${result.restoredItem.title}」已经恢复，未重复执行。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+}
+
 async function executeItemCreateAction(
   prepared: PreparedItemCreateAction,
 ): Promise<ActionExecutionResult> {
@@ -1429,27 +1676,107 @@ async function canReplayPersistedPreparedPlan(
   for (const preparedStep of preparedPlan.steps) {
     if (previouslyCompleted.has(preparedStep.id) || !preparedStep.hasWrite) continue
     hasPendingWrite = true
-    if (
-      preparedStep.actionId !== 'item.move@1'
-      || !preparedStep.prepared
-      || (preparedStep.prepared as PreparedAction).kind !== 'item-move'
-    ) {
-      return false
-    }
-    const preparedMove = preparedStep.prepared as PreparedItemMoveAction
-    if (!await hasPersistedActionChange(
-      preparedMove.trip.id,
-      preparedMove.operationFingerprint,
-    )) {
-      return false
-    }
+    if (!preparedStep.prepared) return false
+    const prepared = preparedStep.prepared as PreparedAction
     try {
-      await assertPersistedItemMoveState(preparedMove)
+      if (prepared.kind === 'item-move') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedItemMoveState(prepared)
+        continue
+      }
+      if (prepared.kind === 'item-delete') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedItemDeleteState(prepared)
+        continue
+      }
+      if (prepared.kind === 'history-undo') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedItemDeletionUndoState(prepared)
+        continue
+      }
+      return false
     } catch {
       return false
     }
   }
   return hasPendingWrite
+}
+
+async function assertPersistedItemDeleteState(
+  prepared: PreparedItemDeleteAction,
+) {
+  const record = await db.tripReplanRecords.get(prepared.operationRecordId)
+  if (
+    !record
+    || record.operationKind !== 'item_delete'
+    || record.status !== 'applied'
+    || record.operationFingerprint !== prepared.operationFingerprint
+    || !record.appliedFingerprint
+    || await db.itineraryItems.get(prepared.target.id)
+  ) {
+    throw new FreshConfirmationRequiredError(
+      '删除后的行程与操作历史不一致，请重新生成预览。',
+    )
+  }
+  const day = await db.days.get(prepared.day.id)
+  if (!day) throw new FreshConfirmationRequiredError('目标日期已不存在。')
+  const currentItems = (await db.itineraryItems.where('dayId').equals(day.id).toArray())
+    .sort((first, second) =>
+      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id),
+    )
+  if (
+    buildTripOperationSnapshotFingerprint({ days: [day], items: currentItems })
+    !== record.appliedFingerprint
+  ) {
+    throw new FreshConfirmationRequiredError(
+      '删除后的行程已变化，请重新生成预览。',
+    )
+  }
+}
+
+async function assertPersistedItemDeletionUndoState(
+  prepared: PreparedHistoryUndoAction,
+) {
+  const record = await db.tripReplanRecords.get(prepared.record.id)
+  if (
+    !record
+    || record.operationKind !== 'item_delete'
+    || record.status !== 'undone'
+    || !record.undoFingerprint
+  ) {
+    throw new FreshConfirmationRequiredError(
+      '撤销后的行程与操作历史不一致，请重新生成预览。',
+    )
+  }
+  const day = await db.days.get(prepared.day.id)
+  if (!day) throw new FreshConfirmationRequiredError('目标日期已不存在。')
+  const currentItems = (await db.itineraryItems.where('dayId').equals(day.id).toArray())
+    .sort((first, second) =>
+      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id),
+    )
+  if (
+    buildTripOperationSnapshotFingerprint({ days: [day], items: currentItems })
+    !== record.undoFingerprint
+  ) {
+    throw new FreshConfirmationRequiredError(
+      '撤销后的行程已变化，请重新生成预览。',
+    )
+  }
 }
 
 async function executeItemTimeAction(
@@ -1979,6 +2306,20 @@ function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   if (matches.length === 1) return matches[0]
   if (matches.length > 1) throw new Error('找到多个匹配行程点，请写清楚名称。')
   throw new Error('没有找到目标行程点。')
+}
+
+function getDeletedItemFromOperationRecord(record: TripReplanRecord) {
+  if (record.operationKind !== 'item_delete' || !record.afterSnapshot) {
+    throw new Error('删除记录类型无效。')
+  }
+  const afterIds = new Set(record.afterSnapshot.items.map((item) => item.id))
+  const deletedItems = record.beforeSnapshot.items.filter((item) =>
+    !afterIds.has(item.id),
+  )
+  if (deletedItems.length !== 1) {
+    throw new Error('删除记录缺少唯一行程点快照。')
+  }
+  return deletedItems[0]
 }
 
 function sameOrderedItemIds(first: string[], second: string[]) {

@@ -8,6 +8,7 @@ import {
 import { getZonedMinuteOfDay, getZonedPlainDate, resolveTripTimeZone } from './timeZone'
 import type { TripReadinessIssue, TripReadinessIssueType, TripReadinessModel, TripReadinessSeverity } from './tripReadiness'
 import { getTicketDisplayTitle, getTicketStorageMode } from './tickets'
+import { isAdaptiveTripReplanRecord } from './tripOperationSnapshots'
 import type { TripRoutePreparation } from './routePreparation'
 import type { Day, ItineraryItem, SharedTripMutation, TicketBlobSyncState, TicketMeta, Trip, TripDisruptionEvent, TripReplanRecord } from '../types'
 
@@ -757,7 +758,9 @@ function buildAdaptiveReplanTimeline(
     timestamp: event.updatedAt,
     title: getDisruptionKindLabel(event.kind),
   }))
-  const recordEntries: TripOperationsReplanTimelineEntry[] = records.map((record) => ({
+  const recordEntries: TripOperationsReplanTimelineEntry[] = records
+    .filter(isAdaptiveTripReplanRecord)
+    .map((record) => ({
     detail: record.selectedDiff
       ? summarizeReplanDiff(record.selectedDiff)
       : record.options.length > 0
@@ -768,7 +771,7 @@ function buildAdaptiveReplanTimeline(
     severity: record.status === 'conflict' ? 'high' : record.status === 'preview' ? 'medium' : 'low',
     timestamp: record.updatedAt,
     title: record.status === 'applied' ? '已应用重排' : record.status === 'undone' ? '已撤销重排' : '重排方案',
-  }))
+    }))
   const undoRequestEntries: TripOperationsReplanTimelineEntry[] = sharedMutations
     .filter((mutation) => mutation.mutationType === 'request_replan_undo')
     .map((mutation) => ({

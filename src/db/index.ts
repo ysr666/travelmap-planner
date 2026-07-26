@@ -20,6 +20,8 @@ export {
   listTripReplanRecordsByEvent,
   listTripReplanRecordsByTrip,
 } from './repositories'
+export { listAppliedItemDeletionRecords } from '../lib/itemDeletion'
+export { isAdaptiveTripReplanRecord } from '../lib/tripOperationSnapshots'
 export {
   getExchangeRateCache,
   getLedgerExpense,
@@ -40,6 +42,7 @@ export {
   createTrip,
   deleteDayCascade,
   deleteItineraryItemCascade,
+  deleteItineraryItemReversible,
   deleteTicket,
   deleteTripCascade,
   importTripBackupRecords,
@@ -55,6 +58,7 @@ export {
   updateTrip,
   updateTripDisruptionEvent,
   updateTripReplanRecord,
+  undoItineraryItemDeletion,
 } from './trackedMutations'
 export {
   createLedgerBudget,

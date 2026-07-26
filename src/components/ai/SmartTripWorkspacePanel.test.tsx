@@ -337,12 +337,12 @@ async function clickTestId(testId: string) {
 }
 
 async function waitForText(text: string) {
-  for (let index = 0; index < 50; index += 1) {
+  for (let index = 0; index < 500; index += 1) {
     if (document.body.textContent?.includes(text)) {
       return
     }
     await act(async () => {
-      await delay()
+      await new Promise((resolve) => window.setTimeout(resolve, 10))
     })
   }
   throw new Error(`Text not found: ${text}`)

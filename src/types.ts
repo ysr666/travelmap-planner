@@ -144,6 +144,7 @@ export type TripDisruptionEventStatus = 'reported' | 'planned' | 'applied' | 'di
 export type TripDisruptionReporterRole = 'owner' | 'companion' | 'system'
 export type TripReplanStrategy = 'least_change' | 'preserve_most' | 'shortest_route'
 export type TripReplanRecordStatus = 'preview' | 'applied' | 'undone' | 'conflict'
+export type TripReplanOperationKind = 'adaptive_replan' | 'item_delete'
 export type TripReplanSourceKind = 'user_report' | 'travel_search' | 'place_details' | 'route_preview' | 'route_order_suggestion' | 'transport_segment'
 
 export type TripReplanSourceEvidence = {
@@ -254,10 +255,14 @@ export type TripReplanRecord = {
   id: string
   tripId: string
   eventId: string
+  operationKind?: TripReplanOperationKind
+  operationFingerprint?: string
+  scopeItemIds?: string[]
   selectedOptionId?: string
   status: TripReplanRecordStatus
   baselineFingerprint: string
   appliedFingerprint?: string
+  undoFingerprint?: string
   undoneAt?: number
   options: TripReplanOption[]
   selectedDiff?: TripReplanDiff

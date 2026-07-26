@@ -2066,6 +2066,48 @@ describe('provider proxy handler ai_action_plan', () => {
     })
     expect(fetcher).toHaveBeenCalledOnce()
   })
+
+  it('rejects provider-selected deletion IDs, snapshots, and sensitive fields', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            schemaVersion: 'ai_action_plan.v1',
+            steps: [{
+              actionId: 'item.delete@1',
+              args: {
+                recordId: 'replan_record_internal',
+                snapshot: { items: ['item_internal'] },
+                target: '伦敦眼',
+                ticketBlob: 'sensitive',
+              },
+              dependsOn: [],
+              id: 'delete',
+            }],
+            summary: '删除行程点',
+          }),
+        },
+      }],
+    }))) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'server-secret',
+        TRIPMAP_AI_BASE_URL: 'https://api.example/v1',
+        TRIPMAP_AI_MODEL: 'test-model',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validAiActionPlanRequest()),
+    })
+
+    expect(response.status).toBe(502)
+    expect(await response.json()).toMatchObject({
+      code: 'invalid_response',
+      ok: false,
+      operation: 'ai_action_plan',
+    })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
 })
 
 function validEditRequest(command = '第二天太满了，帮我放松一点') {

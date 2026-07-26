@@ -2,6 +2,7 @@ import { db } from './database'
 import Dexie from 'dexie'
 import { createId } from './ids'
 import { sortItineraryItems, sortItineraryItemsByPlanOrder } from '../lib/itinerary'
+import { buildTripOperationSnapshotFingerprint } from '../lib/tripOperationSnapshots'
 import type {
   Day,
   ItineraryItem,
@@ -47,6 +48,37 @@ type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdA
 type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
 type CreateTripReplanRecordInput = Omit<TripReplanRecord, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripReplanRecordPatch = Partial<Omit<TripReplanRecord, 'id' | 'tripId' | 'eventId' | 'createdAt' | 'updatedAt'>>
+
+export type DeleteItineraryItemReversibleOptions = {
+  expectedBaselineFingerprint?: string
+  expectedCurrentItemIds?: string[]
+  expectedItemUpdatedAt?: number
+  now?: number
+  operationFingerprint?: string
+  operationRecordId?: string
+  tripId?: string
+}
+
+export type RestoreItineraryItemDeletionOptions = {
+  expectedAppliedFingerprint?: string
+  now?: number
+  tripId?: string
+  undoOperationFingerprint?: string
+}
+
+export type ReversibleItemDeletionResult = {
+  changedItems: ItineraryItem[]
+  deleted: boolean
+  deletedItem: ItineraryItem
+  operationRecord: TripReplanRecord
+}
+
+export type RestoredItemDeletionResult = {
+  changedItems: ItineraryItem[]
+  operationRecord: TripReplanRecord
+  restored: boolean
+  restoredItem: ItineraryItem
+}
 
 export type ImportTripBackupRecordsInput = {
   trip: Trip
@@ -488,6 +520,94 @@ function sameOrderedIds(first: string[], second: string[]) {
     && first.every((itemId, index) => itemId === second[index])
 }
 
+async function listOrderedDayItems(dayId: string) {
+  return (await db.itineraryItems.where('dayId').equals(dayId).toArray())
+    .sort((first, second) =>
+      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id),
+    )
+}
+
+async function findItemDeletionRecord(
+  options: DeleteItineraryItemReversibleOptions,
+) {
+  if (options.operationRecordId) {
+    const byId = await db.tripReplanRecords.get(options.operationRecordId)
+    if (byId) return byId
+  }
+  if (!options.operationFingerprint) return undefined
+  const records = options.tripId
+    ? await db.tripReplanRecords.where('tripId').equals(options.tripId).toArray()
+    : await db.tripReplanRecords.toArray()
+  return records.find((record) =>
+    record.operationKind === 'item_delete'
+    && record.operationFingerprint === options.operationFingerprint,
+  )
+}
+
+async function readPersistedItemDeletionResult(
+  record: TripReplanRecord,
+  itemId: string,
+  options: DeleteItineraryItemReversibleOptions,
+): Promise<ReversibleItemDeletionResult> {
+  if (
+    record.operationKind !== 'item_delete'
+    || (options.operationFingerprint
+      && record.operationFingerprint !== options.operationFingerprint)
+    || (options.tripId && record.tripId !== options.tripId)
+  ) {
+    throw new ItineraryBaselineConflictError('删除操作记录与当前请求不一致。')
+  }
+  if (
+    record.status !== 'applied'
+    || !record.afterSnapshot
+    || !record.appliedFingerprint
+  ) {
+    throw new ItineraryBaselineConflictError(
+      record.status === 'undone'
+        ? '这次删除已经撤销，不能重复删除。'
+        : '删除操作记录不能继续执行。',
+    )
+  }
+  const deletedItem = getDeletedItemFromRecord(record)
+  if (deletedItem.id !== itemId || await db.itineraryItems.get(itemId)) {
+    throw new ItineraryBaselineConflictError('删除操作记录与当前行程不一致。')
+  }
+  const day = record.afterSnapshot.days[0] ?? record.beforeSnapshot.days[0]
+  if (!day) {
+    throw new ItineraryBaselineConflictError('删除记录缺少日期快照。')
+  }
+  const currentDay = await db.days.get(day.id)
+  if (!currentDay) {
+    throw new ItineraryBaselineConflictError('删除记录对应的日期已不存在。')
+  }
+  const currentSnapshot = {
+    days: [currentDay],
+    items: await listOrderedDayItems(day.id),
+  }
+  if (
+    buildTripOperationSnapshotFingerprint(currentSnapshot)
+    !== record.appliedFingerprint
+  ) {
+    throw new ItineraryBaselineConflictError('删除后的行程已变化，请重新生成预览。')
+  }
+  return {
+    changedItems: [],
+    deleted: false,
+    deletedItem,
+    operationRecord: record,
+  }
+}
+
+function getDeletedItemFromRecord(record: TripReplanRecord) {
+  const afterIds = new Set(record.afterSnapshot?.items.map((item) => item.id) ?? [])
+  const deletedItems = record.beforeSnapshot.items
+    .filter((item) => !afterIds.has(item.id))
+  if (deletedItems.length !== 1) {
+    throw new ItineraryBaselineConflictError('删除记录缺少唯一行程点快照。')
+  }
+  return deletedItems[0]
+}
+
 function matchesIdempotentItemInput(existing: ItineraryItem, input: CreateItineraryItemInput) {
   return existing.tripId === input.tripId
     && existing.dayId === input.dayId
@@ -500,28 +620,187 @@ function matchesIdempotentItemInput(existing: ItineraryItem, input: CreateItiner
     && existing.ticketIds.every((ticketId, index) => ticketId === input.ticketIds[index])
 }
 
-export async function deleteItineraryItemCascade(itemId: string) {
-  await db.transaction(
+export async function deleteItineraryItemReversible(
+  itemId: string,
+  options: DeleteItineraryItemReversibleOptions = {},
+): Promise<ReversibleItemDeletionResult | undefined> {
+  return db.transaction(
     'rw',
+    db.days,
     db.itineraryItems,
-    db.ticketMetas,
-    db.ticketBlobs,
+    db.tripReplanRecords,
     db.trips,
     async () => {
       const item = await db.itineraryItems.get(itemId)
-      if (!item) {
-        return
+      const existingRecord = await findItemDeletionRecord(options)
+      const tripId = options.tripId ?? item?.tripId ?? existingRecord?.tripId
+      if (!tripId) return undefined
+      if (item && item.tripId !== tripId) {
+        throw new ItineraryBaselineConflictError('目标行程点不属于当前旅行。')
+      }
+      if (existingRecord) {
+        return readPersistedItemDeletionResult(existingRecord, itemId, options)
+      }
+      if (!item) return undefined
+
+      const day = await db.days.get(item.dayId)
+      if (!day || day.tripId !== tripId) {
+        throw new ItineraryBaselineConflictError('目标日期已不存在。')
+      }
+      const currentItems = await listOrderedDayItems(day.id)
+      const currentItemIds = currentItems.map((candidate) => candidate.id)
+      if (
+        options.expectedCurrentItemIds
+        && !sameOrderedIds(currentItemIds, options.expectedCurrentItemIds)
+      ) {
+        throw new ItineraryBaselineConflictError('当天顺序已变化，请重新确认删除。')
+      }
+      if (
+        options.expectedItemUpdatedAt !== undefined
+        && item.updatedAt !== options.expectedItemUpdatedAt
+      ) {
+        throw new ItineraryBaselineConflictError('行程点内容已变化，请重新确认删除。')
+      }
+      const beforeSnapshot = { days: [day], items: currentItems }
+      const baselineFingerprint = buildTripOperationSnapshotFingerprint(beforeSnapshot)
+      if (
+        options.expectedBaselineFingerprint
+        && baselineFingerprint !== options.expectedBaselineFingerprint
+      ) {
+        throw new ItineraryBaselineConflictError('行程内容已变化，请重新确认删除。')
       }
 
-      const ticketMetas = await db.ticketMetas.where('itemId').equals(itemId).toArray()
-      const ticketIds = ticketMetas.map((ticket) => ticket.id)
+      const now = options.now ?? Date.now()
+      const remainingItems = currentItems.filter((candidate) => candidate.id !== itemId)
+      const nextItems = remainingItems.map((candidate, index) => (
+        candidate.sortOrder === index + 1
+          ? candidate
+          : { ...candidate, sortOrder: index + 1, updatedAt: now }
+      ))
+      const changedItems = nextItems.filter((candidate) => {
+        const previous = remainingItems.find((entry) => entry.id === candidate.id)
+        return previous?.sortOrder !== candidate.sortOrder
+      })
+      const afterSnapshot = { days: [day], items: nextItems }
+      const operationRecordId = options.operationRecordId ?? createId('replan_record')
+      const operationFingerprint = options.operationFingerprint
+        ?? `item-delete:${operationRecordId}`
+      const operationRecord: TripReplanRecord = {
+        afterSnapshot,
+        appliedFingerprint: buildTripOperationSnapshotFingerprint(afterSnapshot),
+        baselineFingerprint,
+        beforeSnapshot,
+        createdAt: now,
+        eventId: `item-delete:${operationRecordId}`,
+        evidence: [],
+        id: operationRecordId,
+        operationFingerprint,
+        operationKind: 'item_delete',
+        options: [],
+        scopeItemIds: currentItemIds,
+        status: 'applied',
+        tripId,
+        updatedAt: now,
+      }
 
-      await Promise.all([
-        db.itineraryItems.delete(itemId),
-        ticketIds.length > 0 ? db.ticketMetas.bulkDelete(ticketIds) : Promise.resolve(),
-        ticketIds.length > 0 ? db.ticketBlobs.bulkDelete(ticketIds) : Promise.resolve(),
-        db.trips.update(item.tripId, { updatedAt: Date.now() }),
-      ])
+      await db.itineraryItems.delete(itemId)
+      if (changedItems.length > 0) await db.itineraryItems.bulkPut(changedItems)
+      await db.tripReplanRecords.add(operationRecord)
+      await db.trips.update(tripId, { updatedAt: now })
+      return { changedItems, deleted: true, deletedItem: item, operationRecord }
+    },
+  )
+}
+
+export async function restoreItineraryItemDeletion(
+  recordId: string,
+  options: RestoreItineraryItemDeletionOptions = {},
+): Promise<RestoredItemDeletionResult> {
+  return db.transaction(
+    'rw',
+    db.days,
+    db.itineraryItems,
+    db.tripReplanRecords,
+    db.trips,
+    async () => {
+      const record = await db.tripReplanRecords.get(recordId)
+      if (!record || record.operationKind !== 'item_delete') {
+        throw new ItineraryBaselineConflictError('没有找到可撤销的行程点删除记录。')
+      }
+      if (options.tripId && record.tripId !== options.tripId) {
+        throw new ItineraryBaselineConflictError('删除记录不属于当前旅行。')
+      }
+      const deletedItem = getDeletedItemFromRecord(record)
+      const day = record.afterSnapshot?.days[0] ?? record.beforeSnapshot.days[0]
+      if (!day) {
+        throw new ItineraryBaselineConflictError('删除记录缺少日期快照。')
+      }
+      const currentDay = await db.days.get(day.id)
+      if (!currentDay) {
+        throw new ItineraryBaselineConflictError('删除记录对应的日期已不存在。')
+      }
+      const currentItems = await listOrderedDayItems(day.id)
+      const currentSnapshot = { days: [currentDay], items: currentItems }
+      const currentFingerprint = buildTripOperationSnapshotFingerprint(currentSnapshot)
+
+      if (record.status === 'undone') {
+        if (!record.undoFingerprint || record.undoFingerprint !== currentFingerprint) {
+          throw new ItineraryBaselineConflictError('撤销后的行程已变化，请重新检查。')
+        }
+        const restoredItem = currentItems.find((item) => item.id === deletedItem.id)
+        if (!restoredItem) {
+          throw new ItineraryBaselineConflictError('撤销记录与当前行程不一致。')
+        }
+        return {
+          changedItems: [],
+          operationRecord: record,
+          restored: false,
+          restoredItem,
+        }
+      }
+      if (
+        record.status !== 'applied'
+        || !record.afterSnapshot
+        || !record.appliedFingerprint
+      ) {
+        throw new ItineraryBaselineConflictError('这次删除不能撤销。')
+      }
+      if (
+        options.expectedAppliedFingerprint
+        && options.expectedAppliedFingerprint !== record.appliedFingerprint
+      ) {
+        throw new ItineraryBaselineConflictError('删除记录已变化，请重新生成预览。')
+      }
+      if (currentFingerprint !== record.appliedFingerprint) {
+        throw new ItineraryBaselineConflictError('删除后的行程已变化，不能直接撤销。')
+      }
+
+      const now = options.now ?? Date.now()
+      const restoredItems = record.beforeSnapshot.items.map((item) => ({
+        ...item,
+        updatedAt: now,
+      }))
+      const restoredSnapshot = {
+        days: [currentDay],
+        items: restoredItems,
+      }
+      const operationRecord: TripReplanRecord = {
+        ...record,
+        status: 'undone',
+        undoneAt: now,
+        undoFingerprint: buildTripOperationSnapshotFingerprint(restoredSnapshot),
+        updatedAt: now,
+      }
+
+      if (restoredItems.length > 0) await db.itineraryItems.bulkPut(restoredItems)
+      await db.tripReplanRecords.put(operationRecord)
+      await db.trips.update(record.tripId, { updatedAt: now })
+      return {
+        changedItems: restoredItems,
+        operationRecord,
+        restored: true,
+        restoredItem: restoredItems.find((item) => item.id === deletedItem.id) ?? deletedItem,
+      }
     },
   )
 }

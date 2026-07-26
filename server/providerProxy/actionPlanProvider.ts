@@ -50,6 +50,8 @@ export function buildAiActionPlanProviderInput(
       '最多 6 个步骤。id 使用短英文标识；dependsOn 只能引用同计划中的步骤 id。',
       '每个动作的 args 只能使用 availableActions.input 明确列出的语义字段；不得添加 ID、patch、状态、路由或函数。',
       'item.move@1 只能使用语义行程点、来源/目标日期和固定 first/last/before/after；目标日期或参照点不明确时不要猜测。',
+      'item.delete@1 只删除一个明确的语义行程点；不得选择票据、订单、账本、旅行或任何永久删除目标，也不得与其他结构写入组合。',
+      'history.undo@1 的 kind 只能是 item_delete；不得输出记录 ID、快照、指纹、状态或数据库字段，也不得与其他写入组合。',
       'target 优先使用 current_item、first_item，或上下文中唯一且明确的行程点名称。目标不明确时不要猜测具体名称。',
       'place.enrich@1 与 trip.repair@1 不得出现在同一计划中。',
       '输出必须是 JSON，不要 Markdown、代码块或解释。',
@@ -171,8 +173,37 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
   const ticketRequested = /票据|门票|车票|机票|预订/.test(command) && allowed.has('ticket.open@1')
   const repairRequested = /全部|所有|一键|统一|缺失|修复|整理/.test(command) && allowed.has('trip.repair@1')
   const placeRequested = /地点|地址|坐标|位置/.test(command) && allowed.has('place.enrich@1')
+  const protectedDeleteTarget = /票据|门票|订单|预订|付款|退款|账本|费用|旅行/.test(command)
+  const undoRequested = /撤销|恢复/.test(command)
+    && /删除|移除/.test(command)
+    && !protectedDeleteTarget
+    && allowed.has('history.undo@1')
+  const deleteRequested = !undoRequested
+    && /删除|移除/.test(command)
+    && !protectedDeleteTarget
+    && allowed.has('item.delete@1')
 
-  if (ticketRequested) {
+  if (undoRequested) {
+    const target = extractQuotedTarget(command)
+    steps.push({
+      actionId: 'history.undo@1',
+      args: { kind: 'item_delete', ...(target ? { target } : {}) },
+      dependsOn: [],
+      id: 'undo-item-delete',
+    })
+  } else if (deleteRequested) {
+    const target = inferItemTarget(command)
+    if (target) {
+      steps.push({
+        actionId: 'item.delete@1',
+        args: { target },
+        dependsOn: [],
+        id: 'delete-item',
+      })
+    }
+  }
+
+  if (!undoRequested && !deleteRequested && ticketRequested) {
     const ticketQuery = extractQuotedTarget(command) ?? extractTicketQuery(command)
     steps.push({
       actionId: 'ticket.open@1',
@@ -181,14 +212,14 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
       id: 'open-ticket',
     })
   }
-  if (repairRequested) {
+  if (!undoRequested && !deleteRequested && repairRequested) {
     steps.push({
       actionId: 'trip.repair@1',
       args: { scope: inferRepairScope(command) },
       dependsOn: [],
       id: 'repair-trip',
     })
-  } else if (placeRequested) {
+  } else if (!undoRequested && !deleteRequested && placeRequested) {
     steps.push({
       actionId: 'place.enrich@1',
       args: { target: inferPlaceTarget(command) },
@@ -219,6 +250,12 @@ function inferPlaceTarget(command: string) {
   return extractQuotedTarget(command) ?? 'current_item'
 }
 
+function inferItemTarget(command: string) {
+  if (/第一站|首站|第一个行程点/.test(command)) return 'first_item'
+  if (/当前站|这一站|这个行程点|当前行程点/.test(command)) return 'current_item'
+  return extractQuotedTarget(command)
+}
+
 function extractQuotedTarget(command: string) {
   return command.match(/[「“"]([^」”"]{1,80})[」”"]/)?.[1]?.trim()
 }
@@ -232,6 +269,8 @@ function summarizeMockSteps(steps: Array<Record<string, unknown>>) {
   const ids = new Set(steps.map((step) => step.actionId))
   return [
     ids.has('ticket.open@1') ? '打开票据' : '',
+    ids.has('history.undo@1') ? '撤销行程点删除' : '',
+    ids.has('item.delete@1') ? '删除行程点' : '',
     ids.has('place.enrich@1') ? '补全地点' : '',
     ids.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean).join('并')

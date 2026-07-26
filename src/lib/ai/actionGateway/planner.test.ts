@@ -7,7 +7,7 @@ import {
 } from './planner'
 
 describe('AI Action Gateway planner', () => {
-  it('uses deterministic local planning for registered navigation, create, reorder, time, route, expense, ticket, place, and repair commands', () => {
+  it('uses deterministic local planning for registered navigation, itinerary, ledger, ticket, place, and repair commands', () => {
     expect(buildDeterministicAiActionPlan('打开资料中心')?.steps[0]).toMatchObject({
       actionId: 'workspace.open@1',
       args: { target: 'documents' },
@@ -51,6 +51,27 @@ describe('AI Action Gateway planner', () => {
         target: '伦敦眼',
       },
     })
+    expect(buildDeterministicAiActionPlan('删除第一天的伦敦眼')?.steps[0]).toMatchObject({
+      actionId: 'item.delete@1',
+      args: {
+        day: 'first_day',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('把伦敦眼从行程中移除')?.steps[0]).toMatchObject({
+      actionId: 'item.delete@1',
+      args: { target: '伦敦眼' },
+    })
+    expect(buildDeterministicAiActionPlan('撤销刚才的删除')?.steps[0]).toMatchObject({
+      actionId: 'history.undo@1',
+      args: { kind: 'item_delete' },
+    })
+    expect(buildDeterministicAiActionPlan('恢复刚删除的伦敦眼')?.steps[0]).toMatchObject({
+      actionId: 'history.undo@1',
+      args: { kind: 'item_delete', target: '伦敦眼' },
+    })
+    expect(buildDeterministicAiActionPlan('删除伦敦眼门票')).toBeNull()
+    expect(buildDeterministicAiActionPlan('取消伦敦眼预订')).toBeNull()
     expect(buildDeterministicAiActionPlan('第一天新增午餐 32 GBP')?.steps).toHaveLength(1)
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')?.steps[0]).toMatchObject({
       actionId: 'route.preview@1',
@@ -148,5 +169,7 @@ describe('AI Action Gateway planner', () => {
     expect(shouldRequestAiActionPlan('记一笔酒店 1,000 GBP')).toBe(true)
     expect(shouldRequestAiActionPlan('新增一个行程点但还没确定哪天')).toBe(true)
     expect(shouldRequestAiActionPlan('把伦敦眼移动到另一个日期')).toBe(true)
+    expect(shouldRequestAiActionPlan('删除第一天的伦敦眼')).toBe(false)
+    expect(shouldRequestAiActionPlan('撤销刚才的删除')).toBe(false)
   })
 })

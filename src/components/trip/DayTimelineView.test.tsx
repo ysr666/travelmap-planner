@@ -6,8 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DayTimelineView } from './DayTimelineView'
 
 const mocks = vi.hoisted(() => ({
-  deleteItineraryItemCascade: vi.fn().mockResolvedValue(undefined),
+  deleteItineraryItemReversible: vi.fn(),
   reorderDayItems: vi.fn().mockResolvedValue([]),
+  undoItineraryItemDeletion: vi.fn(),
   navigateTo: vi.fn(),
   describeItemTime: vi.fn(() => '10:00'),
   describePreviousTransport: vi.fn(() => ''),
@@ -17,8 +18,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../db', () => ({
-  deleteItineraryItemCascade: mocks.deleteItineraryItemCascade,
+  deleteItineraryItemReversible: mocks.deleteItineraryItemReversible,
   reorderDayItems: mocks.reorderDayItems,
+  undoItineraryItemDeletion: mocks.undoItineraryItemDeletion,
 }))
 
 vi.mock('../../lib/routes', () => ({
@@ -246,6 +248,60 @@ describe('DayTimelineView', () => {
     const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
       .find((b) => b.getAttribute('aria-label')?.includes('删除') || b.textContent?.includes('删除'))
     expect(deleteButton).toBeTruthy()
+  })
+
+  it('keeps related records and exposes a compact undo after deletion', async () => {
+    const onItemsChange = vi.fn().mockResolvedValue(undefined)
+    const items = [
+      { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', ticketIds: [], sortOrder: 1, createdAt: 100, updatedAt: 100 },
+      { id: 'item_2', dayId: 'day_1', tripId: 'trip_1', title: '东京塔', ticketIds: [], sortOrder: 2, createdAt: 100, updatedAt: 100 },
+    ]
+    mocks.deleteItineraryItemReversible.mockResolvedValueOnce({
+      deleted: true,
+      deletedItem: items[0],
+      operationRecord: { id: 'delete-record-1' },
+    })
+    mocks.undoItineraryItemDeletion.mockResolvedValueOnce({
+      restored: true,
+      restoredItem: items[0],
+    })
+
+    await act(async () => {
+      root?.render(
+        <DayTimelineView
+          day={defaultDay}
+          items={items}
+          onItemsChange={onItemsChange}
+          onOpenItem={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+
+    const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('删除'))
+    await act(async () => deleteButton?.click())
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain('票据、账本和订单保留，可撤销')
+
+    const confirmButton = Array.from(dialog?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('删除行程点'))
+    await act(async () => confirmButton?.click())
+
+    expect(mocks.deleteItineraryItemReversible).toHaveBeenCalledWith('item_1', {
+      expectedCurrentItemIds: ['item_1', 'item_2'],
+      expectedItemUpdatedAt: 100,
+      tripId: 'trip_1',
+    })
+    expect(container?.textContent).toContain('关联资料保留')
+    const undoButton = container?.querySelector<HTMLButtonElement>('[aria-label="撤销删除浅草寺"]')
+    await act(async () => undoButton?.click())
+
+    expect(mocks.undoItineraryItemDeletion).toHaveBeenCalledWith('delete-record-1', {
+      tripId: 'trip_1',
+    })
+    expect(container?.textContent).toContain('已恢复「浅草寺」及原顺序')
+    expect(onItemsChange).toHaveBeenCalledTimes(2)
   })
 
   it('renders multiple items with transport info', async () => {

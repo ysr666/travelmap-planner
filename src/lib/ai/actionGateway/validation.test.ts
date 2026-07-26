@@ -210,6 +210,88 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps item deletion reversible and history undo restricted to semantic targets', () => {
+    expect(buildDeterministicAiActionPlan('删除第一天的伦敦眼')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.delete@1',
+        args: { day: 'first_day', target: '伦敦眼' },
+        risk: 'local_write',
+      }],
+    })
+    expect(buildDeterministicAiActionPlan('撤销刚才的删除')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'history.undo@1',
+        args: { kind: 'item_delete' },
+        risk: 'local_write',
+      }],
+    })
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'item.delete@1',
+        args: {
+          recordId: 'replan_record_secret',
+          snapshot: { items: [] },
+          target: 'item_internal_secret',
+        },
+        id: 'delete',
+      }],
+      summary: '非法删除',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'history.undo@1',
+        args: {
+          kind: 'arbitrary_table',
+          recordId: 'replan_record_secret',
+          target: 'current_item',
+        },
+        id: 'undo',
+      }],
+      summary: '非法撤销',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'item.delete@1',
+          args: { target: '伦敦眼' },
+          id: 'delete',
+        },
+        {
+          actionId: 'item.move@1',
+          args: {
+            destinationDay: 'day:2',
+            position: 'last',
+            target: '大本钟',
+          },
+          id: 'move',
+        },
+      ],
+      summary: '删除并移动',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'history.undo@1',
+          args: { kind: 'item_delete' },
+          id: 'undo',
+        },
+        {
+          actionId: 'item.time.update@1',
+          args: { startTime: '10:00', target: '伦敦眼' },
+          id: 'time',
+        },
+      ],
+      summary: '撤销并修改',
+    }).ok).toBe(false)
+  })
+
   it('keeps route generation and expense drafts bounded and confirmation gated', () => {
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
       requiresConfirmation: true,
@@ -335,7 +417,9 @@ describe('AI Action Gateway V1 contract', () => {
   it('publishes only the supported action catalog and detects likely provider plans', () => {
     expect(listAiActionCatalog().map((action) => action.id)).toEqual([
       'day.items.reorder@1',
+      'history.undo@1',
       'item.create@1',
+      'item.delete@1',
       'item.move@1',
       'item.time.update@1',
       'ledger.expense.draft@1',

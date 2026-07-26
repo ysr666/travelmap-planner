@@ -18,6 +18,7 @@ import {
   updateTicketMeta,
 } from '../db'
 import { createId } from '../db/ids'
+import { isAdaptiveTripReplanRecord } from './tripOperationSnapshots'
 import { getCurrentSession, getCurrentUser } from './cloudBackup'
 import { getTicketCategoryLabel, getTicketScope } from './tickets'
 import { requireSupabaseClient, getSupabaseConfigStatus } from './supabaseClient'
@@ -409,7 +410,11 @@ export function buildSharedTripProjection({
   const sharedItems = items.map((item) => sanitizeSharedItem(item, ticketIds))
   const eventById = new Map(replanEvents.map((event) => [event.id, event]))
   const latestReplan = [...replanRecords]
-    .filter((record) => record.status === 'applied' && record.selectedDiff)
+    .filter((record) =>
+      isAdaptiveTripReplanRecord(record)
+      && record.status === 'applied'
+      && record.selectedDiff,
+    )
     .sort((first, second) => second.updatedAt - first.updatedAt)[0]
   const latestReplanEvent = latestReplan ? eventById.get(latestReplan.eventId) : undefined
 

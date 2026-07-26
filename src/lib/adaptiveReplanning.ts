@@ -107,6 +107,7 @@ export function buildTripReplanPreview({
     beforeSnapshot,
     eventId: event.id,
     evidence: normalizeEvidence(event, evidence, now),
+    operationKind: 'adaptive_replan',
     options,
     status: 'preview',
     tripId: trip.id,
@@ -149,6 +150,9 @@ export async function createTripReplanPreviewForEvent(eventId: string) {
 export async function applyTripReplanOption(recordId: string, optionId: string) {
   const record = await getTripReplanRecord(recordId)
   if (!record) throw new Error('没有找到重排记录。')
+  if (record.operationKind && record.operationKind !== 'adaptive_replan') {
+    throw new Error('这不是自适应重排记录。')
+  }
   if (record.status !== 'preview') throw new Error('这次重排已经处理过。')
   const option = record.options.find((candidate) => candidate.id === optionId)
   if (!option) throw new Error('没有找到要应用的方案。')
@@ -219,6 +223,9 @@ export async function applyTripReplanOption(recordId: string, optionId: string) 
 export async function undoTripReplan(recordId: string) {
   const record = await getTripReplanRecord(recordId)
   if (!record) throw new Error('没有找到重排记录。')
+  if (record.operationKind && record.operationKind !== 'adaptive_replan') {
+    throw new Error('这不是自适应重排记录。')
+  }
   if (record.status !== 'applied' || !record.appliedFingerprint || !record.afterSnapshot) {
     throw new Error('这次重排不能撤销。')
   }

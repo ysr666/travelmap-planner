@@ -39,6 +39,46 @@ describe('actionPlanProvider', () => {
     }
   })
 
+  it('keeps mock deletion and undo inside the registered semantic contract', async () => {
+    const deleteRequest = actionPlanRequest()
+    deleteRequest.command = '删除「伦敦眼」'
+    const deleteResult = await createMockAiActionPlanProvider(deleteRequest)
+      .plan(buildAiActionPlanProviderInput(deleteRequest))
+    expect(deleteResult).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          steps: [{
+            actionId: 'item.delete@1',
+            args: { target: '伦敦眼' },
+          }],
+        },
+      },
+    })
+
+    const undoRequest = actionPlanRequest()
+    undoRequest.command = '撤销刚才的删除'
+    const undoResult = await createMockAiActionPlanProvider(undoRequest)
+      .plan(buildAiActionPlanProviderInput(undoRequest))
+    expect(undoResult).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          steps: [{
+            actionId: 'history.undo@1',
+            args: { kind: 'item_delete' },
+          }],
+        },
+      },
+    })
+
+    const prompt = buildAiActionPlanProviderInput(deleteRequest).prompt
+    expect(prompt).toContain('不得选择票据、订单、账本、旅行或任何永久删除目标')
+    expect(prompt).toContain('不得输出记录 ID、快照、指纹、状态或数据库字段')
+  })
+
   it('sends only the prompt and server-side key to an OpenAI-compatible provider', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

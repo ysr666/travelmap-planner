@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../db', () => ({
   createTripDisruptionEvent: mocks.createTripDisruptionEvent,
+  isAdaptiveTripReplanRecord: (record: { operationKind?: string }) =>
+    !record.operationKind || record.operationKind === 'adaptive_replan',
   listTripReplanRecordsByTrip: mocks.listTripReplanRecordsByTrip,
   setItineraryItemExecutionState: mocks.setExecutionState,
 }))

@@ -16,7 +16,7 @@ import {
   Sparkles,
   Ticket,
 } from 'lucide-react'
-import { listTripReplanRecordsByTrip } from '../../db'
+import { isAdaptiveTripReplanRecord, listTripReplanRecordsByTrip } from '../../db'
 import { prepareAiTripEditExecution } from '../../lib/ai/aiTripEditExecution'
 import { applyAiTripEditPatchPlanToDb } from '../../lib/ai/aiTripEditApply'
 import { buildAiTripEditPatchPreview, type AiTripEditPatchPlan, type AiTripEditPatchPreview } from '../../lib/ai/aiTripEditPatch'
@@ -610,7 +610,11 @@ function LiveModeSurface({
 
 function selectLatestActiveReplanRecord(records: TripReplanRecord[], dayId: string) {
   return records
-    .filter((record) => ACTIVE_REPLAN_RECORD_STATUSES.has(record.status) && replanRecordTouchesDay(record, dayId))
+    .filter((record) =>
+      isAdaptiveTripReplanRecord(record)
+      && ACTIVE_REPLAN_RECORD_STATUSES.has(record.status)
+      && replanRecordTouchesDay(record, dayId),
+    )
     .sort((left, right) => (right.updatedAt - left.updatedAt) || (right.createdAt - left.createdAt))[0] ?? null
 }
 

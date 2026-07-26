@@ -398,6 +398,139 @@ test('全局 AI 跨日移动只在一次确认后同时更新两个日期', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 删除与撤销在 390px 保留票据账本并恢复原顺序', async ({ page }) => {
+  await page.setViewportSize({ height: 844, width: 390 })
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-delete-day',
+      sortOrder: 1,
+      title: '抵达伦敦',
+      tripId: 'gateway-delete-trip',
+    }],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-delete-day',
+        id: 'gateway-delete-hotel',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '伦敦酒店',
+        tripId: 'gateway-delete-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-delete-day',
+        id: 'gateway-delete-eye',
+        sortOrder: 2,
+        ticketIds: ['gateway-delete-ticket'],
+        title: '伦敦眼',
+        tripId: 'gateway-delete-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-delete-day',
+        id: 'gateway-delete-dinner',
+        sortOrder: 3,
+        ticketIds: [],
+        title: '晚餐',
+        tripId: 'gateway-delete-trip',
+        updatedAt: now,
+      },
+    ],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'london-eye.pdf',
+      fileType: 'pdf',
+      id: 'gateway-delete-ticket',
+      itemId: 'gateway-delete-eye',
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 1024,
+      storageMode: 'reference',
+      title: '伦敦眼门票',
+      tripId: 'gateway-delete-trip',
+      updatedAt: now,
+    }],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-delete-trip',
+      startDate: '2026-07-10',
+      title: '可逆删除测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await seedDeletionLedgerRelation(page)
+  await page.goto('/#/trip?tripId=gateway-delete-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('删除第一天的伦敦眼')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('删除行程点')
+  await expect(result).toContainText('保留 1 张票据、1 笔账本关联和订单，可撤销')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect((await readItineraryItemsByDay(page, 'gateway-delete-day')).map((item) => item.title))
+    .toEqual(['伦敦酒店', '伦敦眼', '晚餐'])
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect.poll(async () =>
+    (await readItineraryItemsByDay(page, 'gateway-delete-day')).map((item) => item.title),
+  ).toEqual(['伦敦酒店', '晚餐'])
+  expect(await readFirstStoreRecord(page, 'ticketMetas')).toMatchObject({
+    id: 'gateway-delete-ticket',
+    itemId: 'gateway-delete-eye',
+  })
+  expect(await readFirstStoreRecord(page, 'ledgerExpenses')).toMatchObject({
+    id: 'gateway-delete-expense',
+    itemIds: ['gateway-delete-eye'],
+    status: 'confirmed',
+  })
+  expect(await countStore(page, 'tripReplanRecords')).toBe(1)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByLabel('全局 AI 指令').fill('撤销刚才的删除')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  await expect(result).toContainText('撤销行程点删除')
+  await expect(result).toContainText('恢复「伦敦眼」到第 2 位')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  await expectNoHorizontalOverflow(page)
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect.poll(async () =>
+    (await readItineraryItemsByDay(page, 'gateway-delete-day')).map((item) => item.title),
+  ).toEqual(['伦敦酒店', '伦敦眼', '晚餐'])
+  expect(await readFirstStoreRecord(page, 'ticketMetas')).toMatchObject({
+    id: 'gateway-delete-ticket',
+    itemId: 'gateway-delete-eye',
+  })
+  expect(await readFirstStoreRecord(page, 'ledgerExpenses')).toMatchObject({
+    id: 'gateway-delete-expense',
+    itemIds: ['gateway-delete-eye'],
+    status: 'confirmed',
+  })
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 路线配置变化后重新预览确认才请求服务并写入缓存', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceRouteProxyFixture(page)
@@ -1144,6 +1277,41 @@ async function seedLedgerSetup(page: Page, tripId: string) {
       db.close()
     }
   }, tripId)
+}
+
+async function seedDeletionLedgerRelation(page: Page) {
+  await page.evaluate(async () => {
+    const request = indexedDB.open('TravelConsoleDB')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction('ledgerExpenses', 'readwrite')
+        transaction.objectStore('ledgerExpenses').put({
+          amountMinor: 4200,
+          category: 'admission',
+          createdAt: Date.now(),
+          currency: 'GBP',
+          date: '2026-07-10',
+          id: 'gateway-delete-expense',
+          itemIds: ['gateway-delete-eye'],
+          source: { kind: 'ticket', sourceId: 'gateway-delete-ticket' },
+          splitMode: 'equal',
+          splitShares: [],
+          status: 'confirmed',
+          title: '伦敦眼',
+          tripId: 'gateway-delete-trip',
+          updatedAt: Date.now(),
+        })
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error ?? new Error('写入删除关系测试数据失败'))
+      })
+    } finally {
+      db.close()
+    }
+  })
 }
 
 async function readFirstStoreRecord(page: Page, storeName: string) {

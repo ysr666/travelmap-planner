@@ -77,6 +77,8 @@ vi.mock('../hooks/useTripData', () => ({
 }))
 
 vi.mock('../db', () => ({
+  isAdaptiveTripReplanRecord: (record: { operationKind?: string }) =>
+    !record.operationKind || record.operationKind === 'adaptive_replan',
   listTripDisruptionEventsByTrip: mocks.listTripDisruptionEventsByTrip,
   listItemsByDay: mocks.listItemsByDay,
   listTicketsByTrip: mocks.listTicketsByTrip,

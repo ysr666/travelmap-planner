@@ -270,7 +270,13 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   async function confirmDeleteItem() {
     setIsDeleting(true)
     try {
-      await deleteItineraryItemCascade(item.id)
+      await deleteItineraryItemCascade(item.id, {
+        ...(dayItems.some((candidate) => candidate.id === item.id)
+          ? { expectedCurrentItemIds: dayItems.map((candidate) => candidate.id) }
+          : {}),
+        expectedItemUpdatedAt: item.updatedAt,
+        tripId: trip.id,
+      })
       setIsDeleteConfirmOpen(false)
       onItemDeleted()
     } catch {
@@ -800,7 +806,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
       ) : null}
 
       <ConfirmDialog
-        body="删除后，绑定到该行程点的票据记录也会被移除。"
+        body="仅移除行程点；票据、账本和订单保留，可撤销。"
         confirmLabel="删除行程点"
         loading={isDeleting}
         onCancel={() => {

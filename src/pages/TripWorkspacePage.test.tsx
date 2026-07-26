@@ -77,6 +77,8 @@ vi.mock('../lib/routes', () => ({
 
 vi.mock('../db', () => ({
   getLedgerSettingsByTrip: vi.fn().mockResolvedValue(null),
+  isAdaptiveTripReplanRecord: (record: { operationKind?: string }) =>
+    !record.operationKind || record.operationKind === 'adaptive_replan',
   listLedgerBudgets: vi.fn().mockResolvedValue([]),
   listLedgerExpenses: vi.fn().mockResolvedValue([]),
   listLedgerParticipants: vi.fn().mockResolvedValue([]),

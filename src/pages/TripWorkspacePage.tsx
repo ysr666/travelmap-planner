@@ -14,7 +14,7 @@ import {
   Ticket,
   WalletCards,
 } from 'lucide-react'
-import { listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip } from '../db'
+import { isAdaptiveTripReplanRecord, listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip } from '../db'
 import { TripCover } from '../components/trip/TripCover'
 import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
 import { TripMoreMenu } from '../components/trip/TripMoreMenu'
@@ -179,7 +179,7 @@ export function TripWorkspacePage() {
         setTicketBlobSyncStates(blobSyncStates)
         setCloudSyncQueueSummary(syncSummary)
         setTripDisruptionEvents(replanEvents)
-        setTripReplanRecords(replanRecords)
+        setTripReplanRecords(replanRecords.filter(isAdaptiveTripReplanRecord))
         setSharedTripMutations(sharedState && sharedState.configured && sharedState.signedIn ? sharedState.mutations : [])
         setTripOperationsInboxPreview(inboxPreview ?? null)
         setTripOperationsInboxSummary(buildTripOperationsInboxSummary({

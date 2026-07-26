@@ -3,7 +3,7 @@ import {
   mergeObjectPayloadFields,
   resolveObjectSyncConflictPayload,
 } from './objectSyncMerge'
-import type { ItineraryItem, ObjectSyncConflict, Trip } from '../types'
+import type { ItineraryItem, ObjectSyncConflict, Trip, TripReplanRecord } from '../types'
 
 describe('object sync field merge', () => {
   it('auto merges different fields from the same base', () => {
@@ -125,6 +125,41 @@ describe('object sync field merge', () => {
     }
   })
 
+  it('merges reversible deletion operation metadata and undo state', () => {
+    const base = buildReplanRecord()
+    const local = buildReplanRecord()
+    const remote = buildReplanRecord({
+      operationFingerprint: 'item-delete:fingerprint',
+      operationKind: 'item_delete',
+      scopeItemIds: ['item_1'],
+      status: 'undone',
+      undoFingerprint: 'undo:fingerprint',
+      undoneAt: 200,
+      updatedAt: 200,
+    })
+
+    const result = mergeObjectPayloadFields({
+      basePayload: base,
+      localPayload: local,
+      now: 300,
+      objectType: 'replan_record',
+      remotePayload: remote,
+    })
+
+    expect(result.status).toBe('merged')
+    if (result.status === 'merged') {
+      expect(result.payload).toMatchObject({
+        operationFingerprint: 'item-delete:fingerprint',
+        operationKind: 'item_delete',
+        scopeItemIds: ['item_1'],
+        status: 'undone',
+        undoFingerprint: 'undo:fingerprint',
+        undoneAt: 200,
+        updatedAt: 300,
+      })
+    }
+  })
+
   it('resolves a notes conflict by merging both versions', () => {
     const conflict: ObjectSyncConflict = {
       conflictType: 'field_conflict',
@@ -169,6 +204,26 @@ function buildItem(patch: Partial<ItineraryItem> = {}): ItineraryItem {
     ticketIds: [],
     sortOrder: 1,
     title: '涩谷散步',
+    tripId: 'trip_1',
+    updatedAt: 100,
+    ...patch,
+  }
+}
+
+function buildReplanRecord(
+  patch: Partial<TripReplanRecord> = {},
+): TripReplanRecord {
+  return {
+    afterSnapshot: { days: [], items: [] },
+    appliedFingerprint: 'applied',
+    baselineFingerprint: 'baseline',
+    beforeSnapshot: { days: [], items: [] },
+    createdAt: 1,
+    eventId: 'event_1',
+    evidence: [],
+    id: 'replan_1',
+    options: [],
+    status: 'applied',
     tripId: 'trip_1',
     updatedAt: 100,
     ...patch,

@@ -7,7 +7,7 @@ import {
   createTicketMeta,
   createTrip,
   deleteDayCascade,
-  deleteItineraryItemCascade,
+  deleteItineraryItemReversible,
   deleteTicket,
   deleteTripCascade,
   getDay,
@@ -24,6 +24,7 @@ import {
   moveItineraryItemBetweenDays,
   replaceTripPlanRecords,
   reorderDayItems,
+  restoreItineraryItemDeletion,
   listTrips,
   saveTicketBlob,
   updateTicketMeta,
@@ -378,18 +379,60 @@ describe('Cascade deletes', () => {
     expect(await getTicketMeta(ticket.id)).toBeUndefined()
   })
 
-  it('deleteItineraryItemCascade removes item and its tickets', async () => {
+  it('deleteItineraryItemReversible removes only the item and preserves its ticket', async () => {
     const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
     const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
-    const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 1, ticketIds: [] })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'First', sortOrder: 1, ticketIds: [] })
+    const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 2, ticketIds: [] })
+    const last = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Last', sortOrder: 3, ticketIds: [] })
     const ticket = await createTicketMeta({ tripId: trip.id, itemId: item.id, fileName: 'a.pdf', fileType: 'pdf', mimeType: 'application/pdf', size: 1 })
     await saveTicketBlob(ticket.id, new Blob(['test']))
 
-    await deleteItineraryItemCascade(item.id)
+    const result = await deleteItineraryItemReversible(item.id, {
+      expectedCurrentItemIds: [first.id, item.id, last.id],
+      expectedItemUpdatedAt: item.updatedAt,
+      operationFingerprint: 'test-item-delete',
+      operationRecordId: 'replan-record-delete',
+      tripId: trip.id,
+    })
 
     expect(await getItineraryItem(item.id)).toBeUndefined()
-    expect(await getTicketMeta(ticket.id)).toBeUndefined()
-    expect(await getTicketBlob(ticket.id)).toBeUndefined()
+    expect(await getTicketMeta(ticket.id)).toMatchObject({ id: ticket.id, itemId: item.id })
+    expect(await getTicketBlob(ticket.id)).toBeDefined()
+    expect((await listItemsByDay(day.id)).map((entry) => [entry.title, entry.sortOrder])).toEqual([
+      ['First', 1],
+      ['Last', 2],
+    ])
+    expect(result).toMatchObject({
+      deleted: true,
+      operationRecord: {
+        id: 'replan-record-delete',
+        operationFingerprint: 'test-item-delete',
+        operationKind: 'item_delete',
+        scopeItemIds: [first.id, item.id, last.id],
+        status: 'applied',
+      },
+    })
+    expect(result?.operationRecord.beforeSnapshot.items).toHaveLength(3)
+    expect(result?.operationRecord.afterSnapshot?.items).toHaveLength(2)
+
+    const restored = await restoreItineraryItemDeletion('replan-record-delete', {
+      expectedAppliedFingerprint: result?.operationRecord.appliedFingerprint,
+      tripId: trip.id,
+    })
+
+    expect(restored).toMatchObject({
+      restored: true,
+      restoredItem: { id: item.id, title: 'A' },
+      operationRecord: { status: 'undone' },
+    })
+    expect((await listItemsByDay(day.id)).map((entry) => [entry.title, entry.sortOrder])).toEqual([
+      ['First', 1],
+      ['A', 2],
+      ['Last', 3],
+    ])
+    expect(await getTicketMeta(ticket.id)).toMatchObject({ id: ticket.id, itemId: item.id })
+    expect(await getTicketBlob(ticket.id)).toBeDefined()
   })
 
   it('deleteTicket removes ticket and cleans up item references', async () => {

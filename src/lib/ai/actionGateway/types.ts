@@ -23,6 +23,7 @@ export type AiActionId =
   | 'place.enrich@1'
   | 'route.preview@1'
   | 'ticket.open@1'
+  | 'trip.replan.apply@1'
   | 'trip.repair@1'
   | 'workspace.open@1'
 
@@ -82,6 +83,14 @@ export type AiActionItemReplanPreferenceUpdateArgs = {
   priority?: ReplanPriority
   target: string
   weatherSuitability?: ReplanWeatherSuitability
+}
+
+export type AiActionTripReplanApplyArgs = {
+  day?: string
+  delayMinutes?: number
+  kind: 'cancelled' | 'closure' | 'delay' | 'late' | 'weather_unsuitable'
+  strategy?: 'least_change' | 'preserve_most' | 'shortest_route'
+  target?: string
 }
 
 export type AiActionDayItemsReorderArgs = {
@@ -148,6 +157,7 @@ export type AiActionArgsById = {
   'place.enrich@1': AiActionPlaceEnrichArgs
   'route.preview@1': AiActionRoutePreviewArgs
   'ticket.open@1': AiActionTicketOpenArgs
+  'trip.replan.apply@1': AiActionTripReplanApplyArgs
   'trip.repair@1': AiActionTripRepairArgs
   'workspace.open@1': AiActionWorkspaceOpenArgs
 }

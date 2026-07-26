@@ -143,6 +143,51 @@ describe('actionPlanProvider', () => {
     }
   })
 
+  it('keeps mock disruption replans bounded and rejects non-action wording', async () => {
+    const request = actionPlanRequest()
+    request.command = '“伦敦眼”闭馆了，尽量保留'
+    const result = await createMockAiActionPlanProvider(request)
+      .plan(buildAiActionPlanProviderInput(request))
+
+    expect(result).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          steps: [{
+            actionId: 'trip.replan.apply@1',
+            args: {
+              kind: 'closure',
+              strategy: 'preserve_most',
+              target: '伦敦眼',
+            },
+          }],
+        },
+      },
+    })
+    const prompt = buildAiActionPlanProviderInput(request).prompt
+    expect(prompt).toContain('不得输出事件 ID、记录 ID、证据、备注、时间戳、快照、patch、路线、函数或 Provider')
+
+    for (const command of [
+      '如果我晚到30分钟，帮我调整行程',
+      '不要因为下雨调整行程',
+      '伦敦眼闭馆了怎么办？',
+      '“伦敦眼”并未闭馆，请按最少改动调整行程',
+      '假设“伦敦眼”闭馆，请调整后续',
+      '“伦敦眼”闭馆了吗，请帮我分析后续影响',
+    ]) {
+      const nonActionRequest = actionPlanRequest()
+      nonActionRequest.command = command
+      await expect(
+        createMockAiActionPlanProvider(nonActionRequest)
+          .plan(buildAiActionPlanProviderInput(nonActionRequest)),
+      ).resolves.toMatchObject({
+        errorCode: 'invalid_response',
+        ok: false,
+      })
+    }
+  })
+
   it('sends only the prompt and server-side key to an OpenAI-compatible provider', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

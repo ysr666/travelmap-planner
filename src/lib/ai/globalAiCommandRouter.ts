@@ -347,7 +347,7 @@ function buildReplanPreview(
     targetItem,
     title: intent.hypothetical ? 'What-if 重排预览' : '突发情况重排预览',
     warnings: [
-      intent.hypothetical ? '这是模拟预览，确认应用前不会创建事件或同步云端。' : '确认应用前不会创建事件、重排记录或同步云端。',
+      intent.hypothetical ? '这是只读模拟，不会创建事件、重排记录或同步云端。' : '确认应用前不会创建事件、重排记录或同步云端。',
       '当前全局输入框只使用本地行程数据生成预览；没有来源时不会声明实时事实。',
       ...record.options.flatMap((option) => option.diff.warnings).slice(0, 4),
     ],
@@ -612,7 +612,26 @@ function parsePreferenceIntent(command: string): ItineraryReplanPreference | nul
 }
 
 function parseReplanIntent(command: string, normalized: string): Extract<GlobalAiCommandIntent, { kind: 'replan' }> | null {
-  const hypothetical = containsAny(command, ['如果', '假如', '模拟', '试试', '会怎样']) || /\bwhat\s*if\b/.test(normalized)
+  const explicitHypothetical = containsAny(
+    command,
+    ['如果', '假如', '假设', '假定', '设想', '模拟', '试试', '会怎样'],
+  ) || /\bwhat\s*if\b/.test(normalized)
+  const disruptionPattern = '(?:迟到|晚到|延误|晚点|闭馆|关闭|取消|下雨|天气|重排|调整)'
+  const negatedDisruption =
+    new RegExp(`(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,48}${disruptionPattern}`).test(command)
+    || new RegExp(`(?:没有|没|并未|并没有|未曾|未|不是|并非)[^，。；;]{0,24}${disruptionPattern}`).test(command)
+    || new RegExp(`${disruptionPattern}[^，。；;]{0,16}(?:并不存在|并没有|没有发生|不是真的)`).test(command)
+  const interrogativeDisruption = /(?:是不是|是否|有没有|能否|能不能|可不可以|要不要|该不该)/.test(command)
+    && new RegExp(disruptionPattern).test(command)
+    || new RegExp(`${disruptionPattern}[^，。；;]{0,32}(?:怎么办|会怎样|怎么调整|怎么处理|如何调整|如何处理|吗|么|\\?|？)`).test(command)
+    || /[?？]/.test(command) && new RegExp(disruptionPattern).test(command)
+  const protectedCancellation = /取消/.test(command)
+    && /(?:预订|订单|付款|退款|退票|门票|票据|整个|整趟|全部|所有|行程|旅行)/.test(command)
+  const hypothetical = explicitHypothetical
+    || negatedDisruption
+    || interrogativeDisruption
+    || protectedCancellation
+    || /(?:怎么办|怎么调整|怎么处理|如何调整|如何处理|会有什么影响|吗|么)\s*[?？]?/.test(command)
   const delayMinutes = extractDelayMinutes(command)
   if (containsAny(command, ['迟到', '晚到', '来晚']) || /\blate\b/.test(normalized)) {
     return { delayMinutes: delayMinutes ?? 30, disruptionKind: 'late', hypothetical, kind: 'replan' }
@@ -632,7 +651,9 @@ function parseReplanIntent(command: string, normalized: string): Extract<GlobalA
   if (containsAny(command, ['跳过', '不去了', 'skip']) || /\bskip\b/.test(normalized)) {
     return { disruptionKind: 'skip', hypothetical, kind: 'replan' }
   }
-  return hypothetical ? { disruptionKind: 'late', hypothetical, kind: 'replan' } : null
+  return explicitHypothetical
+    ? { disruptionKind: 'late', hypothetical, kind: 'replan' }
+    : null
 }
 
 function isNewTripCommand(normalized: string) {

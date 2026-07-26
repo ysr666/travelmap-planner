@@ -57,6 +57,51 @@ describe('globalAiInteraction', () => {
     expect(result.actionProposal?.suggestion.action?.mode).toBe('confirm_required')
   })
 
+  it('keeps hypothetical disruption proposals read-only', async () => {
+    const day = {
+      date: '2026-06-18',
+      id: 'day_1',
+      sortOrder: 1,
+      title: '东京第一天',
+      tripId: 'trip_1',
+    }
+    const item = {
+      createdAt: 1,
+      dayId: day.id,
+      endTime: '11:00',
+      id: 'item_1',
+      sortOrder: 1,
+      startTime: '10:00',
+      ticketIds: [],
+      title: '浅草寺',
+      tripId: 'trip_1',
+      updatedAt: 1,
+    }
+    const result = await resolveGlobalAiInteraction(
+      '如果我晚到30分钟会怎样？',
+      context({
+        currentDay: day,
+        currentItem: item,
+        days: [day],
+        items: [item],
+      }),
+    )
+
+    expect(result.kind).toBe('replan_preview')
+    if (result.kind !== 'replan_preview') return
+    expect(result.hypothetical).toBe(true)
+    expect(result.actionProposal).toMatchObject({
+      actionLabel: '只读模拟',
+      requiresConfirmation: false,
+      suggestion: {
+        requiresConfirmation: false,
+        status: 'pending',
+      },
+      title: 'What-if 重排预览',
+    })
+    expect(result.actionProposal?.suggestion.action?.mode).toBe('preview')
+  })
+
   it('can force write-like commands into ordinary assistant answers for recovery', async () => {
     const result = await resolveGlobalAiInteraction('帮我把上午安排改一下', context(), {
       forceMode: 'assistant_answer',

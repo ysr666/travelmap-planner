@@ -38,6 +38,18 @@ const REPLAN_FLEXIBILITIES = new Set(['fixed', 'movable', 'optional'])
 const REPLAN_PRIORITIES = new Set(['must_keep', 'high', 'normal', 'low'])
 const REPLAN_WEATHER_SUITABILITIES = new Set(['any_weather', 'avoid_rain', 'indoor_preferred'])
 const REPLAN_MOBILITY_SUITABILITIES = new Set(['normal', 'easy', 'demanding'])
+const REPLAN_DISRUPTION_KINDS = new Set([
+  'cancelled',
+  'closure',
+  'delay',
+  'late',
+  'weather_unsuitable',
+])
+const REPLAN_STRATEGIES = new Set([
+  'least_change',
+  'preserve_most',
+  'shortest_route',
+])
 const WORKSPACE_TARGETS = new Set([
   'documents',
   'home',
@@ -152,6 +164,9 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   if (steps.filter((step) => step.actionId === 'item.replan.preference.update@1').length > 1) {
     errors.push('一个计划最多更新一次重排偏好。')
   }
+  if (steps.filter((step) => step.actionId === 'trip.replan.apply@1').length > 1) {
+    errors.push('一个计划最多应用一次突发重排。')
+  }
   const structuralActionCount = [
     'day.items.reorder@1',
     'item.create@1',
@@ -172,12 +187,13 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   const boundedItemStateActions = new Set([
     'item.execution.update@1',
     'item.replan.preference.update@1',
+    'trip.replan.apply@1',
   ])
   if (
     steps.some((step) => boundedItemStateActions.has(step.actionId))
     && steps.filter((step) => step.risk === 'local_write').length > 1
   ) {
-    errors.push('行程进度或重排偏好需要与其他写入动作分开确认。')
+    errors.push('行程进度、重排偏好或突发重排需要与其他写入动作分开确认。')
   }
   if (errors.length > 0 || !summary) return { errors: Array.from(new Set(errors)), ok: false }
 
@@ -358,6 +374,41 @@ function validateArgs<TActionId extends AiActionId>(
       ...(priority ? { priority } : {}),
       target,
       ...(weatherSuitability ? { weatherSuitability } : {}),
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'trip.replan.apply@1') {
+    const kind = readEnum(record.kind, REPLAN_DISRUPTION_KINDS)
+    const delayMinutes = readBoundedInteger(record.delayMinutes, 1, 240)
+    const target = record.target === undefined
+      ? undefined
+      : readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const day = record.day === undefined
+      ? undefined
+      : readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    const strategy = readEnum(record.strategy, REPLAN_STRATEGIES)
+    if (!kind) errors.push(`${path}.kind 无效。`)
+    validateOptionalInteger(record, 'delayMinutes', delayMinutes, path, errors)
+    if (record.target !== undefined && !target) {
+      errors.push(`${path}.target 必须是语义行程点目标。`)
+    }
+    if (record.day !== undefined && !day) {
+      errors.push(`${path}.day 必须是语义日期目标。`)
+    }
+    validateOptionalEnum(record, 'strategy', strategy, path, errors)
+    if (
+      delayMinutes !== undefined
+      && kind !== 'delay'
+      && kind !== 'late'
+    ) {
+      errors.push(`${path}.delayMinutes 只允许用于 delay 或 late。`)
+    }
+    if (!kind) return null
+    return {
+      ...(day ? { day } : {}),
+      ...(delayMinutes ? { delayMinutes } : {}),
+      kind,
+      ...(strategy ? { strategy } : {}),
+      ...(target ? { target } : {}),
     } as AiActionArgsById[TActionId]
   }
   if (actionId === 'day.items.reorder@1') {

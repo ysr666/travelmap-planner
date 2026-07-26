@@ -368,6 +368,70 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps adaptive replans semantic, bounded, stale-safe, and separately confirmed', () => {
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'trip.replan.apply@1',
+        args: {
+          delayMinutes: 45,
+          kind: 'late',
+          strategy: 'least_change',
+          target: 'current_item',
+        },
+        id: 'replan',
+      }],
+      summary: '应用突发重排',
+    })).toMatchObject({
+      ok: true,
+      plan: {
+        requiresConfirmation: true,
+        steps: [{
+          actionId: 'trip.replan.apply@1',
+          risk: 'local_write',
+        }],
+      },
+    })
+
+    for (const args of [
+      { functionName: 'deleteTrip', kind: 'late' },
+      { kind: 'skip' },
+      { delayMinutes: 0, kind: 'late' },
+      { delayMinutes: 241, kind: 'delay' },
+      { delayMinutes: 30, kind: 'closure', target: '伦敦眼' },
+      { kind: 'late', strategy: 'provider_selected' },
+      { itemId: 'item_internal', kind: 'closure', target: '伦敦眼' },
+      { kind: 'closure', target: '#/item?token=secret' },
+    ]) {
+      expect(validateAiActionPlan({
+        schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+        steps: [{
+          actionId: 'trip.replan.apply@1',
+          args,
+          id: 'replan',
+        }],
+        summary: '非法突发重排',
+      }).ok).toBe(false)
+    }
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'trip.replan.apply@1',
+          args: { kind: 'late' },
+          id: 'replan',
+        },
+        {
+          actionId: 'item.execution.update@1',
+          args: { state: 'completed', target: '伦敦眼' },
+          id: 'execution',
+        },
+      ],
+      summary: '重排并更新进度',
+    }).ok).toBe(false)
+  })
+
   it('keeps route generation and expense drafts bounded and confirmation gated', () => {
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
       requiresConfirmation: true,
@@ -504,6 +568,7 @@ describe('AI Action Gateway V1 contract', () => {
       'place.enrich@1',
       'route.preview@1',
       'ticket.open@1',
+      'trip.replan.apply@1',
       'trip.repair@1',
       'workspace.open@1',
     ])

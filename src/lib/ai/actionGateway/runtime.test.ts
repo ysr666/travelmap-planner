@@ -929,6 +929,166 @@ describe('AI Action Gateway runtime', () => {
     await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
   })
 
+  it('applies an adaptive disruption replan through one confirmation without a provider call', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.startTime = '10:00'
+    seed.item.endTime = '11:00'
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      endTime: '13:00',
+      id: 'item-2',
+      sortOrder: 2,
+      startTime: '12:00',
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(secondItem)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, secondItem]
+    const plan = buildDeterministicAiActionPlan(
+      '我晚到30分钟，按最少改动调整',
+    )!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼', '大本钟'],
+      hasWrite: true,
+      preview: '抵达伦敦：伦敦眼将改为 10:30，共 2 项；按最少改动调整 2 项。',
+    })
+    await expect(db.tripReplanEvents.count()).resolves.toBe(0)
+    await expect(db.tripReplanRecords.count()).resolves.toBe(0)
+
+    const [firstRun, retryRun] = await Promise.all([
+      executeAiActionPlan(prepared, context),
+      executeAiActionPlan(prepared, context),
+    ])
+
+    expect(firstRun.status).toBe('completed')
+    expect(retryRun.status).toBe('completed')
+    expect([firstRun, retryRun].map((run) => run.steps[0].message).join(' '))
+      .toContain('未重复执行')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      endTime: '11:30',
+      startTime: '10:30',
+    })
+    await expect(db.itineraryItems.get(secondItem.id)).resolves.toMatchObject({
+      endTime: '13:30',
+      startTime: '12:30',
+    })
+    await expect(db.tripReplanEvents.count()).resolves.toBe(1)
+    await expect(db.tripReplanRecords.count()).resolves.toBe(1)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a cross-midnight delay as a manual item instead of a no-op', async () => {
+    const seed = buildSeed()
+    seed.item.startTime = '23:30'
+    seed.item.endTime = '23:55'
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('我晚到45分钟')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(prepared.plan.requiresConfirmation).toBe(false)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: [],
+      hasWrite: false,
+      preview: '抵达伦敦：顺延后会跨日，需手动安排。',
+    })
+  })
+
+  it('requires a fresh confirmation when ticket metadata changes after replan preview', async () => {
+    const seed = buildSeed()
+    seed.item.startTime = '10:00'
+    seed.item.endTime = '11:00'
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('我晚到30分钟')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.ticketMetas.put({
+      createdAt: 2,
+      fileName: 'updated-ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket-stale',
+      itemId: seed.item.id,
+      mimeType: 'application/pdf',
+      scope: 'item',
+      size: 100,
+      storageMode: 'reference',
+      title: '刚更新的票据',
+      tripId: seed.trip.id,
+      updatedAt: 2,
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '旅行、票据或账本内容已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      startTime: '10:00',
+    })
+    await expect(db.tripReplanEvents.count()).resolves.toBe(0)
+    await expect(db.tripReplanRecords.count()).resolves.toBe(0)
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('uses an explicit disruption day instead of an unrelated current item', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.replanPreference = { weatherSuitability: 'avoid_rain' }
+    const secondDay: Day = {
+      date: '2026-07-11',
+      id: 'day-2',
+      sortOrder: 2,
+      title: '爱丁堡',
+      tripId: seed.trip.id,
+    }
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-2',
+      replanPreference: undefined,
+      title: '爱丁堡城堡',
+    }
+    await seedDatabase(seed)
+    await db.days.put(secondDay)
+    await db.itineraryItems.put(secondItem)
+    const context = runtimeContext({
+      day: secondDay,
+      item: secondItem,
+      trip: seed.trip,
+    })
+    context.commandContext.days = [seed.day, secondDay]
+    context.commandContext.items = [seed.item, secondItem]
+    const plan = buildDeterministicAiActionPlan(
+      '7月10日下雨，按最少改动调整',
+    )!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+    })
+    const result = await executeAiActionPlan(prepared, context)
+    expect(result.status).toBe('completed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      executionState: { status: 'skipped' },
+    })
+    expect((await db.itineraryItems.get(secondItem.id))?.executionState)
+      .toBeUndefined()
+  })
+
   it('waits for confirmation before requesting and caching a route preview', async () => {
     const seed = buildSeed()
     seed.item.lat = 51.47

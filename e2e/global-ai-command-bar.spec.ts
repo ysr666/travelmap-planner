@@ -1164,7 +1164,94 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   await expectNoHorizontalOverflow(page)
 })
 
-test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', async ({ page }) => {
+test('全局 AI 在 390px 通过一次确认应用本地突发重排', async ({ page }) => {
+  await page.setViewportSize({ height: 844, width: 390 })
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-replan-day',
+      sortOrder: 1,
+      title: '伦敦第一天',
+      tripId: 'gateway-replan-trip',
+    }],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-replan-day',
+        endTime: '11:00',
+        id: 'gateway-replan-eye',
+        sortOrder: 1,
+        startTime: '10:00',
+        ticketIds: [],
+        title: '伦敦眼',
+        tripId: 'gateway-replan-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-replan-day',
+        endTime: '13:00',
+        id: 'gateway-replan-clock',
+        sortOrder: 2,
+        startTime: '12:00',
+        ticketIds: [],
+        title: '大本钟',
+        tripId: 'gateway-replan-trip',
+        updatedAt: now,
+      },
+    ],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-replan-trip',
+      startDate: '2026-07-10',
+      timeZone: 'Europe/London',
+      title: '突发重排测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto(
+    '/#/day?tripId=gateway-replan-trip&dayId=gateway-replan-day&view=schedule',
+    { waitUntil: 'domcontentloaded' },
+  )
+
+  await page.getByLabel('全局 AI 指令').fill('我晚到30分钟，按最少改动调整')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('应用突发重排')
+  await expect(result).toContainText('伦敦眼将改为 10:30')
+  await expect(result).toContainText('按最少改动调整 2 项')
+  await expect(page.getByTestId('global-ai-action-summary')).toContainText('1 个步骤 · 影响 2 项')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  await expect.poll(async () => await readItineraryItem(page, 'gateway-replan-eye'))
+    .toMatchObject({ endTime: '11:00', startTime: '10:00' })
+  await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
+  await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect.poll(async () => await readItineraryItem(page, 'gateway-replan-eye'))
+    .toMatchObject({ endTime: '11:30', startTime: '10:30' })
+  await expect.poll(async () => await readItineraryItem(page, 'gateway-replan-clock'))
+    .toMatchObject({ endTime: '13:30', startTime: '12:30' })
+  expect(await countStore(page, 'tripReplanEvents')).toBe(1)
+  expect(await countStore(page, 'tripReplanRecords')).toBe(1)
+  expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBe(1)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('全局 AI 输入在移动端承接只读 what-if 重排且永不落库', async ({ page }) => {
   await clearTravelDatabase(page)
 
   const commandBar = page.getByTestId('global-ai-command-bar')
@@ -1192,20 +1279,14 @@ test('全局 AI 输入在移动端承接 what-if 重排且预览不落库', asyn
 
   const result = page.getByTestId('global-ai-command-result')
   await expect(result).toContainText('What-if 重排预览')
-  await expect(result).toContainText('确认应用前不会创建事件或同步云端')
-  await expect(page.getByTestId('global-ai-action-proposal')).toContainText('Live Mode 重排建议')
-  await expect(result.getByRole('button', { name: '确认应用重排' })).toBeVisible()
+  await expect(result).toContainText('这是只读模拟')
+  await expect(page.getByTestId('global-ai-action-proposal')).toHaveCount(0)
+  await expect(result.getByRole('button', { name: '确认应用重排' })).toHaveCount(0)
+  await expect(page.getByTestId('global-ai-write-confirm-dialog')).not.toBeVisible()
   await expectNoHorizontalOverflow(page)
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
-
-  await result.getByRole('button', { name: '确认应用重排' }).click()
-  await expect(page.getByTestId('global-ai-write-confirm-dialog')).toBeVisible()
-  await page.getByRole('button', { name: '写入' }).click()
-  await expect(page.getByText(/已应用模拟重排|已应用突发重排/)).toBeVisible()
-  await expect(await countStore(page, 'tripReplanEvents')).toBeGreaterThan(0)
-  await expect(await countStore(page, 'tripReplanRecords')).toBeGreaterThan(0)
-  await expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBeGreaterThan(0)
+  await expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBe(0)
 })
 
 test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ page }) => {

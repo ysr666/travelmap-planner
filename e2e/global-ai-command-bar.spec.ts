@@ -144,6 +144,89 @@ test('全局 AI 时间调整只在一次确认后写入并保留原时长', asyn
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 在 390px 仅经一次确认更新进度和重排偏好', async ({ page }) => {
+  await page.setViewportSize({ height: 844, width: 390 })
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-10',
+      id: 'gateway-state-day',
+      sortOrder: 1,
+      title: '伦敦第一天',
+      tripId: 'gateway-state-trip',
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'gateway-state-day',
+      id: 'gateway-state-eye',
+      sortOrder: 1,
+      ticketIds: [],
+      title: '伦敦眼',
+      tripId: 'gateway-state-trip',
+      updatedAt: now,
+    }],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-10',
+      id: 'gateway-state-trip',
+      startDate: '2026-07-10',
+      title: '进度动作测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-state-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('第一站已完成')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('更新行程进度')
+  await expect(result).toContainText('标记为已完成')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(await readItineraryItem(page, 'gateway-state-eye')).not.toHaveProperty('executionState')
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect(result).toContainText('已完成')
+  await expect.poll(async () => await readItineraryItem(page, 'gateway-state-eye'))
+    .toMatchObject({ executionState: { status: 'completed' } })
+
+  await page.getByLabel('全局 AI 指令')
+    .fill('第一站不能动，必须保留，下雨别去，预留30分钟')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  await expect(result).toContainText('更新重排偏好')
+  await expect(result).toContainText('缓冲 30 分钟')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect(await readItineraryItem(page, 'gateway-state-eye')).not.toHaveProperty('replanPreference')
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect.poll(async () => await readItineraryItem(page, 'gateway-state-eye'))
+    .toMatchObject({
+      replanPreference: {
+        bufferMinutes: 30,
+        flexibility: 'fixed',
+        priority: 'must_keep',
+        weatherSuitability: 'avoid_rain',
+      },
+    })
+  expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBe(2)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 新增行程点只在一次确认后幂等写入', async ({ page }) => {
   await clearTravelDatabase(page)
   const providerProxyRequests: string[] = []

@@ -774,6 +774,161 @@ describe('AI Action Gateway runtime', () => {
     await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
   })
 
+  it('updates one item execution state only after confirmation and reuses the persisted result', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    await seedDatabase(seed)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('第一站已完成')!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '抵达伦敦：「伦敦眼」将标记为已完成。',
+    })
+    expect(await db.itineraryItems.get(seed.item.id)).not.toHaveProperty('executionState')
+
+    const [firstRun, retryRun] = await Promise.all([
+      executeAiActionPlan(prepared, context),
+      executeAiActionPlan(prepared, context),
+    ])
+
+    expect(firstRun.status).toBe('completed')
+    expect(retryRun.status).toBe('completed')
+    expect([firstRun, retryRun].map((run) => run.steps[0].message).join(' '))
+      .toContain('未重复执行')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      executionState: { status: 'completed' },
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('prefers an explicit quoted item over conflicting positional words', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦酒店'
+    const londonEye: ItineraryItem = {
+      ...seed.item,
+      id: 'item-london-eye',
+      sortOrder: 2,
+      title: '伦敦眼',
+    }
+    await seedDatabase(seed)
+    await db.itineraryItems.put(londonEye)
+    const context = runtimeContext(seed)
+    context.commandContext.items = [seed.item, londonEye]
+    const plan = buildDeterministicAiActionPlan(
+      '把“伦敦眼”标记为完成，不是第一站',
+    )!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+    })
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result.status).toBe('completed')
+    expect((await db.itineraryItems.get(seed.item.id))?.executionState)
+      .toBeUndefined()
+    await expect(db.itineraryItems.get(londonEye.id)).resolves.toMatchObject({
+      executionState: { status: 'completed' },
+    })
+  })
+
+  it('merges bounded item replan preferences only after confirmation', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    seed.item.replanPreference = { flexibility: 'movable', priority: 'normal' }
+    await seedDatabase(seed)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan(
+      '第一站不能动，必须保留，下雨别去，预留30分钟',
+    )!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+    })
+    expect(prepared.steps[0].preview).toContain('缓冲 30 分钟')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      replanPreference: { flexibility: 'movable', priority: 'normal' },
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result.status).toBe('completed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      replanPreference: {
+        bufferMinutes: 30,
+        flexibility: 'fixed',
+        priority: 'must_keep',
+        weatherSuitability: 'avoid_rain',
+      },
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('blocks a prepared execution update after the target item changes', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan('第一站已完成')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.itineraryItems.update(seed.item.id, {
+      notes: '用户刚刚补充',
+      updatedAt: 2,
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '旅行内容已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    const item = await db.itineraryItems.get(seed.item.id)
+    expect(item).not.toHaveProperty('executionState')
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('blocks a prepared preference update after the target item changes', async () => {
+    const seed = buildSeed()
+    await seedDatabase(seed)
+    const context = runtimeContext(seed)
+    const plan = buildDeterministicAiActionPlan(
+      '第一站不能动，必须保留，下雨别去',
+    )!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.itineraryItems.update(seed.item.id, {
+      notes: '用户刚刚补充',
+      updatedAt: 2,
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '旅行内容已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    const item = await db.itineraryItems.get(seed.item.id)
+    expect(item?.replanPreference).toBeUndefined()
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
   it('waits for confirmation before requesting and caching a route preview', async () => {
     const seed = buildSeed()
     seed.item.lat = 51.47

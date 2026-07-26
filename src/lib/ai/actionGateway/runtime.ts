@@ -21,7 +21,9 @@ import {
 import { createId } from '../../../db/ids'
 import type {
   Day,
+  ItineraryExecutionStatus,
   ItineraryItem,
+  ItineraryReplanPreference,
   LedgerExpense,
   LedgerExpenseCategory,
   LedgerParticipant,
@@ -46,6 +48,10 @@ import {
 } from '../tripDailyTravelTip'
 import { PROVIDER_PROXY_PLACE_LOOKUP_OPERATION } from '../providerProxyContract'
 import {
+  formatFlexibility,
+  formatMobility,
+  formatPriority,
+  formatWeather,
   resolveGlobalAiCommand,
   type GlobalAiCommandContext,
   type GlobalAiNavigationResult,
@@ -78,6 +84,10 @@ import { todayInTimeZone } from '../../timeSemantics'
 import { getStoredTravelProfile } from '../../travelProfile'
 import { buildTripOperationSnapshotFingerprint } from '../../tripOperationSnapshots'
 import {
+  updateItineraryItemExecutionStateAtomically,
+  updateItineraryItemReplanPreferenceAtomically,
+} from '../../itemStateUpdates'
+import {
   formatLedgerMoney,
   ledgerCategoryLabels,
   normalizeCurrencyCode,
@@ -93,7 +103,9 @@ import {
   type AiActionHistoryUndoArgs,
   type AiActionItemCreateArgs,
   type AiActionItemDeleteArgs,
+  type AiActionItemExecutionUpdateArgs,
   type AiActionItemMoveArgs,
+  type AiActionItemReplanPreferenceUpdateArgs,
   type AiActionPlaceEnrichArgs,
   type AiActionId,
   type AiActionItemTimeUpdateArgs,
@@ -172,6 +184,29 @@ type PreparedHistoryUndoAction = {
   operationFingerprint: string
   originalIndex: number
   record: TripReplanRecord
+  trip: Trip
+}
+
+type PreparedItemExecutionUpdateAction = {
+  changed: boolean
+  day: Day
+  expectedUpdatedAt: number
+  kind: 'item-execution-update'
+  nextState: AiActionItemExecutionUpdateArgs['state']
+  operationFingerprint: string
+  target: ItineraryItem
+  trip: Trip
+}
+
+type PreparedItemReplanPreferenceUpdateAction = {
+  changed: boolean
+  day: Day
+  expectedUpdatedAt: number
+  kind: 'item-replan-preference-update'
+  nextPreference: ItineraryReplanPreference
+  operationFingerprint: string
+  previousPreference: ItineraryReplanPreference
+  target: ItineraryItem
   trip: Trip
 }
 
@@ -273,7 +308,9 @@ type PreparedAction =
   | PreparedHistoryUndoAction
   | PreparedItemCreateAction
   | PreparedItemDeleteAction
+  | PreparedItemExecutionUpdateAction
   | PreparedItemMoveAction
+  | PreparedItemReplanPreferenceUpdateAction
   | PreparedItemTimeAction
   | PreparedLedgerExpenseDraftAction
   | PreparedPlaceAction
@@ -390,6 +427,28 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
       }
     },
   },
+  'item.execution.update@1': {
+    execute: async (prepared) =>
+      executeItemExecutionUpdateAction(
+        requirePreparedKind(prepared, 'item-execution-update'),
+      ),
+    prepare: (args, context, preparation) =>
+      prepareItemExecutionUpdateAction(
+        args as AiActionItemExecutionUpdateArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const update = requirePreparedKind(prepared, 'item-execution-update')
+      return {
+        affectedLabels: [update.target.title],
+        hasWrite: update.changed,
+        text: update.changed
+          ? `${update.day.title}：「${update.target.title}」将${formatExecutionStateChange(update.nextState)}。`
+          : `「${update.target.title}」已经是${formatExecutionState(update.nextState)}。`,
+      }
+    },
+  },
   'item.move@1': {
     execute: async (prepared) =>
       executeItemMoveAction(requirePreparedKind(prepared, 'item-move')),
@@ -405,6 +464,31 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
         affectedLabels: [move.target.title],
         hasWrite: true,
         text: `${move.target.title}：「${move.sourceDay.title}」第 ${move.currentIndex + 1} 位 → 「${move.destinationDay.title}」第 ${move.nextIndex + 1} 位。`,
+      }
+    },
+  },
+  'item.replan.preference.update@1': {
+    execute: async (prepared) =>
+      executeItemReplanPreferenceUpdateAction(
+        requirePreparedKind(prepared, 'item-replan-preference-update'),
+      ),
+    prepare: (args, context, preparation) =>
+      prepareItemReplanPreferenceUpdateAction(
+        args as AiActionItemReplanPreferenceUpdateArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const update = requirePreparedKind(
+        prepared,
+        'item-replan-preference-update',
+      )
+      return {
+        affectedLabels: [update.target.title],
+        hasWrite: update.changed,
+        text: update.changed
+          ? `${update.target.title}：${formatReplanPreference(update.previousPreference)} → ${formatReplanPreference(update.nextPreference)}。`
+          : `「${update.target.title}」的重排偏好无需调整。`,
       }
     },
   },
@@ -982,6 +1066,84 @@ async function prepareHistoryUndoAction(
   }
 }
 
+function prepareItemExecutionUpdateAction(
+  args: AiActionItemExecutionUpdateArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedItemExecutionUpdateAction> {
+  const resolved = resolveScopedItemActionTarget(
+    args.target,
+    args.day,
+    context.commandContext,
+  )
+  const currentState = resolved.target.executionState?.status ?? 'active'
+  return Promise.resolve({
+    changed: currentState !== args.state,
+    day: resolved.day,
+    expectedUpdatedAt: resolved.target.updatedAt,
+    kind: 'item-execution-update',
+    nextState: args.state,
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    target: resolved.target,
+    trip: resolved.trip,
+  })
+}
+
+function prepareItemReplanPreferenceUpdateAction(
+  args: AiActionItemReplanPreferenceUpdateArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedItemReplanPreferenceUpdateAction> {
+  const resolved = resolveScopedItemActionTarget(
+    args.target,
+    args.day,
+    context.commandContext,
+  )
+  const previousPreference = normalizeReplanPreference(
+    resolved.target.replanPreference ?? {},
+  )
+  const nextPreference = normalizeReplanPreference({
+    ...previousPreference,
+    ...(args.bufferMinutes !== undefined
+      ? { bufferMinutes: args.bufferMinutes }
+      : {}),
+    ...(args.flexibility ? { flexibility: args.flexibility } : {}),
+    ...(args.minimumStayMinutes !== undefined
+      ? { minimumStayMinutes: args.minimumStayMinutes }
+      : {}),
+    ...(args.mobilitySuitability
+      ? { mobilitySuitability: args.mobilitySuitability }
+      : {}),
+    ...(args.priority ? { priority: args.priority } : {}),
+    ...(args.weatherSuitability
+      ? { weatherSuitability: args.weatherSuitability }
+      : {}),
+  })
+  return Promise.resolve({
+    changed: stableStringify(previousPreference) !== stableStringify(nextPreference),
+    day: resolved.day,
+    expectedUpdatedAt: resolved.target.updatedAt,
+    kind: 'item-replan-preference-update',
+    nextPreference,
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    previousPreference,
+    target: resolved.target,
+    trip: resolved.trip,
+  })
+}
+
 function prepareDayItemsReorderAction(
   args: AiActionDayItemsReorderArgs,
   context: AiActionGatewayRuntimeContext,
@@ -1445,6 +1607,84 @@ async function executeHistoryUndoAction(
   }
 }
 
+async function executeItemExecutionUpdateAction(
+  prepared: PreparedItemExecutionUpdateAction,
+): Promise<ActionExecutionResult> {
+  if (!prepared.changed) {
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${prepared.target.title}」已经是${formatExecutionState(prepared.nextState)}。`,
+    }
+  }
+  try {
+    const result = await updateItineraryItemExecutionStateAtomically(
+      prepared.target.id,
+      prepared.nextState === 'active'
+        ? null
+        : prepared.nextState as ItineraryExecutionStatus,
+      {
+        expectedUpdatedAt: prepared.expectedUpdatedAt,
+        historyTitle: 'AI 更新行程进度',
+        operationFingerprint: prepared.operationFingerprint,
+        tripId: prepared.trip.id,
+      },
+    )
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: result.changed
+        ? `已将「${result.item.title}」${formatExecutionStateChange(prepared.nextState)}。`
+        : `「${result.item.title}」已经是${formatExecutionState(prepared.nextState)}，未重复执行。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+}
+
+async function executeItemReplanPreferenceUpdateAction(
+  prepared: PreparedItemReplanPreferenceUpdateAction,
+): Promise<ActionExecutionResult> {
+  if (!prepared.changed) {
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: `「${prepared.target.title}」的重排偏好无需调整。`,
+    }
+  }
+  try {
+    const result = await updateItineraryItemReplanPreferenceAtomically(
+      prepared.target.id,
+      prepared.nextPreference,
+      {
+        expectedUpdatedAt: prepared.expectedUpdatedAt,
+        historyTitle: 'AI 更新重排偏好',
+        operationFingerprint: prepared.operationFingerprint,
+        tripId: prepared.trip.id,
+      },
+    )
+    return {
+      appliedChanges: [],
+      effects: [],
+      errors: [],
+      message: result.changed
+        ? `已更新「${result.item.title}」的重排偏好。`
+        : `「${result.item.title}」的重排偏好已经更新，未重复执行。`,
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+}
+
 async function executeItemCreateAction(
   prepared: PreparedItemCreateAction,
 ): Promise<ActionExecutionResult> {
@@ -1709,12 +1949,60 @@ async function canReplayPersistedPreparedPlan(
         await assertPersistedItemDeletionUndoState(prepared)
         continue
       }
+      if (prepared.kind === 'item-execution-update') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedItemExecutionState(prepared)
+        continue
+      }
+      if (prepared.kind === 'item-replan-preference-update') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedItemReplanPreference(prepared)
+        continue
+      }
       return false
     } catch {
       return false
     }
   }
   return hasPendingWrite
+}
+
+async function assertPersistedItemExecutionState(
+  prepared: PreparedItemExecutionUpdateAction,
+) {
+  const item = await db.itineraryItems.get(prepared.target.id)
+  const currentState = item?.executionState?.status ?? 'active'
+  if (!item || item.tripId !== prepared.trip.id || currentState !== prepared.nextState) {
+    throw new FreshConfirmationRequiredError(
+      '行程进度与操作历史不一致，请重新生成预览。',
+    )
+  }
+}
+
+async function assertPersistedItemReplanPreference(
+  prepared: PreparedItemReplanPreferenceUpdateAction,
+) {
+  const item = await db.itineraryItems.get(prepared.target.id)
+  if (
+    !item
+    || item.tripId !== prepared.trip.id
+    || stableStringify(normalizeReplanPreference(item.replanPreference ?? {}))
+      !== stableStringify(prepared.nextPreference)
+  ) {
+    throw new FreshConfirmationRequiredError(
+      '重排偏好与操作历史不一致，请重新生成预览。',
+    )
+  }
 }
 
 async function assertPersistedItemDeleteState(
@@ -2278,6 +2566,26 @@ function includeRoutesUnlockedByPlaceCandidates(
   }
 }
 
+function resolveScopedItemActionTarget(
+  targetText: string,
+  dayText: string | undefined,
+  context: GlobalAiCommandContext,
+) {
+  const trip = requireTrip(context)
+  const explicitDay = dayText
+    ? resolveExplicitDayTarget(dayText, context)
+    : undefined
+  const target = explicitDay
+    ? resolveItemTargetInDay(targetText, explicitDay, context)
+    : resolveItemTarget(targetText, context)
+  const day = explicitDay
+    ?? context.days.find((candidate) => candidate.id === target.dayId)
+  if (!day || target.dayId !== day.id) {
+    throw new Error('目标行程点的日期已不存在。')
+  }
+  return { day, target, trip }
+}
+
 function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   const ordered = orderItems(context.days, context.items)
   if (target === 'current_item') {
@@ -2579,6 +2887,65 @@ function preserveSameDayDuration(item: ItineraryItem, nextStartTime: string, day
 function formatTimeRange(startTime?: string, endTime?: string) {
   if (startTime && endTime) return `${startTime}-${endTime}`
   return startTime ?? endTime ?? '时间未定'
+}
+
+function formatExecutionState(
+  state: AiActionItemExecutionUpdateArgs['state'],
+) {
+  if (state === 'completed') return '已完成'
+  if (state === 'skipped') return '已跳过'
+  return '待进行'
+}
+
+function formatExecutionStateChange(
+  state: AiActionItemExecutionUpdateArgs['state'],
+) {
+  if (state === 'completed') return '标记为已完成'
+  if (state === 'skipped') return '标记为已跳过'
+  return '恢复为待进行'
+}
+
+function formatReplanPreference(preference: ItineraryReplanPreference) {
+  const parts = [
+    preference.flexibility
+      ? `移动性 ${formatFlexibility(preference.flexibility)}`
+      : '',
+    preference.priority ? `优先级 ${formatPriority(preference.priority)}` : '',
+    preference.weatherSuitability
+      ? formatWeather(preference.weatherSuitability)
+      : '',
+    preference.mobilitySuitability
+      ? formatMobility(preference.mobilitySuitability)
+      : '',
+    preference.bufferMinutes
+      ? `缓冲 ${preference.bufferMinutes} 分钟`
+      : '',
+    preference.minimumStayMinutes
+      ? `停留至少 ${preference.minimumStayMinutes} 分钟`
+      : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || '未设置'
+}
+
+function normalizeReplanPreference(
+  preference: ItineraryReplanPreference,
+): ItineraryReplanPreference {
+  return {
+    ...(preference.bufferMinutes !== undefined
+      ? { bufferMinutes: preference.bufferMinutes }
+      : {}),
+    ...(preference.flexibility ? { flexibility: preference.flexibility } : {}),
+    ...(preference.minimumStayMinutes !== undefined
+      ? { minimumStayMinutes: preference.minimumStayMinutes }
+      : {}),
+    ...(preference.mobilitySuitability
+      ? { mobilitySuitability: preference.mobilitySuitability }
+      : {}),
+    ...(preference.priority ? { priority: preference.priority } : {}),
+    ...(preference.weatherSuitability
+      ? { weatherSuitability: preference.weatherSuitability }
+      : {}),
+  }
 }
 
 function timeToMinutes(value: string) {

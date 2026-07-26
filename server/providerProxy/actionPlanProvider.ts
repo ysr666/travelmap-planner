@@ -52,6 +52,9 @@ export function buildAiActionPlanProviderInput(
       'item.move@1 只能使用语义行程点、来源/目标日期和固定 first/last/before/after；目标日期或参照点不明确时不要猜测。',
       'item.delete@1 只删除一个明确的语义行程点；不得选择票据、订单、账本、旅行或任何永久删除目标，也不得与其他结构写入组合。',
       'history.undo@1 的 kind 只能是 item_delete；不得输出记录 ID、快照、指纹、状态或数据库字段，也不得与其他写入组合。',
+      'item.execution.update@1 只能选择 completed、skipped 或 active；不得根据时间、位置或猜测自动改变进度。',
+      'item.replan.preference.update@1 只能输出登记的偏好枚举与有界分钟数；不得输出 patch、内部字段或自由文本。',
+      '行程进度或重排偏好动作必须与其他写入动作分开。',
       'target 优先使用 current_item、first_item，或上下文中唯一且明确的行程点名称。目标不明确时不要猜测具体名称。',
       'place.enrich@1 与 trip.repair@1 不得出现在同一计划中。',
       '输出必须是 JSON，不要 Markdown、代码块或解释。',
@@ -182,6 +185,12 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
     && /删除|移除/.test(command)
     && !protectedDeleteTarget
     && allowed.has('item.delete@1')
+  const executionState = !undoRequested && !deleteRequested
+    ? inferExecutionState(command)
+    : undefined
+  const preferenceArgs = !undoRequested && !deleteRequested && !executionState
+    ? inferReplanPreferenceArgs(command)
+    : null
 
   if (undoRequested) {
     const target = extractQuotedTarget(command)
@@ -201,9 +210,33 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
         id: 'delete-item',
       })
     }
+  } else if (executionState && allowed.has('item.execution.update@1')) {
+    const target = inferItemTarget(command)
+    if (target) {
+      steps.push({
+        actionId: 'item.execution.update@1',
+        args: { state: executionState, target },
+        dependsOn: [],
+        id: 'update-item-execution',
+      })
+    }
+  } else if (preferenceArgs && allowed.has('item.replan.preference.update@1')) {
+    const target = inferItemTarget(command)
+    if (target) {
+      steps.push({
+        actionId: 'item.replan.preference.update@1',
+        args: { ...preferenceArgs, target },
+        dependsOn: [],
+        id: 'update-item-replan-preference',
+      })
+    }
   }
 
-  if (!undoRequested && !deleteRequested && ticketRequested) {
+  const hasBoundedItemWrite = steps.some((step) =>
+    step.actionId === 'item.execution.update@1'
+    || step.actionId === 'item.replan.preference.update@1',
+  )
+  if (!undoRequested && !deleteRequested && !hasBoundedItemWrite && ticketRequested) {
     const ticketQuery = extractQuotedTarget(command) ?? extractTicketQuery(command)
     steps.push({
       actionId: 'ticket.open@1',
@@ -212,14 +245,14 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
       id: 'open-ticket',
     })
   }
-  if (!undoRequested && !deleteRequested && repairRequested) {
+  if (!undoRequested && !deleteRequested && !hasBoundedItemWrite && repairRequested) {
     steps.push({
       actionId: 'trip.repair@1',
       args: { scope: inferRepairScope(command) },
       dependsOn: [],
       id: 'repair-trip',
     })
-  } else if (!undoRequested && !deleteRequested && placeRequested) {
+  } else if (!undoRequested && !deleteRequested && !hasBoundedItemWrite && placeRequested) {
     steps.push({
       actionId: 'place.enrich@1',
       args: { target: inferPlaceTarget(command) },
@@ -256,6 +289,63 @@ function inferItemTarget(command: string) {
   return extractQuotedTarget(command)
 }
 
+function inferExecutionState(command: string) {
+  if (
+    /(?:不要|别|无需|不用|不必|禁止|不允许)\s*(?:把|将)?[^，。；;]{0,40}(?:完成|跳过)/.test(command)
+    || /(?:是不是|是否|有没有)[^，。；;]{0,40}(?:完成|跳过)/.test(command)
+    || /(?:完成|跳过)[^，。；;]{0,12}(?:吗|么|\?|？)\s*$/.test(command)
+  ) {
+    return undefined
+  }
+  if (/可以(?:直接)?跳过|可跳过|跳过也行/.test(command)) return undefined
+  if (/恢复|重置/.test(command) && /待进行|未完成|未处理|进行中/.test(command)) {
+    return 'active'
+  }
+  if (/已完成|标记为完成|设为完成/.test(command)) return 'completed'
+  if (/已跳过|标记为跳过|设为跳过/.test(command)) return 'skipped'
+  return undefined
+}
+
+function inferReplanPreferenceArgs(command: string) {
+  if (
+    /(?:不要|别|无需|不用|不必)\s*(?:把|将|让)?[^，。；;]{0,24}(?:固定|不能动|必须保留|可移动|优先级|缓冲|预留|停留)/.test(command)
+    || /(?:是不是|是否|有没有|能否|可不可以)[^，。；;]{0,40}(?:固定|移动|必去|优先级|跳过)/.test(command)
+    || /(?:固定|移动|必去|优先级|跳过|下雨|雨天)[^，。；;]{0,12}(?:吗|么|\?|？)\s*$/.test(command)
+  ) {
+    return null
+  }
+  const args: Record<string, string | number> = {}
+  if (/不能动|不可动|固定|必须按原计划/.test(command)) {
+    args.flexibility = 'fixed'
+    args.priority = 'must_keep'
+  } else if (/可以挪|可移动|能移动|可以调整时间/.test(command)) {
+    args.flexibility = 'movable'
+  } else if (/可舍弃|可以舍弃|不重要|可以跳过/.test(command)) {
+    args.flexibility = 'optional'
+    args.priority = 'low'
+  }
+  if (/必须保留|一定要去|必去|最高优先级/.test(command)) args.priority = 'must_keep'
+  else if (/高优先级|尽量保留|很想去/.test(command)) args.priority = 'high'
+  else if (/低优先级|不太重要/.test(command)) args.priority = 'low'
+  if (/雨天不适合|下雨不去|下雨别去|怕下雨/.test(command)) {
+    args.weatherSuitability = 'avoid_rain'
+  } else if (/室内优先|适合下雨|雨天可去/.test(command)) {
+    args.weatherSuitability = 'indoor_preferred'
+  } else if (/全天候|下雨也行/.test(command)) {
+    args.weatherSuitability = 'any_weather'
+  }
+  if (/老人|小孩|孩子|少走路|轻松一点|体力弱/.test(command)) {
+    args.mobilitySuitability = 'easy'
+  } else if (/徒步|爬山|体力挑战|比较累/.test(command)) {
+    args.mobilitySuitability = 'demanding'
+  }
+  const buffer = command.match(/(?:缓冲|间隔|预留)\s*(\d{1,3})\s*(?:分钟|分)/)
+  if (buffer) args.bufferMinutes = Number(buffer[1])
+  const stay = command.match(/(?:停留|玩|参观)\s*(\d{1,3})\s*(?:分钟|分)/)
+  if (stay) args.minimumStayMinutes = Number(stay[1])
+  return Object.keys(args).length > 0 ? args : null
+}
+
 function extractQuotedTarget(command: string) {
   return command.match(/[「“"]([^」”"]{1,80})[」”"]/)?.[1]?.trim()
 }
@@ -271,6 +361,8 @@ function summarizeMockSteps(steps: Array<Record<string, unknown>>) {
     ids.has('ticket.open@1') ? '打开票据' : '',
     ids.has('history.undo@1') ? '撤销行程点删除' : '',
     ids.has('item.delete@1') ? '删除行程点' : '',
+    ids.has('item.execution.update@1') ? '更新行程进度' : '',
+    ids.has('item.replan.preference.update@1') ? '更新重排偏好' : '',
     ids.has('place.enrich@1') ? '补全地点' : '',
     ids.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean).join('并')

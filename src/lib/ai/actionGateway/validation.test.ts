@@ -292,6 +292,82 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps execution state and replan preferences semantic, bounded, and separately confirmed', () => {
+    expect(buildDeterministicAiActionPlan('第一站已完成')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.execution.update@1',
+        args: { state: 'completed', target: 'first_item' },
+        risk: 'local_write',
+      }],
+    })
+    expect(buildDeterministicAiActionPlan('第一天的伦敦眼预留30分钟，下雨别去')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.replan.preference.update@1',
+        args: {
+          bufferMinutes: 30,
+          day: 'first_day',
+          target: '伦敦眼',
+          weatherSuitability: 'avoid_rain',
+        },
+        risk: 'local_write',
+      }],
+    })
+
+    for (const args of [
+      { itemId: 'item_internal', state: 'completed', target: '伦敦眼' },
+      { state: 'deleted', target: '伦敦眼' },
+      { state: 'completed', target: '#/item?token=secret' },
+    ]) {
+      expect(validateAiActionPlan({
+        schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+        steps: [{
+          actionId: 'item.execution.update@1',
+          args,
+          id: 'execution',
+        }],
+        summary: '非法进度更新',
+      }).ok).toBe(false)
+    }
+
+    for (const args of [
+      { patch: { priority: 'must_keep' }, target: '伦敦眼' },
+      { priority: 'critical', target: '伦敦眼' },
+      { bufferMinutes: 0, target: '伦敦眼' },
+      { minimumStayMinutes: 721, target: '伦敦眼' },
+      { bufferMinutes: 30.5, target: '伦敦眼' },
+      { target: '伦敦眼' },
+    ]) {
+      expect(validateAiActionPlan({
+        schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+        steps: [{
+          actionId: 'item.replan.preference.update@1',
+          args,
+          id: 'preference',
+        }],
+        summary: '非法偏好更新',
+      }).ok).toBe(false)
+    }
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'item.execution.update@1',
+          args: { state: 'completed', target: '伦敦眼' },
+          id: 'execution',
+        },
+        {
+          actionId: 'item.replan.preference.update@1',
+          args: { priority: 'must_keep', target: '伦敦眼' },
+          id: 'preference',
+        },
+      ],
+      summary: '同时更新进度与偏好',
+    }).ok).toBe(false)
+  })
+
   it('keeps route generation and expense drafts bounded and confirmation gated', () => {
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
       requiresConfirmation: true,
@@ -420,7 +496,9 @@ describe('AI Action Gateway V1 contract', () => {
       'history.undo@1',
       'item.create@1',
       'item.delete@1',
+      'item.execution.update@1',
       'item.move@1',
+      'item.replan.preference.update@1',
       'item.time.update@1',
       'ledger.expense.draft@1',
       'place.enrich@1',

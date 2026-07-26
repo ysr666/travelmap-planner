@@ -14,7 +14,9 @@ import {
   type AiActionHistoryUndoArgs,
   type AiActionItemCreateArgs,
   type AiActionItemDeleteArgs,
+  type AiActionItemExecutionUpdateArgs,
   type AiActionItemMoveArgs,
+  type AiActionItemReplanPreferenceUpdateArgs,
   type AiActionItemTimeUpdateArgs,
   type AiActionLedgerExpenseDraftArgs,
   type AiActionPlanV1,
@@ -49,6 +51,9 @@ const ACTION_VERBS = [
   '移除',
   '撤销',
   '恢复',
+  '跳过',
+  '标记',
+  '设为',
 ]
 
 export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 | null {
@@ -144,6 +149,45 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
+  const itemExecutionUpdate = historyUndo
+    || itemCreate
+    || itemDelete
+    || itemMove
+    || dayReorder
+    || timeUpdate
+    ? null
+    : parseDeterministicItemExecutionUpdate(normalized)
+  if (itemExecutionUpdate) {
+    steps.push({
+      actionId: 'item.execution.update@1',
+      args: itemExecutionUpdate,
+      dependsOn: [],
+      id: 'update-item-execution',
+    })
+  }
+
+  const replanPreferenceUpdate = historyUndo
+    || itemCreate
+    || itemDelete
+    || itemMove
+    || dayReorder
+    || timeUpdate
+    || itemExecutionUpdate
+    || intent.kind !== 'preference_update'
+    ? null
+    : parseDeterministicReplanPreferenceUpdate(
+        normalized,
+        intent.preference,
+      )
+  if (replanPreferenceUpdate) {
+    steps.push({
+      actionId: 'item.replan.preference.update@1',
+      args: replanPreferenceUpdate,
+      dependsOn: [],
+      id: 'update-item-replan-preference',
+    })
+  }
+
   const tripRepair = isTripRepairCommand(normalized)
   const routePreview = tripRepair ? null : parseDeterministicRoutePreview(normalized)
   if (routePreview) {
@@ -196,8 +240,9 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
 export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
+  if (isNonActionItemStateCommand(normalized)) return false
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
-    ['票', '地点', '地址', '坐标', '行程', '行程点', '删除', '撤销', '恢复', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
+    ['票', '地点', '地址', '坐标', '行程', '行程点', '删除', '撤销', '恢复', '完成', '跳过', '进度', '优先级', '缓冲', '停留', '雨天', '体力', '不可动', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
       .some((noun) => normalized.includes(noun))
 }
 
@@ -275,10 +320,11 @@ function inferRepairScope(command: string): 'day' | 'item' | 'trip' {
 }
 
 function inferSemanticTarget(command: string) {
-  if (['第一站', '首站', '第一个地点'].some((value) => command.includes(value))) return 'first_item'
-  if (['当前站', '这一站', '这个地点', '当前地点'].some((value) => command.includes(value))) return 'current_item'
   const quoted = command.match(/[「“"]([^」”"]{1,80})[」”"]/)
-  return quoted?.[1]?.trim()
+  if (quoted?.[1]?.trim()) return quoted[1].trim()
+  if (['第一站', '首站', '第一个地点'].some((value) => command.includes(value))) return 'first_item'
+  if (['当前站', '这一站', '这个地点', '当前地点', '当前行程点', '这个行程点', '这个预约'].some((value) => command.includes(value))) return 'current_item'
+  return undefined
 }
 
 function parseDeterministicItemCreate(command: string): AiActionItemCreateArgs | null {
@@ -361,6 +407,91 @@ function parseDeterministicItemDelete(command: string): AiActionItemDeleteArgs |
   return {
     ...(day ? { day: day.target } : {}),
     target,
+  }
+}
+
+function parseDeterministicItemExecutionUpdate(
+  command: string,
+): AiActionItemExecutionUpdateArgs | null {
+  if (
+    isHypotheticalCommand(command)
+    || isNonActionItemStateCommand(command)
+    || isTripRepairCommand(command)
+    || /(?:删除|移除|取消|退款|退票)/.test(command)
+  ) {
+    return null
+  }
+  if (/(?:可以|可|能|必要时)(?:直接)?跳过|跳过也行/.test(command)) {
+    return null
+  }
+  const day = findPlannerDayTarget(command)
+  let state: AiActionItemExecutionUpdateArgs['state'] | undefined
+  if (/(?:待进行|未完成|未处理|重新加入下一站|恢复为进行中)/.test(command)
+    && /(?:恢复|重置|重新加入)/.test(command)) {
+    state = 'active'
+  } else if (/(?:已完成|已经完成|完成了|标记为完成|设为完成|完成$)/.test(command)) {
+    state = 'completed'
+  } else if (/(?:已跳过|已经跳过|跳过了|标记为跳过|设为跳过)/.test(command)
+    || /^(?:请|麻烦|帮我|给我|\s)*(?:跳过)\s*/.test(command)) {
+    state = 'skipped'
+  }
+  if (!state) return null
+
+  const semanticTarget = inferSemanticTarget(command)
+  const target = semanticTarget ?? cleanSemanticSelector(
+    command
+      .replace(day?.text ?? '', ' ')
+      .replace(/^(?:请|麻烦|帮我|给我|把|将|\s)+/g, '')
+      .replace(/(?:标记|设置|设|改)?为?\s*(?:已经|已)?(?:完成|跳过)(?:了)?/g, ' ')
+      .replace(/^(?:完成|跳过)\s*/g, '')
+      .replace(/(?:恢复|重置|重新加入)\s*/g, '')
+      .replace(/(?:为)?(?:待进行|未完成|未处理|进行中|下一站)/g, ' ')
+      .replace(/(?:这个|该)?(?:行程点|站点)\s*$/g, '')
+      .replace(/[，,。；;：:\s]+/g, ' ')
+      .trim(),
+  ).replace(/^的\s*/, '')
+  if (!target || target.length > 160) return null
+  return {
+    ...(day ? { day: day.target } : {}),
+    state,
+    target,
+  }
+}
+
+function parseDeterministicReplanPreferenceUpdate(
+  command: string,
+  preference: Omit<AiActionItemReplanPreferenceUpdateArgs, 'day' | 'target'>,
+): AiActionItemReplanPreferenceUpdateArgs | null {
+  if (
+    isHypotheticalCommand(command)
+    || isNonActionItemStateCommand(command)
+    || /(?:不要|别|无需|不用|不必)\s*(?:把|将|让)?[^，。；;]{0,24}(?:固定|不能动|必须保留|可移动|优先级|缓冲|预留|停留)/.test(command)
+  ) {
+    return null
+  }
+  const day = findPlannerDayTarget(command)
+  const semanticTarget = inferSemanticTarget(command)
+  const target = semanticTarget ?? cleanSemanticSelector(
+    command
+      .replace(day?.text ?? '', ' ')
+      .replace(/(?:不能动|不可动|固定|预约不能改|不能改时间|必须按原计划|可以挪|可移动|能移动|可以调整时间|可舍弃|可以舍弃|不重要|可以删|可以取消|可以跳过|必须保留|一定要去|必去|最高优先级|高优先级|尽量保留|很想去|低优先级|不太重要|雨天不适合|下雨不去|下雨别去|怕下雨|室内优先|适合下雨|雨天可去|全天候|下雨也行|老人|小孩|孩子|少走路|轻松一点|体力弱|徒步|爬山|体力挑战|比较累)/g, ' ')
+      .replace(/(?:缓冲|间隔|预留|停留|玩|参观)\s*(?:半小时|一小时|\d{1,3}\s*(?:分钟|分|小时))/g, ' ')
+      .replace(/^(?:请|麻烦|帮我|给我|把|将|\s)+/g, '')
+      .replace(/(?:设置|设定|标记|设为|改为|调整为|作为)/g, ' ')
+      .replace(/(?:这个|该)?(?:行程点|站点|预约)\s*$/g, '')
+      .replace(/[，,。；;：:\s]+/g, ' ')
+      .trim(),
+  ).replace(/^的\s*/, '')
+  if (!target || target.length > 160) return null
+  return {
+    ...(preference.bufferMinutes ? { bufferMinutes: preference.bufferMinutes } : {}),
+    ...(day ? { day: day.target } : {}),
+    ...(preference.flexibility ? { flexibility: preference.flexibility } : {}),
+    ...(preference.minimumStayMinutes ? { minimumStayMinutes: preference.minimumStayMinutes } : {}),
+    ...(preference.mobilitySuitability ? { mobilitySuitability: preference.mobilitySuitability } : {}),
+    ...(preference.priority ? { priority: preference.priority } : {}),
+    target,
+    ...(preference.weatherSuitability ? { weatherSuitability: preference.weatherSuitability } : {}),
   }
 }
 
@@ -682,7 +813,9 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
     actionIds.has('history.undo@1') ? '撤销行程点删除' : '',
     actionIds.has('item.create@1') ? '新增行程点' : '',
     actionIds.has('item.delete@1') ? '删除行程点' : '',
+    actionIds.has('item.execution.update@1') ? '更新行程进度' : '',
     actionIds.has('item.move@1') ? '跨日移动行程点' : '',
+    actionIds.has('item.replan.preference.update@1') ? '更新重排偏好' : '',
     actionIds.has('day.items.reorder@1') ? '调整当天顺序' : '',
     actionIds.has('item.time.update@1') ? '调整行程时间' : '',
     actionIds.has('route.preview@1') ? '生成路线预览' : '',
@@ -691,4 +824,26 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
     actionIds.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean)
   return labels.join('并') || '处理旅行任务'
+}
+
+function isNonActionItemStateCommand(command: string) {
+  const mentionsExecutionState = /(?:完成|跳过)/.test(command)
+  const isExecutionRestore = /(?:恢复|重置|重新加入)/.test(command)
+  if (
+    mentionsExecutionState
+    && /(?:不要|别|无需|不用|不必|禁止|不允许)\s*(?:把|将)?[^，。；;]{0,40}(?:完成|跳过)/.test(command)
+  ) {
+    return true
+  }
+  if (
+    mentionsExecutionState
+    && !isExecutionRestore
+    && /(?:未完成|没有完成|还没完成|尚未完成)/.test(command)
+  ) {
+    return true
+  }
+  return /(?:是不是|是否|有没有|能否|可不可以)[^，。；;]{0,40}(?:完成|跳过|固定|移动|必去|优先级)/
+    .test(command)
+    || /(?:完成|跳过|固定|移动|必去|优先级|下雨|雨天)[^，。；;]{0,12}(?:吗|么|\?|？)\s*$/
+      .test(command)
 }

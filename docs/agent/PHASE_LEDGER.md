@@ -1890,7 +1890,7 @@ Residual:
 
 ## 2026-07-26 Universal AI Action Gateway V1.5 - Reversible Item Delete And Unified Undo
 
-Status: completed locally.
+Status: merged to `main` at `2117432` through PR #22.
 
 Branch: `feature/action-gateway-delete-undo`
 
@@ -1976,3 +1976,93 @@ Residual:
 - Undo is intentionally rejected after the affected day changes again; the user must generate a fresh operation instead of overwriting later edits.
 - Preserved ticket and ledger references can temporarily point to an absent item until undo, but their metadata, files, financial state, and source links remain intact.
 - Real Provider planning remains intentionally uncalled; deterministic planning, mock Provider normalization, schema/privacy boundaries, confirmation, rollback, idempotency, concurrency, and stale-state behavior are covered locally.
+
+Remote verification:
+
+- PR #22 checks passed: Lint, Type Check, Unit Tests, Build, E2E Tests, and Cloudflare Pages.
+- The post-merge `main` GitHub Actions run passed all five jobs for `2117432d6967de629dc8a0e679e49b014a144e9f`.
+- Cloudflare Pages deployed the same commit successfully.
+- Supabase project `rfpcooafakuvgrdlfxpg` remained `ACTIVE_HEALTHY`; schema lint returned no warning-level errors. Existing migration-history drift was recorded without production writes.
+
+## 2026-07-26 Universal AI Action Gateway V1.6 - Live State And Replan Preferences
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-live-state-preferences`
+
+Goal:
+
+- Let a traveler mark a semantic itinerary item completed, skipped, or active again and update its bounded replan preferences through the registered Action Gateway with one confirmation, durable history, idempotency, and stale-item protection.
+
+Scope:
+
+- Add `item.execution.update@1` with a required semantic item target, optional semantic day, and fixed `completed`, `skipped`, or `active` state.
+- Add `item.replan.preference.update@1` with a required semantic item target, optional semantic day, and only the existing fixed preference enums plus bounded buffer/minimum-stay minutes.
+- Deterministically recognize explicit Chinese completion, skip, restore, must-keep, movable, optional, weather, mobility, buffer, and stay-duration commands without a Provider call.
+- Resolve item/day scope locally, reject ambiguity, and show a short before/after preview with one final confirmation.
+- Commit the item update, object-sync entry, stable Trip Intelligence operation marker, and history in one IndexedDB transaction.
+- Treat a repeated execution as idempotent only when the durable marker and complete intended item state match.
+- Reject execution if the target item changes after preview; independent stale commands must not overwrite each other.
+- Keep existing Live Mode controls and compatibility router working while registered commands take precedence.
+
+No-go:
+
+- No arbitrary item patch, title/note/address/coordinate mutation, route generation, deletion, ticket/blob mutation, ledger/order/payment mutation, or Provider-selected function.
+- No Provider-supplied item/day ID, timestamp, execution metadata, history ID, operation fingerprint, or database field.
+- No automatic completion or skipping based on the clock, location, Provider output, or model inference.
+- No new IndexedDB/Supabase table, cloud contract, route-cache contract, ticket/blob contract, or production migration.
+- No real AI, map, route, search, cloud, or Provider calls.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- `src/lib/itemStateUpdates.ts`
+- `server/providerProxy/actionPlanProvider.ts`
+- Focused planner, validation, runtime, transaction, Provider, and 390px E2E tests plus project status/roadmap updates.
+
+Validation:
+
+- Focused state/preference, sync/history, Action Gateway, Provider, and affected compatibility tests.
+- Typecheck, lint, full unit suite, production build, focused 390px E2E, full serial E2E, PWA upgrade coverage, and `git diff --check`.
+
+Risk:
+
+- Medium-high: both actions change synced onsite behavior and future replan decisions, so semantic targeting, stale-item checks, transactional history, and idempotent retries must remain exact.
+
+Stop conditions:
+
+- Stop and repair if planning/preparation writes data, Provider fields escape the registry, an action writes without confirmation, a stale item is overwritten, a retry creates duplicate history, or item/outbox/history can partially commit.
+
+Result:
+
+- Added `item.execution.update@1` with semantic item/day targets and fixed `completed`, `skipped`, and `active` states. No time, location, or model inference can change progress automatically.
+- Added `item.replan.preference.update@1` with only the existing flexibility, priority, weather, and mobility enums plus bounded buffer and minimum-stay minutes.
+- Deterministic Chinese completion, skip, restore, fixed/movable/optional, weather, mobility, buffer, and stay commands stay local and take precedence over the compatibility router.
+- Validation allows one bounded item-state write per plan and rejects unknown fields, internal IDs, timestamps, arbitrary patches, invalid enums, fractional/out-of-range minutes, and mixed local writes.
+- Provider prompts and mock planning expose only registered semantic fields. Malicious Provider responses containing item IDs, timestamps, patches, histories, or fingerprints fail normalization.
+- Preparation performs read-only semantic resolution, rejects ambiguous or missing targets, captures the exact item `updatedAt`, and produces a compact before/after preview.
+- Execution commits the item, trip timestamp, object-sync outbox/state, and stable Trip Intelligence marker/history in one IndexedDB transaction. Outbox failure rolls back the complete operation.
+- Retries require both the durable marker and intended final item state; a changed target requires a fresh preview and confirmation instead of overwriting the user.
+- Added a 390px browser flow proving details remain folded, each write exposes one final confirmation, no data changes before confirmation, and deterministic commands make no Provider request.
+
+Validation:
+
+- Focused Action Gateway, compatibility router, Provider contract/handler/client, and item-state transaction run passed: 9 files and 248 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 186 files and 1520 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2289.1 KiB/94-entry precache.
+- Focused 390px progress/preference E2E passed.
+- The full serial E2E run passed all 151 tests in approximately 5.7 minutes, including PWA upgrade and desktop Beta smoke coverage.
+- `git diff --check` passed.
+- A read-only protected-boundary review found negated/question commands could be misread as writes and quoted targets could lose precedence to positional words. Both were fixed; concurrent replay and preference-only stale baselines gained regression coverage, and the final review found no remaining high- or medium-risk issue.
+
+Residual:
+
+- The actions intentionally update one item at a time; bulk progress changes and free-form field patches remain outside the registry.
+- Restoring `active` clears the completed/skipped status but does not infer a new time, order, route, or live-mode event.
+- Real Provider planning remains intentionally uncalled; deterministic planning, mock Provider normalization, field allowlists, confirmation, rollback, idempotency, and stale-item behavior are covered locally.

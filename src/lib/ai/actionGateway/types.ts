@@ -1,4 +1,11 @@
-import type { LedgerExpenseCategory, RouteId } from '../../../types'
+import type {
+  LedgerExpenseCategory,
+  ReplanFlexibility,
+  ReplanMobilitySuitability,
+  ReplanPriority,
+  ReplanWeatherSuitability,
+  RouteId,
+} from '../../../types'
 
 export const AI_ACTION_PLAN_SCHEMA_VERSION = 'ai_action_plan.v1' as const
 export const AI_ACTION_PLAN_MAX_STEPS = 6
@@ -8,7 +15,9 @@ export type AiActionId =
   | 'history.undo@1'
   | 'item.create@1'
   | 'item.delete@1'
+  | 'item.execution.update@1'
   | 'item.move@1'
+  | 'item.replan.preference.update@1'
   | 'item.time.update@1'
   | 'ledger.expense.draft@1'
   | 'place.enrich@1'
@@ -56,6 +65,23 @@ export type AiActionItemDeleteArgs = {
 export type AiActionHistoryUndoArgs = {
   kind: 'item_delete'
   target?: string
+}
+
+export type AiActionItemExecutionUpdateArgs = {
+  day?: string
+  state: 'active' | 'completed' | 'skipped'
+  target: string
+}
+
+export type AiActionItemReplanPreferenceUpdateArgs = {
+  bufferMinutes?: number
+  day?: string
+  flexibility?: ReplanFlexibility
+  minimumStayMinutes?: number
+  mobilitySuitability?: ReplanMobilitySuitability
+  priority?: ReplanPriority
+  target: string
+  weatherSuitability?: ReplanWeatherSuitability
 }
 
 export type AiActionDayItemsReorderArgs = {
@@ -114,7 +140,9 @@ export type AiActionArgsById = {
   'history.undo@1': AiActionHistoryUndoArgs
   'item.create@1': AiActionItemCreateArgs
   'item.delete@1': AiActionItemDeleteArgs
+  'item.execution.update@1': AiActionItemExecutionUpdateArgs
   'item.move@1': AiActionItemMoveArgs
+  'item.replan.preference.update@1': AiActionItemReplanPreferenceUpdateArgs
   'item.time.update@1': AiActionItemTimeUpdateArgs
   'ledger.expense.draft@1': AiActionLedgerExpenseDraftArgs
   'place.enrich@1': AiActionPlaceEnrichArgs

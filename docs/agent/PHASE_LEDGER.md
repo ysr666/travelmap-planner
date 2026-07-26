@@ -1307,7 +1307,7 @@ Residual:
 
 ## 2026-07-25 Phase 3A - Startup Bundle Boundary And Budget
 
-Status: completed locally.
+Status: merged to `main` as `cd25438` through PR #19.
 
 Branch: `feature/pwa-bundle-budget`
 
@@ -1802,3 +1802,88 @@ Residual:
 - Deletion and cross-day movement remain on the compatibility path because they need a higher-risk contract and clearer undo behavior.
 - A new command invocation intentionally receives a new execution ID; explicit duplicate item creation remains possible when the user separately confirms it.
 - Real Provider planning remains intentionally uncalled; schema, privacy, confirmation, idempotency, rollback, and stale-state behavior are covered locally and with mocks.
+
+## 2026-07-26 Universal AI Action Gateway V1.4 - Cross-Day Item Move
+
+Status: completed locally.
+
+Branch: `feature/action-gateway-cross-day-move`
+
+Goal:
+
+- Move one existing itinerary item between days through the registered Action Gateway while preserving semantic targeting, one final confirmation, atomic sync/history persistence, idempotent retry, and stale-plan protection.
+
+Scope:
+
+- Add `item.move@1` with a semantic item target, semantic destination day, optional semantic source day, and fixed first/last/before/after placement.
+- Resolve source and destination membership locally and show a compact source-to-destination preview.
+- Atomically compact the source day, insert into the destination day, update the moved item's day, enqueue every affected item, and record Trip Intelligence history.
+- Reuse a stable operation marker so retries never move the item twice.
+- Reject execution if either day's membership/order changes after preview.
+- Deterministically recognize unambiguous cross-day move commands without a Provider request.
+- Cover strict schema rejection, ambiguity, destination anchor scope, idempotency, stale state, confirmation gating, compact mobile UI, sync outbox, and history.
+
+No-go:
+
+- No deletion, arbitrary item patch, database ID, route string, coordinate, note, ticket/blob, cloud, payment, or Provider-selected function.
+- No same-day reorder through this action and no automatic fallback that changes the requested destination.
+- No Provider call for deterministic cross-day move commands.
+- No real AI, map, route, search, cloud, or Provider calls.
+- No IndexedDB schema, cloud contract, Provider Proxy contract, route-cache, ticket/blob, or AI privacy-boundary change.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- `src/db/repositories.ts`
+- `src/db/trackedMutations.ts`
+- Focused unit and E2E tests plus project status/roadmap/ledger.
+
+Validation:
+
+- Focused Action Gateway, repository, and tracked-mutation tests.
+- Typecheck, lint, full unit suite, production build, focused 390px E2E, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium-high: one confirmation changes membership and ordering in two synced days, so both baselines and every affected outbox/history write must remain atomic.
+
+Stop conditions:
+
+- Stop and repair if planning or preparation writes data, unknown fields or IDs pass validation, the target or anchor resolves outside the intended day, retry moves twice, either day can change after preview without fresh confirmation, or any partial mutation/history/outbox state commits.
+
+Result:
+
+- Added `item.move@1` with semantic target, optional semantic source day, required semantic destination day, and fixed first/last/before/after placement.
+- Deterministic Chinese commands support Arabic and common Chinese day ordinals and stay fully local; unambiguous cross-day moves make no Provider request.
+- Validation rejects unknown fields, internal IDs, same semantic source/destination, missing destination anchors, multiple moves, and plans that mix move/create/reorder structural writes.
+- Preparation resolves the target and any anchor only inside their intended days, then captures complete source and destination membership/order baselines.
+- Execution atomically compacts the source day, inserts into the destination day, updates the moved item's `dayId`, queues every changed item, and appends stable-ID Trip Intelligence history.
+- Moving to another day clears any completed/skipped execution state instead of carrying a stale onsite status into the new date.
+- A failed outbox/history side effect rolls back the full move. A retry checks the persisted operation marker and both final day orders before returning idempotently.
+- Any source or destination membership/order change after preview becomes a fresh-confirmation error without a partial write.
+- The compact preview's single `确认执行` button is now the final confirmation; the redundant second confirmation dialog was removed across registered write actions.
+- Mock planning rejects unresolved cross-day targets instead of substituting an unrelated repair action.
+- Added 390px E2E coverage proving details stay folded, only one confirmation click is exposed, neither day changes before confirmation, the final order is correct, and Provider Proxy is never called.
+
+Validation:
+
+- Focused Action Gateway, Provider, repository, and tracked-mutation run passed: 6 files and 74 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 185 files and 1496 tests.
+- `npm run build` passed; bundle budget passed at 852.7 KiB initial JS, 245.8 KiB gzip, and 2274.7 KiB/94-entry precache.
+- Focused 390px cross-day move E2E passed.
+- The full serial E2E run passed all 149 tests in approximately 7.1 minutes.
+- `git diff --check` passed.
+- Read-only protected-boundary reviews found stale execution state, blocked idempotent replay, mock misrouting, duplicate confirmation, in-flight command contamination, and concurrent retry defects; execution-scoped state guards, a synchronous action mutex, and delayed double-click E2E coverage resolved every reported issue.
+- The final review found no remaining high- or medium-risk issue.
+
+Residual:
+
+- Deletion remains outside the registry until its undo and ticket-binding behavior has an explicit contract.
+- Cross-day move preserves the item's existing transport fields and ticket bindings; it does not infer new transport details.
+- Real Provider planning remains intentionally uncalled; deterministic planning, schema/privacy boundaries, confirmation, rollback, idempotency, and stale-state behavior are covered locally and with mocks.

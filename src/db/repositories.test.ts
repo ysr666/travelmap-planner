@@ -21,6 +21,7 @@ import {
   listItemsByTrip,
   listTicketsByItem,
   listTicketsByTrip,
+  moveItineraryItemBetweenDays,
   replaceTripPlanRecords,
   reorderDayItems,
   listTrips,
@@ -139,6 +140,76 @@ describe('ItineraryItem CRUD', () => {
       { id: first.id, sortOrder: 2 },
       { id: second.id, sortOrder: 3 },
     ])
+  })
+
+  it('moves an item between days atomically and rejects either stale day baseline', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const firstDay = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const secondDay = await createDay({ tripId: trip.id, date: '2025-04-02', title: 'Day 2', sortOrder: 2 })
+    const sourceFirst = await createItineraryItem({ tripId: trip.id, dayId: firstDay.id, title: 'Source first', sortOrder: 1, ticketIds: [] })
+    const target = await createItineraryItem({
+      dayId: firstDay.id,
+      executionState: { status: 'completed', updatedAt: 1 },
+      sortOrder: 2,
+      ticketIds: [],
+      title: 'Target',
+      tripId: trip.id,
+    })
+    const sourceLast = await createItineraryItem({ tripId: trip.id, dayId: firstDay.id, title: 'Source last', sortOrder: 3, ticketIds: [] })
+    const destinationFirst = await createItineraryItem({ tripId: trip.id, dayId: secondDay.id, title: 'Destination first', sortOrder: 1, ticketIds: [] })
+    const destinationLast = await createItineraryItem({ tripId: trip.id, dayId: secondDay.id, title: 'Destination last', sortOrder: 2, ticketIds: [] })
+    const sourceBaseline = [sourceFirst.id, target.id, sourceLast.id]
+    const destinationBaseline = [destinationFirst.id, destinationLast.id]
+    const nextDestination = [destinationFirst.id, target.id, destinationLast.id]
+
+    await expect(moveItineraryItemBetweenDays(
+      target.id,
+      secondDay.id,
+      nextDestination,
+      {
+        expectedDestinationItemIds: destinationBaseline,
+        expectedSourceItemIds: [target.id, sourceFirst.id, sourceLast.id],
+        sourceDayId: firstDay.id,
+      },
+    )).rejects.toThrow('来源日期行程已变化')
+    await expect(moveItineraryItemBetweenDays(
+      target.id,
+      secondDay.id,
+      nextDestination,
+      {
+        expectedDestinationItemIds: [destinationLast.id, destinationFirst.id],
+        expectedSourceItemIds: sourceBaseline,
+        sourceDayId: firstDay.id,
+      },
+    )).rejects.toThrow('目标日期行程已变化')
+
+    const result = await moveItineraryItemBetweenDays(
+      target.id,
+      secondDay.id,
+      nextDestination,
+      {
+        expectedDestinationItemIds: destinationBaseline,
+        expectedSourceItemIds: sourceBaseline,
+        sourceDayId: firstDay.id,
+      },
+    )
+
+    expect(result.changedItems.map((item) => item.id).sort()).toEqual(
+      [target.id, sourceLast.id, destinationLast.id].sort(),
+    )
+    await expect(listItemsByDay(firstDay.id)).resolves.toMatchObject([
+      { id: sourceFirst.id, sortOrder: 1 },
+      { id: sourceLast.id, sortOrder: 2 },
+    ])
+    await expect(listItemsByDay(secondDay.id)).resolves.toMatchObject([
+      { id: destinationFirst.id, sortOrder: 1 },
+      { dayId: secondDay.id, id: target.id, sortOrder: 2 },
+      { id: destinationLast.id, sortOrder: 3 },
+    ])
+    await expect(getItineraryItem(target.id)).resolves.toMatchObject({
+      dayId: secondDay.id,
+      executionState: undefined,
+    })
   })
 })
 

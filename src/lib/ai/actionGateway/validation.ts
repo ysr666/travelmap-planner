@@ -132,8 +132,16 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   if (steps.filter((step) => step.actionId === 'day.items.reorder@1').length > 1) {
     errors.push('一个计划最多调整一次当天顺序。')
   }
-  if (actionIds.has('item.create@1') && actionIds.has('day.items.reorder@1')) {
-    errors.push('新增行程点与当天重排需要分两次确认。')
+  if (steps.filter((step) => step.actionId === 'item.move@1').length > 1) {
+    errors.push('一个计划最多跨日移动一个行程点。')
+  }
+  const structuralActionCount = [
+    'day.items.reorder@1',
+    'item.create@1',
+    'item.move@1',
+  ].filter((actionId) => actionIds.has(actionId as AiActionId)).length
+  if (structuralActionCount > 1) {
+    errors.push('新增、当天重排与跨日移动需要分开确认。')
   }
   if (errors.length > 0 || !summary) return { errors: Array.from(new Set(errors)), ok: false }
 
@@ -241,6 +249,49 @@ function validateArgs<TActionId extends AiActionId>(
       ...(anchor ? { anchor } : {}),
       ...(day ? { day } : {}),
       position,
+      target,
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'item.move@1') {
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const destinationDay = readSemanticTarget(record.destinationDay, MAX_TARGET_LENGTH)
+    const sourceDay = record.sourceDay === undefined
+      ? undefined
+      : readSemanticTarget(record.sourceDay, MAX_TARGET_LENGTH)
+    const anchor = record.anchor === undefined
+      ? undefined
+      : readSemanticTarget(record.anchor, MAX_TARGET_LENGTH)
+    const position = typeof record.position === 'string' && REORDER_POSITIONS.has(record.position)
+      ? record.position as 'after' | 'before' | 'first' | 'last'
+      : undefined
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (!destinationDay) errors.push(`${path}.destinationDay 必须是语义日期目标。`)
+    if (record.sourceDay !== undefined && !sourceDay) {
+      errors.push(`${path}.sourceDay 必须是语义日期目标。`)
+    }
+    if (!position) errors.push(`${path}.position 无效。`)
+    if ((position === 'before' || position === 'after') && !anchor) {
+      errors.push(`${path}.anchor 在 before/after 时不能为空。`)
+    }
+    if ((position === 'first' || position === 'last') && record.anchor !== undefined) {
+      errors.push(`${path}.anchor 只允许用于 before/after。`)
+    }
+    if (target && anchor && normalizeSemanticText(target) === normalizeSemanticText(anchor)) {
+      errors.push(`${path}.target 与 anchor 不能相同。`)
+    }
+    if (
+      sourceDay
+      && destinationDay
+      && normalizeSemanticText(sourceDay) === normalizeSemanticText(destinationDay)
+    ) {
+      errors.push(`${path}.sourceDay 与 destinationDay 不能相同。`)
+    }
+    if (!target || !destinationDay || !position) return null
+    return {
+      ...(anchor ? { anchor } : {}),
+      destinationDay,
+      position,
+      ...(sourceDay ? { sourceDay } : {}),
       target,
     } as AiActionArgsById[TActionId]
   }

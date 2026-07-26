@@ -21,6 +21,24 @@ describe('actionPlanProvider', () => {
     }
   })
 
+  it('rejects an ambiguous mock cross-day move instead of substituting another action', async () => {
+    for (const command of [
+      '把伦敦眼移动到另一个日期',
+      '把伦敦眼调整到另一个日期',
+    ]) {
+      const request = actionPlanRequest()
+      request.command = command
+      const provider = createMockAiActionPlanProvider(request)
+
+      const result = await provider.plan(buildAiActionPlanProviderInput(request))
+
+      expect(result).toMatchObject({
+        errorCode: 'invalid_response',
+        ok: false,
+      })
+    }
+  })
+
   it('sends only the prompt and server-side key to an OpenAI-compatible provider', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

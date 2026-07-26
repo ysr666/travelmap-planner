@@ -44,6 +44,7 @@ export {
   deleteTripCascade,
   importTripBackupRecords,
   importTripPlanRecords,
+  moveItineraryItemBetweenDays,
   replaceTripPlanRecords,
   reorderDayItems,
   saveTicketBlob,

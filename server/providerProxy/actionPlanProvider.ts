@@ -48,7 +48,8 @@ export function buildAiActionPlanProviderInput(
       '只能选择 availableActions 中的 id；不得输出数据库写入、URL、路由、函数名、Provider 名称或任何未登记动作。',
       '只使用脱敏摘要判断语义目标。不得索取或输出票据文件、Blob、Token、完整数据库、证件号或密钥。',
       '最多 6 个步骤。id 使用短英文标识；dependsOn 只能引用同计划中的步骤 id。',
-      'ticket.open@1 的 args 只能含 query；place.enrich@1 的 args 只能含 target；trip.repair@1 的 args 只能含 scope 和可选 target。',
+      '每个动作的 args 只能使用 availableActions.input 明确列出的语义字段；不得添加 ID、patch、状态、路由或函数。',
+      'item.move@1 只能使用语义行程点、来源/目标日期和固定 first/last/before/after；目标日期或参照点不明确时不要猜测。',
       'target 优先使用 current_item、first_item，或上下文中唯一且明确的行程点名称。目标不明确时不要猜测具体名称。',
       'place.enrich@1 与 trip.repair@1 不得出现在同一计划中。',
       '输出必须是 JSON，不要 Markdown、代码块或解释。',
@@ -66,7 +67,15 @@ export function createMockAiActionPlanProvider(
   return {
     name: 'mock',
     async plan() {
-      const validation = validateAiActionPlan(buildMockPlan(request))
+      const mockPlan = buildMockPlan(request)
+      if (!mockPlan) {
+        return {
+          errorCode: 'invalid_response',
+          message: 'Mock action planner could not resolve an unambiguous registered action.',
+          ok: false,
+        }
+      }
+      const validation = validateAiActionPlan(mockPlan)
       if (!validation.ok) {
         return { errorCode: 'invalid_response', message: 'Mock action planner produced an invalid plan.', ok: false }
       }
@@ -188,14 +197,7 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
     })
   }
   if (steps.length === 0) {
-    const firstAction = request.availableActions[0]
-    if (firstAction?.id === 'ticket.open@1') {
-      steps.push({ actionId: firstAction.id, args: {}, dependsOn: [], id: 'open-ticket' })
-    } else if (firstAction?.id === 'place.enrich@1') {
-      steps.push({ actionId: firstAction.id, args: { target: 'current_item' }, dependsOn: [], id: 'enrich-place' })
-    } else {
-      steps.push({ actionId: 'trip.repair@1', args: { scope: 'trip' }, dependsOn: [], id: 'repair-trip' })
-    }
+    return null
   }
 
   return {

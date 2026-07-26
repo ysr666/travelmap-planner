@@ -33,6 +33,24 @@ describe('AI Action Gateway planner', () => {
         target: '伦敦眼',
       },
     })
+    expect(buildDeterministicAiActionPlan('把第一天的伦敦眼移到第二天大本钟后面')?.steps[0]).toMatchObject({
+      actionId: 'item.move@1',
+      args: {
+        anchor: '大本钟',
+        destinationDay: 'day:2',
+        position: 'after',
+        sourceDay: 'first_day',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('把伦敦眼移到第二天')?.steps[0]).toMatchObject({
+      actionId: 'item.move@1',
+      args: {
+        destinationDay: 'day:2',
+        position: 'last',
+        target: '伦敦眼',
+      },
+    })
     expect(buildDeterministicAiActionPlan('第一天新增午餐 32 GBP')?.steps).toHaveLength(1)
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')?.steps[0]).toMatchObject({
       actionId: 'route.preview@1',
@@ -129,5 +147,6 @@ describe('AI Action Gateway planner', () => {
     expect(shouldRequestAiActionPlan('记一笔 2 人午餐 32.50')).toBe(true)
     expect(shouldRequestAiActionPlan('记一笔酒店 1,000 GBP')).toBe(true)
     expect(shouldRequestAiActionPlan('新增一个行程点但还没确定哪天')).toBe(true)
+    expect(shouldRequestAiActionPlan('把伦敦眼移动到另一个日期')).toBe(true)
   })
 })

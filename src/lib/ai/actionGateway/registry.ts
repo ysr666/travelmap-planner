@@ -42,6 +42,20 @@ const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
     retryPolicy: { maxAttempts: 2, retryable: true },
     risk: 'local_write',
   },
+  'item.move@1': {
+    description: '把一个明确行程点移动到另一天的首位、末位，或目标日期内另一个明确行程点前后；写入前必须确认。',
+    id: 'item.move@1',
+    idempotencyNamespace: 'item-move',
+    input: '{"target":"current_item|first_item|行程点名称","destinationDay":"current_day|first_day|第 N 天|日期标题","position":"first|last|before|after","anchor":"before/after 时必填的目标日期行程点名称","sourceDay":"可选 current_day|first_day|第 N 天|日期标题"}',
+    inputSchema: {
+      allowedFields: ['target', 'destinationDay', 'position', 'anchor', 'sourceDay'],
+      requiredFields: ['target', 'destinationDay', 'position'],
+    },
+    label: '跨日移动行程点',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 2, retryable: true },
+    risk: 'local_write',
+  },
   'item.time.update@1': {
     description: '调整一个明确行程点的开始时间；可同时设置结束时间，写入前必须确认。',
     id: 'item.time.update@1',

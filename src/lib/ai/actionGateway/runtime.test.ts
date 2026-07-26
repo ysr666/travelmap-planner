@@ -294,6 +294,208 @@ describe('AI Action Gateway runtime', () => {
     expect((await db.itineraryItems.toArray()).map((item) => item.sortOrder)).toEqual([1, 1])
   })
 
+  it('moves one semantic item across days only after confirmation and does not repeat it', async () => {
+    const seed = buildSeed()
+    seed.item.executionState = { status: 'completed', updatedAt: 1 }
+    seed.item.title = '伦敦眼'
+    seed.item.sortOrder = 2
+    const sourceFirst: ItineraryItem = {
+      ...seed.item,
+      id: 'item-hotel',
+      sortOrder: 1,
+      title: '伦敦酒店',
+    }
+    const secondDay: Day = {
+      ...seed.day,
+      date: '2026-07-11',
+      id: 'day-2',
+      sortOrder: 2,
+      title: '伦敦市区',
+    }
+    const bigBen: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-big-ben',
+      sortOrder: 1,
+      title: '大本钟',
+    }
+    const museum: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-museum',
+      sortOrder: 2,
+      title: '大英博物馆',
+    }
+    await seedDatabase(seed)
+    await db.days.put(secondDay)
+    await db.itineraryItems.bulkPut([sourceFirst, bigBen, museum])
+    const context = runtimeContext(seed)
+    context.commandContext.days = [seed.day, secondDay]
+    context.commandContext.items = [sourceFirst, seed.item, bigBen, museum]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const plan = buildDeterministicAiActionPlan(
+      '把第一天的伦敦眼移到第二天大本钟后面',
+    )!
+
+    const prepared = await prepareAiActionPlan(plan, context)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(prepared.plan.requiresConfirmation).toBe(true)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['伦敦眼'],
+      hasWrite: true,
+      preview: '伦敦眼：「抵达伦敦」第 2 位 → 「伦敦市区」第 2 位。',
+    })
+    expect((await db.itineraryItems.where('dayId').equals(seed.day.id).toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['伦敦酒店', '伦敦眼'])
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      effects: [{
+        kind: 'navigate',
+        params: { dayId: secondDay.id, tripId: seed.trip.id, view: 'schedule' },
+        route: 'day',
+      }],
+      status: 'completed',
+    })
+    expect((await db.itineraryItems.where('dayId').equals(seed.day.id).toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['伦敦酒店'])
+    expect((await db.itineraryItems.where('dayId').equals(secondDay.id).toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['大本钟', '伦敦眼', '大英博物馆'])
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      executionState: undefined,
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    const itemOutbox = (await db.syncOutbox.toArray())
+      .filter((entry) => entry.objectType === 'item')
+    const itemOutboxIds = itemOutbox
+      .map((entry) => entry.objectId)
+      .sort()
+    expect(itemOutboxIds).toEqual([seed.item.id, museum.id].sort())
+    expect(itemOutbox.find((entry) => entry.objectId === seed.item.id)?.payload)
+      .toMatchObject({
+        dayId: secondDay.id,
+        executionState: undefined,
+      })
+
+    const retry = await executeAiActionPlan(prepared, context)
+    expect(retry.status).toBe('completed')
+    expect(retry.steps[0].message).toContain('未重复移动')
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+    expect((await db.itineraryItems.where('dayId').equals(secondDay.id).toArray())
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((item) => item.title))
+      .toEqual(['大本钟', '伦敦眼', '大英博物馆'])
+  })
+
+  it('rejects a cross-day move when either prepared day order is stale', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    const secondDay: Day = {
+      ...seed.day,
+      date: '2026-07-11',
+      id: 'day-2',
+      sortOrder: 2,
+      title: '伦敦市区',
+    }
+    const bigBen: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-big-ben',
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.days.put(secondDay)
+    await db.itineraryItems.put(bigBen)
+    const context = runtimeContext(seed)
+    context.commandContext.days = [seed.day, secondDay]
+    context.commandContext.items = [seed.item, bigBen]
+    const plan = buildDeterministicAiActionPlan('把伦敦眼移到第二天')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.itineraryItems.put({
+      ...bigBen,
+      id: 'item-new-destination',
+      sortOrder: 2,
+      title: '刚加入目标日期',
+      updatedAt: 2,
+    })
+    prepared.baselineFingerprint = undefined
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      message: '目标日期行程已变化，请重新生成预览。',
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      dayId: seed.day.id,
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('rolls back a cross-day move when its sync outbox cannot be committed', async () => {
+    const seed = buildSeed()
+    seed.item.title = '伦敦眼'
+    const secondDay: Day = {
+      ...seed.day,
+      date: '2026-07-11',
+      id: 'day-2',
+      sortOrder: 2,
+      title: '伦敦市区',
+    }
+    const bigBen: ItineraryItem = {
+      ...seed.item,
+      dayId: secondDay.id,
+      id: 'item-big-ben',
+      title: '大本钟',
+    }
+    await seedDatabase(seed)
+    await db.days.put(secondDay)
+    await db.itineraryItems.put(bigBen)
+    const context = runtimeContext(seed)
+    context.commandContext.days = [seed.day, secondDay]
+    context.commandContext.items = [seed.item, bigBen]
+    const plan = buildDeterministicAiActionPlan('把伦敦眼移到第二天最前面')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    const outboxAdd = vi.spyOn(db.syncOutbox, 'add')
+      .mockRejectedValueOnce(new Error('outbox unavailable'))
+
+    const firstRun = await executeAiActionPlan(prepared, context)
+
+    expect(firstRun.status).toBe('failed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      dayId: seed.day.id,
+      sortOrder: 1,
+    })
+    await expect(db.itineraryItems.get(bigBen.id)).resolves.toMatchObject({
+      dayId: secondDay.id,
+      sortOrder: 1,
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+
+    outboxAdd.mockRestore()
+    const retryRun = await executeAiActionPlan(prepared, context)
+    expect(retryRun.status).toBe('completed')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      dayId: secondDay.id,
+      sortOrder: 1,
+    })
+    await expect(db.itineraryItems.get(bigBen.id)).resolves.toMatchObject({
+      dayId: secondDay.id,
+      sortOrder: 2,
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
   it('previews an item time change and preserves duration until confirmed execution', async () => {
     const seed = buildSeed()
     seed.item.startTime = '09:00'

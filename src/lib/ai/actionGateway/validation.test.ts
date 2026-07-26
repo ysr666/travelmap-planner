@@ -144,6 +144,72 @@ describe('AI Action Gateway V1 contract', () => {
     }).ok).toBe(false)
   })
 
+  it('keeps cross-day item moves semantic, bounded, and separate from structural edits', () => {
+    expect(buildDeterministicAiActionPlan('把第一天的伦敦眼移到第二天大本钟前面')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'item.move@1',
+        args: {
+          anchor: '大本钟',
+          destinationDay: 'day:2',
+          position: 'before',
+          sourceDay: 'first_day',
+          target: '伦敦眼',
+        },
+        risk: 'local_write',
+      }],
+    })
+
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'item.move@1',
+        args: {
+          destinationDay: 'day_internal_secret',
+          functionName: 'moveAnyRecord',
+          position: 'before',
+          target: 'item_internal_secret',
+        },
+        id: 'move',
+      }],
+      summary: '非法跨日移动',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: 'item.move@1',
+        args: {
+          destinationDay: 'first_day',
+          position: 'last',
+          sourceDay: 'first_day',
+          target: '伦敦眼',
+        },
+        id: 'move',
+      }],
+      summary: '同日移动',
+    }).ok).toBe(false)
+    expect(validateAiActionPlan({
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [
+        {
+          actionId: 'item.move@1',
+          args: {
+            destinationDay: 'day:2',
+            position: 'last',
+            target: '伦敦眼',
+          },
+          id: 'move',
+        },
+        {
+          actionId: 'day.items.reorder@1',
+          args: { position: 'first', target: '大本钟' },
+          id: 'reorder',
+        },
+      ],
+      summary: '跨日移动后重排',
+    }).ok).toBe(false)
+  })
+
   it('keeps route generation and expense drafts bounded and confirmation gated', () => {
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')).toMatchObject({
       requiresConfirmation: true,
@@ -270,6 +336,7 @@ describe('AI Action Gateway V1 contract', () => {
     expect(listAiActionCatalog().map((action) => action.id)).toEqual([
       'day.items.reorder@1',
       'item.create@1',
+      'item.move@1',
       'item.time.update@1',
       'ledger.expense.draft@1',
       'place.enrich@1',

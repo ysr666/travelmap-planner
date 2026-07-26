@@ -359,6 +359,135 @@ export async function reorderDayItems(
   })
 }
 
+export async function moveItineraryItemBetweenDays(
+  itemId: string,
+  destinationDayId: string,
+  nextDestinationItemIds: string[],
+  options: {
+    expectedDestinationItemIds: string[]
+    expectedSourceItemIds: string[]
+    sourceDayId: string
+  },
+) {
+  if (options.sourceDayId === destinationDayId) {
+    throw new Error('跨日移动的来源日期与目标日期不能相同。')
+  }
+  for (const [label, itemIds] of [
+    ['来源日期基线', options.expectedSourceItemIds],
+    ['目标日期基线', options.expectedDestinationItemIds],
+    ['目标日期顺序', nextDestinationItemIds],
+  ] as const) {
+    if (new Set(itemIds).size !== itemIds.length) {
+      throw new Error(`${label}包含重复行程点。`)
+    }
+  }
+
+  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
+    const [item, sourceDay, destinationDay] = await Promise.all([
+      db.itineraryItems.get(itemId),
+      db.days.get(options.sourceDayId),
+      db.days.get(destinationDayId),
+    ])
+    if (!item || item.dayId !== options.sourceDayId) {
+      throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
+    }
+    if (!sourceDay || !destinationDay) {
+      throw new ItineraryBaselineConflictError('来源日期或目标日期已不存在，请重新生成预览。')
+    }
+    if (
+      sourceDay.tripId !== destinationDay.tripId
+      || item.tripId !== sourceDay.tripId
+    ) {
+      throw new ItineraryBaselineConflictError('日期归属已变化，请重新生成预览。')
+    }
+
+    const [currentSourceItems, currentDestinationItems] = await Promise.all([
+      db.itineraryItems.where('dayId').equals(sourceDay.id).toArray()
+        .then(sortItineraryItemsByPlanOrder),
+      db.itineraryItems.where('dayId').equals(destinationDay.id).toArray()
+        .then(sortItineraryItemsByPlanOrder),
+    ])
+    const currentSourceItemIds = currentSourceItems.map((candidate) => candidate.id)
+    const currentDestinationItemIds = currentDestinationItems.map((candidate) => candidate.id)
+    if (!sameOrderedIds(currentSourceItemIds, options.expectedSourceItemIds)) {
+      throw new ItineraryBaselineConflictError('来源日期行程已变化，请重新生成预览。')
+    }
+    if (!sameOrderedIds(currentDestinationItemIds, options.expectedDestinationItemIds)) {
+      throw new ItineraryBaselineConflictError('目标日期行程已变化，请重新生成预览。')
+    }
+    if (!currentSourceItemIds.includes(itemId) || currentDestinationItemIds.includes(itemId)) {
+      throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
+    }
+
+    const expectedDestinationMembers = new Set([...currentDestinationItemIds, itemId])
+    if (
+      nextDestinationItemIds.length !== expectedDestinationMembers.size
+      || nextDestinationItemIds.some((candidateId) => !expectedDestinationMembers.has(candidateId))
+    ) {
+      throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
+    }
+
+    const updatedAt = Date.now()
+    const nextSourceItems = currentSourceItems
+      .filter((candidate) => candidate.id !== itemId)
+      .map((candidate, index) =>
+        candidate.sortOrder === index + 1
+          ? candidate
+          : { ...candidate, sortOrder: index + 1, updatedAt },
+      )
+    const destinationItemById = new Map(
+      currentDestinationItems.map((candidate) => [candidate.id, candidate]),
+    )
+    const nextDestinationItems = nextDestinationItemIds.map((candidateId, index) => {
+      const candidate = candidateId === itemId ? item : destinationItemById.get(candidateId)
+      if (!candidate) {
+        throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
+      }
+      if (
+        candidate.dayId === destinationDay.id
+        && candidate.sortOrder === index + 1
+      ) {
+        return candidate
+      }
+      return {
+        ...candidate,
+        dayId: destinationDay.id,
+        ...(candidateId === itemId ? { executionState: undefined } : {}),
+        sortOrder: index + 1,
+        updatedAt,
+      }
+    })
+    const changedItems = [
+      ...nextSourceItems.filter((candidate) => {
+        const previous = currentSourceItems.find((itemCandidate) => itemCandidate.id === candidate.id)
+        return previous?.sortOrder !== candidate.sortOrder
+      }),
+      ...nextDestinationItems.filter((candidate) => {
+        const previous = candidate.id === itemId ? item : destinationItemById.get(candidate.id)
+        return previous?.dayId !== candidate.dayId || previous?.sortOrder !== candidate.sortOrder
+      }),
+    ]
+    const movedItem = nextDestinationItems.find((candidate) => candidate.id === itemId)
+    if (!movedItem) {
+      throw new ItineraryBaselineConflictError('目标日期顺序缺少待移动行程点。')
+    }
+
+    await db.itineraryItems.bulkPut(changedItems)
+    await db.trips.update(item.tripId, { updatedAt })
+    return {
+      changedItems,
+      destinationItemIds: nextDestinationItemIds,
+      movedItem,
+      sourceItemIds: nextSourceItems.map((candidate) => candidate.id),
+    }
+  })
+}
+
+function sameOrderedIds(first: string[], second: string[]) {
+  return first.length === second.length
+    && first.every((itemId, index) => itemId === second[index])
+}
+
 function matchesIdempotentItemInput(existing: ItineraryItem, input: CreateItineraryItemInput) {
   return existing.tripId === input.tripId
     && existing.dayId === input.dayId

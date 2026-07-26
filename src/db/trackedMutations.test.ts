@@ -15,6 +15,7 @@ import {
   getTicketMeta,
   getItineraryItem,
   importTripPlanRecords,
+  moveItineraryItemBetweenDays,
   reorderDayItems,
   saveTicketBlob,
   setItineraryItemExecutionState,
@@ -214,6 +215,40 @@ describe('tracked db mutations', () => {
     expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('items-reordered')
     const outbox = await db.syncOutbox.toArray()
     expect(outbox).toHaveLength(3)
+    expect(outbox.every((entry) => entry.objectType === 'item' && entry.operation === 'upsert')).toBe(true)
+  })
+
+  it('queues every changed item after a cross-day move and records one trip write', async () => {
+    const trip = await createTrip({ destination: '伦敦', endDate: '2026-06-14', startDate: '2026-06-13', title: '伦敦' })
+    const firstDay = await createDay({ date: '2026-06-13', sortOrder: 1, title: '第一天', tripId: trip.id })
+    const secondDay = await createDay({ date: '2026-06-14', sortOrder: 2, title: '第二天', tripId: trip.id })
+    const sourceFirst = await createItineraryItem({ dayId: firstDay.id, sortOrder: 1, ticketIds: [], title: '酒店', tripId: trip.id })
+    const target = await createItineraryItem({ dayId: firstDay.id, sortOrder: 2, ticketIds: [], title: '伦敦眼', tripId: trip.id })
+    const sourceLast = await createItineraryItem({ dayId: firstDay.id, sortOrder: 3, ticketIds: [], title: '晚餐', tripId: trip.id })
+    const destinationFirst = await createItineraryItem({ dayId: secondDay.id, sortOrder: 1, ticketIds: [], title: '大本钟', tripId: trip.id })
+    const destinationLast = await createItineraryItem({ dayId: secondDay.id, sortOrder: 2, ticketIds: [], title: '博物馆', tripId: trip.id })
+    await db.syncOutbox.clear()
+
+    const result = await moveItineraryItemBetweenDays(
+      target.id,
+      secondDay.id,
+      [target.id, destinationFirst.id, destinationLast.id],
+      {
+        expectedDestinationItemIds: [destinationFirst.id, destinationLast.id],
+        expectedSourceItemIds: [sourceFirst.id, target.id, sourceLast.id],
+        sourceDayId: firstDay.id,
+      },
+    )
+
+    expect(result.changedItems.map((item) => item.id).sort()).toEqual(
+      [target.id, sourceLast.id, destinationFirst.id, destinationLast.id].sort(),
+    )
+    expect(getTripAutoSnapshotStatus(trip.id)?.reason).toBe('item-moved-between-days')
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox).toHaveLength(4)
+    expect(outbox.map((entry) => entry.objectId).sort()).toEqual(
+      result.changedItems.map((item) => item.id).sort(),
+    )
     expect(outbox.every((entry) => entry.objectType === 'item' && entry.operation === 'upsert')).toBe(true)
   })
 

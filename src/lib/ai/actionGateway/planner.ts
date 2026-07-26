@@ -12,6 +12,7 @@ import {
   AI_ACTION_PLAN_SCHEMA_VERSION,
   type AiActionDayItemsReorderArgs,
   type AiActionItemCreateArgs,
+  type AiActionItemMoveArgs,
   type AiActionItemTimeUpdateArgs,
   type AiActionLedgerExpenseDraftArgs,
   type AiActionPlanV1,
@@ -31,6 +32,7 @@ const ACTION_VERBS = [
   '整理',
   '完成',
   '调整',
+  '移动到',
   '挪到',
   '移到',
   '进入',
@@ -84,7 +86,17 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const dayReorder = itemCreate ? null : parseDeterministicDayReorder(normalized)
+  const itemMove = itemCreate ? null : parseDeterministicItemMove(normalized)
+  if (itemMove) {
+    steps.push({
+      actionId: 'item.move@1',
+      args: itemMove,
+      dependsOn: [],
+      id: 'move-item',
+    })
+  }
+
+  const dayReorder = itemCreate || itemMove ? null : parseDeterministicDayReorder(normalized)
   if (dayReorder) {
     steps.push({
       actionId: 'day.items.reorder@1',
@@ -94,7 +106,7 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const timeUpdate = itemCreate ? null : parseDeterministicTimeUpdate(normalized)
+  const timeUpdate = itemCreate || itemMove ? null : parseDeterministicTimeUpdate(normalized)
   if (timeUpdate) {
     steps.push({
       actionId: 'item.time.update@1',
@@ -157,7 +169,7 @@ export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
-    ['票', '地点', '地址', '坐标', '行程', '行程点', '站', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
+    ['票', '地点', '地址', '坐标', '行程', '行程点', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
       .some((noun) => normalized.includes(noun))
 }
 
@@ -300,6 +312,62 @@ function parseDeterministicDayReorder(command: string): AiActionDayItemsReorderA
   }
 }
 
+function parseDeterministicItemMove(command: string): AiActionItemMoveArgs | null {
+  if (isHypotheticalCommand(command)) return null
+  const verb = command.match(/移动到|移到|挪到|安排到/)
+  if (!verb || verb.index === undefined) return null
+
+  const sourceText = command.slice(0, verb.index)
+  const destinationText = command.slice(verb.index + verb[0].length)
+  const destinationDay = findPlannerDayTarget(destinationText)
+  if (!destinationDay) return null
+  const sourceDay = findPlannerDayTarget(sourceText)
+  const target = cleanSemanticSelector(sourceText, sourceDay?.text)
+    .replace(/^的\s*/, '')
+    .trim()
+  if (!target || target.length > 160) return null
+
+  const placement = cleanMovePlacement(
+    destinationText.slice(
+      destinationDay.index + destinationDay.text.length,
+    ),
+  )
+  if (!placement || /^(?:最后面|最后|末尾|末位)$/.test(placement)) {
+    return {
+      destinationDay: destinationDay.target,
+      position: 'last',
+      ...(sourceDay ? { sourceDay: sourceDay.target } : {}),
+      target,
+    }
+  }
+  if (/^(?:最前面|最前|第一位|首位|开头)$/.test(placement)) {
+    return {
+      destinationDay: destinationDay.target,
+      position: 'first',
+      ...(sourceDay ? { sourceDay: sourceDay.target } : {}),
+      target,
+    }
+  }
+  const relative = placement.match(/^(.{1,160}?)(前面|之前|后面|之后)$/)
+  if (!relative) return null
+  const anchor = cleanSemanticSelector(relative[1])
+  if (!anchor || normalizePlannerSelector(anchor) === normalizePlannerSelector(target)) return null
+  return {
+    anchor,
+    destinationDay: destinationDay.target,
+    position: relative[2] === '前面' || relative[2] === '之前' ? 'before' : 'after',
+    ...(sourceDay ? { sourceDay: sourceDay.target } : {}),
+    target,
+  }
+}
+
+function cleanMovePlacement(value: string) {
+  return value
+    .replace(/^(?:的|里|中|内|当天|当日|这一天|\s)+/g, '')
+    .replace(/[，,。；;：:\s]+$/g, '')
+    .trim()
+}
+
 function findPlannerDayTarget(command: string) {
   const current = command.match(/今天|当天|当前日|这一天/)
   if (current?.index !== undefined) {
@@ -313,7 +381,41 @@ function findPlannerDayTarget(command: string) {
   if (ordinal?.index !== undefined) {
     return { index: ordinal.index, target: `day:${Number(ordinal[1])}`, text: ordinal[0] }
   }
+  const chineseOrdinal = command.match(/第\s*([一二三四五六七八九十]{1,3})\s*天/)
+  if (chineseOrdinal?.index !== undefined) {
+    const ordinalValue = parsePlannerChineseOrdinal(chineseOrdinal[1])
+    if (ordinalValue) {
+      return {
+        index: chineseOrdinal.index,
+        target: `day:${ordinalValue}`,
+        text: chineseOrdinal[0],
+      }
+    }
+  }
   return null
+}
+
+function parsePlannerChineseOrdinal(value: string) {
+  const digitByText: Record<string, number> = {
+    一: 1,
+    七: 7,
+    三: 3,
+    九: 9,
+    二: 2,
+    五: 5,
+    八: 8,
+    六: 6,
+    四: 4,
+  }
+  if (value === '十') return 10
+  const [tensText, onesText] = value.split('十')
+  if (onesText !== undefined) {
+    const tens = tensText ? digitByText[tensText] : 1
+    const ones = onesText ? digitByText[onesText] : 0
+    const result = tens * 10 + ones
+    return result >= 1 && result <= 99 ? result : 0
+  }
+  return digitByText[value] ?? 0
 }
 
 function extractTrailingPlannerTimeRange(value: string) {
@@ -494,6 +596,7 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
     actionIds.has('workspace.open@1') ? '打开页面' : '',
     actionIds.has('ticket.open@1') ? '打开票据' : '',
     actionIds.has('item.create@1') ? '新增行程点' : '',
+    actionIds.has('item.move@1') ? '跨日移动行程点' : '',
     actionIds.has('day.items.reorder@1') ? '调整当天顺序' : '',
     actionIds.has('item.time.update@1') ? '调整行程时间' : '',
     actionIds.has('route.preview@1') ? '生成路线预览' : '',

@@ -111,6 +111,29 @@ export async function reorderDayItems(
   return items
 }
 
+export async function moveItineraryItemBetweenDays(
+  itemId: string,
+  destinationDayId: string,
+  nextDestinationItemIds: string[],
+  options: Parameters<typeof repo.moveItineraryItemBetweenDays>[3],
+) {
+  const result = await repo.moveItineraryItemBetweenDays(
+    itemId,
+    destinationDayId,
+    nextDestinationItemIds,
+    options,
+  )
+  await Promise.all(
+    result.changedItems.map((item) =>
+      enqueueObjectUpsert({ object: item, objectType: 'item' }),
+    ),
+  )
+  recordTripWriteForSync(result.movedItem.tripId, 'item-moved-between-days', {
+    emitChangeEvent: false,
+  })
+  return result
+}
+
 export async function setItineraryItemExecutionState(
   itemId: string,
   status: 'completed' | 'skipped' | null,

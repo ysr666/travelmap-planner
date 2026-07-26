@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowUpRight, Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { createTripDisruptionEvent, updateItineraryItem } from '../../db'
 import {
@@ -142,7 +142,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [aiPreview, setAiPreview] = useState<AiTripEditPreviewState | null>(null)
   const [writeConfirmOpen, setWriteConfirmOpen] = useState(false)
   const [actionGateway, setActionGateway] = useState<AiActionGatewayState | null>(null)
-  const [actionConfirmOpen, setActionConfirmOpen] = useState(false)
+  const actionGatewayBusyRef = useRef(false)
+  const actionGatewayRef = useRef<AiActionGatewayState | null>(null)
+  actionGatewayRef.current = actionGateway
 
   const trimmedCommand = command.trim()
   const hidden = HIDDEN_ROUTES.has(activeRoute)
@@ -181,7 +183,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
 
   async function runCommand(commandText: string, options: { forceAssistant?: boolean } = {}) {
     const submittedCommand = commandText.trim()
-    if (!submittedCommand || loading) return
+    if (!submittedCommand || loading || applying) return
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -538,7 +540,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   }
 
   async function confirmActionGateway() {
-    if (!actionGateway) return
+    if (!actionGateway || applying || loading || actionGatewayBusyRef.current) return
+    const executionId = actionGateway.prepared.executionId
+    actionGatewayBusyRef.current = true
     setApplying(true)
     setError(null)
     try {
@@ -547,37 +551,43 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         actionGateway.context,
         { completedStepIds: actionGateway.completedStepIds },
       )
-      setActionGateway((current) => current
-        ? {
+      setActionGateway((current) =>
+        current?.prepared.executionId === executionId
+          ? {
             ...current,
             attemptCount: current.attemptCount + 1,
             completedStepIds: actionRun.completedStepIds,
             run: actionRun,
             writeConfirmed: true,
           }
-        : current)
+          : current)
       appendConversationMessage({
         text: actionRun.message,
         tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
         type: 'assistant',
       })
-      setActionConfirmOpen(false)
       applyActionEffects(actionRun.effects)
       if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
         setCommand('')
-        setActionGateway(null)
+        setActionGateway((current) =>
+          current?.prepared.executionId === executionId ? null : current)
         setExpanded(false)
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '动作执行失败。')
-      setActionConfirmOpen(false)
+      if (actionGatewayRef.current?.prepared.executionId === executionId) {
+        setError(caught instanceof Error ? caught.message : '动作执行失败。')
+      }
     } finally {
+      actionGatewayBusyRef.current = false
       setApplying(false)
     }
   }
 
   async function retryActionGateway() {
-    if (!actionGateway?.run) return
+    const gatewaySnapshot = actionGateway
+    if (!gatewaySnapshot?.run || loading || applying || actionGatewayBusyRef.current) return
+    const executionId = gatewaySnapshot.prepared.executionId
+    actionGatewayBusyRef.current = true
     setLoading(true)
     setError(null)
     try {
@@ -586,48 +596,56 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         contextMode === 'account' ? '#/home' : window.location.hash,
       )
       const runtimeContext: AiActionGatewayRuntimeContext = {
-        command: actionGateway.command,
+        command: gatewaySnapshot.command,
         commandContext: freshContext,
         providerConfig,
       }
-      const completedStepIds = actionGateway.completedStepIds
+      const completedStepIds = gatewaySnapshot.completedStepIds
       const prepared = await prepareAiActionPlan(
-        actionGateway.prepared.plan,
+        gatewaySnapshot.prepared.plan,
         runtimeContext,
         {
           completedStepIds,
-          executionId: actionGateway.prepared.executionId,
+          executionId,
         },
       )
       const needsFreshConfirmation = prepared.plan.requiresConfirmation && (
-        actionGateway.run.requiresFreshConfirmation ||
-        !actionGateway.writeConfirmed ||
+        gatewaySnapshot.run.requiresFreshConfirmation ||
+        !gatewaySnapshot.writeConfirmed ||
         hasNewWritePreview(
-          actionGateway.prepared,
+          gatewaySnapshot.prepared,
           prepared,
-          actionGateway.run.failedStepIds,
+          gatewaySnapshot.run.failedStepIds,
         )
       )
+      if (actionGatewayRef.current?.prepared.executionId !== executionId) return
       if (needsFreshConfirmation) {
-        setActionGateway({
-          ...actionGateway,
-          completedStepIds,
-          context: runtimeContext,
-          prepared,
-          run: null,
-          writeConfirmed: false,
-        })
+        setActionGateway((current) =>
+          current?.prepared.executionId === executionId
+            ? {
+              ...current,
+              completedStepIds,
+              context: runtimeContext,
+              prepared,
+              run: null,
+              writeConfirmed: false,
+            }
+            : current)
         return
       }
       const actionRun = await executeAiActionPlan(prepared, runtimeContext, { completedStepIds })
-      setActionGateway({
-        ...actionGateway,
-        attemptCount: actionGateway.attemptCount + 1,
-        completedStepIds: actionRun.completedStepIds,
-        context: runtimeContext,
-        prepared,
-        run: actionRun,
-      })
+      if (actionGatewayRef.current?.prepared.executionId !== executionId) return
+      setActionGateway((current) =>
+        current?.prepared.executionId === executionId
+          ? {
+            ...current,
+            attemptCount: current.attemptCount + 1,
+            completedStepIds: actionRun.completedStepIds,
+            context: runtimeContext,
+            prepared,
+            run: actionRun,
+          }
+          : current)
       appendConversationMessage({
         text: actionRun.message,
         tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
@@ -636,12 +654,16 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       applyActionEffects(actionRun.effects)
       if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
         setCommand('')
-        setActionGateway(null)
+        setActionGateway((current) =>
+          current?.prepared.executionId === executionId ? null : current)
         setExpanded(false)
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '重试失败项时出错。')
+      if (actionGatewayRef.current?.prepared.executionId === executionId) {
+        setError(caught instanceof Error ? caught.message : '重试失败项时出错。')
+      }
     } finally {
+      actionGatewayBusyRef.current = false
       setLoading(false)
     }
   }
@@ -755,7 +777,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
             {actionGateway ? (
               <ActionGatewayView
                 actionGateway={actionGateway}
-                onConfirm={() => setActionConfirmOpen(true)}
+                applying={applying}
+                loading={loading}
+                onConfirm={() => void confirmActionGateway()}
                 onManualEntry={(entry) => applyActionEffects([entry])}
                 onRetry={() => void retryActionGateway()}
               />
@@ -797,6 +821,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           <input
             aria-label="全局 AI 指令"
             className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
+            disabled={loading || applying}
             maxLength={1000}
             onChange={(event) => setCommand(event.currentTarget.value)}
             placeholder="告诉我你想做什么"
@@ -805,7 +830,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
           <button
             aria-label="发送 AI 指令"
             className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition active:scale-95 disabled:opacity-50 tm-focus"
-            disabled={!trimmedCommand || loading}
+            disabled={!trimmedCommand || loading || applying}
             type="submit"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -813,21 +838,6 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         </form>
       </div>
 
-      <ConfirmDialog
-        body={actionGateway
-          ? `将执行 ${actionGateway.prepared.plan.steps.length} 个步骤，并在写入前再次校验旅行状态。`
-          : '将执行已准备的旅行任务。'}
-        cancelLabel="取消"
-        confirmLabel="确认执行"
-        icon={<ShieldCheck className="size-5" />}
-        loading={applying}
-        onCancel={() => !applying && setActionConfirmOpen(false)}
-        onConfirm={() => void confirmActionGateway()}
-        open={actionConfirmOpen}
-        testId="global-ai-action-confirm-dialog"
-        title="执行这次操作？"
-        tone="default"
-      />
       <ConfirmDialog
         body={pendingAi?.searchRequest
           ? '我会读取脱敏后的当前旅行，并在需要实时信息时查询来源。结果先给你确认。'
@@ -895,11 +905,15 @@ function hasNewWritePreview(
 
 function ActionGatewayView({
   actionGateway,
+  applying,
+  loading,
   onConfirm,
   onManualEntry,
   onRetry,
 }: {
   actionGateway: AiActionGatewayState
+  applying: boolean
+  loading: boolean
   onConfirm: () => void
   onManualEntry: (entry: AiActionManualEntry) => void
   onRetry: () => void
@@ -959,9 +973,9 @@ function ActionGatewayView({
         </button>
       ) : null}
       {!run ? (
-        <Button className="min-h-10 w-full px-3 text-xs" onClick={onConfirm}>确认执行</Button>
+        <Button className="min-h-10 w-full px-3 text-xs" loading={applying} onClick={onConfirm}>确认执行</Button>
       ) : run.status !== 'completed' && canRetry ? (
-        <Button className="min-h-10 w-full px-3 text-xs" icon={<RotateCcw className="size-4" />} onClick={onRetry} variant="secondary">
+        <Button className="min-h-10 w-full px-3 text-xs" icon={<RotateCcw className="size-4" />} loading={loading} onClick={onRetry} variant="secondary">
           {retryLabel}
         </Button>
       ) : null}

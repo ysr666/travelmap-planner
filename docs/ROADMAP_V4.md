@@ -82,9 +82,16 @@ V1.3 已完成：
 - 新增、重排、对象同步 outbox 和稳定 ID Trip Intelligence 历史在同一 IndexedDB 事务提交；失败整体回滚，重试不重复核心数据。
 - 双标签页 stale baseline、跨日 anchor、未知字段、内部 ID 和未确认写入均有本地或 E2E 回归。
 
+V1.4 已完成：
+
+- 登记 `item.move@1`，只接受语义行程点、来源/目标日期和固定首尾或前后位置，不接受数据库 ID、任意 patch 或函数名。
+- 来源与目标日期的完整成员和顺序都进入执行基线；任一日期在预览后变化都会要求重新确认。
+- 来源压缩、目标插入、对象同步 outbox 和稳定 ID Trip Intelligence 历史在同一 IndexedDB 事务提交，失败整体回滚。
+- 同一次执行重试会核对两个日期的最终顺序并拒绝重复移动；390px E2E 验证确认前不写入、一次确认和零 Provider 请求。
+
 后续：
 
-- 把删除、跨日移动和其他高频行程编辑迁入注册表。
+- 把删除和其他高频行程编辑迁入注册表。
 - 统一跨模块操作历史与可撤销能力，并为更多页面补稳定 selection contract。
 - 继续保持搜索来源、时间、quota 和 privacy policy，不扩大 Provider 任意调用面。
 
@@ -158,5 +165,5 @@ V1 退出条件已满足：三个高频动作有 E2E、无未确认写入、部�
 1. 用 iPhone Safari 与 Android Chrome 补齐实体机 Beta 记录。
 2. 使用 Beta 账号完成真实英国行程导入、地点、AI、票据和云同步 smoke。
 3. 补多个历史发布版本连续升级、离线编辑后恢复在线和缓存配额压力测试。
-4. 扩展 Action Gateway 到删除、跨日移动和其他高频行程编辑。
+4. 扩展 Action Gateway 到删除和其他高频行程编辑，并先补清晰的撤销合同。
 5. 在 Supabase 预览环境完成 policy 合并、migration history reconciliation 和恢复演练。

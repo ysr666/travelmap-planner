@@ -130,11 +130,9 @@ test('全局 AI 时间调整只在一次确认后写入并保留原时长', asyn
     endTime: '10:30',
     startTime: '09:00',
   })
+  await expect(page.getByTestId('global-ai-action-confirm-dialog')).toHaveCount(0)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  const dialog = page.getByTestId('global-ai-action-confirm-dialog')
-  await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: '确认执行' }).click()
 
   await expect(result).toContainText('已完成')
   await expect.poll(async () => await readItineraryItem(page, firstItemId)).toMatchObject({
@@ -197,7 +195,6 @@ test('全局 AI 新增行程点只在一次确认后幂等写入', async ({ page
   await expectNoHorizontalOverflow(page)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(page).toHaveURL(/#\/day\?/)
   const items = await readItineraryItemsByDay(page, 'gateway-create-day')
@@ -287,11 +284,116 @@ test('全局 AI 当天重排只在一次确认后改变顺序', async ({ page })
   await expectNoHorizontalOverflow(page)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(page).toHaveURL(/#\/day\?/)
   expect((await readItineraryItemsByDay(page, 'gateway-reorder-day')).map((item) => item.title))
     .toEqual(['伦敦酒店', '伦敦眼', '大本钟'])
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
+test('全局 AI 跨日移动只在一次确认后同时更新两个日期', async ({ page }) => {
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [
+      {
+        date: '2026-07-10',
+        id: 'gateway-move-source-day',
+        sortOrder: 1,
+        title: '抵达伦敦',
+        tripId: 'gateway-move-trip',
+      },
+      {
+        date: '2026-07-11',
+        id: 'gateway-move-destination-day',
+        sortOrder: 2,
+        title: '伦敦市区',
+        tripId: 'gateway-move-trip',
+      },
+    ],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-move-source-day',
+        id: 'gateway-move-hotel',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '伦敦酒店',
+        tripId: 'gateway-move-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-move-source-day',
+        id: 'gateway-move-eye',
+        sortOrder: 2,
+        ticketIds: [],
+        title: '伦敦眼',
+        tripId: 'gateway-move-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-move-destination-day',
+        id: 'gateway-move-big-ben',
+        sortOrder: 1,
+        ticketIds: [],
+        title: '大本钟',
+        tripId: 'gateway-move-trip',
+        updatedAt: now,
+      },
+      {
+        createdAt: now,
+        dayId: 'gateway-move-destination-day',
+        id: 'gateway-move-museum',
+        sortOrder: 2,
+        ticketIds: [],
+        title: '大英博物馆',
+        tripId: 'gateway-move-trip',
+        updatedAt: now,
+      },
+    ],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-11',
+      id: 'gateway-move-trip',
+      startDate: '2026-07-10',
+      title: '跨日移动测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-move-trip', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('全局 AI 指令').fill('把第一天的伦敦眼移到第二天大本钟后面')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('跨日移动行程点')
+  await expect(result).toContainText('「抵达伦敦」第 2 位 → 「伦敦市区」第 2 位')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect((await readItineraryItemsByDay(page, 'gateway-move-source-day')).map((item) => item.title))
+    .toEqual(['伦敦酒店', '伦敦眼'])
+  expect((await readItineraryItemsByDay(page, 'gateway-move-destination-day')).map((item) => item.title))
+    .toEqual(['大本钟', '大英博物馆'])
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/day\?/)
+  await expect(page).toHaveURL(/dayId=gateway-move-destination-day/)
+  expect((await readItineraryItemsByDay(page, 'gateway-move-source-day')).map((item) => item.title))
+    .toEqual(['伦敦酒店'])
+  expect((await readItineraryItemsByDay(page, 'gateway-move-destination-day')).map((item) => item.title))
+    .toEqual(['大本钟', '伦敦眼', '大英博物馆'])
   expect(providerProxyRequests).toHaveLength(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -324,6 +426,7 @@ test('全局 AI 路线配置变化后重新预览确认才请求服务并写入�
       segmentIndex: segment.segmentIndex ?? index,
       toItemId: segment.toItemId,
     }))
+    await new Promise((resolve) => setTimeout(resolve, 200))
     await route.fulfill({
       body: JSON.stringify({
         ok: true,
@@ -407,7 +510,6 @@ test('全局 AI 路线配置变化后重新预览确认才请求服务并写入�
     window.dispatchEvent(new Event('tripmap:routing-config-changed'))
   })
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(result).toContainText('路线服务配置已变化')
   expect(routePreviewRequests).toBe(0)
@@ -418,7 +520,7 @@ test('全局 AI 路线配置变化后重新预览确认才请求服务并写入�
   expect(await countRouteCacheEntries(page)).toBe(0)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
+  await expect(page.getByLabel('全局 AI 指令')).toBeDisabled()
 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/dayId=gateway-route-day/)
@@ -473,7 +575,6 @@ test('全局 AI 费用动作只在一次确认后创建待审核草稿', async (
   await expectNoHorizontalOverflow(page)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(page).toHaveURL(/#\/ledger\/expense\?/)
   const expense = await readFirstStoreRecord(page, 'ledgerExpenses')
@@ -552,9 +653,6 @@ test('全局 AI 地点补全显示折叠预览并在一次确认后写入', asyn
   await expectNoHorizontalOverflow(page)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  const dialog = page.getByTestId('global-ai-action-confirm-dialog')
-  await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: '确认执行' }).click()
 
   await expect(result).toContainText('已完成')
   await expect.poll(async () => await readItineraryItem(page, firstItemId)).toMatchObject({
@@ -695,7 +793,6 @@ test('全局 AI 一键修复会先补地点再生成被解锁的路线', async (
   expect(routePreviewRequests).toBe(0)
 
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(result).toContainText('已完成')
   await expect.poll(async () => (await readItineraryItem(page, 'gateway-repair-airport')).lat).toBe(51.47)
@@ -734,6 +831,7 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
       })
       return
     }
+    await new Promise((resolve) => setTimeout(resolve, 200))
     await route.fulfill({
       body: JSON.stringify({
         ok: true,
@@ -823,7 +921,6 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   const result = page.getByTestId('global-ai-command-result')
   await expect(page.getByTestId('global-ai-action-summary')).toContainText('2 个步骤')
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
 
   await expect(page).toHaveURL(/#\/documents\?/)
   const ticketPreview = page.getByTestId('ticket-preview')
@@ -834,11 +931,16 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   expect((await readItineraryItem(page, 'gateway-combo-airport')).lat).toBeUndefined()
   expect(placeLookupRequests).toBe(1)
 
-  await result.getByRole('button', { name: '重试失败项' }).click()
+  const retryButton = result.getByRole('button', { name: '重试失败项' })
+  await retryButton.evaluate((button) => {
+    button.click()
+    button.click()
+  })
+  await expect(retryButton).toBeDisabled()
+  await expect(page.getByLabel('全局 AI 指令')).toBeDisabled()
   await expect.poll(async () => (await readItineraryItem(page, 'gateway-combo-airport')).lat).toBeUndefined()
   await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
   await result.getByRole('button', { name: '确认执行' }).click()
-  await page.getByTestId('global-ai-action-confirm-dialog').getByRole('button', { name: '确认执行' }).click()
   await expect.poll(async () => (await readItineraryItem(page, 'gateway-combo-airport')).lat).toBe(51.47)
   await page.getByTestId('global-ai-action-details').getByText('查看步骤').click()
   await expect(page.getByTestId('global-ai-action-details')).toContainText('此前已完成，未重复执行')

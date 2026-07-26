@@ -517,26 +517,38 @@ function buildActionProposal(
     }
   }
   if (result.kind === 'replan_preview' && context.trip) {
+    const suggestion = buildActionProposalSuggestion({
+      actionKind: 'replan_apply_option',
+      affectedDayIds: result.eventDraft.dayId ? [result.eventDraft.dayId] : [],
+      affectedItemIds: result.targetItem ? [result.targetItem.id] : [],
+      key: `global_ai:replan:${context.trip.id}:${hashString(command)}`,
+      message: result.hypothetical
+        ? '只读模拟不会写入旅行。'
+        : '确认后才会写入重排结果，并保留撤销入口。',
+      now,
+      scope: 'live',
+      sourceId: 'global_ai_replan',
+      sourceKind: 'live',
+      title: result.title,
+    })
+    if (result.hypothetical) {
+      suggestion.action = suggestion.action
+        ? { ...suggestion.action, mode: 'preview' }
+        : undefined
+      suggestion.requiresConfirmation = false
+      suggestion.status = 'pending'
+    }
     return {
-      actionLabel: '确认应用重排',
+      actionLabel: result.hypothetical ? '只读模拟' : '确认应用重排',
       id: `global-ai:proposal:replan:${context.trip.id}:${hashString(command)}`,
       kind: 'replan_preview',
-      message: '将先创建可撤销的 Live Mode 重排记录；票据、账本和交通订单仍需人工处理。',
-      requiresConfirmation: true,
+      message: result.hypothetical
+        ? '仅使用本地行程生成模拟结果，不会创建记录或同步云端。'
+        : '将先创建可撤销的 Live Mode 重排记录；票据、账本和交通订单仍需人工处理。',
+      requiresConfirmation: !result.hypothetical,
       sourceCards: context.sourceCards,
-      suggestion: buildActionProposalSuggestion({
-        actionKind: 'replan_apply_option',
-        affectedDayIds: result.eventDraft.dayId ? [result.eventDraft.dayId] : [],
-        affectedItemIds: result.targetItem ? [result.targetItem.id] : [],
-        key: `global_ai:replan:${context.trip.id}:${hashString(command)}`,
-        message: '确认后才会写入重排结果，并保留撤销入口。',
-        now,
-        scope: 'live',
-        sourceId: 'global_ai_replan',
-        sourceKind: 'live',
-        title: result.title,
-      }),
-      title: 'Live Mode 重排建议',
+      suggestion,
+      title: result.hypothetical ? 'What-if 重排预览' : 'Live Mode 重排建议',
     }
   }
   if (result.kind === 'ledger_summary') {

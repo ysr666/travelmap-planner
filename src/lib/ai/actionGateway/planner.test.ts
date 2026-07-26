@@ -4,7 +4,9 @@ import {
   buildAiActionPlanProviderRequest,
   buildDeterministicAiActionPlan,
   shouldRequestAiActionPlan,
+  validateAiActionPlanCommandBinding,
 } from './planner'
+import { validateAiActionPlan } from './validation'
 
 describe('AI Action Gateway planner', () => {
   it('uses deterministic local planning for registered navigation, itinerary, ledger, ticket, place, and repair commands', () => {
@@ -107,6 +109,61 @@ describe('AI Action Gateway planner', () => {
         target: '伦敦眼',
       },
     })
+    expect(buildDeterministicAiActionPlan('我晚到45分钟，按最少改动调整')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        delayMinutes: 45,
+        kind: 'late',
+        strategy: 'least_change',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('“伦敦眼”闭馆了，尽量保留')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        kind: 'closure',
+        strategy: 'preserve_most',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('伦敦眼闭馆了，必须保留')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        kind: 'closure',
+        strategy: 'preserve_most',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('第一天下雨，按最省路程调整')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        day: 'first_day',
+        kind: 'weather_unsuitable',
+        strategy: 'shortest_route',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('7月10日下雨，按最少改动调整')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        day: '07-10',
+        kind: 'weather_unsuitable',
+        strategy: 'least_change',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('2026-07-10 下雨，按最少改动调整')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        day: '2026-07-10',
+        kind: 'weather_unsuitable',
+        strategy: 'least_change',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('当前站取消了')?.steps[0]).toMatchObject({
+      actionId: 'trip.replan.apply@1',
+      args: {
+        kind: 'cancelled',
+        target: 'current_item',
+      },
+    })
     expect(buildDeterministicAiActionPlan('把“伦敦眼”标记为完成，不是第一站')?.steps[0])
       .toMatchObject({
         actionId: 'item.execution.update@1',
@@ -121,7 +178,25 @@ describe('AI Action Gateway planner', () => {
     expect(buildDeterministicAiActionPlan('伦敦眼可以跳过吗？')).toBeNull()
     expect(buildDeterministicAiActionPlan('不要把伦敦眼固定')).toBeNull()
     expect(buildDeterministicAiActionPlan('删除伦敦眼门票')).toBeNull()
+    expect(buildDeterministicAiActionPlan('不要删除伦敦眼')).toBeNull()
+    expect(buildDeterministicAiActionPlan('无需生成第一天路线')).toBeNull()
     expect(buildDeterministicAiActionPlan('取消伦敦眼预订')).toBeNull()
+    expect(buildDeterministicAiActionPlan('如果我晚到30分钟会怎样')).toBeNull()
+    expect(buildDeterministicAiActionPlan('不要因为下雨重排')).toBeNull()
+    expect(buildDeterministicAiActionPlan('伦敦眼闭馆了怎么办？')).toBeNull()
+    expect(buildDeterministicAiActionPlan('“伦敦眼”没有闭馆，帮我调整行程')).toBeNull()
+    expect(buildDeterministicAiActionPlan('“伦敦眼”并未闭馆，请按最少改动调整行程')).toBeNull()
+    expect(buildDeterministicAiActionPlan('假设“伦敦眼”闭馆，请调整后续')).toBeNull()
+    expect(buildDeterministicAiActionPlan('“伦敦眼”闭馆了吗，请帮我分析后续影响')).toBeNull()
+    expect(shouldRequestAiActionPlan('如果我晚到30分钟，帮我调整行程')).toBe(false)
+    expect(shouldRequestAiActionPlan('不要因为下雨调整行程')).toBe(false)
+    expect(shouldRequestAiActionPlan('伦敦眼闭馆了怎么办？')).toBe(false)
+    expect(shouldRequestAiActionPlan('能不能帮我处理伦敦眼闭馆')).toBe(false)
+    expect(shouldRequestAiActionPlan('“伦敦眼”并未闭馆，请按最少改动调整行程')).toBe(false)
+    expect(shouldRequestAiActionPlan('假设“伦敦眼”闭馆，请调整后续')).toBe(false)
+    expect(shouldRequestAiActionPlan('“伦敦眼”闭馆了吗，请帮我分析后续影响')).toBe(false)
+    expect(shouldRequestAiActionPlan('不要删除伦敦眼')).toBe(false)
+    expect(shouldRequestAiActionPlan('无需生成第一天路线')).toBe(false)
     expect(buildDeterministicAiActionPlan('第一天新增午餐 32 GBP')?.steps).toHaveLength(1)
     expect(buildDeterministicAiActionPlan('生成第一天路线预览')?.steps[0]).toMatchObject({
       actionId: 'route.preview@1',
@@ -145,6 +220,57 @@ describe('AI Action Gateway planner', () => {
     expect(buildDeterministicAiActionPlan('把缺失地点、路线和建议全部修复')?.steps[0]).toMatchObject({
       actionId: 'trip.repair@1',
     })
+  })
+
+  it('binds every provider-selected write to the affirmative user instruction', () => {
+    const positive = buildDeterministicAiActionPlan(
+      '“伦敦眼”闭馆了，按最少改动调整',
+    )!
+    expect(validateAiActionPlanCommandBinding(
+      '“伦敦眼”闭馆了，按最少改动调整',
+      positive,
+    )).toEqual({ ok: true })
+    expect(validateAiActionPlanCommandBinding(
+      '“伦敦眼”并未闭馆，请按最少改动调整',
+      positive,
+    )).toMatchObject({ ok: false })
+
+    const injected = validateAiActionPlan({
+      schemaVersion: 'ai_action_plan.v1',
+      steps: [{
+        actionId: 'trip.replan.apply@1',
+        args: {
+          kind: 'closure',
+          target: 'current_item',
+        },
+        dependsOn: [],
+        id: 'replan',
+      }],
+      summary: '应用突发重排',
+    })
+    expect(injected.ok).toBe(true)
+    if (!injected.ok) return
+    expect(validateAiActionPlanCommandBinding(
+      '帮我处理行程问题',
+      injected.plan,
+    )).toMatchObject({ ok: false })
+
+    const partialRepair = validateAiActionPlan({
+      schemaVersion: 'ai_action_plan.v1',
+      steps: [{
+        actionId: 'place.enrich@1',
+        args: { target: 'first_item' },
+        dependsOn: [],
+        id: 'place',
+      }],
+      summary: '补全地点',
+    })
+    expect(partialRepair.ok).toBe(true)
+    if (!partialRepair.ok) return
+    expect(validateAiActionPlanCommandBinding(
+      '把缺失地点、路线和建议全部修复',
+      partialRepair.plan,
+    )).toMatchObject({ ok: false })
   })
 
   it('builds a redacted provider request by default', () => {

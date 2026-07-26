@@ -4,6 +4,7 @@ import {
   type ProviderProxyAiActionPlanSuccessResponse,
 } from '../../src/lib/ai/providerProxyContract'
 import { AI_ACTION_PLAN_SCHEMA_VERSION } from '../../src/lib/ai/actionGateway/types'
+import { buildDeterministicAiActionPlan } from '../../src/lib/ai/actionGateway/planner'
 import { validateAiActionPlan } from '../../src/lib/ai/actionGateway/validation'
 
 export type AiActionPlanProviderErrorCode =
@@ -54,7 +55,9 @@ export function buildAiActionPlanProviderInput(
       'history.undo@1 的 kind 只能是 item_delete；不得输出记录 ID、快照、指纹、状态或数据库字段，也不得与其他写入组合。',
       'item.execution.update@1 只能选择 completed、skipped 或 active；不得根据时间、位置或猜测自动改变进度。',
       'item.replan.preference.update@1 只能输出登记的偏好枚举与有界分钟数；不得输出 patch、内部字段或自由文本。',
-      '行程进度或重排偏好动作必须与其他写入动作分开。',
+      'trip.replan.apply@1 只处理用户明确报告的 late、delay、closure、cancelled 或 weather_unsuitable；问题、假设和否定表达不得生成写入动作。',
+      'trip.replan.apply@1 只能输出语义目标、固定策略和 1-240 分钟延误；不得输出事件 ID、记录 ID、证据、备注、时间戳、快照、patch、路线、函数或 Provider。',
+      '行程进度、重排偏好或突发重排动作必须与其他写入动作分开。',
       'target 优先使用 current_item、first_item，或上下文中唯一且明确的行程点名称。目标不明确时不要猜测具体名称。',
       'place.enrich@1 与 trip.repair@1 不得出现在同一计划中。',
       '输出必须是 JSON，不要 Markdown、代码块或解释。',
@@ -172,6 +175,24 @@ export function createOpenAiCompatibleAiActionPlanProvider(
 function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
   const command = request.command
   const allowed = new Set(request.availableActions.map((action) => action.id))
+  const deterministic = buildDeterministicAiActionPlan(command)
+  const deterministicReplan = deterministic?.steps.length === 1
+    && deterministic.steps[0].actionId === 'trip.replan.apply@1'
+    && allowed.has('trip.replan.apply@1')
+    ? deterministic.steps[0]
+    : null
+  if (deterministicReplan) {
+    return {
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: deterministicReplan.actionId,
+        args: deterministicReplan.args,
+        dependsOn: [],
+        id: 'apply-adaptive-replan',
+      }],
+      summary: '应用突发重排',
+    }
+  }
   const steps: Array<Record<string, unknown>> = []
   const ticketRequested = /票据|门票|车票|机票|预订/.test(command) && allowed.has('ticket.open@1')
   const repairRequested = /全部|所有|一键|统一|缺失|修复|整理/.test(command) && allowed.has('trip.repair@1')
@@ -363,6 +384,7 @@ function summarizeMockSteps(steps: Array<Record<string, unknown>>) {
     ids.has('item.delete@1') ? '删除行程点' : '',
     ids.has('item.execution.update@1') ? '更新行程进度' : '',
     ids.has('item.replan.preference.update@1') ? '更新重排偏好' : '',
+    ids.has('trip.replan.apply@1') ? '应用突发重排' : '',
     ids.has('place.enrich@1') ? '补全地点' : '',
     ids.has('trip.repair@1') ? '智能修复行程' : '',
   ].filter(Boolean).join('并')

@@ -122,6 +122,7 @@ import {
   type AiActionPlanProvider,
   type AiActionPlanProviderErrorCode,
 } from './actionPlanProvider'
+import { validateAiActionPlanCommandBinding } from '../../src/lib/ai/actionGateway/planner'
 import {
   createDisabledTravelSearchProvider,
   createMockTravelSearchProvider,
@@ -1946,6 +1947,13 @@ async function handleAiActionPlanRequest({
     if (response) {
       const allowedActionIds = new Set(planRequest.availableActions.map((action) => action.id))
       if (response.plan.steps.some((step) => !allowedActionIds.has(step.actionId))) {
+        response = null
+      } else if (
+        !validateAiActionPlanCommandBinding(
+          planRequest.command,
+          response.plan,
+        ).ok
+      ) {
         response = null
       }
     }

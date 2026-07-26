@@ -1986,7 +1986,7 @@ Remote verification:
 
 ## 2026-07-26 Universal AI Action Gateway V1.6 - Live State And Replan Preferences
 
-Status: completed locally.
+Status: merged to `main` at `68ad822` through PR #23.
 
 Branch: `feature/action-gateway-live-state-preferences`
 
@@ -2066,3 +2066,91 @@ Residual:
 - The actions intentionally update one item at a time; bulk progress changes and free-form field patches remain outside the registry.
 - Restoring `active` clears the completed/skipped status but does not infer a new time, order, route, or live-mode event.
 - Real Provider planning remains intentionally uncalled; deterministic planning, mock Provider normalization, field allowlists, confirmation, rollback, idempotency, and stale-item behavior are covered locally.
+
+Remote verification:
+
+- PR #23 checks passed: Lint, Type Check, Unit Tests, Build, E2E Tests, and Cloudflare Pages.
+- The post-merge `main` CI run `30210896226` passed all five jobs for `68ad822f06e9fcebe0a61b353f976b857c2ec950`.
+- Cloudflare Pages deployed the same commit successfully.
+- Supabase project `rfpcooafakuvgrdlfxpg` remained `ACTIVE_HEALTHY`; schema lint returned no warning-level errors. The previously recorded migration-history drift was unchanged and no production write was made.
+
+## 2026-07-27 Universal AI Action Gateway V1.7 - Adaptive Disruption Replan
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `feature/action-gateway-adaptive-replan`
+
+Goal:
+
+- Turn an explicit traveler-reported delay, late arrival, closure, cancellation, or unsuitable-weather event into a local real preview and one-confirmation adaptive replan through the registered Action Gateway.
+
+Scope:
+
+- Add `trip.replan.apply@1` with a fixed disruption-kind enum, optional bounded delay minutes, optional semantic item/day target, and fixed registered strategy values only.
+- Deterministically recognize explicit Chinese late/delay/closure/cancellation/weather commands; hypothetical or interrogative what-if commands remain read-only in the compatibility preview and never write.
+- Resolve the affected item/day locally, build the actual adaptive-replan option from current trip, ticket, ledger, and preference data, and show only a short impact preview.
+- Require one final confirmation before creating a disruption event, applying item patches, and persisting a reversible replan record.
+- Commit affected items, event, applied replan record, object-sync outbox/state, trip timestamp, and stable Trip Intelligence history in one IndexedDB transaction.
+- Use a full local baseline covering trip/day/item state, replan preferences, ticket bindings, and ledger impacts; reject any change after preview.
+- Make retries idempotent only when the durable marker, event, record, and complete final item snapshot agree.
+- Keep tickets, blobs, ledger entries, bookings, payments, and transport orders unchanged; surface their impacts as warnings only.
+
+No-go:
+
+- No Provider-selected item/day/event/record ID, patch, snapshot, timestamp, route, database field, function, evidence, or free-text note.
+- No automatic inference from clock, geolocation, weather Provider, route Provider, or background state; the user must explicitly report the disruption.
+- No ticket/blob deletion, booking cancellation, refund, payment, ledger mutation, cloud permission change, or whole-trip deletion.
+- No real AI, map, route, search, cloud, or Provider calls.
+- No IndexedDB/Supabase schema change, object-sync type change, route-cache contract change, or production migration.
+
+Likely files:
+
+- `src/lib/ai/actionGateway/types.ts`
+- `src/lib/ai/actionGateway/registry.ts`
+- `src/lib/ai/actionGateway/validation.ts`
+- `src/lib/ai/actionGateway/planner.ts`
+- `src/lib/ai/actionGateway/runtime.ts`
+- `src/lib/adaptiveReplanActions.ts`
+- `src/lib/adaptiveReplanning.ts`
+- `server/providerProxy/actionPlanProvider.ts`
+- Focused planner, validation, runtime, adaptive-replan transaction, Provider, compatibility, and 390px E2E tests plus roadmap/status updates.
+
+Validation:
+
+- Focused adaptive-replan, sync/history, Action Gateway, Provider, and compatibility tests.
+- Typecheck, lint, full unit suite, production build, focused 390px E2E, full serial E2E, PWA upgrade coverage, and `git diff --check`.
+
+Risk:
+
+- High: one confirmation may update several synced itinerary items and create durable event/history records, while financial, ticket, booking, and transport data must remain untouched.
+
+Stop conditions:
+
+- Stop and repair if hypothetical text writes data, a Provider field escapes the registry, preparation writes, a stale baseline executes, a retry applies twice, protected related data changes, or any item/event/record/outbox/history subset can partially commit.
+
+Result:
+
+- Registered `trip.replan.apply@1` with bounded disruption kinds, semantic day/item targets, delay minutes, and three fixed strategies; no Provider-selected IDs, patches, fields, functions, routes, or persistence data enter execution.
+- Explicit traveler-reported disruptions produce a real local preview. What-if, assumptions, embedded questions, factual negations, protected cancellation language, and negated action commands remain read-only.
+- Provider plans are validated against both the action registry and the original command in the client and Provider Proxy, rejecting legal-but-unrelated actions and partial downgrades of whole-trip repair requests.
+- Explicit Chinese and ISO dates resolve as day targets. A delay that crosses midnight produces a short manual-handling warning instead of silently rewriting another day.
+- Only business-changed items are persisted. Relevant-day membership, trip, day, item, preferences, ticket metadata, and ledger impacts are protected by the confirmation baseline.
+- Apply and undo commit item changes, disruption event, replan record, object-sync outbox/state, trip timestamp, and stable Trip Intelligence history atomically. Undo restores only this replan's changed items.
+- Idempotent replay requires the durable marker, event, record, strategy, and complete final snapshot to agree; partial or stale state is rejected.
+- Tickets, blobs, ledger entries, bookings, payments, transport orders, cloud permissions, and schemas remain unchanged. No real Provider or cloud call was made.
+
+Validation:
+
+- Focused Action Gateway and adaptive-replan unit runs passed, including negation, Provider semantic binding, stale baselines, cross-midnight behavior, atomic rollback, changed-only persistence, and idempotent retry coverage.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1546 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2293.3 KiB/94-entry precache.
+- Focused Action Gateway and desktop Beta smoke E2E passed all 19 tests at 390px and 1440px.
+- The full serial E2E run passed all 152 tests in approximately 5.7 minutes, including PWA upgrade and desktop Beta smoke coverage.
+- `git diff --check` passed before final staging.
+
+Review:
+
+- Two read-only protected-boundary reviews identified negation ambiguity, legal-but-unrelated Provider actions, date targeting, cross-midnight handling, overbroad undo scope, non-atomic outbox writes, unchanged item persistence, and insufficiently explicit previews.
+- Each issue was repaired with focused regression coverage before the full validation run.

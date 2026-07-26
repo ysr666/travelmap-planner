@@ -2067,6 +2067,46 @@ describe('provider proxy handler ai_action_plan', () => {
     expect(fetcher).toHaveBeenCalledOnce()
   })
 
+  it('rejects a registered write that is not bound to the user instruction', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            schemaVersion: 'ai_action_plan.v1',
+            steps: [{
+              actionId: 'trip.replan.apply@1',
+              args: {
+                kind: 'closure',
+                target: 'current_item',
+              },
+              dependsOn: [],
+              id: 'replan',
+            }],
+            summary: '应用突发重排',
+          }),
+        },
+      }],
+    }))) as unknown as typeof fetch
+    const response = await handleProviderProxyRequest({
+      env: {
+        TRIPMAP_AI_API_KEY: 'server-secret',
+        TRIPMAP_AI_BASE_URL: 'https://api.example/v1',
+        TRIPMAP_AI_MODEL: 'test-model',
+        TRIPMAP_AI_PROVIDER: 'openai_compatible',
+      },
+      fetcher,
+      request: jsonRequest(validAiActionPlanRequest()),
+    })
+
+    expect(response.status).toBe(502)
+    expect(await response.json()).toMatchObject({
+      code: 'invalid_response',
+      ok: false,
+      operation: 'ai_action_plan',
+    })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
   it('rejects provider-selected deletion IDs, snapshots, and sensitive fields', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       choices: [{
@@ -2126,6 +2166,17 @@ describe('provider proxy handler ai_action_plan', () => {
         args: {
           history: { action: 'overwrite' },
           patch: { priority: 'must_keep' },
+          target: '伦敦眼',
+        },
+      },
+      {
+        actionId: 'trip.replan.apply@1',
+        args: {
+          eventId: 'replan_event_internal',
+          evidence: [{ source: 'provider' }],
+          kind: 'late',
+          patch: { startTime: '12:00' },
+          strategy: 'least_change',
           target: '伦敦眼',
         },
       },

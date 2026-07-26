@@ -88,6 +88,14 @@ import {
   updateItineraryItemReplanPreferenceAtomically,
 } from '../../itemStateUpdates'
 import {
+  assertAdaptiveReplanActionApplied,
+  buildAdaptiveReplanActionPreview,
+  executeAdaptiveReplanAction,
+  loadAdaptiveReplanActionContext,
+  type PreparedAdaptiveReplanAction,
+} from '../../adaptiveReplanActions'
+import { REPLAN_CROSS_DAY_WARNING } from '../../adaptiveReplanning'
+import {
   formatLedgerMoney,
   ledgerCategoryLabels,
   normalizeCurrencyCode,
@@ -119,6 +127,7 @@ import {
   type AiActionRoutePreviewArgs,
   type AiActionStepRunResult,
   type AiActionTicketOpenArgs,
+  type AiActionTripReplanApplyArgs,
   type AiActionTripRepairArgs,
   type AiActionWorkspaceOpenArgs,
 } from './types'
@@ -304,6 +313,7 @@ type PreparedRoutePreviewAction = {
 }
 
 type PreparedAction =
+  | PreparedAdaptiveReplanAction
   | PreparedDayItemsReorderAction
   | PreparedHistoryUndoAction
   | PreparedItemCreateAction
@@ -573,6 +583,55 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
         affectedLabels: [ticket.navigation.title],
         hasWrite: false,
         text: ticket.navigation.message,
+      }
+    },
+  },
+  'trip.replan.apply@1': {
+    execute: async (prepared) =>
+      executeTripReplanApplyAction(
+        requirePreparedKind(prepared, 'adaptive-replan-action'),
+      ),
+    prepare: (args, context, preparation) =>
+      prepareTripReplanApplyAction(
+        args as AiActionTripReplanApplyArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const replan = requirePreparedKind(
+        prepared,
+        'adaptive-replan-action',
+      )
+      const changedItems = replan.selectedOption.diff.itemChanges.filter(
+        (change) => change.changeType !== 'unchanged',
+      )
+      const ticketCount = replan.selectedOption.diff.ticketImpacts.filter(
+        (impact) => impact.impact !== 'unaffected',
+      ).length
+      const ledgerCount = replan.selectedOption.diff.ledgerImpacts.filter(
+        (impact) => impact.impact !== 'unaffected',
+      ).length
+      const hasCrossDayWarning = replan.selectedOption.diff.warnings.some(
+        (warning) => warning.includes(REPLAN_CROSS_DAY_WARNING),
+      )
+      const warningParts = [
+        ticketCount + ledgerCount > 0
+          ? `票据 ${ticketCount}、账本 ${ledgerCount} 项需核对`
+          : '',
+        hasCrossDayWarning ? '跨日项需手动安排' : '',
+      ].filter(Boolean)
+      const warningText = warningParts.length > 0
+        ? `；${warningParts.join('；')}`
+        : ''
+      const changeSummary = summarizeAdaptiveReplanChanges(changedItems)
+      return {
+        affectedLabels: changedItems.map((change) => change.title),
+        hasWrite: changedItems.length > 0,
+        text: changedItems.length > 0
+          ? `${replan.dayTitle}：${changeSummary}；按${formatReplanStrategy(replan.strategy)}调整 ${changedItems.length} 项${warningText}。`
+          : hasCrossDayWarning
+            ? `${replan.dayTitle}：顺延后会跨日，需手动安排。`
+            : `${replan.dayTitle}：现有重排偏好下无需改动。`,
       }
     },
   },
@@ -1480,12 +1539,106 @@ async function prepareTripRepairAction(
   }
 }
 
+async function prepareTripReplanApplyAction(
+  args: AiActionTripReplanApplyArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedAdaptiveReplanAction> {
+  const trip = requireTrip(context.commandContext)
+  const fresh = await loadAdaptiveReplanActionContext(trip.id)
+  const freshCommandContext: GlobalAiCommandContext = {
+    ...context.commandContext,
+    currentDay: context.commandContext.currentDay
+      ? fresh.days.find((day) =>
+          day.id === context.commandContext.currentDay?.id,
+        )
+      : undefined,
+    currentItem: context.commandContext.currentItem
+      ? fresh.items.find((item) =>
+          item.id === context.commandContext.currentItem?.id,
+        )
+      : undefined,
+    days: fresh.days,
+    items: fresh.items,
+    ledgerExpenses: fresh.ledgerExpenses,
+    tickets: fresh.tickets,
+    trip: fresh.trip,
+  }
+  const explicitDay = args.day
+    ? resolveExplicitDayTarget(args.day, freshCommandContext)
+    : undefined
+  const target = args.target
+    ? explicitDay
+      ? resolveItemTargetInDay(args.target, explicitDay, freshCommandContext)
+      : resolveItemTarget(args.target, freshCommandContext)
+    : explicitDay
+      ? undefined
+      : freshCommandContext.currentItem
+  const day = explicitDay
+    ?? (target
+      ? fresh.days.find((candidate) => candidate.id === target.dayId)
+      : freshCommandContext.currentDay)
+    ?? resolveDayTarget(undefined, freshCommandContext)
+  if (!day) throw new Error('没有找到突发情况对应的日期。')
+  if (target && target.dayId !== day.id) {
+    throw new Error('目标行程点不在所选日期。')
+  }
+  if (
+    (args.kind === 'closure' || args.kind === 'cancelled')
+    && !target
+  ) {
+    throw new Error('闭馆或取消需要写清楚行程点。')
+  }
+  return buildAdaptiveReplanActionPreview({
+    context: fresh,
+    day,
+    ...((args.kind === 'delay' || args.kind === 'late')
+      ? { delayMinutes: args.delayMinutes ?? 30 }
+      : {}),
+    disruptionKind: args.kind,
+    ...(target ? { item: target } : {}),
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    strategy: args.strategy ?? 'least_change',
+  })
+}
+
 async function executePreparedAction(
   actionId: AiActionId,
   prepared: PreparedAction,
   context: AiActionGatewayRuntimeContext,
 ): Promise<ActionExecutionResult> {
   return ACTION_RUNTIME_DEFINITIONS[actionId].execute(prepared, context)
+}
+
+async function executeTripReplanApplyAction(
+  prepared: PreparedAdaptiveReplanAction,
+): Promise<ActionExecutionResult> {
+  try {
+    const result = await executeAdaptiveReplanAction(prepared)
+    return {
+      appliedChanges: [],
+      effects: result.changed
+        ? [buildDayScheduleEffect(prepared.tripId, prepared.dayId)]
+        : [],
+      errors: [],
+      message: result.changed
+        ? `已按${formatReplanStrategy(prepared.strategy)}调整 ${result.changedItemCount} 个行程点，可从重排记录撤销。`
+        : result.record
+          ? '这次突发重排已经应用，未重复执行。'
+          : '现有重排偏好下无需改动。',
+    }
+  } catch (caught) {
+    if (caught instanceof ItineraryBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
 }
 
 async function executeActionMutationWithHistory<T>(
@@ -1967,6 +2120,10 @@ async function canReplayPersistedPreparedPlan(
           return false
         }
         await assertPersistedItemReplanPreference(prepared)
+        continue
+      }
+      if (prepared.kind === 'adaptive-replan-action') {
+        await assertAdaptiveReplanActionApplied(prepared)
         continue
       }
       return false
@@ -2687,6 +2844,17 @@ function resolveDayTarget(target: string | undefined, context: GlobalAiCommandCo
     if (!day) throw new Error('没有找到对应日期。')
     return day
   }
+  const monthDay = target.match(/^(\d{2})-(\d{2})$/)
+  if (monthDay) {
+    const matches = ordered.filter((day) =>
+      day.date.slice(5) === target,
+    )
+    if (matches.length === 1) return matches[0]
+    if (matches.length > 1) {
+      throw new Error('找到多个同月同日的日期，请写清楚年份。')
+    }
+    throw new Error('没有找到目标日期。')
+  }
   const normalized = normalizeText(target)
   const matches = ordered.filter((day) =>
     day.date === target ||
@@ -2807,6 +2975,33 @@ function formatPlaceSource(source: string) {
   if (source === 'google_places' || source === 'google') return 'Google Places'
   if (source === 'mock') return '测试地点服务'
   return '地点服务'
+}
+
+function formatReplanStrategy(
+  strategy: PreparedAdaptiveReplanAction['strategy'],
+) {
+  if (strategy === 'preserve_most') return '尽量保留'
+  if (strategy === 'shortest_route') return '最省路程'
+  return '最少改动'
+}
+
+function summarizeAdaptiveReplanChanges(
+  changes: PreparedAdaptiveReplanAction['selectedOption']['diff']['itemChanges'],
+) {
+  const first = changes[0]
+  if (!first) return '无需改动'
+  const action = first.changeType === 'skipped'
+    ? '将跳过'
+    : first.changeType === 'day_changed'
+      ? '将移到后续日期'
+      : first.changeType === 'reordered'
+        ? '将调整顺序'
+        : first.changeType === 'time_changed'
+          ? `将改为 ${first.after.startTime ?? first.after.endTime ?? '新时间'}`
+          : '保持不变'
+  return changes.length > 1
+    ? `${first.title}${action}，共 ${changes.length} 项`
+    : `${first.title}${action}`
 }
 
 function getWorkspaceNavigationCommand(target: AiActionWorkspaceOpenArgs['target']) {

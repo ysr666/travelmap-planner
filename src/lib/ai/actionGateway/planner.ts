@@ -7,7 +7,7 @@ import {
   PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION,
   type ProviderProxyAiActionPlanRequest,
 } from '../providerProxyContract'
-import { listAiActionCatalog } from './registry'
+import { getAiActionRisk, listAiActionCatalog } from './registry'
 import {
   AI_ACTION_PLAN_SCHEMA_VERSION,
   type AiActionDayItemsReorderArgs,
@@ -21,6 +21,8 @@ import {
   type AiActionLedgerExpenseDraftArgs,
   type AiActionPlanV1,
   type AiActionRoutePreviewArgs,
+  type AiActionStepV1,
+  type AiActionTripReplanApplyArgs,
 } from './types'
 import { validateAiActionPlan } from './validation'
 
@@ -58,9 +60,10 @@ const ACTION_VERBS = [
 
 export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 | null {
   const normalized = command.trim()
-  if (!normalized) return null
+  if (!normalized || isExplicitlyNegatedActionCommand(normalized)) return null
   const steps: Array<Record<string, unknown>> = []
   const intent = parseGlobalAiCommandIntent(normalized)
+  const adaptiveReplanIntent = parseAdaptiveReplanIntent(normalized, intent)
 
   if (intent.kind === 'ticket_lookup') {
     steps.push({
@@ -173,6 +176,7 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     || dayReorder
     || timeUpdate
     || itemExecutionUpdate
+    || adaptiveReplanIntent.kind === 'replan'
     || intent.kind !== 'preference_update'
     ? null
     : parseDeterministicReplanPreferenceUpdate(
@@ -188,8 +192,29 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const tripRepair = isTripRepairCommand(normalized)
-  const routePreview = tripRepair ? null : parseDeterministicRoutePreview(normalized)
+  const adaptiveReplan = historyUndo
+    || itemCreate
+    || itemDelete
+    || itemMove
+    || dayReorder
+    || timeUpdate
+    || itemExecutionUpdate
+    || replanPreferenceUpdate
+    ? null
+    : parseDeterministicAdaptiveReplan(normalized, adaptiveReplanIntent)
+  if (adaptiveReplan) {
+    steps.push({
+      actionId: 'trip.replan.apply@1',
+      args: adaptiveReplan,
+      dependsOn: [],
+      id: 'apply-adaptive-replan',
+    })
+  }
+
+  const tripRepair = adaptiveReplan ? false : isTripRepairCommand(normalized)
+  const routePreview = tripRepair || adaptiveReplan
+    ? null
+    : parseDeterministicRoutePreview(normalized)
   if (routePreview) {
     steps.push({
       actionId: 'route.preview@1',
@@ -199,7 +224,9 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  const expenseDraft = itemCreate || itemDelete ? null : parseDeterministicExpenseDraft(normalized)
+  const expenseDraft = itemCreate || itemDelete || adaptiveReplan
+    ? null
+    : parseDeterministicExpenseDraft(normalized)
   if (expenseDraft) {
     steps.push({
       actionId: 'ledger.expense.draft@1',
@@ -240,10 +267,39 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
 export function shouldRequestAiActionPlan(command: string) {
   const normalized = command.trim()
   if (!normalized || buildDeterministicAiActionPlan(normalized)) return false
-  if (isNonActionItemStateCommand(normalized)) return false
+  if (
+    isHypotheticalCommand(normalized)
+    || isExplicitlyNegatedActionCommand(normalized)
+    || isNonActionItemStateCommand(normalized)
+    || isNonActionReplanCommand(normalized)
+  ) {
+    return false
+  }
   return ACTION_VERBS.some((verb) => normalized.includes(verb)) &&
     ['票', '地点', '地址', '坐标', '行程', '行程点', '删除', '撤销', '恢复', '完成', '跳过', '进度', '优先级', '缓冲', '停留', '雨天', '体力', '不可动', '站', '天', '日期', '跨日', '顺序', '前面', '后面', '路线', '问题', '建议', '资料', '文档', '账本', '账单', '费用', '消费', '餐', '车费', '住宿', '酒店', '保险', '购物', '地图', '设置', '时间', '开始', '结束']
       .some((noun) => normalized.includes(noun))
+}
+
+export type AiActionPlanCommandBindingResult =
+  | { ok: true }
+  | { errors: string[]; ok: false }
+
+export function validateAiActionPlanCommandBinding(
+  command: string,
+  plan: AiActionPlanV1,
+): AiActionPlanCommandBindingResult {
+  const normalized = command.trim()
+  if (!normalized) {
+    return { errors: ['用户指令不能为空。'], ok: false }
+  }
+  const errors = plan.steps.flatMap((step) =>
+    isAiActionStepBoundToCommand(normalized, step)
+      ? []
+      : [`动作 ${step.actionId} 与用户指令不一致。`],
+  )
+  return errors.length > 0
+    ? { errors: Array.from(new Set(errors)), ok: false }
+    : { ok: true }
 }
 
 export function buildAiActionPlanProviderRequest(
@@ -495,6 +551,76 @@ function parseDeterministicReplanPreferenceUpdate(
   }
 }
 
+function parseDeterministicAdaptiveReplan(
+  command: string,
+  intent: ReturnType<typeof parseGlobalAiCommandIntent>,
+): AiActionTripReplanApplyArgs | null {
+  if (
+    intent.kind !== 'replan'
+    || intent.hypothetical
+    || intent.disruptionKind === 'skip'
+    || isHypotheticalCommand(command)
+    || isNonActionReplanCommand(command)
+  ) {
+    return null
+  }
+  if (
+    intent.disruptionKind === 'cancelled'
+    && /(?:预订|订单|付款|退款|退票|门票|票据)/.test(command)
+  ) {
+    return null
+  }
+  const day = findPlannerDayTarget(command)
+  const semanticTarget = inferSemanticTarget(command)
+  const target = semanticTarget ?? cleanSemanticSelector(
+    command
+      .replace(day?.text ?? '', ' ')
+      .replace(/(?:迟到|晚到|来晚|延误|晚点|关闭|闭馆|不开门|关门|歇业|下雨|暴雨|天气|太热|太冷|台风|户外少一点|取消)(?:了|啦|呢)?/g, ' ')
+      .replace(/(?:半小时|一小时|\d{1,3}\s*(?:分钟|分|小时))/g, ' ')
+      .replace(/(?:按|使用)?(?:最少改动|尽量少改|尽量保留|优先保留|必须保留|一定要去|必去|最省路程|最短路线)(?:方案|策略)?/g, ' ')
+      .replace(/(?:调整|重排)(?:一下|行程|安排)?/g, ' ')
+      .replace(/^(?:请|麻烦|帮我|给我|把|将|我|我们|\s)+/g, '')
+      .replace(/(?:这个|该)?(?:行程点|站点)\s*$/g, '')
+      .replace(/[，,。；;：:\s]+/g, ' ')
+      .trim(),
+  ).replace(/^的\s*/, '')
+  const kind = intent.disruptionKind
+  if (target && target.length > 160) return null
+  const strategy = inferReplanStrategy(command)
+  return {
+    ...(day ? { day: day.target } : {}),
+    ...((kind === 'delay' || kind === 'late') && intent.delayMinutes
+      ? { delayMinutes: intent.delayMinutes }
+      : {}),
+    kind,
+    ...(strategy ? { strategy } : {}),
+    ...(target ? { target } : {}),
+  }
+}
+
+function parseAdaptiveReplanIntent(
+  command: string,
+  intent: ReturnType<typeof parseGlobalAiCommandIntent>,
+) {
+  if (intent.kind === 'replan') return intent
+  const withoutStrategyPreference = command.replace(
+    /(?:尽量保留|优先保留|都保留|必须保留|一定要去|必去|最高优先级|高优先级|很想去|不能动|不可动|固定|必须按原计划|预约不能改|不能改时间|最少改动|尽量少改|少改动|最省路程|最短路线|少绕路)/g,
+    ' ',
+  )
+  return parseGlobalAiCommandIntent(withoutStrategyPreference)
+}
+
+function inferReplanStrategy(
+  command: string,
+): AiActionTripReplanApplyArgs['strategy'] | undefined {
+  if (/(?:最省路程|最短路线|少绕路)/.test(command)) return 'shortest_route'
+  if (/(?:尽量保留|优先保留|都保留|必须保留|一定要去|必去)/.test(command)) {
+    return 'preserve_most'
+  }
+  if (/(?:最少改动|尽量少改|少改动)/.test(command)) return 'least_change'
+  return undefined
+}
+
 function parseDeterministicDayReorder(command: string): AiActionDayItemsReorderArgs | null {
   if (isHypotheticalCommand(command)) return null
   const verb = command.match(/移动到|移到|挪到|排到|调整到/)
@@ -584,6 +710,24 @@ function cleanMovePlacement(value: string) {
 }
 
 function findPlannerDayTarget(command: string) {
+  const fullDate = command.match(
+    /(?<!\d)(\d{4})(?:-|\/|年)(\d{1,2})(?:-|\/|月)(\d{1,2})(?:日)?(?!\d)/,
+  )
+  if (fullDate?.index !== undefined) {
+    return {
+      index: fullDate.index,
+      target: `${fullDate[1]}-${fullDate[2].padStart(2, '0')}-${fullDate[3].padStart(2, '0')}`,
+      text: fullDate[0],
+    }
+  }
+  const monthDay = command.match(/(?<!\d)(\d{1,2})月(\d{1,2})日(?!\d)/)
+  if (monthDay?.index !== undefined) {
+    return {
+      index: monthDay.index,
+      target: `${monthDay[1].padStart(2, '0')}-${monthDay[2].padStart(2, '0')}`,
+      text: monthDay[0],
+    }
+  }
   const current = command.match(/今天|当天|当前日|这一天/)
   if (current?.index !== undefined) {
     return { index: current.index, target: 'current_day', text: current[0] }
@@ -763,8 +907,208 @@ function findExpenseAmountToken(command: string) {
 }
 
 function isHypotheticalCommand(command: string) {
-  return ['如果', '假如', '模拟', '会怎样'].some((value) => command.includes(value)) ||
+  return ['如果', '假如', '假设', '假定', '设想', '模拟', '会怎样'].some((value) => command.includes(value)) ||
     /\bwhat\s*if\b/i.test(command)
+}
+
+function isNonActionReplanCommand(command: string) {
+  const disruptionPattern = '(?:迟到|晚到|延误|晚点|闭馆|关闭|取消|下雨|天气|重排|调整)'
+  if (
+    new RegExp(`(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,48}${disruptionPattern}`).test(command)
+    || new RegExp(`(?:没有|没|并未|并没有|未曾|未|不是|并非)[^，。；;]{0,24}${disruptionPattern}`).test(command)
+    || new RegExp(`${disruptionPattern}[^，。；;]{0,16}(?:并不存在|并没有|没有发生|不是真的)`).test(command)
+  ) {
+    return true
+  }
+  return new RegExp(`(?:是不是|是否|有没有|能否|能不能|可不可以|要不要|该不该)[^，。；;]{0,48}${disruptionPattern}`)
+    .test(command)
+    || new RegExp(`${disruptionPattern}[^，。；;]{0,32}(?:怎么办|会怎样|怎么调整|怎么处理|如何调整|如何处理|吗|么|\\?|？)`)
+      .test(command)
+    || /[?？]/.test(command) && new RegExp(disruptionPattern).test(command)
+}
+
+function isAiActionStepBoundToCommand(
+  command: string,
+  step: AiActionStepV1,
+) {
+  const intent = parseGlobalAiCommandIntent(command)
+  const args = step.args as Record<string, unknown>
+  if (
+    getAiActionRisk(step.actionId) === 'local_write'
+    && (
+      isHypotheticalCommand(command)
+      || isExplicitlyNegatedActionCommand(command)
+    )
+  ) {
+    return false
+  }
+  switch (step.actionId) {
+    case 'ticket.open@1':
+      return intent.kind === 'ticket_lookup'
+        || intent.kind === 'page_navigation' && intent.target === 'tickets'
+    case 'workspace.open@1':
+      return intent.kind === 'page_navigation'
+        && intent.target === args.target
+    case 'history.undo@1':
+      return /(?:撤销|恢复)/.test(command)
+        && /(?:删除|移除)/.test(command)
+        && !/(?:票据|门票|订单|预订|付款|退款|账本|费用)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+    case 'item.create@1':
+      return /(?:新增|添加|加入|插入|创建)/.test(command)
+        && isSemanticTargetBound(args.day, command, 'day')
+        && isSemanticTargetBound(args.title, command, 'literal')
+    case 'item.delete@1':
+      return /(?:删除|移除)/.test(command)
+        && !/(?:取消|退款|退票|作废|票据|门票|订单|预订|付款|账本|费用|整个旅行|整趟旅行)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+        && isSemanticTargetBound(args.day, command, 'day')
+    case 'item.execution.update@1':
+      return isProviderExecutionStateBound(command, args.state)
+        && !isNonActionItemStateCommand(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+        && isSemanticTargetBound(args.day, command, 'day')
+    case 'item.replan.preference.update@1':
+      return intent.kind === 'preference_update'
+        && isPreferenceArgsBound(args, intent.preference)
+        && isSemanticTargetBound(args.target, command, 'item')
+        && isSemanticTargetBound(args.day, command, 'day')
+    case 'trip.replan.apply@1':
+      return isProviderReplanBound(command, args)
+    case 'day.items.reorder@1':
+      return /(?:移动到|移到|挪到|排到|调整到)/.test(command)
+        && /(?:最前|第一位|首位|开头|最后|末尾|前面|之前|后面|之后)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+        && isSemanticTargetBound(args.anchor, command, 'item')
+        && isSemanticTargetBound(args.day, command, 'day')
+    case 'item.move@1':
+      return /(?:移动到|移到|挪到|安排到)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+        && isSemanticTargetBound(args.anchor, command, 'item')
+        && isSemanticTargetBound(args.sourceDay, command, 'day')
+        && isSemanticTargetBound(args.destinationDay, command, 'day')
+    case 'item.time.update@1':
+      return /(?:改到|改为|调整到|调整为|挪到|移到|安排到)/.test(command)
+        && /(?:[0-2]?\d[:：点时][0-5]?\d?)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+    case 'ledger.expense.draft@1':
+      return /(?:记|记录|新增|添加|创建)/.test(command)
+        && /(?:费用|消费|账单|餐|车费|门票|住宿|酒店|保险|购物)/.test(command)
+        && /\d/.test(command)
+        && isSemanticTargetBound(args.title, command, 'literal')
+    case 'place.enrich@1':
+      return !isTripRepairCommand(command)
+        && isPlaceEnrichmentCommand(command)
+        && isSemanticTargetBound(args.target, command, 'item')
+    case 'route.preview@1':
+      return !isTripRepairCommand(command)
+        && /路线/.test(command)
+        && /(?:生成|创建|准备|补上|补全)/.test(command)
+        && isSemanticTargetBound(args.target, command, 'day')
+    case 'trip.repair@1':
+      return isTripRepairCommand(command)
+    default:
+      return false
+  }
+}
+
+function isExplicitlyNegatedActionCommand(command: string) {
+  return /(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,64}(?:打开|查找|补全|补充|修复|处理|整理|完成|调整|移动|挪|生成|新增|添加|创建|删除|移除|撤销|恢复|跳过|标记|设为|记录|写入)/.test(command)
+}
+
+function isProviderExecutionStateBound(
+  command: string,
+  state: unknown,
+) {
+  if (state === 'completed') {
+    return /(?:标记|设为|设置为|改为|已经|已)?完成(?:了)?/.test(command)
+  }
+  if (state === 'skipped') {
+    return /(?:标记为|设为|设置为|直接)?跳过(?:了)?/.test(command)
+  }
+  return state === 'active'
+    && /(?:恢复|重置|重新加入)[^，。；;]{0,20}(?:待进行|未完成|进行中|下一站)/.test(command)
+}
+
+function isPreferenceArgsBound(
+  args: Record<string, unknown>,
+  preference: Record<string, unknown>,
+) {
+  const fields = [
+    'bufferMinutes',
+    'flexibility',
+    'minimumStayMinutes',
+    'mobilitySuitability',
+    'priority',
+    'weatherSuitability',
+  ]
+  return fields.every((field) =>
+    args[field] === undefined || args[field] === preference[field],
+  )
+}
+
+function isProviderReplanBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const intent = parseAdaptiveReplanIntent(
+    command,
+    parseGlobalAiCommandIntent(command),
+  )
+  if (
+    intent.kind !== 'replan'
+    || intent.hypothetical
+    || intent.disruptionKind === 'skip'
+    || isHypotheticalCommand(command)
+    || isNonActionReplanCommand(command)
+    || args.kind !== intent.disruptionKind
+  ) {
+    return false
+  }
+  if (
+    args.delayMinutes !== undefined
+    && args.delayMinutes !== intent.delayMinutes
+  ) {
+    return false
+  }
+  const requestedStrategy = inferReplanStrategy(command)
+  if (
+    args.strategy !== undefined
+    && args.strategy !== requestedStrategy
+    && !(requestedStrategy === undefined && args.strategy === 'least_change')
+  ) {
+    return false
+  }
+  return isSemanticTargetBound(args.target, command, 'item')
+    && isSemanticTargetBound(args.day, command, 'day')
+}
+
+function isSemanticTargetBound(
+  value: unknown,
+  command: string,
+  kind: 'day' | 'item' | 'literal',
+) {
+  if (value === undefined) return true
+  if (typeof value !== 'string' || !value.trim()) return false
+  if (kind === 'item' && value === 'current_item') {
+    const explicit = inferSemanticTarget(command)
+    return explicit === undefined || explicit === 'current_item'
+  }
+  if (kind === 'item' && value === 'first_item') {
+    return inferSemanticTarget(command) === 'first_item'
+  }
+  if (kind === 'day' && value === 'current_day') {
+    const explicit = findPlannerDayTarget(command)
+    return explicit === null || explicit.target === 'current_day'
+  }
+  if (kind === 'day' && value === 'first_day') {
+    return findPlannerDayTarget(command)?.target === 'first_day'
+  }
+  if (kind === 'day' && /^(?:day:\d{1,2}|\d{2}-\d{2}|\d{4}-\d{2}-\d{2})$/.test(value)) {
+    return findPlannerDayTarget(command)?.target === value
+  }
+  return normalizePlannerSelector(command)
+    .includes(normalizePlannerSelector(value))
 }
 
 function inferExpenseCurrency(value: string) {
@@ -816,6 +1160,7 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
     actionIds.has('item.execution.update@1') ? '更新行程进度' : '',
     actionIds.has('item.move@1') ? '跨日移动行程点' : '',
     actionIds.has('item.replan.preference.update@1') ? '更新重排偏好' : '',
+    actionIds.has('trip.replan.apply@1') ? '应用突发重排' : '',
     actionIds.has('day.items.reorder@1') ? '调整当天顺序' : '',
     actionIds.has('item.time.update@1') ? '调整行程时间' : '',
     actionIds.has('route.preview@1') ? '生成路线预览' : '',

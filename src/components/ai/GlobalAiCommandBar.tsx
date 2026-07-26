@@ -21,6 +21,7 @@ import {
   prepareAiActionPlan,
   shouldRequestAiActionPlan,
   summarizePreparedAiActionPlan,
+  validateAiActionPlanCommandBinding,
   type AiActionGatewayRuntimeContext,
   type AiActionManualEntry,
   type AiActionPreparedPlan,
@@ -313,6 +314,13 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
       getStoredAiPrivacySettings(),
     )
     const response = await fetchProviderProxyAiActionPlan(request, providerConfig.proxyUrl)
+    const binding = validateAiActionPlanCommandBinding(
+      submittedCommand,
+      response.plan,
+    )
+    if (!binding.ok) {
+      throw new Error('AI 动作与指令不一致，请把要执行的操作说得更明确。')
+    }
     return response.plan
   }
 
@@ -514,6 +522,9 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         appendConversationMessage({ text: `已更新「${result.item.title}」重排偏好。`, tone: 'success', type: 'assistant' })
         clearInteraction()
       } else if (result.kind === 'replan_preview') {
+        if (result.hypothetical) {
+          throw new Error('模拟预览只读，不会写入旅行。')
+        }
         const record = await applyReplanPreview(result, selectedReplanOption)
         await appendTripIntelligenceExecutionResult(record.tripId, {
           result: {
@@ -1087,8 +1098,12 @@ function CommandResultView({
             {Array.from(new Set(result.warnings)).slice(0, 5).map((warning) => <p key={warning}>{warning}</p>)}
           </div>
         ) : null}
-        <ActionProposalCard proposal={result.actionProposal} />
-        <Button className="min-h-10 px-3 text-xs" disabled={!selectedOption} onClick={onRequestWrite} variant="secondary">确认应用重排</Button>
+        {!result.hypothetical ? (
+          <ActionProposalCard proposal={result.actionProposal} />
+        ) : null}
+        {!result.hypothetical ? (
+          <Button className="min-h-10 px-3 text-xs" disabled={!selectedOption} onClick={onRequestWrite} variant="secondary">确认应用重排</Button>
+        ) : null}
       </ResultShell>
     )
   }

@@ -70,6 +70,8 @@ const STRATEGY_TITLES: Record<TripReplanStrategy, string> = {
   shortest_route: '最省路程',
 }
 
+export const REPLAN_CROSS_DAY_WARNING = '顺延后跨日的行程未自动改动'
+
 export function buildTripReplanPreview({
   days,
   event,
@@ -83,7 +85,6 @@ export function buildTripReplanPreview({
 }: ReplanContext): Omit<TripReplanRecord, 'createdAt' | 'id' | 'updatedAt'> {
   const orderedDays = [...days].sort((first, second) => first.sortOrder - second.sortOrder)
   const orderedItems = sortItineraryItems(items)
-  const beforeSnapshot = buildReplanSnapshot(orderedDays, orderedItems, event)
   const ticketByItem = groupTicketsByItem(tickets)
   const classifications = new Map(orderedItems.map((item) => [
     item.id,
@@ -100,6 +101,12 @@ export function buildTripReplanPreview({
       strategy,
       ticketByItem,
     }),
+  )
+  const beforeSnapshot = buildReplanSnapshot(
+    orderedDays,
+    orderedItems,
+    event,
+    options,
   )
 
   return {
@@ -157,11 +164,22 @@ export async function applyTripReplanOption(recordId: string, optionId: string) 
   const option = record.options.find((candidate) => candidate.id === optionId)
   if (!option) throw new Error('没有找到要应用的方案。')
 
-  const [days, currentItems] = await Promise.all([
+  const [days, currentItems, disruptionEvent] = await Promise.all([
     listDaysByTrip(record.tripId),
     listItemsByTrip(record.tripId),
+    getTripDisruptionEvent(record.eventId),
   ])
-  const currentBaseline = buildReplanFingerprint(buildScopedSnapshot(days, currentItems, record.beforeSnapshot.items.map((item) => item.id)))
+  if (!disruptionEvent) throw new Error('没有找到突发事件。')
+  const baselineDayIds = new Set(
+    record.beforeSnapshot.days.map((day) => day.id),
+  )
+  const currentBaseline = buildReplanFingerprint(buildScopedSnapshot(
+    days,
+    currentItems,
+    currentItems
+      .filter((item) => baselineDayIds.has(item.dayId))
+      .map((item) => item.id),
+  ))
   if (currentBaseline !== record.baselineFingerprint) {
     await updateTripReplanRecord(record.id, { status: 'conflict' })
     throw new Error('行程已变化，请重新生成重排方案。')
@@ -169,7 +187,12 @@ export async function applyTripReplanOption(recordId: string, optionId: string) 
 
   const now = Date.now()
   const itemById = new Map(currentItems.map((item) => [item.id, item]))
+  const scopeItemIds = option.diff.itemChanges
+    .filter((change) => change.changeType !== 'unchanged')
+    .map((change) => change.itemId)
+  const scopeItemIdSet = new Set(scopeItemIds)
   const updatedItems = option.itemPatches.flatMap((patch) => {
+    if (!scopeItemIdSet.has(patch.itemId)) return []
     const item = itemById.get(patch.itemId)
     if (!item) return []
     return [{
@@ -180,44 +203,61 @@ export async function applyTripReplanOption(recordId: string, optionId: string) 
   })
   const afterItemsById = new Map(currentItems.map((item) => [item.id, item]))
   for (const item of updatedItems) afterItemsById.set(item.id, item)
-  const afterSnapshot = buildScopedSnapshot(days, [...afterItemsById.values()], record.beforeSnapshot.items.map((item) => item.id))
+  const afterSnapshot = buildScopedSnapshot(
+    days,
+    [...afterItemsById.values()],
+    scopeItemIds,
+  )
   const appliedFingerprint = buildReplanFingerprint(afterSnapshot)
+  const persistedRecord: TripReplanRecord = {
+    ...record,
+    afterSnapshot,
+    appliedFingerprint,
+    scopeItemIds,
+    selectedDiff: option.diff,
+    selectedOptionId: option.id,
+    status: 'applied',
+    updatedAt: now,
+  }
+  const persistedEvent: TripDisruptionEvent = {
+    ...disruptionEvent,
+    status: 'applied',
+    updatedAt: now,
+  }
 
-  await db.transaction('rw', db.itineraryItems, db.tripReplanRecords, db.tripReplanEvents, db.trips, async () => {
-    if (updatedItems.length > 0) await db.itineraryItems.bulkPut(updatedItems)
-    await db.tripReplanRecords.update(record.id, {
-      afterSnapshot,
-      appliedFingerprint,
-      selectedDiff: option.diff,
-      selectedOptionId: option.id,
-      status: 'applied',
-      updatedAt: now,
-    })
-    await db.tripReplanEvents.update(record.eventId, { status: 'applied', updatedAt: now })
-    await db.trips.update(record.tripId, { updatedAt: now })
-  })
-
-  await Promise.all([
-    ...updatedItems.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' as const })),
-    enqueueObjectUpsert({
-      object: {
-        ...record,
-        afterSnapshot,
-        appliedFingerprint,
-        selectedDiff: option.diff,
-        selectedOptionId: option.id,
-        status: 'applied',
-        updatedAt: now,
-      },
-      objectType: 'replan_record',
-    }),
-    getTripDisruptionEvent(record.eventId).then((event) =>
-      event ? enqueueObjectUpsert({ object: { ...event, status: 'applied', updatedAt: now }, objectType: 'replan_event' }) : undefined,
-    ),
-  ])
+  await db.transaction(
+    'rw',
+    [
+      db.itineraryItems,
+      db.tripReplanRecords,
+      db.tripReplanEvents,
+      db.trips,
+      db.syncOutbox,
+      db.objectSyncStates,
+    ],
+    async () => {
+      if (updatedItems.length > 0) await db.itineraryItems.bulkPut(updatedItems)
+      await db.tripReplanRecords.put(persistedRecord)
+      await db.tripReplanEvents.put(persistedEvent)
+      await db.trips.update(record.tripId, { updatedAt: now })
+      await Promise.all([
+        ...updatedItems.map((item) =>
+          enqueueObjectUpsert({ object: item, objectType: 'item' as const }),
+        ),
+        enqueueObjectUpsert({
+          object: persistedRecord,
+          objectType: 'replan_record',
+        }),
+        enqueueObjectUpsert({
+          object: persistedEvent,
+          objectType: 'replan_event',
+        }),
+      ])
+    },
+  )
   recordTripWriteForSync(record.tripId, 'replan-applied', { emitChangeEvent: false })
   emitTravelDataChanged()
-  return { ...record, afterSnapshot, appliedFingerprint, selectedDiff: option.diff, selectedOptionId: option.id, status: 'applied' as const, updatedAt: now }
+  return persistedRecord
 }
 
 export async function undoTripReplan(recordId: string) {
@@ -233,26 +273,57 @@ export async function undoTripReplan(recordId: string) {
     listDaysByTrip(record.tripId),
     listItemsByTrip(record.tripId),
   ])
-  const currentApplied = buildReplanFingerprint(buildScopedSnapshot(days, currentItems, record.afterSnapshot.items.map((item) => item.id)))
+  const scopeItemIds = record.scopeItemIds
+    ?? record.selectedDiff?.itemChanges
+      .filter((change) => change.changeType !== 'unchanged')
+      .map((change) => change.itemId)
+    ?? record.afterSnapshot.items.map((item) => item.id)
+  const currentApplied = buildReplanFingerprint(
+    buildScopedSnapshot(days, currentItems, scopeItemIds),
+  )
   if (currentApplied !== record.appliedFingerprint) {
     await updateTripReplanRecord(record.id, { status: 'conflict' })
     throw new Error('当前行程已和应用后的快照不一致，不能整次撤销。')
   }
 
   const now = Date.now()
-  const restoredItems = record.beforeSnapshot.items.map((item) => ({ ...item, updatedAt: now }))
-  await db.transaction('rw', db.itineraryItems, db.tripReplanRecords, db.trips, async () => {
-    if (restoredItems.length > 0) await db.itineraryItems.bulkPut(restoredItems)
-    await db.tripReplanRecords.update(record.id, { status: 'undone', undoneAt: now, updatedAt: now })
-    await db.trips.update(record.tripId, { updatedAt: now })
-  })
-  await Promise.all([
-    ...restoredItems.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' as const })),
-    enqueueObjectUpsert({ object: { ...record, status: 'undone', undoneAt: now, updatedAt: now }, objectType: 'replan_record' }),
-  ])
+  const scopeItemIdSet = new Set(scopeItemIds)
+  const restoredItems = record.beforeSnapshot.items
+    .filter((item) => scopeItemIdSet.has(item.id))
+    .map((item) => ({ ...item, updatedAt: now }))
+  const persistedRecord: TripReplanRecord = {
+    ...record,
+    status: 'undone',
+    undoneAt: now,
+    updatedAt: now,
+  }
+  await db.transaction(
+    'rw',
+    [
+      db.itineraryItems,
+      db.tripReplanRecords,
+      db.trips,
+      db.syncOutbox,
+      db.objectSyncStates,
+    ],
+    async () => {
+      if (restoredItems.length > 0) await db.itineraryItems.bulkPut(restoredItems)
+      await db.tripReplanRecords.put(persistedRecord)
+      await db.trips.update(record.tripId, { updatedAt: now })
+      await Promise.all([
+        ...restoredItems.map((item) =>
+          enqueueObjectUpsert({ object: item, objectType: 'item' as const }),
+        ),
+        enqueueObjectUpsert({
+          object: persistedRecord,
+          objectType: 'replan_record',
+        }),
+      ])
+    },
+  )
   recordTripWriteForSync(record.tripId, 'replan-undone', { emitChangeEvent: false })
   emitTravelDataChanged()
-  return { ...record, status: 'undone' as const, undoneAt: now, updatedAt: now }
+  return persistedRecord
 }
 
 export function classifyReplanItem(
@@ -336,14 +407,27 @@ function buildOption({
     routeOrderSuggestionIdsByDay,
     strategy,
   })
+  const scheduleWarnings = buildDelayOverflowWarnings({
+    classifications,
+    days,
+    event,
+    items,
+  })
   const diff = buildDiff({
     event,
     items,
     ledgerExpenses,
     patches,
+    scheduleWarnings,
     strategy,
     ticketByItem,
   })
+  const changedItemIds = new Set(diff.itemChanges
+    .filter((change) => change.changeType !== 'unchanged')
+    .map((change) => change.itemId))
+  const effectivePatches = patches.filter((patch) =>
+    changedItemIds.has(patch.itemId),
+  )
   const changedCount = diff.itemChanges.filter((change) => change.changeType !== 'unchanged').length
   const preservedCount = items.length - diff.itemChanges.filter((change) => change.after.executionState?.status === 'skipped').length
   const routeMinutes = diff.routeImpacts.reduce((total, impact) => total + Math.max(0, impact.afterTravelMinutes ?? 0), 0)
@@ -356,7 +440,7 @@ function buildOption({
   return {
     diff,
     id: createId(`replan_${strategy}`),
-    itemPatches: patches,
+    itemPatches: effectivePatches,
     score,
     strategy,
     summary: summarizeOption(strategy, diff),
@@ -382,10 +466,51 @@ function buildStrategyPatches({
   const affected = getAffectedItems({ days, event, items })
   const delayMinutes = Math.max(0, event.delayMinutes ?? defaultDelayMinutes(event))
   const patches = new Map<string, ItemPatch>()
+  const disruptionDayId = event.dayId
+    ?? (event.itemId
+      ? items.find((item) => item.id === event.itemId)?.dayId
+      : undefined)
+  const nextSortOrderByDay = new Map<string, number>()
+  const takeNextSortOrder = (dayId: string) => {
+    const next = nextSortOrderByDay.get(dayId)
+      ?? getNextSortOrder(items, dayId)
+    nextSortOrderByDay.set(dayId, next + 1)
+    return next
+  }
 
   for (const item of affected) {
     const classification = classifications.get(item.id)
     if (!classification || classification.flexibility === 'fixed') continue
+
+    if (
+      event.kind === 'weather_unsuitable'
+      && item.dayId === disruptionDayId
+      && item.replanPreference?.weatherSuitability === 'avoid_rain'
+    ) {
+      if (strategy === 'preserve_most' && classification.priority !== 'low') {
+        const nextDay = findNextDay(days, item.dayId)
+        if (nextDay) {
+          patches.set(item.id, {
+            itemId: item.id,
+            patch: {
+              dayId: nextDay.id,
+              sortOrder: takeNextSortOrder(nextDay.id),
+            },
+          })
+          continue
+        }
+      }
+      patches.set(item.id, {
+        itemId: item.id,
+        patch: {
+          executionState: {
+            status: 'skipped',
+            updatedAt: Date.now(),
+          },
+        },
+      })
+      continue
+    }
 
     if (item.id === event.itemId && (event.kind === 'skip' || event.kind === 'cancelled')) {
       patches.set(item.id, {
@@ -401,7 +526,10 @@ function buildStrategyPatches({
         if (nextDay) {
           patches.set(item.id, {
             itemId: item.id,
-            patch: { dayId: nextDay.id, sortOrder: getNextSortOrder(items, nextDay.id) },
+            patch: {
+              dayId: nextDay.id,
+              sortOrder: takeNextSortOrder(nextDay.id),
+            },
           })
           continue
         }
@@ -413,7 +541,11 @@ function buildStrategyPatches({
       continue
     }
 
-    if (delayMinutes > 0 && (event.kind === 'delay' || event.kind === 'late')) {
+    if (
+      delayMinutes > 0
+      && item.dayId === disruptionDayId
+      && (event.kind === 'delay' || event.kind === 'late')
+    ) {
       const shifted = shiftItemTime(item, delayMinutes)
       if (shifted) {
         patches.set(item.id, { itemId: item.id, patch: shifted })
@@ -423,6 +555,7 @@ function buildStrategyPatches({
 
   if (strategy === 'shortest_route') {
     for (const day of days) {
+      if (day.id !== disruptionDayId) continue
       const dayAffected = affected.filter((item) => item.dayId === day.id)
       const reorderPatches = buildShortestRouteSortPatches({
         classifications,
@@ -458,23 +591,68 @@ function getAffectedItems({
   const affectedDay = affectedDayId ? dayById.get(affectedDayId) : undefined
   const affectedSortOrder = targetItem?.sortOrder ?? 0
   if (!affectedDay) return []
-  const affectedDayOrder = affectedDay.sortOrder
   return sortItineraryItems(items).filter((item) => {
-    const day = dayById.get(item.dayId)
-    if (!day) return false
-    if (day.sortOrder > affectedDayOrder) return true
-    if (day.sortOrder < affectedDayOrder) return false
-    return item.sortOrder >= affectedSortOrder
+    return item.dayId === affectedDay.id
+      && item.sortOrder >= affectedSortOrder
   })
+}
+
+function buildDelayOverflowWarnings({
+  classifications,
+  days,
+  event,
+  items,
+}: {
+  classifications: Map<string, ClassifiedItem>
+  days: Day[]
+  event: TripDisruptionEvent
+  items: ItineraryItem[]
+}) {
+  if (event.kind !== 'delay' && event.kind !== 'late') return []
+  const delayMinutes = Math.max(
+    0,
+    event.delayMinutes ?? defaultDelayMinutes(event),
+  )
+  if (delayMinutes === 0) return []
+  const overflowCount = getAffectedItems({ days, event, items })
+    .filter((item) =>
+      classifications.get(item.id)?.flexibility !== 'fixed'
+      && doesTimeShiftCrossMidnight(item, delayMinutes),
+    )
+    .length
+  return overflowCount > 0
+    ? [`${overflowCount} 个${REPLAN_CROSS_DAY_WARNING}，请手动安排。`]
+    : []
 }
 
 function shiftItemTime(item: ItineraryItem, minutes: number) {
   const patch: ItemPatch['patch'] = {}
   const startTime = item.startTime ? addMinutesToTime(item.startTime, minutes) : undefined
   const endTime = item.endTime ? addMinutesToTime(item.endTime, minutes) : undefined
+  if ((item.startTime && !startTime) || (item.endTime && !endTime)) return null
   if (startTime && startTime !== item.startTime) patch.startTime = startTime
   if (endTime && endTime !== item.endTime) patch.endTime = endTime
   return Object.keys(patch).length > 0 ? patch : null
+}
+
+function doesTimeShiftCrossMidnight(
+  item: ItineraryItem,
+  minutes: number,
+) {
+  return [item.startTime, item.endTime]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => {
+      const [hourText, minuteText] = value.split(':')
+      const hour = Number(hourText)
+      const minute = Number(minuteText)
+      return Number.isInteger(hour)
+        && Number.isInteger(minute)
+        && hour >= 0
+        && hour <= 23
+        && minute >= 0
+        && minute <= 59
+        && hour * 60 + minute + minutes >= 24 * 60
+    })
 }
 
 function buildShortestRouteSortPatches({
@@ -496,6 +674,7 @@ function buildShortestRouteSortPatches({
     ? suggestedIds
     : nearestNeighborOrder(movableCoordinateItems).map((item) => item.id)
   const queue = [...orderedMovableIds]
+  const sortOrderSlots = orderedItems.map((item) => item.sortOrder)
   const nextOrder = orderedItems.map((item) => {
     const classification = classifications.get(item.id)
     if (hasValidCoordinates(item) && classification?.flexibility !== 'fixed') {
@@ -505,8 +684,9 @@ function buildShortestRouteSortPatches({
   })
   return nextOrder.flatMap((itemId, index) => {
     const item = orderedItems.find((candidate) => candidate.id === itemId)
-    const sortOrder = index + 1
-    if (!item || item.sortOrder === sortOrder) return []
+    if (!item) return []
+    const sortOrder = sortOrderSlots[index] ?? item.sortOrder
+    if (item.sortOrder === sortOrder) return []
     return [{ itemId: item.id, patch: { sortOrder } }]
   })
 }
@@ -533,6 +713,7 @@ function buildDiff({
   items,
   ledgerExpenses,
   patches,
+  scheduleWarnings,
   strategy,
   ticketByItem,
 }: {
@@ -540,6 +721,7 @@ function buildDiff({
   items: ItineraryItem[]
   ledgerExpenses: LedgerExpense[]
   patches: ItemPatch[]
+  scheduleWarnings: string[]
   strategy: TripReplanStrategy
   ticketByItem: Map<string, TicketMeta[]>
 }): TripReplanDiff {
@@ -559,6 +741,7 @@ function buildDiff({
   const ledgerImpacts = buildLedgerImpacts(ledgerExpenses, changedItems)
   const companionImpacts = buildCompanionImpacts(changedItems)
   const warnings = [
+    ...scheduleWarnings,
     ...routeImpacts.filter((impact) => impact.staleRouteCache).map((impact) => impact.summary),
     ...ticketImpacts.filter((impact) => impact.impact !== 'unaffected').map((impact) => impact.summary),
     ...ledgerImpacts.filter((impact) => impact.impact !== 'unaffected').map((impact) => impact.summary),
@@ -603,10 +786,21 @@ function buildItemChange(
 }
 
 function buildRouteImpact(dayId: string, items: ItineraryItem[], patchById: Map<string, ItemPatch['patch']>): TripReplanRouteImpact {
-  const dayItems = sortItineraryItems(items.filter((item) => item.dayId === dayId))
-  const changed = dayItems.filter((item) => patchById.has(item.id))
-  const beforeTravelMinutes = sumTravelMinutes(dayItems)
-  const afterTravelMinutes = sumTravelMinutes(dayItems.map((item) => ({ ...item, ...patchById.get(item.id) })))
+  const beforeDayItems = sortItineraryItems(items.filter((item) =>
+    item.dayId === dayId,
+  ))
+  const afterDayItems = sortItineraryItems(items
+    .map((item) => ({ ...item, ...patchById.get(item.id) }))
+    .filter((item) => item.dayId === dayId))
+  const changed = items.filter((item) => {
+    const patch = patchById.get(item.id)
+    return Boolean(
+      patch
+      && (item.dayId === dayId || patch.dayId === dayId),
+    )
+  })
+  const beforeTravelMinutes = sumTravelMinutes(beforeDayItems)
+  const afterTravelMinutes = sumTravelMinutes(afterDayItems)
   return {
     afterTravelMinutes,
     beforeTravelMinutes,
@@ -672,9 +866,35 @@ function buildCompanionImpacts(changes: TripReplanItemChange[]) {
     }))
 }
 
-function buildReplanSnapshot(days: Day[], items: ItineraryItem[], event: TripDisruptionEvent): TripReplanSnapshot {
-  const scopedItems = getAffectedItems({ days, event, items })
-  return buildScopedSnapshot(days, scopedItems, scopedItems.map((item) => item.id))
+function buildReplanSnapshot(
+  days: Day[],
+  items: ItineraryItem[],
+  event: TripDisruptionEvent,
+  options: TripReplanOption[],
+): TripReplanSnapshot {
+  const itemById = new Map(items.map((item) => [item.id, item]))
+  const targetItem = event.itemId ? itemById.get(event.itemId) : undefined
+  const sourceDayId = event.dayId ?? targetItem?.dayId ?? days[0]?.id
+  const destinationDayIds = new Set(options.flatMap((option) =>
+    option.itemPatches.flatMap((entry) => {
+      const source = itemById.get(entry.itemId)
+      const destinationDayId = entry.patch.dayId
+      return destinationDayId && destinationDayId !== source?.dayId
+        ? [destinationDayId]
+        : []
+    }),
+  ))
+  const dependencyDayIds = new Set([
+    ...(sourceDayId ? [sourceDayId] : []),
+    ...destinationDayIds,
+  ])
+  return buildScopedSnapshot(
+    days,
+    items,
+    items
+      .filter((item) => dependencyDayIds.has(item.dayId))
+      .map((item) => item.id),
+  )
 }
 
 function buildScopedSnapshot(days: Day[], items: ItineraryItem[], itemIds: string[]): TripReplanSnapshot {
@@ -758,7 +978,8 @@ function addMinutesToTime(time: string, minutes: number) {
   const minute = Number(minuteText)
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return time
   const total = Math.max(0, hour * 60 + minute + minutes)
-  const nextHour = Math.floor(total / 60) % 24
+  if (total >= 24 * 60) return undefined
+  const nextHour = Math.floor(total / 60)
   const nextMinute = total % 60
   return `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`
 }

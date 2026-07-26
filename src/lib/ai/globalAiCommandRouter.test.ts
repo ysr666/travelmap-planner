@@ -20,6 +20,64 @@ describe('globalAiCommandRouter', () => {
     expect(result.record.id).toContain('global_ai_replan_record_preview')
   })
 
+  it('keeps an interrogative disruption as a read-only what-if preview', async () => {
+    const context = buildContext()
+    const intent = parseGlobalAiCommandIntent('伦敦眼闭馆了怎么办？')
+
+    expect(intent).toMatchObject({
+      disruptionKind: 'closure',
+      hypothetical: true,
+      kind: 'replan',
+    })
+    const result = await resolveGlobalAiCommand('伦敦眼闭馆了怎么办？', context)
+    expect(result).toMatchObject({
+      hypothetical: true,
+      kind: 'replan_preview',
+    })
+  })
+
+  it('keeps a negated disruption command in the read-only replan lane', async () => {
+    const intent = parseGlobalAiCommandIntent('不要因为下雨调整行程')
+
+    expect(intent).toMatchObject({
+      disruptionKind: 'weather_unsuitable',
+      hypothetical: true,
+      kind: 'replan',
+    })
+    const result = await resolveGlobalAiCommand(
+      '不要因为下雨调整行程',
+      buildContext(),
+    )
+    expect(result).toMatchObject({
+      hypothetical: true,
+      kind: 'replan_preview',
+    })
+  })
+
+  it('keeps factual negation, assumptions, and embedded questions read-only', () => {
+    for (const command of [
+      '“伦敦眼”没有闭馆，帮我调整行程',
+      '“伦敦眼”并未闭馆，请按最少改动调整行程',
+      '假设“伦敦眼”闭馆，请调整后续',
+      '“伦敦眼”闭馆了吗，请帮我分析后续影响',
+    ]) {
+      expect(parseGlobalAiCommandIntent(command)).toMatchObject({
+        hypothetical: true,
+        kind: 'replan',
+      })
+    }
+  })
+
+  it('keeps booking cancellation wording read-only', async () => {
+    const intent = parseGlobalAiCommandIntent('取消伦敦眼预订')
+
+    expect(intent).toMatchObject({
+      disruptionKind: 'cancelled',
+      hypothetical: true,
+      kind: 'replan',
+    })
+  })
+
   it('keeps rainy-day execution requests as replanning commands', () => {
     const intent = parseGlobalAiCommandIntent('今天下雨，户外少一点')
     expect(intent).toMatchObject({ disruptionKind: 'weather_unsuitable', kind: 'replan' })

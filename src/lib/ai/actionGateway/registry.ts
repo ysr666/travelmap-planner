@@ -179,6 +179,20 @@ const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
     retryPolicy: { maxAttempts: 1, retryable: false },
     risk: 'read_only',
   },
+  'trip.replan.apply@1': {
+    description: '根据用户明确报告的晚到、延误、闭馆、取消或天气不适生成本地重排预览；只接受语义目标、固定策略和有界延误分钟数，写入前必须确认。',
+    id: 'trip.replan.apply@1',
+    idempotencyNamespace: 'trip-replan-apply',
+    input: '{"kind":"delay|late|closure|cancelled|weather_unsuitable","delayMinutes":"delay/late 可选 1-240 整数","target":"可选 current_item|first_item|行程点名称","day":"可选 current_day|first_day|第 N 天|日期标题","strategy":"可选 least_change|preserve_most|shortest_route"}',
+    inputSchema: {
+      allowedFields: ['kind', 'delayMinutes', 'target', 'day', 'strategy'],
+      requiredFields: ['kind'],
+    },
+    label: '应用突发重排',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 2, retryable: true },
+    risk: 'local_write',
+  },
   'trip.repair@1': {
     description: '准备并执行当前旅行可自动修复的地点、路线、内容、提示和票据同步问题。',
     id: 'trip.repair@1',

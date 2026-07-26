@@ -79,6 +79,70 @@ describe('actionPlanProvider', () => {
     expect(prompt).toContain('不得输出记录 ID、快照、指纹、状态或数据库字段')
   })
 
+  it('keeps mock execution and preference writes inside bounded registered fields', async () => {
+    const executionRequest = actionPlanRequest()
+    executionRequest.command = '把「伦敦眼」标记为完成'
+    const executionResult = await createMockAiActionPlanProvider(executionRequest)
+      .plan(buildAiActionPlanProviderInput(executionRequest))
+    expect(executionResult).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          steps: [{
+            actionId: 'item.execution.update@1',
+            args: { state: 'completed', target: '伦敦眼' },
+          }],
+        },
+      },
+    })
+
+    const preferenceRequest = actionPlanRequest()
+    preferenceRequest.command = '「伦敦眼」必须保留，下雨别去，预留30分钟'
+    const preferenceResult = await createMockAiActionPlanProvider(preferenceRequest)
+      .plan(buildAiActionPlanProviderInput(preferenceRequest))
+    expect(preferenceResult).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          steps: [{
+            actionId: 'item.replan.preference.update@1',
+            args: {
+              bufferMinutes: 30,
+              priority: 'must_keep',
+              target: '伦敦眼',
+              weatherSuitability: 'avoid_rain',
+            },
+          }],
+        },
+      },
+    })
+
+    const prompt = buildAiActionPlanProviderInput(preferenceRequest).prompt
+    expect(prompt).toContain('只能选择 completed、skipped 或 active')
+    expect(prompt).toContain('不得输出 patch、内部字段或自由文本')
+  })
+
+  it('does not turn negated or interrogative execution text into a write', async () => {
+    for (const command of [
+      '不要把「伦敦眼」标记为完成',
+      '「伦敦眼」是不是已完成？',
+      '不要把「伦敦眼」固定',
+      '「伦敦眼」可以跳过吗？',
+    ]) {
+      const request = actionPlanRequest()
+      request.command = command
+      const result = await createMockAiActionPlanProvider(request)
+        .plan(buildAiActionPlanProviderInput(request))
+
+      expect(result).toMatchObject({
+        errorCode: 'invalid_response',
+        ok: false,
+      })
+    }
+  })
+
   it('sends only the prompt and server-side key to an OpenAI-compatible provider', async () => {
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

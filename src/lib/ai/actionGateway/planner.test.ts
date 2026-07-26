@@ -70,6 +70,56 @@ describe('AI Action Gateway planner', () => {
       actionId: 'history.undo@1',
       args: { kind: 'item_delete', target: '伦敦眼' },
     })
+    expect(buildDeterministicAiActionPlan('第一站已完成')?.steps[0]).toMatchObject({
+      actionId: 'item.execution.update@1',
+      args: { state: 'completed', target: 'first_item' },
+    })
+    expect(buildDeterministicAiActionPlan('跳过伦敦眼')?.steps[0]).toMatchObject({
+      actionId: 'item.execution.update@1',
+      args: { state: 'skipped', target: '伦敦眼' },
+    })
+    expect(buildDeterministicAiActionPlan('把伦敦眼恢复为待进行')?.steps[0]).toMatchObject({
+      actionId: 'item.execution.update@1',
+      args: { state: 'active', target: '伦敦眼' },
+    })
+    expect(buildDeterministicAiActionPlan('伦敦眼不能动，必须保留')?.steps[0]).toMatchObject({
+      actionId: 'item.replan.preference.update@1',
+      args: {
+        flexibility: 'fixed',
+        priority: 'must_keep',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('第一天的伦敦眼预留30分钟，下雨别去')?.steps[0]).toMatchObject({
+      actionId: 'item.replan.preference.update@1',
+      args: {
+        bufferMinutes: 30,
+        day: 'first_day',
+        target: '伦敦眼',
+        weatherSuitability: 'avoid_rain',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('伦敦眼可以跳过')?.steps[0]).toMatchObject({
+      actionId: 'item.replan.preference.update@1',
+      args: {
+        flexibility: 'optional',
+        priority: 'low',
+        target: '伦敦眼',
+      },
+    })
+    expect(buildDeterministicAiActionPlan('把“伦敦眼”标记为完成，不是第一站')?.steps[0])
+      .toMatchObject({
+        actionId: 'item.execution.update@1',
+        args: { state: 'completed', target: '伦敦眼' },
+      })
+    expect(buildDeterministicAiActionPlan('把所有问题修复完成')?.steps[0]).toMatchObject({
+      actionId: 'trip.repair@1',
+    })
+    expect(buildDeterministicAiActionPlan('第一站未完成')).toBeNull()
+    expect(buildDeterministicAiActionPlan('不要把第一站标记为完成')).toBeNull()
+    expect(buildDeterministicAiActionPlan('第一站是不是已完成')).toBeNull()
+    expect(buildDeterministicAiActionPlan('伦敦眼可以跳过吗？')).toBeNull()
+    expect(buildDeterministicAiActionPlan('不要把伦敦眼固定')).toBeNull()
     expect(buildDeterministicAiActionPlan('删除伦敦眼门票')).toBeNull()
     expect(buildDeterministicAiActionPlan('取消伦敦眼预订')).toBeNull()
     expect(buildDeterministicAiActionPlan('第一天新增午餐 32 GBP')?.steps).toHaveLength(1)
@@ -171,5 +221,11 @@ describe('AI Action Gateway planner', () => {
     expect(shouldRequestAiActionPlan('把伦敦眼移动到另一个日期')).toBe(true)
     expect(shouldRequestAiActionPlan('删除第一天的伦敦眼')).toBe(false)
     expect(shouldRequestAiActionPlan('撤销刚才的删除')).toBe(false)
+    expect(shouldRequestAiActionPlan('第一站已完成')).toBe(false)
+    expect(shouldRequestAiActionPlan('伦敦眼不能动，必须保留')).toBe(false)
+    expect(shouldRequestAiActionPlan('第一站未完成')).toBe(false)
+    expect(shouldRequestAiActionPlan('不要把第一站标记为完成')).toBe(false)
+    expect(shouldRequestAiActionPlan('第一站是不是已完成')).toBe(false)
+    expect(shouldRequestAiActionPlan('伦敦眼可以跳过吗？')).toBe(false)
   })
 })

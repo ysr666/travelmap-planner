@@ -2108,6 +2108,63 @@ describe('provider proxy handler ai_action_plan', () => {
     })
     expect(fetcher).toHaveBeenCalledOnce()
   })
+
+  it('rejects provider-selected item IDs, timestamps, patches, and fingerprints', async () => {
+    for (const step of [
+      {
+        actionId: 'item.execution.update@1',
+        args: {
+          expectedUpdatedAt: 1,
+          itemId: 'item_internal',
+          operationFingerprint: 'internal_fingerprint',
+          state: 'completed',
+          target: '伦敦眼',
+        },
+      },
+      {
+        actionId: 'item.replan.preference.update@1',
+        args: {
+          history: { action: 'overwrite' },
+          patch: { priority: 'must_keep' },
+          target: '伦敦眼',
+        },
+      },
+    ]) {
+      const fetcher = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              schemaVersion: 'ai_action_plan.v1',
+              steps: [{
+                ...step,
+                dependsOn: [],
+                id: 'bounded-item-write',
+              }],
+              summary: '修改行程点',
+            }),
+          },
+        }],
+      }))) as unknown as typeof fetch
+      const response = await handleProviderProxyRequest({
+        env: {
+          TRIPMAP_AI_API_KEY: 'server-secret',
+          TRIPMAP_AI_BASE_URL: 'https://api.example/v1',
+          TRIPMAP_AI_MODEL: 'test-model',
+          TRIPMAP_AI_PROVIDER: 'openai_compatible',
+        },
+        fetcher,
+        request: jsonRequest(validAiActionPlanRequest()),
+      })
+
+      expect(response.status).toBe(502)
+      expect(await response.json()).toMatchObject({
+        code: 'invalid_response',
+        ok: false,
+        operation: 'ai_action_plan',
+      })
+      expect(fetcher).toHaveBeenCalledOnce()
+    }
+  })
 })
 
 function validEditRequest(command = '第二天太满了，帮我放松一点') {

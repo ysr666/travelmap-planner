@@ -33,6 +33,11 @@ const EXPENSE_CATEGORIES = new Set([
   'transport',
 ])
 const REORDER_POSITIONS = new Set(['after', 'before', 'first', 'last'])
+const ITEM_EXECUTION_STATES = new Set(['active', 'completed', 'skipped'])
+const REPLAN_FLEXIBILITIES = new Set(['fixed', 'movable', 'optional'])
+const REPLAN_PRIORITIES = new Set(['must_keep', 'high', 'normal', 'low'])
+const REPLAN_WEATHER_SUITABILITIES = new Set(['any_weather', 'avoid_rain', 'indoor_preferred'])
+const REPLAN_MOBILITY_SUITABILITIES = new Set(['normal', 'easy', 'demanding'])
 const WORKSPACE_TARGETS = new Set([
   'documents',
   'home',
@@ -141,6 +146,12 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
   if (steps.filter((step) => step.actionId === 'history.undo@1').length > 1) {
     errors.push('一个计划最多撤销一次删除。')
   }
+  if (steps.filter((step) => step.actionId === 'item.execution.update@1').length > 1) {
+    errors.push('一个计划最多更新一次行程进度。')
+  }
+  if (steps.filter((step) => step.actionId === 'item.replan.preference.update@1').length > 1) {
+    errors.push('一个计划最多更新一次重排偏好。')
+  }
   const structuralActionCount = [
     'day.items.reorder@1',
     'item.create@1',
@@ -157,6 +168,16 @@ export function validateAiActionPlan(input: unknown): AiActionPlanValidationResu
     )
   ) {
     errors.push('撤销删除不能与其他写入动作放在同一计划中。')
+  }
+  const boundedItemStateActions = new Set([
+    'item.execution.update@1',
+    'item.replan.preference.update@1',
+  ])
+  if (
+    steps.some((step) => boundedItemStateActions.has(step.actionId))
+    && steps.filter((step) => step.risk === 'local_write').length > 1
+  ) {
+    errors.push('行程进度或重排偏好需要与其他写入动作分开确认。')
   }
   if (errors.length > 0 || !summary) return { errors: Array.from(new Set(errors)), ok: false }
 
@@ -269,6 +290,74 @@ function validateArgs<TActionId extends AiActionId>(
     return {
       kind: 'item_delete',
       ...(target ? { target } : {}),
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'item.execution.update@1') {
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const day = record.day === undefined
+      ? undefined
+      : readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    const state = typeof record.state === 'string' && ITEM_EXECUTION_STATES.has(record.state)
+      ? record.state as 'active' | 'completed' | 'skipped'
+      : undefined
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (record.day !== undefined && !day) {
+      errors.push(`${path}.day 必须是语义日期目标。`)
+    }
+    if (!state) errors.push(`${path}.state 无效。`)
+    if (!target || !state) return null
+    return {
+      ...(day ? { day } : {}),
+      state,
+      target,
+    } as AiActionArgsById[TActionId]
+  }
+  if (actionId === 'item.replan.preference.update@1') {
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    const day = record.day === undefined
+      ? undefined
+      : readSemanticTarget(record.day, MAX_TARGET_LENGTH)
+    const flexibility = readEnum(record.flexibility, REPLAN_FLEXIBILITIES)
+    const priority = readEnum(record.priority, REPLAN_PRIORITIES)
+    const weatherSuitability = readEnum(
+      record.weatherSuitability,
+      REPLAN_WEATHER_SUITABILITIES,
+    )
+    const mobilitySuitability = readEnum(
+      record.mobilitySuitability,
+      REPLAN_MOBILITY_SUITABILITIES,
+    )
+    const bufferMinutes = readBoundedInteger(record.bufferMinutes, 1, 240)
+    const minimumStayMinutes = readBoundedInteger(record.minimumStayMinutes, 1, 720)
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (record.day !== undefined && !day) {
+      errors.push(`${path}.day 必须是语义日期目标。`)
+    }
+    validateOptionalEnum(record, 'flexibility', flexibility, path, errors)
+    validateOptionalEnum(record, 'priority', priority, path, errors)
+    validateOptionalEnum(record, 'weatherSuitability', weatherSuitability, path, errors)
+    validateOptionalEnum(record, 'mobilitySuitability', mobilitySuitability, path, errors)
+    validateOptionalInteger(record, 'bufferMinutes', bufferMinutes, path, errors)
+    validateOptionalInteger(record, 'minimumStayMinutes', minimumStayMinutes, path, errors)
+    const hasPreference = [
+      flexibility,
+      priority,
+      weatherSuitability,
+      mobilitySuitability,
+      bufferMinutes,
+      minimumStayMinutes,
+    ].some((value) => value !== undefined)
+    if (!hasPreference) errors.push(`${path} 至少需要一个重排偏好字段。`)
+    if (!target || !hasPreference) return null
+    return {
+      ...(bufferMinutes ? { bufferMinutes } : {}),
+      ...(day ? { day } : {}),
+      ...(flexibility ? { flexibility } : {}),
+      ...(minimumStayMinutes ? { minimumStayMinutes } : {}),
+      ...(mobilitySuitability ? { mobilitySuitability } : {}),
+      ...(priority ? { priority } : {}),
+      target,
+      ...(weatherSuitability ? { weatherSuitability } : {}),
     } as AiActionArgsById[TActionId]
   }
   if (actionId === 'day.items.reorder@1') {
@@ -497,6 +586,43 @@ function readText(input: unknown, maxLength: number) {
 
 function readOptionalText(input: unknown, maxLength: number) {
   return input === undefined ? undefined : readText(input, maxLength) || undefined
+}
+
+function readEnum(input: unknown, allowed: Set<string>) {
+  return typeof input === 'string' && allowed.has(input) ? input : undefined
+}
+
+function readBoundedInteger(input: unknown, minimum: number, maximum: number) {
+  return typeof input === 'number'
+    && Number.isSafeInteger(input)
+    && input >= minimum
+    && input <= maximum
+    ? input
+    : undefined
+}
+
+function validateOptionalEnum(
+  record: Record<string, unknown>,
+  field: string,
+  value: string | undefined,
+  path: string,
+  errors: string[],
+) {
+  if (record[field] !== undefined && value === undefined) {
+    errors.push(`${path}.${field} 无效。`)
+  }
+}
+
+function validateOptionalInteger(
+  record: Record<string, unknown>,
+  field: string,
+  value: number | undefined,
+  path: string,
+  errors: string[],
+) {
+  if (record[field] !== undefined && value === undefined) {
+    errors.push(`${path}.${field} 必须是范围内的整数。`)
+  }
 }
 
 function readSemanticTarget(input: unknown, maxLength: number) {

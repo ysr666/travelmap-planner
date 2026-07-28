@@ -39,7 +39,10 @@ describe('applyTravelInboxPreviewRecord', () => {
       expectedBaselineFingerprint: 'baseline',
       tripId: 'trip_1',
     }))
-    expect(mocks.completeSource).toHaveBeenCalledWith('cloud_1', appliedChanges)
+    expect(mocks.completeSource.mock.calls).toEqual([
+      ['cloud:cloud_1', appliedChanges],
+      ['local:local_2', appliedChanges],
+    ])
     expect(mocks.deleteEntries).toHaveBeenCalledWith(['entry_1'])
   })
 
@@ -53,8 +56,9 @@ describe('applyTravelInboxPreviewRecord', () => {
 })
 
 const record: TravelInboxPreviewRecord = {
+  accountSourceRefs: ['cloud:cloud_1', 'local:local_2'],
   checkedDiffIds: ['diff_1'],
-  cloudSourceId: 'cloud_1',
+  cloudSourceId: 'cloud:cloud_1',
   createdAt: 1,
   entryIds: ['entry_1'],
   id: 'preview_1',

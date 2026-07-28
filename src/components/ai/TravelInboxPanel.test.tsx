@@ -88,6 +88,7 @@ vi.mock('../../lib/providerProxyClient', () => ({
 vi.mock('../../lib/ai/existingTripImportExtraction', () => ({
   buildExistingTripImportRequestSources: mocks.buildExistingTripImportRequestSources,
   DEFAULT_EXISTING_TRIP_IMPORT_OCR_LANGUAGES: [],
+  EXISTING_TRIP_IMPORT_MAX_FILE_COUNT: 60,
   extractExistingTripImportSources: mocks.extractExistingTripImportSources,
   OPTIONAL_EXISTING_TRIP_IMPORT_OCR_LANGUAGES: [],
 }))

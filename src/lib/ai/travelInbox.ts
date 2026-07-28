@@ -217,12 +217,14 @@ export async function buildTravelInboxApplyFiles(entryIds: string[]) {
 }
 
 export async function saveTravelInboxPreview({
+  accountSourceRefs,
   cloudSourceId,
   checkedDiffIds,
   entryIds,
   preview,
   tripId,
 }: {
+  accountSourceRefs?: string[]
   cloudSourceId?: string
   checkedDiffIds: string[]
   entryIds: string[]
@@ -231,6 +233,7 @@ export async function saveTravelInboxPreview({
 }) {
   const now = Date.now()
   const record: TravelInboxPreviewRecord = {
+    accountSourceRefs,
     checkedDiffIds,
     cloudSourceId,
     createdAt: now,

@@ -19,7 +19,9 @@ import {
   discardTravelInboxAccountSource,
   listTravelInboxAccountSources,
   processTravelInboxAccountSource,
+  processTravelInboxAccountSourceBatch,
   refreshCloudTravelInboxSources,
+  TRAVEL_INBOX_BATCH_MAX_SOURCE_COUNT,
 } from '../lib/ai/travelInboxOrganization'
 import {
   createTravelInboxLocalFolderConnector,
@@ -48,6 +50,7 @@ export function TravelInboxPage() {
   const [gmailLabelId, setGmailLabelId] = useState('INBOX')
   const [backfillDays, setBackfillDays] = useState<0 | 7 | 30>(0)
   const [autoAiConsent, setAutoAiConsent] = useState(false)
+  const [bulkTripId, setBulkTripId] = useState('')
   const [focusedEntry, setFocusedEntry] = useState<TravelInboxEntry | null>(null)
   const [focusedEntryMissing, setFocusedEntryMissing] = useState(false)
   const processing = useRef(new Set<string>())
@@ -57,6 +60,7 @@ export function TravelInboxPage() {
     try {
       const [nextTrips, nextLocal] = await Promise.all([listTrips(), listTravelInboxLocalFolderConnectors()])
       setTrips(nextTrips)
+      setBulkTripId((current) => current || (nextTrips.length === 1 ? nextTrips[0].id : ''))
       setLocalConnectors(nextLocal)
       if (connectorConfig.configured) {
         const [nextConnectors] = await Promise.all([listTravelInboxConnectors(), refreshCloudTravelInboxSources()])
@@ -103,7 +107,27 @@ export function TravelInboxPage() {
 
   useEffect(() => {
     const queued = sources.filter((source) => ['queued', 'extracting', 'classifying', 'building_preview'].includes(source.status))
-    for (const source of queued) {
+    const localQueued = queued.filter((source) => source.connectorKind === 'local_folder')
+    if (localQueued.length > 0 && !processing.current.has('local-folder-batch')) {
+      const batch = localQueued.slice(0, TRAVEL_INBOX_BATCH_MAX_SOURCE_COUNT)
+      processing.current.add('local-folder-batch')
+      for (const source of batch) processing.current.add(source.id)
+      void processTravelInboxAccountSourceBatch(batch.map((source) => source.id))
+        .catch(() => undefined)
+        .finally(async () => {
+          processing.current.delete('local-folder-batch')
+          for (const source of batch) processing.current.delete(source.id)
+          setSources(await listTravelInboxAccountSources())
+        })
+    }
+
+    const activeIndividualCount = queued.filter((source) =>
+      source.connectorKind !== 'local_folder' && processing.current.has(source.id),
+    ).length
+    const cloudQueued = queued
+      .filter((source) => source.connectorKind !== 'local_folder')
+      .slice(0, Math.max(0, 2 - activeIndividualCount))
+    for (const source of cloudQueued) {
       if (processing.current.has(source.id)) continue
       processing.current.add(source.id)
       void processTravelInboxAccountSource(source.id)
@@ -121,6 +145,10 @@ export function TravelInboxPage() {
     preview: sources.filter((source) => source.status === 'preview_ready').length,
     processing: sources.filter((source) => ['queued', 'extracting', 'classifying', 'building_preview'].includes(source.status)).length,
   }), [sources])
+  const assignableSources = useMemo(
+    () => sources.filter((source) => source.status === 'needs_assignment'),
+    [sources],
+  )
 
   async function run(action: string, work: () => Promise<void>) {
     setBusy(action); setError(null); setMessage(null)
@@ -219,6 +247,36 @@ export function TravelInboxPage() {
 
       <Card className="space-y-3" variant="grouped">
         <div><h3 className="font-semibold text-on-surface">待整理来源</h3><p className="text-xs tm-muted">确认目标旅行后生成整理预览。</p></div>
+        {assignableSources.length > 1 && trips.length > 0 ? (
+          <div className="flex flex-col gap-2 rounded-xl bg-surface-container-high p-3 sm:flex-row sm:items-end">
+            {trips.length > 1 ? (
+              <label className="min-w-0 flex-1 text-xs font-semibold text-on-surface">
+                目标旅行
+                <select
+                  aria-label="批量目标旅行"
+                  className="mt-1 min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface px-2 text-sm font-normal"
+                  onChange={(event) => setBulkTripId(event.target.value)}
+                  value={bulkTripId}
+                >
+                  <option value="">选择目标旅行</option>
+                  {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
+                </select>
+              </label>
+            ) : <p className="min-w-0 flex-1 text-sm font-semibold text-on-surface">{trips[0].title}</p>}
+            <Button
+              disabled={!bulkTripId || busy === 'bulk-assign'}
+              onClick={() => void run('bulk-assign', async () => {
+                const batch = assignableSources.slice(0, TRAVEL_INBOX_BATCH_MAX_SOURCE_COUNT)
+                const result = await processTravelInboxAccountSourceBatch(batch.map((source) => source.id), bulkTripId)
+                setMessage(result.failedCount > 0
+                  ? `已生成 ${result.previewCount} 个预览，${result.failedCount} 项需处理。`
+                  : `已将 ${result.processedCount} 项整理为一个确认预览。`)
+              })}
+            >
+              整理 {Math.min(assignableSources.length, TRAVEL_INBOX_BATCH_MAX_SOURCE_COUNT)} 项
+            </Button>
+          </div>
+        ) : null}
         {sources.length === 0 ? <EmptyState icon={<Inbox className="size-6" />} title="还没有来源" body="连接邮箱或本地文件夹后，新材料会出现在这里。" /> : sources.map((source) => (
           <SourceRow
             busy={busy === `source:${source.id}`}

@@ -2,6 +2,16 @@
 
 最新记录：2026-07-28
 
+## 2026-07-28 离线账号同步恢复
+
+- 账号旅行在线打开后切换为真实浏览器离线状态；离线编辑旅行标题和行程点时，IndexedDB 立即保留修改，账号快照与对象记录保持不变。
+- 离线期间两个对象 outbox 项保持待处理；恢复在线只依赖现有浏览器 `online` 事件，自动完成一对一快照覆盖和 trip/item 对象同步。
+- 恢复后同一旅行只有一个账号快照、trip/item 各一个对象记录、outbox 清空且自动快照状态为 `synced`；刷新后本地修改继续保留。
+- 全部云端行为使用现有 Supabase E2E fixture，未调用真实 Supabase 或 Provider。
+- 聚焦恢复用例连续 10 轮通过，`cloud-backup.spec.ts` 13/13 通过。
+- `npm run typecheck`、`npm run lint`、`npm run build`：通过；`npm run test:unit` 187 个文件、1555 个测试通过。
+- 首次全量串行 E2E 仅出现一次无关 AI 页面 `beforeEach` 导航超时；该用例隔离及连续 10 次均通过，完整重跑 155/155 通过，约 5.9 分钟。
+
 ## 2026-07-28 PWA 连续升级与存储压力
 
 - built-dist PWA 新增 `v1 → v2 → v3` 连续升级矩阵；两次更新都在用户确认前保持 waiting，确认后两个标签切换到同一版本。

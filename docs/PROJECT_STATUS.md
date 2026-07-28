@@ -4,7 +4,7 @@
 
 ## 发布判断
 
-旅图当前处于 **Limited Beta Release Candidate**。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 provider proxy 已形成完整主路径；通用 AI 动作网关已覆盖可逆删除、现场进度、重排偏好和突发情况自适应重排，PWA 多标签升级与弱网恢复保持自动化回归。
+旅图当前处于 **Limited Beta Release Candidate**。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 provider proxy 已形成完整主路径；通用 AI 动作网关已覆盖可逆删除、现场进度、重排偏好和突发情况自适应重排，PWA 多标签升级、弱网恢复和离线编辑恢复在线后的账号同步保持自动化回归。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -50,6 +50,7 @@
 - 地图、道路路线预览、本地路线缓存和失败直线回退。
 - 旅行账本、预算、费用草稿、分摊和结算。
 - Supabase 登录、账号隔离、对象同步、票据 Blob、Shared Trip、成员级票据授权与审计。
+- 账号旅行离线编辑先保存在 IndexedDB 和对象 outbox；恢复在线后由现有 `online` 事件自动续传同一快照和对象变更，不追加重复快照。
 - PWA 发现新版本后提示用户刷新，不在未确认时强制重载。
 
 ## AI 与 Provider 边界
@@ -76,12 +77,14 @@
 - `npm run test:unit`：187 个文件、1555 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：4 个测试通过；连续 5 轮稳定性验证共 20/20 通过。
-- 全量 Playwright：154 个测试通过，串行耗时约 6.1 分钟。
+- 全量 Playwright：155 个测试通过，串行耗时约 5.9 分钟；新增离线编辑恢复在线后的账号快照、对象 outbox 和刷新保留回归。
 - `git diff --check`：通过。
 
 生产入口 JS 从 947.6 kB 降至 485.9 KiB。初始静态 JS 图为 868.3 KiB，gzip 249.6 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
 Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 31.7 KiB 的 Provider 网络执行实现改为首次使用后写入 30 天、最多 80 项的同源运行时缓存。Provider 的轻量配置、错误类型和本地合同仍随核心页面提供。构建会阻止核心代码丢失、Provider 网络执行实现或其他可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个 Service Worker 版本在用户确认前保持 waiting、确认后所有标签收敛、离线 IndexedDB 修改保留；按需资源在下载中断或 origin 配额不足时不会留下残缺缓存，恢复后可重试并离线使用。
+
+账号同步 E2E 同时确认网络离线时云端 fixture 不发生写入、对象 outbox 不提前消失；网络恢复后同一旅行快照原地更新，trip/item 对象各保持一条，自动快照状态收敛为 `synced`，刷新不会丢失离线修改。
 
 CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trace，并取消同分支过时运行。官方 checkout、Node setup 和失败 artifact actions 已迁移到 Node 24 运行时。应用版本显示短提交 SHA，方便确认浏览器是否运行当前部署。
 

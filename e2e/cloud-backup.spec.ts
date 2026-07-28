@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import {
   clearTravelDatabase,
   createDemoTripViaUi,
@@ -229,6 +230,107 @@ test('Trip Home 此设备版本较新且无冲突时会自动立即同步', asyn
   await expect(page.getByTestId('trip-home-cloud-save-card')).toHaveCount(0)
   await expect.poll(async () => readCloudFixtureBackupTitle(page, trip.id)).toBe(trip.title)
   await expectNoHorizontalOverflow(page)
+})
+
+test('PWA 离线编辑恢复在线后自动完成账号对象同步', async ({ page, context }) => {
+  const initialVersion = Date.parse('2026-04-02T10:00:00.000Z')
+  const initialVersionIso = new Date(initialVersion).toISOString()
+  const trip = createSeedTrip({
+    id: 'trip_offline_sync_recovery',
+    title: '离线同步恢复旅行',
+    updatedAt: initialVersion,
+  })
+  const day = createSeedDay(trip.id, 'day_offline_sync_recovery')
+  const item = createSeedItem(trip.id, day.id, {
+    id: 'item_offline_sync_recovery',
+    title: '离线前行程点',
+    updatedAt: initialVersion,
+  })
+  const updatedTripTitle = '离线修改后的旅行'
+  const updatedItemTitle = '离线修改后的行程点'
+  const userId = 'user_offline_sync_recovery'
+  const backupId = buildStableCloudBackupIdForE2e(userId, trip.id)
+
+  await clearTravelDatabase(page)
+  await seedTravelRecords(page, {
+    days: [day],
+    itineraryItems: [item],
+    trips: [trip],
+  })
+  await forceSupabaseFixture(page, {
+    backups: [
+      createCloudBackup({
+        createdAt: initialVersionIso,
+        exportedAt: initialVersionIso,
+        id: backupId,
+        originalTripId: trip.id,
+        title: trip.title,
+        updatedAt: initialVersionIso,
+      }),
+    ],
+    objectRows: [],
+    user: { email: 'qa@example.com', id: userId },
+  })
+  await page.goto(`/#/trip?tripId=${trip.id}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('header h1').first()).toHaveText(trip.title)
+
+  try {
+    await context.setOffline(true)
+    await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false)
+    await updateLocalTripVersion(
+      page,
+      trip.id,
+      updatedTripTitle,
+      updatedItemTitle,
+      { navigate: false },
+    )
+    await markOfflineAutoSnapshotDirty(page, {
+      lastSuccessAt: initialVersion,
+      tripId: trip.id,
+    })
+
+    expect(await readLocalTripTitle(page, trip.id)).toBe(updatedTripTitle)
+    expect(await readLocalItemTitle(page, item.id)).toBe(updatedItemTitle)
+    expect(await readPendingObjectOutboxCount(page, trip.id)).toBe(2)
+    await page.waitForTimeout(300)
+    expect(await readCloudFixtureBackupState(page, trip.id)).toEqual({
+      count: 1,
+      title: trip.title,
+    })
+    expect(await readCloudFixtureObjectState(page, { itemId: item.id, tripId: trip.id })).toEqual({
+      itemRows: 0,
+      itemTitle: null,
+      tripRows: 0,
+      tripTitle: null,
+    })
+
+    await context.setOffline(false)
+    await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true)
+    await expect.poll(
+      () => readCloudFixtureBackupState(page, trip.id),
+      { timeout: 15_000 },
+    ).toEqual({
+      count: 1,
+      title: updatedTripTitle,
+    })
+    await expect.poll(
+      () => readCloudFixtureObjectState(page, { itemId: item.id, tripId: trip.id }),
+      { timeout: 15_000 },
+    ).toEqual({
+      itemRows: 1,
+      itemTitle: updatedItemTitle,
+      tripRows: 1,
+      tripTitle: updatedTripTitle,
+    })
+    await expect.poll(() => readPendingObjectOutboxCount(page, trip.id), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => readAutoSnapshotStatus(page, trip.id), { timeout: 15_000 }).toBe('synced')
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.locator('header h1').first()).toHaveText(updatedTripTitle)
+    expect(await readLocalItemTitle(page, item.id)).toBe(updatedItemTitle)
+  } finally {
+    await context.setOffline(false)
+  }
 })
 
 test('登录后打开 PWA 会自动拉取仅存在云端的旅行', async ({ page }) => {
@@ -669,8 +771,11 @@ async function updateLocalTripVersion(
   tripId: string,
   title: string,
   itemTitle: string,
+  options: { navigate?: boolean } = {},
 ) {
-  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  if (options.navigate !== false) {
+    await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+  }
   await page.evaluate(async ({ itemTitle, title, tripId }) => {
     function openTravelConsoleDb() {
       return new Promise<IDBDatabase>((resolve, reject) => {
@@ -738,6 +843,38 @@ async function updateLocalTripVersion(
       }
     })
   }, { itemTitle, title, tripId })
+}
+
+async function markOfflineAutoSnapshotDirty(
+  page: Page,
+  input: {
+    lastSuccessAt: number
+    tripId: string
+  },
+) {
+  await page.evaluate(({ lastSuccessAt, tripId }) => {
+    const dirtyAt = Date.now()
+    window.localStorage.setItem('tripmap:cloud-auto-snapshot:enabled', '1')
+    window.localStorage.setItem(
+      'tripmap:cloud-auto-snapshot:state',
+      JSON.stringify({
+        trips: {
+          [tripId]: {
+            cloudVersionAtDirty: lastSuccessAt,
+            dirtyAt,
+            lastSuccessAt,
+            reason: 'e2e-offline-edit',
+            status: 'dirty',
+            tripId,
+          },
+        },
+        version: 1,
+      }),
+    )
+    window.dispatchEvent(new CustomEvent('tripmap:cloud-auto-snapshot:changed', {
+      detail: { kind: 'dirty', tripId },
+    }))
+  }, input)
 }
 
 async function attachTinyImageTicket(page: Page, tripId: string) {
@@ -861,6 +998,53 @@ async function readLocalItemTitle(page: Page, itemId: string) {
   }, itemId)
 }
 
+async function readLocalTripTitle(page: Page, tripId: string) {
+  return page.evaluate(async (targetTripId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    const trip = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+      const request = db.transaction('trips', 'readonly').objectStore('trips').get(targetTripId)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return typeof trip?.title === 'string' ? trip.title : null
+  }, tripId)
+}
+
+async function readPendingObjectOutboxCount(page: Page, tripId: string) {
+  return page.evaluate(async (targetTripId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开测试数据库失败'))
+    })
+    const entries = await new Promise<Array<{ status?: string; tripId?: string }>>((resolve, reject) => {
+      const request = db.transaction('syncOutbox', 'readonly').objectStore('syncOutbox').getAll()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    return entries.filter((entry) =>
+      entry.tripId === targetTripId &&
+      (entry.status === 'pending' || entry.status === 'error')
+    ).length
+  }, tripId)
+}
+
+async function readAutoSnapshotStatus(page: Page, tripId: string) {
+  return page.evaluate((targetTripId) => {
+    const raw = window.localStorage.getItem('tripmap:cloud-auto-snapshot:state')
+    const state = raw ? JSON.parse(raw) as {
+      trips?: Record<string, { status?: string }>
+    } : null
+    return state?.trips?.[targetTripId]?.status ?? null
+  }, tripId)
+}
+
 async function readCloudFixtureBackupTitle(page: Page, tripId: string) {
   return page.evaluate((targetTripId) => {
     const raw = window.localStorage.getItem('tripmap:e2e:cloud-fixture')
@@ -869,4 +1053,60 @@ async function readCloudFixtureBackupTitle(page: Page, tripId: string) {
     } : null
     return fixture?.backups?.find((backup) => backup.originalTripId === targetTripId)?.title ?? null
   }, tripId)
+}
+
+async function readCloudFixtureBackupState(page: Page, tripId: string) {
+  return page.evaluate((targetTripId) => {
+    const raw = window.localStorage.getItem('tripmap:e2e:cloud-fixture')
+    const fixture = raw ? JSON.parse(raw) as {
+      backups?: Array<{ originalTripId?: string; title?: string }>
+    } : null
+    const backups = fixture?.backups?.filter((backup) => backup.originalTripId === targetTripId) ?? []
+    return {
+      count: backups.length,
+      title: backups[0]?.title ?? null,
+    }
+  }, tripId)
+}
+
+async function readCloudFixtureObjectState(
+  page: Page,
+  input: {
+    itemId: string
+    tripId: string
+  },
+) {
+  return page.evaluate(({ itemId, tripId }) => {
+    const raw = window.localStorage.getItem('tripmap:e2e:cloud-fixture')
+    const fixture = raw ? JSON.parse(raw) as {
+      objectRows?: Array<{
+        object_id?: string
+        object_type?: string
+        payload?: { title?: string }
+      }>
+    } : null
+    const tripRows = fixture?.objectRows?.filter((row) =>
+      row.object_type === 'trip' && row.object_id === tripId
+    ) ?? []
+    const itemRows = fixture?.objectRows?.filter((row) =>
+      row.object_type === 'item' && row.object_id === itemId
+    ) ?? []
+    return {
+      itemRows: itemRows.length,
+      itemTitle: itemRows[0]?.payload?.title ?? null,
+      tripRows: tripRows.length,
+      tripTitle: tripRows[0]?.payload?.title ?? null,
+    }
+  }, input)
+}
+
+function buildStableCloudBackupIdForE2e(userId: string, tripId: string) {
+  const bytes = createHash('sha256')
+    .update(`tripmap-cloud-backup:v1:${userId}:${tripId}`)
+    .digest()
+    .subarray(0, 16)
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

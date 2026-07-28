@@ -2324,7 +2324,7 @@ Remote verification:
 
 ## 2026-07-28 PWA Upgrade Recovery Matrix
 
-Status: implemented and locally validated; pending merge and remote verification.
+Status: merged and remotely verified.
 
 Branch: `feature/pwa-upgrade-recovery-matrix`
 
@@ -2384,3 +2384,72 @@ Validation:
 - `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
 - Focused built-dist PWA E2E passed all 4 tests; a five-repeat stability run passed all 20 executions.
 - The full serial E2E run passed all 154 tests in approximately 6.1 minutes.
+
+Remote verification:
+
+- PR #29 merged to `main` as `1990dcb28b0487772dd7e923274107f37a20891c`.
+- The same-SHA GitHub Actions run `30350154086` passed Type Check, Unit Tests, Lint, Build, and E2E Tests.
+- Cloudflare Pages deployed the same commit successfully.
+
+## 2026-07-28 Offline Account Sync Recovery
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `feature/offline-sync-recovery`
+
+Goal:
+
+- Prove that an authenticated Beta PWA keeps offline itinerary edits local, then automatically resumes the existing one-to-one account sync when connectivity returns without duplicate uploads or lost object changes.
+
+Scope:
+
+- Seed a matching local trip and account fixture, then edit the trip and one itinerary item while Chromium reports offline.
+- Verify the account fixture stays unchanged, the local object outbox remains pending, and the local edit remains readable offline.
+- Restore connectivity through the browser network state and let the existing `online` handler resume auto snapshot and object sync.
+- Verify the account snapshot and object rows contain the edited values, pending outbox entries are removed, auto-sync state becomes synced, and a reload preserves the local edit.
+- Keep all cloud behavior inside the existing E2E Supabase fixture.
+
+No-go:
+
+- No real Supabase, Provider, AI, map, route, search, ticket/blob, or production call.
+- No cloud overwrite semantics, object merge rules, outbox schema, IndexedDB schema, auth contract, or user-visible UI change.
+- No forced timer shortcut that bypasses the real browser `offline` / `online` transition.
+
+Likely files:
+
+- `e2e/cloud-backup.spec.ts`
+- `docs/BETA_QA_RECORD.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ROADMAP_V4.md`
+
+Validation:
+
+- Focused cloud-backup E2E and repeated recovery stability run.
+- Typecheck, lint, full unit suite, production build, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: the test must distinguish true online-event recovery from a direct helper upload and must assert both snapshot and object-sync state so a partially successful path cannot pass.
+
+Stop conditions:
+
+- Stop and repair if any account fixture changes while offline, a pending object disappears before upload, online recovery duplicates an object, the outbox remains stuck after success, auto state reports synced before cloud state changes, or reload loses the local edit.
+
+Result:
+
+- Added an authenticated account fixture with one stable one-to-one cloud backup plus local trip/day/item records.
+- A real Chromium offline transition now proves trip and itinerary-item edits remain in IndexedDB, enqueue exactly two object mutations, and do not change the account snapshot or object rows.
+- Restoring connectivity through the browser network state exercises the existing `online` handler without a direct upload helper.
+- Online recovery updates the existing snapshot in place, writes exactly one trip and one item object row, drains the outbox, marks the auto snapshot synced, and preserves both edits after reload.
+- The stable cloud backup ID uses the production hash contract so the fixture cannot accidentally model a historical duplicate as the current one-to-one backup.
+- No application code, IndexedDB schema, cloud contract, Provider boundary, real account, or production service changed.
+
+Validation:
+
+- The focused recovery test passed and a ten-repeat stability run passed 10/10.
+- The complete `e2e/cloud-backup.spec.ts` passed all 13 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1555 tests.
+- `npm run build` passed; bundle budget remained at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
+- The first full serial E2E run had one unrelated AI draft `beforeEach` navigation timeout; that test passed in isolation and in a ten-repeat run.
+- A clean full serial E2E rerun passed all 155 tests in approximately 5.9 minutes.

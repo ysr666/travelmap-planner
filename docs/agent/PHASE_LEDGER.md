@@ -2212,7 +2212,7 @@ Remote verification:
 
 ## 2026-07-28 Travel Inbox Real-Data Preflight Hardening
 
-Status: implemented and locally validated; pending merge and remote verification.
+Status: merged and remotely verified.
 
 Branch: `fix/travel-inbox-manual-batch`
 
@@ -2265,3 +2265,53 @@ Validation:
 - Five focused 390px Travel Inbox E2E tests passed, including two-file single-request recognition and final-confirmation protection.
 - The full serial E2E run passed all 153 tests in approximately 5.7 minutes, including PWA upgrade and desktop Beta smoke coverage.
 - `git diff --check` passed.
+
+Remote verification:
+
+- PR #27 merged to `main` as `f5e9d7fd4413ffb1ef954fe27c03f2483df9ddce`.
+- The same-SHA GitHub Actions run `30345527088` passed Type Check, Unit Tests, Lint, Build, and E2E Tests.
+- Cloudflare Pages deployed the same commit successfully.
+
+## 2026-07-28 Real UK Workbook OOXML Compatibility
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `fix/real-import-preflight`
+
+Goal:
+
+- Make the real UK itinerary workbook readable by the same local extraction path used by Travel Inbox.
+
+Scope:
+
+- Accept optional XML namespace prefixes on workbook, relationship, shared-string, worksheet, row, cell, value, and text tags.
+- Preserve support for existing unprefixed workbook fixtures and relative relationship targets.
+- Add a generated namespace-prefixed OOXML regression fixture with an absolute worksheet target.
+- Verify the existing real HTML plan and current UK workbook through a temporary local-only preflight without Provider or account writes.
+
+No-go:
+
+- No workbook content, personal file path, extracted personal text, or temporary preflight fixture committed to the repository.
+- No Provider, cloud, account, IndexedDB schema, ticket/blob, or confirmation-boundary change.
+
+Result:
+
+- The current UK workbook now yields a local spreadsheet source with no extraction warning.
+- The existing HTML plan remains locally extractable.
+- The requested older `20260624.xlsx` file is still absent; only the newer `20260709.xlsx` workbook is available locally.
+- The ticket folder contains 78 files and 49 unique hashes; one 39.6 MB album PDF remains above the explicit 20 MB extraction boundary.
+
+Validation:
+
+- Focused workbook extraction tests passed: 8 tests, including the namespace-prefixed OOXML fixture.
+- The temporary real-data preflight passed and was deleted before staging.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1555 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
+- One unrelated Ticket Library setup timeout passed immediately in isolation; the complete serial rerun then passed all 153 tests in approximately 5.9 minutes.
+- `git diff --check` passed.
+
+Risk:
+
+- Low: parsing broadens only accepted OOXML tag spelling and does not change Provider data, persistence, or write behavior.

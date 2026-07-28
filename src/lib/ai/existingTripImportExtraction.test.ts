@@ -62,6 +62,22 @@ describe('extractExistingTripImportSources', () => {
     expect(result.sources[0].text).toContain('门票 | 爱丁堡城堡 | £38')
   })
 
+  it('reads namespace-prefixed OOXML tags and absolute workbook targets', async () => {
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+    zip.file('xl/workbook.xml', '<x:workbook xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheets><x:sheet name="付款明细" sheetId="1" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></x:sheets></x:workbook>')
+    zip.file('xl/_rels/workbook.xml.rels', '<r:Relationships xmlns:r="http://schemas.openxmlformats.org/package/2006/relationships"><r:Relationship Id="rId1" Target="/xl/worksheets/sheet1.xml"/></r:Relationships>')
+    zip.file('xl/sharedStrings.xml', '<x:sst xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:si><x:t>酒店</x:t></x:si></x:sst>')
+    zip.file('xl/worksheets/sheet1.xml', '<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData><x:row><x:c t="s"><x:v>0</x:v></x:c><x:c t="str"><x:v>伦敦</x:v></x:c></x:row></x:sheetData></x:worksheet>')
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const file = new File([blob], 'namespaced.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+    const result = await extractExistingTripImportSources({ files: [file] })
+
+    expect(result.sources[0].text).toContain('工作表：付款明细')
+    expect(result.sources[0].text).toContain('酒店 | 伦敦')
+  })
+
   it('uses the PDF adapter and preserves warnings without OCR in the test path', async () => {
     const pdfAdapter: ExistingTripImportPdfAdapter = vi.fn(async () => ({
       pageCount: 2,

@@ -367,10 +367,10 @@ async function readSharedStrings(zip: JSZipType) {
   const xml = await zip.file('xl/sharedStrings.xml')?.async('text')
   if (!xml) return []
   const strings: string[] = []
-  for (const match of xml.matchAll(/<si\b[\s\S]*?<\/si>/gi)) {
+  for (const match of xml.matchAll(xmlElementPattern('si'))) {
     const node = match[0] ?? ''
     let value = ''
-    for (const textMatch of node.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)) {
+    for (const textMatch of node.matchAll(xmlTextElementPattern('t'))) {
       value += decodeXml(textMatch[1] ?? '')
     }
     strings.push(value)
@@ -383,13 +383,13 @@ async function readWorkbookSheets(zip: JSZipType) {
   const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('text')
   if (!workbookXml || !relsXml) return []
   const relTargetById = new Map<string, string>()
-  for (const match of relsXml.matchAll(/<Relationship\b[^>]*>/gi)) {
+  for (const match of relsXml.matchAll(xmlStartTagPattern('Relationship'))) {
     const rel = match[0] ?? ''
     relTargetById.set(getXmlAttr(rel, 'Id'), normalizeWorkbookRelationshipTarget(getXmlAttr(rel, 'Target')))
   }
   const sheets: Array<{ name: string; path: string }> = []
   let index = 0
-  for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/gi)) {
+  for (const match of workbookXml.matchAll(xmlStartTagPattern('sheet'))) {
     index += 1
     const sheet = match[0] ?? ''
     sheets.push({
@@ -402,10 +402,10 @@ async function readWorkbookSheets(zip: JSZipType) {
 
 function readWorksheetRows(xml: string, sharedStrings: string[]) {
   const rows: string[][] = []
-  for (const rowMatch of xml.matchAll(/<row\b[\s\S]*?<\/row>/gi)) {
+  for (const rowMatch of xml.matchAll(xmlElementPattern('row'))) {
     const row = rowMatch[0] ?? ''
     const cells: string[] = []
-    for (const cellMatch of row.matchAll(/<c\b[\s\S]*?<\/c>/gi)) {
+    for (const cellMatch of row.matchAll(xmlElementPattern('c'))) {
       const value = readSpreadsheetCellXml(cellMatch[0] ?? '', sharedStrings).trim()
       if (value) cells.push(value)
     }
@@ -415,12 +415,12 @@ function readWorksheetRows(xml: string, sharedStrings: string[]) {
 }
 
 function readSpreadsheetCellXml(cell: string, sharedStrings: string[]) {
-  const type = getXmlAttr(cell.match(/<c\b[^>]*>/i)?.[0] ?? '', 't')
-  const value = decodeXml(cell.match(/<v>([\s\S]*?)<\/v>/i)?.[1] ?? '')
+  const type = getXmlAttr(cell.match(xmlStartTagPattern('c', 'i'))?.[0] ?? '', 't')
+  const value = decodeXml(cell.match(xmlTextElementPattern('v', 'i'))?.[1] ?? '')
   if (type === 's') return sharedStrings[Number(value)] ?? ''
   if (type === 'inlineStr') {
     let inline = ''
-    for (const match of cell.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)) {
+    for (const match of cell.matchAll(xmlTextElementPattern('t'))) {
       inline += decodeXml(match[1] ?? '')
     }
     return inline
@@ -433,6 +433,24 @@ function normalizeWorkbookRelationshipTarget(target: string) {
   if (target.startsWith('/')) return target.replace(/^\/+/, '')
   if (target.startsWith('xl/')) return target
   return `xl/${target.replace(/^\.?\//, '')}`
+}
+
+function xmlStartTagPattern(name: string, flags = 'gi') {
+  return new RegExp(`<${xmlQualifiedName(name)}\\b[^>]*>`, flags)
+}
+
+function xmlElementPattern(name: string, flags = 'gi') {
+  const qualifiedName = xmlQualifiedName(name)
+  return new RegExp(`<${qualifiedName}\\b[\\s\\S]*?<\\/${qualifiedName}>`, flags)
+}
+
+function xmlTextElementPattern(name: string, flags = 'gi') {
+  const qualifiedName = xmlQualifiedName(name)
+  return new RegExp(`<${qualifiedName}\\b[^>]*>([\\s\\S]*?)<\\/${qualifiedName}>`, flags)
+}
+
+function xmlQualifiedName(name: string) {
+  return `(?:[A-Za-z_][\\w.-]*:)?${escapeRegExp(name)}`
 }
 
 function getXmlAttr(tag: string, name: string) {

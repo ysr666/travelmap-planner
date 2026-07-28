@@ -25,8 +25,12 @@ export async function applyTravelInboxPreviewRecord({
   })
   if (!result.ok || result.appliedCount === 0) return result
 
-  if (record.cloudSourceId) {
-    await completeTravelInboxAccountSource(record.cloudSourceId, result.appliedChanges)
+  const accountSourceRefs = Array.from(new Set([
+    ...(record.accountSourceRefs ?? []),
+    ...(record.cloudSourceId ? [record.cloudSourceId] : []),
+  ]))
+  for (const sourceRef of accountSourceRefs) {
+    await completeTravelInboxAccountSource(sourceRef, result.appliedChanges)
   }
   await deleteTravelInboxEntries(record.entryIds)
   return result

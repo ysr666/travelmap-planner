@@ -886,6 +886,7 @@ export type TravelInboxPreviewRecord = {
   id: string
   tripId: string
   cloudSourceId?: string
+  accountSourceRefs?: string[]
   entryIds: string[]
   preview: unknown
   checkedDiffIds: string[]

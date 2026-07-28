@@ -2154,3 +2154,52 @@ Review:
 
 - Two read-only protected-boundary reviews identified negation ambiguity, legal-but-unrelated Provider actions, date targeting, cross-midnight handling, overbroad undo scope, non-atomic outbox writes, unchanged item persistence, and insufficiently explicit previews.
 - Each issue was repaired with focused regression coverage before the full validation run.
+
+## 2026-07-28 Travel Inbox Bounded Batch Import
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `fix/travel-inbox-batch-import`
+
+Goal:
+
+- Make the real UK itinerary material folder importable without duplicate files, one Provider request per file, quota storms, or dozens of confirmation previews.
+
+Scope:
+
+- Deduplicate local-folder files by SHA-256 content while retaining path fingerprints for incremental scans.
+- Resolve uniquely matching trips locally before using AI classification.
+- Combine up to 120 assigned sources into one preview, split Provider payloads into at most two 60-source requests, and namespace merged candidate IDs.
+- Limit automatic cloud-source processing to two concurrent requests and keep multi-trip automatic batches within the same two-call budget.
+- Preserve every account-source reference on the combined preview and remove every source only after the existing final confirmation succeeds.
+- Clean temporary inbox entries after partial Provider failure so retry does not duplicate extracted material.
+- Add one compact mobile bulk target/action row and keep the existing per-source fallback.
+
+No-go:
+
+- No automatic itinerary write, ticket deletion, cloud permission change, Provider contract change, schema version bump, or production migration.
+- No raw ticket/blob payload in Provider requests beyond the existing extracted-text contract.
+- No real AI, map, route, search, cloud, or Provider call during local validation.
+
+Result:
+
+- A 78-file folder now fits one account-source batch and one final preview while Provider requests stay bounded to two calls.
+- Exact duplicate content under different paths is queued once.
+- Successful batch apply completes all local/cloud source references; stale-baseline and final-confirmation behavior remains unchanged.
+- A failed second Provider request removes temporary entries and leaves the original account sources available for retry.
+- The 390px account inbox shows one `整理 N 项` action without horizontal overflow.
+
+Validation:
+
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1550 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2300.3 KiB/94-entry precache.
+- Focused mobile Travel Inbox E2E passed all 3 tests.
+- The full serial E2E run passed all 153 tests in approximately 5.9 minutes, including PWA upgrade and desktop Beta smoke coverage.
+- `git diff --check` passed.
+
+Residual:
+
+- A batch that expands beyond 120 extracted sources is returned for manual assignment instead of silently omitting material.
+- More than 120 account sources are handled in later bounded batches.

@@ -45,13 +45,21 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
     }
   }
   const fingerprints = { ...connector.fileFingerprints }
+  const seenContentHashes = new Set(
+    Object.values(fingerprints)
+      .map(readFingerprintContentHash)
+      .filter((value): value is string => Boolean(value)),
+  )
   const created: TravelInboxAccountSource[] = []
   for await (const { file, name } of walkDirectory(connector.directoryHandle)) {
     if (!isSupportedFileName(name)) continue
     if (file.size > 20 * 1024 * 1024) continue
-    const fingerprint = `${file.size}:${file.lastModified}:${await sha256Blob(file)}`
+    const contentHash = await sha256Blob(file)
+    const fingerprint = `${file.size}:${file.lastModified}:${contentHash}`
     if (fingerprints[name] === fingerprint) continue
     fingerprints[name] = fingerprint
+    if (seenContentHashes.has(contentHash)) continue
+    seenContentHashes.add(contentHash)
     const now = Date.now()
     const source: TravelInboxAccountSource = {
       connectorId: connector.id,
@@ -100,6 +108,10 @@ function inferKind(file: File, fileName = file.name): TravelInboxAccountSource['
   return 'text_file'
 }
 function isSupportedFileName(name: string) { return /\.(txt|eml|html?|pdf|png|jpe?g|webp|json|zip|csv|xlsx|xlsm|xls)$/i.test(name) }
+function readFingerprintContentHash(fingerprint: string) {
+  const match = fingerprint.match(/:([a-f0-9]{64})$/i)
+  return match?.[1]?.toLowerCase()
+}
 function getDeviceId() {
   const key = 'tripmap:device-id'
   const existing = window.localStorage.getItem(key)

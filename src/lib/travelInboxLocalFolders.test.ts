@@ -50,6 +50,25 @@ describe('travel inbox local folder scanning', () => {
     ]))
   })
 
+  it('stores one source when the same file appears in multiple folders', async () => {
+    const first = new File(['same ticket'], 'ticket.pdf', { lastModified: 100, type: 'application/pdf' })
+    const duplicate = new File(['same ticket'], 'ticket-copy.pdf', { lastModified: 200, type: 'application/pdf' })
+    const nested = directoryHandle(async function* () {
+      yield ['ticket-copy.pdf', fileHandle(() => duplicate)]
+    })
+    const handle = directoryHandle(async function* () {
+      yield ['ticket.pdf', fileHandle(() => first)]
+      yield ['nested', nested]
+    })
+    const connector = makeConnector(handle)
+    const update = vi.spyOn(db.travelInboxLocalConnectors, 'update').mockResolvedValue(1)
+
+    await expect(scanTravelInboxLocalFolder(connector)).resolves.toHaveLength(1)
+    await expect(db.travelInboxAccountSources.count()).resolves.toBe(1)
+    const patch = update.mock.calls.at(-1)?.[1] as Partial<TravelInboxLocalConnector>
+    expect(Object.keys(patch.fileFingerprints ?? {})).toEqual(['ticket.pdf', 'nested/ticket-copy.pdf'])
+  })
+
   it('marks the connector as error when read permission is revoked', async () => {
     const handle = directoryHandle(async function* () {}, 'denied')
     const connector = makeConnector(handle)

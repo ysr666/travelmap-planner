@@ -78,6 +78,7 @@ vi.mock('../lib/ai/travelInbox', () => ({
 }))
 
 vi.mock('../lib/ai/existingTripImportExtraction', () => ({
+  EXISTING_TRIP_IMPORT_MAX_FILE_COUNT: 60,
   extractExistingTripImportSources: vi.fn(),
 }))
 

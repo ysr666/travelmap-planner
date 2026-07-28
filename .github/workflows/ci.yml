@@ -82,6 +82,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/verify-pwa-history.ts
       - run: npx playwright test
       - uses: actions/upload-artifact@v6
         if: failure()

@@ -70,6 +70,7 @@ jobs:
     timeout-minutes: 25
     env:
       PLAYWRIGHT_CHANNEL: chrome
+      PWA_CURRENT_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
       VITE_ROUTE_PROXY_PROVIDER: openrouteservice
       VITE_ROUTE_PROXY_URL: /api/provider-proxy
     steps:

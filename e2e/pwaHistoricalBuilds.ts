@@ -30,6 +30,7 @@ export async function buildHistoricalPwaReleases(
   const workspaceRoot = process.cwd()
   const currentNodeModules = join(workspaceRoot, 'node_modules')
   await access(currentNodeModules)
+  const currentRevision = await resolveCurrentRevision(workspaceRoot)
   const currentPackageLockObject = await runCommand(
     'git',
     ['hash-object', 'package-lock.json'],
@@ -38,7 +39,7 @@ export async function buildHistoricalPwaReleases(
   const releases: PreparedHistoricalPwaRelease[] = []
 
   for (const release of HISTORICAL_PWA_RELEASES) {
-    await assertHistoricalRelease(workspaceRoot, release)
+    await assertHistoricalRelease(workspaceRoot, currentRevision, release)
     const sourceDir = join(tempDir, `source-${release.label}`)
     const archivePath = join(tempDir, `${release.label}.tar`)
     await mkdir(sourceDir, { recursive: true })
@@ -136,6 +137,7 @@ async function prepareHistoricalNodeModules(input: {
 
 async function assertHistoricalRelease(
   workspaceRoot: string,
+  currentRevision: string,
   release: (typeof HISTORICAL_PWA_RELEASES)[number],
 ) {
   const commit = await runCommand(
@@ -164,9 +166,26 @@ async function assertHistoricalRelease(
   }
   await runCommand(
     'git',
-    ['merge-base', '--is-ancestor', release.commit, 'HEAD'],
+    ['merge-base', '--is-ancestor', release.commit, currentRevision],
     { cwd: workspaceRoot },
   )
+}
+
+async function resolveCurrentRevision(workspaceRoot: string) {
+  const configuredRevision = process.env.PWA_CURRENT_REVISION?.trim()
+  if (configuredRevision && !/^[0-9a-f]{40}$/.test(configuredRevision)) {
+    throw new Error('PWA_CURRENT_REVISION must be a full Git commit SHA')
+  }
+  const revision = configuredRevision ?? 'HEAD'
+  const resolvedRevision = await runCommand(
+    'git',
+    ['rev-parse', `${revision}^{commit}`],
+    { cwd: workspaceRoot },
+  )
+  if (configuredRevision && resolvedRevision !== configuredRevision) {
+    throw new Error('PWA_CURRENT_REVISION does not resolve to the configured commit')
+  }
+  return resolvedRevision
 }
 
 function runCommand(

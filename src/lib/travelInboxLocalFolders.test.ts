@@ -69,6 +69,33 @@ describe('travel inbox local folder scanning', () => {
     expect(Object.keys(patch.fileFingerprints ?? {})).toEqual(['ticket.pdf', 'nested/ticket-copy.pdf'])
   })
 
+  it('queues Markdown and reports oversized supported files without storing them', async () => {
+    const markdown = new File(['# Notes'], 'README.md', { lastModified: 100, type: 'text/markdown' })
+    const oversized = {
+      lastModified: 200,
+      name: 'album.pdf',
+      size: 20 * 1024 * 1024 + 1,
+      type: 'application/pdf',
+    } as File
+    const handle = directoryHandle(async function* () {
+      yield ['README.md', fileHandle(() => markdown)]
+      yield ['album.pdf', fileHandle(() => oversized)]
+    })
+    const connector = makeConnector(handle)
+    const update = vi.spyOn(db.travelInboxLocalConnectors, 'update').mockResolvedValue(1)
+
+    await expect(scanTravelInboxLocalFolder(connector)).resolves.toHaveLength(1)
+    await expect(db.travelInboxAccountSources.toArray()).resolves.toEqual([
+      expect.objectContaining({ fileName: 'README.md', sourceKind: 'text_file' }),
+    ])
+    const patch = update.mock.calls.at(-1)?.[1] as Partial<TravelInboxLocalConnector>
+    expect(patch).toMatchObject({
+      lastScanSkippedCount: 1,
+      lastScanWarnings: ['album.pdf 超过 20MB，未处理。'],
+    })
+    expect(patch.fileFingerprints?.['album.pdf']).toBe(`${oversized.size}:200:oversize`)
+  })
+
   it('marks the connector as error when read permission is revoked', async () => {
     const handle = directoryHandle(async function* () {}, 'denied')
     const connector = makeConnector(handle)

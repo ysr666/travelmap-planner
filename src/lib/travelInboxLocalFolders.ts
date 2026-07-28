@@ -3,6 +3,8 @@ import { createId } from '../db/ids'
 import { sha256Blob } from './travelInboxSourceHash'
 import type { TravelInboxAccountSource, TravelInboxLocalConnector } from '../types'
 
+const LOCAL_FOLDER_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
+
 export function supportsTravelInboxLocalFolders() {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
 }
@@ -51,9 +53,14 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
       .filter((value): value is string => Boolean(value)),
   )
   const created: TravelInboxAccountSource[] = []
+  const scanWarnings: string[] = []
   for await (const { file, name } of walkDirectory(connector.directoryHandle)) {
     if (!isSupportedFileName(name)) continue
-    if (file.size > 20 * 1024 * 1024) continue
+    if (file.size > LOCAL_FOLDER_MAX_FILE_SIZE_BYTES) {
+      fingerprints[name] = `${file.size}:${file.lastModified}:oversize`
+      scanWarnings.push(`${name} 超过 20MB，未处理。`)
+      continue
+    }
     const contentHash = await sha256Blob(file)
     const fingerprint = `${file.size}:${file.lastModified}:${contentHash}`
     if (fingerprints[name] === fingerprint) continue
@@ -82,7 +89,14 @@ export async function scanTravelInboxLocalFolder(connector: TravelInboxLocalConn
     })
     created.push(source)
   }
-  await db.travelInboxLocalConnectors.update(connector.id, { fileFingerprints: fingerprints, lastScannedAt: Date.now(), status: 'active', updatedAt: Date.now() })
+  await db.travelInboxLocalConnectors.update(connector.id, {
+    fileFingerprints: fingerprints,
+    lastScannedAt: Date.now(),
+    lastScanSkippedCount: scanWarnings.length,
+    lastScanWarnings: scanWarnings.slice(0, 5),
+    status: 'active',
+    updatedAt: Date.now(),
+  })
   return created
 }
 
@@ -107,7 +121,7 @@ function inferKind(file: File, fileName = file.name): TravelInboxAccountSource['
   if (name.endsWith('.html') || name.endsWith('.htm')) return 'html'
   return 'text_file'
 }
-function isSupportedFileName(name: string) { return /\.(txt|eml|html?|pdf|png|jpe?g|webp|json|zip|csv|xlsx|xlsm|xls)$/i.test(name) }
+function isSupportedFileName(name: string) { return /\.(txt|md|markdown|eml|html?|pdf|png|jpe?g|webp|json|zip|csv|xlsx|xlsm|xls)$/i.test(name) }
 function readFingerprintContentHash(fingerprint: string) {
   const match = fingerprint.match(/:([a-f0-9]{64})$/i)
   return match?.[1]?.toLowerCase()

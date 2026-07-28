@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TravelInboxPanel } from './TravelInboxPanel'
+import type { ExistingTripImportSourceSummary } from '../../lib/ai/existingTripImport'
 
 const mocks = vi.hoisted(() => {
   const listLedgerExpenses = vi.fn().mockResolvedValue([])
@@ -16,7 +17,7 @@ const mocks = vi.hoisted(() => {
   deleteTravelInboxPreview: vi.fn(),
   isTravelInboxAutoRecognizeEnabled: vi.fn(() => false),
   setTravelInboxAutoRecognizeEnabled: vi.fn(),
-  buildTravelInboxSourceSummaries: vi.fn(() => []),
+  buildTravelInboxSourceSummaries: vi.fn((): ExistingTripImportSourceSummary[] => []),
   buildTravelInboxProviderTicketSummaries: vi.fn(() => []),
   buildTravelInboxTicketSummaries: vi.fn(() => []),
   summarizeTravelInboxPreview: vi.fn(() => ''),
@@ -33,7 +34,8 @@ const mocks = vi.hoisted(() => {
   saveTravelInboxPreview: vi.fn(),
   updateTravelInboxPreviewRecord: vi.fn(),
   buildTravelInboxApplyFiles: vi.fn(() => []),
-  getProviderProxyConfig: vi.fn(() => ({ baseUrl: '' })),
+  buildTravelInboxProviderRequest: vi.fn(),
+  getProviderProxyConfig: vi.fn(() => ({ configured: false, proxyUrl: null as string | null })),
   fetchProviderProxyExistingTripImport: vi.fn(),
   buildExistingTripImportRequestSources: vi.fn(() => []),
   extractExistingTripImportSources: vi.fn(),
@@ -77,6 +79,7 @@ vi.mock('../../lib/ai/travelInbox', () => ({
   saveTravelInboxPreview: mocks.saveTravelInboxPreview,
   updateTravelInboxPreviewRecord: mocks.updateTravelInboxPreviewRecord,
   buildTravelInboxApplyFiles: mocks.buildTravelInboxApplyFiles,
+  buildTravelInboxProviderRequest: mocks.buildTravelInboxProviderRequest,
 }))
 
 vi.mock('../../lib/providerProxyClient', () => ({
@@ -165,6 +168,8 @@ beforeEach(() => {
   mocks.listLedgerExpenses.mockResolvedValue([])
   mocks.listLedgerParticipants.mockResolvedValue([])
   mocks.loadLedgerSettings.mockResolvedValue(undefined)
+  mocks.getProviderProxyConfig.mockReturnValue({ configured: false, proxyUrl: null })
+  mocks.isTravelInboxAutoRecognizeEnabled.mockReturnValue(false)
 })
 
 afterEach(() => {
@@ -246,6 +251,182 @@ describe('TravelInboxPanel', () => {
     })
 
     expect(container?.textContent).toContain('自动识别')
+  })
+
+  it('extracts multiple selected files together and auto-recognizes them once', async () => {
+    const firstFile = new File(['hotel'], 'hotel.txt', { type: 'text/plain' })
+    const secondFile = new File(['ticket'], 'ticket.md', { type: 'text/markdown' })
+    const entries = [{
+      category: 'mixed',
+      createdAt: 100,
+      extractedText: 'hotel',
+      fileName: 'hotel.txt',
+      id: 'entry_1',
+      label: 'hotel.txt',
+      sourceKind: 'text_file',
+      status: 'ready',
+      tripId: 'trip_1',
+      updatedAt: 100,
+      warnings: [],
+    }, {
+      category: 'mixed',
+      createdAt: 101,
+      extractedText: 'ticket',
+      fileName: 'ticket.md',
+      id: 'entry_2',
+      label: 'ticket.md',
+      sourceKind: 'text_file',
+      status: 'ready',
+      tripId: 'trip_1',
+      updatedAt: 101,
+      warnings: [],
+    }]
+    const preview = {
+      baselineFingerprint: 'baseline',
+      diffs: [],
+      generatedAt: '2026-07-28T00:00:00.000Z',
+      sourceSummaries: [],
+      warnings: [],
+    }
+    mocks.isTravelInboxAutoRecognizeEnabled.mockReturnValue(true)
+    mocks.getProviderProxyConfig.mockReturnValue({ configured: true, proxyUrl: '/api/provider-proxy' })
+    mocks.extractExistingTripImportSources.mockResolvedValue({
+      filesBySourceId: new Map(),
+      sources: [{
+        fileName: 'hotel.txt',
+        id: 'source:file:1',
+        kind: 'text_file',
+        label: 'hotel.txt',
+        mimeType: 'text/plain',
+        text: 'hotel',
+      }, {
+        fileName: 'ticket.md',
+        id: 'source:file:2',
+        kind: 'text_file',
+        label: 'ticket.md',
+        mimeType: 'text/markdown',
+        text: 'ticket',
+      }],
+      warnings: [],
+    })
+    mocks.addTravelInboxExtraction.mockResolvedValue({ entries })
+    mocks.buildTravelInboxSourceSummaries.mockReturnValue([
+      { id: 'entry_1', kind: 'text_file', label: 'hotel.txt', text: 'hotel' },
+      { id: 'entry_2', kind: 'text_file', label: 'ticket.md', text: 'ticket' },
+    ])
+    mocks.buildTravelInboxProviderRequest.mockReturnValue({ operation: 'ai_existing_trip_import' })
+    mocks.fetchProviderProxyExistingTripImport.mockResolvedValue({ result: {}, warnings: [] })
+    mocks.buildExistingTripImportPreview.mockReturnValue(preview)
+    mocks.saveTravelInboxPreview.mockResolvedValue({
+      checkedDiffIds: [],
+      createdAt: 100,
+      entryIds: ['entry_1', 'entry_2'],
+      id: 'preview_1',
+      preview,
+      status: 'ready',
+      tripId: 'trip_1',
+      updatedAt: 100,
+    })
+
+    await act(async () => {
+      root?.render(
+        <TravelInboxPanel
+          days={defaultDays}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    const input = container?.querySelector('input[aria-label="上传收件箱文件"]') as HTMLInputElement
+    Object.defineProperty(input, 'files', { configurable: true, value: [firstFile, secondFile] })
+
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await vi.runAllTimersAsync()
+    })
+
+    expect(mocks.extractExistingTripImportSources).toHaveBeenCalledTimes(1)
+    expect(mocks.extractExistingTripImportSources.mock.calls[0][0]).toEqual(expect.objectContaining({
+      files: [firstFile, secondFile],
+    }))
+    expect(mocks.fetchProviderProxyExistingTripImport).toHaveBeenCalledTimes(1)
+    expect(mocks.saveTravelInboxPreview).toHaveBeenCalledWith(expect.objectContaining({
+      entryIds: ['entry_1', 'entry_2'],
+    }))
+  })
+
+  it('tracks failed files by input position when selected files share a name', async () => {
+    const firstFile = new File(['valid'], 'ticket.txt', { type: 'text/plain' })
+    const secondFile = new File([], 'ticket.txt', { type: 'text/plain' })
+    mocks.extractExistingTripImportSources.mockResolvedValue({
+      filesBySourceId: new Map(),
+      sources: [{
+        fileName: 'ticket.txt',
+        id: 'source:file:1',
+        kind: 'text_file',
+        label: 'ticket.txt',
+        mimeType: 'text/plain',
+        text: 'valid',
+      }],
+      warnings: ['ticket.txt 未提取到可识别文本。'],
+    })
+    mocks.addTravelInboxExtraction.mockResolvedValue({
+      entries: [{
+        category: 'mixed',
+        createdAt: 100,
+        extractedText: 'valid',
+        fileName: 'ticket.txt',
+        id: 'entry_1',
+        label: 'ticket.txt',
+        sourceKind: 'text_file',
+        status: 'ready',
+        tripId: 'trip_1',
+        updatedAt: 100,
+        warnings: [],
+      }],
+    })
+    mocks.addTravelInboxErrorEntry.mockResolvedValue({
+      category: 'mixed',
+      createdAt: 101,
+      extractedText: '',
+      fileName: 'ticket.txt',
+      id: 'entry_2',
+      label: 'ticket.txt',
+      sourceKind: 'text_file',
+      status: 'error',
+      tripId: 'trip_1',
+      updatedAt: 101,
+      warnings: [],
+    })
+
+    await act(async () => {
+      root?.render(
+        <TravelInboxPanel
+          days={defaultDays}
+          allItems={defaultAllItems} tickets={defaultTickets} onApplied={vi.fn()}
+          trip={defaultTrip}
+        />,
+      )
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    const input = container?.querySelector('input[aria-label="上传收件箱文件"]') as HTMLInputElement
+    Object.defineProperty(input, 'files', { configurable: true, value: [firstFile, secondFile] })
+
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await vi.runAllTimersAsync()
+    })
+
+    expect(mocks.addTravelInboxErrorEntry).toHaveBeenCalledTimes(1)
+    expect(mocks.addTravelInboxErrorEntry).toHaveBeenCalledWith(expect.objectContaining({
+      blob: secondFile,
+      fileName: 'ticket.txt',
+    }))
   })
 
   it('renders with entries', async () => {

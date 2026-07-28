@@ -97,7 +97,12 @@ export function TravelInboxPage() {
         try { await scanTravelInboxLocalFolder(connector) } catch { /* surfaced on manual refresh */ }
         finally { processing.current.delete(`scan:${connector.id}`) }
       }
-      setSources(await listTravelInboxAccountSources())
+      const [nextSources, nextConnectors] = await Promise.all([
+        listTravelInboxAccountSources(),
+        listTravelInboxLocalFolderConnectors(),
+      ])
+      setSources(nextSources)
+      setLocalConnectors(nextConnectors)
     }
     void scan()
     const visible = () => { if (document.visibilityState === 'visible') void scan() }
@@ -235,7 +240,7 @@ export function TravelInboxPage() {
 
         {[...connectors, ...localConnectors].map((connector) => (
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-container-high p-3" key={connector.id}>
-            <div className="min-w-0"><p className="truncate text-sm font-semibold text-on-surface">{connector.name}</p><p className="text-xs tm-muted">{connector.kind === 'local_folder' ? '本地文件夹' : connector.kind === 'gmail' ? 'Gmail' : 'IMAP'} · {connector.status}</p></div>
+            <div className="min-w-0"><p className="truncate text-sm font-semibold text-on-surface">{connector.name}</p><p className="text-xs tm-muted">{connector.kind === 'local_folder' ? '本地文件夹' : connector.kind === 'gmail' ? 'Gmail' : 'IMAP'} · {connector.status}{connector.kind === 'local_folder' && connector.lastScanSkippedCount ? ` · ${connector.lastScanSkippedCount} 项未处理` : ''}</p></div>
             <div className="flex gap-1">
               {'last_synced_at' in connector ? <button aria-label="立即同步" className="flex size-11 items-center justify-center rounded-xl text-primary tm-focus" onClick={() => void run(`sync:${connector.id}`, async () => { const result = await syncTravelInboxConnector(connector.id); setMessage(`同步完成：新增 ${result.imported}，跳过 ${result.skipped}。`) })} type="button"><RefreshCw className="size-4" /></button> : null}
               {'mailbox_folder' in connector ? <button aria-label={connector.status === 'paused' ? '恢复' : '暂停'} className="flex size-11 items-center justify-center rounded-xl text-on-surface-variant tm-focus" onClick={() => void run(`toggle:${connector.id}`, async () => { await updateTravelInboxConnector(connector.id, connector.status === 'paused' ? 'active' : 'paused') })} type="button">{connector.status === 'paused' ? <Play className="size-4" /> : <Pause className="size-4" />}</button> : null}

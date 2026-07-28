@@ -856,6 +856,8 @@ export type TravelInboxLocalConnector = {
   fileFingerprints: Record<string, string>
   autoAiEnabled: boolean
   lastScannedAt?: number
+  lastScanSkippedCount?: number
+  lastScanWarnings?: string[]
   createdAt: number
   updatedAt: number
 }

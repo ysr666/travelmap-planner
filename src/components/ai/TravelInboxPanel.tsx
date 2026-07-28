@@ -13,6 +13,7 @@ import {
 } from '../../lib/ai/existingTripImport'
 import {
   DEFAULT_EXISTING_TRIP_IMPORT_OCR_LANGUAGES,
+  EXISTING_TRIP_IMPORT_MAX_FILE_COUNT,
   extractExistingTripImportSources,
   OPTIONAL_EXISTING_TRIP_IMPORT_OCR_LANGUAGES,
   type ExistingTripImportExtractionProgress,
@@ -212,23 +213,24 @@ export function TravelInboxPanel({
   }
 
   async function processFiles(files: File[]) {
-    for (const file of files.slice(0, 8)) {
-      await processExtraction({ files: [file], sourceFile: file })
-    }
-    if (files.length > 8) {
-      setWarnings((current) => [...current, `最多处理 8 个文件，已跳过 ${files.length - 8} 个文件。`])
+    const selectedFiles = files.slice(0, EXISTING_TRIP_IMPORT_MAX_FILE_COUNT)
+    await processExtraction({ files: selectedFiles })
+    if (files.length > EXISTING_TRIP_IMPORT_MAX_FILE_COUNT) {
+      setWarnings((current) => [
+        ...current,
+        `最多处理 ${EXISTING_TRIP_IMPORT_MAX_FILE_COUNT} 个文件，已跳过 ${files.length - EXISTING_TRIP_IMPORT_MAX_FILE_COUNT} 个文件。`,
+      ].slice(-8))
     }
   }
 
   async function processExtraction({
     files,
     pastedText: text,
-    sourceFile,
   }: {
     files?: File[]
     pastedText?: string
-    sourceFile?: File
   }) {
+    const sourceFiles = files ?? []
     setIsExtracting(true)
     setProgress(null)
     setError(null)
@@ -245,19 +247,23 @@ export function TravelInboxPanel({
       if (extraction.sources.length > 0) {
         const result = await addTravelInboxExtraction({ extraction, tripId: trip.id })
         addedEntries = result.entries
-      } else if (sourceFile) {
-        const message = extraction.warnings[0] ?? '未提取到可识别文本。'
-        const entry = await addTravelInboxErrorEntry({
-          blob: sourceFile,
-          error: message,
-          fileName: sourceFile.name,
-          mimeType: sourceFile.type || inferMimeType(sourceFile.name),
-          size: sourceFile.size,
-          tripId: trip.id,
-        })
-        addedEntries = [entry]
       } else if (text?.trim()) {
         setError('粘贴文本未提取到可识别内容。')
+      }
+      const extractedSourceIds = new Set(extraction.sources.map((source) => source.id))
+      const skippedFiles = sourceFiles.filter((_, index) => !extractedSourceIds.has(`source:file:${index + 1}`))
+      for (const file of skippedFiles) {
+        const message = extraction.warnings.find((warning) => warning.includes(file.name))
+          ?? '未提取到可识别文本。'
+        const entry = await addTravelInboxErrorEntry({
+          blob: file,
+          error: message,
+          fileName: file.name,
+          mimeType: file.type || inferMimeType(file.name),
+          size: file.size,
+          tripId: trip.id,
+        })
+        addedEntries.push(entry)
       }
       setWarnings((current) => [...current, ...extraction.warnings].slice(-8))
       await loadInbox()
@@ -265,15 +271,17 @@ export function TravelInboxPanel({
         await recognizeEntries(addedEntries)
       }
     } catch (caught) {
-      if (sourceFile) {
-        await addTravelInboxErrorEntry({
-          blob: sourceFile,
-          error: caught instanceof Error ? caught.message : '本地提取失败。',
-          fileName: sourceFile.name,
-          mimeType: sourceFile.type || inferMimeType(sourceFile.name),
-          size: sourceFile.size,
-          tripId: trip.id,
-        })
+      if (sourceFiles.length > 0) {
+        for (const file of sourceFiles) {
+          await addTravelInboxErrorEntry({
+            blob: file,
+            error: caught instanceof Error ? caught.message : '本地提取失败。',
+            fileName: file.name,
+            mimeType: file.type || inferMimeType(file.name),
+            size: file.size,
+            tripId: trip.id,
+          })
+        }
         await loadInbox()
       } else {
         setError(caught instanceof Error ? caught.message : '本地提取失败。')
@@ -660,7 +668,7 @@ export function TravelInboxPanel({
           <input
             ref={fileInputRef}
             aria-label="上传收件箱文件"
-            accept=".txt,.eml,.html,.htm,.pdf,image/*,.json,.zip,.csv,.xlsx,.xlsm,.xls"
+            accept=".txt,.md,.markdown,.eml,.html,.htm,.pdf,image/*,.json,.zip,.csv,.xlsx,.xlsm,.xls"
             className="sr-only"
             multiple
             onChange={(event) => {
@@ -678,7 +686,7 @@ export function TravelInboxPanel({
             <FileUp className="size-4" />
             添加文件
           </button>
-          <p className="mt-1 text-center text-xs tm-muted">支持 .txt/.eml/.html/.pdf/image/*/.json/.zip/.xlsx，最多 60 个文件。</p>
+          <p className="mt-1 text-center text-xs tm-muted">支持文本、邮件、PDF、图片和表格，最多 60 个文件。</p>
         </div>
         <Button
           disabled={!pastedText.trim() || isExtracting}

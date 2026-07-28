@@ -32,6 +32,19 @@ describe('extractExistingTripImportSources', () => {
     expect(result.sources[0].text).not.toContain('secret')
   })
 
+  it('reads Markdown files as local text sources', async () => {
+    const file = new File(['# 出行说明\n\n提前两小时到机场。'], 'README.md', { type: 'text/markdown' })
+
+    const result = await extractExistingTripImportSources({ files: [file] })
+
+    expect(result.sources[0]).toMatchObject({
+      fileName: 'README.md',
+      kind: 'text_file',
+      mimeType: 'text/markdown',
+      text: expect.stringContaining('提前两小时到机场'),
+    })
+  })
+
   it('extracts readable rows from xlsx files', async () => {
     const JSZip = (await import('jszip')).default
     const zip = new JSZip()

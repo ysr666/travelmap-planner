@@ -769,7 +769,7 @@ test('Trip Home 旅行收件箱自动识别开启后只发送提取文本并保�
     expect(JSON.stringify(body)).not.toContain('ticketIds')
     expect(JSON.stringify(body)).not.toContain('routeCache')
     expect(JSON.stringify(body)).not.toContain('cloud')
-    expect(body.sources).toHaveLength(1)
+    expect(body.sources).toHaveLength(2)
     expect(body.existingTicketSummaries).toEqual([])
     importRequests += 1
     await route.fulfill({
@@ -801,11 +801,15 @@ test('Trip Home 旅行收件箱自动识别开启后只发送提取文本并保�
   await expect(panel.getByLabel(/自动识别/)).toBeChecked()
   expect(importRequests).toBe(0)
 
-  await panel.locator('input[type="file"]').setInputFiles({
+  await panel.locator('input[type="file"]').setInputFiles([{
     buffer: Buffer.from('2026-04-01 14:00 灵隐寺'),
     mimeType: 'text/plain',
     name: 'lingyin.txt',
-  })
+  }, {
+    buffer: Buffer.from('# 票据说明\n\n灵隐寺门票已预订。'),
+    mimeType: 'text/markdown',
+    name: 'ticket.md',
+  }])
 
   await expect(panel).toContainText('整理建议')
   await expect(panel).toContainText('新增行程点「灵隐寺」')

@@ -2157,7 +2157,7 @@ Review:
 
 ## 2026-07-28 Travel Inbox Bounded Batch Import
 
-Status: implemented and locally validated; pending merge and remote verification.
+Status: merged and remotely verified.
 
 Branch: `fix/travel-inbox-batch-import`
 
@@ -2203,3 +2203,65 @@ Residual:
 
 - A batch that expands beyond 120 extracted sources is returned for manual assignment instead of silently omitting material.
 - More than 120 account sources are handled in later bounded batches.
+
+Remote verification:
+
+- PR #26 merged to `main` as `701c90318d4e3e05ab608660e67fd185d7e10887`.
+- The same-SHA GitHub Actions run `30342360466` passed Type Check, Unit Tests, Lint, Build, and all 153 serial E2E tests.
+- Cloudflare Pages deployed the same commit successfully.
+
+## 2026-07-28 Travel Inbox Real-Data Preflight Hardening
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `fix/travel-inbox-manual-batch`
+
+Goal:
+
+- Remove the remaining local-file ingestion failures found while preparing the requested real UK itinerary import.
+
+Scope:
+
+- Treat Markdown files as local text sources in manual uploads and persistent folder scans.
+- Process one manual multi-file selection as one local extraction and at most one existing-trip Provider request instead of one request per file.
+- Track extraction failures by input position so duplicate file names cannot hide a failed source.
+- Keep the 20 MB local extraction boundary, but record and display a compact skipped-item count instead of silently dropping oversized files.
+- Preserve the existing extracted-text-only Provider contract and final confirmation gate.
+
+No-go:
+
+- No Provider contract, IndexedDB schema version, cloud sync, ticket/blob storage, or AI privacy-boundary change.
+- No automatic itinerary write and no real Provider call during implementation validation.
+- No silent import of oversized files into offline storage.
+
+Validation:
+
+- Focused extraction, local-folder, and Travel Inbox component tests.
+- Typecheck, lint, full unit suite, production build, focused 390px E2E, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: the change expands a user-selected import batch and local source coverage while retaining existing privacy, quota, and confirmation boundaries.
+
+Stop conditions:
+
+- Stop and repair if a manual file selection triggers more than one Provider request, a source file is sent instead of extracted text, a failed source is lost, an oversized folder file is silently omitted, or any itinerary data changes before final confirmation.
+
+Result:
+
+- Manual multi-file upload now performs one local extraction and one optional Provider recognition for up to 60 selected files.
+- Markdown materials are accepted by both manual upload and persistent local-folder scanning.
+- Failed files are associated by stable input position, including duplicate file names, and remain retryable as error entries.
+- Oversized supported folder files remain outside local extraction and storage, but the connector now records a concise skipped-item status instead of silently dropping them.
+- Provider requests remain extracted-text only, and imported itinerary changes still require the existing final confirmation.
+
+Validation:
+
+- Focused extraction, local-folder, and Travel Inbox component tests passed: 3 files and 23 tests.
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1554 tests.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2300.8 KiB/94-entry precache.
+- Five focused 390px Travel Inbox E2E tests passed, including two-file single-request recognition and final-confirmation protection.
+- The full serial E2E run passed all 153 tests in approximately 5.7 minutes, including PWA upgrade and desktop Beta smoke coverage.
+- `git diff --check` passed.

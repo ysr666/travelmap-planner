@@ -68,7 +68,7 @@ const MAX_REQUEST_TEXT_LENGTH = 60_000
 const MIN_PDF_TEXT_CHARS_PER_PAGE = 40
 const MAX_SOURCE_TEXT_LENGTH = 12_000
 
-const SUPPORTED_TEXT_EXTENSIONS = /\.(txt|eml|html?|json|csv)$/i
+const SUPPORTED_TEXT_EXTENSIONS = /\.(txt|md|markdown|eml|html?|json|csv)$/i
 
 export async function extractExistingTripImportSources({
   files = [],
@@ -321,6 +321,7 @@ function inferMimeType(fileName: string) {
   if (lowerName.endsWith('.json')) return 'application/json'
   if (lowerName.endsWith('.zip')) return 'application/zip'
   if (lowerName.endsWith('.csv')) return 'text/csv'
+  if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) return 'text/markdown'
   if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   if (lowerName.endsWith('.xls')) return 'application/vnd.ms-excel'
   if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html'

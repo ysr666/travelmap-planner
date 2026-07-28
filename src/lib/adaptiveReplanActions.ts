@@ -38,6 +38,7 @@ export type PreparedAdaptiveReplanAction = {
   baselineFingerprint: string
   dayId: string
   dayTitle: string
+  dayTitlesById: Record<string, string>
   delayMinutes?: number
   disruptionKind: Exclude<TripDisruptionKind, 'skip'>
   eventId: string
@@ -140,6 +141,9 @@ export function buildAdaptiveReplanActionPreview({
     baselineFingerprint: buildAdaptiveReplanActionBaseline(context),
     dayId: day.id,
     dayTitle: day.title,
+    dayTitlesById: Object.fromEntries(
+      context.days.map((candidate) => [candidate.id, candidate.title]),
+    ),
     ...(delayMinutes !== undefined ? { delayMinutes } : {}),
     disruptionKind,
     eventId,

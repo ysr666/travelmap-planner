@@ -957,6 +957,10 @@ describe('AI Action Gateway runtime', () => {
     expect(prepared.plan.requiresConfirmation).toBe(true)
     expect(prepared.steps[0]).toMatchObject({
       affectedLabels: ['伦敦眼', '大本钟'],
+      details: expect.arrayContaining([
+        '伦敦眼：10:00-11:00 → 10:30-11:30',
+        '大本钟：12:00-13:00 → 12:30-13:30',
+      ]),
       hasWrite: true,
       preview: '抵达伦敦：伦敦眼将改为 10:30，共 2 项；按最少改动调整 2 项。',
     })

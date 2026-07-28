@@ -967,7 +967,16 @@ function ActionGatewayView({
             const runStep = run?.steps.find((candidate) => candidate.id === step.id)
             return (
               <li className="min-w-0 break-words leading-5 text-on-surface-variant [overflow-wrap:anywhere]" key={step.id}>
-                {runStep?.message ?? step.error ?? step.preview}
+                <p>{runStep?.message ?? step.error ?? step.preview}</p>
+                {step.details?.map((detail) => (
+                  <p
+                    className="mt-1 border-l border-outline-variant/60 pl-2 text-[11px]"
+                    data-testid="global-ai-action-step-detail"
+                    key={detail}
+                  >
+                    {detail}
+                  </p>
+                ))}
               </li>
             )
           })}

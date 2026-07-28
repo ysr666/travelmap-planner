@@ -50,6 +50,7 @@ export function buildAiActionPlanProviderInput(
       '只使用脱敏摘要判断语义目标。不得索取或输出票据文件、Blob、Token、完整数据库、证件号或密钥。',
       '最多 6 个步骤。id 使用短英文标识；dependsOn 只能引用同计划中的步骤 id。',
       '每个动作的 args 只能使用 availableActions.input 明确列出的语义字段；不得添加 ID、patch、状态、路由或函数。',
+      '用户明确给出的目标、日期、金额、币种、类别、时间、顺序、策略和范围必须逐项原样保留，不得省略、改写或扩大；用户未给出或明确说尚未确定的值不得猜测。',
       'item.move@1 只能使用语义行程点、来源/目标日期和固定 first/last/before/after；目标日期或参照点不明确时不要猜测。',
       'item.delete@1 只删除一个明确的语义行程点；不得选择票据、订单、账本、旅行或任何永久删除目标，也不得与其他结构写入组合。',
       'history.undo@1 的 kind 只能是 item_delete；不得输出记录 ID、快照、指纹、状态或数据库字段，也不得与其他写入组合。',

@@ -70,15 +70,19 @@ jobs:
     timeout-minutes: 25
     env:
       PLAYWRIGHT_CHANNEL: chrome
+      PWA_CURRENT_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
       VITE_ROUTE_PROXY_PROVIDER: openrouteservice
       VITE_ROUTE_PROXY_URL: /api/provider-proxy
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/verify-pwa-history.ts
       - run: npx playwright test
       - uses: actions/upload-artifact@v6
         if: failure()

@@ -2,6 +2,17 @@
 
 最新记录：2026-07-28
 
+## 2026-07-28 历史生产 PWA 迁移矩阵
+
+- 固定使用曾成功部署到 Cloudflare Pages 的两个 `main` 提交：`4c8f60ec`（Limited Beta 收尾）和 `4c748935`（PWA 预缓存预算）。
+- 测试从各提交的精确 Git tree 和 package lock 生成真实 Vite/PWA 产物；提交、tree 和 lock object 任一不匹配都会失败，历史依赖按 lock 哈希隔离缓存。
+- 两个历史产物和当前候选在同一浏览器 origin 依次替换；每次新 Service Worker 都在用户确认前保持 waiting，两个标签继续使用旧 worker，确认后再共同收敛。
+- 第一版中创建的真实示例旅行经过两次跨产物升级仍保留；中间版本离线修改的旅行标题在当前候选中可见并能正常打开。
+- 最终激活后只保留一个当前 precache，旧历史 precache 已清理。
+- CI 的 E2E checkout 使用完整 Git 历史以解析固定提交，不下载可变部署产物，也不调用真实 Cloudflare、Provider、Supabase 或账号数据。
+- 聚焦历史迁移用例连续 5 轮通过；完整 PWA 文件 5/5 通过。
+- `npm run typecheck`、`npm run lint`、`npm run test:unit`、`npm run build` 均通过；全量串行 E2E 156/156 通过，约 7.3 分钟。
+
 ## 2026-07-28 离线账号同步恢复
 
 - 账号旅行在线打开后切换为真实浏览器离线状态；离线编辑旅行标题和行程点时，IndexedDB 立即保留修改，账号快照与对象记录保持不变。
@@ -22,7 +33,7 @@
 - `npm run test:unit`：通过，187 个文件、1555 个测试。
 - `npm run test:e2e:pwa-upgrade`：4 个测试通过；连续 5 轮稳定性验证共 20/20 通过。
 - `npm run test:e2e:serial`：154 个测试通过，约 6.1 分钟。
-- 本轮是当前构建的连续 Service Worker 修订验证，不替代多个真实历史生产构建产物的迁移矩阵，也不替代 iPhone/Android 实体机记录。
+- 本轮覆盖当前构建内的连续 Service Worker 修订；真实历史生产产物由上方独立矩阵覆盖，iPhone/Android 实体机记录仍需人工补录。
 
 ## 2026-07-26 Provider 网络执行按需边界
 

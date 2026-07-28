@@ -76,13 +76,13 @@
 - `npm run lint`：通过。
 - `npm run test:unit`：187 个文件、1555 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
-- `npm run test:e2e:pwa-upgrade`：4 个测试通过；连续 5 轮稳定性验证共 20/20 通过。
-- 全量 Playwright：155 个测试通过，串行耗时约 5.9 分钟；新增离线编辑恢复在线后的账号快照、对象 outbox 和刷新保留回归。
+- `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
+- 全量 Playwright：156 个测试通过，串行耗时约 7.3 分钟；覆盖离线账号续传和固定历史生产构建迁移。
 - `git diff --check`：通过。
 
 生产入口 JS 从 947.6 kB 降至 485.9 KiB。初始静态 JS 图为 868.3 KiB，gzip 249.6 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
-Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 31.7 KiB 的 Provider 网络执行实现改为首次使用后写入 30 天、最多 80 项的同源运行时缓存。Provider 的轻量配置、错误类型和本地合同仍随核心页面提供。构建会阻止核心代码丢失、Provider 网络执行实现或其他可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个 Service Worker 版本在用户确认前保持 waiting、确认后所有标签收敛、离线 IndexedDB 修改保留；按需资源在下载中断或 origin 配额不足时不会留下残缺缓存，恢复后可重试并离线使用。
+Service Worker 预缓存从约 4.15 MiB/107 项降至约 2.21 MiB/94 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 31.7 KiB 的 Provider 网络执行实现改为首次使用后写入 30 天、最多 80 项的同源运行时缓存。Provider 的轻量配置、错误类型和本地合同仍随核心页面提供。构建会阻止核心代码丢失、Provider 网络执行实现或其他可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留；按需资源在下载中断或 origin 配额不足时不会留下残缺缓存，恢复后可重试并离线使用。
 
 账号同步 E2E 同时确认网络离线时云端 fixture 不发生写入、对象 outbox 不提前消失；网络恢复后同一旅行快照原地更新，trip/item 对象各保持一条，自动快照状态收敛为 `synced`，刷新不会丢失离线修改。
 
@@ -107,7 +107,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - iPhone Safari、Android Chrome 和安装到主屏幕后的实体机回归仍需人工完成。
 - MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验仍待记录。
 - 浏览器旧 service worker 可能显示旧 UI；当前版本改为显式更新提示，仍需生产升级观察。
-- 自动化已覆盖同一当前构建的 `v1 → v2 → v3` 连续 Service Worker 修订；多个真实历史生产构建产物之间的迁移矩阵仍待建立。
+- 自动化已覆盖当前构建的 `v1 → v2 → v3`，以及 `4c8f60ec → 4c748935 → 当前候选` 的真实历史生产迁移；更早版本和实体机升级仍以 Beta 观察为准。
 - 真实 provider 可用性还依赖 Cloudflare env、供应商配额、区域网络和当前登录 session；自动化主要覆盖合同、边界、mock 和失败语义。
 - Action Gateway 当前覆盖十五个注册动作；复杂账本和长文本行程编辑仍有兼容路径，不能声称“任意一句话都能完成所有功能”。
 

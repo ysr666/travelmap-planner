@@ -2,9 +2,10 @@ import { expect, test, type Page } from '@playwright/test'
 import { createServer, type Server } from 'node:http'
 import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { extname, join, resolve } from 'node:path'
+import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clickTripCard, getHashParam } from './helpers'
+import { buildHistoricalPwaReleases } from './pwaHistoricalBuilds'
 
 const builtDistDir = join(process.cwd(), 'dist')
 const markerStart = '/* tripmap e2e pwa marker:start */'
@@ -154,6 +155,96 @@ test('PWA 连续升级三个版本时保留离线编辑并让所有标签收敛'
     expect(await readServiceWorkerVersion(secondPage)).toBe('v2')
     await confirmUpdateAcrossPages(secondPage, firstPage, 'v3')
     expect(await readIndexedDbMarker(firstPage)).toBe('edited-offline-on-v2')
+  } finally {
+    await context.setOffline(false)
+    if (server) {
+      await closeStaticServer(server)
+    }
+    await rm(tempDir, { force: true, recursive: true })
+  }
+})
+
+test('PWA 从两个历史生产构建升级到当前候选后保留真实行程与离线修改', async ({ context }) => {
+  test.setTimeout(420_000)
+  const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-history-matrix-'))
+  const currentDistDir = join(tempDir, 'current-dist')
+  let server: Server | null = null
+
+  try {
+    const historicalReleases = await buildHistoricalPwaReleases(tempDir)
+    const [firstRelease, secondRelease] = historicalReleases
+    await cp(builtDistDir, currentDistDir, { recursive: true })
+    const currentVersion = await readCurrentBuildCommit(currentDistDir)
+    await writeServiceWorkerVersion(firstRelease.distDir, firstRelease.version)
+    await writeServiceWorkerVersion(secondRelease.distDir, secondRelease.version)
+    await writeServiceWorkerVersion(currentDistDir, currentVersion)
+
+    const staticServer = await startStaticServer(firstRelease.distDir)
+    server = staticServer.server
+    await context.addInitScript(() => {
+      const key = 'tripmap-pwa-document-loads'
+      const nextCount = Number(window.sessionStorage.getItem(key) ?? '0') + 1
+      window.sessionStorage.setItem(key, String(nextCount))
+    })
+
+    const firstPage = await context.newPage()
+    const secondPage = await context.newPage()
+    await firstPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(firstPage)
+    await secondPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(secondPage)
+    await expect.poll(() => readServiceWorkerVersion(firstPage), { timeout: 10_000 })
+      .toBe(firstRelease.version)
+    await expect.poll(() => readServiceWorkerVersion(secondPage), { timeout: 10_000 })
+      .toBe(firstRelease.version)
+
+    await expect(firstPage.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
+    await firstPage.getByRole('button', { name: '创建示例旅行' }).click()
+    const tripCard = firstPage.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
+    await clickTripCard(tripCard)
+    const tripId = getHashParam(firstPage.url(), 'tripId')
+    expect(tripId).toBeTruthy()
+    expect(await readTripTitle(firstPage, tripId)).toBe('东京春日旅行')
+
+    const firstLoadsBeforeUpdate = await readDocumentLoadCount(firstPage)
+    const secondLoadsBeforeUpdate = await readDocumentLoadCount(secondPage)
+    staticServer.useRootDir(secondRelease.distDir)
+    await prepareUpdatedServiceWorker(firstPage)
+    await expect.poll(() => readWaitingServiceWorkerVersion(secondPage), { timeout: 10_000 })
+      .toBe(secondRelease.version)
+    await expect(firstPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+    await expect(secondPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+    await firstPage.waitForTimeout(500)
+    expect(await readDocumentLoadCount(firstPage)).toBe(firstLoadsBeforeUpdate)
+    expect(await readDocumentLoadCount(secondPage)).toBe(secondLoadsBeforeUpdate)
+    expect(await readServiceWorkerVersion(firstPage)).toBe(firstRelease.version)
+    expect(await readServiceWorkerVersion(secondPage)).toBe(firstRelease.version)
+    await confirmUpdateAcrossPages(firstPage, secondPage, secondRelease.version)
+    expect(await readTripTitle(secondPage, tripId)).toBe('东京春日旅行')
+
+    await context.setOffline(true)
+    await updateTripTitle(firstPage, tripId, '东京离线保留旅行')
+    expect(await readTripTitle(secondPage, tripId)).toBe('东京离线保留旅行')
+    await context.setOffline(false)
+
+    staticServer.useRootDir(currentDistDir)
+    await prepareUpdatedServiceWorker(secondPage)
+    await expect.poll(() => readWaitingServiceWorkerVersion(firstPage), { timeout: 10_000 })
+      .toBe(currentVersion)
+    expect(await readServiceWorkerVersion(firstPage)).toBe(secondRelease.version)
+    expect(await readServiceWorkerVersion(secondPage)).toBe(secondRelease.version)
+    await confirmUpdateAcrossPages(secondPage, firstPage, currentVersion)
+
+    expect(await readTripTitle(firstPage, tripId)).toBe('东京离线保留旅行')
+    const precacheNames = await firstPage.evaluate(async () =>
+      (await caches.keys()).filter((cacheName) => cacheName.includes('precache')))
+    expect(precacheNames).toHaveLength(1)
+
+    await firstPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    const migratedTripCard = firstPage.getByTestId('trip-card').filter({ hasText: '东京离线保留旅行' })
+    await expect(migratedTripCard).toBeVisible()
+    await clickTripCard(migratedTripCard)
+    await expect(firstPage.locator('header h1').first()).toHaveText('东京离线保留旅行')
   } finally {
     await context.setOffline(false)
     if (server) {
@@ -325,16 +416,17 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
   }
 })
 
-async function writeServiceWorkerVersion(appDir: string, version: 'v1' | 'v2' | 'v3') {
+async function writeServiceWorkerVersion(appDir: string, version: string) {
   const swPath = join(appDir, 'sw.js')
   const source = await readFile(swPath, 'utf8')
   const markerPattern = new RegExp(`${escapeRegExp(markerStart)}[\\s\\S]*?${escapeRegExp(markerEnd)}\\s*`, 'g')
   const cleanSource = source.replace(markerPattern, '')
+  const serializedVersion = JSON.stringify(version)
   await writeFile(
     swPath,
     `${cleanSource}
 ${markerStart}
-self.__TRIPMAP_E2E_PWA_VERSION__ = "${version}";
+self.__TRIPMAP_E2E_PWA_VERSION__ = ${serializedVersion};
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "TRIPMAP_E2E_PWA_VERSION" && event.source) {
     event.source.postMessage({ type: "TRIPMAP_E2E_PWA_VERSION", version: self.__TRIPMAP_E2E_PWA_VERSION__ });
@@ -347,6 +439,7 @@ ${markerEnd}
 }
 
 async function startStaticServer(rootDir: string) {
+  let activeRootDir = resolve(rootDir)
   const requestCounts = new Map<string, number>()
   const interruptedRequestCounts = new Map<string, number>()
   const server = createServer(async (request, response) => {
@@ -354,10 +447,12 @@ async function startStaticServer(rootDir: string) {
       const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
       const pathname = decodeURIComponent(requestUrl.pathname)
       requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1)
+      const requestRootDir = activeRootDir
       const requestedFile = pathname === '/' || !extname(pathname)
-        ? join(rootDir, 'index.html')
-        : resolve(rootDir, `.${pathname}`)
-      if (!requestedFile.startsWith(rootDir)) {
+        ? join(requestRootDir, 'index.html')
+        : resolve(requestRootDir, `.${pathname}`)
+      const relativePath = relative(requestRootDir, requestedFile)
+      if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
         response.writeHead(403)
         response.end('Forbidden')
         return
@@ -403,6 +498,9 @@ async function startStaticServer(rootDir: string) {
     },
     origin: `http://127.0.0.1:${address.port}`,
     server,
+    useRootDir(nextRootDir: string) {
+      activeRootDir = resolve(nextRootDir)
+    },
   }
 }
 
@@ -649,7 +747,7 @@ async function readWaitingServiceWorkerVersion(page: Page) {
 async function confirmUpdateAcrossPages(
   confirmingPage: Page,
   observingPage: Page,
-  expectedVersion: 'v2' | 'v3',
+  expectedVersion: string,
 ) {
   await expect(confirmingPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
   await expect(observingPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
@@ -667,6 +765,88 @@ async function confirmUpdateAcrossPages(
   await ensureServiceWorkerController(observingPage)
   await expect.poll(() => readServiceWorkerVersion(confirmingPage), { timeout: 10_000 }).toBe(expectedVersion)
   await expect.poll(() => readServiceWorkerVersion(observingPage), { timeout: 10_000 }).toBe(expectedVersion)
+}
+
+async function readCurrentBuildCommit(appDir: string) {
+  const sourceFiles = await readFile(join(appDir, 'index.html'), 'utf8')
+  const currentCommit = (
+    process.env.CF_PAGES_COMMIT_SHA
+    ?? process.env.GITHUB_SHA
+    ?? process.env.VITE_APP_COMMIT_SHA
+    ?? ''
+  ).trim().slice(0, 8)
+  if (currentCommit) return currentCommit
+
+  const gitCommit = await new Promise<string>((resolveCommit, rejectCommit) => {
+    import('node:child_process').then(({ execFile }) => {
+      execFile('git', ['rev-parse', '--short=8', 'HEAD'], (error, stdout) => {
+        if (error) {
+          rejectCommit(error)
+          return
+        }
+        resolveCommit(stdout.trim())
+      })
+    }).catch(rejectCommit)
+  })
+  if (!sourceFiles.includes('<!doctype html>') || !gitCommit) {
+    throw new Error('current PWA build provenance is unavailable')
+  }
+  return gitCommit
+}
+
+async function updateTripTitle(page: Page, tripId: string, title: string) {
+  await page.evaluate(async ({ title: nextTitle, tripId: targetTripId }) => {
+    const db = await new Promise<IDBDatabase>((resolveOpen, rejectOpen) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolveOpen(request.result)
+      request.onerror = () => rejectOpen(request.error ?? new Error('failed to open travel database'))
+    })
+    await new Promise<void>((resolveUpdate, rejectUpdate) => {
+      const transaction = db.transaction('trips', 'readwrite')
+      const store = transaction.objectStore('trips')
+      const request = store.get(targetTripId)
+      request.onsuccess = () => {
+        if (!request.result) {
+          transaction.abort()
+          return
+        }
+        store.put({
+          ...request.result,
+          title: nextTitle,
+          updatedAt: Date.now(),
+        })
+      }
+      request.onerror = () => rejectUpdate(request.error ?? new Error('failed to read trip'))
+      transaction.oncomplete = () => {
+        db.close()
+        resolveUpdate()
+      }
+      transaction.onabort = () => {
+        db.close()
+        rejectUpdate(transaction.error ?? new Error('failed to update trip'))
+      }
+      transaction.onerror = () => rejectUpdate(transaction.error ?? new Error('failed to update trip'))
+    })
+  }, { title, tripId })
+}
+
+async function readTripTitle(page: Page, tripId: string) {
+  return page.evaluate(async (targetTripId) => {
+    const db = await new Promise<IDBDatabase>((resolveOpen, rejectOpen) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolveOpen(request.result)
+      request.onerror = () => rejectOpen(request.error ?? new Error('failed to open travel database'))
+    })
+    return await new Promise<string | null>((resolveRead, rejectRead) => {
+      const transaction = db.transaction('trips', 'readonly')
+      const request = transaction.objectStore('trips').get(targetTripId)
+      request.onsuccess = () => resolveRead(
+        typeof request.result?.title === 'string' ? request.result.title : null,
+      )
+      request.onerror = () => rejectRead(request.error ?? new Error('failed to read trip'))
+      transaction.oncomplete = () => db.close()
+    })
+  }, tripId)
 }
 
 async function putIndexedDbMarker(page: Page, value = 'kept') {

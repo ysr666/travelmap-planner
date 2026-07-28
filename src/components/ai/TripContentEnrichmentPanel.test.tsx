@@ -194,17 +194,18 @@ async function clickButton(name: string) {
 }
 
 async function waitForText(text: string) {
-  for (let index = 0; index < 60; index += 1) {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
     if (document.body.textContent?.includes(text)) return
     await act(async () => {
-      await delay()
+      await delay(10)
     })
   }
   throw new Error(`Text not found: ${text}`)
 }
 
-function delay() {
-  return new Promise((resolve) => setTimeout(resolve, 0))
+function delay(milliseconds = 0) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function jsonResponse(body: unknown, status = 200) {

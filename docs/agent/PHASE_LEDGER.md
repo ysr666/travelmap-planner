@@ -2274,7 +2274,7 @@ Remote verification:
 
 ## 2026-07-28 Real UK Workbook OOXML Compatibility
 
-Status: implemented and locally validated; pending merge and remote verification.
+Status: merged and remotely verified.
 
 Branch: `fix/real-import-preflight`
 
@@ -2315,3 +2315,72 @@ Validation:
 Risk:
 
 - Low: parsing broadens only accepted OOXML tag spelling and does not change Provider data, persistence, or write behavior.
+
+Remote verification:
+
+- PR #28 merged to `main` as `465d08ba10727dcb7e743f69ded86841270ee727`.
+- The same-SHA GitHub Actions run `30347936823` passed Type Check, Unit Tests, Lint, Build, and all 153 serial E2E tests.
+- Cloudflare Pages deployed the same commit successfully.
+
+## 2026-07-28 PWA Upgrade Recovery Matrix
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `feature/pwa-upgrade-recovery-matrix`
+
+Goal:
+
+- Extend the real-build PWA evidence from one adjacent update to repeated release upgrades and storage-pressure recovery without losing IndexedDB data or serving partial runtime assets.
+
+Scope:
+
+- Exercise one installed PWA through three sequential service-worker revisions, including an offline IndexedDB edit between releases.
+- Verify every update remains waiting until the existing final user confirmation, all open tabs converge on the selected release, and local data survives each activation.
+- Apply an explicit Chromium origin quota during an on-demand asset fetch, verify the app still receives the complete network response, and ensure no incomplete runtime entry is retained.
+- Restore storage headroom, retry the same asset, and verify one complete cached response remains available offline.
+- Keep the current Workbox cache names, expiration policy, precache boundary, and application update UI unchanged.
+
+No-go:
+
+- No production Provider, cloud, account, route, search, map, AI, or storage calls.
+- No Service Worker cache-policy change, IndexedDB schema change, sync contract change, or user-visible UI change.
+- No fixture that depends on a historical production artifact or mutable remote deployment.
+
+Likely files:
+
+- `e2e/pwa-upgrade.spec.ts`
+- `docs/BETA_QA_RECORD.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ROADMAP_V4.md`
+
+Validation:
+
+- Production build and focused built-dist PWA E2E.
+- Repeated focused stability run.
+- Typecheck, lint, full unit suite, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: browser quota APIs and service-worker activation races can make a weak test look green or flaky unless exact controller versions, response byte lengths, cache entries, and IndexedDB markers are checked.
+
+Stop conditions:
+
+- Stop and repair if an update activates before confirmation, tabs remain on mixed versions, an offline edit disappears, a quota failure returns partial data as successful, a partial asset enters cache, or retry cannot restore offline availability.
+
+Result:
+
+- Added a two-tab `v1 → v2 → v3` real-build sequence. Both updates remain waiting until the existing update button is confirmed, then every tab reloads onto the selected controller version.
+- An IndexedDB marker created on v1 and edited while v2 is offline remains unchanged after v3 activation and both document reloads.
+- Applied a real Chromium origin quota with only 64 KiB headroom before requesting the MapLibre chunk. The complete network response still reaches the app and no partial runtime-cache entry remains.
+- Resetting the quota allows the existing interrupted-download check and a complete retry to succeed; the exact complete byte length remains available offline.
+- Hardened the content-enrichment component test wait against full-suite scheduler pressure after validation exposed a transient timeout that could leak unfinished requests into the next test.
+- No application cache policy, UI, IndexedDB schema, sync contract, Provider boundary, or production data changed.
+
+Validation:
+
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1555 tests. The initially exposed content-enrichment timing failure passed in isolation and after the bounded wait hardening.
+- `npm run build` passed; bundle budget passed at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
+- Focused built-dist PWA E2E passed all 4 tests; a five-repeat stability run passed all 20 executions.
+- The full serial E2E run passed all 154 tests in approximately 6.1 minutes.

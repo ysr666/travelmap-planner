@@ -1,6 +1,18 @@
 # Limited Beta QA 记录
 
-最新记录：2026-07-26
+最新记录：2026-07-28
+
+## 2026-07-28 PWA 连续升级与存储压力
+
+- built-dist PWA 新增 `v1 → v2 → v3` 连续升级矩阵；两次更新都在用户确认前保持 waiting，确认后两个标签切换到同一版本。
+- 在 v2 离线写入的 IndexedDB 标记经过 v3 激活和双标签重载后仍完整保留。
+- 使用 Chromium `Storage.overrideQuotaForOrigin` 将可用空间压到低于 MapLibre chunk；网络响应仍保持完整，运行时缓存不保留残缺项。
+- 恢复 quota 后，同一资源可完整写入 `tripmap-on-demand-assets-v1`，随后离线返回相同字节长度。
+- `npm run typecheck`、`npm run lint`、`npm run build`：通过；bundle budget 为 868.3 KiB 初始 JS、249.6 KiB gzip、2301.0 KiB/94 项预缓存。
+- `npm run test:unit`：通过，187 个文件、1555 个测试。
+- `npm run test:e2e:pwa-upgrade`：4 个测试通过；连续 5 轮稳定性验证共 20/20 通过。
+- `npm run test:e2e:serial`：154 个测试通过，约 6.1 分钟。
+- 本轮是当前构建的连续 Service Worker 修订验证，不替代多个真实历史生产构建产物的迁移矩阵，也不替代 iPhone/Android 实体机记录。
 
 ## 2026-07-26 Provider 网络执行按需边界
 

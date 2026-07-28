@@ -16,9 +16,9 @@
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | built-dist 连续三版本升级、双标签收敛、IndexedDB 保留、配额压力恢复、核心离线页和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
-| Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
+| Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 就绪 | 187/1555 unit、154 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
+| CI / E2E | 就绪 | 187/1555 unit、155 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
 | 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
 
 ## 发布必过

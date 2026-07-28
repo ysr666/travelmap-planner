@@ -108,6 +108,61 @@ test('PWA 更新在确认前保持等待，确认后所有标签切换到同一�
   }
 })
 
+test('PWA 连续升级三个版本时保留离线编辑并让所有标签收敛', async ({ context }) => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-release-matrix-'))
+  const appDir = join(tempDir, 'app')
+  let server: Server | null = null
+
+  try {
+    await cp(builtDistDir, appDir, { recursive: true })
+    await writeServiceWorkerVersion(appDir, 'v1')
+    const staticServer = await startStaticServer(appDir)
+    server = staticServer.server
+    await context.addInitScript(() => {
+      const key = 'tripmap-pwa-document-loads'
+      const nextCount = Number(window.sessionStorage.getItem(key) ?? '0') + 1
+      window.sessionStorage.setItem(key, String(nextCount))
+    })
+
+    const firstPage = await context.newPage()
+    const secondPage = await context.newPage()
+    await firstPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(firstPage)
+    await secondPage.goto(`${staticServer.origin}/#/home`, { waitUntil: 'networkidle' })
+    await ensureServiceWorkerController(secondPage)
+    await expect.poll(() => readServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v1')
+    await expect.poll(() => readServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v1')
+    await putIndexedDbMarker(firstPage, 'created-on-v1')
+
+    await writeServiceWorkerVersion(appDir, 'v2')
+    await prepareUpdatedServiceWorker(firstPage)
+    await expect.poll(() => readWaitingServiceWorkerVersion(secondPage), { timeout: 10_000 }).toBe('v2')
+    expect(await readServiceWorkerVersion(firstPage)).toBe('v1')
+    expect(await readServiceWorkerVersion(secondPage)).toBe('v1')
+    await confirmUpdateAcrossPages(firstPage, secondPage, 'v2')
+    expect(await readIndexedDbMarker(secondPage)).toBe('created-on-v1')
+
+    await context.setOffline(true)
+    await putIndexedDbMarker(secondPage, 'edited-offline-on-v2')
+    expect(await readIndexedDbMarker(firstPage)).toBe('edited-offline-on-v2')
+    await context.setOffline(false)
+
+    await writeServiceWorkerVersion(appDir, 'v3')
+    await prepareUpdatedServiceWorker(secondPage)
+    await expect.poll(() => readWaitingServiceWorkerVersion(firstPage), { timeout: 10_000 }).toBe('v3')
+    expect(await readServiceWorkerVersion(firstPage)).toBe('v2')
+    expect(await readServiceWorkerVersion(secondPage)).toBe('v2')
+    await confirmUpdateAcrossPages(secondPage, firstPage, 'v3')
+    expect(await readIndexedDbMarker(firstPage)).toBe('edited-offline-on-v2')
+  } finally {
+    await context.setOffline(false)
+    if (server) {
+      await closeStaticServer(server)
+    }
+    await rm(tempDir, { force: true, recursive: true })
+  }
+})
+
 test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async ({ page, context }) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'tripmap-pwa-cache-'))
   const appDir = join(tempDir, 'app')
@@ -155,6 +210,38 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
       page,
       (name) => name === 'tripmap-on-demand-assets-v1',
     )).not.toContain(mapAssetUrl)
+
+    const cdpSession = await context.newCDPSession(page)
+    try {
+      const storageState = await cdpSession.send('Storage.getUsageAndQuota', {
+        origin: staticServer.origin,
+      })
+      await cdpSession.send('Storage.overrideQuotaForOrigin', {
+        origin: staticServer.origin,
+        quotaSize: Math.ceil(storageState.usage + 64 * 1024),
+      })
+
+      const requestCountBeforeQuotaPressure = staticServer.getRequestCount(mapAssetPath)
+      const quotaPressureFetch = await page.evaluate(async ({ expectedSize, url }) => {
+        const response = await fetch(url)
+        return {
+          complete: response.ok && (await response.arrayBuffer()).byteLength === expectedSize,
+        }
+      }, { expectedSize: mapAssetSize, url: mapAssetUrl })
+      expect(quotaPressureFetch.complete).toBe(true)
+      expect(staticServer.getRequestCount(mapAssetPath)).toBe(requestCountBeforeQuotaPressure + 1)
+      await page.waitForTimeout(750)
+      expect(await readCacheUrls(
+        page,
+        (name) => name === 'tripmap-on-demand-assets-v1',
+      )).not.toContain(mapAssetUrl)
+    } finally {
+      await cdpSession.send('Storage.overrideQuotaForOrigin', {
+        origin: staticServer.origin,
+      })
+      await cdpSession.detach()
+    }
+
     const requestCountBeforeInterruption = staticServer.getRequestCount(mapAssetPath)
     staticServer.interruptNextRequest(mapAssetPath)
     const interruptedFetch = await page.evaluate(async ({ expectedSize, url }) => {
@@ -238,7 +325,7 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
   }
 })
 
-async function writeServiceWorkerVersion(appDir: string, version: 'v1' | 'v2') {
+async function writeServiceWorkerVersion(appDir: string, version: 'v1' | 'v2' | 'v3') {
   const swPath = join(appDir, 'sw.js')
   const source = await readFile(swPath, 'utf8')
   const markerPattern = new RegExp(`${escapeRegExp(markerStart)}[\\s\\S]*?${escapeRegExp(markerEnd)}\\s*`, 'g')
@@ -559,8 +646,31 @@ async function readWaitingServiceWorkerVersion(page: Page) {
   })
 }
 
-async function putIndexedDbMarker(page: Page) {
-  await page.evaluate(async () => {
+async function confirmUpdateAcrossPages(
+  confirmingPage: Page,
+  observingPage: Page,
+  expectedVersion: 'v2' | 'v3',
+) {
+  await expect(confirmingPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+  await expect(observingPage.getByRole('button', { name: '更新并重启' })).toBeVisible()
+  const confirmingLoadsBeforeUpdate = await readDocumentLoadCount(confirmingPage)
+  const observingLoadsBeforeUpdate = await readDocumentLoadCount(observingPage)
+
+  await confirmingPage.bringToFront()
+  await confirmingPage.getByRole('button', { name: '更新并重启' }).click()
+  await expect.poll(() => readDocumentLoadCount(confirmingPage), { timeout: 10_000 })
+    .toBeGreaterThan(confirmingLoadsBeforeUpdate)
+  await observingPage.bringToFront()
+  await expect.poll(() => readDocumentLoadCount(observingPage), { timeout: 10_000 })
+    .toBeGreaterThan(observingLoadsBeforeUpdate)
+  await ensureServiceWorkerController(confirmingPage)
+  await ensureServiceWorkerController(observingPage)
+  await expect.poll(() => readServiceWorkerVersion(confirmingPage), { timeout: 10_000 }).toBe(expectedVersion)
+  await expect.poll(() => readServiceWorkerVersion(observingPage), { timeout: 10_000 }).toBe(expectedVersion)
+}
+
+async function putIndexedDbMarker(page: Page, value = 'kept') {
+  await page.evaluate(async (markerValue) => {
     async function openSmokeDb() {
       return await new Promise<IDBDatabase>((resolveOpen, rejectOpen) => {
         const request = indexedDB.open('TripMapPwaUpgradeSmoke', 1)
@@ -577,14 +687,14 @@ async function putIndexedDbMarker(page: Page) {
     const db = await openSmokeDb()
     await new Promise<void>((resolvePut, rejectPut) => {
       const transaction = db.transaction('records', 'readwrite')
-      transaction.objectStore('records').put('kept', 'marker')
+      transaction.objectStore('records').put(markerValue, 'marker')
       transaction.oncomplete = () => {
         db.close()
         resolvePut()
       }
       transaction.onerror = () => rejectPut(transaction.error ?? new Error('failed to write smoke marker'))
     })
-  })
+  }, value)
 }
 
 async function readIndexedDbMarker(page: Page) {

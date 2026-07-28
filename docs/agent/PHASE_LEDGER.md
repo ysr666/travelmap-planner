@@ -2393,7 +2393,7 @@ Remote verification:
 
 ## 2026-07-28 Offline Account Sync Recovery
 
-Status: implemented and locally validated; pending merge and remote verification.
+Status: merged and remotely verified.
 
 Branch: `feature/offline-sync-recovery`
 
@@ -2453,3 +2453,76 @@ Validation:
 - `npm run build` passed; bundle budget remained at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
 - The first full serial E2E run had one unrelated AI draft `beforeEach` navigation timeout; that test passed in isolation and in a ten-repeat run.
 - A clean full serial E2E rerun passed all 155 tests in approximately 5.9 minutes.
+
+Remote verification:
+
+- PR #30 merged to `main` as `f825112b634e522bdd9ee49e250bc916fdaf7aed`.
+- The same-SHA GitHub Actions run `30352682116` passed Type Check, Unit Tests, Lint, Build, and E2E Tests.
+- Cloudflare Pages deployed the same commit successfully.
+
+## 2026-07-28 Historical PWA Production Migration Matrix
+
+Status: implemented and locally validated; pending merge and remote verification.
+
+Branch: `feature/pwa-historical-migration-matrix`
+
+Goal:
+
+- Prove that actual production source revisions can migrate through their generated Service Workers on one browser origin into the current candidate without forcing activation or losing real TripMap IndexedDB data.
+
+Scope:
+
+- Generate production Vite/PWA distributions from the fixed, previously deployed `main` revisions `4c8f60ec93d2029e6b13b89b27a3b8855d8bf847` and `4c7489352f0d8ddb6195c1b61727a9a845fbbd4a`.
+- Serve each immutable build in sequence on one local origin, followed by the current candidate `dist`.
+- Create a real sample trip in the first historical build, make an offline IndexedDB edit after the first migration, and verify the current build still opens the edited trip.
+- Verify each new worker remains waiting until the product update action, open tabs converge after confirmation, and obsolete precache versions are cleaned.
+- Keep CI able to resolve the pinned historical commits without downloading mutable deployment artifacts.
+
+No-go:
+
+- No real Cloudflare deployment download, Provider, AI, map, route, search, account, Supabase, ticket/blob, or production data call.
+- No application Service Worker policy, IndexedDB schema, cloud sync contract, update UI, or runtime cache behavior change.
+- No moving branch/tag selector, shallow-history fallback, synthetic replacement app, or unpinned remote release input.
+
+Likely files:
+
+- `e2e/pwa-upgrade.spec.ts`
+- `.github/workflows/ci.yml`
+- `docs/BETA_QA_RECORD.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ROADMAP_V4.md`
+
+Validation:
+
+- Focused historical production migration E2E and repeated stability run.
+- Existing built-dist PWA suite.
+- Typecheck, lint, full unit suite, production build, full serial E2E, and `git diff --check`.
+
+Risk:
+
+- Medium: historical source must build reproducibly with the pinned lock-compatible toolchain, and swapping asset roots must not create a transient mixed release that hides a real migration failure.
+
+Stop conditions:
+
+- Stop and repair if a pinned revision is missing, a historical build differs from its declared commit, a worker activates before confirmation, tabs remain split, the sample trip or offline edit disappears, obsolete precaches survive the final activation, or CI needs a mutable network artifact.
+
+Result:
+
+- Added a history builder that validates each fixed commit, Git tree, and package-lock object before extracting the source and running its actual Vite/PWA production build.
+- The older lock installs with its own checked-in `.npmrc`; dependency reuse is isolated by lock-object cache, while the matching current lock reuses the workspace installation.
+- CI E2E checkout now has full Git history so the pinned revisions resolve without a branch/tag fallback or mutable deployment download.
+- Added one same-origin browser matrix from deployed `4c8f60ec` to deployed `4c748935`, then to the current candidate distribution.
+- Both transitions remain waiting while two tabs stay on the old controller, then converge only after the existing `更新并重启` action.
+- A real sample trip created in the first historical app survives both migrations. Its title, edited directly in IndexedDB while the middle release is offline, remains visible and opens in the current candidate.
+- The final release leaves exactly one active precache, proving obsolete historical precaches were cleaned.
+- No application Service Worker policy, IndexedDB schema, update UI, cloud/provider contract, production service, or real user data changed.
+
+Validation:
+
+- The focused historical migration passed; a five-repeat stability run passed 5/5.
+- `npm run test:e2e:pwa-upgrade` passed all 5 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 187 files and 1555 tests.
+- `npm run build` passed; bundle budget remained at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
+- The full serial E2E run passed all 156 tests in approximately 7.3 minutes.
+- `git diff --check` passed.

@@ -164,11 +164,14 @@ async function assertHistoricalRelease(
   if (packageLockObject !== release.expectedPackageLockObject) {
     throw new Error(`historical PWA lockfile mismatch for ${release.label}`)
   }
-  await runCommand(
+  const commonAncestor = await runCommand(
     'git',
-    ['merge-base', '--is-ancestor', release.commit, currentRevision],
+    ['merge-base', release.commit, currentRevision],
     { cwd: workspaceRoot },
   )
+  if (commonAncestor !== release.commit) {
+    throw new Error(`historical PWA commit is not an ancestor for ${release.label}`)
+  }
 }
 
 async function resolveCurrentRevision(workspaceRoot: string) {

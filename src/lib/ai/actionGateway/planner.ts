@@ -10,6 +10,7 @@ import {
 import { getAiActionRisk, listAiActionCatalog } from './registry'
 import {
   AI_ACTION_PLAN_SCHEMA_VERSION,
+  type AiActionId,
   type AiActionDayItemsReorderArgs,
   type AiActionHistoryUndoArgs,
   type AiActionItemCreateArgs,
@@ -255,11 +256,16 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     })
   }
 
-  if (steps.length === 0) return null
+  const safeSteps = isNonAffirmativeWriteCommand(normalized)
+    ? steps.filter((step) =>
+        getAiActionRisk(step.actionId as AiActionId) !== 'local_write',
+      )
+    : steps
+  if (safeSteps.length === 0) return null
   const validation = validateAiActionPlan({
     schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
-    steps,
-    summary: summarizeSteps(steps),
+    steps: safeSteps,
+    summary: summarizeSteps(safeSteps),
   })
   return validation.ok ? validation.plan : null
 }
@@ -270,6 +276,7 @@ export function shouldRequestAiActionPlan(command: string) {
   if (
     isHypotheticalCommand(normalized)
     || isExplicitlyNegatedActionCommand(normalized)
+    || isNonAffirmativeWriteCommand(normalized)
     || isNonActionItemStateCommand(normalized)
     || isNonActionReplanCommand(normalized)
   ) {
@@ -378,8 +385,15 @@ function inferRepairScope(command: string): 'day' | 'item' | 'trip' {
 function inferSemanticTarget(command: string) {
   const quoted = command.match(/[「“"]([^」”"]{1,80})[」”"]/)
   if (quoted?.[1]?.trim()) return quoted[1].trim()
-  if (['第一站', '首站', '第一个地点'].some((value) => command.includes(value))) return 'first_item'
-  if (['当前站', '这一站', '这个地点', '当前地点', '当前行程点', '这个行程点', '这个预约'].some((value) => command.includes(value))) return 'current_item'
+  if (hasAffirmativeSemanticMarker(command, ['第一站', '首站', '第一个地点'])) {
+    return 'first_item'
+  }
+  if (hasAffirmativeSemanticMarker(
+    command,
+    ['当前站', '这一站', '这个地点', '当前地点', '当前行程点', '这个行程点', '这个预约'],
+  )) {
+    return 'current_item'
+  }
   return undefined
 }
 
@@ -575,10 +589,12 @@ function parseDeterministicAdaptiveReplan(
   const target = semanticTarget ?? cleanSemanticSelector(
     command
       .replace(day?.text ?? '', ' ')
+      .replace(/(?:但|不过|而)?\s*(?:并)?(?:不是|并非|非)\s*(?:当前站|这一站|这个地点|当前地点|当前行程点|这个行程点|第一站|首站|第一个地点)/g, ' ')
       .replace(/(?:迟到|晚到|来晚|延误|晚点|关闭|闭馆|不开门|关门|歇业|下雨|暴雨|天气|太热|太冷|台风|户外少一点|取消)(?:了|啦|呢)?/g, ' ')
       .replace(/(?:半小时|一小时|\d{1,3}\s*(?:分钟|分|小时))/g, ' ')
       .replace(/(?:按|使用)?(?:最少改动|尽量少改|尽量保留|优先保留|必须保留|一定要去|必去|最省路程|最短路线)(?:方案|策略)?/g, ' ')
       .replace(/(?:调整|重排)(?:一下|行程|安排)?/g, ' ')
+      .replace(/(?:请|麻烦|帮我|给我)/g, ' ')
       .replace(/^(?:请|麻烦|帮我|给我|把|将|我|我们|\s)+/g, '')
       .replace(/(?:这个|该)?(?:行程点|站点)\s*$/g, '')
       .replace(/[，,。；;：:\s]+/g, ' ')
@@ -938,6 +954,7 @@ function isAiActionStepBoundToCommand(
     && (
       isHypotheticalCommand(command)
       || isExplicitlyNegatedActionCommand(command)
+      || isNonAffirmativeWriteCommand(command)
     )
   ) {
     return false
@@ -956,45 +973,36 @@ function isAiActionStepBoundToCommand(
         && isSemanticTargetBound(args.target, command, 'item')
     case 'item.create@1':
       return /(?:新增|添加|加入|插入|创建)/.test(command)
-        && isSemanticTargetBound(args.day, command, 'day')
+        && isProviderItemCreateBound(command, args)
         && isSemanticTargetBound(args.title, command, 'literal')
     case 'item.delete@1':
       return /(?:删除|移除)/.test(command)
         && !/(?:取消|退款|退票|作废|票据|门票|订单|预订|付款|账本|费用|整个旅行|整趟旅行)/.test(command)
         && isSemanticTargetBound(args.target, command, 'item')
-        && isSemanticTargetBound(args.day, command, 'day')
+        && isOptionalExplicitDayBound(args.day, command)
     case 'item.execution.update@1':
       return isProviderExecutionStateBound(command, args.state)
         && !isNonActionItemStateCommand(command)
         && isSemanticTargetBound(args.target, command, 'item')
-        && isSemanticTargetBound(args.day, command, 'day')
+        && isOptionalExplicitDayBound(args.day, command)
     case 'item.replan.preference.update@1':
       return intent.kind === 'preference_update'
         && isPreferenceArgsBound(args, intent.preference)
         && isSemanticTargetBound(args.target, command, 'item')
-        && isSemanticTargetBound(args.day, command, 'day')
+        && isOptionalExplicitDayBound(args.day, command)
     case 'trip.replan.apply@1':
       return isProviderReplanBound(command, args)
     case 'day.items.reorder@1':
-      return /(?:移动到|移到|挪到|排到|调整到)/.test(command)
-        && /(?:最前|第一位|首位|开头|最后|末尾|前面|之前|后面|之后)/.test(command)
-        && isSemanticTargetBound(args.target, command, 'item')
-        && isSemanticTargetBound(args.anchor, command, 'item')
-        && isSemanticTargetBound(args.day, command, 'day')
+      return isProviderDayReorderBound(command, args)
     case 'item.move@1':
-      return /(?:移动到|移到|挪到|安排到)/.test(command)
-        && isSemanticTargetBound(args.target, command, 'item')
-        && isSemanticTargetBound(args.anchor, command, 'item')
-        && isSemanticTargetBound(args.sourceDay, command, 'day')
-        && isSemanticTargetBound(args.destinationDay, command, 'day')
+      return isProviderItemMoveBound(command, args)
     case 'item.time.update@1':
-      return /(?:改到|改为|调整到|调整为|挪到|移到|安排到)/.test(command)
-        && /(?:[0-2]?\d[:：点时][0-5]?\d?)/.test(command)
-        && isSemanticTargetBound(args.target, command, 'item')
+      return isProviderTimeUpdateBound(command, args)
     case 'ledger.expense.draft@1':
       return /(?:记|记录|新增|添加|创建)/.test(command)
         && /(?:费用|消费|账单|餐|车费|门票|住宿|酒店|保险|购物)/.test(command)
         && /\d/.test(command)
+        && isProviderExpenseBound(command, args)
         && isSemanticTargetBound(args.title, command, 'literal')
     case 'place.enrich@1':
       return !isTripRepairCommand(command)
@@ -1004,9 +1012,12 @@ function isAiActionStepBoundToCommand(
       return !isTripRepairCommand(command)
         && /路线/.test(command)
         && /(?:生成|创建|准备|补上|补全)/.test(command)
-        && isSemanticTargetBound(args.target, command, 'day')
+        && isProviderRoutePreviewBound(command, args)
     case 'trip.repair@1':
       return isTripRepairCommand(command)
+        && args.scope === inferRepairScope(command)
+        && isRequiredExplicitTargetBound(args.target, command)
+        && isSemanticTargetBound(args.target, command, 'item')
     default:
       return false
   }
@@ -1014,6 +1025,203 @@ function isAiActionStepBoundToCommand(
 
 function isExplicitlyNegatedActionCommand(command: string) {
   return /(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,64}(?:打开|查找|补全|补充|修复|处理|整理|完成|调整|移动|挪|生成|新增|添加|创建|删除|移除|撤销|恢复|跳过|标记|设为|记录|写入)/.test(command)
+    || /\b(?:do\s+not|don't|dont|never|no\s+need\s+to)\b[^.!?]{0,96}\b(?:open|find|search|enrich|repair|fix|adjust|move|generate|create|add|delete|remove|undo|restore|skip|mark|record|replan)\b/i.test(command)
+}
+
+function isNonAffirmativeWriteCommand(command: string) {
+  const normalized = command.trim()
+  if (!normalized) return true
+  if (isExplicitlyNegatedActionCommand(normalized)) return true
+  if (
+    /(?:删除|移除|修复|调整|重排|移动|挪|新增|添加|创建|记录|写入|生成|补全|补充|完成|跳过|标记|设为)[^，。；;]{0,48}(?:不用|不要了|不必|无需|算了|取消吧|别了)\s*[。.!！]?$/.test(normalized)
+    || /\b(?:never\s+mind|cancel\s+that|do\s+not|don't|dont|no\s+need)\b/i.test(normalized)
+  ) {
+    return true
+  }
+  if (/[?？]/.test(normalized)) return true
+  if (
+    /^(?:请问|是否|是不是|有没有|能否|能不能|可不可以|要不要|该不该|为什么|怎么|如何)/.test(normalized)
+    || /(?:吗|么)\s*$/.test(normalized)
+    || /^(?:is|are|was|were|do|does|did|can|could|would|should|will|has|have|what|why|how|whether)\b/i.test(normalized)
+  ) {
+    return true
+  }
+  return false
+}
+
+function hasAffirmativeSemanticMarker(
+  command: string,
+  markers: string[],
+) {
+  return markers.some((marker) => {
+    let offset = command.indexOf(marker)
+    while (offset >= 0) {
+      const prefix = command.slice(Math.max(0, offset - 12), offset)
+      if (!/(?:不是|并非|非|不要|别|不选|排除)\s*$/.test(prefix)) {
+        return true
+      }
+      offset = command.indexOf(marker, offset + marker.length)
+    }
+    return false
+  })
+}
+
+function isProviderItemCreateBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const day = findPlannerDayTarget(command)
+  if (!day || args.day !== day.target) return false
+  const time = extractPlannerTimeConstraint(command)
+  if (!time) {
+    return args.startTime === undefined && args.endTime === undefined
+  }
+  return args.startTime === time.startTime
+    && args.endTime === time.endTime
+}
+
+function isProviderDayReorderBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const expected = parseDeterministicDayReorder(command)
+  return Boolean(expected && areActionArgsEqual(
+    args,
+    expected,
+    ['anchor', 'day', 'position', 'target'],
+  ))
+}
+
+function isProviderItemMoveBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const expected = parseDeterministicItemMove(command)
+  return Boolean(expected && areActionArgsEqual(
+    args,
+    expected,
+    ['anchor', 'destinationDay', 'position', 'sourceDay', 'target'],
+  ))
+}
+
+function isProviderTimeUpdateBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const expected = parseDeterministicTimeUpdate(command)
+  return Boolean(expected && areActionArgsEqual(
+    args,
+    expected,
+    ['endTime', 'startTime', 'target'],
+  ))
+}
+
+function isProviderExpenseBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const amount = extractExplicitExpenseAmount(command)
+  if (
+    !amount
+    || typeof args.amount !== 'string'
+    || normalizeDecimalAmount(args.amount) !== normalizeDecimalAmount(amount)
+  ) {
+    return false
+  }
+  const currency = inferExpenseCurrency(command)
+  if (
+    currency
+      ? args.currency !== currency
+      : args.currency !== undefined
+  ) {
+    return false
+  }
+  const date = command.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0]
+  if (date ? args.date !== date : args.date !== undefined) return false
+
+  const category = inferExpenseCategory(command)
+  return category === 'other'
+    ? args.category === undefined || args.category === 'other'
+    : args.category === category
+}
+
+function isProviderRoutePreviewBound(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  const day = findPlannerDayTarget(command)
+  if (day) {
+    return args.scope === 'day' && args.target === day.target
+  }
+  const explicitlyWholeTrip = /(?:全部|所有|整趟|整个|全程|每一天|每天)(?:的)?路线|路线[^，。；;]{0,16}(?:全部|所有|整趟|整个|全程|每一天|每天)/.test(command)
+  return explicitlyWholeTrip
+    && args.scope === 'trip'
+    && args.target === undefined
+}
+
+function isOptionalExplicitDayBound(
+  value: unknown,
+  command: string,
+) {
+  const explicit = findPlannerDayTarget(command)
+  return explicit
+    ? value === explicit.target
+    : value === undefined || isSemanticTargetBound(value, command, 'day')
+}
+
+function isRequiredExplicitTargetBound(
+  value: unknown,
+  command: string,
+) {
+  const explicit = inferSemanticTarget(command)
+  return explicit ? value === explicit : true
+}
+
+function areActionArgsEqual(
+  actual: Record<string, unknown>,
+  expected: Record<string, unknown>,
+  fields: string[],
+) {
+  return fields.every((field) => actual[field] === expected[field])
+}
+
+function extractPlannerTimeConstraint(command: string) {
+  const match = command.match(
+    /(?:^|[，,\s])(?:在|于)?\s*([0-2]?\d(?:[:：][0-5]\d|[点时](?:[0-5]?\d分?)?))(?:\s*(?:-|—|–|至|到)\s*([0-2]?\d(?:[:：][0-5]\d|[点时](?:[0-5]?\d分?)?)?))?/,
+  )
+  if (!match) return null
+  const startTime = normalizePlannerTime(match[1])
+  const endTime = match[2] ? normalizePlannerTime(match[2]) : undefined
+  if (!startTime || (match[2] && !endTime)) return null
+  return {
+    ...(endTime ? { endTime } : {}),
+    startTime,
+  }
+}
+
+function extractExplicitExpenseAmount(command: string) {
+  const matches = [...command.matchAll(
+    /(?:(?:CNY|RMB|人民币|JPY|日元|GBP|英镑|USD|美元|EUR|欧元|HKD|港币|[£$€¥￥])\s*)?(?:\d{1,3}(?:,\d{3})+|\d{1,12})(?:\.\d{1,4})?(?:\s*(?:CNY|RMB|人民币|元|JPY|日元|GBP|英镑|USD|美元|EUR|欧元|HKD|港币))?/gi,
+  )].map((match) => ({
+    amount: match[0].match(/(?:\d{1,3}(?:,\d{3})+|\d{1,12})(?:\.\d{1,4})?/)?.[0].replace(/,/g, ''),
+    token: match[0],
+  })).filter((entry): entry is { amount: string; token: string } => Boolean(entry.amount))
+  const currencyMatches = matches.filter((entry) => inferExpenseCurrency(entry.token))
+  if (currencyMatches.length === 1) return currencyMatches[0].amount
+  if (currencyMatches.length > 1) return undefined
+  const decimalMatches = matches.filter((entry) => entry.amount.includes('.'))
+  if (decimalMatches.length === 1) return decimalMatches[0].amount
+  return matches.length === 1 ? matches[0].amount : undefined
+}
+
+function normalizeDecimalAmount(value: string) {
+  if (!/^\d{1,12}(?:\.\d{1,4})?$/.test(value.trim())) return ''
+  const [integer, decimal = ''] = value.trim().split('.')
+  const normalizedInteger = integer.replace(/^0+(?=\d)/, '')
+  const normalizedDecimal = decimal.replace(/0+$/, '')
+  return normalizedDecimal
+    ? `${normalizedInteger}.${normalizedDecimal}`
+    : normalizedInteger
 }
 
 function isProviderExecutionStateBound(
@@ -1042,9 +1250,7 @@ function isPreferenceArgsBound(
     'priority',
     'weatherSuitability',
   ]
-  return fields.every((field) =>
-    args[field] === undefined || args[field] === preference[field],
-  )
+  return fields.every((field) => args[field] === preference[field])
 }
 
 function isProviderReplanBound(
@@ -1065,22 +1271,19 @@ function isProviderReplanBound(
   ) {
     return false
   }
-  if (
-    args.delayMinutes !== undefined
-    && args.delayMinutes !== intent.delayMinutes
-  ) {
-    return false
-  }
-  const requestedStrategy = inferReplanStrategy(command)
-  if (
-    args.strategy !== undefined
-    && args.strategy !== requestedStrategy
-    && !(requestedStrategy === undefined && args.strategy === 'least_change')
-  ) {
-    return false
-  }
-  return isSemanticTargetBound(args.target, command, 'item')
-    && isSemanticTargetBound(args.day, command, 'day')
+  const expected = parseDeterministicAdaptiveReplan(command, intent)
+  if (!expected) return false
+  const hasExplicitDelay = /(?:半小时|一小时|\d{1,3}\s*(?:分钟|分|小时))/.test(command)
+  const delayBound = hasExplicitDelay
+    ? args.delayMinutes === expected.delayMinutes
+    : args.delayMinutes === undefined || args.delayMinutes === expected.delayMinutes
+  const strategyBound = expected.strategy
+    ? args.strategy === expected.strategy
+    : args.strategy === undefined || args.strategy === 'least_change'
+  return delayBound
+    && strategyBound
+    && args.day === expected.day
+    && args.target === expected.target
 }
 
 function isSemanticTargetBound(
@@ -1091,15 +1294,13 @@ function isSemanticTargetBound(
   if (value === undefined) return true
   if (typeof value !== 'string' || !value.trim()) return false
   if (kind === 'item' && value === 'current_item') {
-    const explicit = inferSemanticTarget(command)
-    return explicit === undefined || explicit === 'current_item'
+    return inferSemanticTarget(command) === 'current_item'
   }
   if (kind === 'item' && value === 'first_item') {
     return inferSemanticTarget(command) === 'first_item'
   }
   if (kind === 'day' && value === 'current_day') {
-    const explicit = findPlannerDayTarget(command)
-    return explicit === null || explicit.target === 'current_day'
+    return findPlannerDayTarget(command)?.target === 'current_day'
   }
   if (kind === 'day' && value === 'first_day') {
     return findPlannerDayTarget(command)?.target === 'first_day'

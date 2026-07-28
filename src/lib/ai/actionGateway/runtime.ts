@@ -354,6 +354,7 @@ type AiActionRuntimeDefinition = {
   ) => Promise<PreparedAction>
   preview: (prepared: PreparedAction) => {
     affectedLabels: string[]
+    details?: string[]
     hasWrite: boolean
     manualEntry?: AiActionManualEntry
     text: string
@@ -624,8 +625,10 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
         ? `；${warningParts.join('；')}`
         : ''
       const changeSummary = summarizeAdaptiveReplanChanges(changedItems)
+      const details = buildAdaptiveReplanDetails(replan, changedItems)
       return {
         affectedLabels: changedItems.map((change) => change.title),
+        ...(details.length > 0 ? { details } : {}),
         hasWrite: changedItems.length > 0,
         text: changedItems.length > 0
           ? `${replan.dayTitle}：${changeSummary}；按${formatReplanStrategy(replan.strategy)}调整 ${changedItems.length} 项${warningText}。`
@@ -930,6 +933,7 @@ async function prepareStep(
     preview.affectedLabels,
     preview.hasWrite,
     preview.manualEntry,
+    preview.details,
   )
 }
 
@@ -940,11 +944,13 @@ function buildPreparedStep(
   affectedLabels: string[],
   hasWrite: boolean,
   manualEntry?: AiActionManualEntry,
+  details?: string[],
 ): AiActionPreparedStep {
   return {
     actionId: step.actionId,
     affectedLabels,
     confirmationFingerprint: hashString(stableStringify(prepared)),
+    ...(details && details.length > 0 ? { details } : {}),
     hasWrite,
     id: step.id,
     idempotencyKey: step.idempotencyKey,
@@ -3002,6 +3008,51 @@ function summarizeAdaptiveReplanChanges(
   return changes.length > 1
     ? `${first.title}${action}，共 ${changes.length} 项`
     : `${first.title}${action}`
+}
+
+function buildAdaptiveReplanDetails(
+  replan: PreparedAdaptiveReplanAction,
+  changes: PreparedAdaptiveReplanAction['selectedOption']['diff']['itemChanges'],
+) {
+  const itemDetails = changes.map((change) => {
+    if (change.changeType === 'skipped') {
+      return `${change.title}：${formatReplanExecutionState(change.before.executionState?.status)} → ${formatReplanExecutionState(change.after.executionState?.status)}`
+    }
+    if (change.changeType === 'day_changed') {
+      const beforeDay = replan.dayTitlesById[change.before.dayId] ?? '原日期'
+      const afterDay = replan.dayTitlesById[change.after.dayId] ?? '新日期'
+      return `${change.title}：${beforeDay} → ${afterDay}`
+    }
+    if (change.changeType === 'reordered') {
+      return `${change.title}：顺序 ${change.before.sortOrder} → ${change.after.sortOrder}`
+    }
+    return `${change.title}：${formatTimeRange(change.before.startTime, change.before.endTime)} → ${formatTimeRange(change.after.startTime, change.after.endTime)}`
+  })
+  const routeDetails = replan.selectedOption.diff.routeImpacts
+    .filter((impact) => impact.staleRouteCache || impact.summary.trim())
+    .map((impact) => `路线：${impact.summary}`)
+  const ticketDetails = replan.selectedOption.diff.ticketImpacts
+    .filter((impact) => impact.impact !== 'unaffected')
+    .map((impact) => `票据「${impact.title}」：${impact.summary}`)
+  const ledgerDetails = replan.selectedOption.diff.ledgerImpacts
+    .filter((impact) => impact.impact !== 'unaffected')
+    .map((impact) => `账本「${impact.title}」：${impact.summary}`)
+  const warnings = replan.selectedOption.diff.warnings.map((warning) => `注意：${warning}`)
+  return Array.from(new Set([
+    ...itemDetails,
+    ...routeDetails,
+    ...ticketDetails,
+    ...ledgerDetails,
+    ...warnings,
+  ]))
+}
+
+function formatReplanExecutionState(
+  status: ItineraryExecutionStatus | undefined,
+) {
+  if (status === 'completed') return '已完成'
+  if (status === 'skipped') return '已跳过'
+  return '待进行'
 }
 
 function getWorkspaceNavigationCommand(target: AiActionWorkspaceOpenArgs['target']) {

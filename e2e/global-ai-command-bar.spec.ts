@@ -1231,12 +1231,17 @@ test('全局 AI 在 390px 通过一次确认应用本地突发重排', async ({ 
   await expect(result).toContainText('伦敦眼将改为 10:30')
   await expect(result).toContainText('按最少改动调整 2 项')
   await expect(page.getByTestId('global-ai-action-summary')).toContainText('1 个步骤 · 影响 2 项')
-  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  const actionDetails = page.getByTestId('global-ai-action-details')
+  await expect(actionDetails).not.toHaveAttribute('open', '')
   await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
   await expect.poll(async () => await readItineraryItem(page, 'gateway-replan-eye'))
     .toMatchObject({ endTime: '11:00', startTime: '10:00' })
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
+
+  await actionDetails.getByText('查看步骤').click()
+  await expect(actionDetails).toContainText('伦敦眼：10:00-11:00 → 10:30-11:30')
+  await expect(actionDetails).toContainText('大本钟：12:00-13:00 → 12:30-13:30')
 
   await result.getByRole('button', { name: '确认执行' }).click()
 

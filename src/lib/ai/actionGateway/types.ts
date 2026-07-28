@@ -216,6 +216,7 @@ export type AiActionPreparedStep = {
   actionId: AiActionId
   affectedLabels: string[]
   confirmationFingerprint: string
+  details?: string[]
   hasWrite: boolean
   id: string
   idempotencyKey: string

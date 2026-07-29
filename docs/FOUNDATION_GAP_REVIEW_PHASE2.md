@@ -1,5 +1,7 @@
 # Foundation Gap Review and Phase-2 Roadmap
 
+> **Historical:** This document records the Phase-2 assessment at the time it was written. It is not the current product roadmap or design contract. See [Product Strategy](PRODUCT_STRATEGY.md), [Roadmap V5](ROADMAP_V5.md), and [UI V3](UI_REFACTOR_V3.md) for the current direction.
+
 Date: 2026-05-27
 Baseline audited: local `main` at `f769379` after `git pull --ff-only`; no branches reported by `git branch --all --no-merged main`.
 Scope: docs/planning review only. No app code, provider calls, cloud calls, schema changes, or test rewrites.

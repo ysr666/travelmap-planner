@@ -1,6 +1,12 @@
 # Provider Proxy
 
-TripMap uses a provider proxy so production route and AI requests can use owner-provided provider keys without shipping those keys to the PWA.
+TripMap uses the provider proxy as its online execution plane for AI actions and realtime travel facts. Production route, place, search, transport, weather, ticket, and AI requests use server-side provider credentials without shipping those credentials to the PWA.
+
+## Product Role
+
+**Target:** the proxy is the single registered gateway between TripMap clients and external intelligence. The AI Action Gateway may select only documented operations, while the proxy returns normalized, source-bearing facts with `observedAt` / `retrievedAt` and `expiresAt` where freshness matters. Explicit read intent may execute without an extra confirmation; any travel-data write still returns a preview and waits for one final confirmation.
+
+**Current:** route preview, route order, travel search, place lookup, AI draft/edit, exchange-rate, and expense extraction operations already use this boundary. Some operations remain manually triggered and some realtime domains are not implemented yet. Mock providers are test and degradation paths, not the intended production experience.
 
 ## Security Boundary
 
@@ -241,7 +247,7 @@ If the proxy URL is absent, route generation is unavailable and the UI falls bac
 
 ## What Moves Behind The Proxy
 
-Now:
+Current:
 
 - Manual day route generation can use the proxy when configured.
 - Trip Home route generation can use the proxy after user confirmation.
@@ -256,9 +262,14 @@ Now:
 - Travel Ledger can call `exchange_rate` while saving an expense, with local date/currency-pair caching and manual-rate fallback.
 - Travel Ledger can call `ai_expense_extract` at most once per confirmed batch preview; the response remains a preview until the user creates drafts.
 
-Later:
+Next realtime scope:
 
-- Opening hours, ratings, reviews, photos, phone, and website fields for places remain deferred because they may change cost, field tiers, privacy, and UI expectations.
+- Place details: opening hours, ratings, official website, phone, photos, accessibility, and source freshness.
+- Door-to-door mobility: transit departures, service alerts, traffic-aware ETA, rail and flight status.
+- Trip conditions: weather, venue disruptions, ticket availability, and official notices.
+- Long-running AI jobs: provider-backed planning, repair, monitoring, retry, and resumable execution.
+
+Every new operation must declare its request whitelist, normalized response schema, source and freshness fields, quota group, cache policy, kill switch, retry policy, and AI Action Registry mapping before release.
 
 ## Travel Search Operation
 
@@ -477,7 +488,7 @@ Request contract:
 Context boundary:
 
 - Includes stable trip/day/item IDs, titles, dates, times, optional location text, optional coarse coordinate state, transport mode/duration, and ticket count/bound state only.
-- Default strips notes. When AI Privacy allows note summary/full notes, only the allowed summary or note text is sent.
+- Notes are stripped by default. The current compatibility data-scope setting may allow a bounded summary or note text; the target action contract declares and enforces the permitted field set server-side.
 - Never sends ticket IDs, ticket filenames/content/blob, exact coordinates, route cache, cloud token/status, provider keys, URLs, or full local DB.
 - Sensitive fields such as `apiKey`, `providerKey`, `Authorization`, `headers`, `ticketIds`, `ticketBlobs`, `ticketMetas`, `fileName`, `routeCache`, `localDb`, `fullTrip`, coordinates, cloud fields, and URLs are rejected as `invalid_request`.
 
@@ -807,14 +818,14 @@ Same shape as `ai_trip_draft` response, with `operation: "ai_trip_draft_repair"`
 - Max 5 requests per 60-second window.
 - Identity prefix: `ai_draft_repair|` — isolated from `ai_draft|` and `route|` quotas.
 
-### Client-Side Privacy Filtering
+### Current Client Data Filtering
 
-Before sending AI draft or repair requests to the proxy, the client applies privacy settings (`src/lib/aiPrivacyGuard.ts`):
+Before sending current AI draft or repair requests to the proxy, the client applies the compatibility data-scope settings in `src/lib/aiPrivacyGuard.ts`:
 
 - **Generation requests** already contain only explicit form fields — no extra data attached.
 - **Repair requests**: item `note` fields are stripped or truncated based on the `allowFullNotes` and `allowNotesSummary` settings. Quality findings are filtered too.
-- Privacy settings are read from `localStorage` at request time and applied as pure functions before the fetch call.
-- This filtering is applied client-side; the server also validates required fields but does not enforce user privacy preferences.
+- The compatibility settings are read from `localStorage` at request time and applied as pure functions before the fetch call.
+- This filtering is applied client-side; the server also validates required fields but does not yet enforce account-level action data policies. The target Action Gateway moves those policies into versioned action contracts and server-side authorization.
 
 #### Provider Behavior
 

@@ -1,6 +1,6 @@
 # trip-plan 示例
 
-这些示例用于外部 AI 或人工工具生成旅图 `trip-plan.json` 时参考。
+这些示例用于外部 AI、旧工具或批量迁移生成旅图 `trip-plan.json` 时参考。它们是兼容格式示例；日常使用应优先通过旅图在线 AI Action Gateway 直接规划、查证并执行旅行任务。
 
 - `trip-plan-basic.json`：基础行程、坐标和交通段。
 - `trip-plan-with-reference-external.json`：reference / external 票据和 `bindTo` 绑定示例。

@@ -1,5 +1,34 @@
 # Autonomous Iteration Phase Ledger
 
+> **Historical ledger:** Entries below preserve completed work and decisions at their original dates. New phases follow the realtime online, AI-first [Product Strategy](../PRODUCT_STRATEGY.md) and [Roadmap V5](../ROADMAP_V5.md).
+
+## 2026-07-29 Planned Program - UI V3 Product Shell
+
+Status: design contract complete; implementation pending
+
+Goal: replace the current layered App Shell, persistent AI input, repeated trip navigation, card-heavy pages, and narrow desktop shell with the product-level adaptive experience defined in [UI V3](../UI_REFACTOR_V3.md).
+
+Execution order:
+
+1. V3.0 visual direction, `DESIGN.md`, Stitch Design System, and six key screens.
+2. V3.1 App Shell, four top-level destinations, adaptive navigation, and on-demand AI Action Sheet.
+3. V3.2 Today, itinerary, map, item detail, and ticket vertical slice.
+4. V3.3 documents, inbox, and search integration.
+5. V3.4 settings, progressive forms, ledger, shared trip, and remaining surfaces.
+6. V3.5 accessibility, performance, Golden Screenshots, full E2E, PWA upgrade, and real-device acceptance.
+
+No-go:
+
+- Do not combine the UI migration with schema, cloud-write, Provider, ticket/blob, route-cache, or AI privacy contract changes in the same phase.
+- Do not describe Target navigation or Action Sheet behavior as shipped before its code and validation land.
+- Do not merge ImageGen, Stitch, or Figma output directly; implement and verify real React components.
+
+Required evidence:
+
+- Fixed viewport and state matrix from `docs/UI_REFACTOR_V3.md`.
+- `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run build`, relevant E2E, full serial E2E when feasible, and PWA upgrade coverage.
+- Manual iPhone Safari/PWA and Android Chrome/PWA records before release.
+
 ## 2026-06-17 Phase 1 - Trip Home Overview
 
 Status: completed

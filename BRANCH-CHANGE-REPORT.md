@@ -1,5 +1,7 @@
 # TripMap 分支改动汇报
 
+> **历史记录：** 本文只记录 2026-06-01 分支状态，不代表当前产品方向。最新方向见 [产品战略](docs/PRODUCT_STRATEGY.md)、[Roadmap V5](docs/ROADMAP_V5.md) 和 [UI V3 重构规范](docs/UI_REFACTOR_V3.md)。
+
 日期: 2026-06-01
 分支: `feature/swiftui-design-system-pass-1`
 基准: `main`

@@ -1,5 +1,7 @@
 # 旅图 TripMap 路线图 v4
 
+> **Historical:** 本文件保留截至 2026-07-28 的本地缓存、PWA 和 Action Gateway 收尾记录，不再代表未来产品方向。实时在线、AI 优先的当前规划见 [路线图 v5](ROADMAP_V5.md)，统一产品原则见 [产品战略](PRODUCT_STRATEGY.md)，第三次 UI 重构见 [UI V3 重构规范](UI_REFACTOR_V3.md)。
+
 更新时间：2026-07-26
 
 ## 北极星

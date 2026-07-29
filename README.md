@@ -1,25 +1,34 @@
 # 旅图 TripMap
 
-旅图 TripMap 是一款产品化旅行管理工具，用统一旅行管理体验收束行程、地图路线、交通记录、票据文件、费用和账号数据；离线可用、PWA 安装和登录后同步是底层能力，而不是产品主入口。
+旅图 TripMap 是一个 **实时在线、AI 优先的旅行操作系统**。用户可以直接查看当前旅行，或用自然语言让 AI 查找实时信息、整理行程、打开票据、补全地点、处理变化并执行已登记动作。
+
+当前代码已经具备完整旅行主路径、账号对象同步、Provider Proxy 和 AI Action Gateway，是向目标架构迁移的稳定基线。目标状态以云端账号数据为事实源，以 Realtime 推送跨设备变化；IndexedDB 保留为启动缓存、弱网 outbox 和应急查看能力。
+
+当前界面仍是 UI V2 收敛版。第三次 UI 重构已经完成规范决策，但四项主导航、Toolbar AI、按需 Action Sheet、平板/桌面主从布局等仍是 Target，不是已上线能力。完整设计合同见 [UI V3 重构规范](docs/UI_REFACTOR_V3.md) 和 [Design System](docs/DESIGN_SYSTEM.md)。
 
 ## 项目定位
 
-旅图不是订票软件，也不是完整导航软件。它更像旅行总控台：在出发前整理每天安排，在路上快速查看地点、票据和交通备注，在需要时跳转到 Apple Maps 或 Google Maps 查看外部路线。
+旅图不是传统表单式行程工具。它的主体验是“打开就看到当前旅行，需要时说一句话，AI 把事情做完”。实时地点、路线、交通、天气、票务和订单事实逐步通过带来源与新鲜度的 Provider 接入。
 
 适合用来：
 
 - 按天管理旅行行程
+- 用全局 AI 查询、规划和执行旅行任务
+- 目标体验：跨设备实时查看账号旅行和同行变化
 - 在地图上查看当天地点和路线顺序
 - 手动记录从上一站到当前站的交通方式和预计耗时
 - 保存或记录车票、门票、酒店订单、PDF、二维码截图
 - 导出 / 导入完整 zip 归档
 - 登录后通过 Supabase 自动同步账号数据
+- 在弱网或离线时查看最近缓存，并在恢复连接后自动续传
 - 添加到 iPhone 主屏幕，作为 PWA 使用
 
 ## ✨ 核心功能
 
+- AI Action Gateway：自然语言规划、注册动作校验、实时预览、一次确认、依赖执行和失败步骤重试
+- Realtime Cloud（目标架构）：账号旅行、协作状态和 AI job 通过云端事件实时收敛
 - Unified Trip Intelligence：Trip Home、Day View、票据、旅行材料、账本、资料和同行共享共用 suggestion / action / appliedChanges 模型
-- 旅行管理：创建、查看和删除本机旅行计划
+- 旅行管理：创建、查看和编辑账号旅行计划；当前版本通过设备缓存与云端对象同步实现
 - Day 时间轴：按天管理景点、酒店、餐厅和交通点
 - MapLibre 地图视图：用 OpenFreeMap 底图显示当天地点、编号 marker、直线顺序，可选手动生成道路路线 polyline
 - 手动交通段：记录步行、公共交通、火车、飞机等方式和备注
@@ -29,20 +38,22 @@
   - reference：仅记录文件位置，不保存票据文件
   - external：保存外部链接，适合网盘、邮箱或订单网页
 - zip 归档：导出和导入单个旅行的离线归档
-- Supabase 云端同步：登录后优先同步 Trip / Day / Item / TicketMeta、账本、Live/Replan 和统一智能记录/建议状态；票据 Blob 独立同步
+- Supabase 账号数据：当前支持对象同步和恢复；下一阶段升级为 cloud-first 写入、Realtime 订阅和服务端 revision
 - PWA：支持 iPhone Safari 添加到主屏幕，并缓存基础 app shell
 
-## 🤖 AI 草稿与外部 AI 行程包
+## 🤖 AI Copilot 与行程导入
 
-旅图支持两类 AI 相关流程：
+AI 是旅图的默认任务入口。当前版本已经支持全局 AI Action Gateway、AI Draft、AI Trip Edit 和一键智能修复；外部 AI 行程包继续作为兼容导入能力。
 
-- AI Draft 页面：可以本地 mock 生成草稿、粘贴 JSON 草稿，或在配置 TripMap provider proxy 后通过真实 AI provider 生成 / 修复草稿。真实 provider key 只放在后端运行时环境，不进入前端 `VITE_*`、IndexedDB、zip、Supabase 或用户设置页。
+- 全局 AI：根据当前旅行上下文选择已登记动作；只读动作直接完成，写入组合计划经过一次最终确认。
+- AI Draft 页面：可以粘贴 JSON 草稿、使用测试 mock，或在配置 TripMap provider proxy 后通过真实 AI provider 生成 / 修复草稿。
 - 外部 AI 行程包：你也可以使用 ChatGPT、Claude、Gemini、DeepSeek 或其他工具生成符合开放格式的 `trip-plan.json` / `trip-plan.zip`，再在设置页的“导入 AI 行程包”区域本地导入。
 
-需要注意：
+当前实现与目标的差距：
 
-- AI Draft 生成 / 修复只更新草稿 preview；用户点击最终“确认导入”前不会写入本地旅行。
-- 当前 AI Draft 不联网搜索，不查询实时营业时间、票价、交通或网页来源，也不读取票据图片/PDF/OCR。
+- AI Draft 生成 / 修复只更新草稿 preview；用户点击最终“确认导入”前不会写入当前账号旅行。
+- 全局 AI 已能使用受限 Place / Route / Search 能力，但完整天气、航班、铁路、票务状态和统一实时事实模型仍在路线图中。
+- 真实 Provider key 只放在后端运行时环境，不进入前端 `VITE_*`、IndexedDB、zip、Supabase 或用户设置页。
 - AI 行程包导入用于新建旅行，不替代完整 zip 归档恢复。
 - JSON 单文件适合导入行程、坐标、交通段、reference / external 票据。
 - copy 模式真实附件必须使用 zip 行程包，并把文件放在 zip 内 `files/` 目录；`filePath` 必须是 `files/` 下的安全相对路径。
@@ -55,6 +66,10 @@
 - [外部 AI 提示词模板](docs/AI_PROMPT_TEMPLATE.md)
 - [AI Agent Foundation](docs/AI_AGENT_FOUNDATION.md)
 - [Provider Proxy](docs/PROVIDER_PROXY.md)
+- [产品战略](docs/PRODUCT_STRATEGY.md)
+- [路线图 v5](docs/ROADMAP_V5.md)
+- [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
+- [Design System](docs/DESIGN_SYSTEM.md)
 - [Limited Beta 用户指南](docs/BETA_USER_GUIDE.md)
 - [Limited Beta 发布说明](docs/LIMITED_BETA_RELEASE_NOTES.md)
 - [Limited Beta QA 记录](docs/BETA_QA_RECORD.md)
@@ -111,9 +126,9 @@ npm run preview
 
 ## ☁️ Supabase 云端同步
 
-旅图接入 Supabase Auth 后会要求登录才能进入业务页面。已联网验证的账号可在此设备离线使用 30 天；退出登录会关闭当前账号数据空间。旅行对象同步和恢复跟随当前账号，不是实时协作：同步会先拉取账号对象，不同对象和不同字段会自动合并；同一字段双边修改会进入冲突面板，用户确认前不会静默覆盖。只要用户已登录且自动同步开启，本机成功写入的旅行、行程点、票据和备注会进入同步队列；用户也可以在设置页点击“立即同步”。
+旅图接入 Supabase Auth 后会要求登录才能进入业务页面。产品目标是让 Supabase/Postgres 成为账号旅行事实源，并通过 Realtime 推送对象、协作和 AI job 变化。
 
-登录且在线时，旅图会比较此设备旅行版本信号与账号数据 metadata。账号数据较新时会提示同步到此设备；此设备较新且自动云端同步已开启时会同步此设备版本到账号；可能双向修改时会提示用户选择同步方向。设置页会轻量显示待同步项、上次同步时间和票据文件上传状态，不把账号同步做成备份控制台。
+当前版本仍处于迁移阶段：业务写入先进入账号隔离的 IndexedDB 和 outbox，再自动同步 Trip / Day / Item / TicketMeta、账本、智能状态和票据 Blob。下一阶段会改为在线写入优先、服务端 revision/ack 和 Realtime 订阅；只有网络失败时才依赖本机队列。当前冲突和恢复行为见 [Supabase 实时云端数据平台](docs/SUPABASE_CLOUD_BACKUP.md)。
 
 需要配置：
 
@@ -122,9 +137,10 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
-账号本机缓存、云端同步和 zip 归档的区别：
+账号云端数据、本机边缘缓存和 zip 归档的区别：
 
-- 账号本机缓存：IndexedDB 数据库名由账号 ID hash 派生，不暴露邮箱或账号标识；路线缓存和部分 localStorage 状态也跟随账号 scope。
+- 账号云端数据：目标事实源，承载跨设备、协作、AI job、票据 metadata 和操作历史。
+- 本机边缘缓存：当前仍承担首写，目标架构中只负责快速启动、弱网 outbox 和应急查看。
 - zip 归档：完全在此设备生成，适合按需保存到 iCloud Drive、OneDrive 或电脑。
 - 云端同步：优先按对象同步 Trip / Day / Item / TicketMeta，并把 copy 票据文件同步为独立账号票据 Blob，适合换设备或清空浏览器后的恢复。
 - 自动云端同步：在此设备数据变化后先拉取账号对象，再补传可安全合并的对象更新；不同对象和不同字段可合并，同一字段双边修改时会提示选择字段版本。
@@ -134,15 +150,15 @@ VITE_SUPABASE_ANON_KEY=
 - 如果新对象同步表尚未部署，应用会退回旧 snapshot 兼容同步；此时不会开放“清理已同步票据缓存”。
 - 第一版未做端到端加密，护照、签证、银行卡等高度敏感文件请谨慎上传。
 
-Supabase 建表、RLS 和 Storage policy 见 [Supabase 云端同步配置](docs/SUPABASE_CLOUD_BACKUP.md)。
+Supabase 建表、RLS 和 Storage policy 见 [Supabase 实时云端数据平台](docs/SUPABASE_CLOUD_BACKUP.md)。
 
 统一旅行智能的 `appliedChanges` 与 `ignored/later/completed` 状态保存在 IndexedDB v10，并通过 `trip_intelligence_applied_change`、`trip_intelligence_suggestion_state` 跨设备同步。普通非 Operations 建议可忽略或稍后 24 小时；高风险、同步冲突和资料过期建议只能稍后。Finance 是费用草稿接收与审核端：票据和已分配旅行的 Inbox 材料只在用户确认后生成 `draft + needs_review`，不会后台扫描或自动计入结算。
 
 Package 7、生产权限加固 migration 与 Provider D1 加固 migration 已部署。Companion 生产 RPC smoke 与真实双设备 intelligence smoke 已完整通过，覆盖设备 A 上传、设备 B 全新 IndexedDB 恢复、latest-wins 和 tombstone 删除传播。Smoke session 只缓存在仓库外并自动刷新，两个设备与 Companion 复用同一次登录，不重复发送 OTP。Provider proxy 生产路径已启用 Auth、Origin allowlist、D1 配额、每日预算和 kill switch；预算邮件在 Cloudflare 免费前提下只有可用 Email Service 绑定时发送，硬限制不依赖邮件。
 
-## 🗺️ 道路路线 Polyline
+## 🗺️ 实时路线与当前 Polyline
 
-地图默认使用直线连接当天地点。配置 TripMap provider proxy 后，在地图页手动点击“生成道路路线”，旅图会按相邻地点请求道路路线 polyline。失败、超时、额度不足或交通模式不支持时，会回退显示直线。
+当前地图默认使用直线连接当天地点。配置 TripMap Provider Proxy 后，在地图页手动点击“生成道路路线”，旅图会按相邻地点请求道路路线 polyline。失败、超时、额度不足或交通模式不支持时，会回退显示直线。路线图 v5 会在此基础上接入出发时间、实时 ETA、交通或班次状态、来源与 TTL。
 
 ```env
 VITE_ROUTE_PROXY_URL=/api/provider-proxy
@@ -155,7 +171,7 @@ Provider secrets 只应配置在后端运行时，例如 Cloudflare Pages Functi
 
 公交段会使用驾车道路路线做近似，不包含公交站点、班次、换乘和实时交通；火车、公共交通和飞机段仍使用直线 fallback。
 
-道路路线不是实时导航，不包含实时交通。生成路线时会把地点坐标发送给 TripMap 路线服务及其后端 provider。详细说明见 [地图道路路线 Polyline](docs/ROUTING.md) 和 [Provider Proxy](docs/PROVIDER_PROXY.md)。
+当前道路路线不是实时导航，不包含实时交通。生成路线时会把地点坐标发送给 TripMap 路线服务及其后端 Provider。详细说明见 [实时路线与出行事实](docs/ROUTING.md) 和 [Provider Proxy](docs/PROVIDER_PROXY.md)。
 
 ## 📱 iPhone 添加到主屏幕
 
@@ -164,18 +180,19 @@ Provider secrets 只应配置在后端运行时，例如 Cloudflare Pages Functi
 3. 选择“添加到主屏幕”
 4. 名称可设为“旅图”
 
-## 🔐 数据与隐私说明
+## 在线数据与安全基线
 
-- 数据会先写入当前浏览器的 IndexedDB 离线缓存；登录后按设置自动同步账号数据。
+- 当前数据会先写入浏览器 IndexedDB 并自动同步；目标架构改为云端提交成功后更新本机缓存。
 - IndexedDB、路线缓存和部分用户派生设置按账号隔离；首次发现旧全局数据库时可选择接管本机数据或仅恢复云端。
 - copy 模式会保存票据文件，离线可查看；登录后票据文件会独立同步到账号，已同步后可清理此设备离线缓存并按需重新同步。
 - reference 模式不会保存票据文件，只记录你填写的位置说明。
 - external 模式只保存外部链接。
-- AI、搜索、路线和地点校准请求仍保持确认边界；普通用户写入成功后会进入云端同步队列。
+- AI、搜索、路线和地点请求统一经过 Provider Proxy；只读查询自动执行，写入按风险进入一次组合确认或独立高风险确认。
 - 道路路线仅在用户手动点击生成时请求第三方路线服务，并会发送相邻地点坐标；Provider proxy 会先验证登录态、Origin、IP/账号/全局配额和 kill switch。
 - 道路路线缓存只保存在当前浏览器本机，不进入云端同步，也不进入 zip 归档。
 - 清除浏览器数据、私密浏览、系统存储压力或长期未使用都可能导致此设备离线缓存丢失。
 - zip 归档是高级/迁移工具；重要旅行也可以按需导出并保存到 iCloud Drive、OneDrive 或电脑。
+- 安全、数据最小化和密钥隔离由后端合同强制，普通用户不需要在首页管理技术性隐私开关。
 
 ## 📦 zip 归档说明
 
@@ -200,18 +217,23 @@ reference / external 模式不会包含实际文件内容，只会保留位置�
 - PWA 无法可靠保存并直接打开本地文件真实路径。
 - iOS Safari 对 IndexedDB 存储有系统策略限制。
 - Supabase 云端同步不是实时协作；同一字段可能双向修改时需要用户手动选择。
+- 上一条是当前版本限制；路线图 v5 将升级为 cloud-first 写入、Realtime 订阅和服务端版本冲突合同。
 - PWA 更新后可能需要刷新或关闭重开；出发前请导出 zip 备份。
 
 ## 项目状态
 
-当前产品阶段以统一旅行管理体验为主：用户在 Trip Home、Day View、票据、账本等上下文里处理“现在要确认什么 / 现在该做什么”。底层仍保留本机先落盘、登录后自动同步账号数据、PWA app shell 缓存和 zip 归档能力。项目可选接入 Supabase 对象同步、TripMap provider proxy 路线服务和浏览器可见的 Google Maps JS 渲染 key；server-only Google Routes / OpenRouteService / future AI keys 不应进入前端 bundle 或用户设置页。
+当前产品阶段从“本机先写、账号同步”的稳定基线迁移到“实时在线、AI 优先”。用户在 Trip Home、Day View、票据和账本上下文里可以直接要求 AI 完成任务；后续版本会让云端状态、实时 Provider 事实和异步 AI job 成为默认主路径。PWA app shell、IndexedDB 和 zip 归档继续作为可靠性与迁移能力。
 
 设计原则：轻量化不是删内容，而是更清楚的信息层级、更少空壳、更自然的分组。
 
 当前路线图与阶段状态见：
 
 - [项目状态](docs/PROJECT_STATUS.md)
-- [路线图 v4](docs/ROADMAP_V4.md)
+- [产品战略](docs/PRODUCT_STRATEGY.md)
+- [路线图 v5](docs/ROADMAP_V5.md)
+- [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
+- [Design System](docs/DESIGN_SYSTEM.md)
+- [历史路线图 v4](docs/ROADMAP_V4.md)
 
 ## License
 

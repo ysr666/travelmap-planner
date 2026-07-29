@@ -1,5 +1,7 @@
 # Limited Beta 发布说明
 
+> **历史记录：** 本文保留当时 Limited Beta 的实际发布范围，不代表当前产品方向。实时在线、AI 优先的后续目标见 [产品战略](PRODUCT_STRATEGY.md)、[Roadmap V5](ROADMAP_V5.md) 与 [UI V3](UI_REFACTOR_V3.md)。
+
 版本：0.4.0.1
 版本日期：2026-07-26
 

@@ -29,6 +29,53 @@ Required evidence:
 - `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run build`, relevant E2E, full serial E2E when feasible, and PWA upgrade coverage.
 - Manual iPhone Safari/PWA and Android Chrome/PWA records before release.
 
+## 2026-07-30 V3.0 Visual Direction And Implementation Gate
+
+Status: three directions generated; user selection pending
+
+Goal:
+
+- Lock one reusable visual language before changing production UI, while preparing an implementation boundary that does not depend on the selected density or Today-page composition.
+
+Completed evidence:
+
+- Audited the live implementation at the fixed `390 x 844` viewport and retained the screenshots outside the repository.
+- Generated exactly three independent Today-page directions from the same real trip state: timeline-first, next-stop-first, and map-first.
+- Recorded the shared contracts and pending selection state in [UI V3](../UI_REFACTOR_V3.md).
+- Confirmed that the direction choice changes first-screen emphasis only; navigation, AI behavior, ticket previews, progressive disclosure, accessibility, and data boundaries stay fixed.
+
+Decision gate:
+
+- The user must select direction `1`, `2`, or `3`.
+- After selection, create `docs/DESIGN.md` with the chosen direction, semantic token mapping, component anatomy, six key-screen contracts, responsive behavior, and approved deviations.
+- Do not start visual implementation, invoke image-to-code, or mark V3.0 complete before that record exists.
+
+Implementation boundary after selection:
+
+- `src/App.tsx` continues to own route resolution and account/trip context, but passes route metadata to the shell instead of deriving visual title behavior ad hoc.
+- `src/components/AppShell.tsx` becomes the sole owner of safe areas, top bar, adaptive primary navigation, modal-layer coordination, and content insets.
+- `src/components/BottomTabBar.tsx` becomes the four-destination `PrimaryNavigation`; route mapping keeps detail, document, ledger, search, and settings subroutes attached to the correct top-level destination.
+- `src/components/ai/GlobalAiCommandBar.tsx` is decomposed into an Action Gateway controller and an on-demand `AiActionSheet`; planning, validation, preview, confirmation, stale-plan, idempotency, and retry behavior remain unchanged.
+- The current exported `TripNav` is replaced with one `日程 | 地图 | 资料 | 费用` context switch and is removed from detail routes.
+- Page-specific fixed bottom bars and guessed `pb-32` / `pb-48` offsets migrate to the shell modal/safe-area contract before page-level visual work begins.
+
+First implementation receipts:
+
+- Unit: four navigation destinations and route mapping; single shell title; AI closed with no mounted fixed surface; dialog focus trap, Escape, focus return, and one confirmation.
+- Component: one bottom surface invariant; long Chinese/English labels; `320px` overflow; `200%` text; light/dark semantic tokens.
+- E2E: Today-to-itinerary navigation, contextual Search, AI open/close/navigation, write preview and single confirmation, direct detail-route refresh, PWA safe-area behavior.
+- Visual: selected target and implementation compared at the same `390 x 844` state before creating any Golden Screenshot.
+
+Risk:
+
+- High for shell migration because the existing AI component, route mapping, full-screen day/item layouts, and bottom navigation all independently own fixed positioning.
+- Medium for route compatibility because existing Hash URLs and deep links must survive the information-architecture change.
+
+Stop conditions:
+
+- Stop and repair if a page can mount two fixed bottom interaction surfaces, AI closes without restoring focus, a write bypasses preview/confirmation, a deep link becomes unreachable, a route loses its top-level selection, or any protected data/Provider contract must change.
+- Keep V3.0 pending if visual selection, `docs/DESIGN.md`, or same-state visual comparison evidence is missing.
+
 ## 2026-06-17 Phase 1 - Trip Home Overview
 
 Status: completed

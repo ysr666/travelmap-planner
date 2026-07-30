@@ -31,7 +31,7 @@ Required evidence:
 
 ## 2026-07-30 V3.0 Visual Direction And Implementation Gate
 
-Status: three directions generated; user selection pending
+Status: completed
 
 Goal:
 
@@ -46,9 +46,11 @@ Completed evidence:
 
 Decision gate:
 
-- The user must select direction `1`, `2`, or `3`.
-- After selection, create `docs/DESIGN.md` with the chosen direction, semantic token mapping, component anatomy, six key-screen contracts, responsive behavior, and approved deviations.
-- Do not start visual implementation, invoke image-to-code, or mark V3.0 complete before that record exists.
+- On 2026-07-30 the user selected a fusion of direction 2's visual language and direction 3's map-first hierarchy.
+- `docs/DESIGN.md` records the chosen direction, semantic token mapping, component anatomy, six key-screen contracts, responsive behavior, and approved deviations.
+- Created Stitch project `9253865158827971218` and Design System `4831380021779748496`.
+- Generated Today, itinerary, map, place detail, documents, and AI Action Sheet references under that single Design System; their screen identifiers are recorded in `docs/DESIGN.md`.
+- Rejected generated suggestions that conflicted with the selected contract, including a deep-blue primary, default-expanded AI steps, and an extra unsourced weather widget.
 
 Implementation boundary after selection:
 

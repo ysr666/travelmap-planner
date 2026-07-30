@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { clickTripCard, getHashParam } from './helpers'
+import { clickTripCard, getFirstTripDayAndItemIds, getHashParam } from './helpers'
 import { buildHistoricalPwaReleases } from './pwaHistoricalBuilds'
 
 const builtDistDir = join(process.cwd(), 'dist')
@@ -244,7 +244,7 @@ test('PWA 从两个历史生产构建升级到当前候选后保留真实行程�
     const migratedTripCard = firstPage.getByTestId('trip-card').filter({ hasText: '东京离线保留旅行' })
     await expect(migratedTripCard).toBeVisible()
     await clickTripCard(migratedTripCard)
-    await expect(firstPage.locator('header h1').first()).toHaveText('东京离线保留旅行')
+    await expect(firstPage.getByRole('button', { name: '当前旅行：东京离线保留旅行' })).toBeVisible()
   } finally {
     await context.setOffline(false)
     if (server) {
@@ -394,19 +394,22 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
     expect(cachedResponse.size).toBe(onlineResponse.size)
 
     await clickTripCard(tripCard)
-    await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
     const tripId = getHashParam(page.url(), 'tripId')
     expect(tripId).toBeTruthy()
+    const ids = await getFirstTripDayAndItemIds(page, tripId)
 
-    await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+    await page.evaluate(({ dayId, currentTripId }) => {
+      window.location.hash = `/day?tripId=${currentTripId}&dayId=${dayId}&view=schedule`
+    }, { currentTripId: tripId, dayId: ids.dayId })
     await expect(page.getByTestId('day-selector')).toBeVisible()
-    await page.getByRole('button', { name: /明治神宫散步/ }).click()
+    await page.getByRole('button', { name: /打开行程点 明治神宫散步/ }).click()
     await expect(page.getByTestId('item-detail-page')).toBeVisible()
 
     await page.evaluate((currentTripId) => {
       window.location.hash = `/documents?tripId=${currentTripId}&tab=attachments`
     }, tripId)
-    await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   } finally {
     await context.setOffline(false)
     if (server) {

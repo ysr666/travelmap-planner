@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { createDemoTripViaUi, expectNoHorizontalOverflow, openDetailsSection } from './helpers'
 
 test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page }) => {
-  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/preferences', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
     window.localStorage.removeItem('tripmap:appearance')
     window.localStorage.removeItem('tripmap:travel-profile')
@@ -10,7 +10,6 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
   await page.reload({ waitUntil: 'domcontentloaded' })
 
-  await openDetailsSection(page, '旅行偏好')
   const profileSection = page.getByTestId('travel-profile-section')
   await expect(profileSection).toBeVisible()
   await expect(profileSection).toContainText('设备内运行')
@@ -32,12 +31,13 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
     reminderLevel: 'detailed',
   })
 
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
   await openDetailsSection(page, 'AI 与隐私')
   const privacySection = page.getByTestId('ai-privacy-section')
   await expect(privacySection).toBeVisible()
-  await expect(privacySection).toContainText('本地检查只读')
-  await expect(privacySection).toContainText('收件箱只在你开启或确认后发送提取文本')
-  await expect(privacySection).toContainText('票据图片/PDF')
+  await expect(privacySection).toContainText('当前本地检查不会读取')
+  await expect(privacySection).toContainText('原始文件不上传')
+  await expect(privacySection).toContainText('票据图片/PDF 内容')
 
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
   await page.getByTestId('ai-privacy-allowItineraryBasics').click()
@@ -52,7 +52,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await openDetailsSection(page, '旅行偏好')
+  await page.goto('/#/settings/preferences', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('travel-profile-pace-relaxed')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-transport-walking')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('travel-profile-meal-protection')).toHaveAttribute('aria-checked', 'false')
@@ -60,15 +60,19 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
   await expect(page.getByTestId('travel-profile-night-return')).toHaveValue('22:00')
   await expect(page.getByTestId('travel-profile-reminder-detailed')).toHaveAttribute('aria-pressed', 'true')
 
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
   await openDetailsSection(page, 'AI 与隐私')
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileNames')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('ai-privacy-allowTicketFileContent')).toBeDisabled()
 
-  await openDetailsSection(page, '外观')
+  await page.goto('/#/settings/app', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('appearance-mode-dark').click()
   await expect(page.locator('html')).toHaveClass(/dark/)
+  await page.goto('/#/settings/preferences', { waitUntil: 'domcontentloaded' })
   await expect(profileSection).toBeVisible()
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, 'AI 与隐私')
   await expect(privacySection).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
@@ -76,7 +80,7 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
 test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
 
-  await openDetailsSection(page, '今日助手')
+  await openDetailsSection(page, '提醒与工具')
   const dayBrief = page.getByTestId('day-local-brief-card')
   await expect(dayBrief).toBeVisible()
   await expect(dayBrief).toContainText('本地检查')
@@ -84,7 +88,8 @@ test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async (
   await expectNoHorizontalOverflow(page)
 
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await openDetailsSection(page, '更多工具与详情')
+  await openDetailsSection(page, '旅行详情')
+  await openDetailsSection(page, '导出与诊断')
   const localCheck = page.getByTestId('local-trip-check-card')
   await expect(localCheck).toBeVisible()
   await expect(localCheck).toContainText('行程体检')
@@ -92,7 +97,7 @@ test('未来 AI 隐私开关关闭时本地简报仍保持只读可见', async (
   await expect(localCheck.getByRole('button')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 
-  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
   await openDetailsSection(page, 'AI 与隐私')
   await expect(page.getByTestId('ai-privacy-allowItineraryBasics')).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByTestId('ai-privacy-allowFullNotes')).toHaveAttribute('aria-checked', 'false')

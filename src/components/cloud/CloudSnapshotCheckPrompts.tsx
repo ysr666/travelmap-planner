@@ -215,7 +215,7 @@ function VersionContextSummary({ result }: { result: CloudSnapshotCheckResult })
   }
 
   return (
-    <div className="grid gap-1.5 rounded-xl bg-white/75 p-2 text-xs ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/60 dark:ring-outline-variant/30/70">
+    <div className="grid gap-1.5 rounded-xl bg-white/75 p-2 text-xs ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/60 dark:ring-outline-variant/30">
       {rows.map((row) => (
         <div className="flex min-w-0 items-start justify-between gap-2" key={row.label}>
           <span className="shrink-0 font-semibold text-on-surface-variant dark:text-outline">{row.label}</span>

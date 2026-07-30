@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
-  ArrowLeft,
   Calculator,
   CalendarClock,
   Check,
@@ -35,6 +34,7 @@ import {
   updateLedgerParticipant,
 } from '../db'
 import { Button } from '../components/ui/Button'
+import { TripNav } from '../components/AppShell'
 import { LedgerReviewQueue } from '../components/ledger/LedgerReviewQueue'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -135,24 +135,24 @@ export function LedgerPage() {
 
   if (loading) return <Card><p className="text-sm tm-muted">正在读取旅行账本...</p></Card>
   if (!trip) return <EmptyState body={error || '没有找到这趟旅行。'} icon={<WalletCards className="size-6" />} title="无法打开旅行账本" />
-  if (!settings) return <LedgerSetup trip={trip} onCreated={refresh} />
+  if (!settings) {
+    return (
+      <div className="space-y-4 pb-4">
+        <TripNav activeRoute="ledger" tripId={trip.id} />
+        <LedgerSetup trip={trip} onCreated={refresh} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5 pb-4" data-testid="ledger-page">
-      <header className="flex items-start gap-3">
-        <button aria-label="返回旅行总览" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant tm-focus" onClick={() => navigateTo('trip', { tripId })} type="button">
-          <ArrowLeft className="size-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-xl font-bold text-on-surface">旅行账本</h2>
-          <p className="mt-1 truncate text-sm tm-muted">{trip.title}</p>
-        </div>
-      </header>
+      <TripNav activeRoute="ledger" tripId={trip.id} />
+      <p className="truncate text-sm font-semibold text-on-surface">{trip.title}</p>
 
       {summary ? <LedgerHero settings={settings} summary={summary} /> : null}
       {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
-      <nav className="grid grid-cols-5 gap-1 rounded-xl border border-outline-variant/30 bg-surface-container p-1" aria-label="账本视图">
+      <nav className="grid grid-cols-5 gap-1 rounded-lg border border-outline-variant/30 bg-surface-container p-1" aria-label="账本视图">
         {([
           ['bills', '账单'],
           ['timeline', '时间线'],
@@ -218,15 +218,15 @@ function LedgerSetup({ trip, onCreated }: { trip: Trip; onCreated: () => Promise
   }
   return (
     <div className="space-y-5" data-testid="ledger-setup">
-      <header><h2 className="text-xl font-bold">建立旅行账本</h2><p className="mt-1 text-sm tm-muted">确认两种显示币种并设置整趟旅行预算。</p></header>
-      <Card className="space-y-4" variant="grouped">
+      <header><h2 className="text-lg font-semibold">建立旅行账本</h2><p className="mt-1 text-sm tm-muted">选择币种并设置总预算。</p></header>
+      <section className="space-y-4">
         <CurrencySelect label="常住地币种" value={homeCurrency} onChange={setHomeCurrency} />
         <CurrencySelect label="旅行币种" value={tripCurrency} onChange={setTripCurrency} />
         <FormField label={`旅行总预算（${tripCurrency}）`} onChange={setBudget} placeholder="例如 12000" required type="number" value={budget} />
-        <p className="text-xs tm-muted">旅行币种用于主要显示；常住地币种用于小字折算和最终结算。目的地建议仅供确认。</p>
+        <p className="text-xs tm-muted">旅行中使用 {tripCurrency}，结算时同时显示 {homeCurrency}。</p>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <Button className="w-full" loading={busy} onClick={() => void submit()}>创建账本</Button>
-      </Card>
+      </section>
     </div>
   )
 }
@@ -483,7 +483,7 @@ function ExpenseRow({ expense, participants, settings, tripId, onEdit, onDelete 
   const payer = participants.find((participant) => participant.id === expense.payerParticipantId)
   return (
     <Card className="space-y-2" data-testid="ledger-expense-row" id={`ledger-expense-${expense.id}`} variant="grouped">
-      <button className="w-full text-left" onClick={() => navigateTo('ledger/expense', { expenseId: expense.id, tripId })} type="button"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{expense.title}</p><p className="mt-1 text-xs tm-muted">{expense.date} · {ledgerCategoryLabels[expense.category]} · {payer?.displayName ?? '付款人待补充'}</p>{expense.merchant || expense.city ? <p className="mt-1 truncate text-xs tm-muted">{[expense.merchant, expense.city].filter(Boolean).join(' · ')}</p> : null}</div><div className="text-right"><p className="font-bold">{formatLedgerMoney(expense.amountMinor, expense.currency ?? settings.tripCurrency)}</p><p className="mt-1 text-xs tm-muted">{expense.status === 'confirmed' ? '已确认' : expense.status === 'draft' ? '待确认' : '已取消'}</p></div></div></button>
+      <button aria-label={`查看账单 ${expense.title}`} className="w-full text-left" onClick={() => navigateTo('ledger/expense', { expenseId: expense.id, tripId })} type="button"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{expense.title}</p><p className="mt-1 text-xs tm-muted">{expense.date} · {ledgerCategoryLabels[expense.category]} · {payer?.displayName ?? '付款人待补充'}</p>{expense.merchant || expense.city ? <p className="mt-1 truncate text-xs tm-muted">{[expense.merchant, expense.city].filter(Boolean).join(' · ')}</p> : null}</div><div className="text-right"><p className="font-bold">{formatLedgerMoney(expense.amountMinor, expense.currency ?? settings.tripCurrency)}</p><p className="mt-1 text-xs tm-muted">{expense.status === 'confirmed' ? '已确认' : expense.status === 'draft' ? '待确认' : '已取消'}</p></div></div></button>
       <div className="flex justify-end gap-1"><Button onClick={onEdit} variant="ghost">编辑</Button><button aria-label={`删除 ${expense.title}`} className="flex size-10 items-center justify-center rounded-lg text-red-600" onClick={() => void onDelete()} type="button"><Trash2 className="size-4" /></button></div>
     </Card>
   )

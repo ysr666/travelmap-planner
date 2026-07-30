@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
+  openDetailsSection,
 } from './helpers'
 
 type SeedTicket = {
@@ -217,7 +218,7 @@ test('票据库空状态清楚可用', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '暂无票据' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
@@ -229,36 +230,42 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('ticket-gallery')).toBeVisible()
-  await expect(page.getByTestId('ticket-add-panel')).not.toHaveAttribute('open', '')
+  await expect(page.getByTestId('ticket-add-panel')).toHaveCount(0)
   const galleryBox = await page.getByTestId('ticket-gallery').boundingBox()
-  const addPanelBox = await page.getByTestId('ticket-add-panel').boundingBox()
   expect(galleryBox).not.toBeNull()
-  expect(addPanelBox).not.toBeNull()
-  expect(galleryBox!.y).toBeLessThan(addPanelBox!.y)
+  await page.getByRole('button', { name: '添加票据' }).first().click()
+  await expect(page.getByTestId('ticket-add-panel')).toBeVisible()
+  await page.getByRole('dialog', { name: '添加票据' }).getByRole('button', { name: '关闭' }).click()
   await expect(page.getByTestId('ticket-card')).toHaveCount(4)
   await expect(page.getByTestId('ticket-gallery')).toContainText('酒店订单 PDF')
   await expect(page.getByTestId('ticket-gallery')).toContainText('位置')
   await expect(page.getByTestId('ticket-gallery')).toContainText('链接')
   await expect(page.getByTestId('ticket-gallery')).toContainText('图片')
   await expect(page.getByTestId('ticket-gallery')).toContainText('PDF')
-  await expect(page.getByTestId('ticket-gallery')).toContainText('离线可用')
   await expect(page.getByTestId('ticket-gallery')).toContainText('绑定到行程点')
-  await expect(page.getByRole('button', { name: /删除酒店订单 PDF/ })).toBeVisible()
+  const hotelCard = page.getByTestId('ticket-card').filter({ hasText: '酒店订单 PDF' })
+  await hotelCard.getByLabel(/酒店订单 PDF更多操作/).click()
+  await expect(hotelCard.getByRole('button', { name: '删除', exact: true })).toBeVisible()
 
-  await page.getByTestId('ticket-stat-copy').click()
+  await page.getByRole('button', { name: '筛选和排序票据' }).click()
+  const filterDialog = page.getByRole('dialog', { name: '筛选与排序' })
+  await filterDialog.getByRole('button', { name: '已保存文件', exact: true }).click()
+  await filterDialog.getByRole('button', { name: '完成' }).click()
   await expect(page.getByTestId('ticket-filter-summary')).toContainText('保存票据文件：2 张')
   await expect(page.getByTestId('ticket-card')).toHaveCount(2)
   await expect(page.getByTestId('ticket-gallery')).toContainText('二维码截图')
   await expect(page.getByTestId('ticket-gallery')).toContainText('备用车票 PDF')
   await expect(page.getByTestId('ticket-gallery')).not.toContainText('酒店订单 PDF')
-  await page.getByRole('button', { name: /查看备用车票 PDF/ }).click()
+  await page.getByRole('button', { name: /预览备用车票 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview-counter')).toContainText('1 / 2')
   await page.getByTestId('ticket-preview-close').click()
-  await page.getByTestId('ticket-stat-all').click()
+  await page.getByRole('button', { name: '筛选和排序票据' }).click()
+  await page.getByRole('dialog', { name: '筛选与排序' }).getByRole('button', { name: '全部', exact: true }).click()
+  await page.getByRole('dialog', { name: '筛选与排序' }).getByRole('button', { name: '完成' }).click()
   await expect(page.getByTestId('ticket-filter-summary')).toContainText('全部票据：4 张')
   await expect(page.getByTestId('ticket-card')).toHaveCount(4)
 
-  await page.getByRole('button', { name: /查看酒店订单 PDF/ }).click()
+  await page.getByRole('button', { name: /预览酒店订单 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-reference')).toContainText('此票据仅记录文件位置')
   await page.getByTestId('ticket-preview-close').click()
@@ -272,7 +279,9 @@ test('票据库可以编辑票据元数据并原子移除行程点绑定', async
   await addTicketMetas(page, tripId, firstItemId, [ticketSeeds[0]])
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /编辑酒店订单 PDF/ }).click()
+  const hotelCard = page.getByTestId('ticket-card').filter({ hasText: '酒店订单 PDF' })
+  await hotelCard.getByLabel(/酒店订单 PDF更多操作/).click()
+  await hotelCard.getByRole('button', { name: '编辑', exact: true }).click()
   const editor = page.getByTestId('ticket-metadata-editor')
   await expect(editor).toBeVisible()
 
@@ -297,7 +306,7 @@ test('票据库可以编辑票据元数据并原子移除行程点绑定', async
   })
   expect(binding.itemTicketIds).not.toContain(binding.ticket.id)
 
-  await page.getByRole('button', { name: /查看酒店订单已整理/ }).click()
+  await page.getByRole('button', { name: /预览酒店订单已整理/ }).click()
   await expect(page.getByTestId('ticket-preview')).toContainText('酒店订单')
   await page.getByTestId('ticket-preview-close').click()
   await expectNoHorizontalOverflow(page)
@@ -309,7 +318,7 @@ test('票据库预览器可以在线性上下文中切换图片、PDF 和外部�
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /查看备用车票 PDF/ }).click()
+  await page.getByRole('button', { name: /预览备用车票 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-counter')).toContainText('1 / 4')
   await expect(page.getByTestId('ticket-preview-previous')).toBeDisabled()
@@ -341,7 +350,7 @@ test('票据库打开第 2 张票据显示 2 / N 且缩略图条可切换', asyn
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
   // Open second ticket (二维码截图 — display order is: 备用车票 PDF, 二维码截图, 电子门票链接, 酒店订单 PDF)
-  await page.getByRole('button', { name: /查看二维码截图/ }).click()
+  await page.getByRole('button', { name: /预览二维码截图/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-counter')).toContainText('2 / 4')
   await expect(page.getByTestId('ticket-preview-image')).toBeVisible()
@@ -368,7 +377,7 @@ test('票据库预览 Escape 键可关闭', async ({ page }) => {
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /查看酒店订单 PDF/ }).click()
+  await page.getByRole('button', { name: /预览酒店订单 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
 
   await page.keyboard.press('Escape')
@@ -392,7 +401,7 @@ test('Package 5 票据费用草稿确认后进入 review queue 并持久显示�
   }])
 
   await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /查看东京晚餐票据/ }).click()
+  await page.getByRole('button', { name: /预览东京晚餐票据/ }).click()
   const preview = page.getByTestId('ticket-preview')
   await expect(preview.getByTestId('ticket-preview-intelligence')).toContainText('可生成费用草稿')
   expect(await countTripRecords(page, 'ledgerExpenses', tripId)).toBe(0)
@@ -487,8 +496,8 @@ async function countTripRecords(page: Page, storeName: string, tripId: string) {
 }
 
 async function openTripHomeSecondaryTools(page: Page) {
-  const tools = page.getByTestId('trip-home-secondary-tools')
-  if (await tools.isVisible().catch(() => false)) return
-  await page.locator('summary').filter({ hasText: '更多工具与详情' }).click()
-  await expect(tools).toBeVisible()
+  if (await page.getByTestId('trip-operations-panel').isVisible().catch(() => false)) return
+  await openDetailsSection(page, '旅行工具')
+  await openDetailsSection(page, '更多工具')
+  await expect(page.getByTestId('trip-operations-panel')).toBeVisible()
 }

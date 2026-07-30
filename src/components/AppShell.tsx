@@ -1,15 +1,27 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useRef, useState, type ReactNode } from 'react'
 import {
-  Home,
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarDays,
+  Search,
+  Sparkles,
   Map,
-  Route,
   FolderLock,
-  User,
+  WalletCards,
 } from 'lucide-react'
 import type { RouteId } from '../types'
-import { navigateTo } from '../lib/routes'
+import { getRouteParams, navigateTo } from '../lib/routes'
 import { BottomTabBar } from './BottomTabBar'
 import { PwaLifecycleBanner } from './PwaLifecycleBanner'
+import {
+  getPrimaryDestination,
+  getRouteTitle,
+  isImmersiveRoute,
+  isPushRoute,
+  shouldShowAiCommand,
+  shouldShowPrimaryNavigation,
+  shouldShowSearchCommand,
+} from './shell/routePresentation'
 
 const GlobalAiCommandBar = lazy(() =>
   import('./ai/GlobalAiCommandBar').then((module) => ({ default: module.GlobalAiCommandBar })),
@@ -19,117 +31,207 @@ type AppShellProps = {
   activeRoute: RouteId
   children: ReactNode
   lastTripId?: string | null
-  title: string
+  tripTitle?: string | null
 }
 
-
-export function AppShell({ activeRoute, children, lastTripId, title }: AppShellProps) {
+export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppShellProps) {
+  const [aiRoute, setAiRoute] = useState<RouteId | null>(null)
+  const aiTriggerRef = useRef<HTMLButtonElement>(null)
   const ownsCanvas = activeRoute === 'home'
-    || activeRoute === 'inbox'
-    || activeRoute === 'settings'
-    || activeRoute === 'settings/privacy'
-    || activeRoute === 'settings/maps'
-    || activeRoute === 'settings/route'
-    || activeRoute === 'search'
-  const fullScreen = activeRoute === 'day' || activeRoute === 'item'
-    || activeRoute === 'trip/new' || activeRoute === 'trip/edit'
-    || activeRoute === 'item/new' || activeRoute === 'item/edit'
-  const showTopAppBar = !fullScreen
-  const showTabBar = activeRoute === 'home'
-    || activeRoute === 'inbox'
-    || activeRoute === 'trip'
     || activeRoute === 'day'
-    || activeRoute === 'tickets'
-    || activeRoute === 'documents'
-    || activeRoute === 'ledger'
-    || activeRoute === 'search'
-    || activeRoute === 'settings'
-    || activeRoute === 'settings/privacy'
-    || activeRoute === 'settings/maps'
-    || activeRoute === 'settings/route'
-  const showGlobalAiCommand = shouldShowGlobalAiCommand(activeRoute)
+  const fullScreen = isImmersiveRoute(activeRoute)
+  const showTopAppBar = !fullScreen
+  const showPrimaryNav = shouldShowPrimaryNavigation(activeRoute)
+  const showGlobalAiCommand = shouldShowAiCommand(activeRoute)
+  const showSearch = shouldShowSearchCommand(activeRoute)
+  const routeTitle = getRouteTitle(activeRoute)
+  const aiOpen = aiRoute !== null
+
+  function handleAiOpenChange(nextOpen: boolean) {
+    setAiRoute(nextOpen ? activeRoute : null)
+    if (!nextOpen) {
+      window.requestAnimationFrame(() => aiTriggerRef.current?.focus())
+    }
+  }
 
   return (
-    <div className="app-viewport relative mx-auto flex w-full max-w-[600px] flex-col overflow-hidden bg-background text-on-surface">
-      {showTopAppBar ? (
-        <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center gap-3 border-b-[0.5px] border-outline-variant/70 bg-surface/95 px-4 backdrop-blur-xl">
-          <button
-            aria-label="返回首页"
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
-            onClick={() => navigateTo('home')}
-            type="button"
-          >
-            <Map className="size-5" />
-          </button>
-          <h1 className="min-w-0 flex-1 truncate text-center text-lg font-semibold text-on-surface">
-            {title || '旅图'}
-          </h1>
-          <button
-            aria-label="设置"
-            className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container text-on-surface-variant transition hover:text-primary active:scale-95 tm-focus"
-            onClick={() => navigateTo('settings')}
-            type="button"
-          >
-            <User className="size-5" />
-          </button>
-        </header>
-      ) : null}
+    <div className="app-viewport app-scaffold bg-background text-on-surface">
+      {showPrimaryNav ? <BottomTabBar activeRoute={activeRoute} lastTripId={lastTripId} /> : null}
+      <div className="app-shell-column">
+        {showTopAppBar ? (
+          <header className="context-header">
+            <div className="context-header-leading">
+              {isPushRoute(activeRoute) ? (
+                <button
+                  aria-label="返回"
+                  className="context-header-icon tm-focus"
+                  onClick={() => navigateBack(activeRoute, lastTripId)}
+                  title="返回"
+                  type="button"
+                >
+                  <ArrowLeft className="size-5" />
+                </button>
+              ) : (
+                <button
+                  aria-label={tripTitle ? `当前旅行：${tripTitle}` : '返回今日'}
+                  className="context-trip-switcher tm-focus"
+                  onClick={() => {
+                    if (lastTripId) navigateTo('trip', { tripId: lastTripId })
+                    else navigateTo('home')
+                  }}
+                  title={tripTitle ?? '今日'}
+                  type="button"
+                >
+                  <BriefcaseBusiness className="size-5 shrink-0" />
+                  <span>{tripTitle ?? '选择旅行'}</span>
+                </button>
+              )}
+            </div>
+            <h1 className="context-header-title">{routeTitle}</h1>
+            <div className="context-header-actions">
+              {showSearch ? (
+                <button
+                  aria-label="搜索"
+                  className="context-header-icon tm-focus"
+                  onClick={() => navigateTo('search', {
+                    from: getPrimaryDestination(activeRoute),
+                    ...(lastTripId ? { tripId: lastTripId } : {}),
+                  })}
+                  title="搜索"
+                  type="button"
+                >
+                  <Search className="size-5" />
+                </button>
+              ) : null}
+              {showGlobalAiCommand ? (
+                <button
+                  aria-expanded={aiOpen}
+                  aria-haspopup="dialog"
+                  aria-label="AI 助手"
+                  className="context-header-icon context-header-ai tm-focus"
+                  onClick={() => setAiRoute(activeRoute)}
+                  ref={aiTriggerRef}
+                  title="AI 助手"
+                  type="button"
+                >
+                  <Sparkles className="size-5" />
+                </button>
+              ) : null}
+            </div>
+          </header>
+        ) : null}
 
-      <PwaLifecycleBanner topAppBar={showTopAppBar} />
+        <PwaLifecycleBanner topAppBar={showTopAppBar} />
 
-      <main
-        className={getMainClassName({ fullScreen, ownsCanvas, showGlobalAiCommand, showTabBar, showTopAppBar })}
-      >
-        <div className={fullScreen ? 'h-full min-h-0 w-full' : 'page-transition min-h-full w-full'}>
-          {children}
-        </div>
-      </main>
+        <main
+          className={getMainClassName({
+            activeRoute,
+            fullScreen,
+            ownsCanvas,
+            showPrimaryNav,
+            showTopAppBar,
+          })}
+        >
+          <div className={fullScreen || ownsCanvas ? 'page-transition h-full min-h-0 w-full' : 'page-transition min-h-full w-full'}>
+            {children}
+          </div>
+        </main>
+      </div>
 
-      {showGlobalAiCommand ? (
+      {showGlobalAiCommand && aiOpen ? (
         <Suspense fallback={null}>
-          <GlobalAiCommandBar activeRoute={activeRoute} hasBottomTab={showTabBar} />
+          <GlobalAiCommandBar
+            activeRoute={activeRoute}
+            onOpenChange={handleAiOpenChange}
+            open={aiOpen}
+          />
         </Suspense>
       ) : null}
-      {showTabBar ? <BottomTabBar activeRoute={activeRoute} lastTripId={lastTripId} /> : null}
     </div>
   )
 }
 
-function shouldShowGlobalAiCommand(activeRoute: RouteId) {
-  return activeRoute !== 'trip/new'
-    && activeRoute !== 'trip/edit'
-    && activeRoute !== 'item/new'
-    && activeRoute !== 'item/edit'
-    && activeRoute !== 'shared-trip'
-    && activeRoute !== 'ledger/expense'
-}
-
 function getMainClassName({
+  activeRoute,
   fullScreen,
   ownsCanvas,
-  showGlobalAiCommand,
-  showTabBar,
+  showPrimaryNav,
   showTopAppBar,
 }: {
+  activeRoute: RouteId
   fullScreen: boolean
   ownsCanvas: boolean
-  showGlobalAiCommand: boolean
-  showTabBar: boolean
+  showPrimaryNav: boolean
   showTopAppBar: boolean
 }) {
   if (fullScreen) {
-    return 'relative min-h-0 flex-1 overflow-hidden'
+    return 'app-shell-main relative min-h-0 flex-1 overflow-hidden'
   }
 
   if (ownsCanvas) {
-    return `relative min-h-0 flex-1 overflow-y-auto ${showGlobalAiCommand ? 'pb-32' : ''} app-scrollbar`
+    const insetClassName = activeRoute === 'home'
+      ? 'app-shell-main-today'
+      : activeRoute === 'day'
+        ? 'app-shell-main-day'
+        : ''
+    return `app-shell-main relative min-h-0 flex-1 overflow-y-auto app-scrollbar ${insetClassName}`
   }
 
   const topPadding = showTopAppBar ? 'pt-24' : 'pt-4'
-  const bottomPadding = showGlobalAiCommand
-    ? showTabBar ? 'pb-48' : 'pb-28'
-    : showTabBar ? 'pb-28' : 'pb-6'
+  const bottomPadding = showPrimaryNav ? 'pb-28 min-[600px]:pb-6' : 'pb-6'
   return `relative min-h-0 flex-1 overflow-y-auto px-4 ${topPadding} ${bottomPadding} app-scrollbar`
+}
+
+function navigateBack(activeRoute: RouteId, lastTripId?: string | null) {
+  const params = getRouteParams()
+  const tripId = params.get('tripId') ?? lastTripId
+  const dayId = params.get('dayId')
+  const itemId = params.get('itemId')
+
+  if (activeRoute.startsWith('settings/')) {
+    navigateTo('settings')
+    return
+  }
+  if (activeRoute === 'ledger/expense' && tripId) {
+    navigateTo('ledger', { tripId })
+    return
+  }
+  if (activeRoute === 'day' && tripId) {
+    navigateTo('trip', { tripId, ...(dayId ? { dayId } : {}) })
+    return
+  }
+  if (activeRoute === 'item/edit' && tripId && dayId && itemId) {
+    navigateTo('item', { tripId, dayId, itemId })
+    return
+  }
+  if (activeRoute === 'item' && tripId && dayId) {
+    navigateTo('day', { tripId, dayId, view: 'schedule' })
+    return
+  }
+  if (activeRoute === 'item/new' && tripId && dayId) {
+    navigateTo('day', { tripId, dayId, view: 'schedule' })
+    return
+  }
+  if ((activeRoute === 'trip/edit' || activeRoute === 'shared-trip' || activeRoute === 'ai-draft') && tripId) {
+    navigateTo('trip', { tripId })
+    return
+  }
+  if (activeRoute === 'search') {
+    const source = params.get('from')
+    if (source === 'trip' && tripId) {
+      navigateTo('trip', { tripId })
+      return
+    }
+    if (source === 'inbox') {
+      navigateTo('inbox')
+      return
+    }
+    if (source === 'settings') {
+      navigateTo('settings')
+      return
+    }
+  }
+  navigateTo('home')
 }
 
 type TripNavProps = {
@@ -145,23 +247,12 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
   const targetDayId = dayId ?? firstDayId ?? null
   const items = [
     {
-      id: 'trip',
-      label: '总览',
-      icon: Home,
-      active: activeRoute === 'trip',
-      onClick: () => navigateTo('trip', { tripId }),
-    },
-    {
       id: 'schedule',
       label: '日程',
-      icon: Route,
-      active: activeRoute === 'day' && activeView !== 'map',
+      icon: CalendarDays,
+      active: activeRoute === 'trip' || (activeRoute === 'day' && activeView !== 'map'),
       onClick: () => {
-        if (targetDayId) {
-          navigateTo('day', { tripId, dayId: targetDayId, view: 'schedule' })
-        } else {
-          navigateTo('trip', { tripId })
-        }
+        navigateTo('trip', targetDayId ? { tripId, dayId: targetDayId } : { tripId })
       },
     },
     {
@@ -184,10 +275,17 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
       active: activeRoute === 'tickets' || activeRoute === 'documents',
       onClick: () => navigateTo('documents', { tripId }),
     },
+    {
+      id: 'ledger',
+      label: '费用',
+      icon: WalletCards,
+      active: activeRoute === 'ledger' || activeRoute === 'ledger/expense',
+      onClick: () => navigateTo('ledger', { tripId }),
+    },
   ]
 
   return (
-    <nav className={`rounded-lg border border-outline-variant/70 bg-surface-container p-1.5 ${className}`}>
+    <nav aria-label="行程内容" className={`rounded-lg border border-outline-variant/70 bg-surface-container p-1 ${className}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon

@@ -116,7 +116,7 @@ class GoogleMapInstance implements MapInstance {
     } else if (path.length > 0) {
       this.polyline = new google.maps.Polyline({
         path,
-        strokeColor: '#1677ff',
+        strokeColor: '#0f8f83',
         strokeWeight: 4,
         strokeOpacity: 0.86,
         map: this.map,

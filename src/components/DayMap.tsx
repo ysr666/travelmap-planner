@@ -23,6 +23,7 @@ import { EmptyState } from './ui/EmptyState'
 
 type DayMapProps = {
   items: ItineraryItem[]
+  markerLabel?: 'category' | 'sequence'
   selectedItemId?: string | null
   selectedItemSource?: 'marker' | 'list' | null
   heightClassName?: string
@@ -75,10 +76,11 @@ type PrewarmSession = {
   restored: boolean
 }
 
-const MAP_ERROR_MESSAGE = '地图底图暂时无法加载，但本地行程仍可查看。'
+const MAP_ERROR_MESSAGE = '地图暂时无法加载，行程仍可查看。'
 
 export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   items,
+  markerLabel = 'category',
   selectedItemId,
   selectedItemSource,
   heightClassName = 'h-[52dvh] min-h-[360px]',
@@ -406,7 +408,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       element.setAttribute('data-testid', 'day-map-marker')
 
       const content = document.createElement('span')
-      const { label, isEmoji } = getMarkerDisplayLabel(item, index)
+      const { label, isEmoji } = getMarkerDisplayLabel(item, index, markerLabel)
       content.className = markerContentClassName(item.id === selectedItemIdRef.current, isEmoji)
       content.textContent = label
       element.append(content)
@@ -424,7 +426,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     updateMarkerSelection()
     markMapStartup('markers rendered', { count: mapItems.length })
-  }, [clearMarkers, updateMarkerSelection])
+  }, [clearMarkers, markerLabel, updateMarkerSelection])
 
   const fitViewportIfNeeded = useCallback(() => {
     const map = mapRef.current
@@ -724,7 +726,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         <div
           className="pointer-events-none absolute left-3 right-3 top-3 z-10 rounded-2xl bg-white/88 px-4 py-3 text-sm font-medium text-slate-600 shadow-[0_12px_32px_rgba(47,65,88,0.10)] ring-1 ring-white/80 backdrop-blur"
         >
-          正在加载地图底图，本地行程仍可查看。
+          正在加载地图
         </div>
       ) : null}
       {mapError ? (
@@ -783,7 +785,14 @@ function userLocationMarkerClassName() {
   ].join(' ')
 }
 
-function getMarkerDisplayLabel(item: ItineraryItem, index: number): { label: string; isEmoji: boolean } {
+function getMarkerDisplayLabel(
+  item: ItineraryItem,
+  index: number,
+  markerLabel: NonNullable<DayMapProps['markerLabel']>,
+): { label: string; isEmoji: boolean } {
+  if (markerLabel === 'sequence') {
+    return { label: String(index + 1), isEmoji: false }
+  }
   const emoji = getMarkerEmoji(item)
   return emoji ? { label: emoji, isEmoji: true } : { label: String(index + 1), isEmoji: false }
 }

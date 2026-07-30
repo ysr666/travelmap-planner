@@ -4,7 +4,7 @@
 
 ## 2026-07-29 Planned Program - UI V3 Product Shell
 
-Status: design contract complete; implementation pending
+Status: implementation and browser acceptance complete; physical-device release evidence pending
 
 Goal: replace the current layered App Shell, persistent AI input, repeated trip navigation, card-heavy pages, and narrow desktop shell with the product-level adaptive experience defined in [UI V3](../UI_REFACTOR_V3.md).
 
@@ -77,6 +77,80 @@ Stop conditions:
 
 - Stop and repair if a page can mount two fixed bottom interaction surfaces, AI closes without restoring focus, a write bypasses preview/confirmation, a deep link becomes unreachable, a route loses its top-level selection, or any protected data/Provider contract must change.
 - Keep V3.0 pending if visual selection, `docs/DESIGN.md`, or same-state visual comparison evidence is missing.
+
+## 2026-07-30 V3.1-V3.4 Product Shell And Core Journeys
+
+Status: implemented; focused validation passed; V3.5 product acceptance in progress.
+
+Goal:
+
+- Apply the selected direction 2 visual language and direction 3 map-first hierarchy to the real application without changing data, Provider, sync, route-cache, ticket/blob, or AI confirmation contracts.
+
+Scope:
+
+- V3.1: adaptive App Shell, four stable destinations, contextual top bar, route presentation, and on-demand AI Action Sheet.
+- V3.2: map-first Today, compact itinerary, full-canvas day map, place detail, and progressive item/trip forms.
+- V3.3: real-thumbnail ticket gallery, documents, Inbox, and search.
+- V3.4: four-group Settings, collapsed technical controls, ledger, owner/companion shared-trip routing, AI Draft, and remaining secondary surfaces.
+
+No-go:
+
+- No IndexedDB schema, Supabase/cloud semantics, Provider operation, route-cache, ticket/blob storage, AI privacy boundary, or write-confirmation change.
+- No real Provider, AI, route, map, Supabase, or Cloudflare call during implementation validation.
+- No fabricated device acceptance result.
+
+Result:
+
+- Bottom navigation is now `今日 | 行程 | 收件箱 | 我的`; Search and AI are top-bar commands.
+- AI has no mounted idle overlay. Opening it shows a compact Action Sheet; result and confirmation states expand only when needed.
+- Today and day map use the existing real map engines as the primary canvas. Map controls, selected-place cards, attribution, and bottom navigation have separate safe regions.
+- Itinerary timelines, reminders, trip tools, readiness repair, Settings, ticket/document tools, and advanced diagnostics are flat or collapsed by default.
+- Ticket pages open on the gallery, use real image/PDF previews when available, contain long names, and move filtering and add flows into sheets.
+- Trip and item forms expose only basic information and place fields before `更多设置`; one save action owns the bottom safe area.
+- The owner `同行共享` route now accepts the `tripId` produced by the product UI instead of falling into the guest-link flow.
+- AI Draft now shows destination, dates, and one primary online generation command first; preferences, variants, local examples, and JSON import are secondary disclosures.
+- All modal surfaces render above the primary navigation, fixing confirmation and preview controls that could previously be obscured.
+
+Focused validation:
+
+- Repeated `npm run typecheck:app` and `npm run lint` checks passed through the implementation phases.
+- Focused component suites for App Shell, route presentation, Today/day/map, tickets, documents, Search, Settings, forms, Trip Workspace, readiness repair, Shared Trip, ledger, and AI Draft passed.
+- The real local application was inspected at `390 x 844` for Today, trip, day list/map, item forms, tickets/documents, Inbox, Search, all Settings levels, ledger setup, owner Shared Trip, AI Draft, and AI Action Sheet.
+- The `390px` inspected states reported no document-level horizontal overflow. Final `320/768/1440`, dark, `200%`, full suite, E2E, build, PWA, and Golden comparison remain in V3.5.
+
+Risk:
+
+- Medium until the complete serial E2E and responsive matrix pass because the shell changes affect every route.
+- Real iPhone Safari/PWA and Android Chrome/PWA remain manual release evidence and must not be inferred from browser automation.
+
+## 2026-07-30 V3.5 Product Acceptance
+
+Status: completed for implementation and browser acceptance; physical-device release evidence pending.
+
+Goal:
+
+- Close the UI V3 implementation with responsive, accessibility, visual-fidelity, full regression, PWA-upgrade, and production-build evidence.
+
+Result:
+
+- Compared the selected `2 + 3` generated reference and the real Today implementation in one same-state `390 x 844` artifact.
+- Fixed the two P2 differences found in the first pass: expanded map attribution and an overly shallow itinerary sheet.
+- The second combined comparison found no actionable P0, P1, or P2 visual differences.
+- Verified Today at `320 x 844`, `390 x 844`, `768 x 1024`, and `1440 x 900`, plus dark mode and `200%` equivalent reflow, without document-level horizontal overflow.
+- Inspected the real Trip itinerary, item detail, ticket gallery, Settings root, and AI Action Sheet in the selected in-app browser.
+- Confirmed AI initial focus, Escape close, focus return, compact idle height, and non-overlapping modal/navigation layers.
+- Kept real iPhone Safari/PWA and Android Chrome/PWA acceptance explicitly pending instead of inferring it from desktop emulation.
+
+Validation:
+
+- `npm run typecheck` passed for the app, Provider runtime, and Travel Inbox Worker.
+- `npm run lint` passed.
+- `npm run test:unit` passed: 188 files and 1,560 tests.
+- `npm run build` passed; bundle budget passed at 852.5 KiB initial JS, 245.6 KiB gzip, and 2,261.3 KiB/108-entry precache.
+- The complete serial E2E suite passed all 156 tests in approximately 5.8 minutes.
+- The complete built-dist PWA upgrade suite passed all 5 tests.
+- The final focused Home/map/mobile regression passed all 9 tests at `390 x 844`.
+- The scan-local `design-qa.md` records the visual comparison and ends with `final result: passed`; screenshots and that local QA record remain uncommitted.
 
 ## 2026-06-17 Phase 1 - Trip Home Overview
 

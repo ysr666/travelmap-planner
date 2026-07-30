@@ -43,29 +43,31 @@ describe('BottomTabBar', () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
-    expect(container?.textContent).toContain('首页')
+    expect(container?.textContent).toContain('今日')
     expect(container?.textContent).toContain('行程')
-    expect(container?.textContent).toContain('搜索')
-    expect(container?.textContent).toContain('设置')
+    expect(container?.textContent).toContain('收件箱')
+    expect(container?.textContent).toContain('我的')
+    expect(container?.textContent).not.toContain('搜索')
   })
 
   it('highlights active tab', async () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
-    const homeButton = container?.querySelector('button[aria-label="首页"]')
-    expect(homeButton?.className).toContain('text-on-primary-fixed')
+    const homeButton = container?.querySelector('button[aria-label="今日"]')
+    expect(homeButton?.className).toContain('primary-navigation-item-active')
+    expect(homeButton?.getAttribute('aria-current')).toBe('page')
   })
 
   it('navigates on click', async () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
-    const searchButton = container?.querySelector('button[aria-label="搜索"]')
+    const inboxButton = container?.querySelector('button[aria-label="收件箱"]')
     await act(async () => {
-      searchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    expect(mocks.navigateTo).toHaveBeenCalledWith('search')
+    expect(mocks.navigateTo).toHaveBeenCalledWith('inbox')
   })
 
   it('has aria-labels on all buttons', async () => {
@@ -73,7 +75,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
     const buttons = container?.querySelectorAll('button') ?? []
-    expect(buttons.length).toBe(5)
+    expect(buttons.length).toBe(4)
     Array.from(buttons).forEach((button) => {
       expect(button.getAttribute('aria-label')).toBeTruthy()
     })
@@ -84,7 +86,7 @@ describe('BottomTabBar', () => {
       root?.render(<BottomTabBar activeRoute="day" />)
     })
     const tripButton = container?.querySelector('button[aria-label="行程"]')
-    expect(tripButton?.className).toContain('text-on-primary-fixed')
+    expect(tripButton?.className).toContain('primary-navigation-item-active')
   })
 
   it('reopens the last trip from a global route', async () => {
@@ -119,8 +121,8 @@ describe('BottomTabBar', () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="settings/privacy" />)
     })
-    const settingsButton = container?.querySelector('button[aria-label="设置"]')
-    expect(settingsButton?.className).toContain('text-on-primary-fixed')
+    const settingsButton = container?.querySelector('button[aria-label="我的"]')
+    expect(settingsButton?.className).toContain('primary-navigation-item-active')
   })
 })
 

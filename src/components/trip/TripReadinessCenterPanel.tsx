@@ -13,12 +13,10 @@ import {
   Ticket,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import {
   TRIP_CONTENT_ENRICHMENT_MAX_ITEMS,
   applyTripContentEnrichmentPreviewsToDb,
-  estimateTripContentEnrichmentRequestCounts,
   type TripContentEnrichmentPreview,
 } from '../../lib/ai/tripContentEnrichment'
 import {
@@ -250,8 +248,12 @@ export function TripReadinessCenterPanel({
 
   return (
     <>
-      <Card className="space-y-4" data-testid="trip-readiness-center-panel" id="trip-readiness-center-panel" variant="grouped">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <section
+        className="space-y-3 border-y border-outline-variant/45 py-4"
+        data-testid="trip-readiness-center-panel"
+        id="trip-readiness-center-panel"
+      >
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -269,19 +271,13 @@ export function TripReadinessCenterPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2" data-testid="trip-readiness-counts">
-          <ReadinessMetric label="待处理" value={model.summary.totalCount} />
-          <ReadinessMetric label="高风险" value={model.summary.highRiskCount} />
-          <ReadinessMetric label="可批量" value={model.summary.fixableCount} />
-        </div>
-
         {model.issues.length === 0 ? (
-          <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <div className="flex items-start gap-2 text-xs leading-5 text-emerald-700 dark:text-emerald-200">
             <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
-            <span>路线、票据、内容和同步状态暂未发现明显阻塞项。</span>
+            <span>行程已就绪</span>
           </div>
         ) : (
-          <details className="group rounded-xl border border-outline-variant/30 bg-surface-container-high/35 px-3 py-2">
+          <details className="group border-y border-outline-variant/35">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-on-surface marker:hidden">
               <span>查看问题明细</span>
               <span className="tm-muted">{model.issues.length} 项</span>
@@ -316,22 +312,16 @@ export function TripReadinessCenterPanel({
         )}
 
         {model.issues.length > 0 ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 tm-muted" data-testid="trip-readiness-selected-summary">
-              已选择 {selectedFixableCount} 项自动修复，高风险仍需手动确认。
-            </p>
-            <Button
-              className="min-h-11 px-3 text-xs"
-              data-testid="trip-readiness-batch-button"
-              disabled={selectedFixableCount === 0 || isRepairing}
-              icon={isRepairing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-              loading={isRepairing}
-              onClick={openBatchConfirm}
-              variant="secondary"
-            >
-              一键智能修复
-            </Button>
-          </div>
+          <Button
+            className="min-h-11 w-full px-3 text-sm"
+            data-testid="trip-readiness-batch-button"
+            disabled={selectedFixableCount === 0 || isRepairing}
+            icon={isRepairing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+            loading={isRepairing}
+            onClick={openBatchConfirm}
+          >
+            一键智能修复
+          </Button>
         ) : null}
 
         {repairResult ? (
@@ -414,10 +404,10 @@ export function TripReadinessCenterPanel({
             {repairError}
           </p>
         ) : null}
-      </Card>
+      </section>
 
       <ConfirmDialog
-        body={buildRepairConfirmBody(pendingPreview, allItems, dailyTipModel)}
+        body={buildRepairConfirmBody(pendingPreview)}
         cancelLabel="暂不处理"
         confirmLabel="确认处理"
         icon={<ShieldCheck className="size-5" />}
@@ -588,7 +578,7 @@ function IssueRow({
   const selectable = issue.canBatchFix && issue.severity !== 'high'
   return (
     <div
-      className="rounded-xl border border-outline-variant/30 bg-surface-container-high/40 px-3 py-2"
+      className="border-b border-outline-variant/30 py-3 last:border-b-0"
       data-issue-severity={issue.severity}
       data-issue-type={issue.type}
       data-testid="trip-readiness-issue"
@@ -645,29 +635,12 @@ function IssueRow({
   )
 }
 
-function ReadinessMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-outline-variant/30 bg-surface-container-high/35 px-3 py-2">
-      <p className="text-[11px] tm-muted">{label}</p>
-      <p className="mt-0.5 text-base font-semibold text-on-surface dark:text-on-surface">{value}</p>
-    </div>
-  )
-}
-
 function buildRepairConfirmBody(
   preview: TripReadinessRepairPreview | null,
-  allItems: ItineraryItem[],
-  dailyTipModel: TripDailyTravelTipModel | null,
 ) {
   if (!preview) {
     return '确认后才会执行修复。'
   }
-  const contentTargets = preview.contentItemIds
-    .map((itemId) => allItems.find((item) => item.id === itemId))
-    .filter((item): item is ItineraryItem => Boolean(item))
-  const contentCounts = estimateTripContentEnrichmentRequestCounts(contentTargets)
-  const dailyTipRequestCount = preview.dailyTipRequested && dailyTipModel ? dailyTipModel.searchTargets.length + 1 : 0
-  const providerRequestCount = preview.routeDayIds.length + preview.placeItemIds.length + contentCounts.total + dailyTipRequestCount
   const parts = [
     preview.routeDayIds.length > 0 ? `生成 ${preview.routeDayIds.length} 天路线缓存` : '',
     preview.placeItemIds.length > 0 ? `补全 ${preview.placeItemIds.length} 个地点坐标` : '',
@@ -677,7 +650,7 @@ function buildRepairConfirmBody(
   ].filter(Boolean)
   return [
     `将执行：${parts.length > 0 ? parts.join('、') : '暂无可执行项'}。`,
-    `预计联网/路线请求 ${providerRequestCount} 次。内容补充和每日提示会先给你预览。`,
+    '需要联网的信息会实时查询；内容和每日提示会先生成预览，确认后才写入。',
   ].join('\n')
 }
 

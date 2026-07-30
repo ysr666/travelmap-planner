@@ -141,7 +141,7 @@ class MapLibreMapInstance implements MapInstance {
           visibility: hasLine && this.routeVisible ? 'visible' : 'none',
         },
         paint: {
-          'line-color': '#1677ff',
+          'line-color': '#0f8f83',
           'line-opacity': 0.86,
           'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2.5, 12, 4, 16, 6],
         },
@@ -233,6 +233,13 @@ export class MapLibreAdapter {
       new maplibregl.AttributionControl({ compact: true }),
       options.attributionPosition ?? 'bottom-left',
     )
+    const collapseAttribution = () => {
+      const attribution = container.querySelector<HTMLElement>('.maplibregl-ctrl-attrib')
+      attribution?.classList.remove('maplibregl-compact-show')
+      attribution?.setAttribute('open', '')
+    }
+    collapseAttribution()
+    map.once('load', collapseAttribution)
 
     return new MapLibreMapInstance(map)
   }

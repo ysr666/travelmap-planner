@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, CalendarDays, Home, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Home, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isAdaptiveTripReplanRecord, listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
@@ -469,29 +469,6 @@ export function DayViewPage() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      {/* ── TopAppBar ── 参考 12_2/code.html: 127-135 行 */}
-      <header className="absolute inset-x-0 top-0 z-50 flex h-14 items-center border-b border-outline-variant/30 bg-surface/80 px-4 backdrop-blur-md">
-        <button
-          aria-label="总览"
-          className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
-          data-testid="day-back-to-trip"
-          onClick={() => navigateTo('trip', { tripId: trip.id })}
-          type="button"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <h1 className="min-w-0 flex-1 truncate px-3 text-center font-headline-sm text-headline-sm text-primary">第 {dayIndex} 天 · {dayDateStr}</h1>
-        <button
-          aria-expanded={isMoreMenuOpen}
-          aria-label="更多操作"
-          className="-mr-2 flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-opacity hover:bg-surface-variant/50 active:opacity-70"
-          onClick={() => setIsMoreMenuOpen(true)}
-          type="button"
-        >
-          <MoreHorizontal className="size-5" />
-        </button>
-      </header>
-
       <DayMoreMenu
         day={selectedDay}
         key={`${selectedDay.id}:${selectedDay.timeZone ?? ''}`}
@@ -517,6 +494,7 @@ export function DayViewPage() {
                 onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'map' })}
                 prewarmEnabled={false}
                 resizeSignal={mapResizeToken}
+                showDefaultMarkerCard={false}
                 showFloatingHeader={false}
                 trip={trip}
               />
@@ -529,7 +507,16 @@ export function DayViewPage() {
             floating
             onSwitch={handleSwitchView}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-[124px] z-30 px-4 [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
+          <button
+            aria-expanded={isMoreMenuOpen}
+            aria-label="更多操作"
+            className="absolute right-4 top-3 z-30 flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface/94 text-on-surface shadow-sm backdrop-blur tm-focus"
+            onClick={() => setIsMoreMenuOpen(true)}
+            type="button"
+          >
+            <MoreHorizontal className="size-5" />
+          </button>
+          <div className="pointer-events-none absolute inset-x-0 top-16 z-30 px-4 [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
             <DaySelector
               days={days}
               density="compact"
@@ -540,33 +527,53 @@ export function DayViewPage() {
           </div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-28 pt-20 app-scrollbar">
-          <div className="mx-auto w-full max-w-3xl space-y-section-gap">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 app-scrollbar">
+          <div className="mx-auto w-full max-w-3xl space-y-4">
+            <section className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-on-surface">{selectedDay.title}</h2>
+                <p className="mt-0.5 text-xs text-on-surface-variant">第 {dayIndex} 天 · {dayDateStr}</p>
+              </div>
+              <button
+                aria-expanded={isMoreMenuOpen}
+                aria-label="更多操作"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus"
+                onClick={() => setIsMoreMenuOpen(true)}
+                type="button"
+              >
+                <MoreHorizontal className="size-5" />
+              </button>
+            </section>
+
             <DaySelector
+              density="compact"
               days={days}
               getDayHref={(day) => buildDayHref(trip.id, day.id, view)}
               onSelectDay={(day) => navigateTo('day', { tripId: trip.id, dayId: day.id, view })}
               selectedDayId={selectedDay.id}
             />
 
-            <section className="space-y-stack-gap">
-              <div>
-                <p className="font-label-sm text-label-sm text-primary uppercase tracking-wider">第 {dayIndex} 天</p>
-                <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-primary">{selectedDay.title}</h2>
-                <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{dayDateStr}</p>
-              </div>
-              <ViewSwitch
-                activeView={view}
-                onSwitch={handleSwitchView}
-              />
-            </section>
+            <ViewSwitch
+              activeView={view}
+              onSwitch={handleSwitchView}
+            />
+
+            <DayTimelineView
+              compact
+              day={selectedDay}
+              items={items}
+              onItemsChange={refreshItems}
+              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
+              sourceView="schedule"
+              trip={trip}
+            />
 
             <Collapsible
               subtitle={dayIntelligenceSuggestions.length > 0
                 ? `${dayIntelligenceSuggestions.length} 项待处理`
-                : '实时行程与提醒'}
+                : undefined}
               testId="day-support-tools"
-              title="今日助手"
+              title="提醒与工具"
             >
               <div className="space-y-stack-gap">
                 {isTripIntelligenceStateLoaded ? (
@@ -605,16 +612,6 @@ export function DayViewPage() {
                 {dayBrief ? <DayBriefCard brief={dayBrief} /> : null}
               </div>
             </Collapsible>
-
-            <DayTimelineView
-              compact
-              day={selectedDay}
-              items={items}
-              onItemsChange={refreshItems}
-              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
-              sourceView="schedule"
-              trip={trip}
-            />
           </div>
         </div>
       )}
@@ -918,10 +915,10 @@ function ViewSwitch({
   onSwitch: (view: DayWorkspaceView) => void
 }) {
   return (
-    <div className={`${floating ? 'absolute left-4 top-[72px] z-30 shadow-lg' : 'relative'} rounded-full border border-outline-variant/30 bg-surface/90 p-1 backdrop-blur-xl`}>
+    <div className={`${floating ? 'absolute left-4 top-3 z-30 shadow-lg' : 'relative'} rounded-lg border border-outline-variant bg-surface/94 p-1 backdrop-blur-xl`}>
       <div className="grid grid-cols-2 gap-1">
         <button
-          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold transition active:scale-[0.98] tm-focus ${
             activeView === 'map' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant'
           }`}
           data-testid="view-switch-map"
@@ -932,7 +929,7 @@ function ViewSwitch({
           地图
         </button>
         <button
-          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-[0.98] ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold transition active:scale-[0.98] tm-focus ${
             activeView === 'schedule' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant'
           }`}
           data-testid="view-switch-schedule"
@@ -959,7 +956,7 @@ function MapLoadingFallback({ day, items }: { day: Day; items: ItineraryItem[] }
       <div className="absolute left-4 right-4 top-20 rounded-2xl tm-surface p-4">
         <SkeletonLine className="w-1/2" />
         <p className="mt-3 text-sm font-medium text-on-surface-variant dark:text-outline-variant">
-          地图加载中，本地行程仍可查看。
+          正在加载地图
         </p>
       </div>
       {previewItem ? (

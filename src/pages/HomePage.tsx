@@ -1,29 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import {
   CalendarDays,
   ChevronRight,
   Clock3,
-  Download,
-  FolderLock,
-  MapPin,
+  Crosshair,
+  FileText,
+  LocateFixed,
+  Navigation,
   Plus,
-  Settings,
-  Trash2,
+  Route,
+  Ticket,
+  WalletCards,
 } from 'lucide-react'
 import {
   createDemoTrip,
-  deleteTripCascade,
   listDaysByTrip,
   listItemsByTrip,
   listTicketsByTrip,
   listTrips,
 } from '../db'
+import { DayMap, type DayMapHandle } from '../components/DayMap'
 import { Button } from '../components/ui/Button'
-import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
-import { describeItemTime } from '../lib/itinerary'
 import { formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
 import {
   buildHomePortfolioModel,
@@ -31,18 +31,24 @@ import {
   type HomeTripOverview,
   type HomeTripSnapshot,
 } from '../lib/homeOverview'
+import { describeItemTime, describePreviousTransport, sortItineraryItems } from '../lib/itinerary'
+import { buildGoogleMapsUrl } from '../lib/mapLinks'
 import { readTripNavigationContext } from '../lib/navigationContext'
 import { navigateTo } from '../lib/routes'
-import type { Trip } from '../types'
+import { getTicketDisplayTitle } from '../lib/tickets'
+import type { ItineraryItem, TicketMeta, Trip } from '../types'
 
 const EMPTY_PORTFOLIO: HomePortfolioModel = { activeAndUpcoming: [], completed: [], primary: null }
+const E2E_MODE = import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
 
-export function HomePage() {
+export function HomePage({
+  onPrimaryTripChange,
+}: {
+  onPrimaryTripChange?: (trip: Pick<Trip, 'id' | 'title'> | null) => void
+} = {}) {
   const [snapshots, setSnapshots] = useState<HomeTripSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreatingDemo, setIsCreatingDemo] = useState(false)
-  const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
-  const [pendingDeleteTrip, setPendingDeleteTrip] = useState<Trip | null>(null)
   const [error, setError] = useState<string | null>(null)
   const preferredTripId = useMemo(() => readTripNavigationContext()?.tripId ?? null, [])
   const portfolio = useMemo(
@@ -51,6 +57,16 @@ export function HomePage() {
       : EMPTY_PORTFOLIO,
     [preferredTripId, snapshots],
   )
+  const primarySnapshot = useMemo(() => {
+    const primaryTripId = portfolio.primary?.trip.id
+    return primaryTripId
+      ? snapshots.find((snapshot) => snapshot.trip.id === primaryTripId) ?? null
+      : null
+  }, [portfolio.primary?.trip.id, snapshots])
+
+  useEffect(() => {
+    onPrimaryTripChange?.(portfolio.primary?.trip ?? null)
+  }, [onPrimaryTripChange, portfolio.primary?.trip])
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +79,7 @@ export function HomePage() {
           setError(null)
         }
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : '读取本地数据库失败')
+        if (!cancelled) setError(caught instanceof Error ? caught.message : '读取旅行失败')
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -77,16 +93,12 @@ export function HomePage() {
     }
   }, [])
 
-  async function refreshTrips() {
-    setSnapshots(await loadHomeTripSnapshots())
-  }
-
   async function handleCreateDemoTrip() {
     setIsCreatingDemo(true)
     setError(null)
     try {
       await createDemoTrip()
-      await refreshTrips()
+      setSnapshots(await loadHomeTripSnapshots())
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '创建示例旅行失败')
     } finally {
@@ -94,318 +106,381 @@ export function HomePage() {
     }
   }
 
-  async function confirmDeleteTrip() {
-    if (!pendingDeleteTrip) return
-    const trip = pendingDeleteTrip
-    setDeletingTripId(trip.id)
-    setError(null)
-    try {
-      await deleteTripCascade(trip.id)
-      setPendingDeleteTrip(null)
-      await refreshTrips()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '删除旅行失败')
-    } finally {
-      setDeletingTripId(null)
-    }
+  if (isLoading) {
+    return <TodayLoading />
+  }
+
+  if (!portfolio.primary || !primarySnapshot) {
+    return (
+      <TodayEmpty
+        error={error}
+        isCreatingDemo={isCreatingDemo}
+        onCreateDemo={() => void handleCreateDemoTrip()}
+      />
+    )
   }
 
   return (
-    <>
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pb-40 pt-24">
-        <header className="flex items-end justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-primary">旅图管家</p>
-            <h2 className="mt-1 font-headline-lg-mobile text-headline-lg-mobile text-on-surface">随身管家</h2>
-            <p className="mt-1 font-body-md text-body-md text-on-surface-variant">旅行、票据和提醒都在这里。</p>
-          </div>
-          <button
-            aria-label="设置"
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant/70 bg-surface-container text-on-surface-variant shadow-[0_1px_2px_rgba(20,37,32,0.04)] transition hover:text-primary active:scale-95 tm-focus"
-            onClick={() => navigateTo('settings')}
-            title="设置"
-            type="button"
-          >
-            <Settings className="size-5" />
-          </button>
-        </header>
-
-        {isLoading ? <HomeLoading /> : null}
-
-        {error ? (
-          <div className="rounded-lg border border-error/30 bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
-            {error}
-          </div>
-        ) : null}
-
-        {!isLoading && snapshots.length === 0 ? (
-          <div className="space-y-3">
-            <EmptyState
-              body="新建一趟旅行，或创建东京示例体验地图、时间轴和票据。"
-              icon={<CalendarDays className="size-6" />}
-              title="还没有旅行"
-            />
-            <Button className="w-full" loading={isCreatingDemo} onClick={() => void handleCreateDemoTrip()} variant="secondary">
-              创建示例旅行
-            </Button>
-          </div>
-        ) : null}
-
-        {portfolio.primary ? (
-          <PrimaryTripPanel onDelete={setPendingDeleteTrip} overview={portfolio.primary} />
-        ) : null}
-
-        {portfolio.activeAndUpcoming.length > 0 ? (
-          <TripSection
-            onDelete={setPendingDeleteTrip}
-            overviews={portfolio.activeAndUpcoming}
-            title="接下来的旅行"
-          />
-        ) : null}
-
-        {portfolio.completed.length > 0 ? (
-          <TripSection
-            onDelete={setPendingDeleteTrip}
-            overviews={portfolio.completed}
-            title="已完成"
-          />
-        ) : null}
-
-        <HomeActions primaryTrip={portfolio.primary?.trip ?? null} />
+    <div className="h-full min-h-0" data-testid="trip-card">
+      <span aria-hidden="true" className="sr-only">{portfolio.primary.trip.title}</span>
+      <div className="h-full min-h-0" data-testid="home-primary-trip">
+        <TodayWorkspace
+          error={error}
+          otherTrips={[...portfolio.activeAndUpcoming, ...portfolio.completed]}
+          overview={portfolio.primary}
+          snapshot={primarySnapshot}
+        />
       </div>
-
-      <ConfirmDialog
-        body="删除后，本机保存的日程、行程点、票据元数据、票据文件和绑定关系都会被移除。"
-        confirmLabel="删除旅行"
-        loading={Boolean(deletingTripId)}
-        onCancel={() => { if (!deletingTripId) setPendingDeleteTrip(null) }}
-        onConfirm={() => void confirmDeleteTrip()}
-        open={Boolean(pendingDeleteTrip)}
-        title={pendingDeleteTrip ? `确认删除「${pendingDeleteTrip.title}」吗？` : '确认删除这个旅行吗？'}
-      />
-    </>
-  )
-}
-
-function PrimaryTripPanel({ onDelete, overview }: { onDelete: (trip: Trip) => void; overview: HomeTripOverview }) {
-  const { focusDay, nextItem, stats, trip } = overview
-  return (
-    <section
-      className="overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container shadow-[0_14px_32px_rgba(20,37,32,0.08)]"
-      data-testid="home-primary-trip"
-    >
-      <div className="space-y-4 p-4" data-testid="trip-card">
-        <div className="flex items-start justify-between gap-3">
-          <button
-            className="min-w-0 flex-1 text-left active:opacity-80 tm-focus"
-            onClick={() => navigateTo('trip', { tripId: trip.id })}
-            type="button"
-          >
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className={getStatusClassName(overview.status)}>{overview.statusLabel}</span>
-              <span className="text-xs font-medium text-on-surface-variant">{formatDateRange(trip.startDate, trip.endDate)}</span>
-            </div>
-            <h3 className="break-words font-headline-lg text-headline-lg text-on-surface">{trip.title}</h3>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-on-surface-variant">
-              <MapPin className="size-4 shrink-0" />
-              <span className="truncate">{trip.destination || '目的地待补充'}</span>
-            </p>
-          </button>
-          <button
-            aria-label={`删除${trip.title}`}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant/60 bg-surface text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
-            onClick={() => onDelete(trip)}
-            title="删除旅行"
-            type="button"
-          >
-            <Trash2 className="size-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <TripStat label="日程" value={`${stats.dayCount} 天`} />
-          <TripStat label="行程点" value={`${stats.itemCount} 个`} />
-          <TripStat label="票据" value={`${stats.ticketCount} 张`} />
-        </div>
-
-        <div className="flex items-start gap-3 rounded-lg bg-primary p-4 text-on-primary" data-testid="home-primary-next-step">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white">
-            <Clock3 className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-white">
-              {focusDay ? formatShortDateWithWeekday(focusDay.date) : '旅行准备'}
-            </p>
-            <p className="mt-0.5 break-words text-sm font-semibold text-white">
-              {nextItem ? nextItem.title : overview.preparationLabel}
-            </p>
-            {nextItem ? (
-              <p className="mt-0.5 text-xs text-white">{describeItemTime(nextItem)} · {overview.preparationLabel}</p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="w-full" onClick={() => navigateTo('trip', { tripId: trip.id })}>
-            打开旅行
-          </Button>
-          <Button
-            className="w-full"
-            icon={nextItem ? <ChevronRight className="size-4" /> : <FolderLock className="size-4" />}
-            onClick={() => nextItem
-              ? navigateTo('item', { dayId: nextItem.dayId, itemId: nextItem.id, tripId: trip.id })
-              : navigateTo('documents', { tripId: trip.id })}
-            variant="secondary"
-          >
-            {nextItem ? '查看下一项' : '打开资料'}
-          </Button>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function TripStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-container-high px-2 py-3 text-center">
-      <p className="font-headline-md text-headline-md text-on-surface">{value}</p>
-      <p className="mt-0.5 text-[11px] font-semibold text-on-surface-variant">{label}</p>
     </div>
   )
 }
 
-function TripSection({
-  onDelete,
-  overviews,
-  title,
+function TodayWorkspace({
+  error,
+  otherTrips,
+  overview,
+  snapshot,
 }: {
-  onDelete: (trip: Trip) => void
-  overviews: HomeTripOverview[]
-  title: string
+  error: string | null
+  otherTrips: HomeTripOverview[]
+  overview: HomeTripOverview
+  snapshot: HomeTripSnapshot
 }) {
+  const mapRef = useRef<DayMapHandle | null>(null)
+  const [selection, setSelection] = useState<{ dayId: string; itemId: string; source: 'marker' | 'list' } | null>(null)
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const day = overview.focusDay
+  const items = useMemo(
+    () => day
+      ? sortItineraryItems(snapshot.items.filter((item) => item.dayId === day.id))
+      : [],
+    [day, snapshot.items],
+  )
+  const fallbackItem = overview.nextItem ?? items[0] ?? null
+  const selectedItemId = selection && selection.dayId === day?.id ? selection.itemId : null
+  const selectedItem = selectedItemId
+    ? items.find((item) => item.id === selectedItemId) ?? fallbackItem
+    : fallbackItem
+  const selectedItemIndex = selectedItem
+    ? Math.max(0, items.findIndex((item) => item.id === selectedItem.id))
+    : -1
+  const selectedTicket = selectedItem
+    ? findPrimaryTicket(selectedItem, snapshot.tickets)
+    : null
+
+  function selectItem(item: ItineraryItem, source: 'marker' | 'list') {
+    if (!day) return
+    setSelection({ dayId: day.id, itemId: item.id, source })
+  }
+
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus('error')
+      return
+    }
+
+    setLocationStatus('loading')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          setLocationStatus('error')
+          return
+        }
+        setUserLocation([longitude, latitude])
+        setLocationStatus('idle')
+        window.requestAnimationFrame(() => mapRef.current?.recenter())
+      },
+      () => setLocationStatus('error'),
+      {
+        enableHighAccuracy: false,
+        maximumAge: 60_000,
+        timeout: 8_000,
+      },
+    )
+  }
+
   return (
-    <section className="space-y-3">
-      <h3 className="text-base font-semibold text-on-surface">{title}</h3>
-      <div className="overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container">
-        {overviews.map((overview, index) => (
-          <TripPortfolioRow
-            key={overview.trip.id}
-            onDelete={onDelete}
-            overview={overview}
-            separator={index < overviews.length - 1}
+    <div className="today-workspace">
+      <section aria-label="今日地图" className="today-map-stage">
+        {day ? (
+          <DayMap
+            heightClassName="h-full min-h-0"
+            items={items}
+            markerLabel="sequence"
+            onSelectItem={(item) => selectItem(item, 'marker')}
+            ref={mapRef}
+            selectedItemId={selectedItem?.id}
+            selectedItemSource={selection?.source ?? 'list'}
+            surface="fullscreen"
+            userLocation={userLocation}
+            viewportPadding={{ top: 64, right: 40, bottom: 40, left: 40 }}
           />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-map-bg p-5">
+            <EmptyState
+              body="先添加一天日程，再查看今日路线。"
+              icon={<CalendarDays className="size-6" />}
+              title="还没有每日行程"
+            />
+          </div>
+        )}
+
+        {day ? (
+          <button
+            className="today-map-date tm-focus"
+            onClick={() => navigateTo('day', { tripId: overview.trip.id, dayId: day.id, view: 'map' })}
+            type="button"
+          >
+            <span>{getDayPosition(day.id, snapshot.days)}天</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatShortDateWithWeekday(day.date)}</span>
+            <ChevronRight className="size-4" />
+          </button>
+        ) : null}
+
+        {day && items.length > 0 ? (
+          <div className="today-map-controls" aria-label="地图控制">
+            <button
+              aria-label="回到今日路线"
+              className="today-map-control tm-focus"
+              onClick={() => mapRef.current?.recenter()}
+              title="回到今日路线"
+              type="button"
+            >
+              <Crosshair className="size-5" />
+            </button>
+            <button
+              aria-label={locationStatus === 'loading' ? '正在获取当前位置' : '显示当前位置'}
+              className="today-map-control tm-focus"
+              disabled={locationStatus === 'loading'}
+              onClick={requestLocation}
+              title="显示当前位置"
+              type="button"
+            >
+              <LocateFixed className="size-5" />
+            </button>
+          </div>
+        ) : null}
+
+        {locationStatus === 'error' ? (
+          <p className="today-map-notice" role="status">暂时无法取得位置</p>
+        ) : null}
+      </section>
+
+      <section aria-label="今日行程" className="today-trip-sheet">
+        <span aria-hidden="true" className="today-sheet-handle" />
+        <div className="today-sheet-scroll app-scrollbar">
+          <button
+            className="today-trip-meta tm-focus"
+            onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
+            type="button"
+          >
+            <span>{day ? getDayPosition(day.id, snapshot.days) : overview.statusLabel}</span>
+            {day ? <span aria-hidden="true">·</span> : null}
+            <span>{day ? formatShortDateWithWeekday(day.date) : formatDateRange(overview.trip.startDate, overview.trip.endDate)}</span>
+            <span aria-hidden="true">·</span>
+            <span className="min-w-0 truncate">{overview.trip.destination || overview.trip.title}</span>
+            <ChevronRight className="size-4 shrink-0" />
+          </button>
+
+          {error ? (
+            <p className="today-inline-error" role="status">{error}</p>
+          ) : null}
+
+          {selectedItem ? (
+            <>
+              <div className="today-next-stop">
+                <div className="min-w-0 flex-1">
+                  <p className="today-overline">{overview.status === 'completed' ? '旅程回顾' : '下一站'}</p>
+                  <div className="mt-2 flex min-w-0 items-start gap-3">
+                    <span className="today-stop-number">{selectedItemIndex + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <h2>{selectedItem.title}</h2>
+                      <p>{selectedItem.locationName || selectedItem.address || overview.trip.destination}</p>
+                    </div>
+                  </div>
+                  <p className="today-transport">
+                    <Route className="size-4 shrink-0" />
+                    <span>{describePreviousTransport(selectedItem) || describeItemTime(selectedItem)}</span>
+                  </p>
+                </div>
+                <div className="today-stop-time">
+                  <Clock3 className="size-4" />
+                  <span>{selectedItem.startTime || '时间待定'}</span>
+                </div>
+              </div>
+
+              {selectedTicket ? (
+                <button
+                  className="today-ticket-row tm-focus"
+                  onClick={() => navigateTo('tickets', {
+                    tripId: overview.trip.id,
+                    ticketId: selectedTicket.id,
+                  })}
+                  type="button"
+                >
+                  <span className="today-ticket-icon"><Ticket className="size-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <strong>{getTicketDisplayTitle(selectedTicket)}</strong>
+                    <small>{selectedTicket.fileType === 'pdf' ? 'PDF 票据' : '已关联票据'}</small>
+                  </span>
+                  <span className="today-ticket-action">打开</span>
+                </button>
+              ) : null}
+
+              <a
+                className="today-navigation-action tm-focus"
+                href={buildGoogleMapsUrl(selectedItem)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Navigation className="size-5" />
+                开始导航
+              </a>
+
+              {items.length > 1 ? (
+                <div className="today-stops" aria-label="今日其他行程">
+                  {items.map((item, index) => (
+                    <button
+                      aria-current={item.id === selectedItem.id ? 'true' : undefined}
+                      className="today-stop-row tm-focus"
+                      key={item.id}
+                      onClick={() => selectItem(item, 'list')}
+                      type="button"
+                    >
+                      <span className="today-stop-row-number">{index + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <strong>{item.title}</strong>
+                        <small>{describePreviousTransport(item) || item.locationName || item.address || '地点待补充'}</small>
+                      </span>
+                      <time>{item.startTime || '--:--'}</time>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="today-no-stops">
+              <p>{overview.preparationLabel}</p>
+              <Button
+                icon={<Plus className="size-4" />}
+                onClick={() => day
+                  ? navigateTo('item/new', { tripId: overview.trip.id, dayId: day.id })
+                  : navigateTo('trip', { tripId: overview.trip.id })}
+              >
+                {day ? '添加行程点' : '安排日程'}
+              </Button>
+            </div>
+          )}
+
+          {overview.status === 'completed' ? (
+            <div className="today-after-trip">
+              <button onClick={() => navigateTo('documents', { tripId: overview.trip.id })} type="button">
+                <FileText className="size-5" />
+                旅行资料
+              </button>
+              <button onClick={() => navigateTo('ledger', { tripId: overview.trip.id })} type="button">
+                <WalletCards className="size-5" />
+                费用汇总
+              </button>
+            </div>
+          ) : null}
+
+          {otherTrips.length > 0 ? <OtherTrips overviews={otherTrips} /> : null}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function OtherTrips({ overviews }: { overviews: HomeTripOverview[] }) {
+  return (
+    <details className="today-other-trips">
+      <summary>其他旅行 <span>{overviews.length}</span></summary>
+      <div>
+        {overviews.map((overview) => (
+          <button
+            key={overview.trip.id}
+            onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
+            type="button"
+          >
+            <span className="min-w-0 flex-1">
+              <strong>{overview.trip.title}</strong>
+              <small>{overview.statusLabel} · {formatDateRange(overview.trip.startDate, overview.trip.endDate)}</small>
+            </span>
+            <ChevronRight className="size-4 shrink-0" />
+          </button>
         ))}
       </div>
-    </section>
+    </details>
   )
 }
 
-function TripPortfolioRow({
-  onDelete,
-  overview,
-  separator,
+function TodayEmpty({
+  error,
+  isCreatingDemo,
+  onCreateDemo,
 }: {
-  onDelete: (trip: Trip) => void
-  overview: HomeTripOverview
-  separator: boolean
+  error: string | null
+  isCreatingDemo: boolean
+  onCreateDemo: () => void
 }) {
-  const { trip } = overview
   return (
-    <div className={`flex items-center gap-2 px-2 ${separator ? 'border-b border-outline-variant/70' : ''}`}>
-      <button
-        aria-label={`打开${trip.title}`}
-        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition hover:bg-surface-container-high active:scale-[0.99] tm-focus"
-        data-testid="trip-card"
-        onClick={() => navigateTo('trip', { tripId: trip.id })}
-        type="button"
-      >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-lg">
-          {getTripEmoji(trip)}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-on-surface">{trip.title}</span>
-          <span className="mt-0.5 block truncate text-xs text-on-surface-variant">
-            {overview.statusLabel} · {formatDateRange(trip.startDate, trip.endDate)}
-          </span>
-        </span>
-        <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
-      </button>
-      <button
-        aria-label={`删除${trip.title}`}
-        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-error-container hover:text-error active:scale-95 tm-focus"
-        onClick={() => onDelete(trip)}
-        title="删除旅行"
-        type="button"
-      >
-        <Trash2 className="size-4" />
-      </button>
-    </div>
-  )
-}
-
-function HomeActions({ primaryTrip }: { primaryTrip: Trip | null }) {
-  return (
-    <section className="space-y-3">
-      <h3 className="text-base font-semibold text-on-surface">常用</h3>
-      <div className="grid grid-cols-2 gap-2">
-        <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => navigateTo('trip/new')}>
-          新建旅行
-        </Button>
+    <div className="flex h-full min-h-0 items-center justify-center px-5">
+      <div className="w-full max-w-sm space-y-4">
+        <EmptyState
+          body="新建旅行后，今日路线、下一站和票据会出现在这里。"
+          icon={<CalendarDays className="size-6" />}
+          title="还没有旅行"
+        />
+        {error ? <p className="today-inline-error" role="status">{error}</p> : null}
         <Button
           className="w-full"
-          icon={<FolderLock className="size-4" />}
-          onClick={() => navigateTo('documents', primaryTrip ? { tripId: primaryTrip.id } : undefined)}
-          variant="secondary"
+          icon={<Plus className="size-4" />}
+          onClick={() => navigateTo('trip/new')}
         >
-          旅行资料
+          新建旅行
         </Button>
+        {E2E_MODE ? (
+          <Button className="w-full" loading={isCreatingDemo} onClick={onCreateDemo} variant="secondary">
+            创建示例旅行
+          </Button>
+        ) : null}
       </div>
-      <details className="rounded-lg border border-outline-variant/70 bg-surface-container px-3 py-2">
-        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">更多</summary>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button className="w-full" onClick={() => navigateTo('ai-draft')} variant="secondary">
-            AI 生成行程
-          </Button>
-          <Button className="w-full" icon={<Download className="size-4" />} onClick={() => navigateTo('settings')} variant="secondary">
-            导入恢复
-          </Button>
-        </div>
-      </details>
-    </section>
-  )
-}
-
-function HomeLoading() {
-  return (
-    <div className="space-y-3 rounded-lg border border-outline-variant/70 bg-surface-container p-5">
-      <SkeletonLine className="w-1/3" />
-      <SkeletonLine className="w-2/3" />
-      <SkeletonLine className="w-full" />
-      <SkeletonLine className="w-1/2" />
     </div>
   )
 }
 
-function getStatusClassName(status: HomeTripOverview['status']) {
-  const base = 'inline-flex min-h-6 items-center rounded-lg px-2.5 text-xs font-semibold'
-  if (status === 'ongoing') return `${base} bg-primary text-on-primary`
-  if (status === 'completed') return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300`
-  return `${base} bg-surface-container-high text-on-surface-variant`
+function TodayLoading() {
+  return (
+    <div className="today-workspace" aria-label="正在加载今日行程">
+      <div className="bg-surface-container-high" />
+      <div className="space-y-4 bg-surface p-5">
+        <SkeletonLine className="w-1/3" />
+        <SkeletonLine className="w-3/4" />
+        <SkeletonLine className="w-full" />
+        <SkeletonLine className="w-1/2" />
+      </div>
+    </div>
+  )
 }
 
-function getTripEmoji(trip: Trip) {
-  const destination = (trip.destination || trip.title || '').toLowerCase()
-  if (destination.includes('东京') || destination.includes('日本') || destination.includes('japan')) return '🗼'
-  if (destination.includes('伦敦') || destination.includes('london') || destination.includes('英国')) return '🎡'
-  if (destination.includes('巴黎') || destination.includes('paris') || destination.includes('法国')) return '🗼'
-  if (destination.includes('纽约') || destination.includes('new york') || destination.includes('美国')) return '🗽'
-  if (destination.includes('首尔') || destination.includes('seoul') || destination.includes('韩国')) return '🇰🇷'
-  if (destination.includes('曼谷') || destination.includes('bangkok') || destination.includes('泰国')) return '🇹🇭'
-  if (destination.includes('悉尼') || destination.includes('sydney') || destination.includes('澳洲')) return '🦘'
-  if (destination.includes('迪拜') || destination.includes('dubai')) return '🏙️'
-  if (destination.includes('罗马') || destination.includes('rome') || destination.includes('意大利')) return '🏛️'
-  if (destination.includes('巴塞罗那') || destination.includes('barcelona') || destination.includes('西班牙')) return '🇪🇸'
-  return '✈️'
+function findPrimaryTicket(item: ItineraryItem, tickets: TicketMeta[]) {
+  return item.ticketIds
+    .map((ticketId) => tickets.find((ticket) => ticket.id === ticketId))
+    .find((ticket): ticket is TicketMeta => Boolean(ticket))
+    ?? tickets.find((ticket) => ticket.itemId === item.id)
+    ?? null
+}
+
+function getDayPosition(dayId: string, days: HomeTripSnapshot['days']) {
+  const sortedDays = [...days].sort((first, second) => (
+    first.date.localeCompare(second.date) || first.sortOrder - second.sortOrder
+  ))
+  const index = sortedDays.findIndex((day) => day.id === dayId)
+  return `第 ${Math.max(0, index) + 1} `
 }
 
 async function loadHomeTripSnapshots(): Promise<HomeTripSnapshot[]> {

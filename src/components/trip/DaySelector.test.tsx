@@ -51,9 +51,9 @@ describe('DaySelector', () => {
       )
     })
 
-    expect(container?.textContent).toContain('Day 1')
-    expect(container?.textContent).toContain('Day 2')
-    expect(container?.textContent).toContain('Day 3')
+    expect(container?.textContent).toContain('第 1 天')
+    expect(container?.textContent).toContain('第 2 天')
+    expect(container?.textContent).toContain('第 3 天')
   })
 
   it('renders dates for each day', async () => {
@@ -80,10 +80,10 @@ describe('DaySelector', () => {
     })
 
     const buttons = container?.querySelectorAll('button') ?? []
-    const day2Button = Array.from(buttons).find((b) => b.textContent?.includes('Day 2'))
+    const day2Button = Array.from(buttons).find((b) => b.textContent?.includes('第 2 天'))
     expect(day2Button?.getAttribute('aria-current')).toBe('page')
 
-    const day1Button = Array.from(buttons).find((b) => b.textContent?.includes('Day 1'))
+    const day1Button = Array.from(buttons).find((b) => b.textContent?.includes('第 1 天'))
     expect(day1Button?.getAttribute('aria-current')).toBeNull()
   })
 
@@ -97,7 +97,7 @@ describe('DaySelector', () => {
     })
 
     const day2Button = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((b) => b.textContent?.includes('Day 2'))
+      .find((b) => b.textContent?.includes('第 2 天'))
 
     await act(async () => {
       day2Button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -131,7 +131,7 @@ describe('DaySelector', () => {
       )
     })
 
-    expect(container?.textContent).toContain('Day 1')
+    expect(container?.textContent).toContain('第 1 天')
   })
 
   it('renders empty when no days', async () => {
@@ -155,7 +155,7 @@ describe('DaySelector', () => {
       )
     })
 
-    expect(container?.textContent).toContain('Day 1')
+    expect(container?.textContent).toContain('第 1 天')
     const buttons = container?.querySelectorAll('button') ?? []
     expect(Array.from(buttons).every((b) => b.getAttribute('aria-current') === null)).toBe(true)
   })

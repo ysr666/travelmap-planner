@@ -45,6 +45,7 @@ type DayMapViewProps = {
   embedded?: boolean
   isVisible?: boolean
   minimalOverlay?: boolean
+  showDefaultMarkerCard?: boolean
   prewarmEnabled?: boolean
   showFloatingHeader?: boolean
   resizeSignal?: number
@@ -56,7 +57,7 @@ const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回
 const LOCATION_UNAVAILABLE_MESSAGE = '暂时无法取得位置，请稍后重试。'
 const LOCATION_PERMISSION_MESSAGE = '定位失败，请在地址栏允许位置后重试'
 const MAP_OVERLAY_GAP = 12
-const MARKER_EDGE_RESERVE = 96
+const MARKER_EDGE_RESERVE = 112
 const MARKER_CARD_FALLBACK_HEIGHT = 196
 
 export function DayMapView({
@@ -68,6 +69,7 @@ export function DayMapView({
   embedded = false,
   isVisible = true,
   minimalOverlay = false,
+  showDefaultMarkerCard = true,
   prewarmEnabled = false,
   showFloatingHeader = true,
   resizeSignal,
@@ -115,10 +117,13 @@ export function DayMapView({
   const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
   const markerCardItem = useMemo(() => {
     if (!markerCardItemId) {
+      if (!showDefaultMarkerCard) {
+        return null
+      }
       return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? null)
     }
     return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [day.id, mappedItems, markerCardDismissedDayId, markerCardItemId])
+  }, [day.id, mappedItems, markerCardDismissedDayId, markerCardItemId, showDefaultMarkerCard])
   const markerCardItemIndex = useMemo(() => {
     if (!markerCardItem) {
       return -1
@@ -452,6 +457,7 @@ export function DayMapView({
             ref={dayMapRef}
             heightClassName="h-full min-h-0"
             items={items}
+            markerLabel="sequence"
             onBaseLoadingChange={setMapBaseLoading}
             onMapError={(message) => setMapError(message)}
             onMapReady={() => setMapReadyToken((current) => current + 1)}
@@ -471,7 +477,6 @@ export function DayMapView({
           <MarkerPreviewCard
             containerRef={markerCardRef}
             itemIndex={markerCardItemIndex}
-            items={mappedItems}
             item={markerCardItem}
             onClose={() => {
               setMarkerCardSelection(null)
@@ -519,7 +524,6 @@ export function DayMapView({
 function MarkerPreviewCard({
   containerRef,
   itemIndex,
-  items,
   item,
   nextItem,
   onClose,
@@ -530,7 +534,6 @@ function MarkerPreviewCard({
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
   itemIndex: number
-  items: ItineraryItem[]
   item: ItineraryItem
   nextItem: ItineraryItem | null
   onClose: () => void
@@ -542,108 +545,72 @@ function MarkerPreviewCard({
 
   return (
     <div
-      className="absolute bottom-[calc(120px+env(safe-area-inset-bottom,20px))] left-4 right-4 z-50"
+      className="absolute bottom-[max(2.25rem,calc(env(safe-area-inset-bottom)+1.5rem))] left-4 right-4 z-50"
       ref={containerRef}
     >
       <div
-        className="rounded-2xl border border-outline-variant/30 bg-surface-container-high/95 p-4 shadow-2xl backdrop-blur-md"
+        className="rounded-lg border border-outline-variant bg-surface/96 p-3 shadow-2xl backdrop-blur-md"
         data-testid="map-marker-card"
       >
-        <div className="flex items-start gap-3">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/20">
-            <Building2 className="size-5 text-primary" />
-          </div>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">
+            {Math.max(0, itemIndex) + 1}
+          </span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-              <span>第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站</span>
-              {item.ticketIds.length > 0 ? <span>{item.ticketIds.length} 张票据</span> : null}
-            </div>
-            <h3 className="mt-1 truncate font-headline-sm text-[16px] text-on-surface">{item.title}</h3>
-            <p className="mt-1 flex min-w-0 items-center gap-1 text-[13px] text-on-surface-variant">
+            <p className="text-xs font-semibold text-primary">第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站</p>
+            <h3 className="mt-0.5 line-clamp-2 break-words text-base font-semibold leading-5 text-on-surface">{item.title}</h3>
+            <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
               <Clock3 className="size-3.5 shrink-0" />
               <span className="truncate">{describeItemTime(item)}</span>
             </p>
             {item.locationName || item.address ? (
-              <p className="mt-1 flex min-w-0 items-center gap-1 text-[13px] text-on-surface-variant">
+              <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
                 <MapPin className="size-3.5 shrink-0" />
                 <span className="truncate">{item.locationName || item.address}</span>
               </p>
             ) : null}
+            {item.ticketIds.length > 0 ? (
+              <p className="mt-1 text-xs font-semibold text-primary">{item.ticketIds.length} 张票据</p>
+            ) : null}
           </div>
-          <div className="flex shrink-0 items-start">
-            <button
-              aria-label="关闭地点卡片"
-              className="flex size-10 items-center justify-center rounded-full bg-surface-container text-on-surface-variant transition hover:text-on-surface active:scale-95"
-              data-testid="map-marker-card-close"
-              onClick={onClose}
-              type="button"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-        {items.length > 1 ? (
-          <div className="-mx-1 mt-3 overflow-x-auto px-1 pb-1 app-scrollbar" data-testid="map-marker-card-station-rail">
-            <div className="flex min-w-max gap-2">
-              {items.map((candidate, index) => {
-                const active = candidate.id === item.id
-                return (
-                  <button
-                    aria-current={active ? 'true' : undefined}
-                    aria-label={`选择第 ${index + 1} 站 ${candidate.title}`}
-                    className={`flex min-h-11 w-32 shrink-0 items-center gap-2 rounded-xl border px-2 text-left text-xs transition active:scale-[0.98] ${
-                      active
-                        ? 'border-primary/40 bg-primary-container text-primary'
-                        : 'border-outline-variant/30 bg-surface-container text-on-surface hover:bg-surface-container-high'
-                    }`}
-                    data-testid="map-marker-card-station"
-                    key={candidate.id}
-                    onClick={() => onSelectItem(candidate)}
-                    type="button"
-                  >
-                    <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                      active
-                        ? 'bg-primary text-on-primary'
-                        : 'bg-surface-container-highest text-on-surface-variant'
-                    }`}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate font-semibold">{candidate.title}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
-        <div className="mt-3 grid grid-cols-[1fr_1.15fr_1fr] gap-2">
           <button
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/30 bg-surface-container px-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            aria-label="关闭地点卡片"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container-high hover:text-on-surface active:scale-95 tm-focus"
+            data-testid="map-marker-card-close"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
+          <button
+            aria-label="上一站"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 tm-focus"
             data-testid="map-marker-card-prev"
             disabled={!previousItem}
             onClick={() => previousItem && onSelectItem(previousItem)}
             type="button"
           >
             <ChevronLeft className="size-4" />
-            上一站
           </button>
           <button
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-2 text-sm font-semibold text-on-primary transition active:scale-[0.98]"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
             data-testid="map-marker-card-open"
             onClick={() => onOpenItem(item)}
             type="button"
           >
             <Navigation className="size-4" />
-            详情
+            查看地点
           </button>
           <button
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/30 bg-surface-container px-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            aria-label="下一站"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 tm-focus"
             data-testid="map-marker-card-next"
             disabled={!nextItem}
             onClick={() => nextItem && onSelectItem(nextItem)}
             type="button"
           >
-            下一站
             <ChevronRight className="size-4" />
           </button>
         </div>
@@ -670,7 +637,7 @@ function MapHeader({
       <div className="pointer-events-auto mx-auto flex items-center gap-2 rounded-2xl p-2 backdrop-blur-xl tm-surface">
         <button
           aria-label="返回日程"
-          className="flex size-11 shrink-0 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
           onClick={onBackToSchedule}
           type="button"
         >

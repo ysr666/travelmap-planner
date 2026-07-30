@@ -13,6 +13,10 @@ const routeIds: RouteId[] = [
   'shared-trip',
   'search',
   'settings',
+  'settings/account',
+  'settings/preferences',
+  'settings/app',
+  'settings/advanced',
   'settings/privacy',
   'settings/maps',
   'settings/route',
@@ -49,6 +53,10 @@ export function routeFromHash(hash = window.location.hash): RouteId {
 export function getCanonicalHashRedirect(hash = window.location.hash) {
   const [rawPath, rawQuery = ''] = hash.replace(/^#\/?/, '').split('?')
   const params = new URLSearchParams(rawQuery)
+
+  if (rawPath === 'settings/privacy' || rawPath === 'settings/maps' || rawPath === 'settings/route') {
+    return buildHash('settings/advanced', params)
+  }
 
   if (rawPath === 'tickets') {
     if (!params.has('tab')) params.set('tab', 'attachments')

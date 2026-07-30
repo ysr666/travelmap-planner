@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Plus, RotateCcw, Save, Ticket, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Clock3, ExternalLink, GripVertical, MapPin, MoreHorizontal, Navigation, Pencil, Plus, RotateCcw, Save, Ticket, Trash2, X } from 'lucide-react'
 import { deleteItineraryItemReversible, reorderDayItems, undoItineraryItemDeletion } from '../../db'
 import { navigateTo } from '../../lib/routes'
 import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
-import { ActionToolbar } from '../ui/ActionToolbar'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
 import { InlineStatus } from '../ui/InlineStatus'
 import { SectionHeader } from '../ui/SectionHeader'
-import { describeItemTime, describePreviousTransport, transportModeLabels } from '../../lib/itinerary'
+import { describePreviousTransport, transportModeLabels } from '../../lib/itinerary'
 import { buildAppleMapsDirectionsUrl, buildGoogleMapsDirectionsUrl } from '../../lib/mapLinks'
 import type { Day, ItineraryItem, Trip } from '../../types'
 
@@ -44,6 +42,7 @@ export function DayTimelineView({
   const [orderingBaselineItemIds, setOrderingBaselineItemIds] = useState<string[]>([])
   const [isOrdering, setIsOrdering] = useState(false)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [openItemMenuId, setOpenItemMenuId] = useState<string | null>(null)
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const displayedItems = isOrdering
     ? draftItemIds.flatMap((itemId) => {
@@ -149,60 +148,65 @@ export function DayTimelineView({
   }
 
   return (
-    <div className={compact ? 'space-y-4' : 'space-y-5'} data-testid="day-timeline">
+    <div className={compact ? 'space-y-3' : 'space-y-4'} data-testid="day-timeline">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">当天日程</h3>
+          <h3 className="text-base font-semibold text-on-surface">当天日程</h3>
           <p className="mt-0.5 text-xs tm-muted">{items.length} 个行程点</p>
         </div>
-        <ActionToolbar align="end" ariaLabel="日程操作" className="max-w-[70%] shrink-0">
+        <div aria-label="日程操作" className="flex shrink-0 items-center gap-2" role="group">
           {isOrdering ? (
             <>
-              <Button
-                className="min-h-11 px-3"
+              <button
+                aria-label="取消排序"
+                className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus"
                 disabled={isSavingOrder}
-                icon={<X className="size-4" />}
                 onClick={cancelOrdering}
-                variant="secondary"
+                title="取消排序"
+                type="button"
               >
-                取消
-              </Button>
-              <Button
-                className="min-h-11 px-3"
+                <X className="size-4" />
+              </button>
+              <button
+                aria-label="保存排序"
+                className="flex size-11 items-center justify-center rounded-lg bg-primary text-on-primary disabled:opacity-40 tm-focus"
                 disabled={!hasOrderChanges}
-                icon={<Save className="size-4" />}
-                loading={isSavingOrder}
                 onClick={() => void saveOrdering()}
+                title="保存排序"
+                type="button"
               >
-                保存
-              </Button>
+                <Save className="size-4" />
+              </button>
             </>
           ) : null}
           {!isOrdering && onSwitchToMap ? (
-            <Button className="min-h-11 px-3 whitespace-nowrap" onClick={onSwitchToMap} variant="secondary">
-              地图
-            </Button>
+            <button aria-label="打开地图" className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus" onClick={onSwitchToMap} title="打开地图" type="button">
+              <Navigation className="size-4" />
+            </button>
           ) : null}
           {!isOrdering && items.length > 1 ? (
-            <Button
-              className="min-h-11 px-3"
-              icon={<GripVertical className="size-4" />}
+            <button
+              aria-label="排序"
+              className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus"
               onClick={startOrdering}
-              variant="secondary"
+              title="排序"
+              type="button"
             >
-              排序
-            </Button>
+              <GripVertical className="size-4" />
+            </button>
           ) : null}
           {!isOrdering ? (
-            <Button
-              className="min-h-11 px-3"
-              icon={<Plus className="size-4" />}
+            <button
+              aria-label="新增"
+              className="flex size-11 items-center justify-center rounded-lg bg-primary text-on-primary tm-focus"
               onClick={() => navigateTo('item/new', { tripId: trip.id, dayId: day.id, view: sourceView })}
+              title="新增行程点"
+              type="button"
             >
-              新增
-            </Button>
+              <Plus className="size-4" />
+            </button>
           ) : null}
-        </ActionToolbar>
+        </div>
       </div>
 
       {actionError ? (
@@ -241,7 +245,7 @@ export function DayTimelineView({
         </InlineStatus>
       ) : null}
 
-      <section className="space-y-3">
+      <section>
         {!compact ? <SectionHeader title="时间轴" /> : null}
         {items.length === 0 ? (
           <EmptyState
@@ -250,40 +254,64 @@ export function DayTimelineView({
             title="这一天还没有行程点"
           />
         ) : (
-          <div className="space-y-3">
+          <div className="relative border-t border-outline-variant">
+            <div className="absolute bottom-8 left-[71px] top-8 w-px bg-outline-variant" />
             {displayedItems.map((item, index) => {
               const previousItem = index > 0 ? displayedItems[index - 1] : null
               const previousTransportDescription = describePreviousTransport(item)
+              const itemMenuOpen = openItemMenuId === item.id
 
               return (
-                <div className="space-y-2" key={item.id}>
+                <div className="relative" key={item.id}>
                   {previousItem && previousTransportDescription ? (
                     <TransportSegment description={previousTransportDescription} />
                   ) : null}
-                  <div className="grid w-full grid-cols-[2.8rem_1fr] gap-3">
-                    <div className="relative flex justify-center">
-                      <div className="z-10 flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-[0_6px_14px_var(--color-primary-shadow)]">
-                        {index + 1}
-                      </div>
-                      {index !== items.length - 1 ? (
-                        <div className="absolute top-9 h-[calc(100%+0.75rem)] w-px bg-surface-container-high dark:bg-surface-container-high" />
-                      ) : null}
-                    </div>
-                    <Card variant="grouped" data-testid={isOrdering ? 'day-order-item' : 'day-timeline-item'}>
-                      {isOrdering ? <div className="flex items-start gap-3">
-                        <GripVertical aria-hidden="true" className="mt-1 size-4 shrink-0 text-outline" />
-                        <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-1.5 text-xs font-semibold tm-muted">
-                            <Clock3 className="size-3.5" />
-                            {describeItemTime(item)}
-                          </p>
-                          <h3 className="mt-1 truncate text-base font-semibold text-on-surface">{item.title}</h3>
-                          <p className="mt-1 truncate text-xs tm-muted">{item.locationName || item.address || '地点未填写'}</p>
+                  <div
+                    className="grid min-h-[72px] w-full grid-cols-[56px_16px_minmax(0,1fr)_44px] items-start gap-2 border-b border-outline-variant py-3"
+                    data-testid={isOrdering ? 'day-order-item' : 'day-timeline-item'}
+                  >
+                    <time className="pt-0.5 text-right text-sm font-semibold text-on-surface-variant">
+                      {item.startTime || '--:--'}
+                    </time>
+                    <span className="relative z-10 mt-1.5 flex justify-center">
+                      <span className={`size-3 rounded-full border-2 ring-4 ring-surface ${
+                        index === 0 ? 'border-primary bg-primary' : 'border-outline bg-surface'
+                      }`} />
+                    </span>
+                    {isOrdering ? (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant">
+                          <GripVertical className="size-3.5" />
+                          调整顺序
                         </div>
-                        <div className="flex shrink-0 gap-1">
+                        <h3 className="mt-1 truncate text-base font-semibold text-on-surface">{item.title}</h3>
+                        <p className="mt-1 truncate text-xs text-on-surface-variant">{item.locationName || item.address || '地点未填写'}</p>
+                      </div>
+                    ) : (
+                      <button aria-label={`打开行程点 ${item.title}`} className="min-w-0 text-left tm-focus" onClick={() => onOpenItem(item)} type="button">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-on-surface">{item.title}</h3>
+                          {item.ticketIds.length > 0 ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
+                              <Ticket className="size-3" />
+                              {item.ticketIds.length}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
+                          <MapPin className="size-3.5 shrink-0" />
+                          <span className="truncate">{item.locationName || item.address || '地点未填写'}</span>
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-on-surface-variant">
+                          {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
+                        </span>
+                      </button>
+                    )}
+                    {isOrdering ? (
+                      <div className="flex flex-col">
                           <button
                             aria-label={`上移${item.title}`}
-                            className="flex size-11 items-center justify-center rounded-xl text-on-surface-variant transition active:bg-surface-container-high disabled:opacity-30 tm-focus"
+                            className="flex size-9 items-center justify-center rounded-lg text-on-surface-variant transition active:bg-surface-container-high disabled:opacity-30 tm-focus"
                             disabled={index === 0 || isSavingOrder}
                             onClick={() => moveDraftItem(item.id, -1)}
                             type="button"
@@ -292,61 +320,48 @@ export function DayTimelineView({
                           </button>
                           <button
                             aria-label={`下移${item.title}`}
-                            className="flex size-11 items-center justify-center rounded-xl text-on-surface-variant transition active:bg-surface-container-high disabled:opacity-30 tm-focus"
+                            className="flex size-9 items-center justify-center rounded-lg text-on-surface-variant transition active:bg-surface-container-high disabled:opacity-30 tm-focus"
                             disabled={index === displayedItems.length - 1 || isSavingOrder}
                             onClick={() => moveDraftItem(item.id, 1)}
                             type="button"
                           >
                             <ArrowDown className="size-4" />
                           </button>
-                        </div>
-                      </div> : <button className="w-full text-left" onClick={() => onOpenItem(item)} type="button">
-                        <p className="flex items-center gap-1.5 text-xs font-semibold tm-muted">
-                          <Clock3 className="size-3.5" />
-                          {describeItemTime(item)} ·{' '}
-                          {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
-                        </p>
-                        <h3 className="mt-1 truncate text-lg font-semibold text-on-surface dark:text-on-surface">{item.title}</h3>
-                        <p className="mt-1 flex items-start gap-1.5 text-sm leading-5 tm-muted">
-                          <MapPin className="mt-0.5 size-4 shrink-0" />
-                          <span className="line-clamp-2">
-                            {item.locationName || item.address || '地点未填写'}
-                          </span>
-                        </p>
-                      </button>}
-                      {!isOrdering && previousItem ? (
-                        <DirectionsLinks fromItem={previousItem} toItem={item} />
-                      ) : null}
-                      {!isOrdering ? (
-                        <div className="mt-3 border-t tm-row pt-3">
-                          <ActionToolbar align="between" ariaLabel={`${item.title} 操作`}>
-                            <span className="tm-chip">
-                              <Ticket className="size-3.5" />
-                              {item.ticketIds.length}
-                            </span>
-                            <ActionToolbar align="end">
-                              <Button
-                                className="min-h-11 rounded-xl px-3"
-                                onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
-                                variant="secondary"
-                              >
-                                编辑
-                              </Button>
-                              <Button
-                                className="min-h-11 rounded-xl px-3"
-                                disabled={deletingItemId === item.id}
-                                icon={<Trash2 className="size-4" />}
-                                onClick={() => setPendingDeleteItem(item)}
-                                variant="destructive"
-                              >
-                                删除
-                              </Button>
-                            </ActionToolbar>
-                          </ActionToolbar>
-                        </div>
-                      ) : null}
-                    </Card>
+                      </div>
+                    ) : (
+                      <button
+                        aria-expanded={itemMenuOpen}
+                        aria-label={`${item.title}更多操作`}
+                        className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high tm-focus"
+                        onClick={() => setOpenItemMenuId((current) => current === item.id ? null : item.id)}
+                        type="button"
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </button>
+                    )}
                   </div>
+                  {!isOrdering && itemMenuOpen ? (
+                    <div className="ml-20 grid grid-cols-2 gap-2 border-b border-outline-variant py-3" data-testid="day-timeline-item-menu">
+                      {previousItem ? <DirectionsLinks fromItem={previousItem} toItem={item} /> : null}
+                      <button
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface tm-focus"
+                        onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
+                        type="button"
+                      >
+                        <Pencil className="size-4" />
+                        编辑
+                      </button>
+                      <button
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-error-container px-3 text-sm font-semibold text-on-error-container tm-focus"
+                        disabled={deletingItemId === item.id}
+                        onClick={() => setPendingDeleteItem(item)}
+                        type="button"
+                      >
+                        <Trash2 className="size-4" />
+                        删除
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )
             })}
@@ -373,7 +388,7 @@ export function DayTimelineView({
 
 function TransportSegment({ description }: { description: string }) {
   return (
-    <div className="ml-[3.4rem] flex items-center gap-2 rounded-lg bg-surface-container-low/80 px-3 py-2 text-xs font-medium leading-5 tm-muted dark:bg-surface-container-highest/45">
+    <div className="ml-[80px] flex min-h-8 items-center gap-2 border-b border-outline-variant px-1 text-xs font-medium leading-5 text-on-surface-variant">
       <ArrowDown className="size-3.5 shrink-0 text-outline" />
       <span className="min-w-0 truncate">{description}</span>
     </div>
@@ -393,9 +408,9 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
   }
 
   return (
-    <div className="mt-3 grid grid-cols-2 gap-2">
+    <div className="col-span-2 grid grid-cols-2 gap-2">
       <a
-        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-sky-50/80 px-2 text-xs font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-2 text-xs font-semibold text-primary"
         href={appleUrl}
         rel="noreferrer"
         target="_blank"
@@ -404,7 +419,7 @@ function DirectionsLinks({ fromItem, toItem }: { fromItem: ItineraryItem; toItem
         Apple 路线
       </a>
       <a
-        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl tm-surface px-2 text-xs font-semibold text-on-surface dark:text-outline-variant"
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-2 text-xs font-semibold text-on-surface"
         href={googleUrl}
         rel="noreferrer"
         target="_blank"

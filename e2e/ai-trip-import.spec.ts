@@ -5,13 +5,16 @@ import {
   expectNoHorizontalOverflow,
   forceRouteProxyFixture,
   forceSupabaseUnconfigured,
+  getFirstTripDayAndItemIds,
+  getHashParam,
   openDetailsSection,
 } from './helpers'
 
 const fixturesDir = path.join(process.cwd(), 'e2e', 'fixtures')
 
 async function openAiTripImportSection(page: Page) {
-  await openDetailsSection(page, 'AI 生成行程')
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
+  await openDetailsSection(page, 'AI 行程包')
   await expect(page.getByRole('heading', { name: 'AI 行程包与应用内生成' })).toBeVisible()
 }
 
@@ -48,11 +51,14 @@ test('可以导入 AI 行程 JSON 并进入旅行工作台', async ({ page }) =>
   await expect(checklist.getByText('可生成路线的日程是否需要批量生成路线预览')).toBeVisible()
   await checklist.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+  const importedTripId = getHashParam(page.url(), 'tripId')
+  expect(importedTripId).toBeTruthy()
+  const { dayId } = await getFirstTripDayAndItemIds(page, importedTripId!)
+  await page.goto(`/#/day?tripId=${importedTripId}&dayId=${dayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
-  await expect(page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })).toBeVisible()
+  await expect(page.getByTestId('day-timeline').getByRole('button', { name: '打开行程点 Hotel Metropolitan Tokyo 入住' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 
@@ -181,10 +187,13 @@ test('AI 行程包有建议检查时仍可导入', async ({ page }) => {
   await expect(page.getByTestId('ai-trip-plan-success-checklist')).toBeVisible()
   await page.getByRole('button', { name: '进入旅行工作台' }).click()
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByRole('button', { name: /缺坐标测试日/ }).click()
+  const importedTripId = getHashParam(page.url(), 'tripId')
+  expect(importedTripId).toBeTruthy()
+  const { dayId } = await getFirstTripDayAndItemIds(page, importedTripId!)
+  await page.goto(`/#/day?tripId=${importedTripId}&dayId=${dayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
-  await expect(page.getByTestId('day-timeline').getByRole('button', { name: /无坐标餐厅/ })).toBeVisible()
+  await expect(page.getByTestId('day-timeline').getByRole('button', { name: '打开行程点 无坐标餐厅' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

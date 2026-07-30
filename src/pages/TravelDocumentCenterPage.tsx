@@ -334,53 +334,42 @@ export function TravelDocumentCenterPage() {
   }
 
   return (
-    <div className="space-y-5 pb-4">
+    <div className="space-y-4 pb-4">
       <section className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="min-h-11 rounded-xl px-2 text-xs font-semibold text-primary tm-focus">安全资料</p>
-            <h2 className="mt-1 text-xl font-semibold text-on-surface">旅行资料中心</h2>
-            <p className="mt-1 text-sm leading-6 tm-muted">集中管理证件、大交通订单和原有票据附件。</p>
-          </div>
-          {vaultUnlocked ? (
-            <button aria-label="锁定资料库" className="flex size-11 shrink-0 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container" onClick={() => void handleLock()} type="button">
-              <Lock className="size-5" />
-            </button>
-          ) : null}
-        </div>
         {selectedTrip ? <TripNav activeRoute="documents" firstDayId={null} tripId={selectedTrip.id} /> : null}
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-outline-variant/30 bg-surface-container p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-lg border border-outline-variant/30 bg-surface-container p-1">
+          <TabButton active={activeTab === 'attachments'} icon={<FileText className="size-4" />} label="票据" onClick={() => changeTab('attachments')} />
           <TabButton active={activeTab === 'documents'} icon={<FileLock2 className="size-4" />} label="证件" onClick={() => changeTab('documents')} />
-          <TabButton active={activeTab === 'transport'} icon={<TrainFront className="size-4" />} label="大交通" onClick={() => changeTab('transport')} />
-          <TabButton active={activeTab === 'attachments'} icon={<FileText className="size-4" />} label="附件" onClick={() => changeTab('attachments')} />
+          <TabButton active={activeTab === 'transport'} icon={<TrainFront className="size-4" />} label="交通" onClick={() => changeTab('transport')} />
         </div>
-        {trips.length > 0 ? (
-          <label className="block">
-            <span className={FIELD_LABEL_CLASS}>当前旅行</span>
-            <select className={FIELD_SELECT_CLASS} onChange={(event) => setSelectedTripId(event.target.value)} value={selectedTripId}>
-              {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
-            </select>
-          </label>
-        ) : null}
       </section>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
 
       {activeTab !== 'attachments' ? (
-        <VaultAccessPanel
-          busy={busy}
-          confirmPassphrase={confirmPassphrase}
-          exists={vaultExists}
-          onConfirmPassphraseChange={setConfirmPassphrase}
-          onCreate={() => void handleCreateVault()}
-          onExport={() => void handleExportVault()}
-          onImport={(file) => void handleImportVault(file)}
-          onPassphraseChange={setPassphrase}
-          onUnlock={() => void handleUnlock()}
-          passphrase={passphrase}
-          unlocked={vaultUnlocked}
-        />
+        <div className="space-y-3">
+          {vaultUnlocked ? (
+            <div className="flex justify-end">
+              <button aria-label="锁定资料库" className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus" onClick={() => void handleLock()} type="button">
+                <Lock className="size-5" />
+              </button>
+            </div>
+          ) : null}
+          <VaultAccessPanel
+            busy={busy}
+            confirmPassphrase={confirmPassphrase}
+            exists={vaultExists}
+            onConfirmPassphraseChange={setConfirmPassphrase}
+            onCreate={() => void handleCreateVault()}
+            onExport={() => void handleExportVault()}
+            onImport={(file) => void handleImportVault(file)}
+            onPassphraseChange={setPassphrase}
+            onUnlock={() => void handleUnlock()}
+            passphrase={passphrase}
+            unlocked={vaultUnlocked}
+          />
+        </div>
       ) : null}
 
       {activeTab === 'documents' && vaultUnlocked ? (
@@ -411,25 +400,35 @@ export function TravelDocumentCenterPage() {
       ) : null}
 
       {activeTab === 'attachments' ? (
-        selectedTripId ? <section className="space-y-3"><div><h3 className="text-base font-semibold text-on-surface">票据和订单</h3><p className="text-xs tm-muted">原有旅行附件继续使用现有离线与云同步机制。</p></div><TicketLibraryPage embedded tripIdOverride={selectedTripId} /></section> : (
-          <EmptyState body="先创建或选择旅行，再保存该旅行的票据附件。" icon={<FileText className="size-6" />} title="尚未选择旅行" />
+        selectedTripId ? <TicketLibraryPage embedded tripIdOverride={selectedTripId} /> : (
+          <EmptyState body="先创建旅行，再添加票据。" icon={<FileText className="size-6" />} title="还没有旅行" />
         )
       ) : null}
 
-      {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
-        <DocumentIntelligencePanel
-          hiddenSuggestions={hiddenDocumentSuggestions}
-          onAction={handleDocumentSuggestion}
-          onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
-          onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
-          onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
-          suggestions={documentSuggestions}
-        />
-      ) : null}
-
-      <details className="rounded-xl border border-outline-variant/30 bg-surface-container px-3 py-2" open={syncConflicts.length > 0}>
-        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">同步</summary>
-        <div className="mt-3">
+      <details className="group rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2" open={syncConflicts.length > 0}>
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
+          <span>资料工具</span>
+          {syncConflicts.length > 0 ? <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">{syncConflicts.length}</span> : null}
+        </summary>
+        <div className="mt-3 space-y-4 border-t border-outline-variant/20 pt-3">
+          {trips.length > 1 ? (
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>当前旅行</span>
+              <select className={FIELD_SELECT_CLASS} onChange={(event) => setSelectedTripId(event.target.value)} value={selectedTripId}>
+                {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {documentSuggestions.length > 0 || hiddenDocumentSuggestions.length > 0 ? (
+            <DocumentIntelligencePanel
+              hiddenSuggestions={hiddenDocumentSuggestions}
+              onAction={handleDocumentSuggestion}
+              onIgnore={(suggestion) => void setSuggestionState({ status: 'ignored', suggestion })}
+              onLater={(suggestion) => void setSuggestionState({ status: 'later', suggestion })}
+              onRestore={(suggestion) => void restoreSuggestionState(suggestion.key)}
+              suggestions={documentSuggestions}
+            />
+          ) : null}
           <CloudControls
             busy={busy}
             conflicts={syncConflicts}
@@ -810,7 +809,7 @@ async function addSegmentsToItinerary(segments: TransportSegment[], trip: Trip) 
 }
 
 function normalizeTab(value: string | null): CenterTab {
-  return value === 'transport' || value === 'attachments' ? value : 'documents'
+  return value === 'documents' || value === 'transport' ? value : 'attachments'
 }
 
 function travelerRoleLabel(role: TravelerRole) {

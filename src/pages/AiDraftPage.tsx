@@ -1234,20 +1234,13 @@ export function AiDraftPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 p-4 pb-24">
+    <div className="mx-auto max-w-lg space-y-4 pb-4">
       <div className="space-y-1" data-testid="ai-draft-page-header">
-        <h1 className="text-xl font-bold text-on-surface dark:text-on-surface">AI 生成行程</h1>
-        <p className="text-sm leading-6 tm-muted">
-          填写旅行偏好，生成可预览、可修改、可确认导入的完整行程草案
-        </p>
-        <p className="text-xs tm-muted">
-          先生成草案，确认后创建行程
-        </p>
+        <h1 className="text-lg font-semibold text-on-surface dark:text-on-surface">AI 生成行程</h1>
+        <p className="text-sm leading-6 tm-muted">告诉 AI 目的地和日期，确认后再创建旅行。</p>
       </div>
 
       <div className="space-y-3" data-testid="ai-draft-request-form">
-        <p className="text-sm font-semibold text-on-surface dark:text-on-surface">填写行程信息</p>
-
         <FormField
           label="目的地"
           value={requestDestination}
@@ -1271,86 +1264,85 @@ export function AiDraftPage() {
             required
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            label="同行人数"
-            value={requestPartySize}
-            onChange={setRequestPartySize}
-            type="number"
-            required
-          />
-          <label className="block">
-            <span className={FIELD_LABEL_CLASS}>结束日期</span>
-            <input
-              className={FIELD_INPUT_CLASS}
-              readOnly
-              value={requestEndDate || '选择日期和天数后计算'}
-            />
-          </label>
-        </div>
-        <div className="space-y-2">
-          <span className={FIELD_LABEL_CLASS}>兴趣标签</span>
-          <div className="flex flex-wrap gap-2" data-testid="ai-trip-builder-interest-tags">
-            {INTEREST_TAGS.map((tag) => {
-              const selected = requestInterestTags.includes(tag)
-              return (
-                <button
-                  className={`min-h-11 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
-                    selected
-                      ? 'border-primary/40 bg-primary-container text-on-primary-container'
-                      : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
-                  }`}
-                  key={tag}
-                  onClick={() => setRequestInterestTags((current) =>
-                    current.includes(tag)
-                      ? current.filter((item) => item !== tag)
-                      : [...current, tag],
-                  )}
-                  type="button"
-                >
-                  {tag}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>兴趣偏好</span>
-          <textarea
-            className={`${FIELD_TEXTAREA_CLASS} h-20`}
-            placeholder="例如：咖啡馆、建筑、适合拍照、少排队"
-            value={requestInterestText}
-            onChange={(e) => setRequestInterestText(e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>旅行节奏</span>
-          <select
-            className={FIELD_SELECT_CLASS}
-            value={requestPace}
-            onChange={(e) => setRequestPace(e.target.value as typeof requestPace)}
-          >
-            <option value="relaxed">轻松</option>
-            <option value="moderate">适中</option>
-            <option value="compact">紧凑</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>交通偏好</span>
-          <select
-            className={FIELD_SELECT_CLASS}
-            value={requestPreferTransport}
-            onChange={(e) => setRequestPreferTransport(e.target.value as typeof requestPreferTransport)}
-          >
-            <option value="public_transport">公共交通</option>
-            <option value="walking">步行</option>
-            <option value="taxi">打车</option>
-            <option value="mixed">综合</option>
-          </select>
-        </label>
+        <p className="px-1 text-xs tm-muted">
+          {requestEndDate ? `预计 ${requestEndDate} 结束` : '选择日期和天数后计算结束日期'}
+        </p>
 
-        <Collapsible title="更多偏好（可选）" subtitle="想去的地方、不想要的安排、补充要求">
+        <Collapsible
+          subtitle="同行人数、兴趣、节奏和交通"
+          testId="ai-draft-preferences"
+          title="旅行偏好"
+        >
           <div className="space-y-3">
+            <FormField
+              label="同行人数"
+              value={requestPartySize}
+              onChange={setRequestPartySize}
+              type="number"
+              required
+            />
+            <div className="space-y-2">
+              <span className={FIELD_LABEL_CLASS}>兴趣标签</span>
+              <div className="flex flex-wrap gap-2" data-testid="ai-trip-builder-interest-tags">
+                {INTEREST_TAGS.map((tag) => {
+                  const selected = requestInterestTags.includes(tag)
+                  return (
+                    <button
+                      className={`min-h-11 rounded-full border px-3 text-xs font-semibold transition active:scale-[0.98] ${
+                        selected
+                          ? 'border-primary/40 bg-primary-container text-on-primary-container'
+                          : 'border-outline-variant/30 bg-surface-container text-on-surface-variant'
+                      }`}
+                      key={tag}
+                      onClick={() => setRequestInterestTags((current) =>
+                        current.includes(tag)
+                          ? current.filter((item) => item !== tag)
+                          : [...current, tag],
+                      )}
+                      type="button"
+                    >
+                      {tag}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <label className="block">
+              <span className={FIELD_LABEL_CLASS}>兴趣偏好</span>
+              <textarea
+                className={`${FIELD_TEXTAREA_CLASS} h-20`}
+                placeholder="例如：咖啡馆、建筑、适合拍照、少排队"
+                value={requestInterestText}
+                onChange={(e) => setRequestInterestText(e.target.value)}
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>旅行节奏</span>
+                <select
+                  className={FIELD_SELECT_CLASS}
+                  value={requestPace}
+                  onChange={(e) => setRequestPace(e.target.value as typeof requestPace)}
+                >
+                  <option value="relaxed">轻松</option>
+                  <option value="moderate">适中</option>
+                  <option value="compact">紧凑</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className={FIELD_LABEL_CLASS}>交通偏好</span>
+                <select
+                  className={FIELD_SELECT_CLASS}
+                  value={requestPreferTransport}
+                  onChange={(e) => setRequestPreferTransport(e.target.value as typeof requestPreferTransport)}
+                >
+                  <option value="public_transport">公共交通</option>
+                  <option value="walking">步行</option>
+                  <option value="taxi">打车</option>
+                  <option value="mixed">综合</option>
+                </select>
+              </label>
+            </div>
             <label className="block">
               <span className={FIELD_LABEL_CLASS}>想去的地方</span>
               <textarea
@@ -1381,66 +1373,58 @@ export function AiDraftPage() {
           </div>
         </Collapsible>
 
-        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            生成完整行程会通过旅图服务请求 AI；生成前会先确认，生成结果只进入草案。
-            <br />
-            生成后仍需预览和确认，确认导入后才会创建本地旅行。
-            {proxyConfig.configured && (
-              <>
-                <br />
-                请求将包含目的地、日期和偏好信息，不会包含票据内容；本地示例草案不会调用外部 AI。
-              </>
-            )}
-          </p>
-        </Card>
-
         {requestErrors.length > 0 && (
-          <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
-            <h3 className="mb-2 font-medium text-red-800 dark:text-red-200">表单错误</h3>
+          <div className="border-l-2 border-error px-3 py-1">
+            <h3 className="mb-1 text-sm font-semibold text-error">请检查输入</h3>
             <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
               {requestErrors.map((error, i) => (
                 <li key={i}>{error.message}</li>
               ))}
             </ul>
-          </Card>
+          </div>
         )}
 
         {proxyConfig.configured ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              onClick={() => setShowVariantConfirm(true)}
-              className="w-full"
-              data-testid="ai-draft-generate-variants-action"
-              disabled={proxyGenerating}
-              loading={variantGenerating}
-            >
-              生成三种方案
-            </Button>
-            <Button
-              onClick={() => setShowProxyConfirm(true)}
-              className="w-full"
-              disabled={variantGenerating}
-              loading={proxyGenerating}
-              variant="secondary"
-            >
-              生成完整行程
-            </Button>
-          </div>
+          <Button
+            onClick={() => setShowProxyConfirm(true)}
+            className="w-full"
+            disabled={variantGenerating}
+            loading={proxyGenerating}
+          >
+            生成完整行程
+          </Button>
         ) : (
           <Button disabled className="w-full" variant="secondary">
-            当前未配置 AI 生成服务
+            AI 服务暂不可用
           </Button>
         )}
 
-        <Button onClick={handleGenerateMock} className="w-full" variant="secondary">
-          生成本地示例草案
-        </Button>
+        <Collapsible
+          subtitle="三方案对比或示例草稿"
+          testId="ai-draft-generation-options"
+          title="其他生成方式"
+        >
+          <div className="space-y-2">
+            {proxyConfig.configured ? (
+              <Button
+                onClick={() => setShowVariantConfirm(true)}
+                className="w-full"
+                data-testid="ai-draft-generate-variants-action"
+                disabled={proxyGenerating}
+                loading={variantGenerating}
+                variant="secondary"
+              >
+                生成三种方案
+              </Button>
+            ) : null}
+            <Button onClick={handleGenerateMock} className="w-full" variant="secondary">
+              生成本地示例草案
+            </Button>
+          </div>
+        </Collapsible>
 
         {proxyError && (
-          <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30">
-            <p className="text-sm text-red-700 dark:text-red-300">{proxyError}</p>
-          </Card>
+          <p className="border-l-2 border-error px-3 py-1 text-sm text-error">{proxyError}</p>
         )}
 
         {variantStates.length > 0 && (
@@ -1476,7 +1460,7 @@ export function AiDraftPage() {
       </div>
 
       <div data-testid="ai-draft-json-section">
-        <Collapsible title="粘贴 JSON 草稿" subtitle="如果你已经有符合格式的草稿 JSON，可以在这里粘贴。">
+        <Collapsible title="导入 JSON 草稿" subtitle="用于已有的结构化行程草稿">
           <div className="space-y-4">
             <div className="space-y-2">
               <textarea

@@ -54,7 +54,7 @@ export function ConfirmDialog({
       aria-describedby={bodyId}
       aria-labelledby={titleId}
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-surface-dim/60"
+      className="fixed inset-0 z-[140] flex items-end justify-center bg-surface-dim/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center dark:bg-surface-dim/60"
       data-testid={testId}
       ref={dialogRef}
       role="dialog"

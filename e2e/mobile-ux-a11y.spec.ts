@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { clearTravelDatabase, clickTripCard, getHashParam } from './helpers'
+import { clearTravelDatabase, clickTripCard, getFirstTripDayAndItemIds, getHashParam } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 const SHORT_MOBILE_VIEWPORT = { width: 390, height: 667 }
@@ -32,7 +32,8 @@ test.describe('390px mobile UX and accessibility', () => {
     expect(tripId).toBeTruthy()
     await auditMobilePage(page, 'trip-workspace', browserIssues)
 
-    await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+    const ids = await getFirstTripDayAndItemIds(page, tripId)
+    await page.goto(`/#/day?tripId=${tripId}&dayId=${ids.dayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/#\/day\?/)
     const dayId = getHashParam(page.url(), 'dayId')
     expect(dayId).toBeTruthy()
@@ -42,12 +43,13 @@ test.describe('390px mobile UX and accessibility', () => {
     await auditMobilePage(page, 'day-map', browserIssues)
     await page.getByTestId('view-switch-schedule').click()
 
-    await page.getByRole('button', { name: /明治神宫散步/ }).click()
+    await page.getByRole('button', { name: /打开行程点 明治神宫散步/ }).click()
     await expect(page).toHaveURL(/#\/item\?/)
     const itemId = getHashParam(page.url(), 'itemId')
     expect(itemId).toBeTruthy()
     await auditMobilePage(page, 'item-detail', browserIssues)
 
+    await page.getByTestId('item-detail-more').locator(':scope > summary').click()
     await page.getByRole('button', { name: '删除行程点' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -80,17 +82,20 @@ test.describe('390px mobile UX and accessibility', () => {
     await auditMobilePage(page, 'search', browserIssues)
     await page.goto('/#/settings')
     await auditMobilePage(page, 'settings', browserIssues)
-    await page.goto('/#/settings/privacy')
-    await auditMobilePage(page, 'settings-privacy', browserIssues)
-    await page.goto('/#/settings/maps')
-    await auditMobilePage(page, 'settings-maps', browserIssues)
-    await page.goto('/#/settings/route')
-    await auditMobilePage(page, 'settings-route', browserIssues)
+    await page.goto('/#/settings/account')
+    await auditMobilePage(page, 'settings-account', browserIssues)
+    await page.goto('/#/settings/preferences')
+    await auditMobilePage(page, 'settings-preferences', browserIssues)
+    await page.goto('/#/settings/app')
+    await auditMobilePage(page, 'settings-app', browserIssues)
+    await page.goto('/#/settings/advanced')
+    await auditMobilePage(page, 'settings-advanced', browserIssues)
     await page.goto('/#/ai-draft')
     await auditMobilePage(page, 'ai-draft', browserIssues)
 
     await page.setViewportSize(SHORT_MOBILE_VIEWPORT)
     await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${itemId}&view=schedule`)
+    await page.getByTestId('item-detail-more').locator(':scope > summary').click()
     const shortDeleteButton = page.getByTestId('item-detail-page').getByRole('button', { name: '删除行程点' })
     await shortDeleteButton.scrollIntoViewIfNeeded()
     await shortDeleteButton.click()

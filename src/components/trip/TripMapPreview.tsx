@@ -464,7 +464,7 @@ export function TripMapPreview({
           </p>
         </div>
         <button
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-surface-container-highest/55 dark:text-outline-variant dark:ring-outline-variant/30/80 tm-focus"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-semibold text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-surface-container-highest/55 dark:text-outline-variant dark:ring-outline-variant/30 tm-focus"
           disabled={!data.targetDay}
           onClick={() => {
             if (data.targetDay) {
@@ -479,7 +479,7 @@ export function TripMapPreview({
       </div>
       <div className="space-y-2 px-4 pb-4">
         <div
-          className="relative h-40 overflow-hidden rounded-2xl bg-surface-container-low/70 ring-1 ring-outline-variant/30/80 dark:bg-surface-container-highest/35 dark:ring-outline-variant/30/60"
+          className="relative h-40 overflow-hidden rounded-2xl bg-surface-container-low/70 ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/35 dark:ring-outline-variant/30"
           data-testid="trip-map-overview-plot"
         >
           {hasPoints ? (
@@ -640,7 +640,7 @@ function RouteOrderSuggestionPanel({
   const titleById = new Map(items.map((item) => [item.id, item.title]))
   return (
     <div
-      className="space-y-2 rounded-2xl bg-surface-container-low/80 p-3 ring-1 ring-outline-variant/30/80 dark:bg-surface-container-highest/45 dark:ring-outline-variant/30/70"
+      className="space-y-2 rounded-2xl bg-surface-container-low/80 p-3 ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/45 dark:ring-outline-variant/30"
       data-testid="trip-map-route-order-panel"
     >
       <div className="flex items-center justify-between gap-2">

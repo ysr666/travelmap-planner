@@ -74,8 +74,9 @@ test('旅行账单档案支持确认接收、时间线、完整性、查询和�
   await expect(page.getByTestId('ledger-summary')).toBeVisible()
   await expect(page.getByTestId('ledger-expense-row')).toHaveCount(0)
 
-  await page.getByRole('button', { name: '返回旅行总览' }).click()
-  await openDetailsSection(page, '更多工具与详情')
+  await page.getByRole('button', { name: '日程', exact: true }).click()
+  await expect(page).toHaveURL(/#\/trip\?/)
+  await openDetailsSection(page, '旅行工具')
   await page.getByTestId('trip-action-travel-inbox').click()
   const inboxPanel = page.getByTestId('travel-inbox-panel')
   await expect(inboxPanel).toBeVisible()
@@ -121,10 +122,10 @@ test('旅行账单档案支持确认接收、时间线、完整性、查询和�
   await expect(page.getByTestId('ledger-summary')).toContainText('JP¥3,000')
   await expect(page.getByTestId('ledger-summary')).toContainText('JP¥3,600')
   await expect(page.getByTestId('ledger-summary')).toContainText('已超预算')
-  await hotelRow.locator('button').first().click()
-  await expect(page.getByTestId('ledger-expense-detail')).toContainText('HOTEL-12345')
+  await hotelRow.getByRole('button', { name: '查看账单 东京酒店' }).click()
+  await expect(page.getByTestId('ledger-expense-detail')).toContainText('HOTEL-12345', { timeout: 15_000 })
   await expect(page.getByText('来源已不可用')).toHaveCount(0)
-  await page.getByRole('button', { name: '返回旅行账本' }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
 
   await page.getByRole('button', { name: '时间线' }).click()
   await page.getByRole('button', { name: '预订' }).click()
@@ -144,7 +145,7 @@ test('旅行账单档案支持确认接收、时间线、完整性、查询和�
   await expect(page.getByText(/未纳入结算/)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
-  await page.getByRole('button', { name: '返回旅行总览' }).click()
+  await page.getByRole('button', { name: '日程', exact: true }).click()
   await expect(page.getByTestId('trip-ledger-summary')).toContainText('JP¥3,000')
 })
 
@@ -195,8 +196,8 @@ test('票据审核队列批量处理合格账单并保留风险项', async ({ pa
 
   await page.getByRole('button', { name: /全部账单/ }).click()
   const autoRow = page.getByTestId('ledger-expense-row').filter({ hasText: '自动酒店' })
-  await autoRow.locator('button').first().click()
-  await expect(page.getByTestId('ledger-expense-detail')).toBeVisible()
+  await autoRow.getByRole('button', { name: '查看账单 自动酒店' }).click()
+  await expect(page.getByTestId('ledger-expense-detail')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('酒店付款票据').first()).toBeVisible()
   await page.getByRole('button', { name: '打开原始来源' }).click()
   await expect(page).toHaveURL(/#\/documents\?.*ticketId=ticket-auto/)

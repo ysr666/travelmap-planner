@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileArchive, HardDrive, Link2, MapPinned, Pencil, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
+import { FileArchive, HardDrive, Link2, MapPinned, MoreHorizontal, Pencil, Plus, RefreshCw, Save, Search, SlidersHorizontal, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
   deleteTicket,
@@ -20,10 +20,9 @@ import {
 import { TicketPreview } from '../components/TicketPreview'
 import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import { TripNav } from '../components/AppShell'
-import { ActionToolbar } from '../components/ui/ActionToolbar'
+import { BottomSheet } from '../components/ui/BottomSheet'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Collapsible } from '../components/ui/Collapsible'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import {
@@ -33,7 +32,6 @@ import {
   FIELD_TEXTAREA_CLASS,
 } from '../components/ui/FormField'
 import { InlineStatus } from '../components/ui/InlineStatus'
-import { SectionHeader } from '../components/ui/SectionHeader'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { describeItemTime } from '../lib/itinerary'
 import { buildLedgerExpenseDraftCandidates, type LedgerExpenseDraftCandidate } from '../lib/ledgerExtraction'
@@ -51,11 +49,6 @@ import {
   ticketCategoryOptions,
   ticketScopeLabels,
 } from '../lib/tickets'
-import {
-  getTicketCloudSyncView,
-  getTicketDisplayMeta,
-  type TicketCloudSyncView,
-} from '../lib/ticketDisplay'
 import {
   getTripAutoSnapshotStatus,
   isAutoSnapshotBackupEnabled,
@@ -103,6 +96,7 @@ type TicketFilter =
   | 'offline-ready'
   | 'trip-level'
   | 'unassigned'
+type TicketSort = 'newest' | 'oldest' | 'title'
 type BindingTarget = TicketScope | `item:${string}`
 type TicketEditDraft = {
   bindingTarget: BindingTarget
@@ -110,40 +104,37 @@ type TicketEditDraft = {
   ticketCategory: TicketCategory
   title: string
 }
-type StorageEstimateState = {
-  usage?: number
-  quota?: number
-}
 type TicketBlobPresenceState = Record<string, boolean | undefined>
 type TicketBlobSyncStateMap = Record<string, TicketBlobSyncState | undefined>
 
 const filterOptions: Array<{ value: TicketFilter; label: string }> = [
   { value: 'all', label: '全部' },
-  { value: 'image', label: '图片' },
-  { value: 'pdf', label: 'PDF' },
-  { value: 'other', label: '其他' },
   { value: 'item-bound', label: '行程点' },
   { value: 'trip-level', label: '旅行级' },
   { value: 'unassigned', label: '未绑定' },
+  { value: 'image', label: '图片' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'other', label: '其他文件' },
+  { value: 'copy', label: '已保存文件' },
+  { value: 'reference', label: '文件位置' },
+  { value: 'external', label: '外部链接' },
+  { value: 'offline-ready', label: '离线可用' },
 ]
 
-const storageOptions: Array<{ value: TicketStorageMode; label: string; description: string; icon: ReactNode }> = [
+const storageOptions: Array<{ value: TicketStorageMode; label: string; icon: ReactNode }> = [
   {
     value: 'copy',
-    label: '保存票据文件',
-    description: '可离线查看，登录后自动同步。',
+    label: '文件',
     icon: <Upload className="size-4" />,
   },
   {
     value: 'reference',
-    label: '仅记录文件位置',
-    description: '适合已在相册、网盘或文件 App 里保存的材料。',
+    label: '位置',
     icon: <MapPinned className="size-4" />,
   },
   {
     value: 'external',
-    label: '添加外部链接',
-    description: '适合网盘、邮箱或订单网页。',
+    label: '链接',
     icon: <Link2 className="size-4" />,
   },
 ]
@@ -171,10 +162,12 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [externalUrl, setExternalUrl] = useState('')
   const [bindingTarget, setBindingTarget] = useState<BindingTarget>('trip')
   const [filter, setFilter] = useState<TicketFilter>('all')
+  const [sort, setSort] = useState<TicketSort>('newest')
   const [searchQuery, setSearchQuery] = useState(initialTicketQuery)
+  const [showAddSheet, setShowAddSheet] = useState(false)
+  const [showFilterSheet, setShowFilterSheet] = useState(false)
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [editingTicket, setEditingTicket] = useState<TicketMeta | null>(null)
-  const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState | null>(null)
   const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
   const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncStateMap>({})
   const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => isAutoSnapshotBackupEnabled())
@@ -223,7 +216,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
   const filteredTickets = useMemo(() => {
     const normalizedSearchQuery = normalizeTicketSearchQuery(searchQuery)
-    return tickets.filter((ticket) => {
+    const matches = tickets.filter((ticket) => {
       if (normalizedSearchQuery && !ticketMatchesSearch(ticket, normalizedSearchQuery, itemById)) {
         return false
       }
@@ -254,7 +247,13 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       return ticket.fileType === filter
     })
-  }, [filter, itemById, searchQuery, ticketBlobPresence, tickets])
+    return [...matches].sort((left, right) => {
+      if (sort === 'title') {
+        return getTicketDisplayTitle(left).localeCompare(getTicketDisplayTitle(right), 'zh-CN')
+      }
+      return sort === 'oldest' ? left.createdAt - right.createdAt : right.createdAt - left.createdAt
+    })
+  }, [filter, itemById, searchQuery, sort, ticketBlobPresence, tickets])
   const ticketLibraryStats = useMemo(
     () => buildTicketLibraryStats(tickets, ticketBlobPresence),
     [ticketBlobPresence, tickets],
@@ -516,27 +515,6 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     }
   }, [])
 
-  useEffect(() => {
-    let isActive = true
-
-    async function loadStorageEstimate() {
-      if (!navigator.storage?.estimate) {
-        return
-      }
-
-      const estimate = await navigator.storage.estimate()
-      if (isActive) {
-        setStorageEstimate({ quota: estimate.quota, usage: estimate.usage })
-      }
-    }
-
-    void loadStorageEstimate()
-
-    return () => {
-      isActive = false
-    }
-  }, [])
-
   async function handleSaveTicket() {
     if (!trip) {
       return
@@ -614,6 +592,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
 
       resetForm()
       await refreshLibrary()
+      setShowAddSheet(false)
       setActionMessage(getTicketSaveSuccessMessage({
         autoSyncEnabled,
         isOnline,
@@ -846,37 +825,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {!embedded ? <Card variant="grouped" className="space-y-3">
-        <div>
-          <p className="text-xs font-semibold text-sky-600 dark:text-sky-300">{trip.title}</p>
-          <h2 className="mt-1 text-xl font-semibold text-on-surface dark:text-on-surface">票据和订单</h2>
-          <p className="mt-2 text-sm leading-6 tm-muted">
-            保存二维码、PDF、订单链接和取票位置。
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-amber-50/80 px-3 py-3 text-sm leading-6 text-amber-800 ring-1 ring-amber-100/80 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50">
-          设备清理可能影响离线缓存；登录同步后可重新取回。
-        </div>
-
-        {storageEstimate ? (
-          <div className="flex items-center gap-2 rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs font-semibold tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
-            <HardDrive className="size-4 text-outline dark:text-on-surface-variant" />
-            <span>
-              已用 {formatStorageSize(storageEstimate.usage)} / 可用 {formatStorageSize(storageEstimate.quota)}
-            </span>
-          </div>
-        ) : null}
-      </Card> : null}
-
+    <div className="flex flex-col gap-4">
       {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
-
-      <TicketLibraryOverview
-        activeFilter={filter}
-        onFilterChange={setFilter}
-        stats={ticketLibraryStats}
-      />
 
       {actionError ? (
         <InlineStatus role="alert" size="md" tone="error">
@@ -889,127 +839,31 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
         </InlineStatus>
       ) : null}
 
-      <Collapsible
-        className="order-2"
-        subtitle="图片、PDF、位置或链接"
-        testId="ticket-add-panel"
-        title="添加票据"
-      >
-        <div className="space-y-3">
-        <div className="grid grid-cols-1 gap-2">
-          {storageOptions.map((option) => (
+      <section className="space-y-3">
+        <div className="flex min-h-11 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-on-surface">票据</h2>
+            <p className="truncate text-xs tm-muted">{trip.title} · {ticketLibraryStats.totalCount} 张</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <button
-              className={`rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
-                storageMode === option.value
-                  ? 'border-sky-200 bg-sky-50/85 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/35 dark:text-sky-200'
-                  : 'border-outline-variant/30 bg-white/80 text-on-surface-variant dark:border-outline-variant/30/70 dark:bg-surface-container-highest/45 dark:text-outline-variant'
-              }`}
-              key={option.value}
-              onClick={() => {
-                setStorageMode(option.value)
-                setActionError(null)
-                setActionMessage(null)
-              }}
+              aria-label="筛选和排序票据"
+              className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
+              onClick={() => setShowFilterSheet(true)}
               type="button"
             >
-              <span className="flex items-center gap-2 text-sm font-bold">
-                {option.icon}
-                {option.label}
-              </span>
-              <span className="mt-1 block text-xs leading-5 tm-muted">{option.description}</span>
+              <SlidersHorizontal className="size-5" />
             </button>
-          ))}
+            <button
+              aria-label="添加票据"
+              className="flex size-11 items-center justify-center rounded-lg bg-primary text-on-primary tm-focus"
+              onClick={() => setShowAddSheet(true)}
+              type="button"
+            >
+              <Plus className="size-5" />
+            </button>
+          </div>
         </div>
-
-        <TextField
-          label="显示名称"
-          onChange={setTitle}
-          placeholder="例如：浅草寺门票二维码"
-          value={title}
-        />
-
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>票据分类</span>
-          <select
-            className={FIELD_SELECT_CLASS}
-            onChange={(event) => setTicketCategory(event.target.value as TicketCategory)}
-            value={ticketCategory}
-          >
-            {ticketCategoryOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {storageMode === 'copy' ? (
-          <CopyTicketFields
-            fileInputKey={fileInputKey}
-            selectedFile={selectedFile}
-            setSelectedFile={setSelectedFile}
-          />
-        ) : null}
-
-        {storageMode === 'reference' ? (
-          <ReferenceTicketFields
-            fileName={referenceFileName}
-            location={referenceLocation}
-            setFileName={setReferenceFileName}
-            setLocation={setReferenceLocation}
-          />
-        ) : null}
-
-        {storageMode === 'external' ? (
-          <TextField
-            label="外部链接"
-            onChange={setExternalUrl}
-            placeholder="https://..."
-            required
-            value={externalUrl}
-          />
-        ) : null}
-
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>绑定对象</span>
-          <select
-            className={FIELD_SELECT_CLASS}
-            onChange={(event) => setBindingTarget(event.target.value as BindingTarget)}
-            value={bindingTarget}
-          >
-            <option value="trip">整个旅行：机票、酒店、保险等</option>
-            <option value="unassigned">不绑定：暂时未分类</option>
-            {bindingOptions.map((option) => (
-              <option key={option.id} value={`item:${option.id}`}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className={FIELD_LABEL_CLASS}>备注</span>
-          <textarea
-            className={`${FIELD_TEXTAREA_CLASS} min-h-20 resize-none`}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="例如：酒店订单、门票二维码、登机牌"
-            value={note}
-          />
-        </label>
-
-        <Button
-          className="w-full"
-          icon={<Upload className="size-4" />}
-          loading={isUploading}
-          onClick={() => void handleSaveTicket()}
-        >
-          保存票据
-        </Button>
-        </div>
-      </Collapsible>
-
-      <section className="order-1 space-y-3">
-        <SectionHeader title="票据库" />
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
           <input
@@ -1020,65 +874,58 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             value={searchQuery}
           />
         </label>
-        <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
-          {filterOptions.map((option) => (
+        {ticketLibraryStats.totalCount > 0 ? (
+          <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar" aria-label="票据分类">
+          {getVisibleTicketCategoryFilters(ticketLibraryStats).map((option) => (
             <button
-              className={`min-h-11 min-w-11 shrink-0 rounded-full px-3 text-xs font-semibold tm-focus ${
-                filter === option.value ? 'bg-primary text-white shadow-[0_4px_12px_var(--color-primary-shadow)]' : 'tm-chip'
+              className={`min-h-10 shrink-0 rounded-full px-3 text-xs font-semibold tm-focus ${
+                filter === option.value ? 'bg-primary text-on-primary' : 'tm-chip'
               }`}
               key={option.value}
               onClick={() => setFilter(option.value)}
               type="button"
             >
-              {option.label}
+              {option.label} {option.count}
             </button>
           ))}
-        </div>
-        <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-surface-container px-3 py-2 text-sm ring-1 ring-outline-variant/30" data-testid="ticket-filter-summary">
-          <span className="min-w-0 truncate font-semibold text-on-surface">
-            {getTicketFilterSummary(filter, filteredTickets.length)}
-          </span>
+          </div>
+        ) : null}
+        <div className="flex min-h-6 items-center justify-between gap-3 text-xs tm-muted" data-testid="ticket-filter-summary">
+          <span className="min-w-0 truncate">{getTicketFilterSummary(filter, filteredTickets.length)}</span>
           {filter !== 'all' ? (
             <button
-              className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition active:scale-95 tm-focus"
+              className="shrink-0 font-semibold text-primary tm-focus"
               onClick={() => setFilter('all')}
               type="button"
             >
-              <X className="size-4" />
-              <span className="sr-only">清除筛选</span>
+              清除
             </button>
           ) : null}
         </div>
 
         {filteredTickets.length === 0 ? (
-          <EmptyState
-            body="添加图片、PDF、文件位置或外部链接后，会显示在这里。"
-            icon={<FileArchive className="size-6" />}
-            title="暂无票据"
-          />
+          <div className="space-y-3">
+            <EmptyState
+              body={tickets.length > 0 ? '换个关键词或清除筛选。' : '添加图片、PDF 或订单链接。'}
+              icon={<FileArchive className="size-6" />}
+              title={tickets.length > 0 ? '没有匹配的票据' : '暂无票据'}
+            />
+            {tickets.length === 0 ? (
+              <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => setShowAddSheet(true)}>
+                添加票据
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <div className="space-y-5" data-testid="ticket-gallery" id="ticket-gallery">
             {gallerySections.map((section) => (
               <div className="space-y-3" data-testid="ticket-gallery-section" key={section.id}>
-                <div className="flex items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">{section.title}</h3>
-                    <p className="mt-1 text-xs leading-5 tm-muted">{section.summary}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-surface-container-high px-2 py-1 text-xs font-semibold tm-muted">
-                    {section.tickets.length}
-                  </span>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-on-surface">{section.title}</h3>
+                  <span className="shrink-0 text-xs tm-muted">{section.tickets.length}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3">
                   {section.tickets.map((ticket) => {
-                    const syncView = getTicketCloudSyncView(ticket, {
-                      autoSyncEnabled,
-                      autoSyncEntry: tripSyncEntry,
-                      blobSyncState: ticketBlobSyncStates[ticket.id],
-                      hasOfflineCache: ticketBlobPresence[ticket.id],
-                      isOnline,
-                      signedIn: isCloudSignedIn,
-                    })
                     return (
                       <TicketCard
                         bindingLabel={describeTicketBinding(ticket, itemById)}
@@ -1091,7 +938,6 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
                         onPreview={() => openTicketPreview(ticket)}
                         onRestoreCache={() => void handleRestoreTicketCache(ticket)}
                         onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
-                        syncView={syncView}
                         ticket={ticket}
                       />
                     )
@@ -1102,6 +948,110 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
           </div>
         )}
       </section>
+
+      <BottomSheet maxHeight="calc(100dvh - 1rem)" onClose={() => setShowAddSheet(false)} open={showAddSheet} title="添加票据">
+        <div className="space-y-4" data-testid="ticket-add-panel">
+          <div className="grid grid-cols-3 gap-2">
+            {storageOptions.map((option) => (
+              <button
+                aria-pressed={storageMode === option.value}
+                className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-2 text-sm font-semibold transition active:scale-[0.99] ${
+                  storageMode === option.value
+                    ? 'border-primary/35 bg-primary-container text-on-primary-container'
+                    : 'border-outline-variant/30 bg-surface text-on-surface-variant'
+                }`}
+                key={option.value}
+                onClick={() => {
+                  setStorageMode(option.value)
+                  setActionError(null)
+                  setActionMessage(null)
+                }}
+                type="button"
+              >
+                {option.icon}
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <TextField label="显示名称" onChange={setTitle} placeholder="例如：浅草寺门票" value={title} />
+
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>票据分类</span>
+            <select className={FIELD_SELECT_CLASS} onChange={(event) => setTicketCategory(event.target.value as TicketCategory)} value={ticketCategory}>
+              {ticketCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+
+          {storageMode === 'copy' ? <CopyTicketFields fileInputKey={fileInputKey} selectedFile={selectedFile} setSelectedFile={setSelectedFile} /> : null}
+          {storageMode === 'reference' ? <ReferenceTicketFields fileName={referenceFileName} location={referenceLocation} setFileName={setReferenceFileName} setLocation={setReferenceLocation} /> : null}
+          {storageMode === 'external' ? <TextField label="外部链接" onChange={setExternalUrl} placeholder="https://..." required value={externalUrl} /> : null}
+
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>绑定对象</span>
+            <select className={FIELD_SELECT_CLASS} onChange={(event) => setBindingTarget(event.target.value as BindingTarget)} value={bindingTarget}>
+              <option value="trip">整个旅行</option>
+              <option value="unassigned">暂不分类</option>
+              {bindingOptions.map((option) => <option key={option.id} value={`item:${option.id}`}>{option.label}</option>)}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className={FIELD_LABEL_CLASS}>备注</span>
+            <textarea className={`${FIELD_TEXTAREA_CLASS} min-h-20 resize-none`} onChange={(event) => setNote(event.target.value)} placeholder="订单号、取票位置等" value={note} />
+          </label>
+
+          <Button className="w-full" icon={<Upload className="size-4" />} loading={isUploading} onClick={() => void handleSaveTicket()}>
+            保存票据
+          </Button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet onClose={() => setShowFilterSheet(false)} open={showFilterSheet} title="筛选与排序">
+        <div className="space-y-5">
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-semibold tm-muted">筛选</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {filterOptions.map((option) => (
+                <button
+                  aria-pressed={filter === option.value}
+                  className={`min-h-11 rounded-lg px-3 text-left text-sm font-semibold tm-focus ${
+                    filter === option.value ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface'
+                  }`}
+                  key={option.value}
+                  onClick={() => setFilter(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-semibold tm-muted">排序</legend>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['newest', '最新'],
+                ['oldest', '最早'],
+                ['title', '名称'],
+              ] as Array<[TicketSort, string]>).map(([value, label]) => (
+                <button
+                  aria-pressed={sort === value}
+                  className={`min-h-11 rounded-lg px-2 text-sm font-semibold tm-focus ${
+                    sort === value ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface'
+                  }`}
+                  key={value}
+                  onClick={() => setSort(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <Button className="w-full" onClick={() => setShowFilterSheet(false)}>完成</Button>
+        </div>
+      </BottomSheet>
 
       {previewTicket ? (
         <TicketPreview
@@ -1191,7 +1141,6 @@ type TicketLibraryStats = {
 
 type TicketGallerySection = {
   id: 'item' | 'trip' | 'unassigned'
-  summary: string
   tickets: TicketMeta[]
   title: string
 }
@@ -1217,7 +1166,7 @@ function TicketMetadataEditor({
   return (
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 px-3 py-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[140] flex items-end justify-center bg-slate-950/60 px-3 py-4 backdrop-blur-sm sm:items-center"
       data-testid="ticket-metadata-editor"
       onClick={(event) => {
         if (event.target === event.currentTarget && !isSaving) onCancel()
@@ -1307,71 +1256,13 @@ function TicketMetadataEditor({
   )
 }
 
-function TicketLibraryOverview({
-  activeFilter,
-  onFilterChange,
-  stats,
-}: {
-  activeFilter: TicketFilter
-  onFilterChange: (filter: TicketFilter) => void
-  stats: TicketLibraryStats
-}) {
-  return (
-    <Card className="space-y-4" data-testid="ticket-library-overview" variant="grouped">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold text-on-surface dark:text-on-surface">票据总览</h3>
-          <p className="mt-1 text-sm leading-6 tm-muted">
-            {stats.totalCount > 0
-              ? `${stats.totalCount} 张票据，${stats.cachedCopyCount} 张可离线打开。`
-              : '还没有保存票据。'}
-          </p>
-        </div>
-        <span className="shrink-0 rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-on-primary-container">
-          {stats.totalCount}
-        </span>
-      </div>
-      <div className="grid grid-cols-3 gap-2 min-[430px]:grid-cols-6">
-        <TicketStat active={activeFilter === 'copy'} filter="copy" label="文件" onSelect={onFilterChange} value={stats.copyCount} />
-        <TicketStat active={activeFilter === 'reference'} filter="reference" label="位置" onSelect={onFilterChange} value={stats.referenceCount} />
-        <TicketStat active={activeFilter === 'external'} filter="external" label="链接" onSelect={onFilterChange} value={stats.externalCount} />
-        <TicketStat active={activeFilter === 'offline-ready'} filter="offline-ready" label="离线" onSelect={onFilterChange} value={stats.cachedCopyCount} />
-        <TicketStat active={activeFilter === 'unassigned'} filter="unassigned" label="未分类" onSelect={onFilterChange} value={stats.unassignedCount} />
-        <TicketStat active={activeFilter === 'all'} filter="all" label="全部" onSelect={onFilterChange} value={stats.totalCount} />
-      </div>
-    </Card>
-  )
-}
-
-function TicketStat({
-  active,
-  filter,
-  label,
-  onSelect,
-  value,
-}: {
-  active: boolean
-  filter: TicketFilter
-  label: string
-  onSelect: (filter: TicketFilter) => void
-  value: number
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      className={`min-h-[4.25rem] min-w-0 rounded-xl px-2 py-3 text-center transition active:scale-[0.99] tm-focus ${
-        active
-          ? 'bg-primary-container text-on-primary-container ring-1 ring-primary/20'
-          : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
-      }`}
-      data-testid={`ticket-stat-${filter}`}
-      onClick={() => onSelect(filter)}
-      type="button"
-    >
-      <p className={`truncate text-[11px] ${active ? 'text-on-primary-container' : 'tm-muted'}`}>{label}</p>
-      <p className={`mt-1 text-lg font-bold ${active ? 'text-on-primary-container' : 'text-on-surface dark:text-on-surface'}`}>{value}</p>
-    </button>
-  )
+function getVisibleTicketCategoryFilters(stats: TicketLibraryStats) {
+  return [
+    { count: stats.totalCount, label: '全部', value: 'all' as const },
+    { count: stats.itemBoundCount, label: '行程点', value: 'item-bound' as const },
+    { count: stats.tripLevelCount, label: '旅行级', value: 'trip-level' as const },
+    { count: stats.unassignedCount, label: '未分类', value: 'unassigned' as const },
+  ].filter((option) => option.value === 'all' || option.count > 0)
 }
 
 function buildTicketLibraryStats(
@@ -1491,19 +1382,16 @@ function buildTicketGallerySections(
   const sections: TicketGallerySection[] = [
     {
       id: 'item',
-      summary: '绑定到具体行程点的门票、订单和凭证。',
       tickets: [],
       title: '行程点票据',
     },
     {
       id: 'trip',
-      summary: '机票、酒店、保险等旅行级文件。',
       tickets: [],
       title: '旅行级票据',
     },
     {
       id: 'unassigned',
-      summary: '稍后再整理的票据。',
       tickets: [],
       title: '未分类',
     },
@@ -1531,7 +1419,6 @@ function TicketCard({
   bindingLabel,
   blobSyncState,
   busy,
-  syncView,
   onClearCache,
   onPreview,
   onEdit,
@@ -1543,7 +1430,6 @@ function TicketCard({
   bindingLabel: string
   blobSyncState?: TicketBlobSyncState
   busy: boolean
-  syncView: TicketCloudSyncView
   onClearCache: () => void
   onPreview: () => void
   onEdit: () => void
@@ -1552,16 +1438,15 @@ function TicketCard({
   onRetryUpload: () => void
 }) {
   const displayTitle = getTicketDisplayTitle(ticket)
-  const visual = getTicketDisplayMeta(ticket)
   const canClearCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus === 'cached' && Boolean(blobSyncState.cloudStoragePath)
   const canRestoreCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus !== 'cached' && Boolean(blobSyncState.cloudStoragePath)
   const canRetryUpload = blobSyncState?.uploadStatus === 'error'
 
   return (
-    <Card variant="grouped" className="flex flex-col overflow-hidden p-2.5" data-testid="ticket-card">
+    <Card variant="grouped" className="relative flex min-w-0 flex-col p-2" data-testid="ticket-card">
       <button
         aria-label={`预览${displayTitle}`}
-        className="flex min-h-0 flex-1 flex-col text-left transition active:scale-[0.99] tm-focus"
+        className="flex min-h-0 min-w-0 flex-1 flex-col text-left transition active:scale-[0.99] tm-focus"
         onClick={onPreview}
         type="button"
       >
@@ -1571,28 +1456,11 @@ function TicketCard({
           ticket={ticket}
         />
 
-        <span className="mt-2 min-w-0 px-0.5">
-          <span className="flex items-center gap-1.5">
-            <span className="block min-w-0 line-clamp-2 text-sm font-semibold leading-5 text-on-surface dark:text-on-surface" title={displayTitle}>
-              {displayTitle}
-            </span>
-            <span
-              className={`shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getTicketSyncToneClass(syncView.tone)}`}
-              title={syncView.detail}
-            >
-              {syncView.label}
-            </span>
+        <span className="mt-2 block min-w-0 px-0.5">
+          <span className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-on-surface [overflow-wrap:anywhere]" title={displayTitle}>
+            {displayTitle}
           </span>
-          <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 tm-muted" title={visual.secondaryLine}>
-            {visual.secondaryLine}
-          </span>
-          <span className="mt-1 line-clamp-2 block text-[11px] leading-4 tm-muted">
-            {syncView.detail}
-          </span>
-        </span>
-
-        <span className="mt-auto pt-2 px-0.5">
-          <span className="block truncate text-[11px] font-semibold tm-muted" title={bindingLabel}>
+          <span className="mt-1 block truncate text-[11px] tm-muted" title={bindingLabel}>
             {bindingLabel}
           </span>
           <span className="mt-0.5 block text-[11px] tm-muted">
@@ -1601,72 +1469,57 @@ function TicketCard({
         </span>
       </button>
 
-      <ActionToolbar align="between" ariaLabel={`${displayTitle} 操作`} className="mt-2 border-t tm-row pt-2">
-        <button
-          aria-label={`查看${displayTitle}`}
-          className="min-h-11 rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition active:bg-sky-100 tm-focus dark:bg-sky-950/35 dark:text-sky-300 dark:active:bg-sky-950/60"
-          onClick={onPreview}
-          type="button"
+      <details className="group absolute right-3 top-3 z-10">
+        <summary
+          aria-label={`${displayTitle}更多操作`}
+          className="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg bg-surface/90 text-on-surface shadow-sm backdrop-blur marker:hidden [&::-webkit-details-marker]:hidden tm-focus"
         >
-          查看
-        </button>
-        <button
-          aria-label={`编辑${displayTitle}`}
-          className="flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-sky-50 active:text-sky-700 tm-focus dark:text-on-surface-variant dark:active:bg-sky-950/35 dark:active:text-sky-300"
-          onClick={onEdit}
-          type="button"
-        >
-          <Pencil className="size-3.5" />
-          编辑
-        </button>
-        <button
-          aria-label={`删除${displayTitle}`}
-          className="flex min-h-11 items-center gap-1 rounded-full px-2 text-xs font-semibold text-outline transition active:bg-red-50 active:text-red-600 tm-focus dark:text-on-surface-variant dark:active:bg-red-950/35 dark:active:text-red-300"
-          onClick={onDelete}
-          type="button"
-        >
-          <Trash2 className="size-3.5" />
-          删除
-        </button>
-      </ActionToolbar>
-
-      {canClearCache || canRestoreCache || canRetryUpload ? (
-        <ActionToolbar ariaLabel={`${displayTitle} 缓存操作`} className="mt-2 gap-1.5 border-t tm-row pt-2">
+          <MoreHorizontal className="size-5" />
+        </summary>
+        <div className="absolute right-0 top-11 z-20 w-40 overflow-hidden rounded-lg bg-surface p-1 shadow-xl ring-1 ring-outline-variant/30">
+          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-on-surface tm-focus" onClick={onEdit} type="button">
+            <Pencil className="size-4" />
+            编辑
+          </button>
           {canClearCache ? (
             <button
-              className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-outline transition active:bg-slate-100 tm-focus dark:text-on-surface-variant dark:active:bg-slate-800"
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus"
               disabled={busy}
               onClick={onClearCache}
               type="button"
             >
-              <HardDrive className="size-3.5" />
-              清理离线缓存
+              <HardDrive className="size-4" />
+              清理缓存
             </button>
           ) : null}
           {canRestoreCache ? (
             <button
-              className="inline-flex min-h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-sky-700 transition active:bg-sky-50 tm-focus disabled:opacity-60 dark:text-sky-300 dark:active:bg-sky-950/35"
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus"
               disabled={busy}
               onClick={onRestoreCache}
               type="button"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className="size-4" />
               重新同步
             </button>
           ) : null}
           {canRetryUpload ? (
             <button
-              className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-[11px] font-semibold text-amber-800 transition active:bg-amber-50 tm-focus disabled:opacity-60 dark:text-amber-300 dark:active:bg-amber-950/35"
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-amber-800 tm-focus"
               disabled={busy}
               onClick={onRetryUpload}
               type="button"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className="size-4" />
               重试上传
             </button>
           ) : null}
-        </ActionToolbar>
-      ) : null}
+          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error tm-focus" onClick={onDelete} type="button">
+            <Trash2 className="size-4" />
+            删除
+          </button>
+        </div>
+      </details>
     </Card>
   )
 }
@@ -1690,7 +1543,7 @@ function CopyTicketFields({
         type="file"
       />
       {selectedFile ? (
-        <span className="mt-2 block rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30/70 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30/70">
+        <span className="mt-2 block rounded-xl bg-surface-container-low/75 px-3 py-2 text-xs tm-muted ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/40 dark:ring-outline-variant/30">
           已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
         </span>
       ) : null}
@@ -1755,26 +1608,6 @@ function getTicketSaveSuccessMessage({
   }
 
   return '已保存，已加入同步队列。'
-}
-
-function getTicketSyncToneClass(tone: TicketCloudSyncView['tone']) {
-  if (tone === 'success') {
-    return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50'
-  }
-
-  if (tone === 'warning') {
-    return 'bg-amber-50 text-amber-800 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-900/50'
-  }
-
-  if (tone === 'danger') {
-    return 'bg-red-50 text-red-600 ring-1 ring-red-100 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50'
-  }
-
-  if (tone === 'info') {
-    return 'bg-sky-50 text-sky-700 ring-1 ring-sky-100 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50'
-  }
-
-  return 'bg-surface-container-low text-on-surface-variant ring-1 ring-outline-variant/30 dark:bg-surface-container-highest/45 dark:text-outline-variant dark:ring-outline-variant/30/70'
 }
 
 function TextField({
@@ -1891,12 +1724,4 @@ function getTicketBindingTarget(ticket: TicketMeta): BindingTarget {
 function normalizeOptional(value: string) {
   const trimmed = value.trim()
   return trimmed ? trimmed : undefined
-}
-
-function formatStorageSize(size?: number) {
-  if (!size) {
-    return '未知'
-  }
-
-  return formatFileSize(size)
 }

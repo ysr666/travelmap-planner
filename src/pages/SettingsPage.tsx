@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
+  Bell,
   CheckCircle2,
+  ChevronRight,
+  Compass,
   Copy,
   Database,
   FileJson,
@@ -14,6 +17,7 @@ import {
   Sparkles,
   Smartphone,
   Sun,
+  UserRound,
   Wifi,
   WifiOff,
 } from 'lucide-react'
@@ -88,11 +92,12 @@ import {
   getPwaLifecycleStatusLabel,
   type PwaLifecycleStatus,
 } from '../lib/pwaLifecycle'
-import { listTrips } from '../db/repositories'
+import { getTrip, listTrips } from '../db/repositories'
 import {
   clearSyncedTicketBlobCachesForTrip,
   getTicketBlobCacheSummary,
 } from '../lib/cloudObjectSync'
+import type { Trip } from '../types'
 
 type StorageEstimateState = {
   usage?: number
@@ -111,6 +116,8 @@ type PersistentStorageManager = StorageManager & {
   persisted?: () => Promise<boolean>
   persist?: () => Promise<boolean>
 }
+
+export type SettingsSection = 'account' | 'preferences' | 'app' | 'advanced'
 
 const AI_PROMPT_SNIPPET = `请只输出可被 JSON.parse 解析的 JSON，不要输出 Markdown 或解释。
 为旅图 TripMap 生成 schemaVersion 1 的 trip-plan.json：
@@ -224,11 +231,10 @@ const aiPrivacyGroups: Array<{
   },
 ]
 
-export function SettingsPage() {
+export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
+  const contextTripId = getRouteParams().get('tripId')
   const { mode: appearanceMode, resolvedMode, setMode: setAppearanceMode } = useAppearance()
   const pwaLifecycle = usePwaLifecycleState()
-  const routeParams = getRouteParams()
-  const shouldOpenCloudBackup = routeParams.get('section') === 'cloud'
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedTripPlanFile, setSelectedTripPlanFile] = useState<File | null>(null)
   const [parsedTripPlan, setParsedTripPlan] = useState<ParsedTripPlanFile | null>(null)
@@ -266,6 +272,21 @@ export function SettingsPage() {
   const [autoExpenseAiMessage, setAutoExpenseAiMessage] = useState('')
   const [isApplyingPwaUpdate, setIsApplyingPwaUpdate] = useState(false)
   const [pwaUpdateMessage, setPwaUpdateMessage] = useState('')
+  const [contextTrip, setContextTrip] = useState<Trip | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const contextTripRequest =
+      section === 'account' && contextTripId ? getTrip(contextTripId) : Promise.resolve(null)
+
+    void contextTripRequest.then((trip) => {
+      if (!cancelled) setContextTrip(trip ?? null)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [contextTripId, section])
 
   const refreshStorageStatus = useCallback(async () => {
     const storage = navigator.storage as PersistentStorageManager | undefined
@@ -603,14 +624,12 @@ export function SettingsPage() {
     }
   }
 
+  if (!section) {
+    return <SettingsIndex />
+  }
+
   return (
-    <div className="mx-auto max-w-3xl space-y-5 px-4 pb-40 pt-24">
-      <div className="mb-2">
-        <p className="text-sm font-semibold text-primary">控制中心</p>
-        <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-          设置
-        </h2>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-4">
 
       {error || success || warnings.length > 0 ? (
         <Card variant="grouped" className="space-y-3">
@@ -629,7 +648,8 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <Collapsible subtitle={`当前：${resolvedMode === 'dark' ? '黑夜' : '白天'}`} title="外观">
+      {section === 'app' ? (
+      <section aria-label="外观">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
@@ -664,16 +684,18 @@ export function SettingsPage() {
             })}
           </div>
         </Card>
-      </Collapsible>
+      </section>
+      ) : null}
 
-      <Collapsible subtitle="节奏、交通和提醒" title="旅行偏好">
+      {section === 'preferences' ? (
         <TravelProfileSettings
           onChange={updateTravelProfile}
           profile={travelProfile}
         />
-      </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="AI 可读取哪些内容" title="AI 与隐私">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="AI 可读取的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
           autoExpenseAiBusy={autoExpenseAiBusy}
           autoExpenseAiEnabled={autoExpenseAiEnabled}
@@ -685,15 +707,17 @@ export function SettingsPage() {
           travelInboxAutoRecognize={travelInboxAutoRecognize}
         />
       </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="主屏幕、版本和离线状态" title="安装与离线">
+      {section === 'app' ? (
+      <section aria-label="安装与更新">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50/80 text-sky-600 ring-1 ring-sky-100/80 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-900/50">
               <Smartphone className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">主屏幕 App</h3>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">安装与更新</h3>
               <p className="mt-1 text-sm leading-6 tm-muted">Safari 分享菜单里添加到主屏幕。</p>
             </div>
           </div>
@@ -712,15 +736,6 @@ export function SettingsPage() {
               icon={isOnline ? <Wifi className="size-4" /> : <WifiOff className="size-4" />}
               text={isOnline ? '当前在线' : '当前离线'}
               tone={isOnline ? 'success' : 'warning'}
-            />
-            <InfoPill
-              icon={<Database className="size-4" />}
-              text="旅行先保存在此设备；登录后自动同步。"
-            />
-            <InfoPill
-              icon={<AlertTriangle className="size-4" />}
-              text="地图和外部路线需要网络。"
-              tone="warning"
             />
           </div>
 
@@ -748,18 +763,15 @@ export function SettingsPage() {
             </InlineStatus>
           ) : null}
         </Card>
-      </Collapsible>
+      </section>
+      ) : null}
 
-      <Collapsible
-        defaultOpen={shouldOpenCloudBackup}
-        key={shouldOpenCloudBackup ? 'cloud-open' : 'cloud'}
-        subtitle="账号同步、队列和冲突"
-        title="云端同步"
-      >
-        <CloudBackupPanel trip={null} />
-      </Collapsible>
+      {section === 'account' ? (
+        <CloudBackupPanel trip={contextTrip} />
+      ) : null}
 
-      <Collapsible subtitle="导入、恢复、迁移" title="高级与迁移">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="导入与恢复" title="迁移">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
@@ -800,8 +812,10 @@ export function SettingsPage() {
           </Button>
         </Card>
       </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="生成或导入行程" title="AI 生成行程">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="生成或导入新旅行" title="AI 行程包">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
@@ -884,8 +898,10 @@ export function SettingsPage() {
           </p>
         </Card>
       </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="路线服务与缓存" title="路线服务">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="路线服务与缓存" title="路线">
         <RouteServiceSettings
           config={routingConfig}
           cacheError={routeCacheError}
@@ -896,8 +912,10 @@ export function SettingsPage() {
           onClearCache={() => void handleClearRouteCache()}
         />
       </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="离线缓存和持久化" title="设备存储">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="缓存和持久化" title="设备存储">
         <Card variant="grouped" className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -971,14 +989,15 @@ export function SettingsPage() {
           ) : null}
         </Card>
       </Collapsible>
+      ) : null}
 
-      <Collapsible subtitle="版本信息与离线缓存提醒" title="关于">
+      {section === 'advanced' ? (
+      <Collapsible subtitle="版本信息" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">
           <div>
-            <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">离线缓存提醒</h3>
+            <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">数据可用性</h3>
             <p className="mt-2 text-sm leading-6 text-amber-800 dark:text-amber-300">
-              旅行会先写入此设备离线缓存。即使浏览器授予持久化存储，iOS Safari
-              在存储压力、清除数据、私密浏览或长期未使用时仍可能清理离线缓存；zip 归档可作为高级迁移或手动留存工具。
+              登录后旅行会持续同步。离线时可查看已缓存内容，恢复网络后自动继续；zip 归档仅用于迁移。
             </p>
           </div>
           <div className="rounded-xl bg-white/60 px-3 py-2 dark:bg-slate-950/35">
@@ -986,7 +1005,64 @@ export function SettingsPage() {
           </div>
         </Card>
       </Collapsible>
+      ) : null}
     </div>
+  )
+}
+
+function SettingsIndex() {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <div className="divide-y divide-outline-variant/35 border-y border-outline-variant/35">
+        <SettingsMenuRow
+          detail="登录与同步"
+          icon={<UserRound className="size-5" />}
+          onClick={() => navigateTo('settings/account')}
+          title="账户与同步"
+        />
+        <SettingsMenuRow
+          detail="节奏、交通和提醒"
+          icon={<Compass className="size-5" />}
+          onClick={() => navigateTo('settings/preferences')}
+          title="旅行偏好"
+        />
+        <SettingsMenuRow
+          detail="外观、安装和通知"
+          icon={<Bell className="size-5" />}
+          onClick={() => navigateTo('settings/app')}
+          title="应用与通知"
+        />
+        <SettingsMenuRow
+          detail="权限、导入和高级选项"
+          icon={<Database className="size-5" />}
+          onClick={() => navigateTo('settings/advanced')}
+          title="数据与高级"
+        />
+      </div>
+    </div>
+  )
+}
+
+function SettingsMenuRow({
+  detail,
+  icon,
+  onClick,
+  title,
+}: {
+  detail: string
+  icon: ReactNode
+  onClick: () => void
+  title: string
+}) {
+  return (
+    <button className="flex min-h-16 w-full items-center gap-3 py-3 text-left tm-focus" onClick={onClick} type="button">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-primary">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-on-surface">{title}</span>
+        <span className="mt-0.5 block text-xs tm-muted">{detail}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+    </button>
   )
 }
 
@@ -1124,30 +1200,7 @@ function AiPrivacySettingsPanel({
 }) {
   return (
     <section className="space-y-3" data-testid="ai-privacy-section">
-      <Card variant="grouped" className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary ring-1 ring-primary/10 dark:bg-primary/15 dark:text-primary-fixed-dim">
-            <ShieldCheck className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">AI 与隐私</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">控制 AI 可以读取的范围。</p>
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <InfoPill
-            icon={<Sparkles className="size-4" />}
-            text="本地检查只读。"
-            tone="success"
-          />
-          <InfoPill
-            icon={<AlertTriangle className="size-4" />}
-            text="收件箱只在你开启或确认后发送提取文本。"
-            tone="warning"
-          />
-        </div>
-
+      <div className="space-y-4">
         {aiPrivacyGroups.map((group) => (
           <div className="space-y-2" key={group.title}>
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{group.title}</p>
@@ -1194,7 +1247,7 @@ function AiPrivacySettingsPanel({
         <p className="rounded-lg bg-surface-container-high px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/70">
           隐私开关保存在当前浏览器；账单 AI 授权登录后同步到账号。
         </p>
-      </Card>
+      </div>
     </section>
   )
 }
@@ -1623,7 +1676,7 @@ function TripPlanValidationStatus({
 }) {
   const status = hasErrors
     ? {
-        className: 'border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300',
+        className: 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300',
         text: '有必须修复，无法导入',
       }
     : hasWarnings
@@ -1671,7 +1724,7 @@ function ValidationList({
 }) {
   const styles =
     tone === 'error'
-      ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300'
+      ? 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/35 dark:text-red-300'
       : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-300'
 
   return (

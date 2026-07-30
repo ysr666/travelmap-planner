@@ -13,16 +13,13 @@ import {
 test('设置页 Supabase 未配置时显示云端同步提示且不显示登录上传控件', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
-  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-  await openDetailsSection(page, '云端同步')
+  await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
   const cloudSection = page.getByTestId('cloud-backup-section')
 
   await expect(cloudSection).toBeVisible()
   const message = page.getByTestId('supabase-unconfigured-message')
-  await expect(message).toContainText('云端同步未配置')
-  await expect(message).toContainText('VITE_SUPABASE_URL')
-  await expect(message).toContainText('VITE_SUPABASE_ANON_KEY')
-  await expect(cloudSection).toContainText('真实同步/恢复前')
+  await expect(message).toContainText('账号同步暂不可用')
+  await expect(message).toContainText('此设备上的旅行仍可正常使用')
   await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('云端自动同步')
   await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('配置 Supabase 后才能开启。')
   await expect(page.getByTestId('cloud-auto-sync-status')).toContainText('未配置')
@@ -34,10 +31,10 @@ test('设置页 Supabase 未配置时显示云端同步提示且不显示登录�
   await expectNoHorizontalOverflow(page)
 })
 
-test('设置页通过 section=cloud 可以直接打开云端同步区域', async ({ page }) => {
+test('账户与同步二级页可以直接打开云端同步区域', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
-  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
   const cloudSection = page.getByTestId('cloud-backup-section')
   await expect(cloudSection).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -62,7 +59,7 @@ test('设置页轻量显示同步队列和票据上传状态', async ({ page }) 
   await page.evaluate(() => window.localStorage.setItem('tripmap:cloud-auto-snapshot:enabled', '0'))
   await seedSyncQueueSummary(page, { ticket, trip })
 
-  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
 
   const summary = page.getByTestId('cloud-sync-queue-summary')
   await expect(summary).toBeVisible()
@@ -110,7 +107,7 @@ test('设置页对象同步字段冲突需要确认后才写入', async ({ page 
     tripId: trip.id,
   })
 
-  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/settings/account?tripId=${trip.id}`, { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByTestId('cloud-auto-sync-status')).toContainText('需要处理冲突')
   const panel = page.getByTestId('object-sync-conflict-panel')
@@ -272,7 +269,7 @@ test('PWA 离线编辑恢复在线后自动完成账号对象同步', async ({ p
     user: { email: 'qa@example.com', id: userId },
   })
   await page.goto(`/#/trip?tripId=${trip.id}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('header h1').first()).toHaveText(trip.title)
+  await expect(page.getByRole('button', { name: `当前旅行：${trip.title}` })).toBeVisible()
 
   try {
     await context.setOffline(true)
@@ -326,7 +323,7 @@ test('PWA 离线编辑恢复在线后自动完成账号对象同步', async ({ p
     await expect.poll(() => readAutoSnapshotStatus(page, trip.id), { timeout: 15_000 }).toBe('synced')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await expect(page.locator('header h1').first()).toHaveText(updatedTripTitle)
+    await expect(page.getByRole('button', { name: `当前旅行：${updatedTripTitle}` })).toBeVisible()
     expect(await readLocalItemTitle(page, item.id)).toBe(updatedItemTitle)
   } finally {
     await context.setOffline(false)
@@ -407,7 +404,7 @@ test('账号数据同步确认会原地覆盖此设备旅行并在刷新后保�
   await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   const ticketCard = page.getByTestId('ticket-card').filter({ hasText: 'Cloud restore tiny ticket' }).first()
   await expect(ticketCard).toBeVisible()
-  await ticketCard.getByRole('button', { name: /查看/ }).first().click()
+  await ticketCard.getByRole('button', { name: /预览/ }).first().click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-image')).toBeVisible()
 })
@@ -434,7 +431,7 @@ test('设置页云端列表展示历史遗留的同一旅行多条云端同步',
   })
   await page.evaluate(() => window.localStorage.setItem('tripmap:appearance', 'dark'))
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.goto('/#/settings?section=cloud', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
 
   await expect(page.locator('html')).toHaveClass(/dark/)
   const list = page.getByTestId('cloud-backup-list')
@@ -458,11 +455,10 @@ test('设置页云端列表展示历史遗留的同一旅行多条云端同步',
 test('设置页只显示通用路线服务状态和缓存管理', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
-  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
+  await page.goto('/#/settings/advanced', { waitUntil: 'domcontentloaded' })
 
-  await openDetailsSection(page, '路线服务')
+  await openDetailsSection(page, '路线')
   await expect(page.getByTestId('routing-settings-section')).toBeVisible()
-  await expect(page.getByText('高级与迁移', { exact: true })).toBeVisible()
   await expect(page.getByTestId('routing-settings-section')).toContainText(/路线服务由旅图提供|路线服务暂不可用/)
   await expect(page.getByTestId('routing-api-key-input')).toHaveCount(0)
   await expect(page.getByTestId('routing-api-key-save')).toHaveCount(0)
@@ -715,13 +711,9 @@ function createCloudSnapshot({
 }
 
 async function openCloudBackupPanel(page: Page, tripId: string) {
-  await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  const details = page.locator('#trip-sync-archive-section details').first()
-  await details.evaluate((element) => {
-    element.open = true
-  })
+  await page.goto(`/#/settings/account?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('cloud-backup-section')).toBeVisible()
+  await expect(page.getByTestId('cloud-upload-current-trip')).toBeEnabled()
 }
 
 async function expectUploadCurrentTrip(page: Page, tripId: string, expectedTitle: string) {
@@ -753,7 +745,7 @@ async function restoreCloudBackupFromPanel(
   if (confirm) {
     await dialog.getByRole('button', { name: '同步账号数据到此设备' }).click()
     await expect(dialog).toHaveCount(0)
-    await expect(page.locator('header h1').first()).toHaveText(expectedCloudTitle)
+    await expect(page.getByRole('button', { name: `当前旅行：${expectedCloudTitle}` })).toBeVisible()
   } else {
     await dialog.getByRole('button', { name: '取消' }).click()
     await expect(dialog).toHaveCount(0)
@@ -763,7 +755,7 @@ async function restoreCloudBackupFromPanel(
 async function expectLocalTripTitle(page: Page, tripId: string, expectedTitle: string) {
   await expect.poll(async () => (await readLocalTripState(page, tripId)).title).toBe(expectedTitle)
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('header h1').first()).toHaveText(expectedTitle)
+  await expect(page.getByRole('button', { name: `当前旅行：${expectedTitle}` })).toBeVisible()
 }
 
 async function updateLocalTripVersion(

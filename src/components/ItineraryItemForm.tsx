@@ -33,8 +33,10 @@ export type ItineraryItemFormValue = {
 type ItineraryItemFormProps = {
   dayDate?: string
   defaultTimeZone?: string
+  formId?: string
   initialItem?: ItineraryItem
   submitLabel: string
+  showActions?: boolean
   loading?: boolean
   onCancel: () => void
   onSubmit: (value: ItineraryItemFormValue) => Promise<void>
@@ -62,8 +64,10 @@ type FormState = {
 export function ItineraryItemForm({
   dayDate,
   defaultTimeZone,
+  formId,
   initialItem,
   submitLabel,
+  showActions = true,
   loading = false,
   onCancel,
   onSubmit,
@@ -93,6 +97,7 @@ export function ItineraryItemForm({
   const [form, setForm] = useState<FormState>(initialState)
   const [error, setError] = useState<string | null>(null)
   const [parseMessage, setParseMessage] = useState<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const googleMapsKeyConfigured = isGoogleMapsConfigured()
   const [showManualCoords, setShowManualCoords] = useState(!googleMapsKeyConfigured)
   const showTravelTimeZoneFields = isLongDistanceTransportMode(form.transportMode) ||
@@ -143,6 +148,7 @@ export function ItineraryItemForm({
     const lat = form.lat.trim() ? Number(form.lat) : undefined
     const lng = form.lng.trim() ? Number(form.lng) : undefined
     if (!validateCoordinates(lat, lng)) {
+      setAdvancedOpen(true)
       setError('坐标范围无效：纬度需在 -90 到 90，经度需在 -180 到 180')
       return
     }
@@ -151,6 +157,7 @@ export function ItineraryItemForm({
       ? Number(form.previousTransportDurationMinutes)
       : undefined
     if (!validateDuration(previousTransportDurationMinutes)) {
+      setAdvancedOpen(true)
       setError('预计耗时需为大于或等于 0 的分钟数')
       return
     }
@@ -160,18 +167,22 @@ export function ItineraryItemForm({
     const endTimeZone = normalizeOptional(form.endTimeZone)
     if (showTravelTimeZoneFields) {
       if (startTimeZone && !normalizeTimeZone(startTimeZone)) {
+        setAdvancedOpen(true)
         setError('出发时区无效，请使用 IANA 时区，例如 Europe/London')
         return
       }
       if (endTimeZone && !normalizeTimeZone(endTimeZone)) {
+        setAdvancedOpen(true)
         setError('到达时区无效，请使用 IANA 时区，例如 Asia/Shanghai')
         return
       }
       if (endDate && !isValidPlainDate(endDate)) {
+        setAdvancedOpen(true)
         setError('到达日期格式无效，请使用 YYYY-MM-DD')
         return
       }
       if (startResolution && endResolution && endResolution.instant < startResolution.instant) {
+        setAdvancedOpen(true)
         setError('到达时刻不能早于出发时刻，请检查日期、时间和时区。')
         return
       }
@@ -214,7 +225,9 @@ export function ItineraryItemForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form className="space-y-5" id={formId} onSubmit={handleSubmit}>
+      <section className="space-y-3" aria-labelledby={`${formId ?? 'item-form'}-basic`}>
+        <h2 className="text-sm font-semibold text-on-surface" id={`${formId ?? 'item-form'}-basic`}>基本信息</h2>
       <FormField
         label="行程标题"
         onChange={(value) => setForm((current) => ({ ...current, title: value }))}
@@ -236,6 +249,9 @@ export function ItineraryItemForm({
           value={form.endTime}
         />
       </div>
+      </section>
+      <section className="space-y-3" aria-labelledby={`${formId ?? 'item-form'}-place`}>
+        <h2 className="text-sm font-semibold text-on-surface" id={`${formId ?? 'item-form'}-place`}>地点</h2>
       {googleMapsKeyConfigured ? (
         <PlaceSearchInput
           label="搜索地点"
@@ -258,6 +274,17 @@ export function ItineraryItemForm({
         placeholder="可选：街道地址或建筑名称"
         value={form.address}
       />
+      </section>
+      <details
+        className="group rounded-lg border border-outline-variant/35 bg-surface-container px-3 py-2"
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        open={advancedOpen}
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
+          <span>更多设置</span>
+          <ChevronDown className="size-4 text-on-surface-variant transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-4 border-t border-outline-variant/25 pt-4">
       <label className="block">
         <span className={FIELD_LABEL_CLASS}>交通方式</span>
         <select
@@ -466,19 +493,21 @@ export function ItineraryItemForm({
           value={form.notes}
         />
       </label>
+        </div>
+      </details>
       {error ? (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">
           {error}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 gap-3">
+      {showActions ? <div className="grid grid-cols-2 gap-3">
         <Button onClick={onCancel} variant="secondary">
           取消
         </Button>
         <Button loading={loading} type="submit">
           {submitLabel}
         </Button>
-      </div>
+      </div> : null}
     </form>
   )
 }

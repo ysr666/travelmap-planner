@@ -168,7 +168,7 @@ describe('CloudBackupPanel', () => {
       root?.render(<CloudBackupPanel trip={defaultTrip} />)
     })
 
-    expect(container?.textContent).toContain('VITE_SUPABASE_URL')
+    expect(container?.textContent).toContain('配置 Supabase 后才能开启')
   })
 
   it('renders loading state', async () => {

@@ -23,7 +23,6 @@ import { buildTripIntelligenceModel, type TripIntelligenceSuggestion } from '../
 import { useTripIntelligencePersistence } from '../../hooks/useTripIntelligencePersistence'
 import type { CompanionPermission, Day, ItineraryItem, SharedTripActivity, SharedTripMember, SharedTripMemberProfile, SharedTripMutation, TicketMeta, TicketSharedVisibility, Trip } from '../../types'
 import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
 import { RestoreTripIntelligenceSuggestionButton, TripIntelligenceSuggestionControls } from './TripIntelligenceSuggestionControls'
 
@@ -56,7 +55,6 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   const autoPublishMemberKeyRef = useRef<string | null>(null)
   const { restoreSuggestionState, setSuggestionState, suggestionStates } = useTripIntelligencePersistence(trip.id)
 
-  const itemCount = useMemo(() => Object.values(itemsByDay).reduce((sum, items) => sum + items.length, 0), [itemsByDay])
   const pendingMutationCount = state?.configured && state.signedIn
     ? state.mutations.filter((mutation) => mutation.status === 'pending').length
     : 0
@@ -334,7 +332,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
   }
 
   return (
-    <Card className="space-y-4" data-testid="shared-trip-panel" id="shared-trip-panel" variant="grouped">
+    <section className="space-y-4" data-testid="shared-trip-panel" id="shared-trip-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -344,7 +342,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
             <h3 className="text-base font-semibold text-on-surface">同行共享</h3>
           </div>
           <p className="mt-1 text-xs leading-5 tm-muted">
-            同行动态通过实时通道刷新；票据和同行资料可按成员精确授权，保存分配后会自动更新共享版本和原件授权。同行提交的普通修改会自动进入主人端处理流并回写共享视图，需主人判断的请求仍保留确认入口。
+            管理邀请、成员权限和共享资料。
           </p>
         </div>
         {state?.configured && state.signedIn && state.sharedTrip ? (
@@ -362,29 +360,23 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
       ) : null}
 
       {state && !state.configured ? (
-        <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-low p-3">
-          <p className="text-sm font-semibold text-on-surface">需要先配置 Supabase</p>
-          <p className="text-xs leading-5 tm-muted">缺少 {state.missing.join('、')}。同行共享不会使用旧版个人云备份表。</p>
-          <Button onClick={() => navigateTo('settings', { section: 'cloud' })} variant="secondary">前往设置</Button>
+        <div className="space-y-3 border-y border-outline-variant/35 py-3">
+          <p className="text-sm font-semibold text-on-surface">同行共享暂不可用</p>
+          <p className="text-xs leading-5 tm-muted">请在账户与同步中完成在线服务设置。</p>
+          <Button onClick={() => navigateTo('settings/account')} variant="secondary">账户与同步</Button>
         </div>
       ) : null}
 
       {state?.configured && !state.signedIn ? (
-        <div className="space-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-low p-3">
+        <div className="space-y-3 border-y border-outline-variant/35 py-3">
           <p className="text-sm font-semibold text-on-surface">登录后才能管理共享</p>
-          <p className="text-xs leading-5 tm-muted">同行成员、留言和协作修改都绑定账号身份。</p>
-          <Button onClick={() => navigateTo('settings', { section: 'cloud' })} variant="secondary">前往登录</Button>
+          <p className="text-xs leading-5 tm-muted">登录后即可创建邀请并管理成员。</p>
+          <Button onClick={() => navigateTo('settings/account')} variant="secondary">前往登录</Button>
         </div>
       ) : null}
 
       {state?.configured && state.signedIn ? (
         <>
-          <div className="grid gap-2 text-xs sm:grid-cols-3">
-            <SummaryCell label="共享天数" value={`${days.length} 天`} />
-            <SummaryCell label="行程点" value={`${itemCount} 个`} />
-            <SummaryCell label="可分配票据" value={`${tickets.length} 条`} />
-          </div>
-
           {sharedTripSuggestions.length > 0 || hiddenSharedTripSuggestions.length > 0 ? (
             <SharedTripIntelligencePanel
               hiddenSuggestions={hiddenSharedTripSuggestions}
@@ -535,16 +527,7 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
           {error}
         </p>
       ) : null}
-    </Card>
-  )
-}
-
-function SummaryCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-container-high/60 px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase text-on-surface-variant">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-on-surface">{value}</p>
-    </div>
+    </section>
   )
 }
 

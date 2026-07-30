@@ -70,10 +70,10 @@ describe('SearchPage', () => {
   it('renders the expanded local search surface', async () => {
     await act(async () => root?.render(<SearchPage />))
 
-    expect(container?.textContent).toContain('地点、票据、账单、交通')
     expect(container?.querySelector('input[type="search"]')).toBeTruthy()
-    expect(container?.querySelector('[data-testid="search-filter-transport"]')).toBeTruthy()
-    expect(container?.querySelector('[data-testid="search-filter-ledger"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="search-filter-all"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="search-filter-transport"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="search-filter-ledger"]')).toBeNull()
   })
 
   it('renders empty state when no local records exist', async () => {

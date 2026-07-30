@@ -80,12 +80,27 @@ E2E tests are in the `e2e/` directory and run against a 390x844 mobile viewport.
 - Mobile-first responsive design (390px base)
 - Touch targets must be ≥44px (WCAG 2.5.8)
 
+## UI And Product Design
+
+- Read `docs/UI_REFACTOR_V3.md` and `docs/DESIGN_SYSTEM.md` before changing App Shell, navigation, AI UI, Trip, Day, Map, Item, Ticket, Inbox, Search, Settings, or shared UI primitives.
+- Treat UI V3 as Target until the relevant component, tests, responsive screenshots, and E2E are merged.
+- Bottom navigation is for top-level destinations only; commands such as AI, Search, Add, and Delete belong in a toolbar, content control, menu, or modal.
+- Keep one primary task and one primary action per screen. Do not repeat the page title, trip name, date, metrics, address, or map links in one viewport.
+- Use cards only for independent records, dialogs, or framed tools. Prefer spacing, grouping, typography, and dividers for normal page sections.
+- Use Lucide React icons and accessible labels. Do not add emoji controls, hand-drawn SVGs, or a second icon library when Lucide has an equivalent.
+- Test `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900` when the change affects shared layout.
+- Check long Chinese/English text, software keyboard, light/dark mode, loading, empty, error, offline, stale, and partial-success states.
+- AI writes remain preview plus final confirmation. UI simplification must not bypass schema, risk, idempotency, stale-state, or permission checks.
+- Generated ImageGen, Stitch, or Figma screens are design references; real React components and approved Golden Screenshots are the final implementation evidence.
+
 ## Architecture
 
-- **Offline-first**: All data stored in IndexedDB
-- **PWA**: Service worker for offline support
-- **Cloud sync**: Optional Supabase sync
-- **AI integration**: Provider proxy pattern for AI features
+- **Online-first target**: Supabase/Postgres is the target account source of truth, with Realtime subscriptions and server revisions.
+- **Edge cache**: IndexedDB supports fast startup, weak-network outbox, and emergency reads.
+- **AI-first**: User intent enters the versioned Action Gateway; models may select only registered semantic actions.
+- **Realtime facts**: Place, route, transit, weather, flight, rail, ticket, and search data carry source and freshness.
+- **PWA resilience**: Service workers preserve the shell and selected cached resources without pretending network-only features are current.
+- **Provider proxy**: AI and realtime providers stay behind authenticated server-side contracts.
 
 ## Commit Messages
 
@@ -112,7 +127,10 @@ chore: maintenance tasks
 ## Key Principles
 
 - **Mobile-first**: Design for 390px viewport
-- **Offline-capable**: Features should work without network
+- **Online-first**: Design the complete path for authenticated, connected users.
+- **Graceful degradation**: Preserve recent data and queued changes when connectivity is unavailable.
+- **Action-oriented AI**: Prefer completed actions and compact results over explanatory answer panels.
 - **Accessible**: Follow WCAG guidelines
+- **Adaptive**: Use bottom navigation on compact screens, rail/top navigation on tablets, and sidebar/master-detail layouts on desktop.
 - **Type-safe**: Use TypeScript strictly
 - **Test-covered**: Write tests for new features

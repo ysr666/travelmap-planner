@@ -56,9 +56,9 @@ describe('TripMoreMenu', () => {
     })
 
     expect(container?.textContent).toContain('全部票据')
-    expect(container?.textContent).toContain('同步与归档')
-    expect(container?.textContent).toContain('设置')
-    expect(container?.textContent).toContain('返回首页')
+    expect(container?.textContent).toContain('编辑旅行')
+    expect(container?.textContent).toContain('同行共享')
+    expect(container?.textContent).toContain('账户与同步')
   })
 
   it('closes menu on X button click', async () => {
@@ -115,16 +115,16 @@ describe('TripMoreMenu', () => {
     })
 
     const settingsButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((b) => b.textContent?.includes('设置'))
+      .find((b) => b.textContent?.includes('账户与同步'))
 
     await act(async () => {
       settingsButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(mocks.navigateTo).toHaveBeenCalledWith('settings')
+    expect(mocks.navigateTo).toHaveBeenCalledWith('settings/account', { tripId: 'trip_1' })
   })
 
-  it('navigates to home on click', async () => {
+  it('navigates to shared trip on click', async () => {
     await act(async () => {
       root?.render(<TripMoreMenu tripId="trip_1" />)
     })
@@ -134,13 +134,13 @@ describe('TripMoreMenu', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    const homeButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((b) => b.textContent?.includes('返回首页'))
+    const sharedTripButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((b) => b.textContent?.includes('同行共享'))
 
     await act(async () => {
-      homeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      sharedTripButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(mocks.navigateTo).toHaveBeenCalledWith('home')
+    expect(mocks.navigateTo).toHaveBeenCalledWith('shared-trip', { tripId: 'trip_1' })
   })
 })

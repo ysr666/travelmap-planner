@@ -328,19 +328,12 @@ describe('DayViewPage', () => {
     expect(container?.querySelector('[data-testid="day-intelligence-card"]')).toBeFalsy()
   })
 
-  it('navigates to trip overview on back button click', async () => {
+  it('does not render a second back button inside the page', async () => {
     await act(async () => {
       root?.render(<DayViewPage />)
     })
 
-    const backButton = container?.querySelector('button[aria-label="总览"]')
-    expect(backButton).toBeTruthy()
-
-    await act(async () => {
-      backButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(mocks.navigateTo).toHaveBeenCalledWith('trip', { tripId: 'trip_1' })
+    expect(container?.querySelector('button[aria-label="总览"]')).toBeNull()
   })
 
   it('opens more menu on button click', async () => {

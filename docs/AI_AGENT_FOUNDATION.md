@@ -1,36 +1,60 @@
 # AI Agent Foundation
 
-当前 AI 基础能力分为两层：
+状态：**Current migration baseline + Target AI-first runtime**
 
-- 本地、只读的旅行上下文和质量检查层：不调用外部 AI，不写入 IndexedDB、Supabase 或 zip 归档。
-- AI 草稿生成 / 修复层：可选通过 TripMap provider proxy 调用真实 AI provider；请求前必须用户确认，返回结果必须经过 JSON extraction 和 `validateAiTripDraft`，最终写入仍需要用户再次确认导入。
-- AI 已保存旅行修改建议层：可选通过 provider proxy 生成一次性 patch plan；发送前确认、返回后本地校验并显示 diff preview，只有用户再次确认才写入 IndexedDB。
+目标架构由全局 AI 接收自然语言目标，自动获取必要的实时事实，选择版本化注册动作，生成真实预览并执行任务。只读动作自动完成；可逆组合写入一次确认；高风险外部副作用单独确认。模型不能直接调用任意函数或修改数据库。
 
-外部 AI 不直接修改已保存旅行；已保存旅行修改必须走白名单 patch plan、预览和二次确认。
+当前代码包含三类兼容能力：
+
+- 本地旅行上下文和质量规则，作为无网/Provider 不可用时的快速 fallback。
+- AI 草稿生成 / 修复，通过 TripMap Provider Proxy 调用真实 AI provider。
+- 全局 AI Action Gateway 与已保存旅行修改建议，通过白名单动作、schema、预览、幂等和 stale-state 保护执行。
+
+统一产品方向见 [产品战略](PRODUCT_STRATEGY.md)，实施顺序见 [路线图 v5](ROADMAP_V5.md)，AI 的目标界面合同见 [UI V3 重构规范](UI_REFACTOR_V3.md)。
+
+## Target AI-First Runtime
+
+- 所有自然语言入口复用同一 Action Gateway 和服务端 capability snapshot。
+- AI 可自动调用已登记的只读 Place / Route / Search / Weather / Flight / Rail / Ticket 工具。
+- Provider 事实进入统一 `RealtimeFact`，携带 source、observedAt、expiresAt 和 confidence。
+- 长任务进入异步 job runtime，并通过 Realtime 更新进度。
+- 写入动作使用服务端 revision、幂等键和审计；客户端只提交语义目标和已确认计划。
+- 结果默认一句摘要、影响对象和一个主按钮，步骤详情折叠。
+- 本地规则继续作为低延迟 fallback，但不再决定产品的 AI 能力上限。
+
+## Target AI UI Surface
+
+- AI 是业务页面标题栏中的统一命令，不是底部导航 Tab，也不保留常驻输入框。
+- 点击后打开上下文 Action Sheet；当前 Trip / Day / Item / Ticket 范围自动解析，范围切换放在 Sheet 内。
+- 只读查找和导航成功后关闭 Sheet 并聚焦目标；写入计划显示真实预览和一次最终确认。
+- 默认只显示一句摘要、步骤数、影响对象和一个主操作；计划详情折叠。
+- 部分失败只显示短结果和“重试失败项”，不显示堆栈、原始 Provider 输出或重复成功步骤。
+- Modal 遵守 WAI-ARIA Dialog 合同；长任务可以收起，不能持续覆盖地图、日程或票据。
+- 当前 `GlobalAiCommandBar` 仍是迁移基线，上述 Action Sheet 是 UI V3 Target。
 
 ## Current AI Draft Capability Status
 
 当前可用能力：
 
-- Local request builder：用户填写目的地、日期、节奏、交通偏好和补充要求，可生成本地 mock 草稿。
+- Local request builder：保留给开发、测试和 Provider 不可用时的 fallback，不是目标产品主入口。
 - Real provider generation：配置 server-side AI env 后，可通过 `/api/provider-proxy` 使用 OpenAI-compatible provider 生成草稿；DeepSeek `deepseek-v4-flash` 已完成真实 smoke。
 - Quality checker：草稿 preview 后运行本地质量检查，提示过密、泛化标题、缺少饭点、时间冲突、短间隔等问题。
 - AI repair：质量检查出现 warnings / criticals 时，用户确认后可通过 provider proxy 请求 AI 修复当前草稿。DeepSeek `deepseek-v4-flash` repair smoke 已验证成功。
 - AI trip edit patch plan：Trip Home 提供轻量 “AI 修改建议” card；用户输入一次性修改指令后，确认发送脱敏上下文，provider proxy 返回 patch plan，本地校验后显示中文 diff preview，最终确认才应用到本地旅行。
-- AI trip edit search tool：当用户明确要求查询实时 / 网页信息时，Trip Home 可在发送确认后先调用一次 `travel_search`，再把最多 3 条来源摘要附加到 patch plan 请求；无来源时不得声称已搜索或知道实时事实。
-- Item Detail place lookup：这是非 AI、手动触发的 `place_lookup` provider proxy 流程；AI 不会自动调用它，也不会把地点候选写入已保存旅行。
-- Privacy Guard：repair 请求发送前会按 AI 隐私设置移除或截断 item notes；默认关闭时备注不会发送。
+- AI trip edit search tool：当前在明确搜索意图下调用一次 `travel_search`；目标版本会把多 Provider 只读查询纳入自动规划，并统一来源和 TTL。
+- Place enrichment：Item Detail 保留手动 `place_lookup` 候选流程；全局 `place.enrich@1` 可按明确指令准备同类候选。两条路径都必须解决唯一目标，并在确认后才写入名称、地址和坐标。
+- Data policy guard：repair 请求发送前按当前数据策略移除或截断 item notes；后续由动作合同和服务端权限策略统一执行。
 - ConfirmDialog write boundary：AI 生成和修复只更新草稿 preview 和 JSON textarea；只有用户点击最终“确认导入”后才写入 IndexedDB。
 - Patch apply boundary：AI 修改建议不会自动写库；白名单 patch plan 只在最终确认后通过本地事务应用，且不触发路线、票据或云端操作。
 
-当前明确限制：
+当前实现限制，不代表路线图上限：
 
-- 不查询天气，也不会自主浏览网页。`travel_search` 可在 mock/disabled 模式运行，也可通过 server-side Tavily env 接入真实搜索；只有 AI Trip Edit 在明确搜索意图且用户确认后可尝试一次 provider proxy search。没有来源就不得声称知道实时营业时间、票价、交通、官网或最新信息。
+- 尚未接入完整天气、航班、铁路、票务和实时交通 Provider；`travel_search` 当前只覆盖受限搜索。
 - 不提供 thinking / reasoning mode UI。推理模式由后端策略管理；默认保持 stable JSON mode，复杂任务才可由后端自动选择更高推理强度。
-- 不做多轮聊天助手、不保留自然语言记忆、不自动应用修改。
+- 尚无统一多轮任务记忆、异步 job runtime 和跨设备 AI 进度。
 - 不读取票据图片、PDF、OCR、Blob、完整本地数据库、云端 token、route cache 或 provider key。
 - 不自动生成路线、不优化行程顺序、不创建票据、不直接触发云端写入。
-- 不自动查找或 enrich Google Places；Item Detail 的地点查询必须由用户打开、搜索、选择并确认后才写入当前行程点。
+- 地点 enrich 当前仍以候选确认写入；路线图将支持 AI 批量准备和一次组合确认。
 
 ## Travel Profile
 
@@ -42,24 +66,24 @@ Travel Profile 是用户在本机配置的旅行偏好，用于后续 AI 简报�
 - 希望几点后开始、希望几点前结束。
 - 提醒强度：轻提醒 / 标准 / 详细。
 
-本阶段只允许旅行节奏影响保守的本地规则阈值，例如“当天安排偏密”的行程点数量。不得基于这些偏好新增路线、用餐、营业时间、实时交通或天气推断。
+当前本地规则只让旅行节奏影响保守阈值。目标版本会把 Travel Profile 同步到账号，并由 AI 在有来源的实时规划中使用；偏好不能替代 Provider 事实。
 
-Travel Profile 只保存在当前浏览器 `localStorage` 的 `tripmap:travel-profile`。它不进入 IndexedDB、zip 归档、Supabase 云端同步或云端同步。
+Travel Profile 当前只保存在浏览器 `localStorage` 的 `tripmap:travel-profile`。路线图将把它迁移为账号级配置并实时同步。
 
-## AI 隐私与数据范围
+## Data Governance Baseline
 
-AI 隐私设置控制 AI 草稿生成和修复时通过旅图服务发送的数据范围。当前本地检查不受这些开关限制：它仍只在设备内使用已存在的安全结构化上下文，不上传数据，也不调用外部 AI。
+数据治理是 AI runtime 的系统合同，不是普通用户的主要操作界面。当前 AI 数据范围设置仍控制草稿生成和修复请求；目标版本将把字段策略、任务权限和审计统一放到动作合同与服务端。
 
 数据范围设置只保存在当前浏览器 `localStorage` 的 `tripmap:ai-privacy`。它不进入 IndexedDB、zip 归档、Supabase 云端同步或云端同步。
 
-默认策略保持保守：AI 可读取的数据范围默认全部关闭，尤其是以下字段必须默认关闭：
+当前兼容策略默认排除以下字段：
 
 - 票据文件名 / 标题。
 - 完整备注内容。
 - 票据图片/PDF 内容。
 - 云端同步/同步状态。
 
-### AI Privacy Guard
+### Current Client Data Guard
 
 `src/lib/aiPrivacyGuard.ts` 中的纯函数在 AI 请求发送给 provider proxy 前进行数据过滤：
 
@@ -71,9 +95,9 @@ AI 隐私设置控制 AI 草稿生成和修复时通过旅图服务发送的数�
 
 票据图片、PDF、Blob 或文件正文在本阶段不可开启，也不得被读取、解析、上传或发送。
 
-## Trip Context 边界
+## Trip Context Contract
 
-`buildTripContext` 的目标是把 TripMap 现有数据整理成稳定、可解释、可测试的结构化上下文。它面向未来 AI Agent，但当前只给本地规则使用。
+`buildTripContext` 把 TripMap 数据整理成稳定、可解释、可测试的结构化上下文。当前本地规则和部分 AI 操作使用受限版本；目标 runtime 将按动作声明选择字段，并由服务端再次校验。
 
 当前允许进入上下文的内容：
 
@@ -95,9 +119,9 @@ AI 隐私设置控制 AI 草稿生成和修复时通过旅图服务发送的数�
 
 ## AI Trip Edit Patch Plan
 
-AI Trip Edit 当前是 foundation，不是完整聊天助手。它只处理一次性用户指令，例如“第二天太满了，帮我放松一点”，并返回一个结构化 patch plan。
+AI Trip Edit 是当前兼容路径，处理一次性用户指令并返回结构化 patch plan。后续高频编辑将迁入统一 Action Gateway。
 
-安全流程：
+执行流程：
 
 1. Trip Home 构建已脱敏的旅行上下文：trip/day/item IDs、标题、日期、时间、地点文本、粗略坐标状态、交通摘要和票据 count/bound state。
 2. 默认不发送 notes；只有 AI Privacy 允许 note summary/full notes 时才发送截断摘要或完整备注。
@@ -130,9 +154,9 @@ Patch plan 白名单：
 
 如果用户要求“查一下今天开放吗 / 最新票价 / 最近活动”，当前只能在确认后执行一次 `travel_search` proxy 调用；如果没有 source-bearing 结果，必须返回 warning：`联网搜索暂未接入，未查询实时信息。` 不得编造实时事实。真实 Tavily 搜索也必须保持来源展示和最终写入确认边界。
 
-## 本地检查优先
+## Online AI First, Local Fallback
 
-`analyzeTripContext` 只使用本地结构化数据，输出 `summary`、`warnings`、`suggestions` 和 `evidence`。所有当前 finding 的 `source` 都必须是 `local_rule`。
+在线时，AI 应优先使用已登记工具和带来源的实时事实完成任务。`analyzeTripContext` 继续只使用本地结构化数据，作为低延迟检查和 Provider 不可用时的 fallback；所有该路径 finding 的 `source` 仍必须是 `local_rule`。
 
 规则保持保守：
 
@@ -144,13 +168,13 @@ Patch plan 白名单：
 
 本地检查不估算真实路线，不调用地图或路线服务，不推断营业时间、天气、实时交通或票价。
 
-## 外部 AI 调用条件
+## External AI Runtime Conditions
 
 任何外部 AI 调用都必须满足：
 
-- 明确的数据范围开关，让用户知道哪些结构化字段会被发送。
-- 明确的用户授权，不做后台自动上传。
-- 每次外部 AI 调用前都必须经过当前数据范围设置过滤。
+- 由注册动作声明所需字段、目的、风险和权限。
+- 当前版本继续使用用户触发和数据范围设置；未来后台任务必须由旅行级自动化策略授权。
+- 请求进入 Provider 前由客户端和服务端按动作最小化字段。
 - 输出 schema 校验，所有建议都必须结构化、可解释、可追踪 evidence。
 - 写入前必须由用户确认；AI 不直接修改数据库。
 - 对敏感字段继续默认排除，尤其是票据/护照/签证内容、证件材料、完整备注、完整坐标、URL、本机路径和密钥。
@@ -159,25 +183,26 @@ AI provider 成功返回的草稿 source 可为 `future_ai`。本地质量检查
 
 ## 结果来源区别
 
-- `local_rule`：当前已实现，只在本机运行，只读，不调用外部服务。
+- `local_rule`：本地 fallback，只读，不调用外部服务。
+- `provider_fact`：带来源、观测时间和有效期的在线事实。
 - `future_ai`：用于标记真实 provider 生成或修复出的草稿；必须先经过数据范围过滤、schema 校验和用户确认流程。
-- 外部 AI API 调用：只允许通过 provider proxy，必须有显式用户许可，不得后台自动上传，不得自动修改数据库。
+- 外部 AI API 调用：只允许通过 Provider Proxy；后台调用必须有明确自动化策略，写入仍通过注册动作和风险合同。
 
 ## UI 文案
 
-本地规则入口使用“草稿检查”“本地检查”等中性文案，不写“AI 已读取文件”或类似表达。AI 生成 / 修复入口必须说明会通过旅图服务、可能消耗额度、不会自动创建或修改旅行。
+UI 不强调“本地检查”“隐私模式”或 Provider 技术细节。AI 有动作时直接显示完成结果或短预览；来源、新鲜度和高风险影响在需要决策的位置简短展示。
 
 ## AI 草稿管道
 
-AI 草稿管道允许用户预览和导入 AI 行程草稿。草稿可以来自本地 mock、手动粘贴 JSON，或可选真实 provider。
+AI 草稿管道允许用户预览和导入 AI 行程草稿。真实 Provider 是产品主路径；本地 mock 和手动 JSON 保留为测试、兼容和恢复能力。
 
 ### 当前阶段
 
 当前阶段支持三种方式生成草稿或修复草稿：
 
-1. **请求表单 + 本地 mock 生成**：用户填写目的地、日期、旅行偏好和补充要求，系统在本地生成示例草稿。不会调用外部 AI，不会上传数据。
+1. **Provider Proxy 真实 AI 生成 / 修复**：配置 server-side AI env 后，通过 `/api/provider-proxy` 请求真实 Provider。
 2. **粘贴 JSON 草稿**：用户手动粘贴 JSON 或加载示例草稿。
-3. **Provider proxy 真实 AI 生成 / 修复**：配置 server-side AI env 后，用户确认才通过 `/api/provider-proxy` 请求真实 provider。返回草稿只更新 preview，导入前不写本地旅行。
+3. **本地 mock 生成**：用于开发、自动化和 Provider 不可用时的测试 fallback。
 
 所有返回草稿都必须在本地完成 JSON extraction 和 schema validation。
 
@@ -266,7 +291,7 @@ AI 草稿管道允许用户预览和导入 AI 行程草稿。草稿可以来自�
 - 用户仍需 preview 和 ConfirmDialog 确认后才写入 IndexedDB。
 - AI 草稿请求有独立的 quota 限制（10次/60秒），与路线 preview quota 隔离。
 
-隐私边界：
+请求数据合同：
 
 - 请求仅包含目的地、日期、旅行偏好和补充文本。
 - 不包含票据内容、云端 token、API key。

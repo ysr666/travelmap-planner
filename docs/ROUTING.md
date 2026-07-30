@@ -1,15 +1,12 @@
-# 地图道路路线 Polyline
+# 实时路线与出行事实
 
-旅图默认使用本地直线连接当天行程点。配置路线服务后，可以在地图页手动生成道路路线 polyline。
+路线是旅图在线旅行运行时的一部分。目标体验会根据当前行程、出发时间和实时 Provider facts 提供可执行路线、交通状态与 ETA；地图 polyline 只是这一能力的可视化结果。
 
-## 功能边界
+## 产品目标与当前能力
 
-- 这不是实时导航。
-- 不提供语音导航或 turn-by-turn 指令。
-- 不包含实时交通。
-- 不做地点搜索、地理编码或自动补坐标。
-- 不支持离线路线。
-- 路线生成失败时，旅图会回退到直线连接。
+**目标：** 在 AI Action Gateway 与日程上下文中统一提供地点解析、交通方式、出发时刻、实时交通或班次、预计到达时间、服务异常和可重试路线计划。每项动态事实都必须带来源、观测时间、适用时区和过期时间。
+
+**当前：** 配置路线服务后，用户可手动生成道路路线 polyline 和顺序建议；不提供语音导航、turn-by-turn、实时交通、实时公交班次或离线路线。地点搜索与补坐标由独立 Place 操作处理。路线请求失败时回退到已缓存路线或直线连接。
 
 ## Provider Proxy
 
@@ -30,13 +27,13 @@ Cloudflare Pages Function 入口为 `functions/api/provider-proxy.ts`。OpenRout
 
 前端不再使用 `VITE_OPENROUTESERVICE_API_KEY`、旧 ORS localStorage key，或 Google Maps JS key 直接调用 OpenRouteService / Google Routes。公开部署和本地 provider QA 都应通过 provider proxy。路线顺序建议已恢复为 `route_order_suggestion` server-side proxy operation；浏览器只发送当前日行程点 ID、标题和坐标，用户确认后才更新当前日排序。详见 [Provider Proxy](PROVIDER_PROXY.md)。
 
-## 隐私说明
+## Provider 数据合同
 
-生成道路路线时，旅图会把相邻行程点的坐标发送给 TripMap 路线服务及其后端 provider。旅图不会发送地点标题、地址、备注、票据或用户账号信息。路线顺序建议只会把坐标发送给真实后端 provider；标题和 ID 仅用于 TripMap proxy 的本地归一化与前端确认展示。
+当前生成道路路线时，旅图把相邻行程点坐标发送给 TripMap 路线服务及其后端 Provider，不发送地点备注、票据或完整账号数据。路线顺序建议只把坐标发送给真实 Provider；标题和 ID 仅用于 TripMap proxy 归一化与确认展示。
 
-路线服务、地图底图和外部 Apple / Google Maps 链接都由第三方提供。出发前请以实际导航软件和官方交通信息为准。
+目标响应必须归一化为具体 Provider、来源链接或标识、`observedAt`、`expiresAt`、适用交通方式、时区、告警和可恢复错误。过期路线不得继续显示为“实时”；动态信息不可用时应明确降级为静态估算或已有缓存。
 
-## 本地路线缓存
+## 路线边缘缓存
 
 道路路线生成成功后，旅图会把最终可渲染的 polyline 保存到独立 IndexedDB：`TripMapRouteCacheDB`。这只是本机加速缓存：
 
@@ -82,4 +79,4 @@ Trip Home 的“路线顺序建议”只在用户点击“查看建议（仅建�
 - `5xx`：路线服务暂时不可用。
 - 超时或网络失败：网络异常或请求超时。
 
-无论哪种失败，地图本地行程、marker、bottom sheet 和直线连接都应继续可用。
+无论哪种失败，已缓存行程、marker、bottom sheet 和直线连接都应继续可用。

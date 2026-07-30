@@ -19,7 +19,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   expect(tripId).toBeTruthy()
 
   await expect(page.getByRole('heading', { name: '当天日程' })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: '打开行程点 Hotel Metropolitan Tokyo 入住' })).toBeVisible()
   await openDaySupportTools(page)
   const dayBrief = page.getByTestId('day-local-brief-card')
   await expect(dayBrief).toBeVisible()
@@ -36,7 +36,7 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toHaveCount(0)
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await openFirstMapMarker(page)
   await expect(page.getByTestId('view-switch-schedule')).toBeVisible()
   await expect(dayBrief).toBeHidden()
   await expectNoHorizontalOverflow(page)
@@ -45,20 +45,20 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByRole('heading', { name: '当天日程' })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Hotel Metropolitan Tokyo 入住/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: '打开行程点 Hotel Metropolitan Tokyo 入住' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.getByTestId('view-switch-map').click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toHaveCount(0)
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await openFirstMapMarker(page)
   await expectNoHorizontalOverflow(page)
 
-  await page.getByTestId('day-selector').getByRole('button', { name: /Day 2/ }).click()
+  await page.getByTestId('day-selector').getByRole('button', { name: /第 2 天/ }).click()
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByTestId('map-sheet')).toHaveCount(0)
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await openFirstMapMarker(page)
   await expectNoHorizontalOverflow(page)
 
   const currentTripId = getHashParam(page.url(), 'tripId')
@@ -66,75 +66,32 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   expect(currentTripId).toBe(tripId)
   expect(currentDayId).toBeTruthy()
 
-  await page.getByTestId('day-back-to-trip').click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
-  await expect(page.getByRole('heading', { name: '每日行程' })).toBeVisible()
-  await expect(page.getByRole('button', { name: /抵达与涩谷/ })).toContainText('3 个行程点')
-  await expect(page.getByRole('button', { name: /浅草与东京站/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /2026年4月12日/ })).toBeVisible()
-  await openTripHomeSecondaryTools(page)
-  const mapOverview = page.getByTestId('trip-map-overview')
-  const localCheck = page.getByTestId('local-trip-check-card')
-  await expect(localCheck).toBeVisible()
-  await expect(localCheck).toContainText('行程体检')
-  await expect(localCheck).toContainText('本地检查')
-  await expect(localCheck).toContainText('准备提醒')
-  await expect(localCheck).toContainText('行程点')
-  await expect(localCheck).toContainText('票据')
-  await expect(localCheck).toContainText('开放时间')
-  await expect(localCheck.getByRole('button')).toHaveCount(0)
-  expect(await localCheck.getByTestId('local-trip-check-finding').count()).toBeLessThanOrEqual(3)
+  await expect(page.getByRole('heading', { name: '行程' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /第 1 天.*抵达与涩谷/ })).toContainText('3 个行程点')
+  await expect(page.getByRole('button', { name: /第 2 天.*浅草与东京站/ })).toBeVisible()
+  await openDetailsSection(page, '旅行工具')
+  await expect(page.getByTestId('trip-home-quick-actions')).toBeVisible()
+  await expect(page.getByTestId('trip-readiness-center-panel')).toBeVisible()
+  await expect(page.getByTestId('trip-readiness-batch-button')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
-  await expect(mapOverview).toBeVisible()
-  await expect(mapOverview).toContainText('行程地图预览')
-  await expect(mapOverview).toContainText('5 个有坐标地点')
-  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewRenderedInPlot(page, 5)
-  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
-  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
-  const mapDayEntries = mapOverview.getByTestId('trip-map-day-entry')
-  await expect(mapDayEntries).toHaveCount(2)
-  await expect(mapDayEntries.nth(0)).toContainText('Day 1')
-  await expect(mapDayEntries.nth(0)).toContainText('3/3 有坐标')
-  await expect(mapDayEntries.nth(0).getByTestId('trip-map-day-first-item')).toContainText('Hotel Metropolitan Tokyo 入住')
-  await expect(mapDayEntries.nth(1)).toContainText('Day 2')
-  await expect(mapDayEntries.nth(1)).toContainText('2/2 有坐标')
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText(
-    '路线仅供预览，不会自动改行程顺序。',
-  )
-  const noteIsOutsidePlot = await mapOverview.evaluate((overview) => {
-    const plot = overview.querySelector('[data-testid="trip-map-overview-plot"]')
-    const note = overview.querySelector('[data-testid="trip-map-overview-note"]')
-    return Boolean(plot && note && !plot.contains(note))
-  })
-  expect(noteIsOutsidePlot).toBe(true)
-  await expectNoHorizontalOverflow(page)
-
-  await mapDayEntries.nth(1).getByRole('button', { name: '打开 Day 2 地图' }).click()
+  await page.getByRole('button', { name: '地图', exact: true }).click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
-  await expect(page.getByTestId('day-selector').getByRole('button', { name: /Day 2/ })).toHaveAttribute('aria-current', 'page')
-  await expect(page.getByTestId('map-sheet')).toHaveCount(0)
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await openFirstMapMarker(page)
 
-  await page.getByTestId('day-back-to-trip').click()
-  await expect(page).toHaveURL(/#\/trip\?/)
-  await openTripHomeSecondaryTools(page)
-  await page.getByTestId('trip-map-overview').getByRole('button', { name: '查看地图' }).click()
-  await expect(page).toHaveURL(/#\/day\?/)
-  await expect(page).toHaveURL(/view=map/)
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
-
-  await page.getByTestId('day-back-to-trip').click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
 
   await page.getByRole('button', { name: '更多' }).click()
   const moreMenu = page.getByTestId('trip-more-menu')
   await expect(moreMenu).toBeVisible()
-  await expect(moreMenu.getByRole('button', { name: '设置' })).toBeVisible()
-  await expect(moreMenu).not.toContainText('设置与存储说明')
-  await expect(moreMenu).not.toContainText(/Google Maps 配置|路线服务配置|路线服务|设备存储/)
+  await expect(moreMenu.getByRole('button', { name: '编辑旅行' })).toBeVisible()
+  await expect(moreMenu.getByRole('button', { name: '同行共享' })).toBeVisible()
+  await expect(moreMenu.getByRole('button', { name: '全部票据' })).toBeVisible()
+  await expect(moreMenu.getByRole('button', { name: '账户与同步' })).toBeVisible()
   await moreMenu.getByRole('button', { name: '更多' }).click()
   await expectNoHorizontalOverflow(page)
 
@@ -143,26 +100,24 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/view=map/)
   expect(getHashParam(page.url(), 'dayId')).toBe(currentDayId)
   await expect(page.getByTestId('day-selector')).toBeVisible()
-  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
+  await openFirstMapMarker(page)
 
-  await page.getByTestId('day-back-to-trip').click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
-  await openTripHomeSecondaryTools(page)
+  await openDetailsSection(page, '旅行工具')
   await page.getByTestId('trip-action-ticket-library').click()
   await expect(page).toHaveURL(/#\/documents\?/)
   const ticketLibraryHash = new URL(page.url()).hash
   expect(ticketLibraryHash).toContain(`tripId=${tripId}`)
   expect(ticketLibraryHash).toContain('tab=attachments')
-  await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await forceSupabaseUnconfigured(page)
-  await page.goto(`/#/settings?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
-  const aboutSection = page.locator('details').filter({
-    has: page.locator('summary').filter({ hasText: '关于' }),
-  })
-  await aboutSection.locator('summary').click()
+  await page.goto(`/#/settings/advanced?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '数据与高级' })).toBeVisible()
+  await openDetailsSection(page, '关于')
+  const aboutSection = page.locator('details > summary').filter({ hasText: '关于' }).locator('..')
   await expect(aboutSection.getByText(/当前版本：v\d+\.\d+\.\d+(?:\.\d+)?/)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
@@ -203,7 +158,7 @@ test('Trip Home 现在建议做什么面板只本地生成并把执行动作保�
   await createDemoTripViaUi(page)
   await forceSupabaseUnconfigured(page)
   await setRouteProxyConfig(page)
-  await page.getByTestId('day-back-to-trip').click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
   await openTripHomeSecondaryTools(page)
 
@@ -429,7 +384,7 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '票据' }).click()
   await expect(page).toHaveURL(/#\/documents\?/)
   await expect(page).toHaveURL(/tab=attachments/)
-  await expect(page.getByRole('heading', { name: '票据和订单' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   expect(providerProxyRequests).toBe(0)
   await expectNoHorizontalOverflow(page)
 
@@ -1072,7 +1027,7 @@ test('Trip Home 今日旅行提示本地展示并在确认后保存增强提示'
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 地图预览缓存路线并通过 proxy 应用路线顺序建议', async ({ page }) => {
+test('Trip Home 路线工具确认后通过 proxy 缓存路线', async ({ page }) => {
   await mockMapStyle(page)
   let routePreviewRequests = 0
   let routeOrderRequests = 0
@@ -1201,17 +1156,9 @@ test('Trip Home 地图预览缓存路线并通过 proxy 应用路线顺序建议
   await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
   await setRouteProxyConfig(page)
   await openTripHomeSecondaryTools(page)
-  const mapOverview = page.getByTestId('trip-map-overview')
-  await expect(mapOverview).toContainText('行程地图预览')
-  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewRenderedInPlot(page, 6)
-  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
-  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(6)
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
   await expect(page.getByTestId('route-preparation-panel')).toContainText('路线准备')
   await expect(page.getByTestId('route-preparation-summary')).toContainText('可为 2 天生成路线预览')
   expect(await readRouteCacheEntryCount(page)).toBe(0)
-  await expect(mapOverview.getByText(/加载地图预览/)).toHaveCount(0)
   expect(routeOrderRequests).toBe(0)
 
   await page.getByTestId('route-preparation-panel').getByRole('button', { name: '生成路线预览' }).click()
@@ -1223,47 +1170,13 @@ test('Trip Home 地图预览缓存路线并通过 proxy 应用路线顺序建议
 
   await routeDialog.getByRole('button', { name: '确认生成' }).click()
   await expect(page.getByTestId('route-preparation-result')).toContainText('已生成 1 天路线预览')
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
   expect(routePreviewRequests).toBeGreaterThan(0)
+  expect(await readRouteCacheEntryCount(page)).toBeGreaterThan(0)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await openTripHomeSecondaryTools(page)
-  const reloadedMapOverview = page.getByTestId('trip-map-overview')
-  await expect(reloadedMapOverview.getByTestId('trip-map-overview-note')).toContainText('已缓存的 ORS 路线几何')
-  await expect(reloadedMapOverview.getByText(/加载地图预览/)).toHaveCount(0)
-
-  await page.evaluate(() => {
-    window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')
-    window.dispatchEvent(new Event('tripmap:google-maps-config-changed'))
-  })
-  const originalOrder = await readDayItemOrder(page, dayId as string)
-  const cacheCountBeforeSuggestion = await readRouteCacheEntryCount(page)
-  const routeOrderPanel = page.getByTestId('trip-map-route-order-panel')
-  await expect(routeOrderPanel).toBeVisible()
+  expect(await readRouteCacheEntryCount(page)).toBeGreaterThan(0)
   expect(routeOrderRequests).toBe(0)
-  await routeOrderPanel.getByRole('button', { name: '查看建议（仅建议）' }).click()
-  await expect(routeOrderPanel.getByTestId('trip-map-route-order-suggestion')).toContainText('建议顺序')
-  expect(routeOrderRequests).toBe(1)
-  expect(await readDayItemOrder(page, dayId as string)).toEqual(originalOrder)
-
-  await routeOrderPanel.getByRole('button', { name: '应用建议' }).click()
-  const orderDialog = page.getByTestId('trip-map-route-order-confirm-dialog')
-  await expect(orderDialog).toContainText('只会更新')
-  await expect(orderDialog).toContainText('不会生成路线')
-  await expect(orderDialog).toContainText('不会写入云端')
-  await expect(orderDialog).toContainText('不会创建票据')
-  await orderDialog.getByRole('button', { name: '暂不应用' }).click()
-  expect(await readDayItemOrder(page, dayId as string)).toEqual(originalOrder)
-
-  await routeOrderPanel.getByRole('button', { name: '应用建议' }).click()
-  await page.getByTestId('trip-map-route-order-confirm-dialog').getByRole('button', { name: '确认应用' }).click()
-  const expectedOrder = [
-    originalOrder[0],
-    ...originalOrder.slice(1, -1).reverse(),
-    originalOrder[originalOrder.length - 1],
-  ]
-  await expect.poll(() => readDayItemOrder(page, dayId as string)).toEqual(expectedOrder)
-  expect(await readRouteCacheEntryCount(page)).toBe(cacheCountBeforeSuggestion)
   expect(directGoogleRouteRequests).toBe(0)
   expect(directOrsRequests).toBe(0)
   await expectNoHorizontalOverflow(page)
@@ -1342,7 +1255,7 @@ test('Trip Home 路线生成可在确认后使用 mock provider proxy', async ({
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', async ({ page }) => {
+test('每日地图在 MapLibre 样式失败时显示清楚的错误状态', async ({ page }) => {
   await mockGoogleMapsUnavailable(page)
   await page.route('https://*.basemaps.cartocdn.com/**', (route) => route.abort())
   await page.route('https://tiles.openfreemap.org/styles/**', (route) => route.abort())
@@ -1350,21 +1263,14 @@ test('Trip Home 地图预览在 MapLibre 样式失败时仍显示轻量预览', 
   const dayId = getHashParam(page.url(), 'dayId')
   expect(dayId).toBeTruthy()
 
-  await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
-  await openTripHomeSecondaryTools(page)
-  const mapOverview = page.getByTestId('trip-map-overview')
-
-  await expect(mapOverview).toContainText('行程地图预览')
-  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expectTripPreviewRenderedInPlot(page, 5, { requireMarkers: true })
-  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
-  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
-  await expect(mapOverview.getByText('地图底图暂时无法加载')).toBeVisible()
-  await expect(mapOverview.getByText(/加载地图预览/)).toHaveCount(0)
+  await page.goto(`/#/day?tripId=${tripId}&dayId=${dayId}&view=map`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '地图底图无法加载' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('地图暂时无法加载，行程仍可查看。')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) => {
+test('每日地图不依赖 Google AdvancedMarker', async ({ page }) => {
+  await mockMapStyle(page)
   await mockGoogleMapsScript(page)
   let googleRouteCalls = 0
   await page.route('https://routes.googleapis.com/directions/v2:computeRoutes', async (route) => {
@@ -1386,20 +1292,9 @@ test('Trip Home Google 地图预览不依赖 AdvancedMarker', async ({ page }) =
   const dayId = getHashParam(page.url(), 'dayId')
   expect(dayId).toBeTruthy()
 
-  await page.evaluate(() => {
-    window.localStorage.setItem('tripmap:google-maps-api-key', 'fake-google-key')
-  })
-  await setRouteProxyConfig(page)
-  await page.goto(`/#/trip?tripId=${tripId}&dayId=${dayId}`, { waitUntil: 'domcontentloaded' })
-  await openTripHomeSecondaryTools(page)
-  const mapOverview = page.getByTestId('trip-map-overview')
-
-  await expect(mapOverview.getByTestId('trip-map-preview-map')).toHaveAttribute('data-interactive', 'false')
-  await expect(mapOverview.getByTestId('trip-map-preview-overlay')).toHaveCount(0)
-  await expect(mapOverview.getByTestId('trip-map-overview-marker')).toHaveCount(5)
-  await expect(mapOverview.getByTestId('trip-map-google-route-line')).toHaveCount(1)
-  await expect(mapOverview.getByTestId('trip-map-overview-note')).toContainText('尚未生成路线预览')
-  await expect(mapOverview.locator('.maplibregl-map')).toHaveCount(0)
+  await page.goto(`/#/day?tripId=${tripId}&dayId=${dayId}&view=map`, { waitUntil: 'domcontentloaded' })
+  await openFirstMapMarker(page)
+  await expect(page.locator('.maplibregl-map')).toHaveCount(1)
   expect(googleRouteCalls).toBe(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -2329,7 +2224,7 @@ test('Trip Home 出行前检查先预览再批量修复低风险项', async ({ p
 
   await panel.getByTestId('trip-readiness-batch-button').click()
   const confirmDialog = page.getByTestId('trip-readiness-repair-confirm-dialog')
-  await expect(confirmDialog).toContainText('预计联网/路线请求')
+  await expect(confirmDialog).toContainText('需要联网的信息会实时查询')
   await confirmDialog.getByRole('button', { name: '暂不处理' }).click()
   expect(routePreviewRequests).toBe(0)
   expect(placeLookupRequests).toBe(0)
@@ -2820,10 +2715,10 @@ async function seedAiEditSearchTrip(page: Page) {
 }
 
 async function openTripHomeSecondaryTools(page: Page) {
-  const tools = page.getByTestId('trip-home-secondary-tools')
-  if (await tools.isVisible().catch(() => false)) return
-  await openDetailsSection(page, '更多工具与详情')
-  await expect(tools).toBeVisible()
+  if (await page.getByTestId('trip-operations-panel').isVisible().catch(() => false)) return
+  await openDetailsSection(page, '旅行工具')
+  await openDetailsSection(page, '更多工具')
+  await expect(page.getByTestId('trip-operations-panel')).toBeVisible()
 }
 
 async function readItemTitle(page: import('@playwright/test').Page, itemId: string) {
@@ -3153,50 +3048,11 @@ async function readRouteCacheEntryCount(page: import('@playwright/test').Page) {
   })
 }
 
-async function expectTripPreviewRenderedInPlot(
-  page: Page,
-  expectedMarkerCount: number,
-  options: { requireMarkers?: boolean } = {},
-) {
-  await expect.poll(async () => {
-    return page.evaluate(({ expectedMarkerCount: markerCount, requireMarkers }) => {
-      const plot = document.querySelector<HTMLElement>('[data-testid="trip-map-overview-plot"]')
-      const map = document.querySelector<HTMLElement>('[data-testid="trip-map-preview-map"]')
-      if (!plot || !map) return false
-
-      const plotRect = plot.getBoundingClientRect()
-      const mapRect = map.getBoundingClientRect()
-      const hasVisiblePlot =
-        plotRect.width > 0 &&
-        plotRect.height > 0 &&
-        mapRect.width > 0 &&
-        mapRect.height > 0
-      if (!hasVisiblePlot) return false
-
-      const isCenteredInPlot = (rect: DOMRect) => {
-        const centerX = rect.left + rect.width / 2
-        const centerY = rect.top + rect.height / 2
-        return (
-          rect.width > 0 &&
-          rect.height > 0 &&
-          centerX >= plotRect.left &&
-          centerX <= plotRect.right &&
-          centerY >= plotRect.top &&
-          centerY <= plotRect.bottom
-        )
-      }
-
-      const markers = Array.from(plot.querySelectorAll<HTMLElement>('[data-testid="trip-map-overview-marker"]'))
-      const markersAreReady =
-        markers.length === markerCount &&
-        markers.every((marker) => isCenteredInPlot(marker.getBoundingClientRect()))
-      if (markersAreReady) return true
-      if (requireMarkers) return false
-
-      const canvas = map.querySelector<HTMLCanvasElement>('canvas')
-      return Boolean(canvas && isCenteredInPlot(canvas.getBoundingClientRect()))
-    }, { expectedMarkerCount, requireMarkers: options.requireMarkers ?? false })
-  }).toBe(true)
+async function openFirstMapMarker(page: Page) {
+  const marker = page.getByRole('button', { name: /^选择 / }).first()
+  await expect(marker).toBeVisible({ timeout: 15_000 })
+  await marker.click()
+  await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15_000 })
 }
 
 async function mockGoogleMapsScript(page: Page) {

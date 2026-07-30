@@ -132,8 +132,7 @@ describe('DayTimelineView', () => {
       )
     })
 
-    const addButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((b) => b.textContent?.includes('新增'))
+    const addButton = container?.querySelector('button[aria-label="新增"]')
     expect(addButton).toBeTruthy()
   })
 
@@ -196,7 +195,7 @@ describe('DayTimelineView', () => {
       )
     })
 
-    expect(container?.textContent).toContain('10:00 - 11:00')
+    expect(container?.textContent).toContain('10:00')
   })
 
   it('calls onOpenItem when item clicked', async () => {
@@ -245,8 +244,11 @@ describe('DayTimelineView', () => {
       )
     })
 
+    expect(container?.textContent).not.toContain('删除')
+    const moreButton = container?.querySelector<HTMLButtonElement>('button[aria-label="浅草寺更多操作"]')
+    await act(async () => moreButton?.click())
     const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((b) => b.getAttribute('aria-label')?.includes('删除') || b.textContent?.includes('删除'))
+      .find((b) => b.textContent?.includes('删除'))
     expect(deleteButton).toBeTruthy()
   })
 
@@ -278,6 +280,8 @@ describe('DayTimelineView', () => {
       )
     })
 
+    const moreButton = container?.querySelector<HTMLButtonElement>('button[aria-label="浅草寺更多操作"]')
+    await act(async () => moreButton?.click())
     const deleteButton = Array.from(container?.querySelectorAll('button') ?? [])
       .find((button) => button.textContent?.includes('删除'))
     await act(async () => deleteButton?.click())
@@ -347,8 +351,7 @@ describe('DayTimelineView', () => {
       )
     })
 
-    const orderButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((button) => button.textContent?.includes('排序'))
+    const orderButton = container?.querySelector<HTMLButtonElement>('button[aria-label="排序"]')
     await act(async () => orderButton?.click())
 
     expect(container?.textContent).toContain('这里只调整浏览和路线顺序')
@@ -360,8 +363,7 @@ describe('DayTimelineView', () => {
       expect.stringContaining('银座'),
     ])
 
-    const saveButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((button) => button.textContent?.includes('保存'))
+    const saveButton = container?.querySelector<HTMLButtonElement>('button[aria-label="保存排序"]')
     await act(async () => saveButton?.click())
 
     expect(mocks.reorderDayItems).toHaveBeenCalledWith(

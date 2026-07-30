@@ -13,8 +13,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./db', () => ({ getTrip: mocks.getTrip }))
 vi.mock('./lib/dataEvents', () => ({ subscribeTravelDataChanged: mocks.subscribeTravelDataChanged }))
 vi.mock('./components/AppShell', () => ({
-  AppShell: ({ children, lastTripId, title }: { children: React.ReactNode; lastTripId?: string | null; title: string }) => (
-    <div data-last-trip-id={lastTripId ?? ''} data-testid="app-shell" data-title={title}>{children}</div>
+  AppShell: ({ children, lastTripId, tripTitle }: { children: React.ReactNode; lastTripId?: string | null; tripTitle?: string | null }) => (
+    <div data-last-trip-id={lastTripId ?? ''} data-testid="app-shell" data-trip-title={tripTitle ?? ''}>{children}</div>
   ),
 }))
 vi.mock('./components/cloud/AutoSnapshotBackupController', () => ({ AutoSnapshotBackupController: () => null }))
@@ -49,7 +49,7 @@ describe('App trip context', () => {
 
     await vi.waitFor(() => {
       const shell = container?.querySelector('[data-testid="app-shell"]')
-      expect(shell?.getAttribute('data-title')).toBe('东京现场')
+      expect(shell?.getAttribute('data-trip-title')).toBe('东京现场')
       expect(shell?.getAttribute('data-last-trip-id')).toBe('trip_1')
       expect(container?.textContent).toContain('资料中心')
     })
@@ -75,7 +75,7 @@ describe('App trip context', () => {
       expect(window.localStorage.getItem('tripmap.navigation-context.v1')).toBeNull()
       const shell = container?.querySelector('[data-testid="app-shell"]')
       expect(shell?.getAttribute('data-last-trip-id')).toBe('')
-      expect(shell?.getAttribute('data-title')).toBe('旅图')
+      expect(shell?.getAttribute('data-trip-title')).toBe('')
     })
   })
 })

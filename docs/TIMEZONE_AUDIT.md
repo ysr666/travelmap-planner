@@ -22,6 +22,14 @@ Phase 12F / Phase 12 已完成第一轮收口。当前目标不是迁移历史�
 - AI trip-plan 导入要求日期为 `YYYY-MM-DD`，时间为 `HH:mm`，可导入并校验 Trip / Day / Item 级 IANA timezone 字段；无效 timezone 会被忽略并产生 warning。
 - 同步、云端版本、历史记录和提醒比较继续使用 Instant；Cloud snapshot 版本时间展示会校验 timezone，无效 timezone fallback 到 UTC，不让同步提示崩溃。
 
+## 实时在线目标
+
+- 每条 Provider fact 除业务值外，还必须记录来源、`observedAt` / `retrievedAt`、`expiresAt` 和 Provider 使用的 IANA 时区。
+- ETA、营业时间、航班或列车状态、天气、交通告警不得只保存格式化字符串；运行时必须能判断事实是否过期以及应按哪个地点时区展示。
+- AI Action Plan 使用服务端 trip revision 和事实版本生成状态指纹。旅行结构或关键实时事实变化后，旧计划必须重新准备，不能沿用旧预览写入。
+- Supabase Realtime 事件使用 Instant 排序；旅行日、当地营业时间和提醒归属仍使用 Trip / Day / Item 的 IANA 时区。
+- IndexedDB 只缓存可验证的事实副本；缓存命中不能移除来源与过期时间，也不能把过期数据包装成实时结果。
+
 ## 字段分类
 
 Plain travel date fields：
@@ -97,12 +105,12 @@ Absolute system timestamp fields：
 - Trip / Day / Item timezone 字段已存在，但跨国家旅行的用户教育和高级 UI 仍不完整；用户可能不理解为何“今天”按 Day timezone 变化。
 - Item 可以表达单段 arrival date/timezone，但复杂多段交通若硬塞进普通行程点仍会丢语义；多段交通和敏感订单信息优先走 Travel Document Center 的 transport booking。
 - AI 或外部导入若给出完整 ISO datetime，不得静默截断；必须映射为明确 date/time/timeZone 或要求用户确认。
-- Map Provider、Transit Hints、实时搜索和提醒增强都必须复用当前时间语义，不要新增平行解析逻辑。
+- Map Provider、Transit、航班、天气、实时搜索和提醒都必须复用当前时间语义，不要新增平行解析逻辑。
 - 未来 provider / AI 结果如果把营业时间、ETA、航班延误或实时交通当作本地 timezone 计算结果展示，会制造无来源事实。
 
 ## 推荐下一步
 
 - 继续保持 plain-date、timezone、cloud version timestamp 和导入校验单元测试。
-- Phase 13A 可以使用现有 selected-day / Trip timezone helper，但不要加入实时营业时间、ETA 或 provider facts，除非有 source-bearing provider flow 和确认边界。
+- 优先建立统一 `ProviderFact` 时间合同，再接入实时营业时间、ETA、交通、航班和天气；所有动态事实必须有来源、观测时间与过期时间。
 - AI import 对 ISO datetime with timezone 的支持必须先设计显式用户确认，不得静默截断成 plain date/time。
 - 跨国家旅行高级 UI 和多段交通解释文案应在 Item Detail / Travel Document Center 后续体验 phase 里统一设计。

@@ -16,6 +16,7 @@ test('全局 AI 在无旅行上下文时离线回答能力问题', async ({ page
     return route.abort()
   })
 
+  await openGlobalAi(page)
   await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
   await expect(page.getByTestId('global-ai-context-label')).toContainText('全部旅行')
   await page.getByLabel('全局 AI 指令').fill('你能做什么？')
@@ -67,6 +68,7 @@ test('全局 AI 查找票据后直接打开画廊目标并收起结果面板', a
     })
   }, tripId!)
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('找一下爱丁堡的门票')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -90,12 +92,13 @@ test('全局 AI 通过注册动作直接打开资料中心且不调用 Provider'
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await clickTripCard(tripCard)
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('打开资料中心')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
   await expect(page).toHaveURL(/#\/documents\?/)
   await expect(page).toHaveURL(/tab=documents/)
-  await expect(page.getByRole('heading', { name: '旅行资料' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '资料', exact: true })).toBeVisible()
   await expect(page.getByTestId('global-ai-action-confirm-dialog')).not.toBeVisible()
   await expect(page.getByTestId('global-ai-command-result')).toHaveCount(0)
   expect(providerProxyRequests).toHaveLength(0)
@@ -118,6 +121,7 @@ test('全局 AI 时间调整只在一次确认后写入并保留原时长', asyn
   const { firstItemId } = await getFirstTripDayAndItemIds(page, tripId!)
   await updateItineraryItemTimes(page, firstItemId, '09:00', '10:30')
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('把第一站改到11点')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -183,6 +187,7 @@ test('全局 AI 在 390px 仅经一次确认更新进度和重排偏好', async 
   })
   await page.goto('/#/trip?tripId=gateway-state-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('第一站已完成')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -265,6 +270,7 @@ test('全局 AI 新增行程点只在一次确认后幂等写入', async ({ page
   })
   await page.goto('/#/trip?tripId=gateway-create-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('第一天新增伦敦眼，10:00-11:00')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -353,6 +359,7 @@ test('全局 AI 当天重排只在一次确认后改变顺序', async ({ page })
   })
   await page.goto('/#/trip?tripId=gateway-reorder-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('把伦敦眼移到大本钟前面')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -454,6 +461,7 @@ test('全局 AI 跨日移动只在一次确认后同时更新两个日期', asyn
   })
   await page.goto('/#/trip?tripId=gateway-move-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('把第一天的伦敦眼移到第二天大本钟后面')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -557,6 +565,7 @@ test('全局 AI 删除与撤销在 390px 保留票据账本并恢复原顺序', 
   await seedDeletionLedgerRelation(page)
   await page.goto('/#/trip?tripId=gateway-delete-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('删除第一天的伦敦眼')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -589,14 +598,16 @@ test('全局 AI 删除与撤销在 390px 保留票据账本并恢复原顺序', 
   expect(providerProxyRequests).toHaveLength(0)
   await expectNoHorizontalOverflow(page)
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('撤销刚才的删除')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
-  await expect(result).toContainText('撤销行程点删除')
-  await expect(result).toContainText('恢复「伦敦眼」到第 2 位')
-  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  const undoResult = page.getByTestId('global-ai-command-result')
+  await expect(undoResult).toContainText('撤销行程点删除')
+  await expect(undoResult).toContainText('恢复「伦敦眼」到第 2 位')
+  await expect(undoResult.getByRole('button', { name: '确认执行' })).toHaveCount(1)
   await expectNoHorizontalOverflow(page)
-  await result.getByRole('button', { name: '确认执行' }).click()
+  await undoResult.getByRole('button', { name: '确认执行' }).click()
 
   await expect.poll(async () =>
     (await readItineraryItemsByDay(page, 'gateway-delete-day')).map((item) => item.title),
@@ -709,6 +720,7 @@ test('全局 AI 路线配置变化后重新预览确认才请求服务并写入�
   })
   await page.goto('/#/trip?tripId=gateway-route-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('生成第一天路线预览')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -778,6 +790,7 @@ test('全局 AI 费用动作只在一次确认后创建待审核草稿', async (
   await seedLedgerSetup(page, 'gateway-expense-trip')
   await page.goto('/#/trip?tripId=gateway-expense-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('记一笔午餐 32.50 GBP')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -855,6 +868,7 @@ test('全局 AI 地点补全显示折叠预览并在一次确认后写入', asyn
   expect(tripId).toBeTruthy()
   const { firstItemId } = await getFirstTripDayAndItemIds(page, tripId!)
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('补全第一站地点信息')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -998,6 +1012,7 @@ test('全局 AI 一键修复会先补地点再生成被解锁的路线', async (
   })
   await page.goto('/#/trip?tripId=gateway-repair-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('把缺失地点、路线和建议全部修复')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -1132,6 +1147,7 @@ test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写�
   })
   await page.goto('/#/trip?tripId=gateway-combo-trip', { waitUntil: 'domcontentloaded' })
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('找一下伦敦的票据并修复所有问题')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
   const result = page.getByTestId('global-ai-command-result')
@@ -1223,6 +1239,7 @@ test('全局 AI 在 390px 通过一次确认应用本地突发重排', async ({ 
     { waitUntil: 'domcontentloaded' },
   )
 
+  await openGlobalAi(page)
   await page.getByLabel('全局 AI 指令').fill('我晚到30分钟，按最少改动调整')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
 
@@ -1258,24 +1275,25 @@ test('全局 AI 在 390px 通过一次确认应用本地突发重排', async ({ 
 
 test('全局 AI 输入在移动端承接只读 what-if 重排且永不落库', async ({ page }) => {
   await clearTravelDatabase(page)
-
-  const commandBar = page.getByTestId('global-ai-command-bar')
-  await expect(commandBar).toBeVisible()
-  await expect(page.getByLabel('全局 AI 指令')).toBeVisible()
+  await expect(page.getByTestId('global-ai-command-bar')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'AI 助手' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
-  await expectCommandBarAboveBottomTab(page)
 
   await page.getByRole('button', { name: '创建示例旅行' }).click()
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
-  await expect(page).toHaveURL(/#\/day\?/)
+  const whatIfTripId = new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('tripId')
+  expect(whatIfTripId).toBeTruthy()
+  const { dayId: whatIfDayId } = await getFirstTripDayAndItemIds(page, whatIfTripId!)
+  await page.goto(`/#/day?tripId=${whatIfTripId}&dayId=${whatIfDayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  await openGlobalAi(page)
+  const commandBar = page.getByTestId('global-ai-command-bar')
   await expect(page.getByTestId('global-ai-context-label')).toContainText(/Day|当前日期/)
 
   await expect(commandBar).toBeVisible()
-  await expectCommandBarAboveBottomTab(page)
+  await expectAiSheetWithinViewport(page)
   await expect(await countStore(page, 'tripReplanEvents')).toBe(0)
   await expect(await countStore(page, 'tripReplanRecords')).toBe(0)
 
@@ -1302,14 +1320,15 @@ test('全局 AI 普通咨询走助手回答且不触发写入确认', async ({ p
     return route.abort()
   })
 
-  const commandBar = page.getByTestId('global-ai-command-bar')
-  await expect(commandBar).toBeVisible()
   await page.getByRole('button', { name: '创建示例旅行' }).click()
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
-  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
-  await expect(page).toHaveURL(/#\/day\?/)
+  const assistantTripId = new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('tripId')
+  expect(assistantTripId).toBeTruthy()
+  const { dayId: assistantDayId } = await getFirstTripDayAndItemIds(page, assistantTripId!)
+  await page.goto(`/#/day?tripId=${assistantTripId}&dayId=${assistantDayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+  await openGlobalAi(page)
   await expect(page.getByTestId('global-ai-context-label')).toContainText(/Day|当前日期/)
 
   await page.getByLabel('全局 AI 指令').fill('今天接下来应该先确认什么？')
@@ -1330,22 +1349,21 @@ test('全局 AI 会话面板支持上下文切换和内存清空', async ({ page
   await clearTravelDatabase(page)
   await page.route('**/api/provider-proxy', (route) => route.abort())
 
-  await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
+  await expect(page.getByTestId('global-ai-command-bar')).toHaveCount(0)
   await page.getByRole('button', { name: '创建示例旅行' }).click()
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
+  await openGlobalAi(page)
   await expect(page.getByTestId('global-ai-context-label')).toContainText('当前旅行')
 
-  await page.getByRole('button', { name: '展开 AI 会话' }).click()
-  await expect(page.getByTestId('global-ai-conversation-panel')).toBeVisible()
-  await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('还没有对话')
-
-  await page.getByTestId('global-ai-context-switch').getByRole('button', { name: '全部旅行' }).click()
+  await page.getByRole('button', { name: '切换到全部旅行' }).click()
   await expect(page.getByTestId('global-ai-context-label')).toContainText('全部旅行')
 
   await page.getByLabel('全局 AI 指令').fill('你能做什么？')
   await page.getByRole('button', { name: '发送 AI 指令' }).click()
+  await page.getByRole('button', { name: '最近会话' }).click()
+  await expect(page.getByTestId('global-ai-conversation-panel')).toBeVisible()
   await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('你')
   await expect(page.getByTestId('global-ai-conversation-messages')).toContainText('助手')
 
@@ -1354,13 +1372,23 @@ test('全局 AI 会话面板支持上下文切换和内存清空', async ({ page
   await expectNoHorizontalOverflow(page)
 })
 
-async function expectCommandBarAboveBottomTab(page: Page) {
-  const commandBox = await page.getByTestId('global-ai-command-bar').boundingBox()
-  const tabBox = await page.locator('nav').filter({ has: page.getByRole('button', { name: '首页' }) }).boundingBox()
+async function openGlobalAi(page: Page) {
+  const commandBar = page.getByTestId('global-ai-command-bar')
+  if (await commandBar.isVisible().catch(() => false)) return
+  await page.getByRole('button', { name: 'AI 助手' }).click()
+  await expect(commandBar).toBeVisible()
+}
 
-  expect(commandBox, 'global AI command bar is visible').not.toBeNull()
-  expect(tabBox, 'bottom tab bar is visible').not.toBeNull()
-  expect(commandBox!.y + commandBox!.height, 'global AI command bar stays above bottom tabs').toBeLessThanOrEqual(tabBox!.y)
+async function expectAiSheetWithinViewport(page: Page) {
+  const commandBox = await page.getByTestId('global-ai-command-bar').boundingBox()
+  const viewport = page.viewportSize()
+
+  expect(commandBox, 'global AI action sheet is visible').not.toBeNull()
+  expect(viewport, 'viewport is configured').not.toBeNull()
+  expect(commandBox!.x).toBeGreaterThanOrEqual(0)
+  expect(commandBox!.y).toBeGreaterThanOrEqual(0)
+  expect(commandBox!.x + commandBox!.width).toBeLessThanOrEqual(viewport!.width)
+  expect(commandBox!.y + commandBox!.height).toBeLessThanOrEqual(viewport!.height)
 }
 
 async function countStore(page: Page, storeName: string) {

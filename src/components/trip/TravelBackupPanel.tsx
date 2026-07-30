@@ -11,9 +11,10 @@ import { SectionHeader } from '../ui/SectionHeader'
 type TravelBackupPanelProps = {
   trip: Trip | null
   isLoadingTrip?: boolean
+  showCloudBackup?: boolean
 }
 
-export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupPanelProps) {
+export function TravelBackupPanel({ trip, isLoadingTrip = false, showCloudBackup = true }: TravelBackupPanelProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -40,20 +41,18 @@ export function TravelBackupPanel({ trip, isLoadingTrip = false }: TravelBackupP
 
   return (
     <section className="space-y-3" id="travel-backup-panel">
-      <SectionHeader title="同步与归档" />
+      <SectionHeader title={showCloudBackup ? '同步与归档' : '导出旅行'} />
 
-      <CloudBackupPanel trip={trip} />
+      {showCloudBackup ? <CloudBackupPanel trip={trip} /> : null}
 
       <Card className="space-y-3">
-        <p className="text-sm leading-6 text-on-surface-variant">
-          zip 归档是高级迁移和手动留存工具，不是日常同步路径。它只在此设备生成，不会上传服务器。
-        </p>
+        <p className="text-sm leading-6 text-on-surface-variant">导出 zip 文件，供迁移或手动备份。</p>
         <div className="flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
             <HardDriveDownload className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-on-surface">高级：导出 zip 归档</h3>
+            <h3 className="text-base font-semibold text-on-surface">旅行归档</h3>
             <p className="truncate text-sm text-on-surface-variant">
               {trip ? trip.title : '请先进入某个旅行，再导出离线归档。'}
             </p>

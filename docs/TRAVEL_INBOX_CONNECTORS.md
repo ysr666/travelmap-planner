@@ -1,6 +1,24 @@
 # Travel Inbox Source Connectors
 
-Travel Inbox connectors add account-level Gmail and IMAP ingestion plus a device-local folder connector. Existing trip-level paste and upload flows remain available when the connector backend is not configured.
+Status: **Current connector baseline + Target UI V3**
+
+Travel Inbox is the realtime ingestion layer for an AI-first trip workspace. Account-level Gmail and IMAP connectors continuously discover supported travel messages, while upload, paste, and device-folder flows remain available as explicit fallbacks.
+
+## Product Role
+
+**Target:** new booking or disruption messages create source-bearing Inbox events, trigger registered AI extraction actions, and propose updates to the correct trip without requiring the user to inspect raw email. Read and classification work can run automatically; changes to itinerary, tickets, expenses, or reminders remain previewed and confirmation-gated.
+
+**Current:** Gmail and IMAP use scheduled ingestion, the device folder is local, and AI output is an editable preview. The current five-minute cron and browser-assisted parsing are migration-stage behavior rather than the final realtime job model.
+
+## Target UI Surface
+
+The Inbox UI follows [UI V3](UI_REFACTOR_V3.md):
+
+- When items exist, the first screen is the pending item list; when empty, it contains one import/connect command.
+- Zero metric cards, Provider availability, connector diagnostics, and technical setup do not lead the main Inbox surface.
+- Source and connector controls live under a secondary “来源与导入” surface.
+- AI classification uses compact states such as processing, needs confirmation, archived, and failed.
+- Batch application produces one combined preview and confirmation instead of opening a long form for each source.
 
 ## Deployment Order
 
@@ -25,12 +43,12 @@ Set these Worker secrets or variables:
 
 The Worker stores only encrypted Gmail refresh tokens and IMAP credentials. The encryption key remains a Worker secret. Gmail sync is read-only. IMAP permits only TLS port 993 and rejects IP literals, localhost, and private hostnames.
 
-## Retention And Privacy
+## Data Lifecycle And Execution Boundaries
 
 - A sync imports at most 50 messages per connector and accepts at most 20 MB and eight attachments per source.
 - Pending source objects expire after 30 days. Applying or discarding deletes the RFC822 object immediately and retains a 90-day dedupe tombstone.
-- The browser parses MIME and runs PDF/OCR extraction locally. Provider requests contain extracted text and trip summaries, never the original file or mailbox credentials.
-- AI output remains a preview. The existing editable diff, confirmation dialog, and baseline fingerprint check guard the final IndexedDB write.
+- Current browser flows parse MIME and run PDF/OCR extraction on-device. The target job runtime may move bounded extraction server-side, but only through a registered connector action with explicit content limits and source lineage; mailbox credentials are never part of AI input.
+- AI output remains a preview. The existing editable diff, confirmation dialog, and baseline fingerprint check guard current writes; the target runtime uses the same confirmation and stale-plan rules against the service-side trip revision.
 
 ## Validation
 

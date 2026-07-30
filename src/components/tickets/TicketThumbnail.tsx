@@ -96,7 +96,7 @@ export function TicketThumbnail({
         <>
           <img
             alt={ticket.title || ticket.fileName || '票据缩略图'}
-            className="size-full object-cover"
+            className="size-full bg-white object-contain p-1"
             loading="lazy"
             onError={() => setPreviewErrorTicketId(ticket.id)}
             src={preview.url}

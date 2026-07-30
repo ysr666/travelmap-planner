@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
   ChevronRight,
-  Compass,
-  Info,
-  Map,
   Clock3,
   ExternalLink,
   MapPin,
   MapPinned,
   Navigation,
+  Pencil,
   Save,
   Search,
   ShieldCheck,
@@ -28,6 +26,7 @@ import {
   updateItineraryItem,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
+import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
 import { ItemContentEnrichmentCard } from '../components/ai/TripContentEnrichmentPanel'
 import {
   buildAppleMapsUrl,
@@ -47,15 +46,10 @@ import {
   formatWeather,
 } from '../lib/ai/globalAiCommandRouter'
 import type { Day, ItineraryItem, ItineraryReplanPreference, ReplanFlexibility, ReplanMobilitySuitability, ReplanPriority, ReplanWeatherSuitability, TicketMeta, Trip } from '../types'
-import {
-  buildItemFieldContext,
-  type ItemFieldContext,
-  type ItemNeighborContext,
-  type ItemRouteActionContext,
-} from '../lib/itemFieldContext'
+import { buildItemFieldContext } from '../lib/itemFieldContext'
 import { Button } from '../components/ui/Button'
-import { getPlaceHeroVisual } from '../lib/placeHeroVisual'
 import { Card } from '../components/ui/Card'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
@@ -76,7 +70,6 @@ type ItemDetailContentProps = {
   item: ItineraryItem
   onItemDeleted: () => void
   onItemUpdated: (item: ItineraryItem) => void
-  onBack: () => void
   sourceView: 'schedule' | 'map'
 }
 
@@ -177,32 +170,31 @@ export function ItemDetailPage() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      <header className="absolute inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b-[0.5px] border-outline-variant/30 bg-surface/70 px-4 backdrop-blur-xl">
+      <header className="absolute inset-x-0 top-0 z-50 flex h-[calc(56px+env(safe-area-inset-top))] items-end justify-between border-b border-outline-variant bg-surface/96 px-3 pb-0 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <button
           aria-label="返回上一页"
-          className="flex size-11 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          className="mb-1.5 flex size-11 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
           onClick={goBackToDay}
           type="button"
         >
           <ArrowLeft className="size-5" />
         </button>
-        <div className="font-headline-md text-headline-md font-bold text-on-surface">详情</div>
+        <div className="flex h-14 items-center text-lg font-semibold text-on-surface">地点详情</div>
         <button
           aria-label="编辑行程点"
-          className="flex size-11 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high/50 active:scale-95"
+          className="mb-1.5 flex size-11 items-center justify-center rounded-lg text-primary transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
           onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
           type="button"
         >
-          <span className="text-sm font-semibold">编辑</span>
+          <Pencil className="size-5" />
         </button>
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-32 pt-16 app-scrollbar">
-        <div className="mx-auto max-w-3xl space-y-8">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[calc(56px+env(safe-area-inset-top))] app-scrollbar">
+        <div className="mx-auto max-w-3xl py-4">
           <ItemDetailContent
             day={day}
             item={item}
             key={item.id}
-            onBack={goBackToDay}
             onItemDeleted={goBackToDay}
             onItemUpdated={setItem}
             sourceView={sourceView}
@@ -214,7 +206,7 @@ export function ItemDetailPage() {
   )
 }
 
-export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdated, onBack, sourceView }: ItemDetailContentProps) {
+export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdated, sourceView }: ItemDetailContentProps) {
   const defaultPlaceLookupQuery = buildPlaceLookupQuery(item)
   const [dayItems, setDayItems] = useState<ItineraryItem[]>([])
   const [tickets, setTickets] = useState<TicketMeta[]>([])
@@ -263,9 +255,6 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   const previousItem = fieldContext.previousItem
   const nextItem = fieldContext.nextItem
   const transportDescription = fieldContext.transportDescription
-  const hasCoordinates = fieldContext.hasCoordinates
-  const appleDirectionsUrl = fieldContext.routeAction.appleUrl
-  const googleDirectionsUrl = fieldContext.routeAction.googleUrl
 
   async function confirmDeleteItem() {
     setIsDeleting(true)
@@ -379,192 +368,233 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     }
   }
 
-  const heroVisual = getPlaceHeroVisual(item)
+  function togglePlaceLookup() {
+    setIsPlaceLookupOpen((open) => {
+      const next = !open
+      if (!next) {
+        return next
+      }
+
+      const nextQuery = placeLookupQuery.trim() || defaultPlaceLookupQuery
+      if (!placeLookupQuery.trim()) {
+        setPlaceLookupQuery(nextQuery)
+      }
+      const autoSearchKey = `${item.id}|${nextQuery}`
+      if (nextQuery && placeLookupAutoSearchKeyRef.current !== autoSearchKey) {
+        placeLookupAutoSearchKeyRef.current = autoSearchKey
+        window.setTimeout(() => {
+          void searchPlaceCandidates(nextQuery)
+        }, 0)
+      }
+      return next
+    })
+  }
 
   return (
     <>
-      {/* Hero Header - matches reference _1/code.html */}
-      <section className="relative w-full h-[320px] md:h-[400px] -mx-4" data-testid="item-detail-hero">
-        <div className={`absolute inset-0 bg-gradient-to-br ${heroVisual.gradientClass}`} />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-        <div className="absolute bottom-6 left-gutter right-gutter">
-          <h1 className="mb-2 break-words font-headline-lg-mobile text-headline-lg-mobile text-on-surface [overflow-wrap:anywhere]">{item.title}</h1>
-          {item.locationName ? (
-            <div className="inline-flex max-w-full items-start gap-2 rounded-full border border-outline-variant/30 bg-surface/50 px-3 py-1.5 font-body-md text-body-md text-on-surface-variant backdrop-blur-md">
-              <Clock3 className="mt-0.5 size-4 shrink-0" />
-              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{describeItemTime(item)} · {item.locationName}</span>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <ItemFieldActionDeck
-        context={fieldContext}
-        isLoadingRelations={isLoadingRelations}
-        onOpenNeighbor={(targetItem) => navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: targetItem.id, view: sourceView })}
-        onOpenTicket={(ticket) => setPreviewTicket(ticket)}
-        onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
-      />
-
-      {/* 基础信息 section - matches reference */}
-      <section data-testid="item-detail-core">
-        <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">基础信息</h2>
-        <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
-          {/* Location */}
-          <div className="flex items-center p-4 border-b border-outline-variant/30 hover:bg-surface-container-high transition-colors cursor-pointer group active:scale-[0.99]">
-            <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary mr-4 group-hover:bg-primary-container/30 transition-colors">
-              <MapPin className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="break-words font-body-lg text-body-lg text-on-surface [overflow-wrap:anywhere]">{item.locationName || '地点未填写'}</div>
-              <div className="mt-0.5 break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{item.address || ''}</div>
-              <div className="font-label-sm text-label-sm text-on-surface-variant mt-1">
-                {hasCoordinates ? `${item.lat?.toFixed(5)}, ${item.lng?.toFixed(5)}` : '暂无坐标'}
-              </div>
-            </div>
-            <ChevronRight className="size-5 text-outline-variant group-hover:text-primary transition-colors" />
-          </div>
-          {/* Time */}
-          <div className="flex items-center p-4 border-b border-outline-variant/30 hover:bg-surface-container-high transition-colors group active:scale-[0.99]">
-            <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4">
-              <Clock3 className="size-5" />
-            </div>
-            <div className="flex-1">
-              <div className="font-body-lg text-body-lg text-on-surface">{formatDate(day.date)}</div>
-              <div className="font-body-md text-body-md text-on-surface-variant mt-0.5">{describeItemTime(item)}</div>
-            </div>
-          </div>
-          {/* Notes */}
-          {item.notes ? (
-            <div className="flex items-start p-4 hover:bg-surface-container-high transition-colors">
-              <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4 shrink-0">
-                <Info className="size-5" />
-              </div>
-              <div className="flex-1 pt-2">
-                <div className="font-body-md text-body-md text-on-surface-variant leading-relaxed whitespace-pre-wrap break-words">
-                  {item.notes}
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {/* Place Lookup Toggle */}
-          <div className="p-4 border-t border-outline-variant/30">
-            <Button
-              className="w-full min-h-11"
-              data-testid="item-place-lookup-toggle"
-              icon={<Search className="size-4" />}
-              onClick={() => {
-                setIsPlaceLookupOpen((open) => {
-                  const next = !open
-                  if (next) {
-                    const nextQuery = placeLookupQuery.trim() || defaultPlaceLookupQuery
-                    if (!placeLookupQuery.trim()) {
-                      setPlaceLookupQuery(nextQuery)
-                    }
-                    const autoSearchKey = `${item.id}|${nextQuery}`
-                    if (nextQuery && placeLookupAutoSearchKeyRef.current !== autoSearchKey) {
-                      placeLookupAutoSearchKeyRef.current = autoSearchKey
-                      window.setTimeout(() => {
-                        void searchPlaceCandidates(nextQuery)
-                      }, 0)
-                    }
-                  }
-                  return next
-                })
-              }}
-              variant="secondary"
+      <div className="space-y-6">
+        <section data-testid="item-detail-core">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-primary">
+            <Clock3 className="size-4" />
+            {describeItemTime(item)}
+          </p>
+          <h1 className="mt-2 break-words text-2xl font-bold leading-8 text-on-surface [overflow-wrap:anywhere]">
+            {item.title}
+          </h1>
+          <p className="mt-2 flex min-w-0 items-start gap-2 text-sm leading-6 text-on-surface-variant">
+            <MapPin className="mt-0.5 size-4 shrink-0" />
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+              {item.address || item.locationName || '地点待补充'}
+            </span>
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <a
+              className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary tm-focus"
+              href={buildGoogleMapsUrl(item)}
+              rel="noreferrer"
+              target="_blank"
             >
+              <Navigation className="size-4 shrink-0" />
+              <span className="truncate">开始导航</span>
+            </a>
+            <button
+              className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface tm-focus"
+              onClick={() => {
+                if (tickets[0]) setPreviewTicket(tickets[0])
+                else navigateTo('tickets', { tripId: trip.id, itemId: item.id })
+              }}
+              type="button"
+            >
+              <Ticket className="size-4 shrink-0" />
+              <span className="truncate">{tickets[0] ? '打开票据' : '添加票据'}</span>
+            </button>
+          </div>
+          {transportDescription ? (
+            <p className="mt-3 flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
+              <Navigation className="size-3.5 shrink-0" />
+              <span className="truncate">{transportDescription}</span>
+            </p>
+          ) : null}
+        </section>
+
+        <section data-testid="item-detail-tickets">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-on-surface">关联票据</h2>
+            <button
+              className="min-h-11 shrink-0 px-2 text-sm font-semibold text-primary tm-focus"
+              data-testid="item-ticket-view-all"
+              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+              type="button"
+            >
+              查看全部
+            </button>
+          </div>
+          {isLoadingRelations ? (
+            <div className="h-16 animate-pulse rounded-lg bg-surface-container-high" />
+          ) : tickets.length === 0 ? (
+            <button
+              className="flex min-h-14 w-full items-center justify-between border-y border-outline-variant py-3 text-left text-sm text-on-surface-variant tm-focus"
+              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+              type="button"
+            >
+              暂无关联票据
+              <ChevronRight className="size-4" />
+            </button>
+          ) : (
+            <div className="divide-y divide-outline-variant border-y border-outline-variant">
+              {tickets.slice(0, 3).map((ticket) => (
+                <button
+                  className="flex min-h-20 w-full min-w-0 items-center gap-3 py-2 text-left tm-focus"
+                  data-testid="item-ticket-entry"
+                  key={ticket.id}
+                  onClick={() => setPreviewTicket(ticket)}
+                  type="button"
+                >
+                  <TicketThumbnail className="h-16 w-12 shrink-0" ticket={ticket} />
+                  <span className="min-w-0 flex-1">
+                    <strong className="line-clamp-2 break-words text-sm leading-5 text-on-surface [overflow-wrap:anywhere]">
+                      {getTicketDisplayTitle(ticket)}
+                    </strong>
+                    <small className="mt-1 block break-words text-xs text-on-surface-variant [overflow-wrap:anywhere]">
+                      {getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF' : ticket.fileType === 'image' ? '图片' : '文件'}
+                    </small>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-on-surface">地点信息</h2>
+            <button
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 px-2 text-sm font-semibold text-primary tm-focus"
+              data-testid="item-place-lookup-toggle"
+              onClick={togglePlaceLookup}
+              type="button"
+            >
+              <Search className="size-4" />
               查找地点信息
-            </Button>
+            </button>
           </div>
-        </div>
-      </section>
-
-      <section data-testid="item-replan-preferences">
-        <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">重排偏好</h2>
-        <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary">
-              <ShieldCheck className="size-5" />
+          <dl className="divide-y divide-outline-variant border-y border-outline-variant">
+            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
+              <dt className="text-sm text-on-surface-variant">地点</dt>
+              <dd className="min-w-0 break-words text-sm font-medium text-on-surface [overflow-wrap:anywhere]">
+                {item.locationName || '待补充'}
+              </dd>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-body-lg text-body-lg font-semibold text-on-surface">给自适应重排看的轻量规则</p>
-              <p className="mt-1 text-sm leading-6 tm-muted">不改变当前行程；只影响之后遇到延误、天气或跳过时，系统怎样保留或移动这个点。</p>
+            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
+              <dt className="text-sm text-on-surface-variant">地址</dt>
+              <dd className="min-w-0 break-words text-sm text-on-surface [overflow-wrap:anywhere]">
+                {item.address || '待补充'}
+              </dd>
             </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <PreferenceSelect
-              label="移动性"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, flexibility: value }))}
-              options={[
-                { label: '自动判断', value: '' },
-                { label: formatFlexibility('fixed'), value: 'fixed' },
-                { label: formatFlexibility('movable'), value: 'movable' },
-                { label: formatFlexibility('optional'), value: 'optional' },
-              ]}
-              value={preferenceForm.flexibility}
-            />
-            <PreferenceSelect
-              label="优先级"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, priority: value }))}
-              options={[
-                { label: '自动判断', value: '' },
-                { label: formatPriority('must_keep'), value: 'must_keep' },
-                { label: formatPriority('high'), value: 'high' },
-                { label: formatPriority('normal'), value: 'normal' },
-                { label: formatPriority('low'), value: 'low' },
-              ]}
-              value={preferenceForm.priority}
-            />
-            <PreferenceSelect
-              label="天气"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, weatherSuitability: value }))}
-              options={[
-                { label: '未设置', value: '' },
-                { label: formatWeather('any_weather'), value: 'any_weather' },
-                { label: formatWeather('avoid_rain'), value: 'avoid_rain' },
-                { label: formatWeather('indoor_preferred'), value: 'indoor_preferred' },
-              ]}
-              value={preferenceForm.weatherSuitability}
-            />
-            <PreferenceSelect
-              label="体力"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, mobilitySuitability: value }))}
-              options={[
-                { label: '未设置', value: '' },
-                { label: formatMobility('normal'), value: 'normal' },
-                { label: formatMobility('easy'), value: 'easy' },
-                { label: formatMobility('demanding'), value: 'demanding' },
-              ]}
-              value={preferenceForm.mobilitySuitability}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <PreferenceNumber
-              label="最短停留（分钟）"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, minimumStayMinutes: value }))}
-              value={preferenceForm.minimumStayMinutes}
-            />
-            <PreferenceNumber
-              label="前后缓冲（分钟）"
-              onChange={(value) => setPreferenceForm((current) => ({ ...current, bufferMinutes: value }))}
-              value={preferenceForm.bufferMinutes}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button className="min-h-11 px-3 text-xs" icon={<Save className="size-4" />} loading={isSavingPreference} onClick={() => void saveReplanPreference()} variant="secondary">保存偏好</Button>
-            {preferenceMessage ? <span className="text-xs font-semibold text-on-surface-variant">{preferenceMessage}</span> : null}
-          </div>
-        </div>
-      </section>
+            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
+              <dt className="text-sm text-on-surface-variant">时间</dt>
+              <dd className="min-w-0 text-sm text-on-surface">{formatDate(day.date)} · {describeItemTime(item)}</dd>
+            </div>
+          </dl>
+        </section>
 
-      <section data-testid="item-detail-navigation">
-        <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">地图导航</h2>
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-sm">
-          {hasCoordinates ? (
-            <div className="grid grid-cols-2 gap-3">
+        {isPlaceLookupOpen ? (
+          <section className="space-y-3 rounded-lg border border-outline-variant bg-surface-container p-3" data-testid="item-place-lookup-panel">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">地点查询关键词</span>
+                <input
+                  className="min-h-11 w-full min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-medium text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  data-testid="item-place-lookup-query"
+                  maxLength={200}
+                  onChange={(event) => {
+                    placeLookupInFlightKeyRef.current = null
+                    placeLookupCompletedKeyRef.current = null
+                    setPlaceLookupQuery(event.currentTarget.value)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void searchPlaceCandidates()
+                    }
+                  }}
+                  placeholder="地点名称或地址"
+                  value={placeLookupQuery}
+                />
+              </label>
+              <Button
+                className="shrink-0 px-3"
+                data-testid="item-place-lookup-search"
+                disabled={!placeLookupQuery.trim() || isPlaceLookupLoading}
+                icon={<Search className="size-4" />}
+                loading={isPlaceLookupLoading}
+                onClick={() => void searchPlaceCandidates()}
+              >
+                搜索
+              </Button>
+            </div>
+            {placeLookupError ? (
+              <p className="rounded-lg bg-error-container px-3 py-2 text-sm font-medium text-on-error-container" data-testid="item-place-lookup-error">
+                {placeLookupError}
+              </p>
+            ) : null}
+            {placeLookupResults.length > 0 ? (
+              <div className="divide-y divide-outline-variant" data-testid="item-place-lookup-results">
+                {placeLookupResults.map((candidate) => (
+                  <button
+                    className="flex w-full min-w-0 items-start gap-3 py-3 text-left tm-focus"
+                    data-testid="item-place-lookup-result"
+                    key={candidate.placeId}
+                    onClick={() => setPendingPlaceCandidate(candidate)}
+                    type="button"
+                  >
+                    <MapPinned className="mt-0.5 size-5 shrink-0 text-primary" />
+                    <span className="min-w-0 flex-1">
+                      <strong className="block break-words text-sm text-on-surface [overflow-wrap:anywhere]">{candidate.displayName}</strong>
+                      <small className="mt-0.5 block break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">{candidate.formattedAddress}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {item.notes ? (
+          <section>
+            <h2 className="mb-2 text-base font-semibold text-on-surface">备注</h2>
+            <p className="whitespace-pre-wrap break-words border-y border-outline-variant py-3 text-sm leading-6 text-on-surface [overflow-wrap:anywhere]">
+              {item.notes}
+            </p>
+          </section>
+        ) : null}
+
+        <Collapsible testId="item-detail-more" title="更多">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
               <a
-                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-outline-variant text-sm font-semibold text-on-surface tm-focus"
                 href={buildAppleMapsUrl(item)}
                 rel="noreferrer"
                 target="_blank"
@@ -573,7 +603,7 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 Apple 地图
               </a>
               <a
-                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-primary font-label-sm text-label-sm transition active:scale-[0.98]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-outline-variant text-sm font-semibold text-on-surface tm-focus"
                 href={buildGoogleMapsUrl(item)}
                 rel="noreferrer"
                 target="_blank"
@@ -582,217 +612,123 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 Google 地图
               </a>
             </div>
-          ) : (
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              无法从这里打开外部地图导航。请先补充这个行程点的坐标。
-            </p>
-          )}
-        </div>
-      </section>
 
-      {/* Place Lookup Panel */}
-      {isPlaceLookupOpen ? (
-        <section className="space-y-3 rounded-xl bg-surface-container px-4 py-3 border border-outline-variant/30" data-testid="item-place-lookup-panel">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">地点查询关键词</span>
-              <input
-                className="min-h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm font-medium text-on-surface outline-none transition placeholder:text-outline focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-outline-variant/30 dark:bg-surface-dim dark:text-on-surface dark:focus:border-sky-700 dark:focus:ring-sky-900/40"
-                data-testid="item-place-lookup-query"
-                maxLength={200}
-                onChange={(event) => {
-                  placeLookupInFlightKeyRef.current = null
-                  placeLookupCompletedKeyRef.current = null
-                  setPlaceLookupQuery(event.currentTarget.value)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') { event.preventDefault(); void searchPlaceCandidates() }
-                }}
-                placeholder="地点名称或地址"
-                value={placeLookupQuery}
-              />
-            </label>
-            <Button className="shrink-0 px-3" data-testid="item-place-lookup-search" disabled={!placeLookupQuery.trim() || isPlaceLookupLoading} icon={<Search className="size-4" />} loading={isPlaceLookupLoading} onClick={() => void searchPlaceCandidates()} variant="primary">搜索</Button>
-          </div>
-          {placeLookupError ? <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm font-medium leading-5 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" data-testid="item-place-lookup-error">{placeLookupError}</div> : null}
-          {placeLookupResults.length > 0 ? (
-            <div className="space-y-2" data-testid="item-place-lookup-results">
-              {placeLookupResults.map((candidate) => (
-                <button className="flex w-full min-w-0 items-start gap-3 rounded-xl bg-white px-3 py-3 text-left ring-1 ring-outline-variant/30 transition hover:ring-sky-200 active:scale-[0.99] tm-focus dark:bg-surface-dim/70 dark:ring-outline-variant/30 dark:hover:ring-sky-800" data-testid="item-place-lookup-result" key={candidate.placeId} onClick={() => setPendingPlaceCandidate(candidate)} type="button">
-                  <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary"><MapPinned className="size-5" /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words font-body-lg text-body-lg text-on-surface [overflow-wrap:anywhere]">{candidate.displayName}</span>
-                    <span className="mt-0.5 block break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{candidate.formattedAddress}</span>
-                    {candidate.googleMapsUri ? <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary"><ExternalLink className="size-3" />Google Maps</span> : null}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+            <ItemContentEnrichmentCard
+              day={day}
+              item={item}
+              onApplied={async () => {
+                const updated = await getItineraryItem(item.id)
+                if (updated) onItemUpdated(updated)
+                await loadRelations()
+              }}
+              trip={trip}
+            />
 
-      <ItemContentEnrichmentCard
-        day={day}
-        item={item}
-        onApplied={async () => {
-          const updated = await getItineraryItem(item.id)
-          if (updated) {
-            onItemUpdated(updated)
-          }
-          await loadRelations()
-        }}
-        trip={trip}
-      />
-
-      {/* 交通 section - matches reference */}
-      {transportDescription ? (
-        <section>
-          <h2 className="font-label-sm text-label-sm text-on-surface-variant mb-3 pl-1 uppercase tracking-wider">交通</h2>
-          <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm">
-            <div className="flex items-center p-4 hover:bg-surface-container-high transition-colors">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant mr-4 shrink-0">
-                <Navigation className="size-5" />
+            <details className="rounded-lg border border-outline-variant">
+              <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-3 text-sm font-semibold text-on-surface">
+                <ShieldCheck className="size-4 text-primary" />
+                重排偏好
+              </summary>
+              <div className="space-y-3 border-t border-outline-variant p-3" data-testid="item-replan-preferences">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PreferenceSelect
+                    label="移动性"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, flexibility: value }))}
+                    options={[
+                      { label: '自动判断', value: '' },
+                      { label: formatFlexibility('fixed'), value: 'fixed' },
+                      { label: formatFlexibility('movable'), value: 'movable' },
+                      { label: formatFlexibility('optional'), value: 'optional' },
+                    ]}
+                    value={preferenceForm.flexibility}
+                  />
+                  <PreferenceSelect
+                    label="优先级"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, priority: value }))}
+                    options={[
+                      { label: '自动判断', value: '' },
+                      { label: formatPriority('must_keep'), value: 'must_keep' },
+                      { label: formatPriority('high'), value: 'high' },
+                      { label: formatPriority('normal'), value: 'normal' },
+                      { label: formatPriority('low'), value: 'low' },
+                    ]}
+                    value={preferenceForm.priority}
+                  />
+                  <PreferenceSelect
+                    label="天气"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, weatherSuitability: value }))}
+                    options={[
+                      { label: '未设置', value: '' },
+                      { label: formatWeather('any_weather'), value: 'any_weather' },
+                      { label: formatWeather('avoid_rain'), value: 'avoid_rain' },
+                      { label: formatWeather('indoor_preferred'), value: 'indoor_preferred' },
+                    ]}
+                    value={preferenceForm.weatherSuitability}
+                  />
+                  <PreferenceSelect
+                    label="体力"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, mobilitySuitability: value }))}
+                    options={[
+                      { label: '未设置', value: '' },
+                      { label: formatMobility('normal'), value: 'normal' },
+                      { label: formatMobility('easy'), value: 'easy' },
+                      { label: formatMobility('demanding'), value: 'demanding' },
+                    ]}
+                    value={preferenceForm.mobilitySuitability}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PreferenceNumber
+                    label="最短停留（分钟）"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, minimumStayMinutes: value }))}
+                    value={preferenceForm.minimumStayMinutes}
+                  />
+                  <PreferenceNumber
+                    label="前后缓冲（分钟）"
+                    onChange={(value) => setPreferenceForm((current) => ({ ...current, bufferMinutes: value }))}
+                    value={preferenceForm.bufferMinutes}
+                  />
+                </div>
+                <Button icon={<Save className="size-4" />} loading={isSavingPreference} onClick={() => void saveReplanPreference()} variant="secondary">
+                  保存偏好
+                </Button>
+                {preferenceMessage ? <p className="text-xs text-on-surface-variant">{preferenceMessage}</p> : null}
               </div>
-              <div className="flex-1">
-                <div className="font-body-lg text-body-lg text-on-surface">从上一站到此处</div>
-                <div className="font-body-md text-body-md text-on-surface-variant mt-0.5">{transportDescription}</div>
-              </div>
-              {hasCoordinates ? (
-                <a className="inline-flex min-h-11 items-center rounded-xl px-3 font-body-md text-body-md text-primary tm-focus" href={buildGoogleMapsUrl(item)} rel="noreferrer" target="_blank">导航</a>
-              ) : null}
-            </div>
-            {appleDirectionsUrl || googleDirectionsUrl ? (
-              <div className="grid grid-cols-2 gap-3 border-t border-outline-variant/30 p-4">
-                {appleDirectionsUrl ? (
-                  <a
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high font-label-sm text-label-sm text-primary transition active:scale-[0.98]"
-                    href={appleDirectionsUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <Navigation className="size-4" />
-                    Apple 路线
-                  </a>
-                ) : null}
-                {googleDirectionsUrl ? (
-                  <a
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high font-label-sm text-label-sm text-primary transition active:scale-[0.98]"
-                    href={googleDirectionsUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <ExternalLink className="size-4" />
-                    Google 路线
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+            </details>
 
-      {/* 票据 section - horizontal scroll cards */}
-      <section data-testid="item-detail-tickets">
-        <div className="flex justify-between items-end mb-3 pl-1">
-          <div>
-            <h2 className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">现场票据</h2>
-            {!isLoadingRelations ? (
-              <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{tickets.length} 张已绑定</p>
-            ) : null}
-          </div>
-          <button
-            className="flex min-h-11 items-center gap-1 rounded-xl px-3 text-primary font-label-sm text-label-sm transition-opacity active:opacity-70 tm-focus"
-            data-testid="item-ticket-view-all"
-            onClick={() => navigateTo('tickets', { tripId: trip.id })}
-            type="button"
-          >
-            查看全部 {tickets.length > 3 ? <span>+{tickets.length - 3}</span> : null}<ChevronRight className="size-4" />
-          </button>
-        </div>
-        {isLoadingRelations ? (
-          <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-            <div className="min-w-[260px] h-40 animate-pulse rounded-xl bg-surface-container" />
-            <div className="min-w-[260px] h-40 animate-pulse rounded-xl bg-surface-container" />
-          </div>
-        ) : tickets.length === 0 ? (
-          <div className="bg-surface-container rounded-xl border border-outline-variant/30 p-4 text-center">
-            <div className="font-body-md text-body-md text-on-surface-variant">暂无绑定票据</div>
-          </div>
-        ) : (
-          <div className="flex overflow-x-auto no-scrollbar gap-4 pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-            {tickets.slice(0, 3).map((ticket) => (
+            <div className="grid grid-cols-2 gap-2">
               <button
-                key={ticket.id}
-                className="ticket-cutout relative w-[calc(100vw-2rem)] max-w-[260px] flex-shrink-0 cursor-pointer overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-high text-left shadow-lg transition-transform duration-200 active:scale-[0.98] sm:w-[260px]"
-                data-testid="item-ticket-entry"
-                onClick={() => setPreviewTicket(ticket)}
+                className="flex min-h-12 min-w-0 items-center gap-2 rounded-lg border border-outline-variant px-3 text-left disabled:opacity-45 tm-focus"
+                data-testid="item-field-previous-stop"
+                disabled={!previousItem}
+                onClick={() => previousItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: previousItem.id, view: sourceView })}
                 type="button"
               >
-                <div className="h-2 w-full bg-primary-container" />
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded bg-primary-container/20 flex items-center justify-center text-primary">
-                      <Ticket className="size-5" />
-                    </div>
-                    <span className="px-2 py-1 rounded bg-secondary-container/20 text-secondary-fixed-dim font-label-sm text-[11px] border border-secondary-container/30">已生效</span>
-                  </div>
-                  <h3 className="mb-1 line-clamp-3 break-words font-headline-md text-headline-md text-on-surface [overflow-wrap:anywhere]">{getTicketDisplayTitle(ticket)}</h3>
-                  <p className="mb-6 break-words font-body-md text-body-md text-on-surface-variant [overflow-wrap:anywhere]">{getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF 文件' : ticket.fileType === 'image' ? '图片' : '文件'}</p>
-                  <div className="border-t border-dashed border-outline-variant/50 w-full my-3" />
-                  <div className="flex justify-between items-center pt-1">
-                    <span className="font-body-md text-body-md text-on-surface-variant">点击预览</span>
-                    <ChevronRight className="size-4 text-outline-variant" />
-                  </div>
-                </div>
+                <ArrowLeft className="size-4 shrink-0" />
+                <span className="min-w-0 truncate text-sm">{previousItem?.title || '上一站'}</span>
               </button>
-            ))}
+              <button
+                className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-lg border border-outline-variant px-3 text-right disabled:opacity-45 tm-focus"
+                data-testid="item-field-next-stop"
+                disabled={!nextItem}
+                onClick={() => nextItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: nextItem.id, view: sourceView })}
+                type="button"
+              >
+                <span className="min-w-0 truncate text-sm">{nextItem?.title || '下一站'}</span>
+                <ArrowRight className="size-4 shrink-0" />
+              </button>
+            </div>
+
+            <Button
+              className="w-full"
+              icon={<Trash2 className="size-4" />}
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              variant="destructive"
+            >
+              删除行程点
+            </Button>
           </div>
-        )}
-      </section>
-
-      <section>
-        <Button
-          className="w-full"
-          icon={<Trash2 className="size-4" />}
-          onClick={() => setIsDeleteConfirmOpen(true)}
-          variant="destructive"
-        >
-          删除行程点
-        </Button>
-      </section>
-
-      {/* Bottom Action Area - matches reference: 3 buttons */}
-      <div className="fixed bottom-0 left-1/2 z-50 flex w-full max-w-[600px] -translate-x-1/2 items-center justify-between gap-3 border-t-[0.5px] border-outline-variant/30 bg-surface-dim/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
-        <button
-          aria-label="上一项"
-          className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
-          data-testid="item-previous-button"
-          disabled={!previousItem}
-          onClick={() => previousItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: previousItem.id, view: sourceView })}
-          type="button"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <button
-          aria-label={sourceView === 'map' ? '返回地图' : '返回日程'}
-          className="flex-1 h-12 bg-primary-container text-on-primary-container font-headline-md text-[16px] rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(62,144,255,0.2)]"
-          onClick={onBack}
-          type="button"
-        >
-          <Map className="size-5" />
-          {sourceView === 'map' ? '返回地图' : '返回日程'}
-        </button>
-        <button
-          aria-label="下一项"
-          className="flex items-center justify-center h-12 w-12 rounded-xl bg-surface-container border border-outline-variant/30 text-on-surface-variant active:scale-90 transition-all hover:text-on-surface"
-          data-testid="item-next-button"
-          disabled={!nextItem}
-          onClick={() => nextItem && navigateTo('item', { tripId: trip.id, dayId: day.id, itemId: nextItem.id, view: sourceView })}
-          type="button"
-        >
-          <ArrowLeft className="size-5 rotate-180" />
-        </button>
+        </Collapsible>
       </div>
 
       {previewTicket ? (
@@ -837,186 +773,6 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         title="确认使用这个地点吗？"
       />
     </>
-  )
-}
-
-function ItemFieldActionDeck({
-  context,
-  isLoadingRelations,
-  onOpenNeighbor,
-  onOpenTicket,
-  onOpenTickets,
-}: {
-  context: ItemFieldContext
-  isLoadingRelations: boolean
-  onOpenNeighbor: (item: ItineraryItem) => void
-  onOpenTicket: (ticket: TicketMeta) => void
-  onOpenTickets: () => void
-}) {
-  const firstTicket = context.ticketAction.firstTicket
-  const ticketLabel = isLoadingRelations ? '读取中' : context.ticketAction.label
-  const ticketSummary = isLoadingRelations ? '正在读取绑定票据。' : context.ticketAction.summary
-
-  return (
-    <section className="space-y-3" data-testid="item-field-action-deck">
-      <div className="grid gap-3 md:grid-cols-[1.25fr_0.75fr]">
-        <Card className="overflow-hidden p-0" variant="grouped">
-          <div className="flex items-start justify-between gap-3 border-b border-outline-variant/30 p-4">
-            <div className="flex min-w-0 gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-container/20 text-primary">
-                <Compass className="size-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-label-sm text-label-sm text-primary">现场行动</p>
-                <h2 className="mt-1 font-headline-md text-headline-md text-on-surface">{context.timeLabel}</h2>
-                <p className="mt-1 truncate text-sm font-semibold text-on-surface-variant">{context.positionLabel}</p>
-              </div>
-            </div>
-            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
-              context.hasCoordinates
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-            }`}>
-              {context.coordinateLabel}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 divide-x divide-outline-variant/30 p-4 text-center">
-            <OnsiteMetric label="地点" value={context.placeLabel} />
-            <OnsiteMetric label="票据" value={ticketLabel} />
-            <OnsiteMetric label="位置" value={`${Math.max(context.itemIndex + 1, 1)}/${Math.max(context.itemCount, 1)}`} />
-          </div>
-          <div className="grid gap-2 border-t border-outline-variant/30 p-3 sm:grid-cols-2">
-            <NeighborButton label="上一站" neighbor={context.previousStop} onOpenNeighbor={onOpenNeighbor} testId="item-field-previous-stop" />
-            <NeighborButton label="下一站" neighbor={context.nextStop} onOpenNeighbor={onOpenNeighbor} testId="item-field-next-stop" />
-          </div>
-        </Card>
-
-        <Card className="space-y-3" variant="grouped">
-          <div className="flex items-center gap-2">
-            <Ticket className="size-4 text-primary" />
-            <h2 className="font-headline-md text-headline-md text-on-surface">现场凭证</h2>
-          </div>
-          <p className="text-sm leading-6 text-on-surface-variant">{ticketSummary}</p>
-          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
-            {firstTicket ? (
-              <Button className="min-h-11 px-3 text-sm" icon={<Ticket className="size-4" />} onClick={() => onOpenTicket(firstTicket)} variant="primary">
-                打开票据
-              </Button>
-            ) : null}
-            <Button className="min-h-11 px-3 text-sm" icon={<ChevronRight className="size-4" />} onClick={onOpenTickets} variant={firstTicket ? 'secondary' : 'primary'}>
-              票据库
-            </Button>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <ActionLinkPanel
-          action={context.routeAction}
-          icon={<Navigation className="size-5" />}
-          testId="item-field-route-action"
-          unavailableDetail={context.routeAction.detail}
-        />
-        <ActionLinkPanel
-          action={context.placeAction}
-          icon={<MapPinned className="size-5" />}
-          testId="item-field-place-action"
-          unavailableDetail={context.placeAction.detail}
-        />
-      </div>
-    </section>
-  )
-}
-
-function OnsiteMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 px-2">
-      <p className="text-[11px] text-on-surface-variant">{label}</p>
-      <p className="mt-1 truncate text-sm font-bold text-on-surface">{value}</p>
-    </div>
-  )
-}
-
-function NeighborButton({
-  label,
-  neighbor,
-  onOpenNeighbor,
-  testId,
-}: {
-  label: string
-  neighbor: ItemNeighborContext | null
-  onOpenNeighbor: (item: ItineraryItem) => void
-  testId: string
-}) {
-  return (
-    <button
-      className="flex min-h-[4.25rem] min-w-0 items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3 text-left transition active:scale-[0.99] disabled:opacity-50 tm-focus"
-      data-testid={testId}
-      disabled={!neighbor}
-      onClick={() => neighbor && onOpenNeighbor(neighbor.item)}
-      type="button"
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-primary">
-        {label === '上一站' ? <ArrowLeft className="size-4" /> : <ArrowRight className="size-4" />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-semibold text-on-surface-variant">{label}</span>
-        <span className="mt-1 block truncate text-sm font-bold text-on-surface">{neighbor?.label ?? '无'}</span>
-        {neighbor ? <span className="mt-0.5 block truncate text-xs text-on-surface-variant">{neighbor.timeLabel}</span> : null}
-      </span>
-    </button>
-  )
-}
-
-function ActionLinkPanel({
-  action,
-  icon,
-  testId,
-  unavailableDetail,
-}: {
-  action: ItemRouteActionContext
-  icon: ReactNode
-  testId: string
-  unavailableDetail: string
-}) {
-  return (
-    <Card className="space-y-3" data-testid={testId} variant="grouped">
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container/20 text-primary">
-          {icon}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-headline-md text-headline-md text-on-surface">{action.title}</h2>
-          <p className="mt-1 text-sm leading-6 text-on-surface-variant">{action.isAvailable ? action.detail : unavailableDetail}</p>
-        </div>
-      </div>
-      {action.isAvailable ? (
-        <div className="grid grid-cols-2 gap-2">
-          {action.appleUrl ? (
-            <a
-              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
-              href={action.appleUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Navigation className="size-4" />
-              <span className="truncate">Apple 地图</span>
-            </a>
-          ) : null}
-          {action.googleUrl ? (
-            <a
-              className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-high text-sm font-semibold text-primary transition active:scale-[0.98] tm-focus"
-              href={action.googleUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <ExternalLink className="size-4" />
-              <span className="truncate">Google 地图</span>
-            </a>
-          ) : null}
-        </div>
-      ) : null}
-    </Card>
   )
 }
 

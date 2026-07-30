@@ -200,7 +200,7 @@ export function TicketPreview({
       aria-describedby={descriptionId}
       aria-labelledby={titleId}
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
       data-testid="ticket-preview"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       ref={dialogRef}

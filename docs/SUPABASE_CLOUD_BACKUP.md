@@ -1,8 +1,17 @@
-# Supabase 云端同步与恢复
+# Supabase 实时云端数据平台
 
-旅图 TripMap 的云端能力服务于产品化旅行管理体验：IndexedDB 是此设备缓存与首写层，Supabase 在登录后同步旅行结构化数据、统一智能状态和已保存票据文件，用于跨设备延续和恢复。
+Supabase 是旅图 TripMap 在线产品的目标数据主干，负责账号权威状态、跨设备实时更新、协作事件、AI 任务状态和附件对象。IndexedDB 的长期角色是设备侧边缘缓存、待发送队列和断网应急读取，而不是产品事实来源。
 
-本功能不做实时协作、多人协作或云端编辑。用户写入成功后会进入同步队列；同步会先拉取账号对象，不同对象和不同字段会自动合并，同一字段双边修改或删除/更新冲突会进入确认面板。
+## 目标与当前边界
+
+**目标架构：**
+
+- 已登录在线写入以 Supabase 服务端 revision 为提交结果，并通过 Realtime 将变更推送到同一账号和获授权的同行设备。
+- AI 计划、后台任务、Provider facts、协作事件和用户写入共享可追踪的服务端状态，不依赖某一浏览器标签页持续存活。
+- 设备断网时写入本地 outbox；恢复在线后基于服务端 revision 重放、去重并解决冲突。
+- 票据与资料附件以云端对象为权威版本，设备只保留按需缓存和明确的离线可用副本。
+
+**当前实现：** IndexedDB 仍是首写层，登录后通过对象 outbox 与 Supabase 增量同步；旧 snapshot 继续承担兼容恢复。当前同步不是实时协作，冲突仍通过拉取、三方合并和确认面板处理。下文凡描述“本地先写”“snapshot”或手动恢复，均是迁移期现状，不是 V5 终态。
 
 ## 当前同步架构
 
@@ -320,7 +329,7 @@ using (
 - `travel_inbox_connector_secrets` 开启 RLS 且无客户端 policy 是刻意 deny-all，connector secret 只允许受控后端路径访问。
 - Companion 与双设备 intelligence 生产 smoke 已完整通过，覆盖 A 端上传、全新 B 端恢复、建议状态与完成历史恢复、latest-wins 和 tombstone 删除传播。脚本把 refresh session 以 `0600` 权限缓存到仓库外，后续运行自动刷新并在两个设备与 Companion 之间复用，不重复投递 OTP。
 
-## 票据 Blob 独立同步与离线缓存
+## 票据 Blob 独立同步与边缘缓存
 
 - copy 票据保存后会先写 `ticketBlobs`，状态为 `pending/cached`。
 - 上传成功后写 `cloud_ticket_blobs`，状态为 `synced/cached`。
@@ -408,7 +417,7 @@ copy 票据附件上传到 Storage；reference / external 票据只保存元数�
 - 不要手动清理 `{userId}/objects/...` Storage 文件，除非同时处理 `cloud_ticket_blobs`。
 - 旧 snapshot 附件仍可恢复；新对象同步成功后，票据长期来源以 `cloud_ticket_blobs` 为准。
 
-## 隐私和安全
+## 安全与数据治理
 
 - 云端同步会同步旅行数据和已保存票据文件到 Supabase。
 - Supabase Auth 和 RLS 用于隔离用户数据。
@@ -422,7 +431,7 @@ copy 票据附件上传到 Storage；reference / external 票据只保存元数�
 
 ### 云端同步是不是实时协作？
 
-不是。它是单旅行账号同步：写入先落到此设备离线缓存，再通过自动同步队列更新账号对象；它不会实时协作，但会做 pull-before-push 增量合并。同一字段双边不同修改会停在冲突面板等待用户确认。
+当前版本还不是。现有实现先写设备缓存，再通过自动同步队列更新账号对象，并使用 pull-before-push 增量合并；同一字段双边不同修改会进入冲突面板。V5 目标是由服务端 revision 和 Supabase Realtime 驱动账号多端及授权同行协作，IndexedDB 退为边缘缓存与断网 outbox。
 
 ### reference / external 票据会上传文件吗？
 

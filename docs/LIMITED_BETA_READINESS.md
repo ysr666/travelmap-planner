@@ -1,10 +1,10 @@
 # Limited Beta Readiness
 
-更新时间：2026-07-28
+更新时间：2026-07-29
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。核心功能和自动化已完成，`main` 同 SHA 远端验证已通过；发布阻塞只保留实体机记录。通用 AI Action Gateway V1 和首轮性能拆分已完成，更深的设备性能、PWA 缓存和云端运营能力继续在 Beta 阶段推进。
+当前代码达到上一阶段 Limited Beta Release Candidate，可作为“实时在线、AI 优先”迁移的稳定基线。`main` 同 SHA 远端验证已通过；但 cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
 
 ## 验收矩阵
 
@@ -20,6 +20,10 @@
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
 | CI / E2E | 就绪 | 187/1555 unit、156 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
 | 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
+| Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
+| Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
+| AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
+| UI V3 | 目标能力 | 已完成[工具、信息架构、视觉、响应式和验收规范](UI_REFACTOR_V3.md) | 当前仍是 UI V2；四项导航、Toolbar AI、Action Sheet 和主从布局尚未实现 |
 
 ## 发布必过
 
@@ -35,9 +39,9 @@
 - Supabase migration、RLS、授权和 advisors 复核。
 - iPhone Safari、iOS 主屏 PWA、Android Chrome 补录。
 
-## 必须保持的边界
+## 必须保持的系统合同
 
-- AI 修改先 preview，最终写入再确认。
+- 只读查询自动执行；可逆组合写入一次确认；高风险外部副作用独立确认。
 - 搜索没有来源就不声明实时营业时间、票价、闭馆或交通状态。
 - Provider key、Authorization、原始 provider body 和 stack trace 不进入 UI、构建产物或报告。
 - 票据文件、完整数据库、route cache 和 cloud token 默认不发送给 AI。
@@ -52,6 +56,8 @@
 - `cloud_ticket_blobs` 双 SELECT policy 需预览环境等价合并。
 - 低使用率索引需真实负载证据后再决定是否删除。
 - Action Gateway 后续动作、统一 undo/history 和更完整的跨模块事务属于后续版本。
+- 当前账号同步不是路线图 v5 的 Realtime Cloud Core；需要 revision、mutation ID、server ack 和订阅矩阵。
+- 当前实时 Provider 覆盖有限，不能承诺天气、航班、铁路、票务或实时交通完整性。
 
 ## 回滚
 

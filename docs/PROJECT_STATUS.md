@@ -1,10 +1,10 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-07-28
+更新时间：2026-07-29
 
 ## 发布判断
 
-旅图当前处于 **Limited Beta Release Candidate**。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 provider proxy 已形成完整主路径；通用 AI 动作网关已覆盖可逆删除、现场进度、重排偏好和突发情况自适应重排，PWA 多标签升级、弱网恢复和离线编辑恢复在线后的账号同步保持自动化回归。
+旅图当前代码处于 **Limited Beta Release Candidate**，同时已经切换到“实时在线、AI 优先”的下一阶段产品战略。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -15,13 +15,22 @@
 
 ## 产品定位
 
-旅图是面向出境旅行的本地优先行程工具。用户打开应用首先看到行程、当天安排和票据，而不是大段建议或系统说明。
+旅图是面向出境旅行的 **实时在线、AI 优先旅行操作系统**。用户打开应用首先看到行程、当天安排、票据和实时变化，也可以直接用一句话让 AI 完成查询与操作，而不是阅读大段建议或寻找分散功能。
 
-- IndexedDB 是此设备离线缓存与首写层。
-- Supabase 提供账号隔离、对象同步、票据文件和共享旅行能力。
-- PWA 缓存 app shell，不承诺地图、搜索、路线或云端能力离线可用。
-- AI、地点、搜索和路线通过后端 provider proxy；写入和高成本动作保留确认边界。
-- 旅图不是订票平台、完整导航软件，也不把无来源的模型回答包装成实时事实。
+- **Target:** Supabase/Postgres 是账号事实源，Realtime 推送跨设备、协作和 AI job 变化。
+- **Target:** AI Action Gateway 是默认操作层，自动完成只读查询，并对组合写入只要求一次风险匹配的确认。
+- **Target:** 地点、路线、交通、天气、航班/铁路和票务事实统一携带来源、观测时间和有效期。
+- **Current:** IndexedDB 仍是首写层，Supabase 负责对象同步、票据文件、恢复和 Shared Trip；后续改为云端提交优先，本机只作边缘缓存和失败 outbox。
+- **Current:** PWA 缓存 app shell 和核心页面，地图、实时 Provider 和云端能力依赖网络。
+- Provider key、权限、schema、幂等和高风险确认继续由系统强制，但不作为普通用户主界面的主要内容。
+
+## UI 状态
+
+- **Current:** 当前界面属于 UI V2 收敛版，已经具备设置折叠、真实图片缩略图、长文本防溢出、全局 AI 动作结果自动收起和 390px E2E 基线。
+- **Current:** App Shell 仍同时包含全局顶栏、底部五项导航和常驻全局 AI 输入；Trip、Documents 等页面仍存在重复导航和首屏信息密度问题。
+- **Current:** Home、Trip Workspace、Item Detail、Ticket Library、Travel Inbox、Settings 和 Global AI 的主要页面/组件仍较大，展示状态与业务状态耦合。
+- **Target:** [UI V3 重构规范](UI_REFACTOR_V3.md) 已锁定工具链、设计权威、四项主导航、按需 AI Action Sheet、视觉 Tokens、响应式布局、无障碍和验收门槛。
+- **Target:** UI V3 尚未实现，不能把四项导航、Toolbar AI、桌面主从布局或 V3 Golden Screenshots 描述为当前能力。
 
 ## 当前主路径
 
@@ -53,11 +62,11 @@
 - 账号旅行离线编辑先保存在 IndexedDB 和对象 outbox；恢复在线后由现有 `online` 事件自动续传同一快照和对象变更，不追加重复快照。
 - PWA 发现新版本后提示用户刷新，不在未确认时强制重载。
 
-## AI 与 Provider 边界
+## AI 与实时能力
 
 当前全局 AI 是“自然语言规划 + 版本化动作注册表”，不是可以任意调用内部函数的自主代理。
 
-- 本地确定性识别优先；必要时 `ai_action_plan` 只返回已登记动作和语义参数。
+- 当前先做确定性识别，必要时调用 `ai_action_plan`；目标架构由 AI 统一规划，再由注册表、权限和状态版本决定是否执行。
 - 本地校验拒绝未知动作、未知字段、依赖循环、超过 6 步的计划、歧义目标和敏感字段。
 - 只读导航可自动执行；任何本地写入都先生成真实预览，再经过一次最终确认。
 - 计划带旅行状态指纹和幂等键；旅行变化后拒绝旧计划，部分失败只重试失败步骤。
@@ -67,6 +76,13 @@
 - 实时营业时间、票价、闭馆、交通中断、评价和活动必须有来源；无来源就不作事实声明。
 - AI 默认不发送票据文件、完整本地数据库、route cache、cloud token 或 provider secret。
 - V1 不支持批量/整趟删除、取消预订、付款、发邮件、修改云端权限或调用任意函数。
+
+下一阶段：
+
+- 增加服务端 action catalog、异步 job、实时进度和跨设备幂等。
+- 让只读 Place / Route / Search / Weather / Flight / Rail 查询按用户指令自动执行。
+- 建立 `RealtimeFact`，统一 source、observedAt、expiresAt 和 confidence。
+- 将低风险可逆写入合并为一次确认；付款、取消订单、发消息和权限修改继续单独确认。
 
 ## 工程基线
 
@@ -90,6 +106,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 ## 云端状态
 
+- 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。
@@ -104,6 +121,8 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 ## 已知发布风险
 
+- 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
+- AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
 - iPhone Safari、Android Chrome 和安装到主屏幕后的实体机回归仍需人工完成。
 - MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验仍待记录。
 - 浏览器旧 service worker 可能显示旧 UI；当前版本改为显式更新提示，仍需生产升级观察。
@@ -113,9 +132,13 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 ## 文档入口
 
-- 当前路线图：[ROADMAP_V4.md](ROADMAP_V4.md)
+- 产品战略：[PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md)
+- 当前路线图：[ROADMAP_V5.md](ROADMAP_V5.md)
+- UI V3 规范：[UI_REFACTOR_V3.md](UI_REFACTOR_V3.md)
+- Design System：[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)
+- 历史路线图：[ROADMAP_V4.md](ROADMAP_V4.md)
 - Beta 验收：[LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md)
 - QA 记录：[BETA_QA_RECORD.md](BETA_QA_RECORD.md)
 - Provider 合同：[PROVIDER_PROXY.md](PROVIDER_PROXY.md)
-- Supabase 同步边界：[SUPABASE_CLOUD_BACKUP.md](SUPABASE_CLOUD_BACKUP.md)
+- Supabase 实时云端平台：[SUPABASE_CLOUD_BACKUP.md](SUPABASE_CLOUD_BACKUP.md)
 - 时间语义：[TIMEZONE_AUDIT.md](TIMEZONE_AUDIT.md)

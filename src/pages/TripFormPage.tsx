@@ -222,7 +222,8 @@ export function TripFormPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label={isEdit ? '返回旅行工作台' : '返回首页'}
-            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
+            data-testid="trip-form-cancel"
             onClick={handleCancel}
             type="button"
           >
@@ -237,36 +238,26 @@ export function TripFormPage() {
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar">
         <div className="page-transition">
-          <Card variant="grouped">
-            <form className="space-y-3" onSubmit={(e) => void handleSubmit(e)}>
+            <form className="space-y-5" id="trip-form" onSubmit={(e) => void handleSubmit(e)}>
               {error ? (
-                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{error}</p>
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-950/35 dark:text-red-300">{error}</p>
               ) : null}
-              <FormField
-                label="旅行标题"
-                onChange={(value) => setForm((current) => ({ ...current, title: value }))}
-                placeholder="例如：东京春日旅行"
-                required
-                value={form.title}
-              />
-              <FormField
-                label="目的地"
-                onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
-                placeholder="例如：日本东京"
-                value={form.destination}
-              />
-              <TimeZoneSelect
-                description={timeZoneMessage ?? '用于判断旅行当地的今天和当前时间'}
-                label="默认时区"
-                onChange={(value) => {
-                  setTimeZoneManuallyEdited(true)
-                  setTimeZoneMessage('已手动设置，目的地变化不会自动覆盖。')
-                  setForm((current) => ({ ...current, timeZone: value, timeZoneSource: 'manual' }))
-                }}
-                source={form.timeZoneSource}
-                value={form.timeZone}
-              />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <section className="space-y-3" aria-labelledby="trip-form-basic">
+                <h2 className="text-sm font-semibold text-on-surface" id="trip-form-basic">基本信息</h2>
+                <FormField
+                  label="旅行标题"
+                  onChange={(value) => setForm((current) => ({ ...current, title: value }))}
+                  placeholder="例如：东京春日旅行"
+                  required
+                  value={form.title}
+                />
+                <FormField
+                  label="目的地"
+                  onChange={(value) => setForm((current) => ({ ...current, destination: value }))}
+                  placeholder="例如：日本东京"
+                  value={form.destination}
+                />
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   label="开始日期"
                   onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
@@ -282,41 +273,51 @@ export function TripFormPage() {
                   value={form.endDate}
                 />
               </div>
-              <label className="block">
-                <span className={FIELD_LABEL_CLASS}>备注</span>
-                <textarea
-                  className={`${FIELD_TEXTAREA_CLASS} min-h-24 resize-none`}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, notes: event.target.value }))
-                  }
-                  placeholder="可选：酒店、航班或旅行说明"
-                  value={form.notes}
-                />
-              </label>
+              </section>
+              <details className="group rounded-lg border border-outline-variant/35 bg-surface-container px-3 py-2">
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">更多设置</summary>
+                <div className="space-y-3 border-t border-outline-variant/25 pt-3">
+                  <TimeZoneSelect
+                    description={timeZoneMessage ?? '用于旅行当地时间'}
+                    label="默认时区"
+                    onChange={(value) => {
+                      setTimeZoneManuallyEdited(true)
+                      setTimeZoneMessage('已手动设置。')
+                      setForm((current) => ({ ...current, timeZone: value, timeZoneSource: 'manual' }))
+                    }}
+                    source={form.timeZoneSource}
+                    value={form.timeZone}
+                  />
+                  <label className="block">
+                    <span className={FIELD_LABEL_CLASS}>备注</span>
+                    <textarea
+                      className={`${FIELD_TEXTAREA_CLASS} min-h-24 resize-none`}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, notes: event.target.value }))
+                      }
+                      placeholder="酒店、航班或旅行说明"
+                      value={form.notes}
+                    />
+                  </label>
+                </div>
+              </details>
               {formError ? (
-                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300 ring-1 ring-red-100/80 dark:bg-red-950/35 dark:text-red-300 dark:ring-red-900/50">{formError}</p>
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-950/35 dark:text-red-300">{formError}</p>
               ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  data-testid="trip-form-cancel"
-                  onClick={handleCancel}
-                  type="button"
-                  variant="secondary"
-                >
-                  取消
-                </Button>
-                <Button
-                  data-testid="trip-form-submit"
-                  loading={isSubmitting}
-                  type="submit"
-                >
-                  {isEdit ? '保存修改' : '保存旅行'}
-                </Button>
-              </div>
             </form>
-          </Card>
         </div>
       </main>
+      <footer className="shrink-0 border-t border-outline-variant/30 bg-surface px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+        <Button
+          className="w-full"
+          data-testid="trip-form-submit"
+          form="trip-form"
+          loading={isSubmitting}
+          type="submit"
+        >
+          {isEdit ? '保存修改' : '保存旅行'}
+        </Button>
+      </footer>
     </div>
   )
 }

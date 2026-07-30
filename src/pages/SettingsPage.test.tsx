@@ -163,12 +163,15 @@ describe('SettingsPage', () => {
     })
 
     expect(container?.textContent).toBeTruthy()
-    expect(container?.textContent).toContain('设置')
+    expect(container?.textContent).toContain('账户与同步')
+    expect(container?.textContent).toContain('旅行偏好')
+    expect(container?.textContent).toContain('应用与通知')
+    expect(container?.textContent).toContain('数据与高级')
   })
 
   it('renders appearance section', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="app" />)
     })
 
     expect(container?.textContent).toContain('外观')
@@ -177,7 +180,7 @@ describe('SettingsPage', () => {
 
   it('renders travel profile section', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="preferences" />)
     })
 
     expect(container?.textContent).toContain('旅行偏好')
@@ -185,7 +188,7 @@ describe('SettingsPage', () => {
 
   it('renders AI privacy section', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="advanced" />)
     })
 
     expect(container?.textContent).toContain('AI 与隐私')
@@ -193,7 +196,7 @@ describe('SettingsPage', () => {
 
   it('renders cloud backup panel', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="account" />)
     })
 
     expect(container?.querySelector('[data-testid="cloud-backup-panel"]')).toBeTruthy()
@@ -201,7 +204,7 @@ describe('SettingsPage', () => {
 
   it('renders route cache section', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="advanced" />)
     })
 
     expect(container?.textContent).toContain('路线缓存')
@@ -209,7 +212,7 @@ describe('SettingsPage', () => {
 
   it('renders app version', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="advanced" />)
     })
 
     expect(container?.querySelector('[data-testid="app-version"]')).toBeTruthy()
@@ -225,7 +228,7 @@ describe('SettingsPage', () => {
     })
 
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="app" />)
     })
 
     expect(container?.textContent).toContain('应用更新：有新版本可更新')
@@ -235,7 +238,7 @@ describe('SettingsPage', () => {
 
   it('renders import trip plan section', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="advanced" />)
     })
 
     expect(container?.textContent).toContain('导入行程')
@@ -243,23 +246,23 @@ describe('SettingsPage', () => {
 
   it('renders travel inbox toggle', async () => {
     await act(async () => {
-      root?.render(<SettingsPage />)
+      root?.render(<SettingsPage section="advanced" />)
     })
 
     expect(container?.textContent).toContain('旅行收件箱')
   })
 
-  it('navigates back to home', async () => {
+  it('opens a second-level settings page', async () => {
     await act(async () => {
       root?.render(<SettingsPage />)
     })
 
-    const backButton = container?.querySelector('button[aria-label="返回"]')
-      ?? Array.from(container?.querySelectorAll('button') ?? []).find((b) => b.textContent?.includes('返回'))
-    if (backButton) {
-      await act(async () => {
-        backButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      })
-    }
+    const accountButton = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.includes('账户与同步'))
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith('settings/account')
   })
 })

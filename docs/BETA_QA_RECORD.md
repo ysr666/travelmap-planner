@@ -1,5 +1,7 @@
 # Limited Beta QA 记录
 
+> **历史记录：** 本文是各版本验证凭据，只描述测试发生时的实现。当前产品战略与未来规划见 [产品战略](PRODUCT_STRATEGY.md)、[Roadmap V5](ROADMAP_V5.md) 和 [UI V3](UI_REFACTOR_V3.md)。
+
 最新记录：2026-07-28
 
 ## 2026-07-28 历史生产 PWA 迁移矩阵

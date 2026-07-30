@@ -4,9 +4,9 @@ import { createDemoTripViaUi, expectNoHorizontalOverflow } from './helpers'
 test('本机搜索可筛选行程点并进入准确详情', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
 
-  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await page.goto(`/#/search?tripId=${tripId}&from=trip`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/#\/search/)
-  await expect(page.getByRole('heading', { name: '找任何东西' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '搜索', exact: true })).toBeVisible()
   await expect(page.getByTestId('search-filter-trip')).toContainText('1')
   await expect(page.getByTestId('search-filter-item')).toContainText('5')
 

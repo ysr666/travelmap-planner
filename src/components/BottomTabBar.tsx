@@ -1,6 +1,7 @@
-import { Compass, Home, Inbox, Search, Settings } from 'lucide-react'
+import { CalendarDays, Inbox, MapPinned, UserRound } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
+import { getPrimaryDestination, type PrimaryDestination } from './shell/routePresentation'
 
 type BottomTabBarProps = {
   activeRoute: RouteId
@@ -8,33 +9,41 @@ type BottomTabBarProps = {
 }
 
 const tabs = [
-  { id: 'home' as RouteId, label: '首页', icon: Home },
-  { id: 'trip' as RouteId, label: '行程', icon: Compass },
-  { id: 'inbox' as RouteId, label: '收件箱', icon: Inbox },
-  { id: 'search' as RouteId, label: '搜索', icon: Search },
-  { id: 'settings' as RouteId, label: '设置', icon: Settings },
+  { id: 'home' as PrimaryDestination, label: '今日', icon: MapPinned },
+  { id: 'trip' as PrimaryDestination, label: '行程', icon: CalendarDays },
+  { id: 'inbox' as PrimaryDestination, label: '收件箱', icon: Inbox },
+  { id: 'settings' as PrimaryDestination, label: '我的', icon: UserRound },
 ]
 
 export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
+  const activeDestination = getPrimaryDestination(activeRoute)
+
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-50 mx-auto flex h-[4.75rem] items-center justify-between border-t-[0.5px] border-outline-variant/70 bg-surface/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">
+    <nav aria-label="主导航" className="primary-navigation" data-testid="primary-navigation">
+      <div className="primary-navigation-brand" aria-hidden="true">
+        <MapPinned className="size-5" />
+        <span>旅图</span>
+      </div>
       {tabs.map((tab) => {
         const Icon = tab.icon
-        const isActive = getActiveTab(activeRoute) === tab.id
+        const isActive = activeDestination === tab.id
         return (
           <button
             key={tab.id}
+            aria-current={isActive ? 'page' : undefined}
             aria-label={tab.label}
-            className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-lg px-1 py-1 transition active:scale-95 tm-focus ${
+            className={`primary-navigation-item tm-focus ${
               isActive
-                ? 'bg-primary-fixed text-on-primary-fixed'
-                : 'text-on-surface-variant hover:text-on-surface'
+                ? 'primary-navigation-item-active'
+                : ''
             }`}
             onClick={() => navigateToTab(tab.id, lastTripId)}
             type="button"
           >
-            <Icon className="size-5 mb-1" />
-            <span className="max-w-full truncate text-[11px] font-semibold leading-4">{tab.label}</span>
+            <span className="primary-navigation-icon">
+              <Icon className="size-5" />
+            </span>
+            <span className="primary-navigation-label">{tab.label}</span>
           </button>
         )
       })}
@@ -42,20 +51,7 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
   )
 }
 
-function getActiveTab(activeRoute: RouteId): RouteId {
-  if (activeRoute === 'day' || activeRoute === 'tickets' || activeRoute === 'documents') {
-    return 'trip'
-  }
-  if (activeRoute === 'ai-draft') {
-    return 'search'
-  }
-  if (activeRoute === 'settings/privacy' || activeRoute === 'settings/maps' || activeRoute === 'settings/route') {
-    return 'settings'
-  }
-  return activeRoute
-}
-
-function navigateToTab(tabId: RouteId, lastTripId?: string | null) {
+function navigateToTab(tabId: PrimaryDestination, lastTripId?: string | null) {
   if (tabId === 'trip') {
     const params = new URLSearchParams(window.location.hash.replace(/^#\/?/, '').split('?')[1] ?? '')
     const tripId = params.get('tripId') ?? lastTripId

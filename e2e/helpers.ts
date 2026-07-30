@@ -40,24 +40,26 @@ export async function clearTravelDatabase(page: Page) {
   })
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible({ timeout: 15_000 })
 }
 
 export async function createDemoTripViaUi(page: Page) {
   await clearTravelDatabase(page)
-  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '创建示例旅行' }).click()
 
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
   await expect(tripCard).toBeVisible()
   await clickTripCard(tripCard)
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
-  await page.getByRole('button', { name: /抵达与涩谷/ }).click()
+  const tripId = getHashParam(page.url(), 'tripId')
+  const { dayId } = await getFirstTripDayAndItemIds(page, tripId)
+  await page.goto(`/#/day?tripId=${tripId}&dayId=${dayId}&view=schedule`, { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
 
-  return getHashParam(page.url(), 'tripId')
+  return tripId
 }
 
 export async function clickTripCard(tripCard: Locator) {
@@ -71,6 +73,12 @@ export async function clickTripCard(tripCard: Locator) {
   const legacyOpenButton = tripCard.getByRole('button').filter({ hasText: '东京春日旅行' })
   if (await legacyOpenButton.count()) {
     await legacyOpenButton.first().click()
+    return
+  }
+
+  const tripDestination = tripCard.page().getByRole('button', { exact: true, name: '行程' })
+  if (await tripDestination.count()) {
+    await tripDestination.click()
     return
   }
 
@@ -230,11 +238,9 @@ export function getHashParam(url: string, key: string) {
 }
 
 export async function openDetailsSection(page: Page, title: string) {
-  const section = page.locator('details').filter({
-    has: page.locator('summary').filter({ hasText: title }),
-  }).first()
-  const summary = section.locator(':scope > summary')
+  const summary = page.locator('details > summary').filter({ hasText: title }).first()
   await expect(summary).toBeVisible()
+  const section = summary.locator('..')
   const isOpen = await section.evaluate((element) => (element as HTMLDetailsElement).open)
   if (!isOpen) {
     await summary.click()

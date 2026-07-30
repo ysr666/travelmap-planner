@@ -25,7 +25,7 @@ export function BottomSheet({
   children,
   maxHeight = 'calc(100dvh - 2rem)',
   showHandle = true,
-  zIndex = 50,
+  zIndex = 120,
 }: BottomSheetProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)

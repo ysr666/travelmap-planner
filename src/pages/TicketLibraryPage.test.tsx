@@ -302,7 +302,7 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('票据库')
+    expect(container?.textContent).toContain('暂无票据')
   })
 
   it('renders trip not found state', async () => {
@@ -340,7 +340,7 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('票据库')
+    expect(container?.textContent).toContain('机票确认')
   })
 
   it('opens the routed ticket preview after the attachment gallery loads', async () => {
@@ -548,7 +548,7 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('票据总览')
+    expect(container?.textContent).toContain('东京旅行 · 3 张')
     expect(container?.textContent).toContain('行程点票据')
     expect(container?.textContent).toContain('旅行级票据')
     expect(container?.textContent).toContain('未分类')
@@ -606,16 +606,24 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
+    const filterButton = container?.querySelector<HTMLButtonElement>('button[aria-label="筛选和排序票据"]')
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>('[data-testid="ticket-stat-external"]')?.click()
+      filterButton?.click()
+    })
+    const externalFilter = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent === '外部链接')
+    await act(async () => {
+      externalFilter?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('外部链接：1 张')
     expect(container?.querySelector('[data-testid="ticket-gallery"]')?.textContent).toContain('外部订单')
     expect(container?.querySelector('[data-testid="ticket-gallery"]')?.textContent).not.toContain('机票确认')
 
+    const allFilter = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent === '全部')
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>('[data-testid="ticket-stat-all"]')?.click()
+      allFilter?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(container?.querySelector('[data-testid="ticket-filter-summary"]')?.textContent).toContain('全部票据：3 张')
@@ -658,8 +666,7 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    const editButton = Array.from(container?.querySelectorAll('button') ?? [])
-      .find((button) => button.getAttribute('aria-label') === '编辑机票确认')
+    const editButton = container?.querySelector<HTMLButtonElement>('[data-testid="ticket-card"] details button')
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -737,7 +744,7 @@ describe('TicketLibraryPage', () => {
     await act(async () => {
       await vi.runAllTimersAsync()
     })
-    const previewButton = container?.querySelector<HTMLButtonElement>('button[aria-label="查看收据"]')
+    const previewButton = container?.querySelector<HTMLButtonElement>('button[aria-label="预览收据"]')
     await act(async () => {
       previewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })

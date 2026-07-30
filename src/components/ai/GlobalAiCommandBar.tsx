@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowUpRight, Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { ArrowUpRight, Bot, CheckCircle2, ChevronDown, Loader2, MessagesSquare, ReceiptText, RotateCcw, Route, Send, ShieldCheck, Sparkles, Trash2, Wand2, X } from 'lucide-react'
 import { createTripDisruptionEvent, updateItineraryItem } from '../../db'
 import {
   applyAiTripEditPatchPlanToDb,
@@ -69,7 +69,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 
 type GlobalAiCommandBarProps = {
   activeRoute: RouteId
-  hasBottomTab: boolean
+  onOpenChange: (open: boolean) => void
+  open: boolean
 }
 
 type PendingAiTripEdit = {
@@ -122,7 +123,7 @@ const HIDDEN_ROUTES = new Set<RouteId>([
 
 const NO_SEARCH_WARNING = '没有可用来源时不会声明实时事实；本次未取得来源结果。'
 
-export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiCommandBarProps) {
+export function GlobalAiCommandBar({ activeRoute, onOpenChange, open }: GlobalAiCommandBarProps) {
   const providerConfig = useMemo(() => getProviderProxyConfig(), [])
   const [command, setCommand] = useState('')
   const [loading, setLoading] = useState(false)
@@ -145,6 +146,8 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const [actionGateway, setActionGateway] = useState<AiActionGatewayState | null>(null)
   const actionGatewayBusyRef = useRef(false)
   const actionGatewayRef = useRef<AiActionGatewayState | null>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const commandRef = useRef<HTMLTextAreaElement>(null)
   actionGatewayRef.current = actionGateway
 
   const trimmedCommand = command.trim()
@@ -152,7 +155,17 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   const selectedReplanOption = result?.kind === 'replan_preview'
     ? result.record.options.find((option) => option.id === selectedReplanOptionId) ?? result.record.options[0]
     : null
-  const panelOpen = Boolean(expanded || error || success || result || aiPreview || actionGateway || loading)
+  const hasOutput = Boolean(expanded || error || success || result || aiPreview || actionGateway || loading)
+  const dismissPanel = useCallback(() => {
+    setExpanded(false)
+    setError(null)
+    setSuccess(null)
+    setResult(null)
+    setAiPreview(null)
+    setActionGateway(null)
+    setLastFailedCommand(null)
+    onOpenChange(false)
+  }, [onOpenChange])
 
   useEffect(() => {
     let cancelled = false
@@ -175,7 +188,39 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     }
   }, [activeRoute, contextMode])
 
-  if (hidden) return null
+  useEffect(() => {
+    if (!open) return
+    const frame = window.requestAnimationFrame(() => commandRef.current?.focus())
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        if (aiSendConfirmOpen || aiApplyConfirmOpen || writeConfirmOpen) return
+        event.preventDefault()
+        dismissPanel()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = getFocusableElements(sheetRef.current)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [aiApplyConfirmOpen, aiSendConfirmOpen, dismissPanel, open, writeConfirmOpen])
+
+  if (hidden || !open) return null
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -219,7 +264,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
               tone: actionRun.status === 'completed' ? 'success' : 'error',
               type: 'assistant',
             })
-            applyActionEffects(actionRun.effects)
+            const navigated = applyActionEffects(actionRun.effects)
             if (actionRun.status !== 'completed' || actionRun.effects.length === 0) {
               setActionGateway({
                 attemptCount: 1,
@@ -232,7 +277,7 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
               })
             } else {
               setCommand('')
-              dismissPanel()
+              if (navigated) dismissPanel()
             }
           } else {
             setActionGateway({
@@ -577,13 +622,14 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
         type: 'assistant',
       })
-      applyActionEffects(actionRun.effects)
-      if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
+        const navigated = applyActionEffects(actionRun.effects)
+        if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
         setCommand('')
-        setActionGateway((current) =>
-          current?.prepared.executionId === executionId ? null : current)
-        setExpanded(false)
-      }
+          setActionGateway((current) =>
+            current?.prepared.executionId === executionId ? null : current)
+          setExpanded(false)
+          if (navigated) dismissPanel()
+        }
     } catch (caught) {
       if (actionGatewayRef.current?.prepared.executionId === executionId) {
         setError(caught instanceof Error ? caught.message : '动作执行失败。')
@@ -662,12 +708,13 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
         tone: actionRun.status === 'completed' ? 'success' : actionRun.status === 'failed' ? 'error' : 'normal',
         type: 'assistant',
       })
-      applyActionEffects(actionRun.effects)
+      const navigated = applyActionEffects(actionRun.effects)
       if (actionRun.status === 'completed' && actionRun.effects.length > 0) {
         setCommand('')
         setActionGateway((current) =>
           current?.prepared.executionId === executionId ? null : current)
         setExpanded(false)
+        if (navigated) dismissPanel()
       }
     } catch (caught) {
       if (actionGatewayRef.current?.prepared.executionId === executionId) {
@@ -686,16 +733,6 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
     setActionGateway(null)
     setPendingAi(null)
     setSelectedReplanOptionId(null)
-  }
-
-  function dismissPanel() {
-    setExpanded(false)
-    setError(null)
-    setSuccess(null)
-    setResult(null)
-    setAiPreview(null)
-    setActionGateway(null)
-    setLastFailedCommand(null)
   }
 
   function appendConversationMessage(input: Omit<ConversationMessage, 'createdAt' | 'id'>) {
@@ -724,129 +761,169 @@ export function GlobalAiCommandBar({ activeRoute, hasBottomTab }: GlobalAiComman
   function handleNavigation(result: Extract<GlobalAiInteractionResult, { kind: 'navigation' }> | Extract<GlobalAiInteractionResult, { kind: 'ledger_summary' }>) {
     if (result.kind === 'ledger_summary') {
       navigateTo('ledger', result.params)
+      dismissPanel()
       return
     }
     navigateTo(result.route, result.params)
     if (result.scrollTargetId) {
       scrollToNavigationTarget(result.scrollTargetId)
     }
+    dismissPanel()
   }
 
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-x-3 z-40 mx-auto max-w-[576px] ${hasBottomTab ? 'bottom-[4.75rem]' : 'bottom-4'}`}
+        className="ai-action-layer"
         data-testid="global-ai-command-bar"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !loading && !applying) dismissPanel()
+        }}
       >
-        {panelOpen ? (
-          <div className="pointer-events-auto mb-2 max-h-[32dvh] overflow-y-auto rounded-lg border border-outline-variant/70 bg-surface/95 p-3 shadow-[0_16px_36px_rgba(20,37,32,0.16)] backdrop-blur-xl app-scrollbar sm:max-h-[52dvh]">
-            <div className="mb-2 flex justify-end">
-              <button
-                aria-label="收起 AI 结果"
-                className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant transition active:scale-95 tm-focus"
-                disabled={loading || applying}
-                onClick={dismissPanel}
-                type="button"
-              >
-                <ChevronDown className="size-4" />
-              </button>
-            </div>
-            {expanded ? (
-              <ConversationPanel
-                contextMode={contextMode}
-                failureRecords={failureRecords}
-                messages={conversation}
-                onClear={() => {
-                  setConversation([])
-                  setFailureRecords([])
-                  setError(null)
-                  setSuccess(null)
-                  setResult(null)
-                  setAiPreview(null)
-                  setActionGateway(null)
-                }}
-                onContextModeChange={setContextMode}
-              />
-            ) : null}
-            {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在处理…" /> : null}
-            {error ? (
-              <div className="space-y-2">
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p>
-                <FailureRecovery
-                  canRetry={Boolean(lastFailedCommand)}
-                  onClear={() => {
-                    setError(null)
-                    setLastFailedCommand(null)
-                  }}
-                  onConsult={() => lastFailedCommand && void runCommand(lastFailedCommand, { forceAssistant: true })}
-                  onHome={() => navigateTo('home')}
-                  onRetry={() => lastFailedCommand && void runCommand(lastFailedCommand)}
-                />
-              </div>
-            ) : null}
-            {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
-            {actionGateway ? (
-              <ActionGatewayView
-                actionGateway={actionGateway}
-                applying={applying}
-                loading={loading}
-                onConfirm={() => void confirmActionGateway()}
-                onManualEntry={(entry) => applyActionEffects([entry])}
-                onRetry={() => void retryActionGateway()}
-              />
-            ) : null}
-            {result ? (
-              <CommandResultView
-                onNavigate={handleNavigation}
-                onRequestWrite={() => setWriteConfirmOpen(true)}
-                onSelectReplanOption={setSelectedReplanOptionId}
-                result={result}
-                selectedReplanOptionId={selectedReplanOptionId}
-              />
-            ) : null}
-            {aiPreview ? (
-              <AiPreviewView
-                aiPreview={aiPreview}
-                onApply={() => setAiApplyConfirmOpen(true)}
-                onDiscard={() => setAiPreview(null)}
-              />
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="pointer-events-none mb-1 flex max-w-full items-center gap-1.5 overflow-hidden px-1 text-[11px] font-semibold text-on-surface-variant" data-testid="global-ai-context-label">
-          <span className="min-w-0 truncate rounded-lg bg-surface-container px-2 py-1 text-on-surface shadow-[0_1px_2px_rgba(20,37,32,0.05)]">{contextLabel}</span>
-        </div>
-        <form
-          className="pointer-events-auto flex min-h-12 items-center gap-2 rounded-lg border border-outline-variant/70 bg-surface/95 px-2 py-1.5 shadow-[0_12px_28px_rgba(20,37,32,0.14)] backdrop-blur-xl"
-          onSubmit={(event) => void handleSubmit(event)}
+        <div
+          aria-labelledby="global-ai-sheet-title"
+          aria-modal="true"
+          className={`ai-action-sheet ${hasOutput ? 'ai-action-sheet-expanded' : ''}`}
+          ref={sheetRef}
+          role="dialog"
         >
-          <button
-            aria-label={expanded ? '收起 AI 会话' : '展开 AI 会话'}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary transition active:scale-95 tm-focus"
-            onClick={() => setExpanded((value) => !value)}
-            type="button"
+          <div className="ai-action-sheet-handle" aria-hidden="true" />
+          <header className="flex min-w-0 items-center gap-2 border-b border-outline-variant px-4 pb-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[17px] font-semibold leading-6 text-on-surface" id="global-ai-sheet-title">
+                AI 助手
+              </h2>
+              <span
+                className="block truncate text-xs leading-5 text-on-surface-variant"
+                data-testid="global-ai-context-label"
+              >
+                {contextLabel}
+              </span>
+            </div>
+            <button
+              aria-label={contextMode === 'current_page' ? '切换到全部旅行' : '切换到当前页面'}
+              className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-on-surface-variant tm-focus"
+              onClick={() => setContextMode((mode) => mode === 'current_page' ? 'account' : 'current_page')}
+              type="button"
+            >
+              <span>{contextMode === 'current_page' ? '当前页面' : '全部旅行'}</span>
+              <ChevronDown className="size-4" />
+            </button>
+            <button
+              aria-label="关闭 AI 助手"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
+              disabled={loading || applying}
+              onClick={dismissPanel}
+              type="button"
+            >
+              <X className="size-5" />
+            </button>
+          </header>
+
+          <form
+            className="flex items-end gap-2 border-b border-outline-variant px-4 py-3"
+            onSubmit={(event) => void handleSubmit(event)}
           >
-            {expanded ? <ChevronDown className="size-4" /> : <MessagesSquare className="size-4" />}
-          </button>
-          <input
-            aria-label="全局 AI 指令"
-            className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/70"
-            disabled={loading || applying}
-            maxLength={1000}
-            onChange={(event) => setCommand(event.currentTarget.value)}
-            placeholder="告诉我你想做什么"
-            value={command}
-          />
-          <button
-            aria-label="发送 AI 指令"
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition active:scale-95 disabled:opacity-50 tm-focus"
-            disabled={!trimmedCommand || loading || applying}
-            type="submit"
-          >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </button>
-        </form>
+            <textarea
+              aria-label="全局 AI 指令"
+              className="max-h-28 min-h-12 min-w-0 flex-1 resize-none rounded-lg border border-outline-variant bg-surface-container px-3 py-3 text-[15px] leading-[22px] text-on-surface outline-none placeholder:text-on-surface-variant/70 focus:border-primary focus:ring-2 focus:ring-primary/20"
+              disabled={loading || applying}
+              maxLength={1000}
+              onChange={(event) => setCommand(event.currentTarget.value)}
+              placeholder="找票据、补地点或修复行程"
+              ref={commandRef}
+              rows={1}
+              value={command}
+            />
+            <button
+              aria-label="发送 AI 指令"
+              className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition active:scale-95 disabled:opacity-50 tm-focus"
+              disabled={!trimmedCommand || loading || applying}
+              type="submit"
+            >
+              {loading ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+            </button>
+          </form>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 app-scrollbar">
+            <div className="space-y-3">
+              {conversation.length > 0 ? (
+                <button
+                  aria-expanded={expanded}
+                  className="flex min-h-11 w-full items-center justify-between gap-2 border-b border-outline-variant text-left text-xs font-semibold text-on-surface-variant tm-focus"
+                  onClick={() => setExpanded((value) => !value)}
+                  type="button"
+                >
+                  <span className="flex items-center gap-2">
+                    <MessagesSquare className="size-4" />
+                    最近会话
+                  </span>
+                  <ChevronDown className={`size-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                </button>
+              ) : null}
+              {expanded ? (
+                <ConversationPanel
+                  contextMode={contextMode}
+                  failureRecords={failureRecords}
+                  messages={conversation}
+                  onClear={() => {
+                    setConversation([])
+                    setFailureRecords([])
+                    setError(null)
+                    setSuccess(null)
+                    setResult(null)
+                    setAiPreview(null)
+                    setActionGateway(null)
+                  }}
+                  onContextModeChange={setContextMode}
+                />
+              ) : null}
+              {loading ? <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="正在处理…" /> : null}
+              {error ? (
+                <div className="space-y-2">
+                  <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-600 dark:bg-red-500/10 dark:text-red-300">{error}</p>
+                  <FailureRecovery
+                    canRetry={Boolean(lastFailedCommand)}
+                    onClear={() => {
+                      setError(null)
+                      setLastFailedCommand(null)
+                    }}
+                    onConsult={() => lastFailedCommand && void runCommand(lastFailedCommand, { forceAssistant: true })}
+                    onHome={() => navigateTo('home')}
+                    onRetry={() => lastFailedCommand && void runCommand(lastFailedCommand)}
+                  />
+                </div>
+              ) : null}
+              {success ? <StatusLine icon={<CheckCircle2 className="size-4" />} tone="success" text={success} /> : null}
+              {actionGateway ? (
+                <ActionGatewayView
+                  actionGateway={actionGateway}
+                  applying={applying}
+                  loading={loading}
+                  onConfirm={() => void confirmActionGateway()}
+                  onManualEntry={(entry) => applyActionEffects([entry])}
+                  onRetry={() => void retryActionGateway()}
+                />
+              ) : null}
+              {result ? (
+                <CommandResultView
+                  onNavigate={handleNavigation}
+                  onRequestWrite={() => setWriteConfirmOpen(true)}
+                  onSelectReplanOption={setSelectedReplanOptionId}
+                  result={result}
+                  selectedReplanOptionId={selectedReplanOptionId}
+                />
+              ) : null}
+              {aiPreview ? (
+                <AiPreviewView
+                  aiPreview={aiPreview}
+                  onApply={() => setAiApplyConfirmOpen(true)}
+                  onDiscard={() => setAiPreview(null)}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
       </div>
 
       <ConfirmDialog
@@ -1378,11 +1455,21 @@ function getInteractionSourceCardCount(result: GlobalAiInteractionResult) {
 }
 
 function applyActionEffects(effects: AiActionRunEffect[]) {
+  let navigated = false
   for (const effect of effects) {
     if (effect.kind !== 'navigate') continue
+    navigated = true
     navigateTo(effect.route, effect.params)
     if (effect.scrollTargetId) scrollToNavigationTarget(effect.scrollTargetId)
   }
+  return navigated
+}
+
+function getFocusableElements(container: HTMLElement | null) {
+  if (!container) return []
+  return Array.from(container.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
 }
 
 function scrollToNavigationTarget(targetId: string, attempt = 0) {

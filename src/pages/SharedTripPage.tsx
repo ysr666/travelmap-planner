@@ -15,6 +15,7 @@ import {
   subscribeToSharedTripRealtime,
   type CompanionSharedTripBundle,
 } from '../lib/companion'
+import { listTicketsByTrip } from '../db'
 import { getCurrentSession, signInWithEmailOtp, verifyEmailOtp } from '../lib/cloudBackup'
 import { getSupabaseConfigStatus } from '../lib/supabaseClient'
 import { describeItemTime, describePreviousTransport, sortItineraryItems } from '../lib/itinerary'
@@ -23,6 +24,7 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import { buildTripLiveModel } from '../lib/tripLiveMode'
 import { getZonedPlainDate, resolveDayTimeZone } from '../lib/timeZone'
 import { useLiveClock } from '../hooks/useLiveClock'
+import { useTripData } from '../hooks/useTripData'
 import type {
   CompanionPermission,
   ItineraryItem,
@@ -36,6 +38,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
+import { SharedTripPanel } from '../components/trip/SharedTripPanel'
 
 type SharedTicketFilePreviewState = {
   fileName: string
@@ -48,6 +51,73 @@ export function SharedTripPage() {
   const params = getRouteParams()
   const inviteToken = params.get('invite') ?? ''
   const sharedTripId = params.get('sharedTripId') ?? ''
+  const tripId = params.get('tripId') ?? ''
+
+  if (tripId) {
+    return <OwnerSharedTripPage tripId={tripId} />
+  }
+
+  return <CompanionSharedTripPage inviteToken={inviteToken} sharedTripId={sharedTripId} />
+}
+
+function OwnerSharedTripPage({ tripId }: { tripId: string }) {
+  const { days, error, isLoading, itemsByDay, trip } = useTripData({ tripId })
+  const [tickets, setTickets] = useState<TicketMeta[]>([])
+  const [ticketError, setTicketError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void listTicketsByTrip(tripId)
+      .then((nextTickets) => {
+        if (!cancelled) setTickets(nextTickets)
+      })
+      .catch(() => {
+        if (!cancelled) setTicketError('票据暂时无法读取。')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tripId])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <SkeletonLine className="w-1/2" />
+        <SkeletonLine className="w-full" />
+        <SkeletonLine className="w-2/3" />
+      </div>
+    )
+  }
+
+  if (error || !trip) {
+    return (
+      <EmptyState
+        body={error || '这趟旅行暂时无法读取。'}
+        icon={<UsersRound className="size-6" />}
+        title="无法管理同行共享"
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-4 pb-4" data-testid="shared-trip-owner-page">
+      <section className="space-y-1">
+        <h2 className="break-words text-lg font-semibold text-on-surface">{trip.title}</h2>
+        <p className="text-sm tm-muted">邀请同行查看或协作。</p>
+      </section>
+      {ticketError ? <Notice tone="error">{ticketError}</Notice> : null}
+      <SharedTripPanel days={days} itemsByDay={itemsByDay} tickets={tickets} trip={trip} />
+    </div>
+  )
+}
+
+function CompanionSharedTripPage({
+  inviteToken,
+  sharedTripId,
+}: {
+  inviteToken: string
+  sharedTripId: string
+}) {
   const [bundle, setBundle] = useState<CompanionSharedTripBundle | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -156,7 +226,7 @@ export function SharedTripPage() {
   if (!sessionReady) {
     return (
       <div className="space-y-4">
-        <SharedTripHeader title="同行共享" subtitle="登录后查看主人分享的旅行。" />
+        <SharedTripHeader title="加入同行旅行" subtitle="使用受邀邮箱登录后继续。" />
         <SharedTripLoginPanel inviteToken={inviteToken} onAuthenticated={handleAuthenticated} />
         {error ? <Notice tone="error">{error}</Notice> : null}
       </div>
@@ -678,7 +748,7 @@ function SharedTicketFilePreview({
   const isImage = preview.mimeType.startsWith('image/')
   const isPdf = preview.mimeType === 'application/pdf'
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" data-testid="shared-trip-ticket-file-preview">
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 p-4" data-testid="shared-trip-ticket-file-preview">
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-surface shadow-2xl">
         <div className="flex items-center gap-2 border-b border-outline-variant/30 px-4 py-3">
           <Ticket className="size-4 shrink-0 text-primary" />
@@ -724,8 +794,7 @@ function SharedTicketFilePreview({
 function SharedTripHeader({ subtitle, title }: { subtitle: string; title: string }) {
   return (
     <section className="space-y-1">
-      <p className="text-xs font-semibold text-primary">Companion / Shared Trip Mode</p>
-      <h2 className="break-words text-2xl font-semibold text-on-surface">{title}</h2>
+      <h2 className="break-words text-lg font-semibold text-on-surface">{title}</h2>
       <p className="text-sm tm-muted">{subtitle}</p>
     </section>
   )

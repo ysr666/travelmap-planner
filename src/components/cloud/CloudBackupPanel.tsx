@@ -9,7 +9,6 @@ import {
   LogOut,
   Mail,
   RefreshCw,
-  ShieldAlert,
   Trash2,
   Upload,
   WifiOff,
@@ -351,27 +350,11 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             <Cloud className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-on-surface">Supabase 云端同步</h3>
+            <h3 className="text-base font-semibold text-on-surface">跨设备同步</h3>
             <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-              登录后，旅行数据和票据文件会进入自动同步队列，方便跨设备延续同一旅行。不同对象和不同字段会自动合并；同一字段冲突会先让你确认。
+              登录后自动同步旅行和已保存票据；遇到冲突时再由你确认。
             </p>
           </div>
-        </div>
-
-        <div className="grid gap-2">
-          <CloudInfoPill
-            icon={<Upload className="size-4" />}
-            text="立即同步会用此设备旅行更新账号数据，包含旅行数据和已保存票据文件。"
-          />
-          <CloudInfoPill
-            icon={<ShieldAlert className="size-4" />}
-            text="第一版未做端到端加密。护照、签证、银行卡等高度敏感文件请谨慎上传。"
-            tone="warning"
-          />
-          <CloudInfoPill
-            icon={<ShieldAlert className="size-4" />}
-            text="真实同步/恢复前，请确认 Supabase RLS、Storage policy 和 Auth Redirect URL 已配置。"
-          />
         </div>
 
         <AutoCloudBackupSetting
@@ -395,9 +378,9 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800 dark:text-amber-300"
             data-testid="supabase-unconfigured-message"
           >
-            <p className="font-semibold">云端同步未配置</p>
+            <p className="font-semibold">账号同步暂不可用</p>
             <p className="mt-1">
-              请配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。未配置时，离线缓存和 zip 归档功能仍可正常使用。
+              稍后再试；此设备上的旅行仍可正常使用。
             </p>
           </div>
         ) : isLoading ? (
@@ -750,7 +733,7 @@ function CloudAutoSyncStatusPanel({
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{view.title}</p>
           <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{view.detail}</p>
-          <p className="mt-1 break-words text-xs leading-5 opacity-80 [overflow-wrap:anywhere]">
+          <p className="mt-1 break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
             对象级增量同步会先检查账号数据；不同字段自动合并，同一字段冲突需确认。
           </p>
         </div>
@@ -858,7 +841,7 @@ function CloudSyncQueueSummaryPanel({ summary }: { summary: CloudSyncQueueSummar
 function QueueMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2">
-      <p className="text-[11px] font-semibold text-outline">{label}</p>
+      <p className="text-[11px] font-semibold text-on-surface-variant">{label}</p>
       <p className="mt-0.5 break-words font-semibold text-on-surface [overflow-wrap:anywhere]">{value}</p>
     </div>
   )
@@ -1004,7 +987,7 @@ function getCloudSyncStatusClassName(tone: CloudAccountSyncTone) {
   }
 
   if (tone === 'danger') {
-    return 'border-red-100 bg-red-50 text-red-600 dark:text-red-300'
+    return 'border-red-100 bg-red-50 text-red-700 dark:text-red-300'
   }
 
   return 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant'
@@ -1043,24 +1026,6 @@ function CloudStatusMessage({
           tone="warning"
         />
       ))}
-    </div>
-  )
-}
-
-function CloudInfoPill({
-  icon,
-  text,
-  tone = 'neutral',
-}: {
-  icon: ReactNode
-  text: string
-  tone?: 'neutral' | 'warning'
-}) {
-  const styles = tone === 'warning' ? 'bg-amber-50 text-amber-800 dark:text-amber-300' : 'bg-surface-container-low text-on-surface-variant'
-  return (
-    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm leading-6 ${styles}`}>
-      <span className="mt-1 shrink-0">{icon}</span>
-      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{text}</span>
     </div>
   )
 }
@@ -1107,7 +1072,7 @@ function CloudNotice({
   tone: 'error' | 'success' | 'warning'
 }) {
   const styles = {
-    error: 'border-red-100 bg-red-50 text-red-600 dark:text-red-300',
+    error: 'border-red-100 bg-red-50 text-red-700 dark:text-red-300',
     success: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:text-emerald-300',
     warning: 'border-amber-100 bg-amber-50 text-amber-800 dark:text-amber-300',
   }[tone]

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { clearTravelDatabase, forceSupabaseFixture, seedTravelRecords } from './helpers'
+import { clearTravelDatabase, forceSupabaseFixture, getHashParam, seedTravelRecords } from './helpers'
 
 test('Companion shared trip supports read, comment, activity, and collaborator sync', async ({ page }) => {
   const seed = createSharedTripSeed()
@@ -200,10 +200,11 @@ test('Package 6 同行冲突建议脱敏且不会自动执行', async ({ page })
 })
 
 async function openTripHomeSecondaryTools(page: Page) {
-  const tools = page.getByTestId('trip-home-secondary-tools')
-  if (await tools.isVisible().catch(() => false)) return
-  await page.locator('summary').filter({ hasText: '更多工具与详情' }).click()
-  await expect(tools).toBeVisible()
+  if (await page.getByTestId('shared-trip-panel').isVisible().catch(() => false)) return
+  const tripId = getHashParam(page.url(), 'tripId')
+  expect(tripId).toBeTruthy()
+  await page.goto(`/#/shared-trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('shared-trip-panel')).toBeVisible()
 }
 
 async function readLatestInviteUrl(panel: Locator, previous = '') {

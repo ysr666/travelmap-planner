@@ -119,6 +119,10 @@ vi.mock('../components/TicketPreview', () => ({
   TicketPreview: () => <div data-testid="ticket-preview" />,
 }))
 
+vi.mock('../components/tickets/TicketThumbnail', () => ({
+  TicketThumbnail: () => <div data-testid="ticket-thumbnail" />,
+}))
+
 vi.mock('../components/ai/TripContentEnrichmentPanel', () => ({
   ItemContentEnrichmentCard: () => <div data-testid="item-content-enrichment" />,
 }))
@@ -319,7 +323,7 @@ describe('ItemDetailPage', () => {
     expect(container?.textContent).toContain('英国伦敦')
   })
 
-  it('renders field action deck with scoped ticket access', async () => {
+  it('renders the compact place actions with scoped ticket access', async () => {
     mocks.listItemsByDay.mockResolvedValue([
       { id: 'item_0', dayId: 'day_1', tripId: 'trip_1', title: '酒店', locationName: '酒店', lat: 35.7, lng: 139.7, ticketIds: [], sortOrder: 0, createdAt: 100, updatedAt: 100 },
       { id: 'item_1', dayId: 'day_1', tripId: 'trip_1', title: '浅草寺', locationName: '浅草寺', ticketIds: ['ticket_1'], sortOrder: 1, createdAt: 100, updatedAt: 100 },
@@ -350,10 +354,10 @@ describe('ItemDetailPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.querySelector('[data-testid="item-field-action-deck"]')?.textContent).toContain('现场行动')
-    expect(container?.textContent).toContain('第 1 天 · 第 2/3 项')
-    expect(container?.textContent).toContain('现场凭证')
-    expect(container?.textContent).toContain('1 张票据')
+    expect(container?.querySelector('[data-testid="item-detail-hero"]')).toBeNull()
+    expect(container?.textContent).toContain('开始导航')
+    expect(container?.querySelector('[data-testid="item-ticket-entry"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="ticket-thumbnail"]')).toBeTruthy()
     expect(container?.querySelector('[data-testid="item-field-previous-stop"]')?.textContent).toContain('酒店')
     expect(container?.querySelector('[data-testid="item-field-next-stop"]')?.textContent).toContain('东京塔')
 
@@ -361,6 +365,6 @@ describe('ItemDetailPage', () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="item-ticket-view-all"]')?.click()
     })
 
-    expect(mocks.navigateTo).toHaveBeenCalledWith('tickets', { tripId: 'trip_1' })
+    expect(mocks.navigateTo).toHaveBeenCalledWith('tickets', { itemId: 'item_1', tripId: 'trip_1' })
   })
 })

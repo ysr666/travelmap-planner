@@ -161,7 +161,7 @@ export function ItemFormPage() {
         <div className="flex items-center justify-between gap-3">
           <button
             aria-label="返回"
-            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30/80 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30/80"
+            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
             onClick={handleCancel}
             type="button"
           >
@@ -176,19 +176,24 @@ export function ItemFormPage() {
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar">
         <div className="page-transition">
-          <Card variant="grouped">
-            <ItineraryItemForm
-              dayDate={day?.date}
-              defaultTimeZone={trip && day ? resolveDayTimeZone(trip, day) : undefined}
-              initialItem={isEdit ? existingItem ?? undefined : undefined}
-              loading={isSubmitting}
-              onCancel={handleCancel}
-              onSubmit={handleSubmit}
-              submitLabel={isEdit ? '保存修改' : '新增行程点'}
-            />
-          </Card>
+          <ItineraryItemForm
+            dayDate={day?.date}
+            defaultTimeZone={trip && day ? resolveDayTimeZone(trip, day) : undefined}
+            formId="itinerary-item-form"
+            initialItem={isEdit ? existingItem ?? undefined : undefined}
+            loading={isSubmitting}
+            onCancel={handleCancel}
+            onSubmit={handleSubmit}
+            showActions={false}
+            submitLabel={isEdit ? '保存修改' : '新增行程点'}
+          />
         </div>
       </main>
+      <footer className="shrink-0 border-t border-outline-variant/30 bg-surface px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+        <Button className="w-full" form="itinerary-item-form" loading={isSubmitting} type="submit">
+          {isEdit ? '保存修改' : '新增行程点'}
+        </Button>
+      </footer>
     </div>
   )
 }

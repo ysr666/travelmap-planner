@@ -50,7 +50,7 @@ export function SearchPage() {
           setError(null)
         }
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : '读取本机搜索索引失败')
+        if (!cancelled) setError(caught instanceof Error ? caught.message : '读取搜索内容失败')
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -71,13 +71,8 @@ export function SearchPage() {
   const hasQuery = Boolean(deferredQuery.trim())
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 pb-40 pt-24">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       <section className="space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-primary">全局检索</p>
-          <h2 className="mt-1 font-headline-lg-mobile text-headline-lg-mobile text-on-surface">找任何东西</h2>
-          <p className="mt-1 font-body-md text-body-md text-on-surface-variant">地点、票据、账单、交通。</p>
-        </div>
         <label className="relative block">
           <span className="sr-only">搜索关键词</span>
           <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
@@ -98,7 +93,7 @@ export function SearchPage() {
           className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 app-scrollbar"
           role="group"
         >
-          {filterOptions.map((option) => (
+          {filterOptions.filter((option) => option === 'all' || option === filter || view.counts[option] > 0).map((option) => (
             <button
               aria-pressed={filter === option}
               className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition active:scale-95 tm-focus ${
@@ -131,12 +126,12 @@ export function SearchPage() {
       {!isLoading && !error && view.results.length === 0 ? (
         <EmptyState
           body={hasQuery
-            ? '换个关键词或分类。'
-            : filter === 'all'
-              ? '还没有可搜索内容。'
-              : `还没有${localSearchCategoryLabels[filter]}记录。`}
+              ? '换个关键词或分类。'
+              : filter === 'all'
+                ? '还没有可搜索内容。'
+                : `还没有${localSearchCategoryLabels[filter]}记录。`}
           icon={<Search className="size-6" />}
-          title={hasQuery ? '没有搜索结果' : '暂无本机内容'}
+          title={hasQuery ? '没有搜索结果' : '暂无内容'}
         />
       ) : null}
 
@@ -156,7 +151,7 @@ export function SearchPage() {
           ))}
         </section>
       ) : null}
-    </main>
+    </div>
   )
 }
 
@@ -171,20 +166,16 @@ function SearchResultGroup({
         <h4 className="text-sm font-semibold text-on-surface">{group.label}</h4>
         <span className="text-xs text-on-surface-variant">{group.results.length}</span>
       </div>
-      <div className="overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container">
-        {group.results.map((result, index) => (
-          <SearchResultRow
-            key={result.record.id}
-            record={result.record}
-            separator={index < group.results.length - 1}
-          />
+      <div className="divide-y divide-outline-variant/50 border-y border-outline-variant/50">
+        {group.results.map((result) => (
+          <SearchResultRow key={result.record.id} record={result.record} />
         ))}
       </div>
     </section>
   )
 }
 
-function SearchResultRow({ record, separator }: { record: LocalSearchRecord; separator: boolean }) {
+function SearchResultRow({ record }: { record: LocalSearchRecord }) {
   const iconView = getRecordIcon(record.category)
   return (
     <button
@@ -197,12 +188,11 @@ function SearchResultRow({ record, separator }: { record: LocalSearchRecord; sep
       <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconView.className}`}>
         {iconView.icon}
       </span>
-      <span className={`min-w-0 flex-1 ${separator ? 'border-b border-outline-variant/70 pb-3' : ''}`}>
-        <span className="block truncate text-[11px] font-semibold text-on-surface-variant">{record.eyebrow}</span>
-        <span className="mt-0.5 block line-clamp-2 text-sm font-semibold text-on-surface" title={record.title}>{record.title}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block line-clamp-2 text-sm font-semibold text-on-surface" title={record.title}>{record.title}</span>
         <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-on-surface-variant" title={record.detail}>{record.detail}</span>
       </span>
-      <ChevronRight className={`size-4 shrink-0 text-on-surface-variant ${separator ? 'mb-3' : ''}`} />
+      <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
     </button>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CalendarClock, ExternalLink, FileText, Link2, ReceiptText, Route, Undo2 } from 'lucide-react'
+import { CalendarClock, ExternalLink, FileText, Link2, ReceiptText, Route, Undo2 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -91,15 +91,9 @@ export function LedgerExpenseDetailPage() {
 
   return (
     <div className="space-y-5 pb-6" data-testid="ledger-expense-detail">
-      <header className="flex items-start gap-3">
-        <button aria-label="返回旅行账本" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant tm-focus" onClick={() => navigateTo('ledger', { tripId })} type="button">
-          <ArrowLeft className="size-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-primary">账单与来源</p>
-          <h2 className="mt-1 truncate text-xl font-bold text-on-surface">{expense.title}</h2>
-          <p className="mt-1 text-sm tm-muted">{trip.title} · {expense.date}</p>
-        </div>
+      <header className="min-w-0">
+        <h2 className="break-words text-lg font-semibold text-on-surface [overflow-wrap:anywhere]">{expense.title}</h2>
+        <p className="mt-1 text-sm tm-muted">{trip.title} · {expense.date}</p>
       </header>
 
       <Card className="space-y-4" variant="grouped">

@@ -279,6 +279,7 @@ vi.mock('../lib/dates', () => ({
   formatDate: vi.fn(() => '4月1日'),
   formatDateKey: vi.fn(() => '2026-04-01'),
   formatDateRange: vi.fn(() => '4月1日 - 4月5日'),
+  formatShortDate: vi.fn(() => '4月1日'),
   formatShortDateWithWeekday: vi.fn(() => '4月1日 周三'),
 }))
 
@@ -334,12 +335,13 @@ afterEach(() => {
 })
 
 describe('TripWorkspacePage', () => {
-  it('renders trip title', async () => {
-    act(() => {
-      root?.render(<TripWorkspacePage />)
-    })
+  it('does not repeat the trip title inside the schedule content', async () => {
+    await renderWorkspacePage()
 
-    expect(container?.textContent).toContain('东京旅行')
+    expect(Array.from(container?.querySelectorAll('h1, h2, h3') ?? [])
+      .some((heading) => heading.textContent === '东京旅行')).toBe(false)
+    expect(container?.textContent).toContain('东京')
+    expect(container?.textContent).toContain('日程')
   })
 
   it('renders day information', async () => {
@@ -373,7 +375,7 @@ describe('TripWorkspacePage', () => {
 
     expect(container?.querySelector('[data-testid="travel-inbox-panel"]')).toBeNull()
     expect(container?.querySelector('[data-testid="trip-action-travel-inbox"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="trip-action-account-inbox"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="trip-action-account-inbox"]')).toBeNull()
   })
 
   it('shows the embedded travel inbox when an active preview is waiting for confirmation', async () => {

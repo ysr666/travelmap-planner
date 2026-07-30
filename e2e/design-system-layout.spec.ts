@@ -2,7 +2,6 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   createDemoTripViaUi,
   expectNoHorizontalOverflow,
-  openDetailsSection,
 } from './helpers'
 
 const layoutViewports = [
@@ -26,14 +25,13 @@ test('Phase 11 shared action and status surfaces avoid overflow on mobile and de
     await expectNoHorizontalOverflow(page)
     await timeline.getByRole('button', { name: '取消' }).click()
 
-    await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('ticket-card')).toHaveCount(1)
-    await expect(page.getByRole('group', { name: '酒店订单 PDF 操作' })).toBeVisible()
+    await expect(page.getByTestId('ticket-card').getByLabel(/更多操作/)).toBeVisible()
     await expectNoHorizontalOverflow(page)
 
-    await page.goto('/#/settings', { waitUntil: 'domcontentloaded' })
-    await openDetailsSection(page, '安装与离线')
-    await expect(page.locator('main')).toContainText('地图和外部路线需要网络')
+    await page.goto('/#/settings/app', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('main')).toContainText('安装与更新')
     await expectNoHorizontalOverflow(page)
   }
 })

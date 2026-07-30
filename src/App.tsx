@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
@@ -15,10 +15,10 @@ import {
 } from './lib/navigationContext'
 import { getCanonicalHashRedirect, routeFromHash } from './lib/routes'
 import type { RouteId } from './types'
-import { HomePage } from './pages/HomePage'
 
-const DEFAULT_SHELL_TITLE = '旅图'
-
+const HomePage = lazy(() =>
+  import('./pages/HomePage').then((module) => ({ default: module.HomePage })),
+)
 const TripWorkspacePage = lazy(() =>
   import('./pages/TripWorkspacePage').then((module) => ({ default: module.TripWorkspacePage })),
 )
@@ -73,9 +73,18 @@ const SettingsRoutePage = lazy(() =>
 
 function App() {
   const [currentHash, setCurrentHash] = useState(() => window.location.hash)
-  const [shellTitle, setShellTitle] = useState(DEFAULT_SHELL_TITLE)
+  const [tripTitle, setTripTitle] = useState<string | null>(null)
   const [lastTripId, setLastTripId] = useState(() => readTripNavigationContext()?.tripId ?? null)
   const activeRoute: RouteId = routeFromHash(currentHash)
+  const handleHomePrimaryTripChange = useCallback((trip: { id: string; title: string } | null) => {
+    setLastTripId(trip?.id ?? null)
+    setTripTitle(trip?.title || null)
+    if (trip) {
+      recordTripNavigationContext({ tripId: trip.id })
+    } else {
+      clearTripNavigationContext()
+    }
+  }, [])
 
   useEffect(() => {
     const syncRoute = () => {
@@ -107,7 +116,7 @@ function App() {
       if (!candidateTripId) {
         if (!cancelled) {
           setLastTripId(null)
-          setShellTitle(DEFAULT_SHELL_TITLE)
+          setTripTitle(null)
         }
         return
       }
@@ -118,16 +127,16 @@ function App() {
         if (!trip) {
           if (storedContext?.tripId === candidateTripId) clearTripNavigationContext()
           setLastTripId(null)
-          setShellTitle(DEFAULT_SHELL_TITLE)
+          setTripTitle(null)
           return
         }
 
         setLastTripId(trip.id)
-        setShellTitle(routeTarget ? trip.title || DEFAULT_SHELL_TITLE : DEFAULT_SHELL_TITLE)
+        setTripTitle(trip.title || null)
         if (routeTarget) recordTripNavigationContext(routeTarget)
       } catch {
         if (!cancelled) {
-          setShellTitle(DEFAULT_SHELL_TITLE)
+          setTripTitle(null)
         }
       }
     }
@@ -141,11 +150,17 @@ function App() {
   }, [activeRoute, currentHash])
 
   return (
-    <AppShell activeRoute={activeRoute} lastTripId={lastTripId} title={shellTitle}>
+    <AppShell activeRoute={activeRoute} lastTripId={lastTripId} tripTitle={tripTitle}>
       <PwaLifecycleController />
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
-      {activeRoute === 'home' ? <HomePage /> : null}
+      {activeRoute === 'home' ? (
+        <ErrorBoundary key={activeRoute}>
+          <Suspense fallback={<RouteLoading />}>
+            <HomePage onPrimaryTripChange={handleHomePrimaryTripChange} />
+          </Suspense>
+        </ErrorBoundary>
+      ) : null}
       {activeRoute !== 'home' ? (
         <ErrorBoundary key={activeRoute}>
           <Suspense fallback={<RouteLoading />}>
@@ -162,6 +177,10 @@ function App() {
             {activeRoute === 'inbox' ? <TravelInboxPage /> : null}
             {activeRoute === 'search' ? <SearchPage /> : null}
             {activeRoute === 'settings' ? <SettingsPage /> : null}
+            {activeRoute === 'settings/account' ? <SettingsPage section="account" /> : null}
+            {activeRoute === 'settings/preferences' ? <SettingsPage section="preferences" /> : null}
+            {activeRoute === 'settings/app' ? <SettingsPage section="app" /> : null}
+            {activeRoute === 'settings/advanced' ? <SettingsPage section="advanced" /> : null}
             {activeRoute === 'settings/privacy' ? <SettingsPrivacyPage /> : null}
             {activeRoute === 'settings/maps' ? <SettingsMapsPage /> : null}
             {activeRoute === 'settings/route' ? <SettingsRoutePage /> : null}

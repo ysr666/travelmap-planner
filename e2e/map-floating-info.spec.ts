@@ -19,6 +19,7 @@ test('地图视图只保留浮动信息栏，不渲染底部抽屉', async ({ pa
   await expect(page.getByTestId('day-selector')).toBeVisible()
   await expectDaySelectorShadowBreathingRoom(page)
 
+  await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
   const markerCard = page.getByTestId('map-marker-card')
   await expect(markerCard).toBeVisible({ timeout: 15000 })
   await expect(markerCard).toContainText('Hotel Metropolitan Tokyo 入住')
@@ -40,14 +41,15 @@ test('点击地图 marker 更新浮动信息栏并可进入详情', async ({ pag
   const shibuyaSkyMarker = page.getByRole('button', { name: /选择 Shibuya Sky 夜景/ })
   const markerCard = page.getByTestId('map-marker-card')
 
+  await expect(markerCard).toHaveCount(0)
+  await hotelMarker.click()
   await expect(markerCard).toBeVisible({ timeout: 15000 })
-  await expect(markerCard.getByTestId('map-marker-card-open')).toContainText('详情')
-  const stationButtons = markerCard.getByTestId('map-marker-card-station')
-  await expect(stationButtons).toHaveCount(3)
-  await expect(stationButtons.nth(0)).toHaveAttribute('aria-current', 'true')
-  await stationButtons.nth(2).click()
+  await expect(markerCard.getByTestId('map-marker-card-open')).toContainText('查看地点')
+  await expect(markerCard.getByTestId('map-marker-card-prev')).toBeDisabled()
+  await markerCard.getByTestId('map-marker-card-next').click()
+  await markerCard.getByTestId('map-marker-card-next').click()
   await expect(markerCard).toContainText('Shibuya Sky 夜景')
-  await expect(stationButtons.nth(2)).toHaveAttribute('aria-current', 'true')
+  await expect(markerCard.getByTestId('map-marker-card-next')).toBeDisabled()
   await expectMarkerAndCardInUsableMapArea(page, shibuyaSkyMarker, markerCard)
 
   await expect(shibuyaSkyMarker).toBeVisible()
@@ -70,7 +72,7 @@ test('点击地图 marker 更新浮动信息栏并可进入详情', async ({ pag
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByRole('heading', { name: /Hotel Metropolitan Tokyo/ })).toBeVisible()
 
-  await page.getByLabel('返回地图').click()
+  await page.getByLabel('返回上一页').click()
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=map/)
   await expectNoHorizontalOverflow(page)
@@ -86,6 +88,7 @@ test('地图重定位不会生成路线且保留浮动信息栏', async ({ page 
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
   await expect(page.getByTestId('map-recenter-button')).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
   await expect(page.getByTestId('map-marker-card')).toBeVisible()
 
   await page.getByTestId('map-recenter-button').click()
@@ -98,19 +101,16 @@ test('地图重定位不会生成路线且保留浮动信息栏', async ({ page 
 test('地图日期条真实点击可以在 Day 1 和 Day 2 间切换', async ({ page }) => {
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
+  await page.getByRole('button', { name: /选择 Hotel Metropolitan Tokyo 入住/ }).click()
   await expect(page.getByTestId('map-marker-card')).toBeVisible({ timeout: 15000 })
 
-  await page.getByTestId('day-selector').getByRole('button', { name: /Day 2/ }).click()
-  await expect(page.getByRole('heading', { name: '第 2 天 · 4月13日' })).toBeVisible()
+  const dayTwoButton = page.getByTestId('day-selector').getByRole('button', { name: /第 2 天/ })
+  await dayTwoButton.click()
+  await expect(dayTwoButton).toHaveAttribute('aria-current', 'page')
 
-  const day1Box = await page.getByTestId('day-selector').getByRole('button', { name: /Day 1/ }).boundingBox()
-  expect(day1Box).not.toBeNull()
-  if (!day1Box) {
-    throw new Error('Day 1 日期按钮没有可用布局盒')
-  }
-
-  await page.mouse.click(day1Box.x + day1Box.width / 2, day1Box.y + day1Box.height / 2)
-  await expect(page.getByRole('heading', { name: '第 1 天 · 4月12日' })).toBeVisible()
+  const dayOneButton = page.getByTestId('day-selector').getByRole('button', { name: /第 1 天/ })
+  await dayOneButton.click()
+  await expect(dayOneButton).toHaveAttribute('aria-current', 'page')
   await expect(page.getByTestId('map-sheet')).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
@@ -193,6 +193,7 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
     }
 
     const tolerance = 12
+    const bottomSafeInset = 24
     return (
       markerBox.x >= -tolerance &&
       markerBox.x + markerBox.width <= viewport.width + tolerance &&
@@ -201,7 +202,7 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
       cardBox.x >= 8 &&
       cardBox.x + cardBox.width <= viewport.width - 8 &&
       cardBox.y >= 48 &&
-      cardBox.y + cardBox.height <= viewport.height - 48
+      cardBox.y + cardBox.height <= viewport.height - bottomSafeInset
     )
   }, {
     message: 'selected marker and marker card should fit in the usable map area',
@@ -211,7 +212,7 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
 
 async function expectDaySelectorShadowBreathingRoom(page: Page) {
   const selectorBox = await page.getByTestId('day-selector').boundingBox()
-  const activeDayBox = await page.getByTestId('day-selector').getByRole('button', { name: /Day 1/ }).boundingBox()
+  const activeDayBox = await page.getByTestId('day-selector').getByRole('button', { name: /第 1 天/ }).boundingBox()
 
   expect(selectorBox).not.toBeNull()
   expect(activeDayBox).not.toBeNull()

@@ -72,7 +72,7 @@ test.describe('390px mobile UX and accessibility', () => {
     await page.goto('/#/trip/new')
     await auditMobilePage(page, 'trip-new', browserIssues)
 
-    await page.goto(`/#/tickets?tripId=${tripId}`)
+    await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`)
     await auditMobilePage(page, 'ticket-library', browserIssues)
     await page.goto(`/#/documents?tripId=${tripId}`)
     await auditMobilePage(page, 'travel-document-center', browserIssues)

@@ -25,7 +25,7 @@ test('Phase 11 shared action and status surfaces avoid overflow on mobile and de
     await expectNoHorizontalOverflow(page)
     await timeline.getByRole('button', { name: '取消' }).click()
 
-    await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('ticket-card')).toHaveCount(1)
     await expect(page.getByTestId('ticket-card').getByLabel(/更多操作/)).toBeVisible()
     await expectNoHorizontalOverflow(page)

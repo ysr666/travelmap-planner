@@ -217,7 +217,7 @@ const ticketSeeds: SeedTicket[] = [
 test('票据库空状态清楚可用', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '暂无票据' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -228,7 +228,7 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('ticket-gallery')).toBeVisible()
   await expect(page.getByTestId('ticket-add-panel')).toHaveCount(0)
   const galleryBox = await page.getByTestId('ticket-gallery').boundingBox()
@@ -278,7 +278,7 @@ test('票据库可以编辑票据元数据并原子移除行程点绑定', async
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, [ticketSeeds[0]])
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   const hotelCard = page.getByTestId('ticket-card').filter({ hasText: '酒店订单 PDF' })
   await hotelCard.getByLabel(/酒店订单 PDF更多操作/).click()
   await hotelCard.getByRole('button', { name: '编辑', exact: true }).click()
@@ -317,7 +317,7 @@ test('票据库预览器可以在线性上下文中切换图片、PDF 和外部�
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /预览备用车票 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
   await expect(page.getByTestId('ticket-preview-counter')).toContainText('1 / 4')
@@ -347,7 +347,7 @@ test('票据库打开第 2 张票据显示 2 / N 且缩略图条可切换', asyn
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
 
   // Open second ticket (二维码截图 — display order is: 备用车票 PDF, 二维码截图, 电子门票链接, 酒店订单 PDF)
   await page.getByRole('button', { name: /预览二维码截图/ }).click()
@@ -376,7 +376,7 @@ test('票据库预览 Escape 键可关闭', async ({ page }) => {
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /预览酒店订单 PDF/ }).click()
   await expect(page.getByTestId('ticket-preview')).toBeVisible()
 

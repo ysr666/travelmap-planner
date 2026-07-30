@@ -106,9 +106,10 @@ test('旅行工作台可以在日程和地图视图之间切换', async ({ page 
   await expect(page).toHaveURL(/#\/trip\?/)
   await openDetailsSection(page, '旅行工具')
   await page.getByTestId('trip-action-ticket-library').click()
-  await expect(page).toHaveURL(/#\/tickets\?/)
+  await expect(page).toHaveURL(/#\/documents\?/)
   const ticketLibraryHash = new URL(page.url()).hash
   expect(ticketLibraryHash).toContain(`tripId=${tripId}`)
+  expect(ticketLibraryHash).toContain('tab=attachments')
   await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
@@ -381,7 +382,8 @@ test('Day View Trip Live Mode 只做本地计算并提供执行入口', async ({
   await page.goto('/#/day?tripId=trip-live-briefing&dayId=day-live-briefing&view=schedule', { waitUntil: 'domcontentloaded' })
   await openTripLiveDetails(page)
   await page.getByTestId('trip-live-mode-card').getByRole('button', { name: '票据' }).click()
-  await expect(page).toHaveURL(/#\/tickets\?/)
+  await expect(page).toHaveURL(/#\/documents\?/)
+  await expect(page).toHaveURL(/tab=attachments/)
   await expect(page.getByRole('heading', { name: '票据', exact: true })).toBeVisible()
   expect(providerProxyRequests).toBe(0)
   await expectNoHorizontalOverflow(page)

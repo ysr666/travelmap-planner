@@ -401,7 +401,7 @@ test('账号数据同步确认会原地覆盖此设备旅行并在刷新后保�
   expect(restoredState.ticketTitle).toBe('Cloud restore tiny ticket')
   expect(restoredState.ticketBlobSize).toBe(68)
 
-  await page.goto(`/#/tickets?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/#/documents?tripId=${tripId}&tab=attachments`, { waitUntil: 'domcontentloaded' })
   const ticketCard = page.getByTestId('ticket-card').filter({ hasText: 'Cloud restore tiny ticket' }).first()
   await expect(ticketCard).toBeVisible()
   await ticketCard.getByRole('button', { name: /预览/ }).first().click()

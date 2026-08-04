@@ -219,10 +219,10 @@ export function TripFormPage() {
       data-testid="trip-form-page"
     >
       <header className="z-30 shrink-0 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
           <button
             aria-label={isEdit ? '返回旅行工作台' : '返回首页'}
-            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
+            className="flex size-11 items-center justify-center rounded-lg text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
             data-testid="trip-form-cancel"
             onClick={handleCancel}
             type="button"
@@ -237,7 +237,7 @@ export function TripFormPage() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar">
-        <div className="page-transition">
+        <div className="page-transition mx-auto w-full max-w-3xl">
             <form className="space-y-5" id="trip-form" onSubmit={(e) => void handleSubmit(e)}>
               {error ? (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-950/35 dark:text-red-300">{error}</p>
@@ -308,15 +308,17 @@ export function TripFormPage() {
         </div>
       </main>
       <footer className="shrink-0 border-t border-outline-variant/30 bg-surface px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-        <Button
-          className="w-full"
-          data-testid="trip-form-submit"
-          form="trip-form"
-          loading={isSubmitting}
-          type="submit"
-        >
-          {isEdit ? '保存修改' : '保存旅行'}
-        </Button>
+        <div className="mx-auto w-full max-w-3xl">
+          <Button
+            className="w-full"
+            data-testid="trip-form-submit"
+            form="trip-form"
+            loading={isSubmitting}
+            type="submit"
+          >
+            {isEdit ? '保存修改' : '保存旅行'}
+          </Button>
+        </div>
       </footer>
     </div>
   )

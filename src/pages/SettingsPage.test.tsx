@@ -183,7 +183,8 @@ describe('SettingsPage', () => {
       root?.render(<SettingsPage section="preferences" />)
     })
 
-    expect(container?.textContent).toContain('旅行偏好')
+    expect(container?.textContent).toContain('旅行节奏')
+    expect(container?.textContent).toContain('交通偏好')
   })
 
   it('renders AI privacy section', async () => {

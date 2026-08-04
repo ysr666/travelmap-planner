@@ -9,6 +9,7 @@ import {
   FileLock2,
   FileText,
   FolderLock,
+  Inbox,
   KeyRound,
   Lock,
   LockOpen,
@@ -20,7 +21,6 @@ import {
   UserRoundPlus,
 } from 'lucide-react'
 import { createItineraryItem, deleteTicket, listDaysByTrip, listItemsByDay, listTicketsByTrip, listTrips } from '../db'
-import { TripNav } from '../components/AppShell'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -335,75 +335,96 @@ export function TravelDocumentCenterPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      <section className="space-y-3">
-        {selectedTrip ? <TripNav activeRoute="documents" firstDayId={null} tripId={selectedTrip.id} /> : null}
-        <div className="grid grid-cols-3 gap-1 rounded-lg border border-outline-variant/30 bg-surface-container p-1">
-          <TabButton active={activeTab === 'attachments'} icon={<FileText className="size-4" />} label="票据" onClick={() => changeTab('attachments')} />
-          <TabButton active={activeTab === 'documents'} icon={<FileLock2 className="size-4" />} label="证件" onClick={() => changeTab('documents')} />
-          <TabButton active={activeTab === 'transport'} icon={<TrainFront className="size-4" />} label="交通" onClick={() => changeTab('transport')} />
-        </div>
+      <section className="space-y-2">
+        {activeTab !== 'attachments' ? (
+          <CenterTabControls activeTab={activeTab} onChange={changeTab} />
+        ) : null}
       </section>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
 
-      {activeTab !== 'attachments' ? (
-        <div className="space-y-3">
-          {vaultUnlocked ? (
-            <div className="flex justify-end">
-              <button aria-label="锁定资料库" className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus" onClick={() => void handleLock()} type="button">
-                <Lock className="size-5" />
-              </button>
-            </div>
-          ) : null}
-          <VaultAccessPanel
-            busy={busy}
-            confirmPassphrase={confirmPassphrase}
-            exists={vaultExists}
-            onConfirmPassphraseChange={setConfirmPassphrase}
-            onCreate={() => void handleCreateVault()}
-            onExport={() => void handleExportVault()}
-            onImport={(file) => void handleImportVault(file)}
-            onPassphraseChange={setPassphrase}
-            onUnlock={() => void handleUnlock()}
-            passphrase={passphrase}
-            unlocked={vaultUnlocked}
+      <div
+        aria-labelledby={`document-center-tab-${activeTab}`}
+        className="space-y-4"
+        id={`document-center-panel-${activeTab}`}
+        role="tabpanel"
+      >
+        {activeTab !== 'attachments' ? (
+          <div className="space-y-3">
+            {vaultUnlocked ? (
+              <div className="flex justify-end">
+                <button aria-label="锁定资料库" className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus" onClick={() => void handleLock()} type="button">
+                  <Lock className="size-5" />
+                </button>
+              </div>
+            ) : null}
+            <VaultAccessPanel
+              busy={busy}
+              confirmPassphrase={confirmPassphrase}
+              exists={vaultExists}
+              onConfirmPassphraseChange={setConfirmPassphrase}
+              onCreate={() => void handleCreateVault()}
+              onExport={() => void handleExportVault()}
+              onImport={(file) => void handleImportVault(file)}
+              onPassphraseChange={setPassphrase}
+              onUnlock={() => void handleUnlock()}
+              passphrase={passphrase}
+              unlocked={vaultUnlocked}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === 'documents' && vaultUnlocked ? (
+          <DocumentsPanel
+            documents={documents}
+            documentTripIds={documentTripIds}
+            legacyTickets={legacyTickets}
+            onChanged={refresh}
+            onDelete={(id) => runAction(async () => { await deleteTravelDocument(id); await refresh(); setMessage('证件资料已删除。') })}
+            onMigrate={setMigrationTicket}
+            selectedTrip={selectedTrip}
+            travelers={travelers}
+            vaultId={vaultId!}
           />
-        </div>
-      ) : null}
+        ) : null}
 
-      {activeTab === 'documents' && vaultUnlocked ? (
-        <DocumentsPanel
-          documents={documents}
-          documentTripIds={documentTripIds}
-          legacyTickets={legacyTickets}
-          onChanged={refresh}
-          onDelete={(id) => runAction(async () => { await deleteTravelDocument(id); await refresh(); setMessage('证件资料已删除。') })}
-          onMigrate={setMigrationTicket}
-          selectedTrip={selectedTrip}
-          travelers={travelers}
-          vaultId={vaultId!}
-        />
-      ) : null}
+        {activeTab === 'transport' ? (
+          <TransportPanel
+            bookings={bookings}
+            onChanged={refresh}
+            onDelete={(id) => runAction(async () => { await deleteTransportBooking(id); await refresh(); setMessage('交通订单已删除。') })}
+            segmentsByBooking={segmentsByBooking}
+            selectedBookingId={requestedBookingId}
+            selectedTrip={selectedTrip}
+            travelers={travelers}
+            vaultUnlocked={vaultUnlocked}
+          />
+        ) : null}
 
-      {activeTab === 'transport' ? (
-        <TransportPanel
-          bookings={bookings}
-          onChanged={refresh}
-          onDelete={(id) => runAction(async () => { await deleteTransportBooking(id); await refresh(); setMessage('交通订单已删除。') })}
-          segmentsByBooking={segmentsByBooking}
-          selectedBookingId={requestedBookingId}
-          selectedTrip={selectedTrip}
-          travelers={travelers}
-          vaultUnlocked={vaultUnlocked}
-        />
-      ) : null}
-
-      {activeTab === 'attachments' ? (
-        selectedTripId ? <TicketLibraryPage embedded tripIdOverride={selectedTripId} /> : (
-          <EmptyState body="先创建旅行，再添加票据。" icon={<FileText className="size-6" />} title="还没有旅行" />
-        )
-      ) : null}
+        {activeTab === 'attachments' ? (
+          selectedTripId ? (
+            <TicketLibraryPage
+              contextControls={<CenterTabControls activeTab={activeTab} onChange={changeTab} />}
+              embedded
+              headerAction={(
+                <button
+                  aria-label="来源与导入"
+                  className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
+                  onClick={() => navigateTo('inbox', selectedTripId ? { tripId: selectedTripId } : undefined)}
+                  title="来源与导入"
+                  type="button"
+                >
+                  <Inbox className="size-5" />
+                </button>
+              )}
+              tripIdOverride={selectedTripId}
+            />
+          ) : (
+            <EmptyState body="先创建旅行，再添加票据。" icon={<FileText className="size-6" />} title="还没有旅行" />
+          )
+        ) : null}
+      </div>
 
       <details className="group rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2" open={syncConflicts.length > 0}>
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
@@ -772,8 +793,34 @@ function BookingRow({ booking, highlighted, onDelete, segments }: { booking: Tra
   return <div className={`rounded-xl border bg-surface-container p-4 ${highlighted ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/30'}`} id={`transport-booking-${booking.id}`}><div className="flex items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700"><TrainFront className="size-5" /></div><div className="min-w-0 flex-1"><h4 className="font-semibold text-on-surface">{booking.title}</h4><p className="text-xs tm-muted">{bookingKindLabels[booking.kind]} · {segments.length} 段 · {booking.status}</p></div><button aria-label="删除订单" className="flex size-11 items-center justify-center rounded-xl text-error tm-focus" onClick={onDelete} type="button"><Trash2 className="size-4" /></button></div><div className="mt-3 space-y-2 border-t border-outline-variant/20 pt-3">{segments.map((segment) => <div className="text-sm" key={segment.id}><span className="font-medium">{segment.departureDate} {segment.departureTime || '--:--'} · {segment.departurePlace}</span><span className="mx-2 tm-muted">→</span><span>{segment.arrivalDate} {segment.arrivalTime || '--:--'} · {segment.arrivalPlace}</span><p className="text-xs tm-muted">{segment.carrier || '承运方待补充'} {segment.serviceNumber || ''} · {segment.departureTimeZone} → {segment.arrivalTimeZone}</p></div>)}</div>{booking.externalActions.length ? <div className="mt-3 flex flex-wrap gap-2">{booking.externalActions.map((action) => <a className="tm-chip inline-flex min-h-11 items-center gap-2 px-3 text-xs font-semibold" href={action.url} key={action.id} rel="noreferrer" target="_blank"><ExternalLink className="size-4" />{action.label}</a>)}</div> : null}{booking.kind === 'flight' ? <Button className="mt-3 w-full" onClick={() => void checkStatus()} variant="secondary">检查航班动态接口</Button> : null}{statusMessage ? <p className="mt-2 text-xs text-amber-700">{statusMessage}</p> : null}</div>
 }
 
-function TabButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button className={`flex min-h-11 items-center justify-center gap-1 rounded-lg text-xs font-semibold ${active ? 'bg-primary-container text-on-primary-container shadow-sm' : 'text-on-surface-variant'}`} onClick={onClick} type="button">{icon}{label}</button>
+function CenterTabControls({ activeTab, onChange }: { activeTab: CenterTab; onChange: (tab: CenterTab) => void }) {
+  return (
+    <div aria-label="资料分类" className="flex min-w-max items-center gap-2" role="tablist">
+      <TabButton active={activeTab === 'attachments'} label="票据" onClick={() => onChange('attachments')} tab="attachments" />
+      <TabButton active={activeTab === 'documents'} label="证件" onClick={() => onChange('documents')} tab="documents" />
+      <TabButton active={activeTab === 'transport'} label="交通" onClick={() => onChange('transport')} tab="transport" />
+    </div>
+  )
+}
+
+function TabButton({ active, label, onClick, tab }: { active: boolean; label: string; onClick: () => void; tab: CenterTab }) {
+  return (
+    <button
+      aria-controls={`document-center-panel-${tab}`}
+      aria-selected={active}
+      className={`min-h-11 rounded-full border px-3 text-sm font-medium tm-focus ${
+        active
+          ? 'border-primary bg-primary-container text-on-primary-container'
+          : 'border-outline-variant/45 bg-surface text-on-surface-variant'
+      }`}
+      onClick={onClick}
+      id={`document-center-tab-${tab}`}
+      role="tab"
+      type="button"
+    >
+      {label}
+    </button>
+  )
 }
 
 function Notice({ children, tone }: { children: React.ReactNode; tone: 'error' | 'success' }) {

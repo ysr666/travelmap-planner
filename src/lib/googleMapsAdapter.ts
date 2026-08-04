@@ -1,12 +1,62 @@
 /// <reference types="google.maps" />
-import type { MapEventType, MapInstance, MapInitOptions, FitBoundsOptions, CameraState, MarkerHandle, LngLat, LngLatBounds } from './mapEngine'
+import type { MapEventType, MapInstance, MapInitOptions, FitBoundsOptions, CameraState, MarkerHandle, LngLat, LngLatBounds, RouteLineKind } from './mapEngine'
 
 const IDLE_TIMEOUT_MS = 15000
+const TRIP_MAP_GOOGLE_STYLES: google.maps.MapTypeStyle[] = [
+  {
+    elementType: 'geometry',
+    stylers: [{ color: '#f4f7f5' }],
+  },
+  {
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#5e6b68' }],
+  },
+  {
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#ffffff' }, { weight: 3 }],
+  },
+  {
+    featureType: 'administrative.locality',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#deeedb' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#ffffff' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#d9e0dd' }],
+  },
+  {
+    featureType: 'transit',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#d8ecf1' }],
+  },
+]
 
 class GoogleMapInstance implements MapInstance {
   private map: google.maps.Map
   private markers: MarkerHandle[] = []
   private polyline: google.maps.Polyline | null = null
+  private connectorPolyline: google.maps.Polyline | null = null
   private disposed = false
   private listeners = new Map<() => void, google.maps.MapsEventListener>()
   private wrappers = new Map<() => void, (...args: unknown[]) => void>()
@@ -24,6 +74,10 @@ class GoogleMapInstance implements MapInstance {
     if (this.polyline) {
       this.polyline.setMap(null)
       this.polyline = null
+    }
+    if (this.connectorPolyline) {
+      this.connectorPolyline.setMap(null)
+      this.connectorPolyline = null
     }
     for (const listener of this.listeners.values()) {
       listener.remove()
@@ -103,30 +157,52 @@ class GoogleMapInstance implements MapInstance {
     return marker
   }
 
-  setRouteLine(lineStrings: LngLat[][]) {
+  setRouteLine(lineStrings: LngLat[][], kind: RouteLineKind = 'road') {
     if (this.disposed) return
 
     const path = lineStrings.flatMap((line) =>
       line.map(([lng, lat]) => new google.maps.LatLng(lat, lng)),
     )
 
+    const routeStyle = getGoogleRouteStyle(kind)
     if (this.polyline) {
       this.polyline.setPath(path)
+      this.polyline.setOptions(routeStyle)
       this.polyline.setMap(path.length > 0 ? this.map : null)
     } else if (path.length > 0) {
       this.polyline = new google.maps.Polyline({
         path,
-        strokeColor: '#0f8f83',
-        strokeWeight: 4,
-        strokeOpacity: 0.86,
+        ...routeStyle,
         map: this.map,
       })
     }
   }
 
   setRouteVisibility(visible: boolean) {
-    if (this.disposed || !this.polyline) return
-    this.polyline.setMap(visible ? this.map : null)
+    if (this.disposed) return
+    this.polyline?.setMap(visible ? this.map : null)
+    this.connectorPolyline?.setMap(visible ? this.map : null)
+  }
+
+  setRouteConnectorLine(lineStrings: LngLat[][]) {
+    if (this.disposed) return
+
+    const path = lineStrings.flatMap((line) =>
+      line.map(([lng, lat]) => new google.maps.LatLng(lat, lng)),
+    )
+
+    const connectorStyle = getGoogleRouteStyle('sequence')
+    if (this.connectorPolyline) {
+      this.connectorPolyline.setPath(path)
+      this.connectorPolyline.setOptions(connectorStyle)
+      this.connectorPolyline.setMap(path.length > 0 ? this.map : null)
+    } else if (path.length > 0) {
+      this.connectorPolyline = new google.maps.Polyline({
+        path,
+        ...connectorStyle,
+        map: this.map,
+      })
+    }
   }
 
   on(event: MapEventType, handler: () => void) {
@@ -173,6 +249,34 @@ class GoogleMapInstance implements MapInstance {
         resolve(this.disposed ? 'timeout' : result)
       }
     })
+  }
+}
+
+function getGoogleRouteStyle(kind: RouteLineKind): google.maps.PolylineOptions {
+  if (kind === 'road') {
+    return {
+      icons: [],
+      strokeColor: '#0f8f83',
+      strokeOpacity: 0.94,
+      strokeWeight: 3,
+    }
+  }
+
+  return {
+    icons: [{
+      icon: {
+        path: 'M 0,-1 0,1',
+        scale: 2,
+        strokeColor: '#0f8f83',
+        strokeOpacity: 0.58,
+        strokeWeight: 1.5,
+      },
+      offset: '0',
+      repeat: '10px',
+    }],
+    strokeColor: '#0f8f83',
+    strokeOpacity: 0,
+    strokeWeight: 2,
   }
 }
 
@@ -228,6 +332,7 @@ function toGoogleEvent(event: MapEventType): string | null {
     error: 'error',
     moveend: 'dragend',
     resize: 'resize',
+    zoom: 'zoom_changed',
   }
   return mapping[event] ?? null
 }
@@ -240,15 +345,17 @@ export class GoogleMapsEngineAdapter {
     const map = new google.maps.Map(container, {
       center: { lng: options.center[0], lat: options.center[1] },
       zoom: options.zoom,
-      clickableIcons: interactive,
+      clickableIcons: false,
+      disableDefaultUI: true,
       disableDoubleClickZoom: !interactive,
       draggable: interactive,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      keyboardShortcuts: interactive,
-      zoomControl: interactive,
+      keyboardShortcuts: false,
+      zoomControl: false,
       gestureHandling: interactive ? 'greedy' : 'none',
+      styles: TRIP_MAP_GOOGLE_STYLES,
     })
 
     return new GoogleMapInstance(map)

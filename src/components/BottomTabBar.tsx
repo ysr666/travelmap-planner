@@ -1,4 +1,4 @@
-import { CalendarDays, Inbox, MapPinned, UserRound } from 'lucide-react'
+import { Files, List, MapPin, UserRound } from 'lucide-react'
 import type { RouteId } from '../types'
 import { navigateTo } from '../lib/routes'
 import { getPrimaryDestination, type PrimaryDestination } from './shell/routePresentation'
@@ -9,9 +9,9 @@ type BottomTabBarProps = {
 }
 
 const tabs = [
-  { id: 'home' as PrimaryDestination, label: '今日', icon: MapPinned },
-  { id: 'trip' as PrimaryDestination, label: '行程', icon: CalendarDays },
-  { id: 'inbox' as PrimaryDestination, label: '收件箱', icon: Inbox },
+  { id: 'home' as PrimaryDestination, label: '今日', icon: MapPin },
+  { id: 'trip' as PrimaryDestination, label: '行程', icon: List },
+  { id: 'documents' as PrimaryDestination, label: '资料', icon: Files },
   { id: 'settings' as PrimaryDestination, label: '我的', icon: UserRound },
 ]
 
@@ -21,7 +21,7 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
   return (
     <nav aria-label="主导航" className="primary-navigation" data-testid="primary-navigation">
       <div className="primary-navigation-brand" aria-hidden="true">
-        <MapPinned className="size-5" />
+        <MapPin className="size-6" />
         <span>旅图</span>
       </div>
       {tabs.map((tab) => {
@@ -32,6 +32,7 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
             key={tab.id}
             aria-current={isActive ? 'page' : undefined}
             aria-label={tab.label}
+            data-destination={tab.id}
             className={`primary-navigation-item tm-focus ${
               isActive
                 ? 'primary-navigation-item-active'
@@ -41,7 +42,7 @@ export function BottomTabBar({ activeRoute, lastTripId }: BottomTabBarProps) {
             type="button"
           >
             <span className="primary-navigation-icon">
-              <Icon className="size-5" />
+              <Icon className="size-6" />
             </span>
             <span className="primary-navigation-label">{tab.label}</span>
           </button>
@@ -60,6 +61,10 @@ function navigateToTab(tabId: PrimaryDestination, lastTripId?: string | null) {
       return
     }
     navigateTo('home')
+    return
+  }
+  if (tabId === 'documents') {
+    navigateTo('documents', lastTripId ? { tripId: lastTripId } : undefined)
     return
   }
   navigateTo(tabId)

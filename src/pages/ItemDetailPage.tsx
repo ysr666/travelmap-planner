@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  Camera,
   ChevronRight,
   Clock3,
   ExternalLink,
   MapPin,
   MapPinned,
+  MoreVertical,
   Navigation,
+  NotebookPen,
   Pencil,
   Save,
   Search,
   ShieldCheck,
+  Sparkles,
   Ticket,
   Trash2,
+  X,
 } from 'lucide-react'
 import {
   deleteItineraryItemCascade,
@@ -53,6 +58,7 @@ import { Collapsible } from '../components/ui/Collapsible'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
+import { useModalAccessibility } from '../components/ui/useModalAccessibility'
 import { getRouteParams } from '../lib/routes'
 import {
   ProviderProxyClientError,
@@ -63,6 +69,10 @@ import {
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
   type ProviderProxyPlaceLookupResult,
 } from '../lib/ai/providerProxyContract'
+
+const GlobalAiCommandBar = lazy(() =>
+  import('../components/ai/GlobalAiCommandBar').then((module) => ({ default: module.GlobalAiCommandBar })),
+)
 
 type ItemDetailContentProps = {
   trip: Trip
@@ -84,6 +94,9 @@ export function ItemDetailPage() {
   const [day, setDay] = useState<Day | null>(null)
   const [item, setItem] = useState<ItineraryItem | null>(null)
   const [isLoading, setIsLoading] = useState(!hasMissingParams)
+  const [isAiOpen, setIsAiOpen] = useState(false)
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+  const aiTriggerRef = useRef<HTMLButtonElement>(null)
   const [error, setError] = useState<string | null>(() => {
     if (hasMissingParams) return '缺少行程点参数。'
     return null
@@ -170,27 +183,42 @@ export function ItemDetailPage() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" data-testid="item-detail-page">
-      <header className="absolute inset-x-0 top-0 z-50 flex h-[calc(56px+env(safe-area-inset-top))] items-end justify-between border-b border-outline-variant bg-surface/96 px-3 pb-0 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+      <header className="item-detail-header">
         <button
           aria-label="返回上一页"
-          className="mb-1.5 flex size-11 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
+          className="item-detail-header-icon tm-focus"
           onClick={goBackToDay}
           type="button"
         >
           <ArrowLeft className="size-5" />
         </button>
-        <div className="flex h-14 items-center text-lg font-semibold text-on-surface">地点详情</div>
-        <button
-          aria-label="编辑行程点"
-          className="mb-1.5 flex size-11 items-center justify-center rounded-lg text-primary transition-colors hover:bg-surface-container-high active:scale-95 tm-focus"
-          onClick={() => navigateTo('item/edit', { tripId: trip.id, dayId: day.id, itemId: item.id, view: sourceView })}
-          type="button"
-        >
-          <Pencil className="size-5" />
-        </button>
+        <div className="item-detail-header-title">地点详情</div>
+        <div className="item-detail-header-actions">
+          <button
+            aria-expanded={isAiOpen}
+            aria-haspopup="dialog"
+            aria-label="AI 助手"
+            className="item-detail-header-icon text-primary tm-focus"
+            onClick={() => setIsAiOpen(true)}
+            ref={aiTriggerRef}
+            type="button"
+          >
+            <Sparkles className="size-5" />
+          </button>
+          <button
+            aria-expanded={isMoreMenuOpen}
+            aria-haspopup="dialog"
+            aria-label="更多"
+            className="item-detail-header-icon tm-focus"
+            onClick={() => setIsMoreMenuOpen(true)}
+            type="button"
+          >
+            <MoreVertical className="size-5" />
+          </button>
+        </div>
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[calc(56px+env(safe-area-inset-top))] app-scrollbar">
-        <div className="mx-auto max-w-3xl py-4">
+      <main className="item-detail-scroll min-h-0 flex-1 overflow-y-auto app-scrollbar">
+        <div className="mx-auto max-w-3xl">
           <ItemDetailContent
             day={day}
             item={item}
@@ -202,6 +230,28 @@ export function ItemDetailPage() {
           />
         </div>
       </main>
+
+      <ItemHeaderMoreMenu
+        day={day}
+        item={item}
+        onClose={() => setIsMoreMenuOpen(false)}
+        open={isMoreMenuOpen}
+        sourceView={sourceView}
+        trip={trip}
+      />
+
+      {isAiOpen ? (
+        <Suspense fallback={null}>
+          <GlobalAiCommandBar
+            activeRoute="item"
+            onOpenChange={(open) => {
+              setIsAiOpen(open)
+              if (!open) window.requestAnimationFrame(() => aiTriggerRef.current?.focus())
+            }}
+            open={isAiOpen}
+          />
+        </Suspense>
+      ) : null}
     </div>
   )
 }
@@ -390,137 +440,131 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     })
   }
 
+  const primaryTicket = tickets[0]
+
   return (
     <>
-      <div className="space-y-6">
-        <section data-testid="item-detail-core">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-primary">
-            <Clock3 className="size-4" />
-            {describeItemTime(item)}
-          </p>
-          <h1 className="mt-2 break-words text-2xl font-bold leading-8 text-on-surface [overflow-wrap:anywhere]">
-            {item.title}
-          </h1>
-          <p className="mt-2 flex min-w-0 items-start gap-2 text-sm leading-6 text-on-surface-variant">
-            <MapPin className="mt-0.5 size-4 shrink-0" />
-            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-              {item.address || item.locationName || '地点待补充'}
+      <div className="item-detail-content">
+        <section className="item-detail-intro" data-testid="item-detail-core">
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-on-surface-variant">
+            {transportDescription ? <Navigation className="size-4 shrink-0" /> : <Clock3 className="size-4 shrink-0" />}
+            <span className="min-w-0 truncate">
+              {transportDescription ? `${transportDescription} · 出发 ${describeItemTime(item)}` : describeItemTime(item)}
             </span>
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <a
-              className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary tm-focus"
-              href={buildGoogleMapsUrl(item)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Navigation className="size-4 shrink-0" />
-              <span className="truncate">开始导航</span>
-            </a>
+          <h1 className="mt-3 break-words text-[2rem] font-bold leading-[1.18] text-on-surface [overflow-wrap:anywhere]">
+            {item.title}
+          </h1>
+          <p className="mt-3 min-w-0 break-words text-base leading-6 text-on-surface-variant [overflow-wrap:anywhere]">
+            {item.address || item.locationName || '地点待补充'}
+          </p>
+          <a
+            className="mt-6 inline-flex min-h-14 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-base font-semibold text-on-primary transition active:scale-[0.99] tm-focus"
+            href={buildGoogleMapsUrl(item)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Navigation className="size-5 shrink-0" />
+            <span className="truncate">开始导航</span>
+          </a>
+
+          {isLoadingRelations ? (
+            <div className="mt-4 h-[72px] animate-pulse rounded-lg bg-surface-container-high" />
+          ) : (
             <button
-              className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface tm-focus"
+              aria-label={primaryTicket ? '打开票据' : '添加票据'}
+              className="item-detail-ticket-callout mt-4 tm-focus"
               onClick={() => {
-                if (tickets[0]) setPreviewTicket(tickets[0])
+                if (primaryTicket) setPreviewTicket(primaryTicket)
                 else navigateTo('tickets', { tripId: trip.id, itemId: item.id })
               }}
               type="button"
             >
-              <Ticket className="size-4 shrink-0" />
-              <span className="truncate">{tickets[0] ? '打开票据' : '添加票据'}</span>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface text-on-surface-variant">
+                <Ticket className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <strong className="block truncate text-sm font-semibold text-on-surface">
+                  {primaryTicket ? getTicketDisplayTitle(primaryTicket) : '暂无关联票据'}
+                </strong>
+                <small className="mt-0.5 block truncate text-xs text-on-surface-variant">
+                  {primaryTicket ? (primaryTicket.note || `${getTicketCategoryLabel(primaryTicket)} · 已就绪`) : '为这个地点添加票据'}
+                </small>
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-primary">
+                {primaryTicket ? '打开票据' : '添加票据'}
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-primary" />
             </button>
-          </div>
-          {transportDescription ? (
-            <p className="mt-3 flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
-              <Navigation className="size-3.5 shrink-0" />
-              <span className="truncate">{transportDescription}</span>
-            </p>
-          ) : null}
-        </section>
-
-        <section data-testid="item-detail-tickets">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-on-surface">关联票据</h2>
-            <button
-              className="min-h-11 shrink-0 px-2 text-sm font-semibold text-primary tm-focus"
-              data-testid="item-ticket-view-all"
-              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
-              type="button"
-            >
-              查看全部
-            </button>
-          </div>
-          {isLoadingRelations ? (
-            <div className="h-16 animate-pulse rounded-lg bg-surface-container-high" />
-          ) : tickets.length === 0 ? (
-            <button
-              className="flex min-h-14 w-full items-center justify-between border-y border-outline-variant py-3 text-left text-sm text-on-surface-variant tm-focus"
-              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
-              type="button"
-            >
-              暂无关联票据
-              <ChevronRight className="size-4" />
-            </button>
-          ) : (
-            <div className="divide-y divide-outline-variant border-y border-outline-variant">
-              {tickets.slice(0, 3).map((ticket) => (
-                <button
-                  className="flex min-h-20 w-full min-w-0 items-center gap-3 py-2 text-left tm-focus"
-                  data-testid="item-ticket-entry"
-                  key={ticket.id}
-                  onClick={() => setPreviewTicket(ticket)}
-                  type="button"
-                >
-                  <TicketThumbnail className="h-16 w-12 shrink-0" ticket={ticket} />
-                  <span className="min-w-0 flex-1">
-                    <strong className="line-clamp-2 break-words text-sm leading-5 text-on-surface [overflow-wrap:anywhere]">
-                      {getTicketDisplayTitle(ticket)}
-                    </strong>
-                    <small className="mt-1 block break-words text-xs text-on-surface-variant [overflow-wrap:anywhere]">
-                      {getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF' : ticket.fileType === 'image' ? '图片' : '文件'}
-                    </small>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
-                </button>
-              ))}
-            </div>
           )}
         </section>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-on-surface">地点信息</h2>
+        <section className="item-detail-section">
+          <h2 className="item-detail-section-title">现场操作</h2>
+          <div className="mt-3 divide-y divide-outline-variant">
             <button
-              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 px-2 text-sm font-semibold text-primary tm-focus"
+              className="item-detail-info-row w-full text-left tm-focus"
+              data-testid="item-add-onsite-photo"
+              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+              type="button"
+            >
+              <Camera className="size-5 shrink-0 text-on-surface-variant" />
+              <span className="min-w-0 flex-1 text-sm font-semibold text-on-surface">添加现场照片</span>
+              <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+            </button>
+            <button
+              className="item-detail-info-row w-full text-left tm-focus"
+              data-testid="item-record-note"
+              onClick={() => navigateTo('item/edit', {
+                tripId: trip.id,
+                dayId: day.id,
+                itemId: item.id,
+                view: sourceView,
+              })}
+              type="button"
+            >
+              <NotebookPen className="size-5 shrink-0 text-on-surface-variant" />
+              <span className="min-w-0 flex-1 text-sm font-semibold text-on-surface">记录灵感</span>
+              <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+            </button>
+          </div>
+        </section>
+
+        <section className="item-detail-section">
+          <h2 className="item-detail-section-title">地点信息</h2>
+          <div className="mt-3 divide-y divide-outline-variant">
+            <div className="item-detail-info-row">
+              <MapPin className="mt-0.5 size-5 shrink-0 text-on-surface-variant" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-semibold text-on-surface [overflow-wrap:anywhere]">
+                  {item.locationName || '地点名称待补充'}
+                </p>
+                <p className="mt-0.5 break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
+                  {item.lat != null && item.lng != null ? '已定位，可直接导航' : '坐标待补充'}
+                </p>
+              </div>
+            </div>
+            <div className="item-detail-info-row">
+              <Clock3 className="mt-0.5 size-5 shrink-0 text-on-surface-variant" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-on-surface">{formatDate(day.date)}</p>
+                <p className="mt-0.5 text-xs text-on-surface-variant">{describeItemTime(item)}</p>
+              </div>
+            </div>
+            <button
+              className="item-detail-info-row w-full text-left tm-focus"
               data-testid="item-place-lookup-toggle"
               onClick={togglePlaceLookup}
               type="button"
             >
-              <Search className="size-4" />
-              查找地点信息
+              <Search className="size-5 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 text-sm font-semibold text-on-surface">查找地点信息</span>
+              <ChevronRight className={`size-4 shrink-0 text-on-surface-variant transition-transform ${isPlaceLookupOpen ? 'rotate-90' : ''}`} />
             </button>
           </div>
-          <dl className="divide-y divide-outline-variant border-y border-outline-variant">
-            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
-              <dt className="text-sm text-on-surface-variant">地点</dt>
-              <dd className="min-w-0 break-words text-sm font-medium text-on-surface [overflow-wrap:anywhere]">
-                {item.locationName || '待补充'}
-              </dd>
-            </div>
-            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
-              <dt className="text-sm text-on-surface-variant">地址</dt>
-              <dd className="min-w-0 break-words text-sm text-on-surface [overflow-wrap:anywhere]">
-                {item.address || '待补充'}
-              </dd>
-            </div>
-            <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 py-3">
-              <dt className="text-sm text-on-surface-variant">时间</dt>
-              <dd className="min-w-0 text-sm text-on-surface">{formatDate(day.date)} · {describeItemTime(item)}</dd>
-            </div>
-          </dl>
-        </section>
 
-        {isPlaceLookupOpen ? (
-          <section className="space-y-3 rounded-lg border border-outline-variant bg-surface-container p-3" data-testid="item-place-lookup-panel">
+          {isPlaceLookupOpen ? (
+            <div className="mt-3 space-y-3 border-t border-outline-variant pt-4" data-testid="item-place-lookup-panel">
             <div className="flex flex-col gap-2 sm:flex-row">
               <label className="min-w-0 flex-1">
                 <span className="sr-only">地点查询关键词</span>
@@ -578,19 +622,71 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
                 ))}
               </div>
             ) : null}
-          </section>
-        ) : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="item-detail-section" data-testid="item-detail-tickets">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="item-detail-section-title">关联票据</h2>
+            <button
+              className="min-h-11 shrink-0 px-2 text-sm font-semibold text-primary tm-focus"
+              data-testid="item-ticket-view-all"
+              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+              type="button"
+            >
+              查看全部
+            </button>
+          </div>
+          {isLoadingRelations ? (
+            <div className="mt-3 h-16 animate-pulse rounded-lg bg-surface-container-high" />
+          ) : tickets.length === 0 ? (
+            <button
+              className="item-detail-info-row mt-2 w-full border-y border-outline-variant text-left tm-focus"
+              onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+              type="button"
+            >
+              <Ticket className="size-5 shrink-0 text-on-surface-variant" />
+              <span className="min-w-0 flex-1 text-sm text-on-surface-variant">暂无关联票据</span>
+              <span className="text-sm font-semibold text-primary">添加</span>
+              <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+            </button>
+          ) : (
+            <div className="mt-2 divide-y divide-outline-variant border-y border-outline-variant">
+              {tickets.slice(0, 3).map((ticket) => (
+                <button
+                  className="flex min-h-20 w-full min-w-0 items-center gap-3 py-2 text-left tm-focus"
+                  data-testid="item-ticket-entry"
+                  key={ticket.id}
+                  onClick={() => setPreviewTicket(ticket)}
+                  type="button"
+                >
+                  <TicketThumbnail className="h-16 w-12 shrink-0" ticket={ticket} />
+                  <span className="min-w-0 flex-1">
+                    <strong className="line-clamp-2 break-words text-sm leading-5 text-on-surface [overflow-wrap:anywhere]">
+                      {getTicketDisplayTitle(ticket)}
+                    </strong>
+                    <small className="mt-1 block break-words text-xs text-on-surface-variant [overflow-wrap:anywhere]">
+                      {getTicketCategoryLabel(ticket)} · {ticket.fileType === 'pdf' ? 'PDF' : ticket.fileType === 'image' ? '图片' : '文件'}
+                    </small>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
         {item.notes ? (
-          <section>
-            <h2 className="mb-2 text-base font-semibold text-on-surface">备注</h2>
-            <p className="whitespace-pre-wrap break-words border-y border-outline-variant py-3 text-sm leading-6 text-on-surface [overflow-wrap:anywhere]">
+          <section className="item-detail-section">
+            <h2 className="item-detail-section-title">备注</h2>
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-on-surface [overflow-wrap:anywhere]">
               {item.notes}
             </p>
           </section>
         ) : null}
 
-        <Collapsible testId="item-detail-more" title="更多">
+        <Collapsible className="item-detail-more" testId="item-detail-more" title="更多">
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <a
@@ -773,6 +869,117 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
         title="确认使用这个地点吗？"
       />
     </>
+  )
+}
+
+function ItemHeaderMoreMenu({
+  day,
+  item,
+  onClose,
+  open,
+  sourceView,
+  trip,
+}: {
+  day: Day
+  item: ItineraryItem
+  onClose: () => void
+  open: boolean
+  sourceView: 'schedule' | 'map'
+  trip: Trip
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+
+  useModalAccessibility({
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onClose,
+    open,
+  })
+
+  if (!open) return null
+
+  return (
+    <div
+      aria-labelledby={titleId}
+      aria-modal="true"
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-surface-dim/24 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
+    >
+      <div className="w-full max-w-[430px] rounded-lg bg-surface p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]" data-testid="item-header-more-menu">
+        <div className="flex min-h-12 items-center justify-between px-3">
+          <h2 className="text-sm font-semibold text-on-surface" id={titleId}>地点操作</h2>
+          <button
+            aria-label="关闭地点操作"
+            className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <ItemHeaderMenuButton
+          icon={<Pencil className="size-4" />}
+          label="编辑行程点"
+          onClick={() => navigateTo('item/edit', {
+            tripId: trip.id,
+            dayId: day.id,
+            itemId: item.id,
+            view: sourceView,
+          })}
+        />
+        <ItemHeaderMenuButton
+          icon={<Ticket className="size-4" />}
+          label="全部票据"
+          onClick={() => navigateTo('tickets', { tripId: trip.id, itemId: item.id })}
+        />
+        <a
+          className="item-header-menu-row tm-focus"
+          href={buildAppleMapsUrl(item)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span className="item-header-menu-icon"><Navigation className="size-4" /></span>
+          <span className="min-w-0 flex-1 truncate">Apple 地图</span>
+          <ExternalLink className="size-4 shrink-0 text-on-surface-variant" />
+        </a>
+        <a
+          className="item-header-menu-row tm-focus"
+          href={buildGoogleMapsUrl(item)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span className="item-header-menu-icon"><Navigation className="size-4" /></span>
+          <span className="min-w-0 flex-1 truncate">Google 地图</span>
+          <ExternalLink className="size-4 shrink-0 text-on-surface-variant" />
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function ItemHeaderMenuButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button className="item-header-menu-row tm-focus" onClick={onClick} type="button">
+      <span className="item-header-menu-icon">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <ChevronRight className="size-4 shrink-0 text-on-surface-variant" />
+    </button>
   )
 }
 

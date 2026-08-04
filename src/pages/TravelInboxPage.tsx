@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Cloud, FolderOpen, Inbox, Loader2, Mail, MoreHorizontal, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronRight, Cloud, FileText, FileUp, FolderOpen, Inbox, Loader2, Mail, MoreHorizontal, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { EmptyState } from '../components/ui/EmptyState'
 import { listTrips } from '../db'
 import {
   createImapConnector,
@@ -27,9 +26,11 @@ import {
 import {
   createTravelInboxLocalFolderConnector,
   deleteTravelInboxLocalFolderConnector,
+  importTravelInboxFiles,
   listTravelInboxLocalFolderConnectors,
   scanTravelInboxLocalFolder,
   supportsTravelInboxLocalFolders,
+  TRAVEL_INBOX_FILE_ACCEPT,
 } from '../lib/travelInboxLocalFolders'
 import { getTravelInboxEntry } from '../lib/ai/travelInbox'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -55,6 +56,7 @@ export function TravelInboxPage() {
   const [bulkTripId, setBulkTripId] = useState('')
   const [focusedEntry, setFocusedEntry] = useState<TravelInboxEntry | null>(null)
   const [focusedEntryMissing, setFocusedEntryMissing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const processing = useRef(new Set<string>())
 
   const load = useCallback(async () => {
@@ -157,6 +159,18 @@ export function TravelInboxPage() {
     finally { setBusy(null) }
   }
 
+  async function importFiles(files: File[]) {
+    if (files.length === 0) return
+    await run('files', async () => {
+      const result = await importTravelInboxFiles(files)
+      if (result.created.length === 0) throw new Error(result.warnings[0] ?? '没有可导入的文件。')
+      setMessage(result.warnings.length > 0
+        ? `已导入 ${result.created.length} 项，${result.warnings.length} 项未处理。`
+        : `已导入 ${result.created.length} 项，正在整理。`)
+      setSourceSheetOpen(false)
+    })
+  }
+
   async function connectGmail() {
     if (!autoAiConsent) { setError('请先开启自动整理。'); return }
     await run('gmail', async () => {
@@ -177,34 +191,50 @@ export function TravelInboxPage() {
 
   return (
     <div className="space-y-4 pb-4" data-testid="travel-inbox-page">
-      <div className="flex min-h-11 items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-on-surface">材料</h2>
-          <p className="text-xs tm-muted">{sources.length} 项</p>
+      <input
+        accept={TRAVEL_INBOX_FILE_ACCEPT}
+        aria-label="选择旅行材料"
+        className="sr-only"
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? [])
+          event.currentTarget.value = ''
+          void importFiles(files)
+        }}
+        ref={fileInputRef}
+        type="file"
+      />
+
+      {sources.length > 0 ? (
+        <div className="flex min-h-11 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h2 className="text-lg font-semibold text-on-surface">待整理</h2>
+            <span className="text-xs tm-muted">{sources.length} 项</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              aria-label="刷新收件箱"
+              className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
+              disabled={busy === 'refresh'}
+              onClick={() => void run('refresh', async () => {
+                for (const connector of localConnectors) await scanTravelInboxLocalFolder(connector)
+                if (connectorConfig.configured) await refreshCloudTravelInboxSources()
+              })}
+              type="button"
+            >
+              <RefreshCw className={`size-5 ${busy === 'refresh' ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              aria-label="导入材料"
+              className="flex size-11 items-center justify-center rounded-lg bg-primary text-on-primary tm-focus"
+              onClick={() => fileInputRef.current?.click()}
+              type="button"
+            >
+              <Plus className="size-5" />
+            </button>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            aria-label="刷新收件箱"
-            className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
-            disabled={busy === 'refresh'}
-            onClick={() => void run('refresh', async () => {
-              for (const connector of localConnectors) await scanTravelInboxLocalFolder(connector)
-              if (connectorConfig.configured) await refreshCloudTravelInboxSources()
-            })}
-            type="button"
-          >
-            <RefreshCw className={`size-5 ${busy === 'refresh' ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            aria-label="添加来源"
-            className="flex size-11 items-center justify-center rounded-lg bg-primary text-on-primary tm-focus"
-            onClick={() => setSourceSheetOpen(true)}
-            type="button"
-          >
-            <Plus className="size-5" />
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {focusedEntryId ? (
         <Card className="space-y-3 border-primary/40" data-testid="travel-inbox-focused-entry" variant="grouped">
@@ -218,10 +248,6 @@ export function TravelInboxPage() {
       {error ? <p className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{error}</p> : null}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-on-surface">待整理</h3>
-          {sources.length > 0 ? <span className="text-xs tm-muted">{sources.length}</span> : null}
-        </div>
         {assignableSources.length > 1 && trips.length > 0 ? (
           <div className="flex flex-col gap-2 rounded-lg bg-surface-container-high p-3 sm:flex-row sm:items-end">
             {trips.length > 1 ? (
@@ -253,9 +279,15 @@ export function TravelInboxPage() {
           </div>
         ) : null}
         {sources.length === 0 ? (
-          <div className="space-y-3">
-            <EmptyState icon={<Inbox className="size-6" />} title="暂无材料" body="导入文件或连接邮箱。" />
-            <Button className="w-full" icon={<Plus className="size-4" />} onClick={() => setSourceSheetOpen(true)}>添加来源</Button>
+          <div className="mx-auto flex min-h-64 max-w-sm flex-col items-center justify-center px-4 py-10 text-center sm:min-h-80">
+            <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary-fixed text-primary">
+              <Inbox className="size-6" />
+            </div>
+            <h2 className="text-lg font-semibold text-on-surface">导入旅行材料</h2>
+            <p className="mt-1 text-sm leading-6 tm-muted">票据、证件和行程单都可以</p>
+            <Button className="mt-5 min-w-40" icon={<FileUp className="size-4" />} loading={busy === 'files'} onClick={() => fileInputRef.current?.click()}>
+              导入材料
+            </Button>
           </div>
         ) : (
           <div className="divide-y divide-outline-variant/25 border-y border-outline-variant/25">
@@ -275,38 +307,39 @@ export function TravelInboxPage() {
         )}
       </section>
 
-      <button className="flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-sm font-semibold text-on-surface-variant tm-focus" onClick={() => setSourceSheetOpen(true)} type="button">
-        <span>来源设置</span>
-        <span className="text-xs tm-muted">{connectors.length + localConnectors.length}</span>
+      <button
+        aria-label={`来源与导入 ${connectors.length + localConnectors.length}`}
+        className="flex min-h-12 w-full items-center justify-between border-t border-outline-variant/25 px-1 pt-2 text-sm font-semibold text-on-surface-variant tm-focus"
+        onClick={() => setSourceSheetOpen(true)}
+        type="button"
+      >
+        <span>来源与导入</span>
+        <span className="flex items-center gap-1 text-xs tm-muted">
+          {connectors.length + localConnectors.length > 0 ? connectors.length + localConnectors.length : null}
+          <ChevronRight className="size-4" />
+        </span>
       </button>
 
-      <BottomSheet maxHeight="calc(100dvh - 1rem)" onClose={() => setSourceSheetOpen(false)} open={sourceSheetOpen} title="添加与管理来源">
+      <BottomSheet maxHeight="calc(100dvh - 1rem)" onClose={() => setSourceSheetOpen(false)} open={sourceSheetOpen} title="来源与导入">
         <div className="space-y-4">
           <div className="grid gap-2">
+            <Button icon={<FileUp className="size-4" />} loading={busy === 'files'} onClick={() => fileInputRef.current?.click()}>
+              导入文件
+            </Button>
             {supportsTravelInboxLocalFolders() ? (
               <Button icon={<FolderOpen className="size-4" />} onClick={() => void run('local', async () => {
                 await createTravelInboxLocalFolderConnector(true)
                 setMessage('本地文件夹已连接。')
                 setSourceSheetOpen(false)
-              })}>
+              })} variant="secondary">
                 选择本地文件夹
-              </Button>
-            ) : null}
-            {connectorConfig.configured ? (
-              <Button disabled={busy === 'gmail' || !autoAiConsent} icon={<Mail className="size-4" />} onClick={() => void connectGmail()} variant="secondary">
-                连接 Gmail
-              </Button>
-            ) : null}
-            {connectorConfig.configured ? (
-              <Button icon={<Cloud className="size-4" />} onClick={() => setImapOpen((value) => !value)} variant="secondary">
-                连接其他邮箱
               </Button>
             ) : null}
           </div>
 
           {connectorConfig.configured ? (
             <details className="rounded-lg border border-outline-variant/30 px-3 py-2">
-              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">邮箱整理设置</summary>
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-on-surface">连接邮箱</summary>
               <div className="space-y-3 border-t border-outline-variant/20 pt-3">
                 <label className="flex items-center gap-3 text-sm">
                   <input checked={autoAiConsent} className="size-4" onChange={(event) => setAutoAiConsent(event.target.checked)} type="checkbox" />
@@ -321,9 +354,17 @@ export function TravelInboxPage() {
                   </select>
                 </label>
                 <Input label="Gmail 标签" placeholder="INBOX" value={gmailLabelId} onChange={setGmailLabelId} />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button disabled={busy === 'gmail' || !autoAiConsent} icon={<Mail className="size-4" />} onClick={() => void connectGmail()} variant="secondary">
+                    连接 Gmail
+                  </Button>
+                  <Button icon={<Cloud className="size-4" />} onClick={() => setImapOpen((value) => !value)} variant="secondary">
+                    其他邮箱
+                  </Button>
+                </div>
               </div>
             </details>
-          ) : <p className="text-sm tm-muted">邮箱连接暂不可用。</p>}
+          ) : null}
 
           {imapOpen ? (
             <div className="grid gap-3 rounded-lg border border-outline-variant/30 p-3 sm:grid-cols-2">
@@ -362,11 +403,16 @@ export function TravelInboxPage() {
 
 function SourceRow({ busy, onAssign, onDiscard, onOpen, onRetry, source, trips }: { busy: boolean; onAssign: (tripId: string) => void; onDiscard: () => void; onOpen: () => void; onRetry: () => void; source: TravelInboxAccountSource; trips: Trip[] }) {
   return (
-    <div className="space-y-2 py-3" data-testid="travel-inbox-source">
+    <div className="space-y-2 py-2.5" data-testid="travel-inbox-source">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="break-words text-sm font-semibold text-on-surface">{source.label}</p>
-          <p className="mt-0.5 text-xs tm-muted">{source.connectorKind === 'local_folder' ? '文件夹' : '邮箱'} · {statusLabel(source.status)}</p>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-on-surface-variant">
+            <FileText className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-on-surface" title={source.label}>{source.label}</p>
+            <p className="mt-0.5 text-xs tm-muted">{source.connectorKind === 'local_folder' ? (source.connectorId ? '文件夹' : '文件') : '邮箱'} · {statusLabel(source.status)}</p>
+          </div>
         </div>
         {busy ? <Loader2 className="mt-2 size-4 animate-spin text-primary" /> : (
           <details className="relative shrink-0">
@@ -388,7 +434,12 @@ function SourceRow({ busy, onAssign, onDiscard, onOpen, onRetry, source, trips }
           </select>
         </div>
       ) : null}
-      {source.status === 'preview_ready' ? <Button className="w-full" onClick={onOpen} variant="secondary">查看整理预览</Button> : null}
+      {source.status === 'preview_ready' ? (
+        <button className="flex min-h-11 w-full items-center justify-between rounded-lg px-2 text-sm font-semibold text-primary tm-focus" onClick={onOpen} type="button">
+          <span>查看整理预览</span>
+          <ChevronRight className="size-4" />
+        </button>
+      ) : null}
     </div>
   )
 }

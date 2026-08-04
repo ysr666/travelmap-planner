@@ -1,6 +1,6 @@
 # Travel Inbox Source Connectors
 
-Status: **Current connector baseline + Target UI V3**
+Status: **Current connector baseline + Candidate UI V3 surface**
 
 Travel Inbox is the realtime ingestion layer for an AI-first trip workspace. Account-level Gmail and IMAP connectors continuously discover supported travel messages, while upload, paste, and device-folder flows remain available as explicit fallbacks.
 
@@ -10,9 +10,9 @@ Travel Inbox is the realtime ingestion layer for an AI-first trip workspace. Acc
 
 **Current:** Gmail and IMAP use scheduled ingestion, the device folder is local, and AI output is an editable preview. The current five-minute cron and browser-assisted parsing are migration-stage behavior rather than the final realtime job model.
 
-## Target UI Surface
+## Candidate UI Surface
 
-The Inbox UI follows [UI V3](UI_REFACTOR_V3.md):
+The candidate Inbox UI follows [UI V3](UI_REFACTOR_V3.md); it becomes production Current only after merge and release qualification:
 
 - When items exist, the first screen is the pending item list; when empty, it contains one import/connect command.
 - Zero metric cards, Provider availability, connector diagnostics, and technical setup do not lead the main Inbox surface.

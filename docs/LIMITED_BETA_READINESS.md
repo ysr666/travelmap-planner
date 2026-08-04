@@ -1,29 +1,29 @@
 # Limited Beta Readiness
 
-更新时间：2026-07-29
+更新时间：2026-08-05
 
 ## 结论
 
-当前代码达到上一阶段 Limited Beta Release Candidate，可作为“实时在线、AI 优先”迁移的稳定基线。`main` 同 SHA 远端验证已通过；但 cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
+当前代码达到 Limited Beta Release Candidate。UI V3 候选实现已完成本地浏览器和自动化验收；当前分支尚未完成实体机与本次候选 SHA 的远端检查。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
 
 ## 验收矩阵
 
 | 区域 | 状态 | 当前证据 | 发布边界 |
 | --- | --- | --- | --- |
 | Trip / Day / Item | 就绪 | 核心导航、时间轴、地图、详情和移动端溢出 E2E | 路线是预览，不是导航 |
-| Ticket Library | 就绪 | 画廊前置、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
+| Ticket Library | 候选就绪 | 编辑式预览列表、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
 | 全局 AI | V1 就绪但有限 | 票据、地点、行程修复的注册表校验、预览、确认、stale guard 和部分失败 E2E | 只能执行登记动作，不是任意自主代理 |
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 就绪 | 187/1555 unit、156 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
+| CI / E2E | 本地候选就绪 | 190/1576 unit、173/173 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
 | 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 目标能力 | 已完成[工具、信息架构、视觉、响应式和验收规范](UI_REFACTOR_V3.md) | 当前仍是 UI V2；四项导航、Toolbar AI、Action Sheet 和主从布局尚未实现 |
+| UI V3 | 候选实现完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、五视口 Golden | 实体机、同 SHA CI 和生产部署后才转为 Current |
 
 ## 发布必过
 

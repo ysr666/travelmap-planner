@@ -12,7 +12,9 @@ test('设置页可以配置旅行偏好和 AI 隐私数据范围', async ({ page
 
   const profileSection = page.getByTestId('travel-profile-section')
   await expect(profileSection).toBeVisible()
-  await expect(profileSection).toContainText('设备内运行')
+  await expect(profileSection).not.toContainText('设备内运行')
+  await expect(profileSection).toContainText('旅行节奏')
+  await expect(profileSection).toContainText('交通偏好')
   await expect(page.getByTestId('travel-profile-pace-moderate')).toHaveAttribute('aria-pressed', 'true')
 
   await page.getByTestId('travel-profile-pace-relaxed').click()

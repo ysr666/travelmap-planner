@@ -269,11 +269,10 @@ test.describe('AI Trip Builder Page', () => {
     await page.goto('/#/ai-draft')
   })
 
-  test('shows description and context note', async ({ page }) => {
-    const header = page.getByTestId('ai-draft-page-header')
-    await expect(header.getByRole('heading', { name: 'AI 生成行程' })).toBeVisible()
-    await expect(header).toContainText('告诉 AI 目的地和日期')
-    await expect(header).toContainText('确认后再创建旅行')
+  test('shows one task title and starts with the request form', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'AI 生成行程', exact: true })).toHaveCount(1)
+    await expect(page.getByTestId('ai-draft-request-form')).toBeVisible()
+    await expect(page.getByText('告诉 AI 目的地和日期')).toHaveCount(0)
   })
 
   test('shows request builder section', async ({ page }) => {
@@ -752,11 +751,10 @@ test.describe('AI Trip Builder Page', () => {
     await expect(preview.getByLabel('每日主题').nth(2)).toHaveValue('用户请求中编辑第三天')
   })
 
-  test('shows privacy notice', async ({ page }) => {
+  test('shows a concise final-write boundary', async ({ page }) => {
     await parseSampleDraft(page)
     const privacyNote = page.getByTestId('ai-draft-privacy-note')
-    await expect(privacyNote).toContainText('这里的修改只更新当前草案')
-    await expect(privacyNote).toContainText('确认导入后才会写入本地旅行')
+    await expect(privacyNote).toHaveText('确认导入后才会创建旅行。')
   })
 
   test('shows confirm button only for valid draft', async ({ page }) => {

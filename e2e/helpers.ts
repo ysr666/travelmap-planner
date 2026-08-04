@@ -40,12 +40,12 @@ export async function clearTravelDatabase(page: Page) {
   })
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('today-empty')).toBeVisible({ timeout: 15_000 })
 }
 
 export async function createDemoTripViaUi(page: Page) {
   await clearTravelDatabase(page)
-  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('today-empty')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '创建示例旅行' }).click()
 
   const tripCard = page.getByTestId('trip-card').filter({ hasText: '东京春日旅行' })
@@ -146,6 +146,36 @@ export async function seedTravelRecords(page: Page, seed: {
       for (const blob of nextSeed.ticketBlobs ?? []) transaction.objectStore('ticketBlobs').put(blob)
     })
   }, seed)
+}
+
+export async function seedRouteCacheRecords(page: Page, entries: unknown[]) {
+  await page.evaluate(async (nextEntries) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TripMapRouteCacheDB', 1)
+      request.onupgradeneeded = () => {
+        const database = request.result
+        if (database.objectStoreNames.contains('routeCaches')) return
+        const store = database.createObjectStore('routeCaches', { keyPath: 'id' })
+        store.createIndex('signature', 'signature')
+        store.createIndex('[tripId+dayId]', ['tripId', 'dayId'])
+        store.createIndex('lastUsedAt', 'lastUsedAt')
+        store.createIndex('updatedAt', 'updatedAt')
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('打开路线缓存数据库失败'))
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('routeCaches', 'readwrite')
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => reject(transaction.error ?? new Error('写入路线缓存失败'))
+      transaction.onabort = () => reject(transaction.error ?? new Error('写入路线缓存中断'))
+      for (const entry of nextEntries) transaction.objectStore('routeCaches').put(entry)
+    })
+  }, entries)
 }
 
 export async function forceRoutingUnconfigured(page: Page) {

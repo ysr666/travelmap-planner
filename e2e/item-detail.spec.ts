@@ -399,7 +399,8 @@ test('地图来源详情编辑后保留地图上下文', async ({ page }) => {
   await expect(page).toHaveURL(/view=map/)
   await expect(page.getByRole('button', { name: '返回上一页' })).toBeVisible()
 
-  await page.getByRole('button', { name: '编辑行程点' }).click()
+  await page.getByRole('button', { exact: true, name: '更多' }).click()
+  await page.getByTestId('item-header-more-menu').getByRole('button', { exact: true, name: '编辑行程点' }).click()
   await expect(page).toHaveURL(/#\/item\/edit\?/)
   await expect(page).toHaveURL(/view=map/)
   await page.getByLabel('行程标题').fill('Hotel Metropolitan Tokyo 入住 v2')

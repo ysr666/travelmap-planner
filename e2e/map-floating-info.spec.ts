@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await mockMapStyle(page)
 })
 
-test('地图视图只保留浮动信息栏，不渲染底部抽屉', async ({ page }) => {
+test('地图视图只保留一个地点 Sheet，不恢复旧路线抽屉', async ({ page }) => {
   await createDemoTripViaUi(page)
   await page.getByTestId('view-switch-map').click()
 
@@ -14,7 +14,7 @@ test('地图视图只保留浮动信息栏，不渲染底部抽屉', async ({ pa
   await expect(page.getByTestId('map-sheet-handle')).toHaveCount(0)
   await expect(page.getByTestId('route-chip')).toHaveCount(0)
   await expect(page.getByTestId('route-controls-section')).toHaveCount(0)
-  await expect(page.getByTestId('view-switch-map')).toBeVisible()
+  await expect(page.getByTestId('view-switch-map')).toHaveCount(0)
   await expect(page.getByTestId('view-switch-schedule')).toBeVisible()
   await expect(page.getByTestId('day-selector')).toBeVisible()
   await expectDaySelectorShadowBreathingRoom(page)
@@ -24,6 +24,8 @@ test('地图视图只保留浮动信息栏，不渲染底部抽屉', async ({ pa
   await expect(markerCard).toBeVisible({ timeout: 15000 })
   await expect(markerCard).toContainText('Hotel Metropolitan Tokyo 入住')
   await expect(markerCard).toContainText('15:00')
+  await expect(markerCard.getByTestId('map-marker-card-navigate')).toHaveAttribute('href', /google\.com\/maps/)
+  await expect(markerCard.getByTestId('map-marker-card-navigate')).toContainText('开始导航')
   await expect(page.getByRole('link', { name: /Apple 地图|Apple/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Google 地图|Google/ })).toHaveCount(0)
 
@@ -193,16 +195,15 @@ async function expectMarkerAndCardInUsableMapArea(page: Page, marker: Locator, m
     }
 
     const tolerance = 12
-    const bottomSafeInset = 24
     return (
       markerBox.x >= -tolerance &&
       markerBox.x + markerBox.width <= viewport.width + tolerance &&
       markerBox.y >= -tolerance &&
       markerBox.y + markerBox.height <= cardBox.y + tolerance &&
-      cardBox.x >= 8 &&
-      cardBox.x + cardBox.width <= viewport.width - 8 &&
+      cardBox.x >= -1 &&
+      cardBox.x + cardBox.width <= viewport.width + 1 &&
       cardBox.y >= 48 &&
-      cardBox.y + cardBox.height <= viewport.height - bottomSafeInset
+      cardBox.y + cardBox.height <= viewport.height + 1
     )
   }, {
     message: 'selected marker and marker card should fit in the usable map area',
@@ -229,7 +230,7 @@ async function expectMarkerGroupNearVisibleCenter(page: Page) {
     const viewport = page.viewportSize()
     const markerBoxes = await getVisibleMarkerBoxes(page)
     const cardBox = await page.getByTestId('map-marker-card').boundingBox()
-    const switchBox = await page.getByTestId('view-switch-map').boundingBox()
+    const switchBox = await page.getByTestId('view-switch-schedule').boundingBox()
     const selectorBox = await page.getByTestId('day-selector').boundingBox()
     const locationButtonBox = await page.getByTestId('map-user-location-button').boundingBox()
     if (!viewport || markerBoxes.length === 0 || !cardBox || !switchBox || !selectorBox || !locationButtonBox) {

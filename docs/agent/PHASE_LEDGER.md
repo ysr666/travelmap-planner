@@ -2,6 +2,46 @@
 
 > **Historical ledger:** Entries below preserve completed work and decisions at their original dates. New phases follow the realtime online, AI-first [Product Strategy](../PRODUCT_STRATEGY.md) and [Roadmap V5](../ROADMAP_V5.md).
 
+## 2026-08-05 UI V3 Selected Target Implementation
+
+Status: candidate implementation complete; release qualification pending.
+
+Goal:
+
+- Implement the selected product direction across the real React PWA, then close browser, responsive, accessibility, PWA, and release evidence without changing protected data or Provider contracts.
+
+Scope:
+
+- M0-M5: App Shell, staged Today lifecycle, itinerary/map/place, documents/inbox, contextual AI/search, forms, ledger/shared trip, and Settings.
+- M6: same-state visual comparison, five-viewport Goldens, full regression, PWA upgrade, physical-device, and same-SHA remote evidence.
+
+No-go:
+
+- No IndexedDB schema, Supabase semantics, Provider contracts, route-cache semantics, ticket/blob storage, AI privacy, or confirmation-boundary change.
+- No generated map, ticket, identity, or realtime fact copied into product data.
+- No fabricated physical-device or remote deployment result.
+
+Result:
+
+- Mobile navigation is `今日 | 行程 | 资料 | 我的`; Search and AI remain contextual commands.
+- Today now has distinct empty, predeparture, active, and completed states.
+- Documents use a real-preview editing list; Inbox is reached through `来源与导入`.
+- Trip uses `日程 | 地图`, a compact date strip, continuous timeline, and one place Sheet.
+- Global AI is on-demand, auto-closes after navigation, preserves one final confirmation for writes, and retries failed steps without repeating successful steps.
+- Shared V3 Section, Row, Status, Disclosure, and Form primitives now cover core and low-frequency pages.
+- Selected Target comparisons for predeparture, active Today, itinerary, and documents found no open P0/P1/P2 visual issue.
+
+Validation:
+
+- Typecheck, lint, 190-file/1576-test unit suite, production build, bundle budget, 12 visual flows, and five PWA upgrade tests passed.
+- Full serial E2E passed 173/173 in approximately 6.2 minutes; PWA upgrade passed 5/5.
+- Physical iPhone and Android evidence is pending because the iPhone is offline and no Android device is connected.
+- Same-SHA GitHub and Cloudflare evidence is pending until the candidate is committed and pushed.
+
+Next:
+
+- Complete physical-device acceptance, push the candidate branch, validate required checks and deployment, then change Candidate documentation to Current.
+
 ## 2026-07-29 Planned Program - UI V3 Product Shell
 
 Status: implementation and browser acceptance complete; physical-device release evidence pending

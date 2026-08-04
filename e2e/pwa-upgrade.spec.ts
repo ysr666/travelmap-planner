@@ -394,7 +394,8 @@ test('PWA 核心页面预缓存且可选重资源首次使用后缓存', async (
     expect(cachedResponse.size).toBe(onlineResponse.size)
 
     await clickTripCard(tripCard)
-    await expect(page.getByRole('heading', { name: '抵达与涩谷' })).toBeVisible()
+    await expect(page.getByTestId('trip-home-focus-timeline')).toBeVisible()
+    await expect(page.getByText('Hotel Metropolitan Tokyo 入住', { exact: true })).toBeVisible()
     const tripId = getHashParam(page.url(), 'tripId')
     expect(tripId).toBeTruthy()
     const ids = await getFirstTripDayAndItemIds(page, tripId)

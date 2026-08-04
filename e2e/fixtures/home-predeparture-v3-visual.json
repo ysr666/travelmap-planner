@@ -1,0 +1,108 @@
+{
+  "fixedNow": "2026-08-04T08:00:00.000Z",
+  "records": {
+    "trips": [
+      {
+        "id": "trip_home_predeparture_v3",
+        "title": "英国12天家庭旅行",
+        "destination": "伦敦",
+        "startDate": "2026-08-12",
+        "endDate": "2026-08-23",
+        "timeZone": "Europe/London",
+        "timeZoneSource": "imported",
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      }
+    ],
+    "days": [
+      {
+        "id": "day_home_predeparture_v3_01",
+        "tripId": "trip_home_predeparture_v3",
+        "date": "2026-08-12",
+        "title": "抵达伦敦",
+        "sortOrder": 1
+      }
+    ],
+    "itineraryItems": [
+      {
+        "id": "item_home_predeparture_v3_arrival",
+        "tripId": "trip_home_predeparture_v3",
+        "dayId": "day_home_predeparture_v3_01",
+        "title": "抵达伦敦",
+        "startTime": "17:35",
+        "locationName": "London Heathrow Airport",
+        "ticketIds": ["ticket_home_predeparture_v3_flight"],
+        "sortOrder": 1,
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      },
+      {
+        "id": "item_home_predeparture_v3_hotel",
+        "tripId": "trip_home_predeparture_v3",
+        "dayId": "day_home_predeparture_v3_01",
+        "title": "酒店入住",
+        "startTime": "19:00",
+        "locationName": "Park Plaza Westminster Bridge London",
+        "address": "200 Westminster Bridge Road, London SE1 7UT",
+        "lat": 51.5009,
+        "lng": -0.1167,
+        "ticketIds": ["ticket_home_predeparture_v3_hotel"],
+        "sortOrder": 2,
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      }
+    ],
+    "ticketMetas": [
+      {
+        "id": "ticket_home_predeparture_v3_flight",
+        "tripId": "trip_home_predeparture_v3",
+        "itemId": "item_home_predeparture_v3_arrival",
+        "scope": "item",
+        "title": "CA849 上海至伦敦机票",
+        "storageMode": "reference",
+        "referenceLocation": "TripMap/英国旅行/CA849.pdf",
+        "ticketCategory": "flight_ticket",
+        "fileName": "CA849-shanghai-london.pdf",
+        "fileType": "pdf",
+        "mimeType": "application/pdf",
+        "size": 246000,
+        "note": "8月12日 11:35 起飞 · 已出票",
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      },
+      {
+        "id": "ticket_home_predeparture_v3_hotel",
+        "tripId": "trip_home_predeparture_v3",
+        "itemId": "item_home_predeparture_v3_hotel",
+        "scope": "item",
+        "title": "伦敦 Park Plaza Westminster 酒店",
+        "storageMode": "reference",
+        "referenceLocation": "TripMap/英国旅行/london-hotel.pdf",
+        "ticketCategory": "hotel_booking",
+        "fileName": "london-hotel-booking.pdf",
+        "fileType": "pdf",
+        "mimeType": "application/pdf",
+        "size": 312000,
+        "note": "8月12日入住 · 4晚",
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      },
+      {
+        "id": "ticket_home_predeparture_v3_insurance",
+        "tripId": "trip_home_predeparture_v3",
+        "scope": "trip",
+        "title": "英国旅行保险保单",
+        "storageMode": "reference",
+        "referenceLocation": "TripMap/英国旅行/insurance.pdf",
+        "ticketCategory": "other",
+        "fileName": "uk-travel-insurance-policy.pdf",
+        "fileType": "pdf",
+        "mimeType": "application/pdf",
+        "size": 198000,
+        "note": "8月12日 - 8月23日 · 已生效",
+        "createdAt": 1785830400000,
+        "updatedAt": 1785830400000
+      }
+    ]
+  }
+}

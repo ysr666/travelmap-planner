@@ -223,7 +223,7 @@ test('票据库空状态清楚可用', async ({ page }) => {
   await expectNoHorizontalOverflow(page)
 })
 
-test('票据库以 gallery 卡片展示多种票据并保留预览行为', async ({ page }) => {
+test('票据库以编辑式预览列表展示多种票据并保留预览行为', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
   const firstItemId = await getFirstItemId(page, tripId)
   await addTicketMetas(page, tripId, firstItemId, ticketSeeds)
@@ -242,7 +242,7 @@ test('票据库以 gallery 卡片展示多种票据并保留预览行为', async
   await expect(page.getByTestId('ticket-gallery')).toContainText('链接')
   await expect(page.getByTestId('ticket-gallery')).toContainText('图片')
   await expect(page.getByTestId('ticket-gallery')).toContainText('PDF')
-  await expect(page.getByTestId('ticket-gallery')).toContainText('绑定到行程点')
+  await expect(page.getByTestId('ticket-gallery')).toContainText('其他票据 · 位置')
   const hotelCard = page.getByTestId('ticket-card').filter({ hasText: '酒店订单 PDF' })
   await hotelCard.getByLabel(/酒店订单 PDF更多操作/).click()
   await expect(hotelCard.getByRole('button', { name: '删除', exact: true })).toBeVisible()
@@ -294,7 +294,7 @@ test('票据库可以编辑票据元数据并原子移除行程点绑定', async
   await expect(editor).toHaveCount(0)
   await expect(page.getByText('票据信息已更新。')).toBeVisible()
   await expect(page.getByTestId('ticket-gallery')).toContainText('酒店订单已整理')
-  await expect(page.getByTestId('ticket-gallery-section').filter({ hasText: '未分类' })).toContainText('酒店订单已整理')
+  await expect(page.getByTestId('ticket-card').filter({ hasText: '酒店订单已整理' })).toBeVisible()
 
   const binding = await readTicketBinding(page, tripId, firstItemId, '酒店订单已整理')
   expect(binding.ticket.itemId).toBeUndefined()

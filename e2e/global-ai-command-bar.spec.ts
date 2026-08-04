@@ -1033,6 +1033,103 @@ test('全局 AI 一键修复会先补地点再生成被解锁的路线', async (
   await expectNoHorizontalOverflow(page)
 })
 
+test('出发前首页一键补全会直接生成统一预览且只保留最终确认', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-07-24T09:00:00.000Z'))
+  await clearTravelDatabase(page)
+  await forceRouteProxyFixture(page)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  let placeLookupRequests = 0
+  await page.route('**/api/provider-proxy', async (route) => {
+    const body = route.request().postDataJSON()
+    if (body.operation !== 'place_lookup') {
+      await route.fallback()
+      return
+    }
+    placeLookupRequests += 1
+    await route.fulfill({
+      body: JSON.stringify({
+        ok: true,
+        operation: 'place_lookup',
+        results: [{
+          displayName: '伦敦希思罗机场',
+          formattedAddress: 'Hounslow, United Kingdom',
+          location: { lat: 51.47, lng: -0.4543 },
+          placeId: 'places/e2e-home-repair',
+          provider: 'google_places',
+          retrievedAt: '2026-07-24T09:00:00.000Z',
+        }],
+        retrievedAt: '2026-07-24T09:00:00.000Z',
+        source: 'mock',
+      }),
+      contentType: 'application/json',
+    })
+  })
+
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-07-25',
+      id: 'gateway-home-repair-day',
+      sortOrder: 1,
+      title: '抵达伦敦',
+      tripId: 'gateway-home-repair-trip',
+    }],
+    itineraryItems: [
+      {
+        createdAt: now,
+        dayId: 'gateway-home-repair-day',
+        id: 'gateway-home-repair-airport',
+        sortOrder: 1,
+        startTime: '09:00',
+        ticketIds: [],
+        title: '抵达伦敦希思罗机场',
+        tripId: 'gateway-home-repair-trip',
+        updatedAt: now,
+      },
+      {
+        address: '1 Hamilton Place, London',
+        createdAt: now,
+        dayId: 'gateway-home-repair-day',
+        id: 'gateway-home-repair-hotel',
+        lat: 51.501,
+        lng: -0.158,
+        locationName: '伦敦酒店',
+        sortOrder: 2,
+        startTime: '11:00',
+        ticketIds: [],
+        title: '伦敦酒店入住',
+        tripId: 'gateway-home-repair-trip',
+        updatedAt: now,
+      },
+    ],
+    trips: [{
+      createdAt: now,
+      destination: '英国伦敦',
+      endDate: '2026-07-26',
+      id: 'gateway-home-repair-trip',
+      notes: '## 今日旅行提示 · 2026-07-25\n已核对当天提示。',
+      startDate: '2026-07-25',
+      timeZone: 'Europe/London',
+      title: '英国测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByTestId('today-upcoming')).toBeVisible()
+  await page.getByTestId('home-smart-repair').click()
+
+  await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeVisible()
+  await expect(page.getByLabel('全局 AI 指令')).toHaveValue('把这个旅行缺失的地点、路线、景点内容、每日提示和票据同步问题全部修复')
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('智能修复行程')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  expect((await readItineraryItem(page, 'gateway-home-repair-airport')).lat).toBeUndefined()
+  expect(placeLookupRequests).toBe(1)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 组合计划部分失败后只重试失败步骤且不跳过写入确认', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceRouteProxyFixture(page)

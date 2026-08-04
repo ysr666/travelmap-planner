@@ -1,0 +1,103 @@
+{
+  "fixedNow": "2026-06-16T08:00:00.000Z",
+  "records": {
+    "trips": [
+      {
+        "id": "trip_itinerary_v3",
+        "title": "英国12天家庭旅行",
+        "destination": "英国",
+        "startDate": "2026-06-15",
+        "endDate": "2026-06-26",
+        "timeZone": "Europe/London",
+        "timeZoneSource": "imported",
+        "createdAt": 1781510400000,
+        "updatedAt": 1781510400000
+      }
+    ],
+    "days": [
+      { "id": "trip_v3_day_01", "tripId": "trip_itinerary_v3", "date": "2026-06-15", "title": "抵达伦敦", "sortOrder": 1, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_02", "tripId": "trip_itinerary_v3", "date": "2026-06-16", "title": "伦敦经典路线", "sortOrder": 2, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_03", "tripId": "trip_itinerary_v3", "date": "2026-06-17", "title": "博物馆与西区", "sortOrder": 3, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_04", "tripId": "trip_itinerary_v3", "date": "2026-06-18", "title": "牛津一日", "sortOrder": 4, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_05", "tripId": "trip_itinerary_v3", "date": "2026-06-19", "title": "约克老城", "sortOrder": 5, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_06", "tripId": "trip_itinerary_v3", "date": "2026-06-20", "title": "前往爱丁堡", "sortOrder": 6, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_07", "tripId": "trip_itinerary_v3", "date": "2026-06-21", "title": "爱丁堡老城", "sortOrder": 7, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_08", "tripId": "trip_itinerary_v3", "date": "2026-06-22", "title": "爱丁堡新城", "sortOrder": 8, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_09", "tripId": "trip_itinerary_v3", "date": "2026-06-23", "title": "湖区", "sortOrder": 9, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_10", "tripId": "trip_itinerary_v3", "date": "2026-06-24", "title": "湖区慢游", "sortOrder": 10, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_11", "tripId": "trip_itinerary_v3", "date": "2026-06-25", "title": "返回伦敦", "sortOrder": 11, "createdAt": 1781510400000, "updatedAt": 1781510400000 },
+      { "id": "trip_v3_day_12", "tripId": "trip_itinerary_v3", "date": "2026-06-26", "title": "返程", "sortOrder": 12, "createdAt": 1781510400000, "updatedAt": 1781510400000 }
+    ],
+    "itineraryItems": [
+      {
+        "id": "trip_v3_item_museum",
+        "tripId": "trip_itinerary_v3",
+        "dayId": "trip_v3_day_02",
+        "title": "大英博物馆",
+        "startTime": "09:00",
+        "locationName": "Great British Museum, Bloomsbury",
+        "address": "Great Russell Street, London WC1B 3DG",
+        "lat": 51.5194133,
+        "lng": -0.1269566,
+        "previousTransportMode": "walk",
+        "previousTransportDurationMinutes": 10,
+        "ticketIds": [],
+        "sortOrder": 1,
+        "createdAt": 1781510400000,
+        "updatedAt": 1781510400000
+      },
+      {
+        "id": "trip_v3_item_lunch",
+        "tripId": "trip_itinerary_v3",
+        "dayId": "trip_v3_day_02",
+        "title": "Dishoom Covent Garden",
+        "startTime": "12:30",
+        "locationName": "Covent Garden",
+        "address": "12 Upper St Martin's Lane, London WC2H 9FB",
+        "lat": 51.5124922,
+        "lng": -0.1269867,
+        "previousTransportMode": "walk",
+        "previousTransportDurationMinutes": 15,
+        "ticketIds": [],
+        "sortOrder": 2,
+        "createdAt": 1781510400000,
+        "updatedAt": 1781510400000
+      },
+      {
+        "id": "trip_v3_item_bridge",
+        "tripId": "trip_itinerary_v3",
+        "dayId": "trip_v3_day_02",
+        "title": "伦敦塔桥",
+        "startTime": "14:30",
+        "locationName": "Tower Bridge, Southwark",
+        "address": "Tower Bridge Road, London SE1 2UP",
+        "lat": 51.5054564,
+        "lng": -0.0753565,
+        "previousTransportMode": "bus",
+        "previousTransportDurationMinutes": 20,
+        "ticketIds": [],
+        "sortOrder": 3,
+        "createdAt": 1781510400000,
+        "updatedAt": 1781510400000
+      },
+      {
+        "id": "trip_v3_item_train",
+        "tripId": "trip_itinerary_v3",
+        "dayId": "trip_v3_day_02",
+        "title": "乘火车前往爱丁堡",
+        "startTime": "17:00",
+        "locationName": "London King's Cross to Edinburgh Waverley",
+        "address": "King's Cross Station, London N1 9AL",
+        "lat": 51.530799,
+        "lng": -0.123801,
+        "previousTransportMode": "train",
+        "previousTransportDurationMinutes": 270,
+        "ticketIds": [],
+        "sortOrder": 4,
+        "createdAt": 1781510400000,
+        "updatedAt": 1781510400000
+      }
+    ],
+    "ticketMetas": []
+  }
+}

@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, Home, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Home, List, Map as MapIcon, MapPin, MoreHorizontal, Route, Settings, ShieldCheck, Ticket } from 'lucide-react'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isAdaptiveTripReplanRecord, listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip, updateDay } from '../db'
 import { DayBriefCard } from '../components/ai/DayBriefCard'
@@ -914,8 +914,23 @@ function ViewSwitch({
   floating?: boolean
   onSwitch: (view: DayWorkspaceView) => void
 }) {
+  if (floating) {
+    return (
+      <button
+        aria-label="切换到列表"
+        className="absolute right-[4.25rem] top-3 z-30 flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface/94 text-on-surface shadow-sm backdrop-blur-xl transition active:scale-[0.98] tm-focus"
+        data-testid="view-switch-schedule"
+        onClick={() => onSwitch('schedule')}
+        title="切换到列表"
+        type="button"
+      >
+        <List className="size-5" />
+      </button>
+    )
+  }
+
   return (
-    <div className={`${floating ? 'absolute left-4 top-3 z-30 shadow-lg' : 'relative'} rounded-lg border border-outline-variant bg-surface/94 p-1 backdrop-blur-xl`}>
+    <div className="relative rounded-lg border border-outline-variant bg-surface/94 p-1 backdrop-blur-xl">
       <div className="grid grid-cols-2 gap-1">
         <button
           className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold transition active:scale-[0.98] tm-focus ${

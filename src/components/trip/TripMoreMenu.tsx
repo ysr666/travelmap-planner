@@ -24,8 +24,9 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
     <>
       <button
         aria-label="更多"
-        className="flex size-11 items-center justify-center rounded-lg bg-white/88 text-on-surface ring-1 ring-outline-variant/30 backdrop-blur active:scale-[0.98]"
+        className="trip-focus-action tm-focus"
         onClick={() => setOpen(true)}
+        title="更多"
         type="button"
       >
         <MoreHorizontal className="size-5" />
@@ -43,7 +44,7 @@ export function TripMoreMenu({ tripId }: TripMoreMenuProps) {
           role="dialog"
           tabIndex={-1}
         >
-          <div className="w-full rounded-lg bg-white p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]" data-testid="trip-more-menu">
+          <div className="w-full rounded-lg bg-surface p-2 shadow-[0_-10px_28px_rgba(38,53,76,0.14)]" data-testid="trip-more-menu">
             <h2 className="sr-only" id={titleId}>更多操作</h2>
             <button
               aria-label="关闭更多操作菜单"

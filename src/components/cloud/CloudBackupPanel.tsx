@@ -16,8 +16,6 @@ import {
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
-import { EmptyState } from '../ui/EmptyState'
-import { SectionHeader } from '../ui/SectionHeader'
 import { SkeletonLine } from '../ui/SkeletonLine'
 import { CloudSnapshotCheckPrompts } from './CloudSnapshotCheckPrompts'
 import { ObjectSyncConflictPanel } from './ObjectSyncConflictPanel'
@@ -83,6 +81,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
   const [backups, setBackups] = useState<CloudBackupSummary[]>([])
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
+  const [otpRequested, setOtpRequested] = useState(false)
   const [isLoading, setIsLoading] = useState(configStatus.configured)
   const [isSendingOtp, setIsSendingOtp] = useState(false)
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
@@ -117,7 +116,13 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
         setBackups([])
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '读取云端同步状态失败。')
+      if (isMissingAuthSessionError(caught)) {
+        setUser(null)
+        setBackups([])
+        setError(null)
+      } else {
+        setError('账号状态暂时无法读取，请稍后重试。')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -177,6 +182,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     setMessage(null)
     try {
       await signInWithEmailOtp(trimmedEmail)
+      setOtpRequested(true)
       setMessage('登录链接/验证码已发送，请检查邮箱。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '发送登录邮件失败。')
@@ -200,6 +206,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
     try {
       await verifyEmailOtp(trimmedEmail, token)
       setOtp('')
+      setOtpRequested(false)
       const [localTrips, accountBackups, queueSummary] = await Promise.all([
         listTrips().catch(() => []),
         listCloudBackups().catch(() => []),
@@ -231,6 +238,7 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
       setBackups([])
       setRestoreResult(null)
       setLoginOnboarding(null)
+      setOtpRequested(false)
       setMessage('已退出账号。请重新登录后继续使用旅图。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '退出登录失败。')
@@ -343,45 +351,14 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
 
   return (
     <section className="space-y-3" data-testid="cloud-backup-section">
-      <SectionHeader title="云端同步" />
-      <Card className="space-y-3">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:text-sky-300">
-            <Cloud className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-on-surface">跨设备同步</h3>
-            <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-              登录后自动同步旅行和已保存票据；遇到冲突时再由你确认。
-            </p>
-          </div>
-        </div>
-
-        <AutoCloudBackupSetting
-          configured={configStatus.configured}
-          enabled={autoBackupEnabled}
-          onToggle={handleAutoBackupToggle}
-          signedIn={Boolean(user)}
-        />
-        <CloudAutoSyncStatusPanel
-          configured={configStatus.configured}
-          enabled={autoBackupEnabled}
-          signedIn={Boolean(user)}
-          tripId={trip?.id}
-        />
-
-        <CloudSnapshotCheckPrompts maxItems={5} variant="settings" />
-        <ObjectSyncConflictPanel tripId={trip?.id} />
-
+      <Card className="space-y-3" variant="grouped">
         {!configStatus.configured ? (
           <div
-            className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800 dark:text-amber-300"
+            className="rounded-lg bg-surface-container-high px-3 py-3 text-sm leading-6 text-on-surface-variant"
             data-testid="supabase-unconfigured-message"
           >
-            <p className="font-semibold">账号同步暂不可用</p>
-            <p className="mt-1">
-              稍后再试；此设备上的旅行仍可正常使用。
-            </p>
+            <p className="font-semibold text-on-surface">账号同步暂不可用</p>
+            <p className="mt-1">稍后再试，已保存的旅行不受影响。</p>
           </div>
         ) : isLoading ? (
           <div aria-busy="true" className="space-y-2" role="status">
@@ -403,47 +380,77 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             </div>
             {loginOnboarding ? <CloudLoginOnboardingNotice copy={loginOnboarding} /> : null}
 
+            <AutoCloudBackupSetting
+              configured={configStatus.configured}
+              enabled={autoBackupEnabled}
+              onToggle={handleAutoBackupToggle}
+              signedIn
+            />
+            <CloudAutoSyncStatusPanel
+              configured={configStatus.configured}
+              enabled={autoBackupEnabled}
+              signedIn
+              tripId={trip?.id}
+            />
+            <CloudSnapshotCheckPrompts maxItems={5} variant="settings" />
+            <ObjectSyncConflictPanel tripId={trip?.id} />
+
             <div className="grid gap-2">
-              <Button
-                className="w-full"
-                data-testid="cloud-upload-current-trip"
-                disabled={!trip}
-                icon={<Upload className="size-4" />}
-                loading={isUploading}
-                onClick={handleUploadRequest}
-              >
-                立即同步
-              </Button>
-              {!trip ? (
-                <p className="rounded-xl bg-surface-container-low px-3 py-2 text-xs leading-5 text-on-surface-variant">
-                  请先进入某个旅行，再立即同步。
-                </p>
+              {trip ? (
+                <Button
+                  className="w-full"
+                  data-testid="cloud-upload-current-trip"
+                  icon={<Upload className="size-4" />}
+                  loading={isUploading}
+                  onClick={handleUploadRequest}
+                >
+                  立即同步当前旅行
+                </Button>
               ) : null}
               <Button
                 className="w-full"
                 icon={<LogOut className="size-4" />}
                 loading={isSigningOut}
                 onClick={() => void handleSignOut()}
-                variant="secondary"
+                variant="ghost"
               >
                 退出登录
               </Button>
             </div>
 
-            <CloudBackupList
-              backups={backups}
-              onDelete={setDeleteTarget}
-              onRestore={setRestoreTarget}
-            />
+            {backups.length > 0 ? (
+              <details className="group rounded-lg border border-outline-variant/30 px-3 py-2" data-testid="cloud-backup-history">
+                <summary className="flex min-h-11 cursor-pointer items-center justify-between text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
+                  <span>账号旅行</span>
+                  <span className="text-xs font-medium tm-muted">{backups.length}</span>
+                </summary>
+                <div className="border-t border-outline-variant/20 pt-3">
+                  <CloudBackupList
+                    backups={backups}
+                    onDelete={setDeleteTarget}
+                    onRestore={setRestoreTarget}
+                  />
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3" data-testid="cloud-login-form">
             <CloudStatusMessage error={error} message={message} warnings={warnings} />
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary">
+                <Cloud className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-on-surface">登录旅图</h3>
+                <p className="mt-0.5 text-xs leading-5 tm-muted">同步旅行与已保存票据</p>
+              </div>
+            </div>
             <label className="block">
               <span className="text-sm font-semibold text-on-surface">邮箱</span>
               <input
                 aria-label="Supabase 登录邮箱"
-                className="mt-2 h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-sky-200"
+                className="mt-2 h-11 w-full min-w-0 rounded-lg border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-primary"
                 inputMode="email"
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
@@ -459,27 +466,31 @@ export function CloudBackupPanel({ trip }: CloudBackupPanelProps) {
             >
               发送登录链接/验证码
             </Button>
-            <label className="block">
-              <span className="text-sm font-semibold text-on-surface">验证码</span>
-              <input
-                aria-label="Supabase 登录验证码"
-                className="mt-2 h-11 w-full min-w-0 rounded-xl border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-sky-200"
-                inputMode="numeric"
-                onChange={(event) => setOtp(event.target.value)}
-                placeholder="邮箱中的验证码"
-                type="text"
-                value={otp}
-              />
-            </label>
-            <Button
-              className="w-full"
-              icon={<KeyRound className="size-4" />}
-              loading={isVerifyingOtp}
-              onClick={() => void handleVerifyOtp()}
-              variant="secondary"
-            >
-              验证登录
-            </Button>
+            {otpRequested || otp ? (
+              <>
+                <label className="block">
+                  <span className="text-sm font-semibold text-on-surface">验证码</span>
+                  <input
+                    aria-label="Supabase 登录验证码"
+                    className="mt-2 h-11 w-full min-w-0 rounded-lg border border-outline-variant/30 bg-white px-3 text-sm text-on-surface outline-none focus:border-primary"
+                    inputMode="numeric"
+                    onChange={(event) => setOtp(event.target.value)}
+                    placeholder="邮箱中的验证码"
+                    type="text"
+                    value={otp}
+                  />
+                </label>
+                <Button
+                  className="w-full"
+                  icon={<KeyRound className="size-4" />}
+                  loading={isVerifyingOtp}
+                  onClick={() => void handleVerifyOtp()}
+                  variant="secondary"
+                >
+                  验证登录
+                </Button>
+              </>
+            ) : null}
           </div>
         )}
       </Card>
@@ -578,14 +589,14 @@ function AutoCloudBackupSetting({
   signedIn: boolean
 }) {
   const helperText = !configured
-    ? '配置 Supabase 后才能开启。'
+    ? '暂不可用。'
     : signedIn
-      ? '打开 PWA 后自动检查账号数据；此设备关键修改会排队同步，并先做对象级增量合并。'
-      : '登录账号后，会自动检查账号数据并排队同步此设备关键修改。'
+      ? '旅行和票据会自动保持最新。'
+      : '登录后自动保持最新。'
 
   return (
     <div
-      className="rounded-2xl border border-outline-variant/30 bg-surface-container-low/80 px-3 py-3"
+      className="rounded-lg border border-outline-variant/30 bg-surface-container-low/80 px-3 py-3"
       data-testid="auto-cloud-backup-setting"
     >
       <div className="flex items-start justify-between gap-3">
@@ -721,7 +732,7 @@ function CloudAutoSyncStatusPanel({
 
   return (
     <div
-      className={`rounded-2xl border px-3 py-3 ${getCloudSyncStatusClassName(view.tone)}`}
+      className={`rounded-lg border px-3 py-3 ${getCloudSyncStatusClassName(view.tone)}`}
       data-sync-status={view.status}
       data-testid="cloud-auto-sync-status"
       role="status"
@@ -733,9 +744,6 @@ function CloudAutoSyncStatusPanel({
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{view.title}</p>
           <p className="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{view.detail}</p>
-          <p className="mt-1 break-words text-xs leading-5 text-on-surface-variant [overflow-wrap:anywhere]">
-            对象级增量同步会先检查账号数据；不同字段自动合并，同一字段冲突需确认。
-          </p>
         </div>
       </div>
       {view.status === 'conflict' ? (
@@ -857,13 +865,7 @@ function CloudBackupList({
   onRestore: (backup: CloudBackupSummary) => void
 }) {
   if (backups.length === 0) {
-    return (
-      <EmptyState
-        body="当前旅行同步到账号后，这里会显示可用于更新此设备的账号数据。"
-        icon={<Cloud className="size-6" />}
-        title="还没有云端同步记录"
-      />
-    )
+    return null
   }
 
   const groups = groupCloudBackupsForDisplay(backups)
@@ -951,6 +953,11 @@ function CloudBackupList({
       ))}
     </div>
   )
+}
+
+function isMissingAuthSessionError(caught: unknown) {
+  const message = caught instanceof Error ? caught.message : String(caught ?? '')
+  return /auth session missing|refresh token.*(?:missing|not found|invalid)|invalid refresh token/i.test(message)
 }
 
 function getCloudSyncStatusIcon(status: CloudAccountSyncStatus) {

@@ -8,7 +8,6 @@ import {
   Loader2,
   NotebookText,
   Pencil,
-  Plus,
   RotateCw,
   Route,
   Ticket,
@@ -30,6 +29,7 @@ import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePane
 import { TripBriefCard } from '../components/ai/TripBriefCard'
 import { TripContentEnrichmentPanel } from '../components/ai/TripContentEnrichmentPanel'
 import { TravelInboxPanel } from '../components/ai/TravelInboxPanel'
+import { TripScheduleOverview } from '../components/trip/TripScheduleOverview'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Collapsible } from '../components/ui/Collapsible'
@@ -39,13 +39,13 @@ import { SkeletonLine } from '../components/ui/SkeletonLine'
 import { useTripData } from '../hooks/useTripData'
 import { useLiveClock } from '../hooks/useLiveClock'
 import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
-import { ensureDaysForTrip, formatDate, formatDateRange, formatShortDate } from '../lib/dates'
+import { ensureDaysForTrip } from '../lib/dates'
 import { buildTripContext } from '../lib/ai/aiTripContext'
 import { getRouteParams, navigateTo } from '../lib/routes'
 import { analyzeTripContext } from '../lib/tripCheck'
 import { getStoredTravelProfile } from '../lib/travelProfile'
 import { buildTripBrief } from '../lib/travelBrief'
-import { describeItemTime } from '../lib/itinerary'
+import { buildTripScheduleFocus } from '../lib/tripScheduleFocus'
 import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
 import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../lib/routeGeneration'
 import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
@@ -121,6 +121,7 @@ export function TripWorkspacePage() {
   const [routeGenerationError, setRouteGenerationError] = useState<string | null>(null)
   const [dismissedImportRoutePromptTripId, setDismissedImportRoutePromptTripId] = useState<string | null>(null)
   const [completedImportRoutePromptTripId, setCompletedImportRoutePromptTripId] = useState<string | null>(null)
+  const [manualScheduleDayId, setManualScheduleDayId] = useState<string | null>(null)
   const liveNow = useLiveClock()
 
   const tripContextKey = useMemo(() => {
@@ -415,10 +416,18 @@ export function TripWorkspacePage() {
 
     return days.flatMap((day) => itemsByDay[day.id] ?? [])
   }, [allItems, days, itemsByDay])
-  const tripHomeFocus = useMemo(
-    () => buildTripHomeFocus({ days, itemsByDay, liveDay, selectedDay }),
-    [days, itemsByDay, liveDay, selectedDay],
-  )
+  const tripHomeFocus = useMemo(() => {
+    const explicitDayId = manualScheduleDayId ?? requestedDayId
+    const explicitDay = explicitDayId
+      ? days.find((day) => day.id === explicitDayId) ?? null
+      : null
+    return buildTripScheduleFocus({
+      days,
+      itemsByDay,
+      liveDay: explicitDay ? null : liveDay,
+      selectedDay: explicitDay ?? selectedDay,
+    })
+  }, [days, itemsByDay, liveDay, manualScheduleDayId, requestedDayId, selectedDay])
   const mappedItemCount = useMemo(
     () => overviewItems.filter(hasUsableCoordinates).length,
     [overviewItems],
@@ -557,27 +566,17 @@ export function TripWorkspacePage() {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="trip-workspace-v3">
         <TripNav
           activeRoute="trip"
           activeView="schedule"
+          className="trip-workspace-tabs"
           firstDayId={days[0]?.id}
           tripId={trip.id}
         />
 
-        <section className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-on-surface">{trip.destination || trip.title}</p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-on-surface-variant">
-              <CalendarDays className="size-3.5 shrink-0" />
-              {formatDateRange(trip.startDate, trip.endDate)}
-            </p>
-          </div>
-          <TripMoreMenu tripId={trip.id} />
-        </section>
-
         {days.length === 0 ? (
-          <section className="space-y-4 py-8">
+          <section className="trip-workspace-empty">
             <EmptyState
               body="按旅行日期生成每日行程后，即可添加地点。"
               icon={<CalendarDays className="size-6" />}
@@ -598,20 +597,24 @@ export function TripWorkspacePage() {
             </Button>
           </section>
         ) : (
-          <>
-            <DailyItineraryList
+          <div className="trip-workspace-layout">
+            <TripScheduleOverview
+              actions={<TripMoreMenu tripId={trip.id} />}
               days={days}
-              itemsByDay={itemsByDay}
-              onOpenDay={(day) => setSelectedDay(day)}
-              selectedDayId={tripHomeFocus?.day.id}
-            />
-            <FocusDayTimelinePreview
               focus={tripHomeFocus}
+              itemsByDay={itemsByDay}
               onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
+              onSelectDay={(day) => {
+                setManualScheduleDayId(day.id)
+                setSelectedDay(day)
+              }}
+              selectedDayId={tripHomeFocus?.day.id}
             />
 
+            <aside className="trip-workspace-secondary" aria-label="旅行管理">
             <Collapsible
+              className="trip-workspace-disclosure"
               defaultOpen={showTravelInboxPanel}
               subtitle={hasInboxAttention ? '有材料待处理' : sharedTripNeedsAttention ? '有同行变更待处理' : undefined}
               title="旅行工具"
@@ -751,7 +754,7 @@ export function TripWorkspacePage() {
               </div>
             </Collapsible>
 
-            <Collapsible title="旅行详情">
+            <Collapsible className="trip-workspace-disclosure" title="旅行详情">
               <div className="space-y-4">
                 {trip.notes ? (
                   <div className="flex items-start gap-3">
@@ -791,7 +794,8 @@ export function TripWorkspacePage() {
                 </details>
               </div>
             </Collapsible>
-          </>
+            </aside>
+          </div>
         )}
       </div>
 
@@ -838,12 +842,6 @@ function buildTripOperationsInboxSummary({
     readyEntryCount,
     selectedPreviewDiffCount: previewCheckedCount,
   }
-}
-
-type TripHomeFocus = {
-  day: Day
-  dayIndex: number
-  items: ItineraryItem[]
 }
 
 function TripHomeQuickActions({
@@ -937,124 +935,6 @@ function TripHomeActionRow({
   )
 }
 
-function FocusDayTimelinePreview({
-  focus,
-  onAddItem,
-  onOpenItem,
-}: {
-  focus: TripHomeFocus | null
-  onAddItem: (day: Day) => void
-  onOpenItem: (item: ItineraryItem) => void
-}) {
-  if (!focus) {
-    return null
-  }
-
-  return (
-    <section className="flex flex-col gap-3" data-testid="trip-home-focus-timeline">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold text-on-surface">
-            {focus.day.title || `第 ${focus.dayIndex + 1} 天`}
-          </h2>
-          <p className="mt-0.5 text-xs text-on-surface-variant">
-            第 {focus.dayIndex + 1} 天 · {formatDate(focus.day.date)} · {focus.items.length} 个地点
-          </p>
-        </div>
-        <button
-          aria-label="添加行程点"
-          className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-surface text-primary tm-focus"
-          onClick={() => onAddItem(focus.day)}
-          title="添加行程点"
-          type="button"
-        >
-          <Plus className="size-5" />
-        </button>
-      </div>
-
-      {focus.items.length === 0 ? (
-        <div className="py-10 text-center">
-          <p className="text-sm font-semibold text-on-surface">这一天还没有行程点</p>
-          <button
-            className="mt-3 min-h-11 px-3 text-sm font-semibold text-primary tm-focus"
-            onClick={() => onAddItem(focus.day)}
-            type="button"
-          >
-            添加第一个地点
-          </button>
-        </div>
-      ) : (
-        <div className="relative" role="list">
-          <div className="absolute bottom-8 left-[71px] top-8 w-px bg-outline-variant" />
-          {focus.items.map((item, index) => {
-            return (
-              <button
-                className="group relative z-10 grid min-h-[68px] w-full grid-cols-[56px_16px_minmax(0,1fr)] items-start gap-2 border-b border-outline-variant py-3 text-left transition hover:bg-surface-container-high active:scale-[0.99] tm-focus"
-                key={item.id}
-                onClick={() => onOpenItem(item)}
-                role="listitem"
-                type="button"
-              >
-                <time className="pt-0.5 text-right text-sm font-semibold text-on-surface-variant">
-                  {item.startTime || '--:--'}
-                </time>
-                <span className="mt-1.5 flex justify-center">
-                  <span className={`size-3 rounded-full border-2 ring-4 ring-surface group-hover:ring-surface-container-high ${
-                    index === 0
-                      ? 'border-primary bg-primary'
-                      : 'border-outline bg-surface'
-                  }`} />
-                </span>
-                <span className="min-w-0">
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-on-surface">{item.title}</span>
-                      <span className="mt-1 block overflow-hidden text-ellipsis whitespace-nowrap text-xs text-on-surface-variant">
-                        {item.locationName || item.address || describeItemTime(item)}
-                      </span>
-                    </span>
-                    {item.ticketIds.length > 0 ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
-                        <Ticket className="size-3" />
-                        {item.ticketIds.length}
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function buildTripHomeFocus({
-  days,
-  itemsByDay,
-  liveDay,
-  selectedDay,
-}: {
-  days: Day[]
-  itemsByDay: Record<string, ItineraryItem[]>
-  liveDay: Day | null
-  selectedDay: Day | null
-}): TripHomeFocus | null {
-  const day = liveDay ?? selectedDay ?? days[0] ?? null
-  if (!day) {
-    return null
-  }
-
-  const dayIndex = Math.max(0, days.findIndex((candidate) => candidate.id === day.id))
-  const items = itemsByDay[day.id] ?? []
-  return {
-    day,
-    dayIndex,
-    items,
-  }
-}
-
 function hasUsableCoordinates(item: ItineraryItem) {
   return typeof item.lat === 'number' && Number.isFinite(item.lat)
     && typeof item.lng === 'number' && Number.isFinite(item.lng)
@@ -1087,53 +967,6 @@ function describeRouteReadiness(preparation: TripRoutePreparation | null, loadin
     return `${preparation.cachedDayCount} 天已缓存，${preparation.targetDayIds.length} 天待生成`
   }
   return `${preparation.targetDayIds.length} 天可生成`
-}
-
-function DailyItineraryList({
-  days,
-  itemsByDay,
-  onOpenDay,
-  selectedDayId,
-}: {
-  days: Day[]
-  itemsByDay: Record<string, { id: string }[]>
-  onOpenDay: (day: Day) => void
-  selectedDayId?: string | null
-}) {
-  return (
-    <section aria-label="选择日期">
-      <div className="-mx-4 overflow-x-auto px-4 py-1 app-scrollbar" data-testid="trip-day-selector">
-        <div className="flex min-w-max gap-1">
-        {days.map((day, index) => {
-          const itemCount = itemsByDay[day.id]?.length ?? 0
-          const active = day.id === selectedDayId
-          return (
-            <button
-              aria-current={active ? 'page' : undefined}
-              className={`relative z-10 flex min-h-12 w-[76px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 py-1 text-center transition active:scale-[0.98] tm-focus ${
-                active
-                  ? 'border-primary bg-primary text-on-primary'
-                  : 'border-transparent bg-transparent text-on-surface hover:bg-surface-container-high'
-              }`}
-              data-testid="trip-day-link"
-              key={day.id}
-              onClick={() => onOpenDay(day)}
-              type="button"
-            >
-              <span className="text-[11px] font-semibold">
-                第 {index + 1} 天
-              </span>
-              <span className={`mt-0.5 text-xs ${active ? 'text-on-primary' : 'text-on-surface-variant'}`}>
-                {formatShortDate(day.date)}
-              </span>
-              <span className="sr-only">{day.title} · {itemCount} 个行程点</span>
-            </button>
-          )
-        })}
-        </div>
-      </div>
-    </section>
-  )
 }
 
 function RoutePreparationPanel({

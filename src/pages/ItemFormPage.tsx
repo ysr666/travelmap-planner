@@ -158,10 +158,10 @@ export function ItemFormPage() {
       data-testid="item-form-page"
     >
       <header className="z-30 shrink-0 border-b tm-row bg-surface/88 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
           <button
             aria-label="返回"
-            className="flex size-11 items-center justify-center rounded-xl text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
+            className="flex size-11 items-center justify-center rounded-lg text-on-surface ring-1 ring-outline-variant/30 transition active:scale-[0.98] tm-surface tm-focus dark:text-outline-variant dark:ring-outline-variant/30"
             onClick={handleCancel}
             type="button"
           >
@@ -175,7 +175,7 @@ export function ItemFormPage() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 app-scrollbar">
-        <div className="page-transition">
+        <div className="page-transition mx-auto w-full max-w-3xl">
           <ItineraryItemForm
             dayDate={day?.date}
             defaultTimeZone={trip && day ? resolveDayTimeZone(trip, day) : undefined}
@@ -190,9 +190,11 @@ export function ItemFormPage() {
         </div>
       </main>
       <footer className="shrink-0 border-t border-outline-variant/30 bg-surface px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-        <Button className="w-full" form="itinerary-item-form" loading={isSubmitting} type="submit">
-          {isEdit ? '保存修改' : '新增行程点'}
-        </Button>
+        <div className="mx-auto w-full max-w-3xl">
+          <Button className="w-full" form="itinerary-item-form" loading={isSubmitting} type="submit">
+            {isEdit ? '保存修改' : '新增行程点'}
+          </Button>
+        </div>
       </footer>
     </div>
   )

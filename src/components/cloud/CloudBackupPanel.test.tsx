@@ -168,7 +168,8 @@ describe('CloudBackupPanel', () => {
       root?.render(<CloudBackupPanel trip={defaultTrip} />)
     })
 
-    expect(container?.textContent).toContain('配置 Supabase 后才能开启')
+    expect(container?.textContent).toContain('账号同步暂不可用')
+    expect(container?.textContent).not.toContain('Supabase')
   })
 
   it('renders loading state', async () => {
@@ -206,6 +207,8 @@ describe('CloudBackupPanel', () => {
   })
 
   it('renders auto backup toggle', async () => {
+    mocks.getCurrentUser.mockResolvedValue({ id: 'user_1', email: 'test@example.com' })
+
     await act(async () => {
       root?.render(<CloudBackupPanel trip={defaultTrip} />)
     })
@@ -226,7 +229,7 @@ describe('CloudBackupPanel', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('网络错误')
+    expect(container?.textContent).toContain('账号状态暂时无法读取，请稍后重试。')
   })
 
   it('renders email input for login', async () => {

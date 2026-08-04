@@ -1,13 +1,24 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, MapPin } from 'lucide-react'
+import { createRoot, type Root } from 'react-dom/client'
+import { AlertTriangle, MapPin, Navigation, Ticket } from 'lucide-react'
 import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
+import { getGoogleMapsApiKey, waitForGoogleMaps } from '../lib/googleMaps'
 import { loadMapLibreAdapter } from '../lib/maplibreAdapterLoader'
-import type { EdgeInsets, MapEngineAdapter, MapInstance, LngLat as MapLngLat, LngLatBounds } from '../lib/mapEngine'
+import type {
+  EdgeInsets,
+  MapEngineAdapter,
+  MapInstance,
+  LngLat as MapLngLat,
+  LngLatBounds,
+  RouteLineKind,
+} from '../lib/mapEngine'
 import { markMapStartup } from '../lib/mapStartupMetrics'
 import {
   DEFAULT_DAY_MAP_PADDING,
   MARKER_FOCUS_COMFORT_ZOOM,
+  USER_LOCATION_DISTANCE_THRESHOLD_METERS,
   buildDayMapViewportPlan,
+  getDistanceMeters,
   getMarkerFocusCorrection,
   isValidLngLat,
   normalizeEdgeInsets,
@@ -22,8 +33,11 @@ import type { ItineraryItem } from '../types'
 import { EmptyState } from './ui/EmptyState'
 
 type DayMapProps = {
+  connectUserLocationToFirst?: boolean
   items: ItineraryItem[]
-  markerLabel?: 'category' | 'sequence'
+  mapEngine?: 'auto' | 'maplibre'
+  mapStyleUrl?: string
+  markerLabel?: 'category' | 'details' | 'sequence'
   selectedItemId?: string | null
   selectedItemSource?: 'marker' | 'list' | null
   heightClassName?: string
@@ -31,6 +45,8 @@ type DayMapProps = {
   resizeSignal?: number
   viewportPadding?: EdgeInsets
   markerFocusPadding?: EdgeInsets
+  originRouteLineString?: LngLat[]
+  routeLineKind?: RouteLineKind
   routeLineStrings?: LngLat[][]
   userLocation?: LngLat | null
   onSelectItem: (item: ItineraryItem) => void
@@ -56,11 +72,20 @@ type MarkerRecord = {
   handle: { setLngLat(lngLat: MapLngLat): void; remove(): void }
   element: HTMLButtonElement
   content: HTMLSpanElement
+  isDetailed: boolean
+  isEmoji: boolean
+  iconRoots: Root[]
 }
 
 type UserLocationMarkerRecord = {
   handle: { setLngLat(lngLat: MapLngLat): void; remove(): void }
+  headingRoot: Root
   element: HTMLDivElement
+}
+
+type RouteDirectionMarkerRecord = {
+  handle: { remove(): void }
+  root: Root
 }
 
 type CameraState = {
@@ -77,9 +102,44 @@ type PrewarmSession = {
 }
 
 const MAP_ERROR_MESSAGE = '地图暂时无法加载，行程仍可查看。'
+const GOOGLE_MAP_LOAD_BUDGET_MS = 3_500
+
+async function loadDayMapAdapter(preference: NonNullable<DayMapProps['mapEngine']>): Promise<{
+  adapter: MapEngineAdapter
+  styleUrl?: string
+}> {
+  if (preference === 'auto' && getGoogleMapsApiKey()) {
+    const googleReady = await waitForBooleanWithin(waitForGoogleMaps(), GOOGLE_MAP_LOAD_BUDGET_MS)
+    if (googleReady) {
+      const { GoogleMapsEngineAdapter } = await import('../lib/googleMapsAdapter')
+      return { adapter: new GoogleMapsEngineAdapter() }
+    }
+  }
+
+  return { adapter: await loadMapLibreAdapter() }
+}
+
+function waitForBooleanWithin(promise: Promise<boolean>, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const timeout = window.setTimeout(() => finish(false), timeoutMs)
+
+    function finish(value: boolean) {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      resolve(value)
+    }
+
+    void promise.then(finish, () => finish(false))
+  })
+}
 
 export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
+  connectUserLocationToFirst = false,
   items,
+  mapEngine = 'maplibre',
+  mapStyleUrl = DEFAULT_MAP_STYLE,
   markerLabel = 'category',
   selectedItemId,
   selectedItemSource,
@@ -88,6 +148,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   resizeSignal,
   viewportPadding,
   markerFocusPadding,
+  originRouteLineString,
+  routeLineKind = 'sequence',
   routeLineStrings,
   userLocation,
   onSelectItem,
@@ -99,6 +161,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const mapRef = useRef<MapInstance | null>(null)
   const markersRef = useRef<MarkerRecord[]>([])
   const userLocationMarkerRef = useRef<UserLocationMarkerRecord | null>(null)
+  const routeDirectionMarkersRef = useRef<RouteDirectionMarkerRecord[]>([])
   const loadedRef = useRef(false)
   const fallbackTriedRef = useRef(false)
   const fitCoordinateKeyRef = useRef<string | null>(null)
@@ -109,11 +172,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const selectedItemIdRef = useRef(selectedItemId)
   const coordinateKeyRef = useRef('')
   const routeLineStringsRef = useRef<LngLat[][] | undefined>(routeLineStrings)
+  const routeLineKindRef = useRef<RouteLineKind>(routeLineKind)
+  const originRouteLineStringRef = useRef<LngLat[] | undefined>(originRouteLineString)
   const userLocationRef = useRef<LngLat | null>(userLocation ?? null)
   const viewportPaddingRef = useRef<EdgeInsets>(DEFAULT_DAY_MAP_PADDING)
   const markerFocusPaddingRef = useRef<EdgeInsets>(DEFAULT_DAY_MAP_PADDING)
   const resizeFrameRef = useRef<number | null>(null)
   const markerFocusFrameRef = useRef<number | null>(null)
+  const resizeFitTimeoutRef = useRef<number | null>(null)
   const prewarmSessionRef = useRef<PrewarmSession | null>(null)
   const initialItemCountRef = useRef(items.length)
   const validItems = useMemo(
@@ -139,7 +205,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         .join('|'),
     [validItems],
   )
-  const routeLineKey = useMemo(() => buildRouteLineKey(routeLineStrings), [routeLineStrings])
+  const routeLineKey = useMemo(
+    () => `${routeLineKind}:${buildRouteLineKey(routeLineStrings)}::origin:${buildRouteLineKey(originRouteLineString ? [originRouteLineString] : undefined)}`,
+    [originRouteLineString, routeLineKind, routeLineStrings],
+  )
   const userLocationKey = useMemo(() => (
     userLocation ? `${userLocation[0].toFixed(6)},${userLocation[1].toFixed(6)}` : ''
   ), [userLocation])
@@ -157,19 +226,35 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   validItemsRef.current = validItems
   coordinateKeyRef.current = coordinateKey
   routeLineStringsRef.current = routeLineStrings
+  routeLineKindRef.current = routeLineKind
+  originRouteLineStringRef.current = originRouteLineString
   userLocationRef.current = userLocation ?? null
   selectedItemIdRef.current = selectedItemId
   viewportPaddingRef.current = normalizedViewportPadding
   markerFocusPaddingRef.current = normalizedMarkerFocusPadding
 
   const clearMarkers = useCallback(() => {
-    markersRef.current.forEach(({ handle }) => handle.remove())
+    markersRef.current.forEach(({ handle, iconRoots }) => {
+      iconRoots.forEach(deferRootUnmount)
+      handle.remove()
+    })
     markersRef.current = []
   }, [])
 
   const clearUserLocationMarker = useCallback(() => {
+    if (userLocationMarkerRef.current) {
+      deferRootUnmount(userLocationMarkerRef.current.headingRoot)
+    }
     userLocationMarkerRef.current?.handle.remove()
     userLocationMarkerRef.current = null
+  }, [])
+
+  const clearRouteDirectionMarkers = useCallback(() => {
+    routeDirectionMarkersRef.current.forEach(({ handle, root }) => {
+      deferRootUnmount(root)
+      handle.remove()
+    })
+    routeDirectionMarkersRef.current = []
   }, [])
 
   const cleanupMap = useCallback(() => {
@@ -180,9 +265,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
     clearMarkers()
     clearUserLocationMarker()
+    clearRouteDirectionMarkers()
     if (markerFocusFrameRef.current !== null) {
       window.cancelAnimationFrame(markerFocusFrameRef.current)
       markerFocusFrameRef.current = null
+    }
+    if (resizeFitTimeoutRef.current !== null) {
+      window.clearTimeout(resizeFitTimeoutRef.current)
+      resizeFitTimeoutRef.current = null
     }
     if (mapRef.current) {
       mapRef.current.remove()
@@ -190,7 +280,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     }
     loadedRef.current = false
     fitCoordinateKeyRef.current = null
-  }, [clearMarkers, clearUserLocationMarker])
+  }, [clearMarkers, clearRouteDirectionMarkers, clearUserLocationMarker])
 
   const updateMarkerZoomScale = useCallback(() => {
     const map = mapRef.current
@@ -208,9 +298,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
   const updateMarkerSelection = useCallback(() => {
     const selectedId = selectedItemIdRef.current
-    markersRef.current.forEach(({ itemId, element, content }) => {
+    markersRef.current.forEach(({ itemId, element, content, isDetailed, isEmoji }) => {
       const isSelected = itemId === selectedId
-      content.className = markerContentClassName(isSelected)
+      content.className = markerContentClassName(isSelected, isEmoji, isDetailed)
       element.style.zIndex = isSelected ? '45' : '40'
     })
     updateMarkerZoomScale()
@@ -223,9 +313,34 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     resizeFrameRef.current = window.requestAnimationFrame(() => {
       resizeFrameRef.current = null
-      mapRef.current?.resize()
+      const map = mapRef.current
+      map?.resize()
+      if (!map || !loadedRef.current) return
+
+      if (resizeFitTimeoutRef.current !== null) {
+        window.clearTimeout(resizeFitTimeoutRef.current)
+      }
+      resizeFitTimeoutRef.current = window.setTimeout(() => {
+        resizeFitTimeoutRef.current = null
+        const currentMap = mapRef.current
+        if (!currentMap || !loadedRef.current) return
+        const plan = buildDayMapViewportPlan({
+          itineraryCoordinates: validItemsRef.current.map((item) => getItemLngLat(item)),
+          userLocation: userLocationRef.current,
+        })
+        applyViewportPlan(
+          currentMap,
+          plan,
+          getResponsiveDayMapPadding(
+            viewportPaddingRef.current,
+            markerLabel,
+            containerRef.current?.clientWidth,
+          ),
+        )
+        markMapStartup('resize viewport refit completed')
+      }, 160)
     })
-  }, [])
+  }, [markerLabel])
 
   const restorePrewarmCamera = useCallback((session: PrewarmSession) => {
     if (session.restored) {
@@ -329,7 +444,11 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     })
     const map = mapRef.current
     if (map && loadedRef.current) {
-      const padding = options?.padding ?? markerFocusPaddingRef.current
+      const padding = options?.padding ?? getResponsiveDayMapPadding(
+        markerFocusPaddingRef.current,
+        markerLabel,
+        containerRef.current?.clientWidth,
+      )
       const selectedLngLat = options?.focusSelected ? getSelectedLngLat() : null
       if (selectedLngLat) {
         applyCenteredViewport(map, selectedLngLat, Math.max(map.getCamera().zoom, MARKER_FOCUS_COMFORT_ZOOM), padding)
@@ -346,7 +465,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       includedUserLocation: plan.includedUserLocation,
       usedItineraryPoints: plan.usedItineraryPoints,
     }
-  }, [getSelectedLngLat])
+  }, [getSelectedLngLat, markerLabel])
 
   useImperativeHandle(ref, () => ({
     cancelPrewarm,
@@ -376,10 +495,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     pulse.className = 'absolute size-9 rounded-full bg-sky-400/25'
     const dot = document.createElement('span')
     dot.className = 'relative flex size-4 rounded-full border-2 border-white bg-sky-500 shadow-[0_0_0_5px_rgba(14,165,233,0.20)]'
-    element.append(pulse, dot)
+    const heading = document.createElement('span')
+    heading.className = 'day-map-user-heading'
+    const headingRoot = createRoot(heading)
+    headingRoot.render(<Navigation aria-hidden="true" />)
+    element.append(pulse, dot, heading)
 
     const handle = map.addMarker(nextUserLocation as unknown as MapLngLat, element)
-    userLocationMarkerRef.current = { element, handle }
+    userLocationMarkerRef.current = { element, handle, headingRoot }
   }, [clearUserLocationMarker])
 
   const syncMarkersAndRoute = useCallback(() => {
@@ -390,9 +513,45 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     const mapItems = validItemsRef.current
     clearMarkers()
+    clearRouteDirectionMarkers()
 
-    const lineStrings = buildLineStrings(mapItems, routeLineStringsRef.current)
-    map.setRouteLine(lineStrings as unknown as MapLngLat[][])
+    const routePresentation = buildRouteLinePresentation(
+      mapItems,
+      routeLineStringsRef.current,
+      routeLineKindRef.current,
+      connectUserLocationToFirst ? userLocationRef.current : null,
+      originRouteLineStringRef.current,
+    )
+    map.setRouteLine(
+      (routePresentation.road.length > 0
+        ? routePresentation.road
+        : routePresentation.sequence) as unknown as MapLngLat[][],
+      routePresentation.road.length > 0 ? 'road' : 'sequence',
+    )
+    map.setRouteConnectorLine(routePresentation.connector as unknown as MapLngLat[][])
+
+    const directionLines = routePresentation.road
+    directionLines.forEach((lineString) => {
+      const direction = getRouteDirectionMarker(lineString)
+      if (!direction) return
+
+      const element = document.createElement('span')
+      element.className = 'day-map-route-direction'
+      element.setAttribute('aria-hidden', 'true')
+      element.setAttribute('data-testid', 'day-map-route-direction')
+
+      const root = createRoot(element)
+      root.render(
+        <Navigation
+          aria-hidden="true"
+          className="day-map-route-direction-symbol"
+          style={{ transform: `rotate(${direction.bearing.toFixed(1)}deg)` }}
+        />,
+      )
+
+      const handle = map.addMarker(direction.coordinate as unknown as MapLngLat, element)
+      routeDirectionMarkersRef.current.push({ handle, root })
+    })
 
     mapItems.forEach((item, index) => {
       const lngLat = getItemLngLat(item)
@@ -402,15 +561,28 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
       const element = document.createElement('button')
       element.type = 'button'
-      element.className = markerRootClassName()
+      const isDetailed = markerLabel === 'details'
+      element.className = markerRootClassName(isDetailed)
       element.style.zIndex = '40'
-      element.setAttribute('aria-label', `选择 ${item.title}`)
+      element.setAttribute(
+        'aria-label',
+        `选择 ${item.title}${item.startTime ? `，${item.startTime}` : ''}`,
+      )
       element.setAttribute('data-testid', 'day-map-marker')
 
       const content = document.createElement('span')
       const { label, isEmoji } = getMarkerDisplayLabel(item, index, markerLabel)
-      content.className = markerContentClassName(item.id === selectedItemIdRef.current, isEmoji)
-      content.textContent = label
+      content.className = markerContentClassName(
+        item.id === selectedItemIdRef.current,
+        isEmoji,
+        isDetailed,
+      )
+      const iconRoots = isDetailed
+        ? appendDetailedMarkerContent(content, item, index, label, mapItems)
+        : []
+      if (!isDetailed) {
+        content.textContent = label
+      }
       element.append(content)
 
       element.addEventListener('click', () => {
@@ -421,12 +593,20 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       })
 
       const handle = map.addMarker(lngLat as unknown as MapLngLat, element)
-      markersRef.current.push({ itemId: item.id, handle, element, content })
+      markersRef.current.push({
+        itemId: item.id,
+        handle,
+        element,
+        content,
+        isDetailed,
+        isEmoji,
+        iconRoots,
+      })
     })
 
     updateMarkerSelection()
     markMapStartup('markers rendered', { count: mapItems.length })
-  }, [clearMarkers, markerLabel, updateMarkerSelection])
+  }, [clearMarkers, clearRouteDirectionMarkers, connectUserLocationToFirst, markerLabel, updateMarkerSelection])
 
   const fitViewportIfNeeded = useCallback(() => {
     const map = mapRef.current
@@ -442,11 +622,23 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     const plan = buildDayMapViewportPlan({
       itineraryCoordinates: mapItems.map((item) => getItemLngLat(item)),
     })
-    applyViewportPlan(map, plan, viewportPaddingRef.current)
+    applyViewportPlan(
+      map,
+      plan,
+      getResponsiveDayMapPadding(
+        viewportPaddingRef.current,
+        markerLabel,
+        containerRef.current?.clientWidth,
+      ),
+    )
     markMapStartup('first fitBounds completed', { points: mapItems.length })
-  }, [])
+  }, [markerLabel])
 
   const focusSelectedItem = useCallback((source: 'marker' | 'list' | null | undefined) => {
+    if (!source) {
+      return
+    }
+
     const selectedId = selectedItemIdRef.current
     if (!selectedId) {
       return
@@ -464,10 +656,15 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     const container = containerRef.current
 
     if (markerRecord && container) {
+      const responsivePadding = getResponsiveDayMapPadding(
+        markerFocusPaddingRef.current,
+        markerLabel,
+        container.clientWidth,
+      )
       const correction = getMarkerFocusCorrection({
         currentZoom,
         markerRect: domRectToScreenRect(markerRecord.element.getBoundingClientRect()),
-        padding: markerFocusPaddingRef.current,
+        padding: responsivePadding,
         viewportRect: domRectToScreenRect(container.getBoundingClientRect()),
       })
 
@@ -475,7 +672,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         return
       }
 
-      applyCenteredViewport(map, selectedLngLat, correction.nextZoom, markerFocusPaddingRef.current)
+      applyCenteredViewport(map, selectedLngLat, correction.nextZoom, responsivePadding)
       markMapStartup('selected marker camera corrected', {
         reason: correction.reason,
         source: source ?? 'unknown',
@@ -488,10 +685,14 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         map,
         selectedLngLat,
         Math.max(currentZoom, MARKER_FOCUS_COMFORT_ZOOM),
-        markerFocusPaddingRef.current,
+        getResponsiveDayMapPadding(
+          markerFocusPaddingRef.current,
+          markerLabel,
+          containerRef.current?.clientWidth,
+        ),
       )
     }
-  }, [])
+  }, [markerLabel])
 
   useEffect(() => {
     markMapStartup('DayMap component mounted', { itemCount: initialItemCountRef.current })
@@ -529,8 +730,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     validItemsRef.current = validItems
     coordinateKeyRef.current = coordinateKey
     routeLineStringsRef.current = routeLineStrings
+    routeLineKindRef.current = routeLineKind
+    originRouteLineStringRef.current = originRouteLineString
     userLocationRef.current = userLocation ?? null
-  }, [coordinateKey, routeLineStrings, userLocation, validItems])
+  }, [coordinateKey, originRouteLineString, routeLineKind, routeLineStrings, userLocation, validItems])
 
   useEffect(() => {
     onBaseLoadingChangeRef.current?.(showBaseLoading)
@@ -556,7 +759,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     let disposed = false
 
-    function createMap(maplibreAdapter: MapEngineAdapter, styleUrl: string, isFallback: boolean) {
+    function createMap(adapter: MapEngineAdapter, styleUrl: string, isFallback: boolean) {
       if (!containerRef.current || disposed) {
         return
       }
@@ -568,14 +771,15 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       const firstLngLat = getItemLngLat(validItemsRef.current[0])
       const initialUserLocation = userLocationRef.current
       const initialCenter = firstLngLat ?? initialUserLocation ?? [139.7671, 35.6812]
-      const map = maplibreAdapter.createMap(containerRef.current, {
+      const map = adapter.createMap(containerRef.current, {
         center: initialCenter as MapLngLat,
         zoom: firstLngLat ? 12 : initialUserLocation ? 14 : 10,
         style: styleUrl,
       })
 
       mapRef.current = map
-      markMapStartup('map created', { isFallback, styleUrl })
+      containerRef.current.dataset.mapEngine = adapter.type
+      markMapStartup('map created', { engine: adapter.type, isFallback, styleUrl })
 
       map.once('idle', () => {
         markMapStartup('map idle event')
@@ -602,9 +806,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
           return
         }
 
-        if (!isFallback && !fallbackTriedRef.current) {
+        if (adapter.type === 'maplibre' && !isFallback && !fallbackTriedRef.current) {
           fallbackTriedRef.current = true
-          createMap(maplibreAdapter, FALLBACK_MAP_STYLE, true)
+          createMap(adapter, FALLBACK_MAP_STYLE, true)
           return
         }
 
@@ -616,10 +820,16 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
 
     fallbackTriedRef.current = false
     setMapError(null)
-    void loadMapLibreAdapter()
-      .then((maplibreAdapter) => {
-        if (!disposed) {
-          createMap(maplibreAdapter, DEFAULT_MAP_STYLE, false)
+    void loadDayMapAdapter(mapEngine)
+      .then(async ({ adapter, styleUrl }) => {
+        if (disposed) return
+
+        try {
+          createMap(adapter, styleUrl ?? mapStyleUrl, false)
+        } catch (caught) {
+          if (adapter.type !== 'google') throw caught
+          const maplibreAdapter = await loadMapLibreAdapter()
+          if (!disposed) createMap(maplibreAdapter, mapStyleUrl, false)
         }
       })
       .catch(() => {
@@ -635,7 +845,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       disposed = true
       cleanupMap()
     }
-  }, [cleanupMap, fitViewportIfNeeded, hasMapTargets, syncMarkersAndRoute, syncUserLocationMarker, updateMarkerZoomScale])
+  }, [cleanupMap, fitViewportIfNeeded, hasMapTargets, mapEngine, mapStyleUrl, syncMarkersAndRoute, syncUserLocationMarker, updateMarkerZoomScale])
 
   useEffect(() => {
     selectedItemIdRef.current = selectedItemId
@@ -681,6 +891,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
         window.cancelAnimationFrame(resizeFrameRef.current)
         resizeFrameRef.current = null
       }
+      if (resizeFitTimeoutRef.current !== null) {
+        window.clearTimeout(resizeFitTimeoutRef.current)
+        resizeFitTimeoutRef.current = null
+      }
     }
   }, [hasMapTargets, scheduleMapResize])
 
@@ -720,6 +934,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
           ? `relative ${heightClassName} overflow-hidden bg-slate-100`
           : `relative ${heightClassName} overflow-hidden rounded-2xl border border-white/80 bg-slate-100 shadow-[0_8px_22px_rgba(47,65,88,0.08)] transition-[height,min-height] duration-300`
       }
+      data-route-source={routeLineStrings?.some((lineString) => lineString.length >= 2) ? routeLineKind : 'sequence'}
+      data-origin-route-source={originRouteLineString && originRouteLineString.length >= 2 ? 'road' : 'connector'}
     >
       <div className="h-full w-full" ref={containerRef} />
       {showBaseLoading ? (
@@ -744,8 +960,9 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   )
 })
 
-function markerRootClassName() {
+function markerRootClassName(isDetailed: boolean) {
   return [
+    isDetailed ? 'day-map-marker-root-detailed' : '',
     'flex',
     'size-11',
     'items-center',
@@ -754,24 +971,111 @@ function markerRootClassName() {
   ].join(' ')
 }
 
-function markerContentClassName(isSelected: boolean, isEmoji = false) {
+function markerContentClassName(isSelected: boolean, isEmoji = false, isDetailed = false) {
+  if (isDetailed) {
+    return [
+      'day-map-marker-content-detailed',
+      isSelected ? 'is-selected' : '',
+    ].filter(Boolean).join(' ')
+  }
+
   return [
     'flex',
-    'size-11',
+    'size-9',
     'items-center',
     'justify-center',
     'rounded-full',
-    'border-4',
-    isEmoji ? 'text-lg' : 'text-base',
+    'border-[3px]',
+    isEmoji ? 'text-base' : 'text-sm',
     'font-bold',
     'transition-[transform,box-shadow,background-color]',
     'duration-200',
     'will-change-transform',
-    'shadow-[0_12px_28px_rgba(22,119,255,0.28)]',
+    'shadow-[0_6px_16px_rgba(8,100,93,0.22)]',
     isSelected
-      ? 'border-white bg-emerald-500 text-white ring-4 ring-emerald-200'
+      ? 'border-white bg-primary text-white ring-2 ring-primary/20'
       : 'border-white bg-primary text-white',
   ].join(' ')
+}
+
+function appendDetailedMarkerContent(
+  content: HTMLSpanElement,
+  item: ItineraryItem,
+  index: number,
+  label: string,
+  allItems: ItineraryItem[],
+): Root[] {
+  const iconRoots: Root[] = []
+  const dot = document.createElement('span')
+  dot.className = 'day-map-marker-dot'
+  dot.textContent = label
+
+  const details = document.createElement('span')
+  details.className = [
+    'day-map-marker-details',
+    getDetailedMarkerPosition(allItems, index),
+  ].join(' ')
+  details.setAttribute('data-testid', 'day-map-marker-details')
+
+  const title = document.createElement('strong')
+  title.textContent = item.title
+  details.append(title)
+
+  const locationName = item.locationName?.trim()
+  if (locationName && locationName.toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase()) {
+    const secondary = document.createElement('span')
+    secondary.className = 'day-map-marker-secondary'
+    secondary.textContent = locationName
+    details.append(secondary)
+  }
+
+  if (item.ticketIds.length > 0) {
+    const ticket = document.createElement('span')
+    ticket.className = 'day-map-marker-ticket'
+    const icon = document.createElement('span')
+    icon.className = 'day-map-marker-ticket-icon'
+    const iconRoot = createRoot(icon)
+    iconRoot.render(<Ticket aria-hidden="true" />)
+    iconRoots.push(iconRoot)
+    ticket.append(icon, document.createTextNode(item.startTime ? `已购票 · ${item.startTime}` : '已购票'))
+    details.append(ticket)
+  } else if (item.startTime) {
+    const time = document.createElement('time')
+    time.className = 'day-map-marker-time'
+    time.textContent = item.startTime
+    details.append(time)
+  }
+
+  content.append(dot, details)
+  return iconRoots
+}
+
+function deferRootUnmount(root: Root) {
+  window.queueMicrotask(() => root.unmount())
+}
+
+function getDetailedMarkerPosition(items: ItineraryItem[], index: number) {
+  if (index === 0) return 'day-map-marker-details-center'
+
+  const current = getItemLngLat(items[index])
+  const neighbor = getItemLngLat(items[index + 1] ?? items[index - 1])
+  if (!current || !neighbor) {
+    return index % 2 === 1 ? 'day-map-marker-details-right' : 'day-map-marker-details-left'
+  }
+
+  const averageLatitudeRadians = ((current[1] + neighbor[1]) / 2) * Math.PI / 180
+  const horizontalSpan = Math.abs(neighbor[0] - current[0]) * Math.cos(averageLatitudeRadians)
+  const verticalSpan = Math.abs(neighbor[1] - current[1])
+  const followsHorizontalCorridor = horizontalSpan > verticalSpan * 1.35
+
+  if (index === items.length - 1) {
+    return followsHorizontalCorridor
+      ? 'day-map-marker-details-end'
+      : 'day-map-marker-details-center'
+  }
+  return followsHorizontalCorridor
+    ? 'day-map-marker-details-top'
+    : 'day-map-marker-details-right'
 }
 
 function userLocationMarkerClassName() {
@@ -790,7 +1094,7 @@ function getMarkerDisplayLabel(
   index: number,
   markerLabel: NonNullable<DayMapProps['markerLabel']>,
 ): { label: string; isEmoji: boolean } {
-  if (markerLabel === 'sequence') {
+  if (markerLabel === 'sequence' || markerLabel === 'details') {
     return { label: String(index + 1), isEmoji: false }
   }
   const emoji = getMarkerEmoji(item)
@@ -807,23 +1111,100 @@ function getMarkerScaleForZoom(zoom: number) {
   return 0.86 + ((zoom - 9) / 6) * 0.22
 }
 
-function buildLineStrings(items: ItineraryItem[], routeLineStrings?: LngLat[][]): LngLat[][] {
+function getResponsiveDayMapPadding(
+  padding: EdgeInsets,
+  markerLabel: NonNullable<DayMapProps['markerLabel']>,
+  containerWidth?: number,
+): EdgeInsets {
+  if (markerLabel !== 'details' || !containerWidth || containerWidth > 360) {
+    return padding
+  }
+
+  return {
+    top: Math.min(padding.top, 56),
+    right: Math.min(padding.right, 56),
+    bottom: Math.min(padding.bottom, 56),
+    left: Math.min(padding.left, 56),
+  }
+}
+
+function buildRouteLinePresentation(
+  items: ItineraryItem[],
+  routeLineStrings?: LngLat[][],
+  routeLineKind: RouteLineKind = 'sequence',
+  routeOrigin?: LngLat | null,
+  originRouteLineString?: LngLat[],
+): { connector: LngLat[][]; road: LngLat[][]; sequence: LngLat[][] } {
   const normalized = normalizeLineStrings(routeLineStrings)
-  if (normalized.length > 0) {
-    return normalized
-  }
-
-  if (items.length <= 1) {
-    return []
-  }
-
-  return normalizeLineStrings(
-    items.slice(1).flatMap((item, index) => {
-      const from = getItemLngLat(items[index])
-      const to = getItemLngLat(item)
-      return from && to ? [[from, to]] : []
-    }),
+  const normalizedOriginRoute = normalizeLineStrings(
+    originRouteLineString ? [originRouteLineString] : undefined,
   )
+  const firstItemCoordinate = getItemLngLat(items[0])
+  const normalizedOrigin = routeOrigin && isValidLngLat(routeOrigin) ? routeOrigin : null
+  const originSegment = normalizedOrigin
+    && firstItemCoordinate
+    && getDistanceMeters(normalizedOrigin, firstItemCoordinate) <= USER_LOCATION_DISTANCE_THRESHOLD_METERS
+    ? [[normalizedOrigin, firstItemCoordinate] satisfies LngLat[]]
+    : []
+  if (normalized.length > 0 || normalizedOriginRoute.length > 0) {
+    const itemSegments = normalized.length > 0
+      ? []
+      : items.slice(1).flatMap((item, index) => {
+          const from = getItemLngLat(items[index])
+          const to = getItemLngLat(item)
+          return from && to ? [[from, to] satisfies LngLat[]] : []
+        })
+    return {
+      connector: normalizeLineStrings([
+        ...(normalizedOriginRoute.length > 0 ? [] : originSegment),
+        ...(routeLineKind === 'road' ? [] : normalized),
+        ...itemSegments,
+      ]),
+      road: [
+        ...normalizedOriginRoute,
+        ...(routeLineKind === 'road' ? normalized : []),
+      ],
+      sequence: [],
+    }
+  }
+
+  const itemSegments = items.slice(1).flatMap((item, index) => {
+    const from = getItemLngLat(items[index])
+    const to = getItemLngLat(item)
+    return from && to ? [[from, to]] : []
+  })
+
+  if (originSegment.length === 0 && itemSegments.length === 0) {
+    return { connector: [], road: [], sequence: [] }
+  }
+
+  return {
+    connector: [],
+    road: [],
+    sequence: normalizeLineStrings([...originSegment, ...itemSegments]),
+  }
+}
+
+function getRouteDirectionMarker(lineString: LngLat[]) {
+  if (lineString.length < 2) return null
+
+  const segmentIndex = Math.min(
+    lineString.length - 2,
+    Math.max(0, Math.floor((lineString.length - 1) * 0.55)),
+  )
+  const from = lineString[segmentIndex]
+  const to = lineString[segmentIndex + 1]
+  const averageLatitudeRadians = ((from[1] + to[1]) / 2) * Math.PI / 180
+  const east = (to[0] - from[0]) * Math.cos(averageLatitudeRadians)
+  const north = to[1] - from[1]
+
+  return {
+    bearing: Math.atan2(east, north) * 180 / Math.PI,
+    coordinate: [
+      (from[0] + to[0]) / 2,
+      (from[1] + to[1]) / 2,
+    ] satisfies LngLat,
+  }
 }
 
 function applyViewportPlan(

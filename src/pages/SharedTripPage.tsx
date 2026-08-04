@@ -53,11 +53,13 @@ export function SharedTripPage() {
   const sharedTripId = params.get('sharedTripId') ?? ''
   const tripId = params.get('tripId') ?? ''
 
-  if (tripId) {
-    return <OwnerSharedTripPage tripId={tripId} />
-  }
-
-  return <CompanionSharedTripPage inviteToken={inviteToken} sharedTripId={sharedTripId} />
+  return (
+    <div className="mx-auto w-full max-w-3xl" data-testid="shared-trip-surface">
+      {tripId
+        ? <OwnerSharedTripPage tripId={tripId} />
+        : <CompanionSharedTripPage inviteToken={inviteToken} sharedTripId={sharedTripId} />}
+    </div>
+  )
 }
 
 function OwnerSharedTripPage({ tripId }: { tripId: string }) {
@@ -134,7 +136,7 @@ function CompanionSharedTripPage({
       if (!configured.configured) {
         setSessionReady(false)
         setBundle(null)
-        setError(`同行共享需要 Supabase 配置：${configured.missing.join('、')}`)
+        setError('同行共享暂不可用，请稍后再试。')
         return
       }
 

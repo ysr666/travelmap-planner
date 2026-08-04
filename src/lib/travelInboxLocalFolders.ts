@@ -4,6 +4,8 @@ import { sha256Blob } from './travelInboxSourceHash'
 import type { TravelInboxAccountSource, TravelInboxLocalConnector } from '../types'
 
 const LOCAL_FOLDER_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
+export const TRAVEL_INBOX_FILE_ACCEPT = '.txt,.md,.markdown,.eml,.html,.htm,.pdf,image/*,.json,.zip,.csv,.xlsx,.xlsm,.xls'
+export const TRAVEL_INBOX_MANUAL_MAX_FILE_COUNT = 60
 
 export function supportsTravelInboxLocalFolders() {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
@@ -31,6 +33,59 @@ export async function createTravelInboxLocalFolderConnector(autoAiEnabled = true
 
 export function listTravelInboxLocalFolderConnectors() {
   return db.travelInboxLocalConnectors.orderBy('updatedAt').reverse().toArray()
+}
+
+export async function importTravelInboxFiles(files: File[]) {
+  const selected = files.slice(0, TRAVEL_INBOX_MANUAL_MAX_FILE_COUNT)
+  const created: TravelInboxAccountSource[] = []
+  const createdFiles: Array<{ file: File; source: TravelInboxAccountSource }> = []
+  const warnings: string[] = []
+  const seenContentHashes = new Set<string>()
+
+  for (const file of selected) {
+    if (!isSupportedFileName(file.name)) {
+      warnings.push(`${file.name} 暂不支持。`)
+      continue
+    }
+    if (file.size > LOCAL_FOLDER_MAX_FILE_SIZE_BYTES) {
+      warnings.push(`${file.name} 超过 20MB，未处理。`)
+      continue
+    }
+    const contentHash = await sha256Blob(file)
+    if (seenContentHashes.has(contentHash)) continue
+    seenContentHashes.add(contentHash)
+    const now = Date.now()
+    const source: TravelInboxAccountSource = {
+      connectorKind: 'local_folder',
+      createdAt: now,
+      fileName: file.name,
+      id: createId('account_inbox'),
+      label: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      receivedAt: file.lastModified || now,
+      size: file.size,
+      sourceKind: inferKind(file),
+      status: 'queued',
+      updatedAt: now,
+      warnings: [],
+    }
+    created.push(source)
+    createdFiles.push({ file, source })
+  }
+
+  if (files.length > TRAVEL_INBOX_MANUAL_MAX_FILE_COUNT) {
+    warnings.push(`最多导入 ${TRAVEL_INBOX_MANUAL_MAX_FILE_COUNT} 个文件。`)
+  }
+  if (created.length > 0) {
+    await db.transaction('rw', db.travelInboxAccountSources, db.travelInboxAccountSourceBlobs, async () => {
+      await db.travelInboxAccountSources.bulkAdd(created)
+      await db.travelInboxAccountSourceBlobs.bulkPut(createdFiles.map(({ file, source }) => ({
+        blob: file,
+        sourceId: source.id,
+      })))
+    })
+  }
+  return { created, warnings }
 }
 
 export async function deleteTravelInboxLocalFolderConnector(id: string) {

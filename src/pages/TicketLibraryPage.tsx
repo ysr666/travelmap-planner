@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileArchive, HardDrive, Link2, MapPinned, MoreHorizontal, Pencil, Plus, RefreshCw, Save, Search, SlidersHorizontal, Trash2, Upload, X } from 'lucide-react'
 import {
   createTicketMeta,
@@ -18,8 +18,7 @@ import {
   updateTicketMeta,
 } from '../db'
 import { TicketPreview } from '../components/TicketPreview'
-import { TicketThumbnail } from '../components/tickets/TicketThumbnail'
-import { TripNav } from '../components/AppShell'
+import { DocumentPreviewRow } from '../components/tickets/DocumentPreviewRow'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -39,7 +38,6 @@ import { getRouteParams, navigateTo } from '../lib/routes'
 import {
   describeTicketMetaLine,
   formatFileSize,
-  formatTicketCreatedAt,
   getTicketDisplayTitle,
   getTicketFileType,
   getTicketScope,
@@ -139,7 +137,17 @@ const storageOptions: Array<{ value: TicketStorageMode; label: string; icon: Rea
   },
 ]
 
-export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedded?: boolean; tripIdOverride?: string | null } = {}) {
+export function TicketLibraryPage({
+  contextControls,
+  embedded = false,
+  headerAction,
+  tripIdOverride,
+}: {
+  contextControls?: ReactNode
+  embedded?: boolean
+  headerAction?: ReactNode
+  tripIdOverride?: string | null
+} = {}) {
   const params = getRouteParams()
   const tripId = tripIdOverride ?? params.get('tripId')
   const initialItemId = params.get('itemId')
@@ -166,6 +174,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [searchQuery, setSearchQuery] = useState(initialTicketQuery)
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [showFilterSheet, setShowFilterSheet] = useState(false)
+  const [showSearch, setShowSearch] = useState(Boolean(initialTicketQuery))
   const [previewTicket, setPreviewTicket] = useState<TicketMeta | null>(null)
   const [editingTicket, setEditingTicket] = useState<TicketMeta | null>(null)
   const [ticketBlobPresence, setTicketBlobPresence] = useState<TicketBlobPresenceState>({})
@@ -192,6 +201,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const {
     appendExecutionResult,
     restoreSuggestionState,
@@ -258,10 +268,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     () => buildTicketLibraryStats(tickets, ticketBlobPresence),
     [ticketBlobPresence, tickets],
   )
-  const gallerySections = useMemo(
-    () => buildTicketGallerySections(filteredTickets, itemById),
-    [filteredTickets, itemById],
-  )
+  const visibleTicketCategoryFilters = getVisibleTicketCategoryFilters(ticketLibraryStats)
+  const showEmbeddedScopeFilters = embedded && (visibleTicketCategoryFilters.length > 2 || filter !== 'all')
   const ticketLedgerDraftCandidates = useMemo(() => {
     if (!trip || !ledgerSettings) return []
     return buildLedgerExpenseDraftCandidates({
@@ -388,9 +396,24 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }, [refreshLibrary])
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setSearchQuery(initialTicketQuery), 0)
+    const timeout = window.setTimeout(() => {
+      setSearchQuery(initialTicketQuery)
+      if (initialTicketQuery) setShowSearch(true)
+    }, 0)
     return () => window.clearTimeout(timeout)
   }, [initialTicketQuery])
+
+  useEffect(() => {
+    function handleTicketSearchCommand() {
+      setShowSearch((current) => {
+        const next = !current
+        if (next) window.requestAnimationFrame(() => searchInputRef.current?.focus())
+        return next
+      })
+    }
+    window.addEventListener('tripmap:ticket-search', handleTicketSearchCommand)
+    return () => window.removeEventListener('tripmap:ticket-search', handleTicketSearchCommand)
+  }, [])
 
   useEffect(() => {
     if (!initialTicketId || previewTicket?.id === initialTicketId) return
@@ -797,6 +820,41 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
     setFileInputKey((current) => current + 1)
   }
 
+  function renderDocumentPreviewRow(ticket: TicketMeta) {
+    const displayTitle = getTicketDisplayTitle(ticket)
+    const blobSyncState = ticketBlobSyncStates[ticket.id]
+    const canClearCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus === 'cached' && Boolean(blobSyncState.cloudStoragePath)
+    const canRestoreCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus !== 'cached' && Boolean(blobSyncState.cloudStoragePath)
+    const canRetryUpload = blobSyncState?.uploadStatus === 'error'
+    return (
+      <DocumentPreviewRow
+        action={(
+          <TicketActionsMenu
+            busy={ticketBlobActionId === ticket.id}
+            canClearCache={canClearCache}
+            canRestoreCache={canRestoreCache}
+            canRetryUpload={canRetryUpload}
+            className="relative"
+            displayTitle={displayTitle}
+            onClearCache={() => void handleClearTicketCache(ticket)}
+            onDelete={() => setPendingDeleteTicket(ticket)}
+            onEdit={() => openTicketEditor(ticket)}
+            onRestoreCache={() => void handleRestoreTicketCache(ticket)}
+            onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
+          />
+        )}
+        blobSyncState={blobSyncState}
+        detail={ticket.note?.trim() || describeTicketBinding(ticket, itemById)}
+        key={ticket.id}
+        meta={ticket.size > 0 ? formatFileSize(ticket.size) : undefined}
+        onOpen={() => openTicketPreview(ticket)}
+        subtitle={describeCompactTicketMeta(ticket)}
+        ticket={ticket}
+        title={displayTitle}
+      />
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-5">
@@ -825,8 +883,7 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {!embedded ? <TripNav activeRoute="tickets" firstDayId={days[0]?.id} tripId={trip.id} /> : null}
+    <div className="flex flex-col gap-3">
 
       {actionError ? (
         <InlineStatus role="alert" size="md" tone="error">
@@ -840,12 +897,19 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
       ) : null}
 
       <section className="space-y-3">
+        {embedded ? <h2 className="sr-only">票据</h2> : null}
         <div className="flex min-h-11 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-on-surface">票据</h2>
-            <p className="truncate text-xs tm-muted">{trip.title} · {ticketLibraryStats.totalCount} 张</p>
-          </div>
+          {embedded ? (
+            <div className="min-w-0 flex-1 overflow-x-auto app-scrollbar">
+              {contextControls}
+            </div>
+          ) : (
+            <h2 className="min-w-0 truncate text-base font-semibold text-on-surface">
+              票据 <span className="text-sm font-normal text-on-surface-variant">{ticketLibraryStats.totalCount}</span>
+            </h2>
+          )}
           <div className="flex shrink-0 items-center gap-1">
+            {headerAction}
             <button
               aria-label="筛选和排序票据"
               className="flex size-11 items-center justify-center rounded-lg text-on-surface-variant tm-focus"
@@ -864,33 +928,39 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             </button>
           </div>
         </div>
-        <label className="relative block">
+        <label className={showSearch ? 'relative block' : 'hidden'}>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
           <input
             aria-label="搜索票据"
             className={`${FIELD_INPUT_CLASS} pl-9`}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="搜索票据、地点或订单"
+            ref={searchInputRef}
             value={searchQuery}
           />
         </label>
-        {ticketLibraryStats.totalCount > 0 ? (
+        {ticketLibraryStats.totalCount > 0 && (!embedded || showEmbeddedScopeFilters) ? (
           <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar" aria-label="票据分类">
-          {getVisibleTicketCategoryFilters(ticketLibraryStats).map((option) => (
+          {visibleTicketCategoryFilters.map((option) => (
             <button
-              className={`min-h-10 shrink-0 rounded-full px-3 text-xs font-semibold tm-focus ${
-                filter === option.value ? 'bg-primary text-on-primary' : 'tm-chip'
+              className={`min-h-10 shrink-0 rounded-full border px-3 text-xs font-semibold tm-focus ${
+                filter === option.value
+                  ? 'border-primary/45 bg-primary-container/45 text-primary'
+                  : 'border-outline-variant/45 bg-surface text-on-surface-variant'
               }`}
               key={option.value}
               onClick={() => setFilter(option.value)}
               type="button"
             >
-              {option.label} {option.count}
+              {option.label}{embedded ? '' : ` ${option.count}`}
             </button>
           ))}
           </div>
         ) : null}
-        <div className="flex min-h-6 items-center justify-between gap-3 text-xs tm-muted" data-testid="ticket-filter-summary">
+        <div
+          className={filter !== 'all' || searchQuery ? 'flex min-h-6 items-center justify-between gap-3 text-xs tm-muted' : 'sr-only'}
+          data-testid="ticket-filter-summary"
+        >
           <span className="min-w-0 truncate">{getTicketFilterSummary(filter, filteredTickets.length)}</span>
           {filter !== 'all' ? (
             <button
@@ -917,34 +987,8 @@ export function TicketLibraryPage({ embedded = false, tripIdOverride }: { embedd
             ) : null}
           </div>
         ) : (
-          <div className="space-y-5" data-testid="ticket-gallery" id="ticket-gallery">
-            {gallerySections.map((section) => (
-              <div className="space-y-3" data-testid="ticket-gallery-section" key={section.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-on-surface">{section.title}</h3>
-                  <span className="shrink-0 text-xs tm-muted">{section.tickets.length}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 min-[410px]:grid-cols-3">
-                  {section.tickets.map((ticket) => {
-                    return (
-                      <TicketCard
-                        bindingLabel={describeTicketBinding(ticket, itemById)}
-                        blobSyncState={ticketBlobSyncStates[ticket.id]}
-                        busy={ticketBlobActionId === ticket.id}
-                        key={ticket.id}
-                        onClearCache={() => void handleClearTicketCache(ticket)}
-                        onDelete={() => setPendingDeleteTicket(ticket)}
-                        onEdit={() => openTicketEditor(ticket)}
-                        onPreview={() => openTicketPreview(ticket)}
-                        onRestoreCache={() => void handleRestoreTicketCache(ticket)}
-                        onRetryUpload={() => void handleRetryTicketBlobUpload(ticket)}
-                        ticket={ticket}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="document-preview-list" data-testid="ticket-gallery" id="ticket-gallery">
+            {filteredTickets.map(renderDocumentPreviewRow)}
           </div>
         )}
       </section>
@@ -1137,12 +1181,6 @@ type TicketLibraryStats = {
   tripLevelCount: number
   totalCount: number
   unassignedCount: number
-}
-
-type TicketGallerySection = {
-  id: 'item' | 'trip' | 'unassigned'
-  tickets: TicketMeta[]
-  title: string
 }
 
 function TicketMetadataEditor({
@@ -1375,153 +1413,78 @@ function buildTicketSearchGroups(normalizedQuery: string) {
     })
 }
 
-function buildTicketGallerySections(
-  tickets: TicketMeta[],
-  itemById: Map<string, ItineraryItem>,
-): TicketGallerySection[] {
-  const sections: TicketGallerySection[] = [
-    {
-      id: 'item',
-      tickets: [],
-      title: '行程点票据',
-    },
-    {
-      id: 'trip',
-      tickets: [],
-      title: '旅行级票据',
-    },
-    {
-      id: 'unassigned',
-      tickets: [],
-      title: '未分类',
-    },
-  ]
-  const sectionById = new Map(sections.map((section) => [section.id, section]))
-
-  tickets.forEach((ticket) => {
-    const scope = getTicketScope(ticket)
-    if (scope === 'item' || (ticket.itemId && itemById.has(ticket.itemId))) {
-      sectionById.get('item')?.tickets.push(ticket)
-      return
-    }
-    if (scope === 'unassigned') {
-      sectionById.get('unassigned')?.tickets.push(ticket)
-      return
-    }
-    sectionById.get('trip')?.tickets.push(ticket)
-  })
-
-  return sections.filter((section) => section.tickets.length > 0)
-}
-
-function TicketCard({
-  ticket,
-  bindingLabel,
-  blobSyncState,
+function TicketActionsMenu({
   busy,
+  canClearCache,
+  canRestoreCache,
+  canRetryUpload,
+  className,
+  displayTitle,
   onClearCache,
-  onPreview,
-  onEdit,
   onDelete,
+  onEdit,
   onRestoreCache,
   onRetryUpload,
 }: {
-  ticket: TicketMeta
-  bindingLabel: string
-  blobSyncState?: TicketBlobSyncState
   busy: boolean
+  canClearCache: boolean
+  canRestoreCache: boolean
+  canRetryUpload: boolean
+  className: string
+  displayTitle: string
   onClearCache: () => void
-  onPreview: () => void
-  onEdit: () => void
   onDelete: () => void
+  onEdit: () => void
   onRestoreCache: () => void
   onRetryUpload: () => void
 }) {
-  const displayTitle = getTicketDisplayTitle(ticket)
-  const canClearCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus === 'cached' && Boolean(blobSyncState.cloudStoragePath)
-  const canRestoreCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus !== 'cached' && Boolean(blobSyncState.cloudStoragePath)
-  const canRetryUpload = blobSyncState?.uploadStatus === 'error'
-
   return (
-    <Card variant="grouped" className="relative flex min-w-0 flex-col p-2" data-testid="ticket-card">
-      <button
-        aria-label={`预览${displayTitle}`}
-        className="flex min-h-0 min-w-0 flex-1 flex-col text-left transition active:scale-[0.99] tm-focus"
-        onClick={onPreview}
-        type="button"
+    <details className={`group z-10 ${className}`}>
+      <summary
+        aria-label={`${displayTitle}更多操作`}
+        className="flex size-11 cursor-pointer list-none items-center justify-center rounded-lg bg-surface/90 text-on-surface shadow-sm backdrop-blur marker:hidden [&::-webkit-details-marker]:hidden tm-focus"
       >
-        <TicketThumbnail
-          blobSyncState={blobSyncState}
-          className="aspect-[4/3] w-full"
-          ticket={ticket}
-        />
-
-        <span className="mt-2 block min-w-0 px-0.5">
-          <span className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-on-surface [overflow-wrap:anywhere]" title={displayTitle}>
-            {displayTitle}
-          </span>
-          <span className="mt-1 block truncate text-[11px] tm-muted" title={bindingLabel}>
-            {bindingLabel}
-          </span>
-          <span className="mt-0.5 block text-[11px] tm-muted">
-            {formatTicketCreatedAt(ticket.createdAt)}
-          </span>
-        </span>
-      </button>
-
-      <details className="group absolute right-3 top-3 z-10">
-        <summary
-          aria-label={`${displayTitle}更多操作`}
-          className="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg bg-surface/90 text-on-surface shadow-sm backdrop-blur marker:hidden [&::-webkit-details-marker]:hidden tm-focus"
-        >
-          <MoreHorizontal className="size-5" />
-        </summary>
-        <div className="absolute right-0 top-11 z-20 w-40 overflow-hidden rounded-lg bg-surface p-1 shadow-xl ring-1 ring-outline-variant/30">
-          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-on-surface tm-focus" onClick={onEdit} type="button">
-            <Pencil className="size-4" />
-            编辑
+        <MoreHorizontal className="size-5" />
+      </summary>
+      <div className="absolute right-0 top-11 z-20 w-40 overflow-hidden rounded-lg bg-surface p-1 shadow-xl ring-1 ring-outline-variant/30">
+        <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-on-surface tm-focus" onClick={onEdit} type="button">
+          <Pencil className="size-4" />
+          编辑
+        </button>
+        {canClearCache ? (
+          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus" disabled={busy} onClick={onClearCache} type="button">
+            <HardDrive className="size-4" />
+            清理缓存
           </button>
-          {canClearCache ? (
-            <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus"
-              disabled={busy}
-              onClick={onClearCache}
-              type="button"
-            >
-              <HardDrive className="size-4" />
-              清理缓存
-            </button>
-          ) : null}
-          {canRestoreCache ? (
-            <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus"
-              disabled={busy}
-              onClick={onRestoreCache}
-              type="button"
-            >
-              <RefreshCw className="size-4" />
-              重新同步
-            </button>
-          ) : null}
-          {canRetryUpload ? (
-            <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-amber-800 tm-focus"
-              disabled={busy}
-              onClick={onRetryUpload}
-              type="button"
-            >
-              <RefreshCw className="size-4" />
-              重试上传
-            </button>
-          ) : null}
-          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error tm-focus" onClick={onDelete} type="button">
-            <Trash2 className="size-4" />
-            删除
+        ) : null}
+        {canRestoreCache ? (
+          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-on-surface-variant tm-focus" disabled={busy} onClick={onRestoreCache} type="button">
+            <RefreshCw className="size-4" />
+            重新同步
           </button>
-        </div>
-      </details>
-    </Card>
+        ) : null}
+        {canRetryUpload ? (
+          <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-amber-800 tm-focus" disabled={busy} onClick={onRetryUpload} type="button">
+            <RefreshCw className="size-4" />
+            重试上传
+          </button>
+        ) : null}
+        <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error tm-focus" onClick={onDelete} type="button">
+          <Trash2 className="size-4" />
+          删除
+        </button>
+      </div>
+    </details>
   )
+}
+
+function describeCompactTicketMeta(ticket: TicketMeta) {
+  const category = ticketCategoryOptions.find((option) => option.value === (ticket.ticketCategory ?? 'other'))?.label ?? '票据'
+  const storageMode = getTicketStorageMode(ticket)
+  if (storageMode === 'external') return `${category} · 链接`
+  if (storageMode === 'reference') return `${category} · 位置`
+  const fileType = ticket.fileType === 'pdf' ? 'PDF' : ticket.fileType === 'image' ? '图片' : '文件'
+  return `${category} · ${fileType}`
 }
 
 function CopyTicketFields({

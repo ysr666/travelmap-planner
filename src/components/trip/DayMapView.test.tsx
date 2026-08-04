@@ -7,6 +7,7 @@ import { DayMapView } from './DayMapView'
 
 const mocks = vi.hoisted(() => ({
   hasValidCoordinates: vi.fn(() => true),
+  buildGoogleMapsUrl: vi.fn(() => 'https://www.google.com/maps/search/?api=1&query=35.0%2C139.0'),
   describeItemTime: vi.fn(() => '10:00'),
   formatDate: vi.fn(() => '4月1日'),
   getRoutingConfig: vi.fn(() => ({})),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../lib/mapLinks', () => ({
   hasValidCoordinates: mocks.hasValidCoordinates,
+  buildGoogleMapsUrl: mocks.buildGoogleMapsUrl,
 }))
 
 vi.mock('../../lib/itinerary', () => ({

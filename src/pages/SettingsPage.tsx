@@ -629,7 +629,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className={`mx-auto max-w-3xl ${section === 'advanced' ? 'settings-advanced-stack' : 'space-y-4'}`}>
 
       {error || success || warnings.length > 0 ? (
         <Card variant="grouped" className="space-y-3">
@@ -695,7 +695,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="AI 可读取的数据范围" title="AI 与隐私">
+      <Collapsible className="settings-advanced-disclosure" subtitle="AI 可读取的数据范围" title="AI 与隐私">
         <AiPrivacySettingsPanel
           autoExpenseAiBusy={autoExpenseAiBusy}
           autoExpenseAiEnabled={autoExpenseAiEnabled}
@@ -771,7 +771,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="导入与恢复" title="迁移">
+      <Collapsible className="settings-advanced-disclosure" subtitle="导入与恢复" title="迁移">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50/80 text-emerald-600 ring-1 ring-emerald-100/80 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-900/50">
@@ -815,7 +815,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="生成或导入新旅行" title="AI 行程包">
+      <Collapsible className="settings-advanced-disclosure" subtitle="生成或导入新旅行" title="AI 行程包">
         <Card variant="grouped" className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50/80 text-violet-600 ring-1 ring-violet-100/80 dark:bg-violet-950/35 dark:text-violet-300 dark:ring-violet-900/50">
@@ -901,7 +901,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="路线服务与缓存" title="路线">
+      <Collapsible className="settings-advanced-disclosure" subtitle="路线服务与缓存" title="路线">
         <RouteServiceSettings
           config={routingConfig}
           cacheError={routeCacheError}
@@ -915,7 +915,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="缓存和持久化" title="设备存储">
+      <Collapsible className="settings-advanced-disclosure" subtitle="缓存和持久化" title="设备存储">
         <Card variant="grouped" className="space-y-3">
           <div className="divide-y divide-slate-100 py-1">
             <ListRow
@@ -992,7 +992,7 @@ export function SettingsPage({ section }: { section?: SettingsSection } = {}) {
       ) : null}
 
       {section === 'advanced' ? (
-      <Collapsible subtitle="版本信息" title="关于">
+      <Collapsible className="settings-advanced-disclosure" subtitle="版本信息" title="关于">
         <Card className="space-y-3 border-amber-100 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/25">
           <div>
             <h3 className="text-base font-semibold text-amber-950 dark:text-amber-200">数据可用性</h3>
@@ -1074,26 +1074,7 @@ function TravelProfileSettings({
   onChange: (patch: Partial<TravelProfile>) => void
 }) {
   return (
-    <section className="space-y-3" data-testid="travel-profile-section">
-      <Card variant="grouped" className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-fixed text-primary ring-1 ring-primary/10 dark:bg-primary/15 dark:text-primary-fixed-dim">
-            <Route className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-slate-950 dark:text-slate-100">旅行偏好</h3>
-            <p className="mt-1 text-sm leading-6 tm-muted">给 AI 和本地提醒参考。</p>
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <InfoPill
-            icon={<ShieldCheck className="size-4" />}
-            text="本地检查只在设备内运行。"
-            tone="success"
-          />
-        </div>
-
+    <section className="space-y-5" data-testid="travel-profile-section">
         <div className="space-y-2">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">旅行节奏</p>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="旅行节奏">
@@ -1171,10 +1152,6 @@ function TravelProfileSettings({
           </div>
         </div>
 
-        <p className="rounded-lg bg-surface-container-high px-3 py-2 text-xs leading-5 tm-muted ring-1 ring-outline-variant/70">
-          当前只影响安排密度和提醒强度。
-        </p>
-      </Card>
     </section>
   )
 }

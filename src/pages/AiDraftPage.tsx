@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ExternalLink, MapPinned, Search } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -240,6 +240,8 @@ export function AiDraftPage() {
   const [variantMixError, setVariantMixError] = useState<string | null>(null)
   const [showVariantConfirm, setShowVariantConfirm] = useState(false)
   const [pendingVariantRetry, setPendingVariantRetry] = useState<AiTripDraftVariantKind | null>(null)
+  const [generationOptionsOpen, setGenerationOptionsOpen] = useState(false)
+  const [requestSettingsOpen, setRequestSettingsOpen] = useState(false)
 
   // Quality check state
   const qualityResult = useMemo(
@@ -357,6 +359,7 @@ export function AiDraftPage() {
       if (result.valid && result.draft) {
         setDraft(result.draft)
         setErrors([])
+        setRequestSettingsOpen(false)
       } else {
         setDraft(null)
         setErrors(result.errors)
@@ -382,6 +385,7 @@ export function AiDraftPage() {
       if (result.valid && result.draft) {
         setDraft(result.draft)
         setErrors([])
+        setRequestSettingsOpen(false)
       } else {
         setDraft(null)
         setErrors(result.errors)
@@ -427,6 +431,7 @@ export function AiDraftPage() {
     setRequestErrors([])
     const mockDraft = generateMockAiTripDraft(validation.request)
     previewDraftObject(mockDraft)
+    setGenerationOptionsOpen(false)
   }
 
   function handleProxyConfirm() {
@@ -436,6 +441,7 @@ export function AiDraftPage() {
 
   function handleVariantConfirm() {
     setShowVariantConfirm(false)
+    setGenerationOptionsOpen(false)
     handleGenerateVariantsViaProxy()
   }
 
@@ -1234,13 +1240,14 @@ export function AiDraftPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-4">
-      <div className="space-y-1" data-testid="ai-draft-page-header">
-        <h1 className="text-lg font-semibold text-on-surface dark:text-on-surface">AI 生成行程</h1>
-        <p className="text-sm leading-6 tm-muted">告诉 AI 目的地和日期，确认后再创建旅行。</p>
-      </div>
-
-      <div className="space-y-3" data-testid="ai-draft-request-form">
+    <div className={`mx-auto w-full space-y-4 pb-4 ${draft ? 'max-w-4xl' : 'max-w-lg'}`} data-testid="ai-draft-page">
+      <AiDraftRequestFrame
+        collapsed={Boolean(draft)}
+        onOpenChange={setRequestSettingsOpen}
+        open={requestSettingsOpen}
+        subtitle={`${requestDestination || draft?.destination || '当前草稿'} · ${requestStartDate || draft?.startDate || '未定日期'} · ${requestDayCount || draft?.days.length || 0} 天`}
+      >
+        <div className="space-y-3" data-testid="ai-draft-request-form">
         <FormField
           label="目的地"
           value={requestDestination}
@@ -1400,6 +1407,8 @@ export function AiDraftPage() {
         )}
 
         <Collapsible
+          onOpenChange={setGenerationOptionsOpen}
+          open={generationOptionsOpen}
           subtitle="三方案对比或示例草稿"
           testId="ai-draft-generation-options"
           title="其他生成方式"
@@ -1457,30 +1466,31 @@ export function AiDraftPage() {
             </div>
           </Card>
         )}
-      </div>
+        </div>
 
-      <div data-testid="ai-draft-json-section">
-        <Collapsible title="导入 JSON 草稿" subtitle="用于已有的结构化行程草稿">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <textarea
-                className="h-48 w-full rounded-xl border border-outline-variant/30 p-3 font-mono text-sm tm-surface dark:border-outline-variant/30"
-                placeholder='{"title": "...", "startDate": "YYYY-MM-DD", ...}'
-                value={jsonText}
-                onChange={(e) => setJsonText(e.target.value)}
-              />
+        <div data-testid="ai-draft-json-section">
+          <Collapsible title="导入 JSON 草稿" subtitle="用于已有的结构化行程草稿">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <textarea
+                  className="h-48 w-full rounded-xl border border-outline-variant/30 p-3 font-mono text-sm tm-surface dark:border-outline-variant/30"
+                  placeholder='{"title": "...", "startDate": "YYYY-MM-DD", ...}'
+                  value={jsonText}
+                  onChange={(e) => setJsonText(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleLoadSample} variant="secondary">
+                  加载固定示例
+                </Button>
+                <Button onClick={handleParse} disabled={!jsonText.trim()}>
+                  解析草稿
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleLoadSample} variant="secondary">
-                加载固定示例
-              </Button>
-              <Button onClick={handleParse} disabled={!jsonText.trim()}>
-                解析草稿
-              </Button>
-            </div>
-          </div>
-        </Collapsible>
-      </div>
+          </Collapsible>
+        </div>
+      </AiDraftRequestFrame>
 
       {errors.length > 0 && (
         <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30" data-testid="ai-draft-errors">
@@ -1954,13 +1964,9 @@ export function AiDraftPage() {
             </div>
           </Card>
 
-          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30" data-testid="ai-draft-privacy-note">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              这里的修改只更新当前草案。
-              <br />
-              确认导入后才会写入本地旅行。
-            </p>
-          </Card>
+          <p className="px-1 text-xs tm-muted" data-testid="ai-draft-privacy-note">
+            确认导入后才会创建旅行。
+          </p>
 
           <Button disabled={!canImportDraft} onClick={() => setShowConfirm(true)} className="w-full">
             确认导入
@@ -2094,6 +2100,33 @@ export function AiDraftPage() {
         ) : null}
       </ConfirmDialog>
     </div>
+  )
+}
+
+function AiDraftRequestFrame({
+  children,
+  collapsed,
+  onOpenChange,
+  open,
+  subtitle,
+}: {
+  children: ReactNode
+  collapsed: boolean
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  subtitle: string
+}) {
+  if (!collapsed) return <>{children}</>
+  return (
+    <Collapsible
+      onOpenChange={onOpenChange}
+      open={open}
+      subtitle={subtitle}
+      testId="ai-draft-request-settings"
+      title="生成设置"
+    >
+      <div className="space-y-4">{children}</div>
+    </Collapsible>
   )
 }
 

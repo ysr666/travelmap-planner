@@ -360,10 +360,9 @@ export function SharedTripPanel({ days, itemsByDay, tickets, trip }: SharedTripP
       ) : null}
 
       {state && !state.configured ? (
-        <div className="space-y-3 border-y border-outline-variant/35 py-3">
+        <div className="space-y-1 border-y border-outline-variant/35 py-3">
           <p className="text-sm font-semibold text-on-surface">同行共享暂不可用</p>
-          <p className="text-xs leading-5 tm-muted">请在账户与同步中完成在线服务设置。</p>
-          <Button onClick={() => navigateTo('settings/account')} variant="secondary">账户与同步</Button>
+          <p className="text-xs leading-5 tm-muted">请稍后再试。</p>
         </div>
       ) : null}
 

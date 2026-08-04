@@ -1,6 +1,15 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
 import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import {
+  Bookmark,
+  BusFront,
   CalendarDays,
+  CarFront,
   ChevronRight,
   Clock3,
   Crosshair,
@@ -8,8 +17,11 @@ import {
   LocateFixed,
   Navigation,
   Plus,
+  PersonStanding,
   Route,
+  SquarePlus,
   Ticket,
+  TrainFront,
   WalletCards,
 } from 'lucide-react'
 import {
@@ -22,24 +34,56 @@ import {
 import { DayMap, type DayMapHandle } from '../components/DayMap'
 import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
-import { SkeletonLine } from '../components/ui/SkeletonLine'
+import {
+  CompletedTodayView,
+  EmptyTodayView,
+  TodayStageLoading,
+  UpcomingTodayView,
+} from '../components/home/TodayStageViews'
 import { subscribeTravelDataChanged } from '../lib/dataEvents'
-import { formatDateRange, formatShortDateWithWeekday } from '../lib/dates'
+import { formatDateRange, formatShortDate } from '../lib/dates'
 import {
   buildHomePortfolioModel,
   type HomePortfolioModel,
   type HomeTripOverview,
   type HomeTripSnapshot,
 } from '../lib/homeOverview'
-import { describeItemTime, describePreviousTransport, sortItineraryItems } from '../lib/itinerary'
+import { getHomeDeparturePresentation } from '../lib/homeDeparture'
+import { sortItineraryItems, transportModeLabels } from '../lib/itinerary'
 import { buildGoogleMapsUrl } from '../lib/mapLinks'
+import { MAP_STYLES } from '../lib/mapConfig'
+import type { RouteLineKind } from '../lib/mapEngine'
 import { readTripNavigationContext } from '../lib/navigationContext'
+import { generateAndCacheDayRoutePreview } from '../lib/routeGeneration'
+import { getPersistentRouteProvider } from '../lib/routePreparation'
+import {
+  ROUTE_CACHE_CHANGED_EVENT,
+  buildCurrentRouteCacheIdentity,
+  loadRouteCache,
+} from '../lib/routeCache'
 import { navigateTo } from '../lib/routes'
+import {
+  ROUTING_CONFIG_CHANGED_EVENT,
+  fetchDayRoute,
+  getItemLngLat,
+  getRoutingConfig,
+  type LngLat,
+} from '../lib/routing'
+import {
+  USER_LOCATION_DISTANCE_THRESHOLD_METERS,
+  getDistanceMeters,
+} from '../lib/dayMapViewport'
 import { getTicketDisplayTitle } from '../lib/tickets'
-import type { ItineraryItem, TicketMeta, Trip } from '../types'
+import { useLiveClock } from '../hooks/useLiveClock'
+import type { ItineraryItem, TicketMeta, TransportMode, Trip } from '../types'
 
 const EMPTY_PORTFOLIO: HomePortfolioModel = { activeAndUpcoming: [], completed: [], primary: null }
 const E2E_MODE = import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
+const E2E_USE_LIVE_MAP = import.meta.env.VITE_E2E_USE_LIVE_MAP === '1'
+const TODAY_MAP_VIEWPORT_PADDING = { top: 60, right: 76, bottom: 52, left: 60 } as const
+
+type OriginRouteState = { lineString: LngLat[]; signature: string }
+type TodayRouteGeometry = { kind: RouteLineKind; lineStrings: LngLat[][] }
 
 export function HomePage({
   onPrimaryTripChange,
@@ -107,16 +151,42 @@ export function HomePage({
   }
 
   if (isLoading) {
-    return <TodayLoading />
+    return <TodayStageLoading />
   }
 
   if (!portfolio.primary || !primarySnapshot) {
     return (
-      <TodayEmpty
+      <EmptyTodayView
         error={error}
         isCreatingDemo={isCreatingDemo}
         onCreateDemo={() => void handleCreateDemoTrip()}
       />
+    )
+  }
+
+  const otherTrips = [...portfolio.activeAndUpcoming, ...portfolio.completed]
+  if (portfolio.primary.status === 'upcoming') {
+    return (
+      <TodayStageContainer title={portfolio.primary.trip.title}>
+        <UpcomingTodayView
+          error={error}
+          otherTrips={otherTrips}
+          overview={portfolio.primary}
+          snapshot={primarySnapshot}
+        />
+      </TodayStageContainer>
+    )
+  }
+  if (portfolio.primary.status === 'completed') {
+    return (
+      <TodayStageContainer title={portfolio.primary.trip.title}>
+        <CompletedTodayView
+          error={error}
+          otherTrips={otherTrips}
+          overview={portfolio.primary}
+          snapshot={primarySnapshot}
+        />
+      </TodayStageContainer>
     )
   }
 
@@ -126,11 +196,20 @@ export function HomePage({
       <div className="h-full min-h-0" data-testid="home-primary-trip">
         <TodayWorkspace
           error={error}
-          otherTrips={[...portfolio.activeAndUpcoming, ...portfolio.completed]}
+          otherTrips={otherTrips}
           overview={portfolio.primary}
           snapshot={primarySnapshot}
         />
       </div>
+    </div>
+  )
+}
+
+function TodayStageContainer({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="h-full min-h-0" data-testid="trip-card">
+      <span aria-hidden="true" className="sr-only">{title}</span>
+      <div className="h-full min-h-0" data-testid="home-primary-trip">{children}</div>
     </div>
   )
 }
@@ -147,9 +226,16 @@ function TodayWorkspace({
   snapshot: HomeTripSnapshot
 }) {
   const mapRef = useRef<DayMapHandle | null>(null)
+  const attemptedRouteSignaturesRef = useRef(new Set<string>())
+  const attemptedOriginRouteSignaturesRef = useRef(new Set<string>())
   const [selection, setSelection] = useState<{ dayId: string; itemId: string; source: 'marker' | 'list' } | null>(null)
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [routeCacheRevision, setRouteCacheRevision] = useState(0)
+  const [routeGeometry, setRouteGeometry] = useState<TodayRouteGeometry | undefined>()
+  const [originRoute, setOriginRoute] = useState<OriginRouteState | null>(null)
+  const [missingRouteSignature, setMissingRouteSignature] = useState<string | null>(null)
+  const liveNow = useLiveClock(1_000)
   const day = overview.focusDay
   const items = useMemo(
     () => day
@@ -162,12 +248,236 @@ function TodayWorkspace({
   const selectedItem = selectedItemId
     ? items.find((item) => item.id === selectedItemId) ?? fallbackItem
     : fallbackItem
+  const canRecenterRoute = Boolean(selection || userLocation)
   const selectedItemIndex = selectedItem
     ? Math.max(0, items.findIndex((item) => item.id === selectedItem.id))
     : -1
   const selectedTicket = selectedItem
     ? findPrimaryTicket(selectedItem, snapshot.tickets)
     : null
+  const selectedTicketPresentation = selectedTicket
+    ? getTicketPresentation(selectedTicket)
+    : null
+  const transportSummary = selectedItem ? describeTodayTransport(selectedItem) : ''
+  const departure = day && selectedItem
+    ? getHomeDeparturePresentation({
+        day,
+        item: selectedItem,
+        now: liveNow,
+        status: overview.status,
+        trip: overview.trip,
+      })
+    : null
+  const relatedItems = selectedItem
+    ? items.filter((item) => item.id !== selectedItem.id)
+    : items
+  const visibleRelatedItems = relatedItems.slice(0, 2)
+  const routingConfig = useMemo(() => {
+    void routeCacheRevision
+    return getRoutingConfig()
+  }, [routeCacheRevision])
+  const routeProvider = getPersistentRouteProvider(routingConfig)
+  const firstItemCoordinate = useMemo(() => getItemLngLat(items[0]), [items])
+  const originRouteSignature = useMemo(() => {
+    if (
+      !day
+      || !routeProvider
+      || !userLocation
+      || !firstItemCoordinate
+      || items.length === 0
+      || getDistanceMeters(userLocation, firstItemCoordinate) > USER_LOCATION_DISTANCE_THRESHOLD_METERS
+    ) {
+      return null
+    }
+    return [
+      routeProvider,
+      day.id,
+      userLocation.map((value) => value.toFixed(5)).join(','),
+      firstItemCoordinate.map((value) => value.toFixed(5)).join(','),
+      items[0].previousTransportMode ?? items[0].transportMode ?? 'walk',
+    ].join('::')
+  }, [day, firstItemCoordinate, items, routeProvider, userLocation])
+  const originRouteLineString = originRoute?.signature === originRouteSignature
+    ? originRoute.lineString
+    : undefined
+  const routeLineKind = routeGeometry?.kind ?? 'sequence'
+  const routeLineStrings = routeGeometry?.lineStrings
+  const routeCacheIdentity = useMemo(() => {
+    if (!day || items.length < 2) return null
+    return {
+      ...buildCurrentRouteCacheIdentity({
+        tripId: overview.trip.id,
+        dayId: day.id,
+        items,
+        provider: routeProvider ?? 'openrouteservice',
+      }),
+      revision: routeCacheRevision,
+    }
+  }, [day, items, overview.trip.id, routeCacheRevision, routeProvider])
+  useEffect(() => {
+    const refreshRoute = () => setRouteCacheRevision((current) => current + 1)
+    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoute)
+    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoute)
+    return () => {
+      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoute)
+      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoute)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function refreshCachedRoute() {
+      if (!routeCacheIdentity) {
+        setRouteGeometry(undefined)
+        setMissingRouteSignature(null)
+        return
+      }
+
+      try {
+        const cached = await loadRouteCache(routeCacheIdentity.signature)
+        if (!cancelled) {
+          setRouteGeometry(cached
+            ? {
+                kind: cached.status === 'road' ? 'road' : 'sequence',
+                lineStrings: cached.lineStrings,
+              }
+            : undefined)
+          setMissingRouteSignature(cached ? null : routeCacheIdentity.signature)
+        }
+      } catch {
+        if (!cancelled) {
+          setRouteGeometry(undefined)
+          setMissingRouteSignature(routeCacheIdentity.signature)
+        }
+      }
+    }
+
+    void refreshCachedRoute()
+    return () => {
+      cancelled = true
+    }
+  }, [routeCacheIdentity])
+
+  useEffect(() => {
+    const attemptedRouteSignatures = attemptedRouteSignaturesRef.current
+    if (
+      !day
+      || !routeProvider
+      || !routeCacheIdentity
+      || missingRouteSignature !== routeCacheIdentity.signature
+      || overview.status === 'completed'
+      || attemptedRouteSignatures.has(routeCacheIdentity.signature)
+    ) {
+      return
+    }
+
+    attemptedRouteSignatures.add(routeCacheIdentity.signature)
+    const abortController = new AbortController()
+    let cancelled = false
+    let settled = false
+
+    void generateAndCacheDayRoutePreview({
+      config: routingConfig,
+      day,
+      forceRefresh: true,
+      items,
+      signal: abortController.signal,
+      tripId: overview.trip.id,
+    }).then((outcome) => {
+      if (cancelled || outcome.status === 'failed' || outcome.lineStrings.length === 0) return
+      setRouteGeometry({
+        kind: outcome.result?.status === 'road' ? 'road' : 'sequence',
+        lineStrings: outcome.lineStrings,
+      })
+      setMissingRouteSignature(null)
+    }).catch(() => {
+      // The map keeps its local point sequence when the online route is unavailable.
+    }).finally(() => {
+      settled = true
+    })
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+      if (!settled) attemptedRouteSignatures.delete(routeCacheIdentity.signature)
+    }
+  }, [
+    day,
+    items,
+    missingRouteSignature,
+    overview.status,
+    overview.trip.id,
+    routeCacheIdentity,
+    routeProvider,
+    routingConfig,
+  ])
+
+  useEffect(() => {
+    const attemptedOriginRouteSignatures = attemptedOriginRouteSignaturesRef.current
+    if (!day || !routeProvider || !userLocation || !firstItemCoordinate || !originRouteSignature) {
+      return
+    }
+
+    if (attemptedOriginRouteSignatures.has(originRouteSignature)) {
+      return
+    }
+    attemptedOriginRouteSignatures.add(originRouteSignature)
+
+    const abortController = new AbortController()
+    let cancelled = false
+    let settled = false
+    const timestamp = Date.now()
+    const originItem: ItineraryItem = {
+      createdAt: timestamp,
+      dayId: day.id,
+      id: 'current-location',
+      lat: userLocation[1],
+      lng: userLocation[0],
+      sortOrder: -1,
+      ticketIds: [],
+      title: '当前位置',
+      tripId: overview.trip.id,
+      updatedAt: timestamp,
+    }
+    const destinationItem: ItineraryItem = {
+      ...items[0],
+      previousTransportMode: items[0].previousTransportMode ?? items[0].transportMode ?? 'walk',
+    }
+
+    void fetchDayRoute([originItem, destinationItem], routingConfig, {
+      forceRefresh: true,
+      signal: abortController.signal,
+    }).then((result) => {
+      if (cancelled) return
+      const roadSegment = result.segments.find((segment) => segment.kind === 'road')
+      if (roadSegment?.coordinates.length && roadSegment.coordinates.length >= 2) {
+        setOriginRoute({
+          lineString: roadSegment.coordinates,
+          signature: originRouteSignature,
+        })
+      }
+    }).catch(() => {
+      // DayMap retains the short direct connector when the live origin route is unavailable.
+    }).finally(() => {
+      settled = true
+    })
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+      if (!settled) attemptedOriginRouteSignatures.delete(originRouteSignature)
+    }
+  }, [
+    day,
+    firstItemCoordinate,
+    items,
+    overview.trip.id,
+    originRouteSignature,
+    routeProvider,
+    routingConfig,
+    userLocation,
+  ])
 
   function selectItem(item: ItineraryItem, source: 'marker' | 'list') {
     if (!day) return
@@ -206,16 +516,22 @@ function TodayWorkspace({
       <section aria-label="今日地图" className="today-map-stage">
         {day ? (
           <DayMap
+            connectUserLocationToFirst
             heightClassName="h-full min-h-0"
             items={items}
-            markerLabel="sequence"
+            mapEngine={E2E_MODE && !E2E_USE_LIVE_MAP ? 'maplibre' : 'auto'}
+            mapStyleUrl={MAP_STYLES.positron}
+            markerLabel="details"
             onSelectItem={(item) => selectItem(item, 'marker')}
             ref={mapRef}
             selectedItemId={selectedItem?.id}
-            selectedItemSource={selection?.source ?? 'list'}
+            selectedItemSource={selection?.source ?? null}
             surface="fullscreen"
+            routeLineStrings={routeLineStrings}
+            routeLineKind={routeLineKind}
+            originRouteLineString={originRouteLineString}
             userLocation={userLocation}
-            viewportPadding={{ top: 64, right: 40, bottom: 40, left: 40 }}
+            viewportPadding={TODAY_MAP_VIEWPORT_PADDING}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-map-bg p-5">
@@ -227,39 +543,26 @@ function TodayWorkspace({
           </div>
         )}
 
-        {day ? (
-          <button
-            className="today-map-date tm-focus"
-            onClick={() => navigateTo('day', { tripId: overview.trip.id, dayId: day.id, view: 'map' })}
-            type="button"
-          >
-            <span>{getDayPosition(day.id, snapshot.days)}天</span>
-            <span aria-hidden="true">·</span>
-            <span>{formatShortDateWithWeekday(day.date)}</span>
-            <ChevronRight className="size-4" />
-          </button>
-        ) : null}
-
-        {day && items.length > 0 ? (
+        {day && items.length > 0 && (!userLocation || selection) ? (
           <div className="today-map-controls" aria-label="地图控制">
             <button
-              aria-label="回到今日路线"
-              className="today-map-control tm-focus"
-              onClick={() => mapRef.current?.recenter()}
-              title="回到今日路线"
-              type="button"
-            >
-              <Crosshair className="size-5" />
-            </button>
-            <button
-              aria-label={locationStatus === 'loading' ? '正在获取当前位置' : '显示当前位置'}
+              aria-label={locationStatus === 'loading'
+                ? '正在获取当前位置'
+                : canRecenterRoute
+                  ? '回到今日路线'
+                  : '显示当前位置'}
               className="today-map-control tm-focus"
               disabled={locationStatus === 'loading'}
-              onClick={requestLocation}
-              title="显示当前位置"
+              onClick={canRecenterRoute
+                ? () => {
+                    setSelection(null)
+                    mapRef.current?.recenter()
+                  }
+                : requestLocation}
+              title={canRecenterRoute ? '回到今日路线' : '显示当前位置'}
               type="button"
             >
-              <LocateFixed className="size-5" />
+              {canRecenterRoute ? <Crosshair className="size-5" /> : <LocateFixed className="size-5" />}
             </button>
           </div>
         ) : null}
@@ -269,20 +572,23 @@ function TodayWorkspace({
         ) : null}
       </section>
 
-      <section aria-label="今日行程" className="today-trip-sheet">
-        <span aria-hidden="true" className="today-sheet-handle" />
-        <div className="today-sheet-scroll app-scrollbar">
+      <section
+        aria-label="今日行程"
+        className="today-trip-sheet"
+        data-testid="today-trip-sheet"
+      >
+        <div className="today-sheet-scroll app-scrollbar" id="today-sheet-content">
           <button
+            aria-label={`${day ? getDayPosition(day.id, snapshot.days) : overview.statusLabel}，${day ? formatShortDate(day.date) : formatDateRange(overview.trip.startDate, overview.trip.endDate)}，${overview.trip.destination || overview.trip.title}`}
             className="today-trip-meta tm-focus"
             onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
             type="button"
           >
             <span>{day ? getDayPosition(day.id, snapshot.days) : overview.statusLabel}</span>
-            {day ? <span aria-hidden="true">·</span> : null}
-            <span>{day ? formatShortDateWithWeekday(day.date) : formatDateRange(overview.trip.startDate, overview.trip.endDate)}</span>
-            <span aria-hidden="true">·</span>
-            <span className="min-w-0 truncate">{overview.trip.destination || overview.trip.title}</span>
-            <ChevronRight className="size-4 shrink-0" />
+            <span aria-hidden="true" className="min-w-0 truncate">
+              {day ? ` · ${formatShortDate(day.date)}` : ` ${formatDateRange(overview.trip.startDate, overview.trip.endDate)}`}
+              {` · ${overview.trip.destination || overview.trip.title}`}
+            </span>
           </button>
 
           {error ? (
@@ -294,25 +600,37 @@ function TodayWorkspace({
               <div className="today-next-stop">
                 <div className="min-w-0 flex-1">
                   <p className="today-overline">{overview.status === 'completed' ? '旅程回顾' : '下一站'}</p>
-                  <div className="mt-2 flex min-w-0 items-start gap-3">
+                  <div className="mt-1 flex min-w-0 items-start gap-3">
                     <span className="today-stop-number">{selectedItemIndex + 1}</span>
                     <div className="min-w-0 flex-1">
                       <h2>{selectedItem.title}</h2>
                       <p>{selectedItem.locationName || selectedItem.address || overview.trip.destination}</p>
                     </div>
                   </div>
-                  <p className="today-transport">
-                    <Route className="size-4 shrink-0" />
-                    <span>{describePreviousTransport(selectedItem) || describeItemTime(selectedItem)}</span>
-                  </p>
+                  {transportSummary ? (
+                    <p className="today-transport">
+                      <TransportModeIcon mode={selectedItem.previousTransportMode} />
+                      <span>{transportSummary}</span>
+                    </p>
+                  ) : null}
                 </div>
-                <div className="today-stop-time">
-                  <Clock3 className="size-4" />
-                  <span>{selectedItem.startTime || '时间待定'}</span>
-                </div>
+                {departure ? (
+                  <div
+                    aria-label={departure.accessibleLabel}
+                    className="today-departure"
+                    data-testid="today-departure-countdown"
+                  >
+                    <span className="today-departure-label">
+                      <Clock3 className="size-4" />
+                      {departure.label}
+                    </span>
+                    <strong>{departure.value}</strong>
+                    <small>{departure.footer}</small>
+                  </div>
+                ) : null}
               </div>
 
-              {selectedTicket ? (
+              {selectedTicket && selectedTicketPresentation ? (
                 <button
                   className="today-ticket-row tm-focus"
                   onClick={() => navigateTo('tickets', {
@@ -321,43 +639,82 @@ function TodayWorkspace({
                   })}
                   type="button"
                 >
-                  <span className="today-ticket-icon"><Ticket className="size-5" /></span>
+                  <span className="today-ticket-icon"><Ticket /></span>
                   <span className="min-w-0 flex-1">
-                    <strong>{getTicketDisplayTitle(selectedTicket)}</strong>
-                    <small>{selectedTicket.fileType === 'pdf' ? 'PDF 票据' : '已关联票据'}</small>
+                    <strong>
+                      {getTicketDisplayTitle(selectedTicket)}
+                      {selectedTicketPresentation.detail ? <span> · {selectedTicketPresentation.detail}</span> : null}
+                    </strong>
+                    <small>{selectedTicketPresentation.status}</small>
                   </span>
-                  <span className="today-ticket-action">打开</span>
+                  <span className="today-ticket-action">
+                    <SquarePlus aria-hidden="true" className="size-4" />
+                    打开门票
+                  </span>
                 </button>
               ) : null}
 
-              <a
-                className="today-navigation-action tm-focus"
-                href={buildGoogleMapsUrl(selectedItem)}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <Navigation className="size-5" />
-                开始导航
-              </a>
+              {overview.status === 'completed' ? (
+                <button
+                  className="today-navigation-action tm-focus"
+                  onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
+                  type="button"
+                >
+                  <CalendarDays className="size-5" />
+                  查看行程
+                </button>
+              ) : (
+                <a
+                  className="today-navigation-action tm-focus"
+                  href={buildGoogleMapsUrl(selectedItem)}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <Navigation className="size-5" />
+                  开始导航
+                </a>
+              )}
 
-              {items.length > 1 ? (
+              {relatedItems.length > 0 ? (
                 <div className="today-stops" aria-label="今日其他行程">
-                  {items.map((item, index) => (
+                  {visibleRelatedItems.map((item) => (
                     <button
-                      aria-current={item.id === selectedItem.id ? 'true' : undefined}
                       className="today-stop-row tm-focus"
                       key={item.id}
                       onClick={() => selectItem(item, 'list')}
                       type="button"
                     >
-                      <span className="today-stop-row-number">{index + 1}</span>
+                      <span className="today-stop-row-number">{items.indexOf(item) + 1}</span>
                       <span className="min-w-0 flex-1">
-                        <strong>{item.title}</strong>
-                        <small>{describePreviousTransport(item) || item.locationName || item.address || '地点待补充'}</small>
+                        <span className="today-stop-row-heading">
+                          <strong>{item.title}</strong>
+                          {getSecondaryPlaceName(item) ? <em>{getSecondaryPlaceName(item)}</em> : null}
+                        </span>
+                        <small>
+                          <TransportModeIcon mode={item.previousTransportMode} />
+                          <span>{describeTodayTransport(item) || item.address || '地点待补充'}</span>
+                        </small>
                       </span>
-                      <time>{item.startTime || '--:--'}</time>
+                      <span className="today-stop-row-trailing">
+                        <time>{item.startTime || '--:--'}</time>
+                        <Bookmark aria-hidden="true" className="size-5" />
+                      </span>
                     </button>
                   ))}
+                  {relatedItems.length > visibleRelatedItems.length && day ? (
+                    <button
+                      className="today-all-stops tm-focus"
+                      onClick={() => navigateTo('day', {
+                        tripId: overview.trip.id,
+                        dayId: day.id,
+                        view: 'schedule',
+                      })}
+                      type="button"
+                    >
+                      查看全天行程
+                      <ChevronRight className="size-4" />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </>
@@ -418,55 +775,6 @@ function OtherTrips({ overviews }: { overviews: HomeTripOverview[] }) {
   )
 }
 
-function TodayEmpty({
-  error,
-  isCreatingDemo,
-  onCreateDemo,
-}: {
-  error: string | null
-  isCreatingDemo: boolean
-  onCreateDemo: () => void
-}) {
-  return (
-    <div className="flex h-full min-h-0 items-center justify-center px-5">
-      <div className="w-full max-w-sm space-y-4">
-        <EmptyState
-          body="新建旅行后，今日路线、下一站和票据会出现在这里。"
-          icon={<CalendarDays className="size-6" />}
-          title="还没有旅行"
-        />
-        {error ? <p className="today-inline-error" role="status">{error}</p> : null}
-        <Button
-          className="w-full"
-          icon={<Plus className="size-4" />}
-          onClick={() => navigateTo('trip/new')}
-        >
-          新建旅行
-        </Button>
-        {E2E_MODE ? (
-          <Button className="w-full" loading={isCreatingDemo} onClick={onCreateDemo} variant="secondary">
-            创建示例旅行
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-function TodayLoading() {
-  return (
-    <div className="today-workspace" aria-label="正在加载今日行程">
-      <div className="bg-surface-container-high" />
-      <div className="space-y-4 bg-surface p-5">
-        <SkeletonLine className="w-1/3" />
-        <SkeletonLine className="w-3/4" />
-        <SkeletonLine className="w-full" />
-        <SkeletonLine className="w-1/2" />
-      </div>
-    </div>
-  )
-}
-
 function findPrimaryTicket(item: ItineraryItem, tickets: TicketMeta[]) {
   return item.ticketIds
     .map((ticketId) => tickets.find((ticket) => ticket.id === ticketId))
@@ -475,12 +783,61 @@ function findPrimaryTicket(item: ItineraryItem, tickets: TicketMeta[]) {
     ?? null
 }
 
+function getTicketPresentation(ticket: TicketMeta) {
+  const note = ticket.note?.trim()
+  if (note) {
+    const parts = note.split('·').map((part) => part.trim()).filter(Boolean)
+    if (parts.length > 1) {
+      return {
+        detail: parts.slice(0, -1).join(' · '),
+        status: parts.at(-1) ?? '已关联',
+      }
+    }
+    return { detail: '', status: note }
+  }
+  return ticket.fileType === 'pdf'
+    ? { detail: 'PDF 票据', status: '已关联' }
+    : { detail: '', status: '已关联票据' }
+}
+
+function getSecondaryPlaceName(item: ItineraryItem) {
+  const locationName = item.locationName?.trim()
+  if (!locationName || locationName.toLocaleLowerCase() === item.title.trim().toLocaleLowerCase()) {
+    return null
+  }
+  return locationName
+}
+
+function TransportModeIcon({ mode }: { mode?: TransportMode }) {
+  const className = 'size-4 shrink-0'
+  if (mode === 'walk') return <PersonStanding aria-hidden="true" className={className} />
+  if (mode === 'bus') return <BusFront aria-hidden="true" className={className} />
+  if (mode === 'car') return <CarFront aria-hidden="true" className={className} />
+  if (mode === 'train' || mode === 'transit') {
+    return <TrainFront aria-hidden="true" className={className} />
+  }
+  return <Route aria-hidden="true" className={className} />
+}
+
+function describeTodayTransport(item: ItineraryItem) {
+  const details = [
+    item.previousTransportMode ? transportModeLabels[item.previousTransportMode] : '',
+    item.previousTransportDurationMinutes === undefined
+      ? ''
+      : `${item.previousTransportDurationMinutes} 分钟`,
+  ].filter(Boolean)
+  const summary = details.join(' · ')
+  const note = item.previousTransportNote?.trim()
+  if (!note) return summary || null
+  return summary ? `${summary} (${note})` : note
+}
+
 function getDayPosition(dayId: string, days: HomeTripSnapshot['days']) {
   const sortedDays = [...days].sort((first, second) => (
     first.date.localeCompare(second.date) || first.sortOrder - second.sortOrder
   ))
   const index = sortedDays.findIndex((day) => day.id === dayId)
-  return `第 ${Math.max(0, index) + 1} `
+  return `第${Math.max(0, index) + 1}天`
 }
 
 async function loadHomeTripSnapshots(): Promise<HomeTripSnapshot[]> {

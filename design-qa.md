@@ -10,7 +10,8 @@
 
 - **视觉实现：passed。** Selected Target 的四个核心状态已经用同状态并排图审查，没有待修复的 P0、P1 或 P2 视觉问题。
 - **浏览器产品验收：passed。** 核心流程、固定视口、长内容、200% 文本、软件键盘、浅色/深色、无障碍和横向溢出门槛已由真实组件与 E2E 覆盖。
-- **发布资格：pending。** 真实 iPhone 当前离线，Android 未连接；同 SHA GitHub CI 和 Cloudflare Pages 只能在候选提交推送后核验。
+- **候选远端检查：passed。** 实现候选 `2a858d5` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
+- **发布资格：pending。** 真实 iPhone 当前离线，Android 未连接；实体机与合并后的 Cloudflare Pages Production 尚未完成。
 
 UI V3 在合并和发布前仍称为 **Candidate**。实体机与远端门槛通过后，才可把本页最终状态和项目文档改为 Current。
 
@@ -100,6 +101,8 @@ Selected Target：
 - `npm run test:e2e:serial`：`173 / 173` passed，串行耗时约 `6.3m`。
 - `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
 - `git diff --check`：passed。
+- GitHub Actions run `30982017519`：同 SHA `2a858d5` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed。
+- Cloudflare Pages Preview deployment `0375f835-2990-422b-8cff-0c711cab43d2`：同 SHA `2a858d5` passed；Production 仍保持 `main@b77cf24`，未被候选分支改变。
 
 ## 7. 模拟器补充验收
 
@@ -117,9 +120,9 @@ Selected Target：
 
 1. 真实 iPhone Safari/PWA：安装、冷启动、软件键盘、地图、票据、弱网和升级。
 2. 真实 Android Chrome/PWA：安装、冷启动、软件键盘、地图、票据、弱网和升级。
-3. 提交并推送候选分支后，核验同 SHA GitHub required checks。
-4. 合并后核验同 SHA Cloudflare Pages production deployment。
-5. 将实体机和远端结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
+3. 实体机通过后，对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+4. 合并后核验同 SHA Cloudflare Pages Production deployment。
+5. 将实体机和生产部署结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
 
 当前设备探测只发现一台离线 iPhone，没有可用 Android 实体机。模拟器和桌面移动视口可以补充回归，但不能替代以上实体机发布证据。
 
@@ -127,4 +130,4 @@ Selected Target：
 
 2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
 
-当前最终结果：**visual and browser acceptance passed; release qualification pending physical devices and same-SHA remote checks.**
+当前最终结果：**visual, browser, and candidate remote acceptance passed; release qualification pending physical devices and production deployment.**

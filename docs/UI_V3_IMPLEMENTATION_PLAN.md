@@ -11,7 +11,7 @@
 - [Selected Design](DESIGN.md)
 - [Design System](DESIGN_SYSTEM.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5 和 M6 的浏览器验收；真实 iPhone/Android、同 SHA CI 与生产部署仍未完成，因此 UI V3 尚未成为生产 Current。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收、模拟器补充验收和实现候选 `2a858d5` 的同 SHA GitHub CI / Cloudflare Pages Preview；真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。
 
 ## 实施进度
 
@@ -23,7 +23,7 @@
 | M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单和五视口 Golden |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | 浏览器视觉/自动化及模拟器补充验收已通过；实体机与同 SHA 远端证据待补 |
+| M6 产品级验收与发布 | 进行中 | 浏览器、自动化、模拟器及 `2a858d5` 同 SHA 候选远端检查已通过；实体机与 Production 证据待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -397,7 +397,7 @@ npm run test:e2e:pwa-upgrade
 - Bundle budget 不回归；Map、PDF、OCR、AI 和 JSZip 保持按需加载。
 - 真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、键盘、地图、票据和弱网测试。
 - 真实 AI、搜索、路线、地图或其他 Provider 冒烟测试仍需当前任务明确授权；默认使用 fixture/mock，且不得用未授权真实调用替代自动化。
-- 推送后同 SHA 的 GitHub CI、Cloudflare Pages 部署和必要的安全诊断通过。
+- 推送后同 SHA 的 GitHub CI、Cloudflare Pages Preview 和必要的安全诊断通过；合并后 Production 必须再次指向同一发布 SHA。
 
 **退出条件**
 
@@ -483,6 +483,6 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 ## 11. 下一执行动作
 
 1. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、弱网和升级矩阵。
-2. 将候选分支按明确文件 stage、提交并推送，通过 PR 核验 GitHub required checks。
-3. 合并后核验 Cloudflare Pages production 指向同一 SHA，并补录发布证据。
+2. 实体机通过后，对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
 4. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。

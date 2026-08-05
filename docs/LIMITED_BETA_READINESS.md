@@ -4,7 +4,7 @@
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。UI V3 候选实现已完成本地浏览器和自动化验收；当前分支尚未完成实体机与本次候选 SHA 的远端检查。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
+当前代码达到 Limited Beta Release Candidate。UI V3 实现候选 `2a858d5` 已完成本地浏览器、自动化、同 SHA GitHub required checks 和 Cloudflare Pages Preview；实体机与合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
 
 ## 验收矩阵
 
@@ -17,13 +17,13 @@
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
-| Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 本地候选就绪 | 191/1577 unit、173/173 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
+| Supabase schema | 就绪 | 空库重建、生产 SQL 检查；2026-08-05 只读复核 migrations 与 security/performance advisors | 本轮无 DDL；剩余 advisor 均已记录 |
+| CI / E2E | 候选远端通过 | 191/1577 unit、173/173 E2E、bundle/PWA budget、真实 runtime typecheck；`2a858d5` 同 SHA CI/Preview 通过 | 最终合并头仍需保持全绿 |
 | 实体机 | 待完成 | 自动化覆盖移动视口；iOS 26.5 Simulator 与 Android API 33 Emulator 已补充验证核心页面、地图和 AI 键盘布局 | iPhone Safari/PWA 与 Android Chrome/PWA 仍需实体机人工记录 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 候选实现完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、五视口 Golden | 实体机、同 SHA CI 和生产部署后才转为 Current |
+| UI V3 | 候选实现完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、五视口 Golden、同 SHA 候选远端检查 | 实体机与同 SHA Production 后才转为 Current |
 
 ## 发布必过
 
@@ -52,9 +52,10 @@
 
 - MapLibre 独立 chunk 首次使用仍需网络；自动化已覆盖中断、配额不足和多标签连续升级，实体机弱网体验仍需记录。
 - Provider 本地合同仍是共享 chunk；后续只在收益明确时按操作拆分，不能削弱本地校验。
-- Supabase leaked-password protection 需要计划/配置决策。
-- `cloud_ticket_blobs` 双 SELECT policy 需预览环境等价合并。
-- 低使用率索引需真实负载证据后再决定是否删除。
+- Supabase leaked-password protection 需要按 [Auth 密码安全指南](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)完成计划/配置决策。
+- `travel_inbox_connector_secrets` 启用 RLS 但无客户端 policy 是有意 fail-closed；[advisor 信息项](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)保留，不为消除提示开放读取。
+- `cloud_ticket_blobs` 双 SELECT policy 需按 [policy advisor](https://supabase.com/docs/guides/database/database-linter?lint=0006_multiple_permissive_policies)先在预览环境验证等价合并。
+- [低使用率索引提示](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)需真实负载证据后再决定是否删除。
 - Action Gateway 后续动作、统一 undo/history 和更完整的跨模块事务属于后续版本。
 - 当前账号同步不是路线图 v5 的 Realtime Cloud Core；需要 revision、mutation ID、server ack 和订阅矩阵。
 - 当前实时 Provider 覆盖有限，不能承诺天气、航班、铁路、票务或实时交通完整性。

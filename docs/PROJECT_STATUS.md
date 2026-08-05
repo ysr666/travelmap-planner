@@ -4,7 +4,7 @@
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现和本地浏览器验收；尚未完成实体机与同 SHA 远端发布门槛，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现、本地浏览器验收和实现候选 `2a858d5` 的同 SHA GitHub CI / Cloudflare Pages Preview；尚未完成实体机与合并后的 Production 发布门槛，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -34,7 +34,7 @@
 - **Candidate:** Home、Documents、Global AI 等大型展示已拆出生命周期视图、资料行和 AI 展示层；核心页面共享 Section、Row、Status、Disclosure 与 Form 组件。
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
-- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收及 iOS/Android 模拟器补充验收；M6 实体机与同 SHA 远端证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)。
+- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收、iOS/Android 模拟器补充验收及 `2a858d5` 同 SHA 候选远端检查；M6 实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 尚未合并部署，不能把候选分支能力描述为生产 Current。
 
@@ -100,7 +100,7 @@
 - `npm run test:unit`：191 个文件、1577 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
-- 全量 Playwright：173/173 通过，串行耗时约 6.3 分钟；候选提交推送后仍以同 SHA CI 为准。
+- 全量 Playwright：173/173 通过，串行耗时约 6.3 分钟；实现候选 `2a858d5` 的 GitHub Actions 五项 required jobs 与 Cloudflare Pages Preview 均按同一 SHA 通过。
 - `git diff --check`：通过。
 
 补充平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出。该结果只证明旧 WebView 布局兼容，不替代 Android Chrome/PWA 实体机发布记录。
@@ -124,9 +124,10 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 当前 advisor 剩余项：
 
-- Auth leaked-password protection 尚未启用，需要在 Supabase 计划/配置层处理。
-- `cloud_ticket_blobs` 的 owner/companion 双 SELECT policy 有性能提示，修改前需在预览环境验证权限等价。
-- 低使用率索引提示仅记录观察；新建外键索引尚无使用统计，不在缺少真实负载证据时删除。
+- Auth leaked-password protection 尚未启用，需要按 [Auth 密码安全指南](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)在计划/配置层处理。
+- `travel_inbox_connector_secrets` 的 RLS 无客户端 policy 是有意 fail-closed，不应为消除 [advisor 信息项](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)而开放读取。
+- `cloud_ticket_blobs` 的 owner/companion 双 SELECT policy 有[性能提示](https://supabase.com/docs/guides/database/database-linter?lint=0006_multiple_permissive_policies)，修改前需在预览环境验证权限等价。
+- [低使用率索引提示](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)仅记录观察；新建外键索引尚无使用统计，不在缺少真实负载证据时删除。
 
 ## 已知发布风险
 

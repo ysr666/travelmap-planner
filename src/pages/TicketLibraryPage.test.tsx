@@ -473,7 +473,7 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('全部')
   })
 
-  it('renders navigation', async () => {
+  it('leaves primary navigation to the app shell', async () => {
     await act(async () => {
       root?.render(<TicketLibraryPage />)
     })
@@ -481,7 +481,7 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.querySelector('[data-testid="trip-nav"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="trip-nav"]')).toBeNull()
   })
 
   it('handles load error gracefully', async () => {
@@ -497,7 +497,7 @@ describe('TicketLibraryPage', () => {
     expect(container?.textContent).toContain('db error')
   })
 
-  it('renders gallery overview and binding sections', async () => {
+  it('renders one editable preview list with scope filters', async () => {
     mocks.listTicketsByTrip.mockResolvedValue([
       {
         id: 'ticket_item',
@@ -548,11 +548,12 @@ describe('TicketLibraryPage', () => {
       await vi.runAllTimersAsync()
     })
 
-    expect(container?.textContent).toContain('东京旅行 · 3 张')
-    expect(container?.textContent).toContain('行程点票据')
-    expect(container?.textContent).toContain('旅行级票据')
+    expect(container?.textContent).toContain('票据 3')
+    expect(container?.textContent).toContain('行程点 1')
+    expect(container?.textContent).toContain('旅行级 1')
     expect(container?.textContent).toContain('未分类')
-    expect(container?.querySelectorAll('[data-testid="ticket-gallery-section"]').length).toBe(3)
+    expect(container?.querySelectorAll('[data-ticket-layout="row"]').length).toBe(3)
+    expect(container?.querySelectorAll('[data-ticket-layout="thumbnail"]').length).toBe(0)
   })
 
   it('filters gallery from actionable overview stats', async () => {

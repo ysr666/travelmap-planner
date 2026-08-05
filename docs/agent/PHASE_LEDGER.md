@@ -2,6 +2,48 @@
 
 > **Historical ledger:** Entries below preserve completed work and decisions at their original dates. New phases follow the realtime online, AI-first [Product Strategy](../PRODUCT_STRATEGY.md) and [Roadmap V5](../ROADMAP_V5.md).
 
+## 2026-08-05 UI V3 Selected Target Implementation
+
+Status: candidate release qualification passed; production merge pending.
+
+Goal:
+
+- Implement the selected product direction across the real React PWA, then close browser, responsive, accessibility, PWA, and release evidence without changing protected data or Provider contracts.
+
+Scope:
+
+- M0-M5: App Shell, staged Today lifecycle, itinerary/map/place, documents/inbox, contextual AI/search, forms, ledger/shared trip, and Settings.
+- M6: same-state visual comparison, five-viewport Goldens, full regression, PWA upgrade, owner-approved iOS/Android simulator qualification, and same-SHA remote evidence.
+
+No-go:
+
+- No IndexedDB schema, Supabase semantics, Provider contracts, route-cache semantics, ticket/blob storage, AI privacy, or confirmation-boundary change.
+- No generated map, ticket, identity, or realtime fact copied into product data.
+- No fabricated simulator, physical-device, or remote deployment result.
+
+Result:
+
+- Mobile navigation is `今日 | 行程 | 资料 | 我的`; Search and AI remain contextual commands.
+- Today now has distinct empty, predeparture, active, and completed states.
+- Documents use a real-preview editing list; Inbox is reached through `来源与导入`.
+- Trip uses `日程 | 地图`, a compact date strip, continuous timeline, and one place Sheet.
+- Global AI is on-demand, auto-closes after navigation, preserves one final confirmation for writes, and retries failed steps without repeating successful steps.
+- Shared V3 Section, Row, Status, Disclosure, and Form primitives now cover core and low-frequency pages.
+- Selected Target comparisons for predeparture, active Today, itinerary, and documents found no open P0/P1/P2 visual issue.
+
+Validation:
+
+- Typecheck, lint, 191-file/1578-test unit suite, production build, bundle budget, executable Golden flows, and five PWA upgrade tests passed.
+- Full serial E2E passed 175/175 in approximately 6.6 minutes; PWA upgrade passed 5/5.
+- iPhone 16 / iOS 26.5 Simulator passed Safari, Add to Home Screen, installed-PWA cold start, software-keyboard, map, and AI Sheet checks from a fresh state.
+- Android API 33 Emulator passed the production build in Chrome, system WebView layout, DOM accessibility bounds, software keyboard, map, AI Sheet, and horizontal-overflow checks. The legacy Chrome 103 WebAPK launcher limitation is recorded and covered by the 5/5 built-dist PWA lifecycle matrix under the owner-approved simulator standard.
+- Final candidate `94885be` passed GitHub Actions run `30998908036` and Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` on the same SHA.
+- Physical devices are optional post-release observation and no longer block UI V3.
+
+Next:
+
+- Merge the qualified candidate, validate same-SHA Production without real Provider calls, then change Candidate documentation to Current.
+
 ## 2026-07-29 Planned Program - UI V3 Product Shell
 
 Status: implementation and browser acceptance complete; physical-device release evidence pending
@@ -2678,3 +2720,39 @@ Validation:
 - `npm run build` passed; bundle budget remained at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
 - The full serial E2E run passed all 156 tests in approximately 7.3 minutes.
 - `git diff --check` passed.
+
+## 2026-08-05 UI V3 S1-S3 Structural Qualification
+
+Status: implemented and locally validated; final branch-head remote, physical-device, and production qualification pending.
+
+Branch: `feature/ui-v3-selected-target`
+
+Goal:
+
+- Close the M6 structural plan without changing visible behavior, Golden output, data contracts, Provider contracts, or AI write protections.
+
+Result:
+
+- S1 split Settings and Ticket Library into route entries, controller hooks, ViewModels, and presentation components.
+- S2 split Trip, Day, and Item data aggregation, view models, menus, map loading, and presentation boundaries.
+- S3 split Global AI orchestration from its command-bar shell and split AI Draft into request-form state, Provider/draft orchestration, and focused map, variant, import, and workspace views.
+- Action Gateway registry validation, privacy filtering, real preview, one final confirmation, stale-state protection, idempotency, and failed-step retry behavior remained unchanged.
+- No IndexedDB/Supabase schema, sync semantics, route cache, ticket/blob storage, Provider contract, secret, or real Provider call changed.
+
+Commits:
+
+- S1: `1d6dfb4`, documentation receipt `73fe5af`.
+- S2: `e9aedaa`, `fb5abf8`, `012ed76`.
+- S3: `193b8ca`, `3a9fb8c`.
+
+Validation:
+
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run build` passed.
+- `npm run test:unit` passed: 191 files and 1578 tests.
+- AI Draft focused unit tests passed 118/118; AI Draft, form, and Golden focused E2E passed 47/47.
+- `npm run test:e2e:serial` passed 175/175 in approximately 6.6 minutes.
+- `npm run test:e2e:pwa-upgrade` passed 5/5 in approximately 46 seconds.
+- Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2337.3 KiB/114-entry precache.
+- S1 remote baseline `73fe5af` passed GitHub Actions run `30992807064` and Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`.
+- Final candidate `0b464be` passed GitHub Actions run `30998260337`; Lint, Type Check, Unit Tests, Build, and E2E Tests all passed, with E2E completing in approximately 5 minutes 28 seconds.
+- Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` is Active for the same `0b464be` source revision.

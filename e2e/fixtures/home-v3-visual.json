@@ -1,0 +1,211 @@
+{
+  "fixedNow": "2026-07-30T09:47:20.000Z",
+  "geolocation": {
+    "latitude": 55.941,
+    "longitude": -3.215
+  },
+  "originRouteLineString": [
+    [-3.215, 55.941],
+    [-3.2146, 55.9422],
+    [-3.2114, 55.9432],
+    [-3.2092, 55.9452],
+    [-3.2055, 55.9466],
+    [-3.2022, 55.9481],
+    [-3.1999135, 55.9485947]
+  ],
+  "routeLineStrings": [
+    [
+      [-3.1999135, 55.9485947],
+      [-3.1995, 55.94955],
+      [-3.1952, 55.94958],
+      [-3.1949, 55.95022],
+      [-3.1914, 55.95025],
+      [-3.18845, 55.950154]
+    ],
+    [
+      [-3.18845, 55.950154],
+      [-3.1869, 55.9496],
+      [-3.1812, 55.94978],
+      [-3.1808, 55.95142],
+      [-3.1761, 55.95155],
+      [-3.1745, 55.95212],
+      [-3.172273, 55.952683]
+    ]
+  ],
+  "records": {
+    "trips": [
+      {
+        "id": "trip_home_v3",
+        "title": "英国12天家庭旅行",
+        "destination": "爱丁堡",
+        "startDate": "2026-07-24",
+        "endDate": "2026-08-04",
+        "timeZone": "Europe/London",
+        "timeZoneSource": "imported",
+        "createdAt": 1785404840000,
+        "updatedAt": 1785404840000
+      }
+    ],
+    "days": [
+      {
+        "id": "day_home_v3_01",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-24",
+        "title": "抵达伦敦",
+        "sortOrder": 1
+      },
+      {
+        "id": "day_home_v3_02",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-25",
+        "title": "伦敦城市漫步",
+        "sortOrder": 2
+      },
+      {
+        "id": "day_home_v3_03",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-26",
+        "title": "博物馆与西区",
+        "sortOrder": 3
+      },
+      {
+        "id": "day_home_v3_04",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-27",
+        "title": "牛津一日",
+        "sortOrder": 4
+      },
+      {
+        "id": "day_home_v3_05",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-28",
+        "title": "前往约克",
+        "sortOrder": 5
+      },
+      {
+        "id": "day_home_v3_06",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-29",
+        "title": "抵达爱丁堡",
+        "sortOrder": 6
+      },
+      {
+        "id": "day_home_v3_07",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-30",
+        "title": "爱丁堡老城",
+        "sortOrder": 7
+      },
+      {
+        "id": "day_home_v3_08",
+        "tripId": "trip_home_v3",
+        "date": "2026-07-31",
+        "title": "爱丁堡新城",
+        "sortOrder": 8
+      },
+      {
+        "id": "day_home_v3_09",
+        "tripId": "trip_home_v3",
+        "date": "2026-08-01",
+        "title": "前往湖区",
+        "sortOrder": 9
+      },
+      {
+        "id": "day_home_v3_10",
+        "tripId": "trip_home_v3",
+        "date": "2026-08-02",
+        "title": "湖区",
+        "sortOrder": 10
+      },
+      {
+        "id": "day_home_v3_11",
+        "tripId": "trip_home_v3",
+        "date": "2026-08-03",
+        "title": "返回伦敦",
+        "sortOrder": 11
+      },
+      {
+        "id": "day_home_v3_12",
+        "tripId": "trip_home_v3",
+        "date": "2026-08-04",
+        "title": "返程",
+        "sortOrder": 12
+      }
+    ],
+    "itineraryItems": [
+      {
+        "id": "item_home_v3_castle",
+        "tripId": "trip_home_v3",
+        "dayId": "day_home_v3_07",
+        "title": "爱丁堡城堡",
+        "startTime": "11:00",
+        "locationName": "Edinburgh Castle",
+        "address": "Castlehill, Edinburgh EH1 2NG",
+        "lat": 55.9485947,
+        "lng": -3.1999135,
+        "previousTransportMode": "walk",
+        "previousTransportDurationMinutes": 16,
+        "previousTransportNote": "约 1.1 公里",
+        "ticketIds": [
+          "ticket_home_v3_castle"
+        ],
+        "sortOrder": 1,
+        "createdAt": 1785404840000,
+        "updatedAt": 1785404840000
+      },
+      {
+        "id": "item_home_v3_royal_mile",
+        "tripId": "trip_home_v3",
+        "dayId": "day_home_v3_07",
+        "title": "皇家英里大道",
+        "startTime": "13:30",
+        "locationName": "Royal Mile",
+        "address": "Royal Mile, Edinburgh",
+        "lat": 55.950154,
+        "lng": -3.18845,
+        "previousTransportMode": "walk",
+        "previousTransportDurationMinutes": 18,
+        "ticketIds": [],
+        "sortOrder": 2,
+        "createdAt": 1785404840000,
+        "updatedAt": 1785404840000
+      },
+      {
+        "id": "item_home_v3_holyrood",
+        "tripId": "trip_home_v3",
+        "dayId": "day_home_v3_07",
+        "title": "荷里路德宫",
+        "startTime": "15:30",
+        "locationName": "Palace of Holyroodhouse",
+        "address": "Canongate, Edinburgh EH8 8DX",
+        "lat": 55.952683,
+        "lng": -3.172273,
+        "previousTransportMode": "walk",
+        "previousTransportDurationMinutes": 22,
+        "ticketIds": [],
+        "sortOrder": 3,
+        "createdAt": 1785404840000,
+        "updatedAt": 1785404840000
+      }
+    ],
+    "ticketMetas": [
+      {
+        "id": "ticket_home_v3_castle",
+        "tripId": "trip_home_v3",
+        "itemId": "item_home_v3_castle",
+        "scope": "item",
+        "title": "城堡门票",
+        "storageMode": "reference",
+        "referenceLocation": "TripMap/英国旅行/爱丁堡城堡门票.pdf",
+        "ticketCategory": "admission_ticket",
+        "fileName": "edinburgh-castle-ticket.pdf",
+        "fileType": "pdf",
+        "mimeType": "application/pdf",
+        "size": 0,
+        "note": "11:00 入场 · 已就绪",
+        "createdAt": 1785404840000,
+        "updatedAt": 1785404840000
+      }
+    ]
+  }
+}

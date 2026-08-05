@@ -1,13 +1,10 @@
-import { lazy, Suspense, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   BriefcaseBusiness,
-  CalendarDays,
+  ChevronDown,
   Search,
   Sparkles,
-  Map,
-  FolderLock,
-  WalletCards,
 } from 'lucide-react'
 import type { RouteId } from '../types'
 import { getRouteParams, navigateTo } from '../lib/routes'
@@ -36,6 +33,7 @@ type AppShellProps = {
 
 export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppShellProps) {
   const [aiRoute, setAiRoute] = useState<RouteId | null>(null)
+  const [initialAiCommand, setInitialAiCommand] = useState<string | null>(null)
   const aiTriggerRef = useRef<HTMLButtonElement>(null)
   const ownsCanvas = activeRoute === 'home'
     || activeRoute === 'day'
@@ -46,22 +44,39 @@ export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppSh
   const showSearch = shouldShowSearchCommand(activeRoute)
   const routeTitle = getRouteTitle(activeRoute)
   const aiOpen = aiRoute !== null
+  const usesNestedTripHeader = activeRoute === 'tickets'
+
+  useEffect(() => {
+    function handleOpenAi(event: Event) {
+      const command = (event as CustomEvent<{ command?: string }>).detail?.command?.trim()
+      setInitialAiCommand(command || null)
+      setAiRoute(activeRoute)
+    }
+
+    window.addEventListener('tripmap:open-ai', handleOpenAi)
+    return () => window.removeEventListener('tripmap:open-ai', handleOpenAi)
+  }, [activeRoute])
 
   function handleAiOpenChange(nextOpen: boolean) {
     setAiRoute(nextOpen ? activeRoute : null)
+    if (!nextOpen) setInitialAiCommand(null)
     if (!nextOpen) {
       window.requestAnimationFrame(() => aiTriggerRef.current?.focus())
     }
   }
 
   return (
-    <div className="app-viewport app-scaffold bg-background text-on-surface">
+    <div
+      className="app-viewport app-scaffold bg-background text-on-surface"
+      data-ai-open={aiOpen ? 'true' : undefined}
+      data-route={activeRoute}
+    >
       {showPrimaryNav ? <BottomTabBar activeRoute={activeRoute} lastTripId={lastTripId} /> : null}
       <div className="app-shell-column">
         {showTopAppBar ? (
           <header className="context-header">
             <div className="context-header-leading">
-              {isPushRoute(activeRoute) ? (
+              {isPushRoute(activeRoute) || usesNestedTripHeader ? (
                 <button
                   aria-label="返回"
                   className="context-header-icon tm-focus"
@@ -84,20 +99,32 @@ export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppSh
                 >
                   <BriefcaseBusiness className="size-5 shrink-0" />
                   <span>{tripTitle ?? '选择旅行'}</span>
+                  <ChevronDown aria-hidden="true" className="context-trip-switcher-chevron" />
                 </button>
               )}
             </div>
-            <h1 className="context-header-title">{routeTitle}</h1>
+            <div className={`context-header-heading ${usesNestedTripHeader ? 'context-header-heading-stacked' : ''}`}>
+              {usesNestedTripHeader && tripTitle ? (
+                <span className="context-header-subtitle">{tripTitle}</span>
+              ) : null}
+              <h1 className="context-header-title">{routeTitle}</h1>
+            </div>
             <div className="context-header-actions">
               {showSearch ? (
                 <button
-                  aria-label="搜索"
+                  aria-label={activeRoute === 'documents' || usesNestedTripHeader ? '搜索资料' : '搜索'}
                   className="context-header-icon tm-focus"
-                  onClick={() => navigateTo('search', {
-                    from: getPrimaryDestination(activeRoute),
-                    ...(lastTripId ? { tripId: lastTripId } : {}),
-                  })}
-                  title="搜索"
+                  onClick={() => {
+                    if (activeRoute === 'documents' || usesNestedTripHeader) {
+                      window.dispatchEvent(new Event('tripmap:ticket-search'))
+                      return
+                    }
+                    navigateTo('search', {
+                      from: getPrimaryDestination(activeRoute),
+                      ...(lastTripId ? { tripId: lastTripId } : {}),
+                    })
+                  }}
+                  title={activeRoute === 'documents' || usesNestedTripHeader ? '搜索资料' : '搜索'}
                   type="button"
                 >
                   <Search className="size-5" />
@@ -109,7 +136,10 @@ export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppSh
                   aria-haspopup="dialog"
                   aria-label="AI 助手"
                   className="context-header-icon context-header-ai tm-focus"
-                  onClick={() => setAiRoute(activeRoute)}
+                  onClick={() => {
+                    setInitialAiCommand(null)
+                    setAiRoute(activeRoute)
+                  }}
                   ref={aiTriggerRef}
                   title="AI 助手"
                   type="button"
@@ -142,6 +172,8 @@ export function AppShell({ activeRoute, children, lastTripId, tripTitle }: AppSh
         <Suspense fallback={null}>
           <GlobalAiCommandBar
             activeRoute={activeRoute}
+            fallbackTripId={lastTripId}
+            initialCommand={initialAiCommand}
             onOpenChange={handleAiOpenChange}
             open={aiOpen}
           />
@@ -177,8 +209,18 @@ function getMainClassName({
     return `app-shell-main relative min-h-0 flex-1 overflow-y-auto app-scrollbar ${insetClassName}`
   }
 
-  const topPadding = showTopAppBar ? 'pt-24' : 'pt-4'
-  const bottomPadding = showPrimaryNav ? 'pb-28 min-[600px]:pb-6' : 'pb-6'
+  if (activeRoute === 'trip') {
+    return 'app-shell-main app-shell-main-trip relative min-h-0 flex-1 overflow-y-auto app-scrollbar'
+  }
+
+  const topPadding = showTopAppBar
+    ? activeRoute === 'tickets'
+      ? 'pt-[calc(52px+env(safe-area-inset-top))]'
+      : 'pt-[calc(56px+env(safe-area-inset-top)+8px)]'
+    : 'pt-4'
+  const bottomPadding = showPrimaryNav
+    ? 'pb-[calc(66px+env(safe-area-inset-bottom)+16px)] min-[600px]:pb-6'
+    : 'pb-6'
   return `relative min-h-0 flex-1 overflow-y-auto px-4 ${topPadding} ${bottomPadding} app-scrollbar`
 }
 
@@ -198,6 +240,10 @@ function navigateBack(activeRoute: RouteId, lastTripId?: string | null) {
   }
   if (activeRoute === 'day' && tripId) {
     navigateTo('trip', { tripId, ...(dayId ? { dayId } : {}) })
+    return
+  }
+  if ((activeRoute === 'documents' || activeRoute === 'tickets') && tripId) {
+    navigateTo('trip', { tripId })
     return
   }
   if (activeRoute === 'item/edit' && tripId && dayId && itemId) {
@@ -223,7 +269,11 @@ function navigateBack(activeRoute: RouteId, lastTripId?: string | null) {
       return
     }
     if (source === 'inbox') {
-      navigateTo('inbox')
+      navigateTo('documents', tripId ? { tripId } : undefined)
+      return
+    }
+    if (source === 'documents') {
+      navigateTo('documents', tripId ? { tripId } : undefined)
       return
     }
     if (source === 'settings') {
@@ -249,7 +299,6 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
     {
       id: 'schedule',
       label: '日程',
-      icon: CalendarDays,
       active: activeRoute === 'trip' || (activeRoute === 'day' && activeView !== 'map'),
       onClick: () => {
         navigateTo('trip', targetDayId ? { tripId, dayId: targetDayId } : { tripId })
@@ -258,7 +307,6 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
     {
       id: 'map',
       label: '地图',
-      icon: Map,
       active: activeRoute === 'day' && activeView === 'map',
       onClick: () => {
         if (targetDayId) {
@@ -268,40 +316,22 @@ export function TripNav({ tripId, activeRoute, activeView, dayId, firstDayId, cl
         }
       },
     },
-    {
-      id: 'documents',
-      label: '资料',
-      icon: FolderLock,
-      active: activeRoute === 'tickets' || activeRoute === 'documents',
-      onClick: () => navigateTo('documents', { tripId }),
-    },
-    {
-      id: 'ledger',
-      label: '费用',
-      icon: WalletCards,
-      active: activeRoute === 'ledger' || activeRoute === 'ledger/expense',
-      onClick: () => navigateTo('ledger', { tripId }),
-    },
   ]
 
   return (
-    <nav aria-label="行程内容" className={`rounded-lg border border-outline-variant/70 bg-surface-container p-1 ${className}`}>
-      <div className="grid grid-cols-4 gap-1">
+    <nav aria-label="行程内容" className={`trip-context-tabs ${className}`}>
+      <div className="trip-context-tabs-track">
         {items.map((item) => {
-          const Icon = item.icon
           return (
             <button
-              className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition active:scale-[0.98] tm-focus ${
-                item.active
-                  ? 'bg-primary text-on-primary shadow-sm'
-                  : 'text-on-surface-variant active:bg-surface-container-high/50'
-              }`}
+              aria-current={item.active ? 'page' : undefined}
+              className="trip-context-tab tm-focus"
+              data-active={item.active ? 'true' : undefined}
               key={item.id}
               onClick={item.onClick}
               type="button"
             >
-              <Icon className="size-4 shrink-0" />
-              <span className="whitespace-nowrap">{item.label}</span>
+              <span>{item.label}</span>
             </button>
           )
         })}

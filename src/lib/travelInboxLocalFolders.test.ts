@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/database'
-import { scanTravelInboxLocalFolder } from './travelInboxLocalFolders'
+import { importTravelInboxFiles, scanTravelInboxLocalFolder } from './travelInboxLocalFolders'
 import type { TravelInboxLocalConnector } from '../types'
 
 beforeEach(async () => {
@@ -10,6 +10,44 @@ beforeEach(async () => {
 })
 
 describe('travel inbox local folder scanning', () => {
+  it('imports files directly without requiring the directory picker', async () => {
+    const files = [
+      new File(['ticket'], 'museum.pdf', { lastModified: 100, type: 'application/pdf' }),
+      new File(['plan'], 'plan.xlsx', { lastModified: 200, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    ]
+
+    await expect(importTravelInboxFiles(files)).resolves.toMatchObject({
+      created: [
+        expect.objectContaining({ fileName: 'museum.pdf', sourceKind: 'pdf', status: 'queued' }),
+        expect.objectContaining({ fileName: 'plan.xlsx', sourceKind: 'spreadsheet', status: 'queued' }),
+      ],
+      warnings: [],
+    })
+    await expect(db.travelInboxAccountSourceBlobs.count()).resolves.toBe(2)
+  })
+
+  it('skips duplicate, unsupported, and oversized manual files', async () => {
+    const duplicate = new File(['same'], 'copy.pdf', { type: 'application/pdf' })
+    const oversized = {
+      lastModified: 200,
+      name: 'album.pdf',
+      size: 20 * 1024 * 1024 + 1,
+      type: 'application/pdf',
+    } as File
+    const result = await importTravelInboxFiles([
+      new File(['same'], 'ticket.pdf', { type: 'application/pdf' }),
+      duplicate,
+      new File(['nope'], 'script.exe'),
+      oversized,
+    ])
+
+    expect(result.created).toHaveLength(1)
+    expect(result.warnings).toEqual([
+      'script.exe 暂不支持。',
+      'album.pdf 超过 20MB，未处理。',
+    ])
+  })
+
   it('scans supported top-level files incrementally and treats modifications as new versions', async () => {
     let currentFile = new File(['first'], 'booking.txt', { lastModified: 100, type: 'text/plain' })
     const handle = directoryHandle(async function* () {

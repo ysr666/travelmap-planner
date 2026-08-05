@@ -23,7 +23,7 @@ test('桌面 Beta smoke 覆盖核心页面与 AI 确认边界', async ({ page })
   })
 
   await clearTravelDatabase(page)
-  await expect(page.getByRole('heading', { name: '还没有旅行' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '开始准备下一次旅行' })).toBeVisible()
   await page.getByRole('button', { name: 'AI 助手' }).click()
   await expect(page.getByTestId('global-ai-command-bar')).toBeVisible()
   await page.getByRole('button', { name: '关闭 AI 助手' }).click()
@@ -70,7 +70,7 @@ test('桌面 Beta smoke 覆盖核心页面与 AI 确认边界', async ({ page })
   await expectNoHorizontalOverflow(page)
 
   await page.goto(`/#/documents?tripId=${tripId}&tab=documents`, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('button', { name: '证件', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '证件', exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.goto(`/#/settings/app?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })

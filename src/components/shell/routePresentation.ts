@@ -1,20 +1,24 @@
 import type { RouteId } from '../../types'
 
-export type PrimaryDestination = 'home' | 'inbox' | 'settings' | 'trip'
+export type PrimaryDestination = 'documents' | 'home' | 'settings' | 'trip'
 
 const TRIP_DESTINATION_ROUTES = new Set<RouteId>([
   'ai-draft',
   'day',
-  'documents',
   'item',
   'item/edit',
   'item/new',
   'ledger',
   'ledger/expense',
   'shared-trip',
-  'tickets',
   'trip',
   'trip/edit',
+])
+
+const DOCUMENT_DESTINATION_ROUTES = new Set<RouteId>([
+  'documents',
+  'inbox',
+  'tickets',
 ])
 
 const PUSH_ROUTES = new Set<RouteId>([
@@ -59,12 +63,13 @@ export function getPrimaryDestination(
   hash?: string,
 ): PrimaryDestination {
   if (activeRoute === 'home') return 'home'
-  if (activeRoute === 'inbox') return 'inbox'
+  if (DOCUMENT_DESTINATION_ROUTES.has(activeRoute)) return 'documents'
   if (activeRoute === 'settings' || activeRoute.startsWith('settings/')) return 'settings'
   if (TRIP_DESTINATION_ROUTES.has(activeRoute)) return 'trip'
   if (activeRoute === 'search') {
     const source = new URLSearchParams(resolveHash(hash).split('?')[1] ?? '').get('from')
-    if (source === 'inbox' || source === 'settings' || source === 'trip') return source
+    if (source === 'documents' || source === 'settings' || source === 'trip') return source
+    if (source === 'inbox') return 'documents'
   }
   return 'home'
 }
@@ -94,7 +99,8 @@ export function getRouteTitle(activeRoute: RouteId, hash?: string) {
   if (activeRoute === 'trip/edit') return '编辑旅行'
   if (activeRoute === 'item/new') return '添加行程点'
   if (activeRoute === 'item/edit') return '编辑行程点'
-  return 'AI 行程草稿'
+  if (activeRoute === 'ai-draft') return 'AI 生成行程'
+  return '旅图'
 }
 
 export function isPushRoute(activeRoute: RouteId) {
@@ -114,8 +120,7 @@ export function shouldShowAiCommand(activeRoute: RouteId) {
 }
 
 export function shouldShowSearchCommand(activeRoute: RouteId) {
-  return activeRoute === 'home'
-    || activeRoute === 'inbox'
+  return activeRoute === 'inbox'
     || activeRoute === 'trip'
     || activeRoute === 'tickets'
     || activeRoute === 'documents'

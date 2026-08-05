@@ -71,7 +71,7 @@ export function SearchPage() {
   const hasQuery = Boolean(deferredQuery.trim())
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4" data-testid="search-page">
       <section className="space-y-3">
         <label className="relative block">
           <span className="sr-only">搜索关键词</span>

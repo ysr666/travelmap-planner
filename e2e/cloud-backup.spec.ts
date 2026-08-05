@@ -10,7 +10,7 @@ import {
   seedTravelRecords,
 } from './helpers'
 
-test('设置页 Supabase 未配置时显示云端同步提示且不显示登录上传控件', async ({ page }) => {
+test('设置页账号同步未配置时显示短提示且不显示登录上传控件', async ({ page }) => {
   await clearTravelDatabase(page)
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
@@ -19,11 +19,11 @@ test('设置页 Supabase 未配置时显示云端同步提示且不显示登录�
   await expect(cloudSection).toBeVisible()
   const message = page.getByTestId('supabase-unconfigured-message')
   await expect(message).toContainText('账号同步暂不可用')
-  await expect(message).toContainText('此设备上的旅行仍可正常使用')
-  await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('云端自动同步')
-  await expect(page.getByTestId('auto-cloud-backup-setting')).toContainText('配置 Supabase 后才能开启。')
-  await expect(page.getByTestId('cloud-auto-sync-status')).toContainText('未配置')
-  await expect(page.getByTestId('auto-cloud-backup-toggle')).toBeDisabled()
+  await expect(message).toContainText('已保存的旅行不受影响')
+  await expect(message).not.toContainText('Supabase')
+  await expect(page.getByTestId('auto-cloud-backup-setting')).toHaveCount(0)
+  await expect(page.getByTestId('cloud-auto-sync-status')).toHaveCount(0)
+  await expect(page.getByTestId('auto-cloud-backup-toggle')).toHaveCount(0)
   await expect(page.getByTestId('cloud-login-form')).toHaveCount(0)
   await expect(page.getByTestId('cloud-upload-current-trip')).toHaveCount(0)
   await expect(page.getByTestId('cloud-backup-list')).toHaveCount(0)
@@ -143,7 +143,7 @@ test('本地新建和编辑旅行不受云端同步提醒干扰', async ({ page 
   await forceSupabaseUnconfigured(page)
   await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
 
-  await page.getByRole('button', { name: '新建旅行' }).click()
+  await page.getByRole('button', { name: '手动新建' }).click()
   await expect(page.getByTestId('trip-form-page')).toBeVisible()
 
   await page.getByLabel('旅行标题').fill('测试旅行')
@@ -434,6 +434,7 @@ test('设置页云端列表展示历史遗留的同一旅行多条云端同步',
   await page.goto('/#/settings/account', { waitUntil: 'domcontentloaded' })
 
   await expect(page.locator('html')).toHaveClass(/dark/)
+  await page.getByTestId('cloud-backup-history').locator('summary').click()
   const list = page.getByTestId('cloud-backup-list')
   await expect(list).toContainText('历史备份（旧版本）')
   await expect(list).toContainText('2 条历史备份')
@@ -725,6 +726,7 @@ async function expectUploadCurrentTrip(page: Page, tripId: string, expectedTitle
   await expect(dialog).toContainText('当前方向操作不会自动合并')
   await dialog.getByRole('button', { name: '立即同步' }).click()
   await expect(page.locator('body')).toContainText('此设备版本已同步到账号')
+  await page.getByTestId('cloud-backup-history').locator('summary').click()
   await expect(page.getByTestId('cloud-backup-group').filter({ hasText: expectedTitle })).toBeVisible()
 }
 
@@ -735,6 +737,7 @@ async function restoreCloudBackupFromPanel(
   confirm: boolean,
 ) {
   await openCloudBackupPanel(page, tripId)
+  await page.getByTestId('cloud-backup-history').locator('summary').click()
   const group = page.getByTestId('cloud-backup-group').filter({ hasText: expectedCloudTitle }).first()
   await expect(group).toBeVisible()
   await group.getByTestId('cloud-restore-backup').click()

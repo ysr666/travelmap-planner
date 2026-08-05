@@ -86,11 +86,11 @@ export function LedgerExpenseDetailPage() {
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
 
-  if (loading) return <Card><p className="text-sm tm-muted">正在读取账单来源...</p></Card>
-  if (!trip || !expense) return <EmptyState body="账单可能已删除，或不属于当前旅行。" icon={<ReceiptText className="size-6" />} title="无法打开账单" />
+  if (loading) return <div className="mx-auto w-full max-w-3xl"><Card><p className="text-sm tm-muted">正在读取账单来源...</p></Card></div>
+  if (!trip || !expense) return <div className="mx-auto w-full max-w-3xl"><EmptyState body="账单可能已删除，或不属于当前旅行。" icon={<ReceiptText className="size-6" />} title="无法打开账单" /></div>
 
   return (
-    <div className="space-y-5 pb-6" data-testid="ledger-expense-detail">
+    <div className="mx-auto w-full max-w-3xl space-y-5 pb-6" data-testid="ledger-expense-detail">
       <header className="min-w-0">
         <h2 className="break-words text-lg font-semibold text-on-surface [overflow-wrap:anywhere]">{expense.title}</h2>
         <p className="mt-1 text-sm tm-muted">{trip.title} · {expense.date}</p>

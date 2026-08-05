@@ -1,12 +1,12 @@
 # TripMap Design System
 
-更新时间：2026-07-29
+更新时间：2026-08-04
 
-状态：**Current baseline + Target V3**
+状态：**Current baseline + Candidate V3 implementation**
 
-This project uses a compact, realtime online, AI-first app surface. Product copy is Chinese by default, controls keep 44px or taller touch targets, and dense operational pages prioritize scanability over decorative layout.
+TripMap uses a compact consumer travel surface for complex outbound trips. Product copy is Chinese by default, controls keep 44px or taller touch targets, and every screen prioritizes the current travel stage, real objects, and one next action over feature exposure or decorative layout. Realtime online and AI-first remain implementation strategies, not the visual identity.
 
-The complete Target contract for the third UI refactor lives in [UI_REFACTOR_V3.md](UI_REFACTOR_V3.md). That document is authoritative for V3 information architecture, tooling, visual direction, adaptive behavior, screen requirements, accessibility, validation, and migration order. This file defines the shared implementation rules that apply before, during, and after migration.
+The upstream product contract is [PRODUCT_POSITIONING.md](PRODUCT_POSITIONING.md). The complete Target contract for the third UI refactor lives in [UI_REFACTOR_V3.md](UI_REFACTOR_V3.md). That document is authoritative for V3 information architecture, tooling, visual direction, adaptive behavior, screen requirements, accessibility, validation, and migration order. This file defines the shared implementation rules that apply before, during, and after migration.
 
 ## Status Boundary
 
@@ -46,6 +46,7 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - Use `ListRow` for settings or metadata rows with stable icon/title/detail structure.
 - Use Lucide React for product icons. Do not add hand-drawn SVGs, emoji icons, or a second icon library when Lucide has an equivalent.
 - V3 shared primitives are `AppScaffold`, `ContextHeader`, `PrimaryNavigation`, `Section`, `StatusStrip`, `RecordRow`, `TimelineRow`, `DocumentThumbnail`, `AiActionSheet`, `FilterSheet`, `DisclosureRow`, and `FormSection`.
+- Materials uses `DocumentPreviewRow` as the default presentation: a stable real thumbnail on the left and title plus essential metadata on the right. `DocumentThumbnail` remains available inside previews and detail surfaces, not as the default two-column page layout.
 - Shared primitives define default, pressed, focus, selected, disabled, loading, error, empty, long-content, and dark-mode states before broad page adoption.
 - Cards, buttons, inputs, and rows use at most `8px` radius. A modal bottom sheet may use `12px` on its top corners.
 
@@ -56,7 +57,7 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - Do not claim offline support for maps, routes, search, provider calls, or cloud sync unless a real local cache exists for that capability.
 - Show realtime state with a short source/freshness treatment; stale or failed facts must visibly degrade without expanding into a diagnostic card.
 - Destructive, sync, storage, and update actions must be confirmation-gated or user-triggered.
-- Put the user's primary object first: itinerary timeline before advice, ticket gallery before add/edit forms, and setting categories before their controls.
+- Put the user's primary object first: phase-appropriate next action before maps or advice, itinerary timeline before tools, real materials before import settings, and setting categories before their controls.
 - Secondary intelligence, diagnostics, reminders, setup forms, and level-two settings default to a single compact disclosure row. Opening one surface must not expand unrelated surfaces.
 - Keep disclosure labels short and state-bearing. The expanded content owns its detail copy; the collapsed row must not summarize a paragraph.
 - A completed global AI navigation action closes the AI panel and focuses the destination. Do not leave an answer panel covering the page it just opened.
@@ -65,7 +66,7 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - One screen has one primary task, one primary action, and no more than two navigation levels.
 - A title, trip name, date, metric group, address, or map-link group appears once per viewport.
 - Bottom navigation is for top-level destinations only. AI, Add, Search, Delete, and other commands belong in a toolbar, content control, menu, or modal.
-- V3 mobile navigation is `今日 | 行程 | 收件箱 | 我的`; AI opens from the shared toolbar as an on-demand modal Action Sheet.
+- V3 mobile navigation is `今日 | 行程 | 资料 | 我的`; pending inbox items are a state inside Materials, and AI opens from the shared toolbar as an on-demand modal Action Sheet.
 - Only one fixed bottom interaction surface may be expanded at a time. The AI sheet, map place sheet, sticky action area, and bottom navigation must not stack over each other.
 - AI closes after successful navigation and restores focus to its trigger when dismissed.
 - Forms disclose basic information and place first; timezone, coordinates, cross-day transport, and advanced rules remain collapsed until requested.
@@ -77,6 +78,7 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - `600–1023px`: navigation rail or stable top navigation and optional list-detail split.
 - `>=1024px`: sidebar and master-detail layout; do not render the app as a centered phone column.
 - App Shell owns safe-area insets, fixed navigation height, content padding, and z-index.
+- Full-height shells declare `100vh` before `100dvh/100svh`; dynamic units may override the fallback, but older Android WebView must still fill the visible viewport.
 - Text and controls must remain usable at `320px`, with software keyboard open, and at `200%` text zoom.
 
 ## Accessibility
@@ -96,4 +98,4 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - Static Golden Screenshots target `maxDiffPixelRatio <= 0.005`.
 - Dynamic maps use stable fixture data plus canvas, marker, control, and overlap assertions.
 - Every page checks that `scrollWidth <= clientWidth`.
-- Real iPhone Safari/PWA and Android Chrome/PWA remain required before release; simulator results cannot replace the device record.
+- Release qualification uses the owner-approved iPhone Simulator and Android Emulator matrix plus built-dist PWA lifecycle tests. Physical devices are post-release observation coverage, not a UI V3 release blocker.

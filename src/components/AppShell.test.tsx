@@ -45,7 +45,7 @@ describe('BottomTabBar', () => {
     })
     expect(container?.textContent).toContain('今日')
     expect(container?.textContent).toContain('行程')
-    expect(container?.textContent).toContain('收件箱')
+    expect(container?.textContent).toContain('资料')
     expect(container?.textContent).toContain('我的')
     expect(container?.textContent).not.toContain('搜索')
   })
@@ -63,11 +63,11 @@ describe('BottomTabBar', () => {
     await act(async () => {
       root?.render(<BottomTabBar activeRoute="home" />)
     })
-    const inboxButton = container?.querySelector('button[aria-label="收件箱"]')
+    const documentsButton = container?.querySelector('button[aria-label="资料"]')
     await act(async () => {
-      inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      documentsButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    expect(mocks.navigateTo).toHaveBeenCalledWith('inbox')
+    expect(mocks.navigateTo).toHaveBeenCalledWith('documents', undefined)
   })
 
   it('has aria-labels on all buttons', async () => {
@@ -87,6 +87,14 @@ describe('BottomTabBar', () => {
     })
     const tripButton = container?.querySelector('button[aria-label="行程"]')
     expect(tripButton?.className).toContain('primary-navigation-item-active')
+  })
+
+  it('maps inbox and document routes to the 资料 tab', async () => {
+    await act(async () => {
+      root?.render(<BottomTabBar activeRoute="inbox" />)
+    })
+    const documentsButton = container?.querySelector('button[aria-label="资料"]')
+    expect(documentsButton?.className).toContain('primary-navigation-item-active')
   })
 
   it('reopens the last trip from a global route', async () => {

@@ -1,21 +1,24 @@
 # 旅图 TripMap
 
-旅图 TripMap 是一个 **实时在线、AI 优先的旅行操作系统**。用户可以直接查看当前旅行，或用自然语言让 AI 查找实时信息、整理行程、打开票据、补全地点、处理变化并执行已登记动作。
+旅图 TripMap 是面向复杂出境自由行组织者的 **智能旅行管家**。它把散落的订单、票据、地点和同行信息整理成一趟随时可执行、发生变化也能迅速调整的旅行：下一步去哪、何时出发、需要出示什么，一眼就知道。
 
-当前代码已经具备完整旅行主路径、账号对象同步、Provider Proxy 和 AI Action Gateway，是向目标架构迁移的稳定基线。目标状态以云端账号数据为事实源，以 Realtime 推送跨设备变化；IndexedDB 保留为启动缓存、弱网 outbox 和应急查看能力。
+实时在线和 AI 优先是实现这项承诺的技术战略，不是要求用户理解的产品类别。当前代码已经具备完整旅行主路径、账号对象同步、Provider Proxy 和 AI Action Gateway，是向目标架构迁移的稳定基线。目标状态以云端账号数据为事实源，以 Realtime 推送跨设备变化；IndexedDB 保留为启动缓存、弱网 outbox 和应急查看能力。
 
-当前界面仍是 UI V2 收敛版。第三次 UI 重构已经完成规范决策，但四项主导航、Toolbar AI、按需 Action Sheet、平板/桌面主从布局等仍是 Target，不是已上线能力。完整设计合同见 [UI V3 重构规范](docs/UI_REFACTOR_V3.md) 和 [Design System](docs/DESIGN_SYSTEM.md)。
+当前生产界面仍以 [项目状态](docs/PROJECT_STATUS.md) 为准。`feature/ui-v3-selected-target` 已完成第三次 UI 重构的候选实现：`今日 | 行程 | 资料 | 我的`、Toolbar AI、按需 Action Sheet、阶段化首页、资料编辑式列表和自适应壳层均已进入真实代码与可执行 Golden 验收。候选 `94885be` 的 GitHub required checks、Cloudflare Pages Preview 以及项目所有者批准的 iOS/Android 模拟器发布资格均已通过；合并后的生产部署仍未完成，因此暂不描述为已上线 Current。完整合同见 [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)、[UI V3 重构规范](docs/UI_REFACTOR_V3.md)、[Selected Design](docs/DESIGN.md)、[实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)、[M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md) 和 [Design QA](design-qa.md)。
 
 ## 项目定位
 
-旅图不是传统表单式行程工具。它的主体验是“打开就看到当前旅行，需要时说一句话，AI 把事情做完”。实时地点、路线、交通、天气、票务和订单事实逐步通过带来源与新鲜度的 Provider 接入。
+旅图不是攻略社区、订票平台、通用地图、聊天机器人或专业财务软件。它的核心价值是把用户已经决定或购买的复杂旅行变成可靠的执行流程：先收齐资料、确认准备情况，旅行中直接执行下一步，变化时由 AI 准备可执行调整。
 
 适合用来：
 
-- 按天管理旅行行程
-- 用全局 AI 查询、规划和执行旅行任务
-- 目标体验：跨设备实时查看账号旅行和同行变化
-- 在地图上查看当天地点和路线顺序
+- 汇总邮件、PDF、网页、表格、图片和手工记录中的旅行资料
+- 出发前识别真正缺失、冲突或过期的内容，并一次修复可自动处理的问题
+- 旅行中快速查看下一站、出发时间、导航和需要出示的票据
+- 用 AI 查询、规划和执行已登记的旅行任务
+- 在变化发生时查看影响并确认可逆调整
+- 跨设备查看账号旅行和同行变化
+- 按天管理日程，并在需要空间判断时查看地图与路线
 - 手动记录从上一站到当前站的交通方式和预计耗时
 - 保存或记录车票、门票、酒店订单、PDF、二维码截图
 - 导出 / 导入完整 zip 归档
@@ -67,8 +70,11 @@ AI 是旅图的默认任务入口。当前版本已经支持全局 AI Action Gat
 - [AI Agent Foundation](docs/AI_AGENT_FOUNDATION.md)
 - [Provider Proxy](docs/PROVIDER_PROXY.md)
 - [产品战略](docs/PRODUCT_STRATEGY.md)
+- [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)
 - [路线图 v5](docs/ROADMAP_V5.md)
 - [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
+- [UI V3 实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)
+- [UI V3 M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)
 - [Design System](docs/DESIGN_SYSTEM.md)
 - [Limited Beta 用户指南](docs/BETA_USER_GUIDE.md)
 - [Limited Beta 发布说明](docs/LIMITED_BETA_RELEASE_NOTES.md)
@@ -232,6 +238,7 @@ reference / external 模式不会包含实际文件内容，只会保留位置�
 - [产品战略](docs/PRODUCT_STRATEGY.md)
 - [路线图 v5](docs/ROADMAP_V5.md)
 - [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
+- [UI V3 M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)
 - [Design System](docs/DESIGN_SYSTEM.md)
 - [历史路线图 v4](docs/ROADMAP_V4.md)
 

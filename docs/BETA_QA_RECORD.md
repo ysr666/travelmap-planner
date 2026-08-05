@@ -2,7 +2,44 @@
 
 > **历史记录：** 本文是各版本验证凭据，只描述测试发生时的实现。当前产品战略与未来规划见 [产品战略](PRODUCT_STRATEGY.md)、[Roadmap V5](ROADMAP_V5.md) 和 [UI V3](UI_REFACTOR_V3.md)。
 
-最新记录：2026-07-28
+最新记录：2026-08-05
+
+## 2026-08-05 UI V3 候选浏览器验收
+
+- 候选分支实现四项主导航、阶段化 Today、按需 AI Action Sheet、连续时间轴、单一地点 Sheet、资料编辑式预览列表、渐进表单和四组设置。
+- 候选代码 `68b2945` 新增固定 Git commit/tree/lock 的四页面 Golden 像素回归，差异预算为 `maxDiffPixelRatio <= 0.005`；成功时不提交截图，失败时才保留 Playwright 对比 artifact。
+- Reduced Motion 新增真实浏览器 media emulation 和全局 CSS 合同测试；首页、AI Action Sheet 和有限时长动画在该偏好下停用可见动效。
+- Home 页面控制器拆分为 Today 工作区和数据聚合，资料中心拆分为控制器与资料/证件/交通展示；页面单测、资料 E2E 和 Golden 均证明行为与像素未回归。
+- S1 将设置和票据库拆成薄路由入口、controller hook、ViewModel 与展示组件；提交 `73fe5af` 的 GitHub Actions run `30992807064` 五项 required jobs 全部通过，Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436` 为 Active。
+- S2 将 Trip、Day 和 Item 的数据聚合、ViewModel、菜单/Sheet 和详情展示拆出；原有地图/日程上下文、返回来源、长文本和 Golden 保持不变。
+- S3 将 Global AI 的 Action Gateway/兼容编辑编排移入 `useGlobalAiCommandController.ts`，并把 AI Draft 拆成请求表单状态、Provider/草稿控制器和独立展示组件；没有改变隐私过滤、一次最终确认、stale guard 或失败项重试。
+- Selected Target 的出发前、旅行中、行程和资料四个核心状态均完成 `390 x 844` 同状态并排审查；没有待修复的 P0、P1 或 P2 视觉问题。
+- Golden/视觉流程覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`，并覆盖长文本、200% 文本、软件键盘、浅色/深色和无横向溢出。
+- `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1578 个测试。
+- `npm run test:e2e:pwa-upgrade` 5/5 通过；历史生产包专用空状态断言保留历史文案，未用 V3 文案改写旧产物事实。
+- `npm run test:e2e:serial` 最终重跑 175/175 通过，串行耗时约 6.4 分钟。
+- 2026-08-05 项目所有者将 UI V3 设备发布标准调整为 iOS/Android 模拟器加 built-dist PWA 自动化；实体机转为发布后观察，不再阻塞合并。
+- 候选验收提交 `f825dfe` 的 GitHub Actions run `30989177863` 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`，其中 E2E job 用时约 5 分 41 秒；Cloudflare Pages Preview deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 也指向同一 SHA 并为 Active。
+- Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，生产部署结论仍待补录。
+
+### S1-S3 结构收口复验
+
+- 最终结构代码基线为 `3a9fb8c`；`npm run typecheck`、`npm run lint`、191 文件/1578 单测、`npm run build` 和 bundle/PWA budget 全部通过。
+- AI Draft 聚焦单测 118/118，通过 47/47 AI Draft、表单与 Golden 移动端 E2E；全量串行 E2E 最终为 175/175，约 6.6 分钟。
+- PWA 升级 5/5 通过，入口 468.2 KiB、初始 JS 852.4 KiB、初始 gzip 245.5 KiB、预缓存 2337.3 KiB/114 项。
+- 最终代码 `0b464be` 已完成复验：GitHub Actions run `30998260337` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过，E2E job 约 5 分 28 秒；Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 同 SHA 为 Active。
+
+### 平台模拟器发布记录
+
+- iPhone 16 / iOS 26.5 Simulator 已擦除后全新启动，在 Safari 打开同 SHA Preview，将 `旅图` 添加到主屏幕并完成安装后冷启动；登录页、核心页面、地图、资料、我的和 AI Action Sheet 正常，完整软件键盘未遮挡输入。
+- Android API 33 Emulator 的 Chrome 加载真实 production build，Today、四项导航、AI Action Sheet 和软件键盘通过；UI Automator 可访问性树内的控件边界均落在 `1080px` 视口内。
+- 同一 Android Emulator 使用系统 WebView 壳验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；核心页面均满足 `scrollWidth === clientWidth`。
+- Android WebView 103 不支持 `dvh/svh`，暴露 App Shell 半屏高度问题。增加 `100vh` 回退后，`innerHeight`、`#root`、`.app-viewport` 和底部导航底边均收敛到约 `867px`；软件键盘打开后同步收敛到约 `554px`。
+- Android 镜像内置 Chrome 103 的 WebAPK launcher 安装未完成，代理下还会触发该旧镜像的 GPU 进程限制；这是模拟器环境限制。5/5 built-dist PWA 测试覆盖安装/升级合同、等待确认、多标签收敛、历史数据保留与缓存恢复，项目所有者已接受该组合证据作为 Android 发布门槛。
+- 候选文档头 `94885be` 的 GitHub Actions run `30998908036` 五项 required jobs 全部通过；Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 指向同一 SHA 并为 Active。
+- 真实设备性能、相机/文件选择和网络差异列为 Beta 运营观察，不阻塞 UI V3 发布。
+
+完整视觉与发布边界见仓库根目录 `design-qa.md` 和 [UI V3 M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 2026-07-28 历史生产 PWA 迁移矩阵
 
@@ -130,13 +167,13 @@ Action Gateway V1 覆盖票据打开、地点补全和行程修复；E2E 验证�
 
 备注：2026-07-05 本轮全量 E2E 由 Playwright webServer 直接管理并通过；未保留额外 dev server。
 
-## 实体机检查
+## 实体机运营观察（可选）
 
-实体机结果必须人工补录，不得由自动化假填。
+实体机不再是 UI V3 发布门槛。后续如执行，结果必须按实际设备人工补录，不得由模拟器或自动化假填。
 
 | 设备 | 浏览器 | 状态 | 记录 |
 | --- | --- | --- | --- |
-| iPhone | Safari | 待人工补录 | 需检查登录、PWA 添加到主屏幕、Trip/Day/Ticket/Settings、刷新更新 |
-| Android | Chrome | 待人工补录 | 需检查登录、Trip/Day Map、Item、Ledger、Documents、PWA 刷新 |
+| iPhone | Safari | 发布后观察 | 登录、PWA 添加到主屏幕、Trip/Day/Ticket/Settings、刷新更新 |
+| Android | Chrome | 发布后观察 | 登录、Trip/Day Map、Item、Ledger、Documents、PWA 刷新 |
 
 截图和录屏保持未跟踪，不提交到仓库。

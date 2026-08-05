@@ -1,6 +1,8 @@
 # 旅图 TripMap 路线图 v5
 
-更新时间：2026-07-29
+更新时间：2026-08-05
+
+产品定义：[产品定位与核心体验](PRODUCT_POSITIONING.md)
 
 战略来源：[产品战略](PRODUCT_STRATEGY.md)
 
@@ -8,8 +10,10 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## 总目标
 
-把当前稳定的 PWA、账号同步、Provider Proxy 和 AI Action Gateway 基线，升级为 **实时在线、AI 优先的旅行操作系统**：
+把当前稳定的 PWA、账号同步、Provider Proxy 和 AI Action Gateway 基线，升级为面向复杂出境自由行组织者的 **智能旅行管家**。实时在线和 AI 优先是完成用户任务的技术方式，不是产品对外类别：
 
+- 围绕收齐、放心、执行、应变和同行五项核心任务组织产品。
+- “今日”按未建旅行、出发前、旅行中和旅行后切换唯一主任务。
 - 云端账号状态成为事实源，跨设备和同行变化实时收敛。
 - AI 成为统一任务入口，能查询实时信息并执行注册动作。
 - 地点、路线、交通、天气、票务和订单变化都有来源与新鲜度。
@@ -34,24 +38,30 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - AI 仍有关键词兼容路由，动作覆盖不完整，长任务没有统一 job runtime。
 - 实时地点、交通、天气、航班/铁路和票务 Provider 尚未形成统一事实模型。
 - 用户仍需在多个页面手动触发查询、修复和同步。
-- 当前 App Shell、全局 AI、Trip Workspace、地点详情和资料中心仍存在重复导航、固定层遮挡和信息密度问题。
+- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界、平台模拟器和最终候选远端资格；仅生产发布证据尚未完成。
 
 ## Phase 0：UI V3 Product Shell
+
+状态：**Candidate release qualification passed; production merge pending**
 
 周期：5-7 周，可与 Realtime Cloud Core 的合同设计并行，但不在同一 PR 中混改数据和展示层。
 
 目标：先把用户每天接触的 App Shell、今日、日程、地图、地点详情和票据流程收敛为产品级原生式体验，再逐步迁移低频页面。
 
+执行合同：[UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
+
+完成收据：M0-M5、浏览器 M6、项目所有者批准的平台模拟器验收、S1-S3 结构治理及最终候选远端资格已完成；当前只剩 Production 发布门槛。真实 iPhone/Android 转为发布后运营观察。
+
 ### V3.0 设计锁定
 
 - 使用当前真实页面和固定测试数据建立视觉基线。
-- 生成 3 个独立“今日”视觉方向，完成一次方向选择。
-- 将选定方向写入 `DESIGN.md`，建立统一 Stitch Design System。
-- 产出今日、日程、地图、地点详情、票据和 AI Action Sheet 六个关键屏。
+- 已先锁定阶段化信息架构，并为同一产品生成 3 个独立跨场景视觉方向。
+- 已在 `DESIGN.md` 锁定“第一套左上角出发前首页 + 第二套整体视觉 + 第三套资料列表”的 Selected Target；Stitch/Figma 可作协作镜像，但不作为代码实施前置条件。
+- 已生成未建旅行、出发前、旅行中、旅行后、行程、地点、表单、资料、AI、费用、同行和设置的完整页面图集。
 
 ### V3.1 App Shell
 
-- 移动端底部导航改为“今日、行程、收件箱、我的”。
+- 移动端底部导航改为“今日、行程、资料、我的”；待整理材料并入资料。
 - AI 从底部常驻输入框改为标题栏命令和按需 Action Sheet。
 - 搜索从底部 Tab 改为标题栏或内容内的上下文命令。
 - App Shell 统一管理安全区、固定导航、内容 padding 和 z-index。
@@ -59,15 +69,16 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ### V3.2 核心旅行
 
-- 首页变为“今日”，删除宣传 Hero、重复统计和大块建议。
+- 首页变为阶段化“今日”：未建旅行先导入，出发前处理准备，旅行中执行下一步，旅行后完成归档。
 - 日程使用扁平时间线，编辑和删除进入上下文菜单。
-- 地图保持全屏，并且一次只展开一个地点 Sheet。
+- 地图是日程视图切换；正在移动时可成为今日主视觉，并且一次只展开一个地点 Sheet。
 - 地点详情首屏展示名称、时间、地址、导航和票据；无真实图片时不显示假 Hero。
 
 ### V3.3 资料流程
 
-- Ticket Library 打开后直接进入真实缩略图画廊。
-- Inbox 有数据时显示资料列表，无数据时只显示一个导入主操作。
+- “资料”作为一级目的地，默认显示当前旅行的票据、订单和证件。
+- 待整理材料以 Badge、分区或筛选进入；无待整理项时不显示空工作队列。
+- 有可预览资料时直接进入 Selected Target 的编辑式列表：左侧真实缩略图，右侧名称和关键元数据。
 - 筛选、排序、连接器和 Provider 诊断进入二级 Sheet 或设置。
 
 ### V3.4 设置与表单
@@ -79,7 +90,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 ### V3.5 产品验收
 
 - 完成固定视口 Golden Screenshots、无障碍、性能、全量 E2E 和 PWA 升级测试。
-- 真实 iPhone Safari/PWA 与 Android Chrome/PWA 各完成一轮人工验收。
+- iPhone Simulator Safari/主屏 PWA、Android Emulator Chrome/WebView 与 built-dist PWA 生命周期各完成一轮验收。
 - 静态核心页面目标 `maxDiffPixelRatio <= 0.005`，所有核心页面从 `320px` 起无横向溢出。
 
 退出条件：
@@ -211,8 +222,9 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 ## UI V3 锁定原则
 
 - V3 是信息架构和 App Shell 重构，不是局部换肤。
+- 产品定位、核心用户、旅行阶段和下一步先于视觉方向；地图和 AI 都不是固定首页身份。
 - 生成式效果图只用于方向探索，真实 React 组件和 Golden Screenshots 是最终依据。
-- 底部导航只用于顶层页面；AI、搜索和新增是 Toolbar 或内容命令。
+- 底部导航固定为“今日、行程、资料、我的”；AI、搜索和新增是 Toolbar 或内容命令。
 - AI 结果默认一句摘要、影响对象和一个主操作；详细步骤折叠。
 - 地点、票据、资料和设置采用同一层级：真实对象在一级，编辑和诊断在二级。
 - Provider、同步、配额和技术性隐私说明只进入高级设置、诊断或帮助。
@@ -221,16 +233,16 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## 接下来十项
 
-1. 完成 UI V3 三方向效果图、一次方向选择和 `DESIGN.md`。
-2. 实现 V3 App Shell、四项导航和按需 AI Action Sheet。
-3. 完成“今日 → 日程 → 地点详情 → 票据”纵向切片及 Golden Screenshots。
+1. 合并已通过平台模拟器、GitHub CI 和 Cloudflare Preview 的 UI V3 候选 PR。
+2. 核验同 SHA Cloudflare Production 并执行不触发真实 Provider 的生产 smoke。
+3. 补录生产证据，把 UI V3 从 Candidate 转为 Current。
 4. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
 5. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
 6. 建立 `RealtimeFact` schema、TTL 和来源 UI。
 7. 建立 AI job runtime，并把剩余关键词动作迁入 Action Gateway 注册表。
 8. 扩展 Place Provider，并接入天气、航班/铁路状态的 mock、合同和受限真实 smoke。
 9. 让“一键智能修复”消费实时事实，让 Shared Trip 复用 Realtime 事件和服务端版本。
-10. 完成 UI V3 全页面迁移、真实设备验收和在线延迟/Provider 成本/AI 完成率仪表。
+10. 建立在线延迟、Provider 成本、事实新鲜度和 AI 动作完成率仪表。
 
 ## 保持不变的工程底线
 

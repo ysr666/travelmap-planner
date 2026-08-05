@@ -74,7 +74,7 @@ test('旅行账单档案支持确认接收、时间线、完整性、查询和�
   await expect(page.getByTestId('ledger-summary')).toBeVisible()
   await expect(page.getByTestId('ledger-expense-row')).toHaveCount(0)
 
-  await page.getByRole('button', { name: '日程', exact: true }).click()
+  await page.getByRole('button', { name: '行程', exact: true }).click()
   await expect(page).toHaveURL(/#\/trip\?/)
   await openDetailsSection(page, '旅行工具')
   await page.getByTestId('trip-action-travel-inbox').click()
@@ -145,7 +145,7 @@ test('旅行账单档案支持确认接收、时间线、完整性、查询和�
   await expect(page.getByText(/未纳入结算/)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
-  await page.getByRole('button', { name: '日程', exact: true }).click()
+  await page.getByRole('button', { name: '行程', exact: true }).click()
   await expect(page.getByTestId('trip-ledger-summary')).toContainText('JP¥3,000')
 })
 

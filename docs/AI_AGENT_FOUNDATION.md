@@ -22,7 +22,7 @@
 - 结果默认一句摘要、影响对象和一个主按钮，步骤详情折叠。
 - 本地规则继续作为低延迟 fallback，但不再决定产品的 AI 能力上限。
 
-## Target AI UI Surface
+## Candidate AI UI Surface
 
 - AI 是业务页面标题栏中的统一命令，不是底部导航 Tab，也不保留常驻输入框。
 - 点击后打开上下文 Action Sheet；当前 Trip / Day / Item / Ticket 范围自动解析，范围切换放在 Sheet 内。
@@ -30,7 +30,7 @@
 - 默认只显示一句摘要、步骤数、影响对象和一个主操作；计划详情折叠。
 - 部分失败只显示短结果和“重试失败项”，不显示堆栈、原始 Provider 输出或重复成功步骤。
 - Modal 遵守 WAI-ARIA Dialog 合同；长任务可以收起，不能持续覆盖地图、日程或票据。
-- 当前 `GlobalAiCommandBar` 仍是迁移基线，上述 Action Sheet 是 UI V3 Target。
+- 候选 `GlobalAiCommandBar` 已拆分展示层并以按需 Action Sheet 接入 App Shell；合并和发布验收前仍不得描述为生产 Current。
 
 ## Current AI Draft Capability Status
 

@@ -1,18 +1,23 @@
 import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { MapEventType, MapInstance, MapInitOptions, FitBoundsOptions, CameraState, MarkerHandle, LngLat, LngLatBounds } from './mapEngine'
+import type { MapEventType, MapInstance, MapInitOptions, FitBoundsOptions, CameraState, MarkerHandle, LngLat, LngLatBounds, RouteLineKind } from './mapEngine'
 
 const IDLE_TIMEOUT_MS = 15000
+type RouteWidthExpression = ['interpolate', ['linear'], ['zoom'], number, number, number, number, number, number]
 
 class MapLibreMapInstance implements MapInstance {
   private map: maplibregl.Map
   private markers: maplibregl.Marker[] = []
   private routeSourceId = 'route-source'
+  private routeCasingLayerId = 'route-casing'
   private routeLayerId = 'route-line'
+  private routeConnectorSourceId = 'route-connector-source'
+  private routeConnectorCasingLayerId = 'route-connector-casing'
+  private routeConnectorLayerId = 'route-connector-line'
   private routeVisible = true
   private disposed = false
   private listeners = new Map<() => void, (event?: unknown) => void>()
-  private pendingRouteLineStrings: LngLat[][] | null = null
+  private pendingRouteLine: { kind: RouteLineKind; lineStrings: LngLat[][] } | null = null
   private pendingRouteLineListenerAttached = false
 
   constructor(map: maplibregl.Map) {
@@ -90,22 +95,22 @@ class MapLibreMapInstance implements MapInstance {
     }
   }
 
-  setRouteLine(lineStrings: LngLat[][]) {
+  setRouteLine(lineStrings: LngLat[][], kind: RouteLineKind = 'road') {
     if (this.disposed) return
 
     try {
-      this.applyRouteLine(lineStrings)
-      this.pendingRouteLineStrings = null
+      this.applyRouteLine(lineStrings, kind)
+      this.pendingRouteLine = null
     } catch (caught) {
       if (!isMapLibreStyleLoadingError(caught)) {
         throw caught
       }
-      this.queueRouteLine(lineStrings)
+      this.queueRouteLine(lineStrings, kind)
     }
   }
 
-  private queueRouteLine(lineStrings: LngLat[][]) {
-    this.pendingRouteLineStrings = lineStrings
+  private queueRouteLine(lineStrings: LngLat[][], kind: RouteLineKind) {
+    this.pendingRouteLine = { kind, lineStrings }
     if (this.pendingRouteLineListenerAttached) {
       return
     }
@@ -113,15 +118,15 @@ class MapLibreMapInstance implements MapInstance {
     this.pendingRouteLineListenerAttached = true
     this.map.once('load', () => {
       this.pendingRouteLineListenerAttached = false
-      const pending = this.pendingRouteLineStrings
-      this.pendingRouteLineStrings = null
+      const pending = this.pendingRouteLine
+      this.pendingRouteLine = null
       if (pending && !this.disposed) {
-        this.setRouteLine(pending)
+        this.setRouteLine(pending.lineStrings, pending.kind)
       }
     })
   }
 
-  private applyRouteLine(lineStrings: LngLat[][]) {
+  private applyRouteLine(lineStrings: LngLat[][], kind: RouteLineKind) {
     const feature = {
       type: 'Feature' as const,
       geometry: { type: 'MultiLineString' as const, coordinates: lineStrings },
@@ -132,6 +137,21 @@ class MapLibreMapInstance implements MapInstance {
     if (!this.map.getSource(this.routeSourceId)) {
       this.map.addSource(this.routeSourceId, { type: 'geojson', data: feature })
       this.map.addLayer({
+        id: this.routeCasingLayerId,
+        type: 'line',
+        source: this.routeSourceId,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          visibility: hasLine && this.routeVisible ? 'visible' : 'none',
+        },
+        paint: {
+          'line-color': '#ffffff',
+          'line-opacity': routeCasingOpacity(kind),
+          'line-width': routeCasingWidth(kind),
+        },
+      })
+      this.map.addLayer({
         id: this.routeLayerId,
         type: 'line',
         source: this.routeSourceId,
@@ -141,14 +161,25 @@ class MapLibreMapInstance implements MapInstance {
           visibility: hasLine && this.routeVisible ? 'visible' : 'none',
         },
         paint: {
-          'line-color': '#0f8f83',
-          'line-opacity': 0.86,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2.5, 12, 4, 16, 6],
+          'line-color': '#0e7c73',
+          'line-dasharray': routeDashArray(kind),
+          'line-opacity': routeLineOpacity(kind),
+          'line-width': routeLineWidth(kind),
         },
       })
     } else {
       const source = this.map.getSource(this.routeSourceId) as maplibregl.GeoJSONSource
       source.setData(feature)
+      this.map.setPaintProperty(this.routeCasingLayerId, 'line-opacity', routeCasingOpacity(kind))
+      this.map.setPaintProperty(this.routeCasingLayerId, 'line-width', routeCasingWidth(kind))
+      this.map.setPaintProperty(this.routeLayerId, 'line-dasharray', routeDashArray(kind))
+      this.map.setPaintProperty(this.routeLayerId, 'line-opacity', routeLineOpacity(kind))
+      this.map.setPaintProperty(this.routeLayerId, 'line-width', routeLineWidth(kind))
+      this.map.setLayoutProperty(
+        this.routeCasingLayerId,
+        'visibility',
+        hasLine && this.routeVisible ? 'visible' : 'none',
+      )
       this.map.setLayoutProperty(
         this.routeLayerId,
         'visibility',
@@ -157,11 +188,73 @@ class MapLibreMapInstance implements MapInstance {
     }
   }
 
+  setRouteConnectorLine(lineStrings: LngLat[][]) {
+    if (this.disposed) return
+
+    const feature = {
+      type: 'Feature' as const,
+      geometry: { type: 'MultiLineString' as const, coordinates: lineStrings },
+      properties: {},
+    }
+    const hasLine = lineStrings.length > 0
+
+    if (!this.map.getSource(this.routeConnectorSourceId)) {
+      this.map.addSource(this.routeConnectorSourceId, { type: 'geojson', data: feature })
+      this.map.addLayer({
+        id: this.routeConnectorCasingLayerId,
+        type: 'line',
+        source: this.routeConnectorSourceId,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          visibility: hasLine && this.routeVisible ? 'visible' : 'none',
+        },
+        paint: {
+          'line-color': '#ffffff',
+          'line-opacity': routeCasingOpacity('sequence'),
+          'line-width': routeCasingWidth('sequence'),
+        },
+      })
+      this.map.addLayer({
+        id: this.routeConnectorLayerId,
+        type: 'line',
+        source: this.routeConnectorSourceId,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          visibility: hasLine && this.routeVisible ? 'visible' : 'none',
+        },
+        paint: {
+          'line-color': '#0e7c73',
+          'line-dasharray': routeDashArray('sequence'),
+          'line-opacity': routeLineOpacity('sequence'),
+          'line-width': routeLineWidth('sequence'),
+        },
+      })
+      return
+    }
+
+    const source = this.map.getSource(this.routeConnectorSourceId) as maplibregl.GeoJSONSource
+    source.setData(feature)
+    const visibility = hasLine && this.routeVisible ? 'visible' : 'none'
+    this.map.setLayoutProperty(this.routeConnectorCasingLayerId, 'visibility', visibility)
+    this.map.setLayoutProperty(this.routeConnectorLayerId, 'visibility', visibility)
+  }
+
   setRouteVisibility(visible: boolean) {
     this.routeVisible = visible
     if (this.disposed) return
+    if (this.map.getLayer(this.routeCasingLayerId)) {
+      this.map.setLayoutProperty(this.routeCasingLayerId, 'visibility', visible ? 'visible' : 'none')
+    }
     if (this.map.getLayer(this.routeLayerId)) {
       this.map.setLayoutProperty(this.routeLayerId, 'visibility', visible ? 'visible' : 'none')
+    }
+    if (this.map.getLayer(this.routeConnectorCasingLayerId)) {
+      this.map.setLayoutProperty(this.routeConnectorCasingLayerId, 'visibility', visible ? 'visible' : 'none')
+    }
+    if (this.map.getLayer(this.routeConnectorLayerId)) {
+      this.map.setLayoutProperty(this.routeConnectorLayerId, 'visibility', visible ? 'visible' : 'none')
     }
   }
 
@@ -243,6 +336,30 @@ export class MapLibreAdapter {
 
     return new MapLibreMapInstance(map)
   }
+}
+
+function routeCasingWidth(kind: RouteLineKind) {
+  return kind === 'road'
+    ? ['interpolate', ['linear'], ['zoom'], 8, 4, 12, 5.5, 16, 7] satisfies RouteWidthExpression
+    : ['interpolate', ['linear'], ['zoom'], 8, 3.5, 12, 4.5, 16, 5.5] satisfies RouteWidthExpression
+}
+
+function routeLineWidth(kind: RouteLineKind) {
+  return kind === 'road'
+    ? ['interpolate', ['linear'], ['zoom'], 8, 2, 12, 3, 16, 4] satisfies RouteWidthExpression
+    : ['interpolate', ['linear'], ['zoom'], 8, 1.8, 12, 2.5, 16, 3.2] satisfies RouteWidthExpression
+}
+
+function routeDashArray(kind: RouteLineKind): [number, number] {
+  return kind === 'road' ? [1, 0.01] : [0.7, 1.35]
+}
+
+function routeCasingOpacity(kind: RouteLineKind) {
+  return kind === 'road' ? 0.9 : 0.42
+}
+
+function routeLineOpacity(kind: RouteLineKind) {
+  return kind === 'road' ? 0.98 : 0.52
 }
 
 function isMapLibreStyleLoadingError(caught: unknown) {

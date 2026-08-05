@@ -260,11 +260,12 @@ describe('AiDraftPage', () => {
     expect(backButton).toBeTruthy()
   })
 
-  it('renders page title', async () => {
+  it('leaves the route title to AppShell and starts with the request form', async () => {
     await act(async () => {
       root?.render(<AiDraftPage />)
     })
 
-    expect(container?.textContent).toContain('AI 生成行程')
+    expect(container?.querySelector('[data-testid="ai-draft-request-form"]')).toBeTruthy()
+    expect(container?.textContent).not.toContain('AI 生成行程')
   })
 })

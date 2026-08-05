@@ -17,15 +17,15 @@ const thumbnailToneClasses: Record<TicketDisplayToneKey, string> = {
 function renderThumbnailIcon(iconKind: TicketDisplayIconKind) {
   switch (iconKind) {
     case 'image':
-      return <FileImage className="size-8" />
+      return <FileImage className="size-6" />
     case 'pdf':
-      return <FileText className="size-8" />
+      return <FileText className="size-6" />
     case 'reference':
-      return <MapPinned className="size-8" />
+      return <MapPinned className="size-6" />
     case 'external':
-      return <Link2 className="size-8" />
+      return <Link2 className="size-6" />
     default:
-      return <FileArchive className="size-8" />
+      return <FileArchive className="size-6" />
   }
 }
 
@@ -87,16 +87,18 @@ export function TicketThumbnail({
   }, [blobSyncState, ticket.fileType, ticket.id, shouldLoadPreview])
 
   const showPreview = shouldLoadPreview && preview?.ticketId === ticket.id && previewErrorTicketId !== ticket.id
+  const showPreviewLoading = shouldLoadPreview && !showPreview && previewErrorTicketId !== ticket.id
 
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ring-1 ring-slate-100 dark:ring-slate-800 ${className}`}
+      className={`relative overflow-hidden rounded-lg bg-surface-container-low ring-1 ring-outline-variant/40 ${className}`}
+      data-preview-state={showPreview ? 'ready' : showPreviewLoading ? 'loading' : 'fallback'}
     >
       {showPreview ? (
         <>
           <img
             alt={ticket.title || ticket.fileName || '票据缩略图'}
-            className="size-full bg-white object-contain p-1"
+            className="size-full bg-white object-contain"
             loading="lazy"
             onError={() => setPreviewErrorTicketId(ticket.id)}
             src={preview.url}
@@ -105,10 +107,19 @@ export function TicketThumbnail({
             {visual.typeLabel}
           </span>
         </>
+      ) : showPreviewLoading ? (
+        <div
+          aria-label="正在生成缩略图"
+          className="flex size-full animate-pulse flex-col justify-end gap-2 bg-surface-container-low p-3"
+          role="status"
+        >
+          <span className="h-2 w-2/3 rounded bg-outline-variant/55" />
+          <span className="h-2 w-2/5 rounded bg-outline-variant/35" />
+        </div>
       ) : (
         <div className={`flex size-full flex-col items-center justify-center gap-1 ${thumbnailToneClasses[visual.toneKey]}`}>
-          {renderThumbnailIcon(visual.iconKind)}
-          <span className="text-[11px] font-bold leading-none">{visual.typeLabel}</span>
+          <span className="opacity-80">{renderThumbnailIcon(visual.iconKind)}</span>
+          <span className="text-[11px] font-semibold leading-none">{visual.typeLabel}</span>
         </div>
       )}
     </div>

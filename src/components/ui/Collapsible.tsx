@@ -5,6 +5,8 @@ type CollapsibleProps = {
   title: string
   subtitle?: string
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   children: ReactNode
   className?: string
   testId?: string
@@ -14,6 +16,8 @@ export function Collapsible({
   title,
   subtitle,
   defaultOpen = false,
+  open,
+  onOpenChange,
   children,
   className = '',
   testId,
@@ -24,7 +28,8 @@ export function Collapsible({
     <details
       className={`group rounded-lg tm-group ${className}`}
       data-testid={testId}
-      open={defaultOpen}
+      onToggle={(event) => onOpenChange?.(event.currentTarget.open)}
+      open={open ?? defaultOpen}
       ref={detailsRef}
     >
       <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-3 select-none marker:hidden [&::-webkit-details-marker]:hidden tm-focus">

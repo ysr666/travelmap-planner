@@ -1,29 +1,29 @@
 # Limited Beta Readiness
 
-更新时间：2026-07-29
+更新时间：2026-08-05
 
 ## 结论
 
-当前代码达到上一阶段 Limited Beta Release Candidate，可作为“实时在线、AI 优先”迁移的稳定基线。`main` 同 SHA 远端验证已通过；但 cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。
+当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `94885be` 已完成本地浏览器、自动化、S1-S3 结构和项目所有者批准的平台模拟器资格，并通过同 SHA GitHub required checks 和 Cloudflare Pages Preview；仅合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 验收矩阵
 
 | 区域 | 状态 | 当前证据 | 发布边界 |
 | --- | --- | --- | --- |
 | Trip / Day / Item | 就绪 | 核心导航、时间轴、地图、详情和移动端溢出 E2E | 路线是预览，不是导航 |
-| Ticket Library | 就绪 | 画廊前置、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
+| Ticket Library | 候选就绪 | 编辑式预览列表、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
 | 全局 AI | V1 就绪但有限 | 票据、地点、行程修复的注册表校验、预览、确认、stale guard 和部分失败 E2E | 只能执行登记动作，不是任意自主代理 |
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
-| Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 就绪 | 187/1555 unit、156 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
-| 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
+| Supabase schema | 就绪 | 空库重建、生产 SQL 检查；2026-08-05 只读复核 migrations 与 security/performance advisors | 本轮无 DDL；剩余 advisor 均已记录 |
+| CI / E2E | 最终候选通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`94885be` 同 SHA CI/Preview 通过 | 合并后仍需保持全绿 |
+| 平台模拟器 | 发布资格通过 | iOS 26.5 Simulator 完成 Safari、主屏 PWA 安装/冷启动和键盘；Android API 33 Emulator 完成 Chrome/WebView、可访问性边界、地图、AI Sheet 和无溢出 | Android Chrome 103 WebAPK launcher 限制由 5/5 built-dist PWA 生命周期覆盖；实体机为发布后观察 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 目标能力 | 已完成[工具、信息架构、视觉、响应式和验收规范](UI_REFACTOR_V3.md) | 当前仍是 UI V2；四项导航、Toolbar AI、Action Sheet 和主从布局尚未实现 |
+| UI V3 | 候选发布资格完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、S1-S3 结构边界、五视口、四页面像素 Golden、Reduced Motion 和平台模拟器 | 同 SHA Production 后转为 Current |
 
 ## 发布必过
 
@@ -37,7 +37,7 @@
 - GitHub Actions 五个 required jobs 全绿。
 - Cloudflare Pages production 指向同一提交。
 - Supabase migration、RLS、授权和 advisors 复核。
-- iPhone Safari、iOS 主屏 PWA、Android Chrome 补录。
+- iPhone Simulator Safari/主屏 PWA、Android Emulator Chrome/WebView 和 built-dist PWA 生命周期记录。
 
 ## 必须保持的系统合同
 
@@ -50,11 +50,12 @@
 
 ## 已知非阻塞项
 
-- MapLibre 独立 chunk 首次使用仍需网络；自动化已覆盖中断、配额不足和多标签连续升级，实体机弱网体验仍需记录。
+- MapLibre 独立 chunk 首次使用仍需网络；自动化已覆盖中断、配额不足和多标签连续升级，实体机弱网体验作为发布后观察。
 - Provider 本地合同仍是共享 chunk；后续只在收益明确时按操作拆分，不能削弱本地校验。
-- Supabase leaked-password protection 需要计划/配置决策。
-- `cloud_ticket_blobs` 双 SELECT policy 需预览环境等价合并。
-- 低使用率索引需真实负载证据后再决定是否删除。
+- Supabase leaked-password protection 需要按 [Auth 密码安全指南](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)完成计划/配置决策。
+- `travel_inbox_connector_secrets` 启用 RLS 但无客户端 policy 是有意 fail-closed；[advisor 信息项](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)保留，不为消除提示开放读取。
+- `cloud_ticket_blobs` 双 SELECT policy 需按 [policy advisor](https://supabase.com/docs/guides/database/database-linter?lint=0006_multiple_permissive_policies)先在预览环境验证等价合并。
+- [低使用率索引提示](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)需真实负载证据后再决定是否删除。
 - Action Gateway 后续动作、统一 undo/history 和更完整的跨模块事务属于后续版本。
 - 当前账号同步不是路线图 v5 的 Realtime Cloud Core；需要 revision、mutation ID、server ack 和订阅矩阵。
 - 当前实时 Provider 覆盖有限，不能承诺天气、航班、铁路、票务或实时交通完整性。

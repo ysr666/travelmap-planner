@@ -15,14 +15,33 @@ test('账号旅行收件箱在连接器后端未配置时保留本地能力', as
 
   await expect(page.getByTestId('travel-inbox-page')).toBeVisible()
   await expect(page.getByRole('heading', { name: '收件箱', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '暂无材料' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '来源设置 0' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '收件箱', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('heading', { name: '导入旅行材料' })).toBeVisible()
+  await expect(page.getByRole('button', { exact: true, name: '导入材料' })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '来源与导入 0' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '资料', exact: true })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByRole('button', { name: '连接 Gmail' })).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 })
 
-test('Trip Home 用轻量入口保留材料输入并可进入账号总收件箱', async ({ page }) => {
+test('账号旅行收件箱可从移动端文件选择器直接导入材料', async ({ page }) => {
+  await clearTravelDatabase(page)
+  await forceSupabaseUnconfigured(page)
+  await page.route('**/api/provider-proxy', (route) => void route.abort())
+  await page.goto('/#/inbox', { waitUntil: 'domcontentloaded' })
+
+  await page.getByLabel('选择旅行材料').setInputFiles({
+    buffer: Buffer.from('museum ticket'),
+    mimeType: 'application/pdf',
+    name: '爱丁堡城堡门票.pdf',
+  })
+
+  await expect(page.getByTestId('travel-inbox-source')).toHaveCount(1)
+  await expect(page.getByText('爱丁堡城堡门票.pdf', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { exact: true, name: '待整理' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
+test('Trip Home 用轻量入口保留材料输入并经资料页进入账号总收件箱', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
   await page.goto(`/#/trip?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
@@ -31,7 +50,10 @@ test('Trip Home 用轻量入口保留材料输入并可进入账号总收件箱'
   await expect(page.getByTestId('trip-action-travel-inbox')).toBeVisible()
   await page.getByTestId('trip-action-travel-inbox').click()
   await expect(page.getByTestId('travel-inbox-panel')).toBeVisible()
-  await page.getByRole('button', { name: '收件箱', exact: true }).click()
+  await page.getByRole('button', { name: '资料', exact: true }).click()
+  await expect(page).toHaveURL(/#\/documents/)
+  await expect(page.getByRole('heading', { exact: true, name: '资料' })).toBeVisible()
+  await page.getByRole('button', { name: '来源与导入' }).click()
   await expect(page).toHaveURL(/#\/inbox/)
   await expect(page.getByTestId('travel-inbox-page')).toBeVisible()
 })

@@ -34,7 +34,6 @@ import {
   updateLedgerParticipant,
 } from '../db'
 import { Button } from '../components/ui/Button'
-import { TripNav } from '../components/AppShell'
 import { LedgerReviewQueue } from '../components/ledger/LedgerReviewQueue'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -133,42 +132,42 @@ export function LedgerPage() {
 
   const summary = useMemo(() => settings ? buildLedgerSummary({ budgets, expenses, participants, settings }) : null, [budgets, expenses, participants, settings])
 
-  if (loading) return <Card><p className="text-sm tm-muted">正在读取旅行账本...</p></Card>
-  if (!trip) return <EmptyState body={error || '没有找到这趟旅行。'} icon={<WalletCards className="size-6" />} title="无法打开旅行账本" />
+  if (loading) return <div className="mx-auto w-full max-w-3xl"><Card><p className="text-sm tm-muted">正在读取旅行账本...</p></Card></div>
+  if (!trip) return <div className="mx-auto w-full max-w-3xl"><EmptyState body={error || '没有找到这趟旅行。'} icon={<WalletCards className="size-6" />} title="无法打开旅行账本" /></div>
   if (!settings) {
     return (
       <div className="space-y-4 pb-4">
-        <TripNav activeRoute="ledger" tripId={trip.id} />
-        <LedgerSetup trip={trip} onCreated={refresh} />
+        <div className="mx-auto w-full max-w-3xl" data-testid="ledger-content">
+          <LedgerSetup trip={trip} onCreated={refresh} />
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-5 pb-4" data-testid="ledger-page">
-      <TripNav activeRoute="ledger" tripId={trip.id} />
-      <p className="truncate text-sm font-semibold text-on-surface">{trip.title}</p>
+      <div className="mx-auto w-full max-w-3xl space-y-5" data-testid="ledger-content">
+        {summary ? <LedgerHero settings={settings} summary={summary} /> : null}
+        {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
-      {summary ? <LedgerHero settings={settings} summary={summary} /> : null}
-      {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+        <nav className="grid grid-cols-5 gap-1 rounded-lg border border-outline-variant/30 bg-surface-container p-1" aria-label="账本视图">
+          {([
+            ['bills', '账单'],
+            ['timeline', '时间线'],
+            ['integrity', '完整性'],
+            ['budget', '预算'],
+            ['report', '报告'],
+          ] as Array<[LedgerTab, string]>).map(([value, label]) => (
+            <button className={`min-h-11 min-w-0 whitespace-nowrap rounded-lg px-0.5 text-[11px] font-semibold sm:px-2 sm:text-sm ${activeTab === value ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant'}`} key={value} onClick={() => setActiveTab(value)} type="button">{label}</button>
+          ))}
+        </nav>
 
-      <nav className="grid grid-cols-5 gap-1 rounded-lg border border-outline-variant/30 bg-surface-container p-1" aria-label="账本视图">
-        {([
-          ['bills', '账单'],
-          ['timeline', '时间线'],
-          ['integrity', '完整性'],
-          ['budget', '预算'],
-          ['report', '报告'],
-        ] as Array<[LedgerTab, string]>).map(([value, label]) => (
-          <button className={`min-h-11 rounded-lg px-2 text-sm font-semibold ${activeTab === value ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant'}`} key={value} onClick={() => setActiveTab(value)} type="button">{label}</button>
-        ))}
-      </nav>
-
-      {activeTab === 'bills' ? <ExpensesView expenses={expenses} items={items} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
-      {activeTab === 'timeline' ? <TimelineView expenses={expenses} settings={settings} /> : null}
-      {activeTab === 'integrity' ? <IntegrityView expenses={expenses} onEdit={(expense) => navigateTo('ledger/expense', { expenseId: expense.id, tripId: trip.id })} /> : null}
-      {activeTab === 'budget' ? <BudgetAndForecastView budgets={budgets} expenses={expenses} settings={settings} trip={trip} onChanged={refresh} /> : null}
-      {activeTab === 'report' ? <ReportView budgets={budgets} expenses={expenses} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
+        {activeTab === 'bills' ? <ExpensesView expenses={expenses} items={items} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
+        {activeTab === 'timeline' ? <TimelineView expenses={expenses} settings={settings} /> : null}
+        {activeTab === 'integrity' ? <IntegrityView expenses={expenses} onEdit={(expense) => navigateTo('ledger/expense', { expenseId: expense.id, tripId: trip.id })} /> : null}
+        {activeTab === 'budget' ? <BudgetAndForecastView budgets={budgets} expenses={expenses} settings={settings} trip={trip} onChanged={refresh} /> : null}
+        {activeTab === 'report' ? <ReportView budgets={budgets} expenses={expenses} participants={participants} settings={settings} trip={trip} onChanged={refresh} /> : null}
+      </div>
     </div>
   )
 }

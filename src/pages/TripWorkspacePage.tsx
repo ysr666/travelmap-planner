@@ -1,81 +1,22 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import {
-  CalendarDays,
-  CheckCircle2,
-  ChevronRight,
-  Cloud,
-  Inbox,
-  Loader2,
-  NotebookText,
-  Pencil,
-  Plus,
-  RotateCw,
-  Route,
-  Ticket,
-  UsersRound,
-  WalletCards,
-} from 'lucide-react'
-import { isAdaptiveTripReplanRecord, listItemsByDay, listTicketsByTrip, listTripDisruptionEventsByTrip, listTripReplanRecordsByTrip } from '../db'
-import { TripNav } from '../components/AppShell'
-import { ImportRouteGenerationPanel } from '../components/trip/ImportRouteGenerationPanel'
-import { TripMoreMenu } from '../components/trip/TripMoreMenu'
-import { TripDailyTravelTipCard } from '../components/trip/TripDailyTravelTipCard'
-import { TripOperationsPanel } from '../components/trip/TripOperationsPanel'
-import { TripLiveModeCard } from '../components/trip/TripLiveModeCard'
-import { TripReadinessCenterPanel } from '../components/trip/TripReadinessCenterPanel'
-import { LedgerSummaryCard } from '../components/trip/LedgerSummaryCard'
-import { TravelBackupPanel } from '../components/trip/TravelBackupPanel'
-import { AiTripEditPanel } from '../components/ai/AiTripEditPanel'
-import { SmartTripWorkspacePanel } from '../components/ai/SmartTripWorkspacePanel'
-import { TripBriefCard } from '../components/ai/TripBriefCard'
-import { TripContentEnrichmentPanel } from '../components/ai/TripContentEnrichmentPanel'
-import { TravelInboxPanel } from '../components/ai/TravelInboxPanel'
+import { CalendarDays } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { listItemsByDay } from '../db'
+import { TripWorkspaceView } from '../components/trip/TripWorkspaceView'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Collapsible } from '../components/ui/Collapsible'
-import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SkeletonLine } from '../components/ui/SkeletonLine'
-import { useTripData } from '../hooks/useTripData'
 import { useLiveClock } from '../hooks/useLiveClock'
+import { useTripData } from '../hooks/useTripData'
 import { useTripIntelligencePersistence } from '../hooks/useTripIntelligencePersistence'
-import { ensureDaysForTrip, formatDate, formatDateRange, formatShortDate } from '../lib/dates'
-import { buildTripContext } from '../lib/ai/aiTripContext'
-import { getRouteParams, navigateTo } from '../lib/routes'
-import { analyzeTripContext } from '../lib/tripCheck'
-import { getStoredTravelProfile } from '../lib/travelProfile'
-import { buildTripBrief } from '../lib/travelBrief'
-import { describeItemTime } from '../lib/itinerary'
-import { buildTripDailyTravelTip } from '../lib/ai/tripDailyTravelTip'
+import { useTripWorkspaceAggregates } from '../hooks/useTripWorkspaceAggregates'
+import { useTripWorkspaceViewModel } from '../hooks/useTripWorkspaceViewModel'
+import { ensureDaysForTrip } from '../lib/dates'
 import { generateRoutePreviewsForTrip, type RouteGenerationBatchResult } from '../lib/routeGeneration'
-import { getPersistentRouteProvider, loadTripRoutePreparation, type TripRoutePreparation } from '../lib/routePreparation'
-import { ROUTE_CACHE_CHANGED_EVENT } from '../lib/routeCache'
-import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
-import { getCloudSyncQueueSummary, type CloudSyncQueueSummary } from '../lib/cloudSyncQueueSummary'
-import { listTicketBlobSyncStatesByTrip } from '../lib/objectSyncLocal'
-import { buildTripReadinessModel } from '../lib/tripReadiness'
-import { buildTripOperationsModel, type TripOperationsInboxSummary } from '../lib/tripOperationsAgent'
-import { buildTripIntelligenceModel } from '../lib/tripIntelligence'
-import type { ExistingTripImportPreview } from '../lib/ai/existingTripImport'
-import {
-  type TripOperationsLocalState,
-} from '../lib/tripOperationsState'
-import { getZonedPlainDate, resolveDayTimeZone, resolveTripTimeZone } from '../lib/timeZone'
-import { getActiveTravelInboxPreview, listTravelInboxEntriesByTrip } from '../lib/ai/travelInbox'
-import { listTravelInboxAccountSources } from '../lib/ai/travelInboxOrganization'
-import { navigateToTripOperationsRecommendation } from '../lib/tripOperationsNavigation'
-import { loadOwnerSharedTripState } from '../lib/companion'
-import type {
-  Day,
-  ItineraryItem,
-  SharedTripMutation,
-  TicketBlobSyncState,
-  TicketMeta,
-  TravelInboxAccountSource,
-  TravelInboxPreviewRecord,
-  TripDisruptionEvent,
-  TripReplanRecord,
-} from '../types'
+import { getRouteParams, navigateTo } from '../lib/routes'
+import { getRoutingConfig } from '../lib/routing'
+import type { TripOperationsLocalState } from '../lib/tripOperationsState'
+import type { Day } from '../types'
 
 export function TripWorkspacePage() {
   const params = getRouteParams()
@@ -100,19 +41,6 @@ export function TripWorkspacePage() {
 
   const [isGeneratingDays, setIsGeneratingDays] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [ticketMetas, setTicketMetas] = useState<TicketMeta[]>([])
-  const [ticketBlobSyncStates, setTicketBlobSyncStates] = useState<TicketBlobSyncState[]>([])
-  const [cloudSyncQueueSummary, setCloudSyncQueueSummary] = useState<CloudSyncQueueSummary | null>(null)
-  const [tripOperationsInboxSummary, setTripOperationsInboxSummary] = useState<TripOperationsInboxSummary | null>(null)
-  const [tripOperationsInboxPreview, setTripOperationsInboxPreview] = useState<TravelInboxPreviewRecord | null>(null)
-  const [tripDisruptionEvents, setTripDisruptionEvents] = useState<TripDisruptionEvent[]>([])
-  const [tripReplanRecords, setTripReplanRecords] = useState<TripReplanRecord[]>([])
-  const [sharedTripMutations, setSharedTripMutations] = useState<SharedTripMutation[]>([])
-  const [loadedTripContextKey, setLoadedTripContextKey] = useState('')
-  const [routePreparation, setRoutePreparation] = useState<TripRoutePreparation | null>(null)
-  const [routePreparationLoading, setRoutePreparationLoading] = useState(false)
-  const [routePreparationVersion, setRoutePreparationVersion] = useState(0)
-  const [readinessDataVersion, setReadinessDataVersion] = useState(0)
   const [travelInboxRefreshVersion, setTravelInboxRefreshVersion] = useState(0)
   const [travelInboxManualOpen, setTravelInboxManualOpen] = useState(false)
   const [routeGenerationConfirmOpen, setRouteGenerationConfirmOpen] = useState(false)
@@ -121,16 +49,16 @@ export function TripWorkspacePage() {
   const [routeGenerationError, setRouteGenerationError] = useState<string | null>(null)
   const [dismissedImportRoutePromptTripId, setDismissedImportRoutePromptTripId] = useState<string | null>(null)
   const [completedImportRoutePromptTripId, setCompletedImportRoutePromptTripId] = useState<string | null>(null)
+  const [manualScheduleDayId, setManualScheduleDayId] = useState<string | null>(null)
   const liveNow = useLiveClock()
 
-  const tripContextKey = useMemo(() => {
-    if (!trip || days.length === 0) {
-      return ''
-    }
-
-    return `${trip.id}:${days.map((day) => day.id).join('|')}`
-  }, [days, trip])
-
+  const aggregates = useTripWorkspaceAggregates({
+    days,
+    isLoading,
+    itemsByDay,
+    setItemsByDay,
+    trip,
+  })
   const {
     isLoaded: isTripIntelligenceStateLoaded,
     localState: tripOperationsLocalState,
@@ -146,296 +74,35 @@ export function TripWorkspacePage() {
     }
   }, [isLoading, requestedView, selectedDay, trip])
 
-  useEffect(() => {
-    if (isLoading || !trip || days.length === 0) {
-      return
-    }
-
-    let cancelled = false
-    const currentTripContextKey = tripContextKey
-    void Promise.all([
-      Promise.all(
-        days.map(async (day) => {
-          const dayItems = await listItemsByDay(day.id)
-          return [day.id, dayItems] as const
-        }),
-      ),
-      listTicketsByTrip(trip.id),
-      listTicketBlobSyncStatesByTrip(trip.id),
-      getCloudSyncQueueSummary(trip.id),
-      listTravelInboxEntriesByTrip(trip.id),
-      getActiveTravelInboxPreview(trip.id),
-      listTravelInboxAccountSources(),
-      listTripDisruptionEventsByTrip(trip.id),
-      listTripReplanRecordsByTrip(trip.id),
-      loadOwnerSharedTripState(trip.id).catch(() => null),
-    ]).then(([entries, tickets, blobSyncStates, syncSummary, inboxEntries, inboxPreview, accountSources, replanEvents, replanRecords, sharedState]) => {
-      if (!cancelled) {
-        setItemsByDay(Object.fromEntries(entries))
-        setTicketMetas(tickets)
-        setTicketBlobSyncStates(blobSyncStates)
-        setCloudSyncQueueSummary(syncSummary)
-        setTripDisruptionEvents(replanEvents)
-        setTripReplanRecords(replanRecords.filter(isAdaptiveTripReplanRecord))
-        setSharedTripMutations(sharedState && sharedState.configured && sharedState.signedIn ? sharedState.mutations : [])
-        setTripOperationsInboxPreview(inboxPreview ?? null)
-        setTripOperationsInboxSummary(buildTripOperationsInboxSummary({
-          accountSources,
-          errorEntryCount: inboxEntries.filter((entry) => entry.status === 'error').length,
-          previewCheckedCount: inboxPreview?.checkedDiffIds.length ?? 0,
-          readyEntryCount: inboxEntries.filter((entry) => entry.status === 'ready' || entry.status === 'previewed').length,
-          tripId: trip.id,
-        }))
-        setLoadedTripContextKey(currentTripContextKey)
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setTicketMetas([])
-        setTicketBlobSyncStates([])
-        setCloudSyncQueueSummary(null)
-        setTripOperationsInboxSummary(null)
-        setTripOperationsInboxPreview(null)
-        setTripDisruptionEvents([])
-        setTripReplanRecords([])
-        setSharedTripMutations([])
-        setLoadedTripContextKey('')
-      }
-      // Trip Home can still render without aggregate item counts.
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [days, isLoading, readinessDataVersion, setItemsByDay, trip, tripContextKey])
-
-  useEffect(() => {
-    function refreshRoutePreparation() {
-      setRoutePreparationVersion((version) => version + 1)
-    }
-
-    window.addEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
-    window.addEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
-    window.addEventListener('storage', refreshRoutePreparation)
-    return () => {
-      window.removeEventListener(ROUTE_CACHE_CHANGED_EVENT, refreshRoutePreparation)
-      window.removeEventListener(ROUTING_CONFIG_CHANGED_EVENT, refreshRoutePreparation)
-      window.removeEventListener('storage', refreshRoutePreparation)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
-      queueMicrotask(() => {
-        setRoutePreparation(null)
-        setRoutePreparationLoading(false)
-      })
-      return
-    }
-
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) {
-        setRoutePreparationLoading(true)
-      }
-    })
-    void loadTripRoutePreparation({
-      days,
-      itemsByDay,
-      provider: getPersistentRouteProvider(getRoutingConfig()),
-      tripId: trip.id,
-    }).then((preparation) => {
-      if (!cancelled) {
-        setRoutePreparation(preparation)
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setRoutePreparation(null)
-      }
-    }).finally(() => {
-      if (!cancelled) {
-        setRoutePreparationLoading(false)
-      }
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [days, itemsByDay, loadedTripContextKey, routePreparationVersion, trip, tripContextKey])
-
-
-  const tripContext = useMemo(() => {
-    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
-      return null
-    }
-
-    return buildTripContext({
-      days,
-      items: allItems,
-      nowPlainDate: getZonedPlainDate(
-        new Date(),
-        selectedDay ? resolveDayTimeZone(trip, selectedDay) : resolveTripTimeZone(trip),
-      ),
-      profile: getStoredTravelProfile(),
-      selectedDayId: selectedDay?.id,
-      tickets: ticketMetas,
-      trip,
-    })
-  }, [allItems, days, loadedTripContextKey, selectedDay, ticketMetas, trip, tripContextKey])
-
-  const tripCheckResult = useMemo(() => {
-    return tripContext ? analyzeTripContext(tripContext) : null
-  }, [tripContext])
-
-  const tripBrief = useMemo(() => {
-    return tripContext && tripCheckResult ? buildTripBrief(tripContext, tripCheckResult) : null
-  }, [tripCheckResult, tripContext])
-
-  const dailyTipModel = useMemo(() => {
-    if (!trip || !tripCheckResult) {
-      return null
-    }
-    return buildTripDailyTravelTip({
-      days,
-      itemsByDay,
-      routePreparation,
-      trip,
-      tripCheck: tripCheckResult,
-    })
-  }, [days, itemsByDay, routePreparation, trip, tripCheckResult])
-
-  const readinessModel = useMemo(() => {
-    if (!trip || !tripContextKey || loadedTripContextKey !== tripContextKey) {
-      return null
-    }
-    return buildTripReadinessModel({
-      allItems,
-      cloudSummary: cloudSyncQueueSummary,
-      dailyTipModel,
-      days,
-      itemsByDay,
-      routePreparation,
-      ticketBlobSyncStates,
-      tickets: ticketMetas,
-      trip,
-      tripCheck: tripCheckResult,
-    })
-  }, [
+  const model = useTripWorkspaceViewModel({
     allItems,
-    cloudSyncQueueSummary,
-    dailyTipModel,
+    cloudSyncQueueSummary: aggregates.cloudSyncQueueSummary,
     days,
+    isTripContextLoaded: aggregates.isTripContextLoaded,
     itemsByDay,
-    loadedTripContextKey,
-    routePreparation,
-    ticketBlobSyncStates,
-    ticketMetas,
+    liveNow,
+    manualScheduleDayId,
+    requestedDayId,
+    routePreparation: aggregates.routePreparation,
+    selectedDay,
+    sharedTripMutations: aggregates.sharedTripMutations,
+    suggestionStates: tripIntelligenceSuggestionStates,
+    ticketBlobSyncStates: aggregates.ticketBlobSyncStates,
+    ticketMetas: aggregates.ticketMetas,
     trip,
-    tripCheckResult,
-    tripContextKey,
-  ])
-
-  const tripOperationsModel = useMemo(() => {
-    if (!trip || !readinessModel) {
-      return null
-    }
-    return buildTripOperationsModel({
-      activeInboxPreview: tripOperationsInboxPreview ? {
-        checkedDiffIds: tripOperationsInboxPreview.checkedDiffIds,
-        id: tripOperationsInboxPreview.id,
-        preview: tripOperationsInboxPreview.preview as ExistingTripImportPreview,
-      } : null,
-      allItems,
-      cloudSummary: cloudSyncQueueSummary,
-      dailyTipModel,
-      days,
-      dispositions: tripOperationsLocalState.dispositions,
-      inboxSummary: tripOperationsInboxSummary,
-      itemsByDay,
-      readinessModel,
-      routePreparation,
-      sharedMutations: sharedTripMutations,
-      ticketBlobSyncStates,
-      tickets: ticketMetas,
-      trip,
-      tripDisruptionEvents,
-      tripReplanRecords,
-    })
-  }, [
-    allItems,
-    cloudSyncQueueSummary,
-    dailyTipModel,
-    days,
-    itemsByDay,
-    readinessModel,
-    routePreparation,
-    sharedTripMutations,
-    ticketBlobSyncStates,
-    ticketMetas,
-    trip,
-    tripDisruptionEvents,
-    tripReplanRecords,
-    tripOperationsInboxSummary,
-    tripOperationsInboxPreview,
-    tripOperationsLocalState.dispositions,
-  ])
-
-  const tripIntelligenceModel = useMemo(() => {
-    if (!trip) return null
-    return buildTripIntelligenceModel({
-      inbox: {
-        activePreview: tripOperationsInboxPreview,
-        summary: tripOperationsInboxSummary,
-      },
-      operationsModel: tripOperationsModel,
-      readinessModel,
-      sharedMutations: sharedTripMutations,
-      suggestionStates: tripIntelligenceSuggestionStates,
-    })
-  }, [
-    readinessModel,
-    sharedTripMutations,
-    tripIntelligenceSuggestionStates,
-    trip,
-    tripOperationsInboxSummary,
-    tripOperationsInboxPreview,
-    tripOperationsModel,
-  ])
-
-  const liveDay = useMemo(() => {
-    if (!trip) return null
-    return days.find((day) => day.date === getZonedPlainDate(liveNow, resolveDayTimeZone(trip, day))) ?? null
-  }, [days, liveNow, trip])
-  const liveRouteDay = liveDay
-    ? routePreparation?.days.find((routeDay) => routeDay.day.id === liveDay.id) ?? null
-    : null
-  const overviewItems = useMemo(() => {
-    if (allItems.length > 0) {
-      return allItems
-    }
-
-    return days.flatMap((day) => itemsByDay[day.id] ?? [])
-  }, [allItems, days, itemsByDay])
-  const tripHomeFocus = useMemo(
-    () => buildTripHomeFocus({ days, itemsByDay, liveDay, selectedDay }),
-    [days, itemsByDay, liveDay, selectedDay],
-  )
-  const mappedItemCount = useMemo(
-    () => overviewItems.filter(hasUsableCoordinates).length,
-    [overviewItems],
-  )
-  const hasInboxAttention = hasTripHomeInboxAttention(tripOperationsInboxSummary, tripOperationsInboxPreview)
-  const showTravelInboxPanel = travelInboxManualOpen || Boolean(tripOperationsInboxPreview)
-  const sharedTripNeedsAttention = sharedTripMutations.some((mutation) => mutation.status === 'pending' || mutation.status === 'conflict')
+    tripDisruptionEvents: aggregates.tripDisruptionEvents,
+    tripOperationsInboxPreview: aggregates.tripOperationsInboxPreview,
+    tripOperationsInboxSummary: aggregates.tripOperationsInboxSummary,
+    tripOperationsLocalState,
+    tripReplanRecords: aggregates.tripReplanRecords,
+  })
 
   function handleTripOperationsLocalStateChange(nextState: TripOperationsLocalState) {
-    if (!trip) return
-    updateTripOperationsLocalState(nextState)
+    if (trip) updateTripOperationsLocalState(nextState)
   }
 
   async function handleGenerateDays() {
-    if (!trip) {
-      return
-    }
+    if (!trip) return
 
     setIsGeneratingDays(true)
     setActionError(null)
@@ -455,9 +122,7 @@ export function TripWorkspacePage() {
   }
 
   async function handleConfirmGenerateRoutes() {
-    if (!trip || !routePreparation?.canGenerate) {
-      return
-    }
+    if (!trip || !aggregates.routePreparation?.canGenerate) return
 
     setRouteGenerationLoading(true)
     setRouteGenerationError(null)
@@ -471,16 +136,12 @@ export function TripWorkspacePage() {
       })
       setRouteGenerationResult(result)
       setRouteGenerationConfirmOpen(false)
-      setRoutePreparationVersion((version) => version + 1)
+      aggregates.refreshRoutePreparation()
     } catch (caught) {
       setRouteGenerationError(caught instanceof Error ? caught.message : '路线预览生成失败。')
     } finally {
       setRouteGenerationLoading(false)
     }
-  }
-
-  function openDay(day: Day, view: 'schedule' | 'map' = 'schedule') {
-    navigateTo('day', { tripId: day.tripId, dayId: day.id, view })
   }
 
   function openTravelInboxPanel() {
@@ -490,37 +151,20 @@ export function TripWorkspacePage() {
     })
   }
 
-  function openToolSection(elementId: string) {
-    const element = document.getElementById(elementId)
-    if (!element) return
-    const details = element.closest('details') as HTMLDetailsElement | null
-    if (details) details.open = true
-    window.requestAnimationFrame(() => {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }
-
   function clearPostImportRoutePrompt({ hide }: { hide: boolean }) {
-    if (!trip) {
-      return
-    }
+    if (!trip) return
     if (hide) {
       setDismissedImportRoutePromptTripId(trip.id)
       setCompletedImportRoutePromptTripId(null)
     } else {
       setCompletedImportRoutePromptTripId(trip.id)
     }
-    if (hasPostImportRoutePrompt) {
-      navigateTo('trip', { tripId: trip.id })
-    }
+    if (hasPostImportRoutePrompt) navigateTo('trip', { tripId: trip.id })
   }
 
   async function handleReadinessChanged(options: { refreshTripData?: boolean } = {}) {
-    setReadinessDataVersion((version) => version + 1)
-    setRoutePreparationVersion((version) => version + 1)
-    if (options.refreshTripData) {
-      await refresh()
-    }
+    aggregates.refreshReadinessData()
+    if (options.refreshTripData) await refresh()
   }
 
   async function handleTripOperationsChanged(options: { refreshTripData?: boolean } = {}) {
@@ -548,692 +192,55 @@ export function TripWorkspacePage() {
           icon={<CalendarDays className="size-6" />}
           title="无法打开旅行总览"
         />
-        <Button className="w-full" onClick={() => navigateTo('home')} variant="secondary">
-          返回首页
-        </Button>
+        <Button className="w-full" onClick={() => navigateTo('home')} variant="secondary">返回首页</Button>
       </div>
     )
   }
 
   return (
-    <>
-      <div className="space-y-4">
-        <TripNav
-          activeRoute="trip"
-          activeView="schedule"
-          firstDayId={days[0]?.id}
-          tripId={trip.id}
-        />
-
-        <section className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-on-surface">{trip.destination || trip.title}</p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-on-surface-variant">
-              <CalendarDays className="size-3.5 shrink-0" />
-              {formatDateRange(trip.startDate, trip.endDate)}
-            </p>
-          </div>
-          <TripMoreMenu tripId={trip.id} />
-        </section>
-
-        {days.length === 0 ? (
-          <section className="space-y-4 py-8">
-            <EmptyState
-              body="按旅行日期生成每日行程后，即可添加地点。"
-              icon={<CalendarDays className="size-6" />}
-              title="还没有每日行程"
-            />
-            {actionError ? (
-              <p className="rounded-lg bg-error-container px-3 py-2 text-sm font-medium text-on-error-container">
-                {actionError}
-              </p>
-            ) : null}
-            <Button
-              className="w-full"
-              icon={<RotateCw className="size-4" />}
-              loading={isGeneratingDays}
-              onClick={() => void handleGenerateDays()}
-            >
-              生成每日行程
-            </Button>
-          </section>
-        ) : (
-          <>
-            <DailyItineraryList
-              days={days}
-              itemsByDay={itemsByDay}
-              onOpenDay={(day) => setSelectedDay(day)}
-              selectedDayId={tripHomeFocus?.day.id}
-            />
-            <FocusDayTimelinePreview
-              focus={tripHomeFocus}
-              onAddItem={(targetDay) => navigateTo('item/new', { tripId: trip.id, dayId: targetDay.id })}
-              onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: item.dayId, itemId: item.id })}
-            />
-
-            <Collapsible
-              defaultOpen={showTravelInboxPanel}
-              subtitle={hasInboxAttention ? '有材料待处理' : sharedTripNeedsAttention ? '有同行变更待处理' : undefined}
-              title="旅行工具"
-            >
-              <div className="space-y-4" data-testid="trip-tools">
-                <TripHomeQuickActions
-                  mappedItemCount={mappedItemCount}
-                  onOpenLedger={() => navigateTo('ledger', { tripId: trip.id })}
-                  onOpenRoutePreparation={() => openToolSection('route-preparation-panel')}
-                  onOpenTickets={() => navigateTo('tickets', { tripId: trip.id })}
-                  onOpenTravelInbox={openTravelInboxPanel}
-                  routePreparation={routePreparation}
-                  routePreparationLoading={routePreparationLoading}
-                  ticketCount={ticketMetas.length}
-                  totalItemCount={overviewItems.length}
-                />
-
-                {readinessModel ? (
-                  <div id="trip-readiness-details-section">
-                    <TripReadinessCenterPanel
-                      allItems={allItems}
-                      dailyTipModel={dailyTipModel}
-                      days={days}
-                      itemsByDay={itemsByDay}
-                      key={trip.id}
-                      model={readinessModel}
-                      onChanged={handleReadinessChanged}
-                      trip={trip}
-                    />
-                  </div>
-                ) : null}
-
-                {showTravelInboxPanel ? (
-                  <div id="trip-travel-inbox-panel">
-                    <TravelInboxPanel
-                      allItems={allItems}
-                      days={days}
-                      key={trip.id}
-                      onApplied={async () => { await refresh() }}
-                      onPreviewChanged={async () => { await handleReadinessChanged({ refreshTripData: false }) }}
-                      refreshVersion={travelInboxRefreshVersion}
-                      tickets={ticketMetas}
-                      trip={trip}
-                    />
-                  </div>
-                ) : null}
-
-                <details className="group rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2">
-                  <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
-                    <span>更多工具</span>
-                    <ChevronRight className="size-4 text-on-surface-variant transition-transform group-open:rotate-90" />
-                  </summary>
-                  <div className="space-y-4 border-t border-outline-variant/25 pt-4">
-                <TripDailyTravelTipCard
-                  days={days}
-                  itemsByDay={itemsByDay}
-                  onOpenContentEnrichment={() => document.getElementById('trip-content-enrichment-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  onOpenDay={(targetDay) => openDay(targetDay, 'schedule')}
-                  onOpenRouteGeneration={() => {
-                    if (routePreparation?.canGenerate) {
-                      setRouteGenerationConfirmOpen(true)
-                    }
-                  }}
-                  onSaved={async () => { await refresh() }}
-                  routePreparation={routePreparation}
-                  trip={trip}
-                  tripCheck={tripCheckResult}
-                />
-
-                {dismissedImportRoutePromptTripId !== trip.id && (hasPostImportRoutePrompt || completedImportRoutePromptTripId === trip.id) ? (
-                  <ImportRouteGenerationPanel
-                    onDismiss={() => clearPostImportRoutePrompt({ hide: true })}
-                    onGenerated={() => clearPostImportRoutePrompt({ hide: false })}
-                    showDismiss
-                    tripId={trip.id}
-                  />
-                ) : null}
-
-                {isTripIntelligenceStateLoaded && liveDay && tripOperationsModel ? (
-                  <TripLiveModeCard
-                    allItems={allItems}
-                    compact
-                    day={liveDay}
-                    days={days}
-                    items={itemsByDay[liveDay.id] ?? []}
-                    localState={tripOperationsLocalState}
-                    now={liveNow}
-                    onChanged={async () => { await handleTripOperationsChanged({ refreshTripData: true }) }}
-                    onLocalStateChange={handleTripOperationsLocalStateChange}
-                    onOpenItem={(item) => navigateTo('item', { dayId: item.dayId, itemId: item.id, tripId: trip.id })}
-                    onOpenMap={() => openDay(liveDay, 'map')}
-                    onOpenOperation={(recommendation) => navigateToTripOperationsRecommendation(recommendation, trip.id)}
-                    onOpenTickets={(item) => navigateTo('tickets', { itemId: item.id, tripId: trip.id })}
-                    operationsRecommendations={tripOperationsModel.activeRecommendations}
-                    routeDay={liveRouteDay}
-                    tickets={ticketMetas}
-                    trip={trip}
-                  />
-                ) : null}
-
-                {isTripIntelligenceStateLoaded && readinessModel && tripOperationsModel ? (
-                  <TripOperationsPanel
-                    activeInboxPreview={tripOperationsInboxPreview}
-                    allItems={allItems}
-                    dailyTipModel={dailyTipModel}
-                    days={days}
-                    intelligenceModel={tripIntelligenceModel}
-                    itemsByDay={itemsByDay}
-                    model={tripOperationsModel}
-                    localState={tripOperationsLocalState}
-                    onChanged={handleTripOperationsChanged}
-                    onLocalStateChange={handleTripOperationsLocalStateChange}
-                    onSuggestionStateChange={(suggestion, status) => {
-                      void setTripIntelligenceSuggestionState({ status, suggestion })
-                    }}
-                    onSuggestionStateRestore={(suggestionKey) => {
-                      void restoreTripIntelligenceSuggestionState(suggestionKey)
-                    }}
-                    readinessModel={readinessModel}
-                    tickets={ticketMetas}
-                    trip={trip}
-                  />
-                ) : null}
-
-                <div id="trip-tools-ledger-section">
-                  <LedgerSummaryCard trip={trip} />
-                </div>
-
-                <div id="trip-content-enrichment-panel">
-                  <TripContentEnrichmentPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
-                </div>
-                <SmartTripWorkspacePanel allItems={allItems} days={days} itemsByDay={itemsByDay} onApplied={async () => { await refresh() }} trip={trip} />
-                <AiTripEditPanel allItems={allItems} days={days} onApplied={async () => { await refresh() }} trip={trip} />
-                <RoutePreparationPanel error={routeGenerationError} loading={routePreparationLoading} onGenerate={() => setRouteGenerationConfirmOpen(true)} preparation={routePreparation} result={routeGenerationResult} submitting={routeGenerationLoading} />
-                  </div>
-                </details>
-              </div>
-            </Collapsible>
-
-            <Collapsible title="旅行详情">
-              <div className="space-y-4">
-                {trip.notes ? (
-                  <div className="flex items-start gap-3">
-                    <NotebookText className="mt-0.5 size-4 shrink-0 text-on-surface-variant" />
-                    <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-6 text-on-surface">{trip.notes}</p>
-                  </div>
-                ) : null}
-                <div className="divide-y divide-outline-variant/35 border-y border-outline-variant/35">
-                  <TripHomeActionRow
-                    detail="标题、日期和目的地"
-                    icon={<Pencil className="size-4" />}
-                    label="编辑旅行"
-                    onClick={() => navigateTo('trip/edit', { tripId: trip.id })}
-                  />
-                  <TripHomeActionRow
-                    detail="成员和协作"
-                    icon={<UsersRound className="size-4" />}
-                    label="同行共享"
-                    onClick={() => navigateTo('shared-trip', { tripId: trip.id })}
-                  />
-                  <TripHomeActionRow
-                    detail="登录与同步"
-                    icon={<Cloud className="size-4" />}
-                    label="账户与同步"
-                    onClick={() => navigateTo('settings/account', { tripId: trip.id })}
-                  />
-                </div>
-                <details className="group rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2">
-                  <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-on-surface marker:hidden [&::-webkit-details-marker]:hidden">
-                    <span>导出与诊断</span>
-                    <ChevronRight className="size-4 text-on-surface-variant transition-transform group-open:rotate-90" />
-                  </summary>
-                  <div className="space-y-4 border-t border-outline-variant/25 pt-4">
-                    <TravelBackupPanel showCloudBackup={false} trip={trip} />
-                    {tripBrief ? <TripBriefCard brief={tripBrief} /> : null}
-                  </div>
-                </details>
-              </div>
-            </Collapsible>
-          </>
-        )}
-      </div>
-
-      <ConfirmDialog
-        body={buildRouteGenerationConfirmBody(routePreparation)}
-        cancelLabel="暂不生成"
-        confirmLabel="确认生成"
-        icon={<Route className="size-5" />}
-        loading={routeGenerationLoading}
-        onCancel={() => {
-          if (!routeGenerationLoading) {
-            setRouteGenerationConfirmOpen(false)
-          }
-        }}
-        onConfirm={() => void handleConfirmGenerateRoutes()}
-        open={routeGenerationConfirmOpen}
-        testId="route-generation-confirm-dialog"
-        tone="default"
-        title={`生成 ${routePreparation?.targetDayIds.length ?? 0} 天路线预览？`}
-      />
-    </>
+    <TripWorkspaceView
+      actionError={actionError}
+      allItems={allItems}
+      completedImportRoutePromptTripId={completedImportRoutePromptTripId}
+      days={days}
+      dismissedImportRoutePromptTripId={dismissedImportRoutePromptTripId}
+      hasPostImportRoutePrompt={hasPostImportRoutePrompt}
+      isGeneratingDays={isGeneratingDays}
+      isTripIntelligenceStateLoaded={isTripIntelligenceStateLoaded}
+      itemsByDay={itemsByDay}
+      liveNow={liveNow}
+      model={model}
+      onClearPostImportRoutePrompt={clearPostImportRoutePrompt}
+      onConfirmGenerateRoutes={handleConfirmGenerateRoutes}
+      onGenerateDays={handleGenerateDays}
+      onReadinessChanged={handleReadinessChanged}
+      onRefresh={refresh}
+      onRouteGenerationConfirmOpenChange={setRouteGenerationConfirmOpen}
+      onSelectDay={(day: Day) => {
+        setManualScheduleDayId(day.id)
+        setSelectedDay(day)
+      }}
+      onSuggestionStateChange={(suggestion, status) => {
+        void setTripIntelligenceSuggestionState({ status, suggestion })
+      }}
+      onSuggestionStateRestore={(suggestionKey) => {
+        void restoreTripIntelligenceSuggestionState(suggestionKey)
+      }}
+      onTravelInboxOpen={openTravelInboxPanel}
+      onTripOperationsChanged={handleTripOperationsChanged}
+      onTripOperationsLocalStateChange={handleTripOperationsLocalStateChange}
+      routeGenerationConfirmOpen={routeGenerationConfirmOpen}
+      routeGenerationError={routeGenerationError}
+      routeGenerationLoading={routeGenerationLoading}
+      routeGenerationResult={routeGenerationResult}
+      routePreparation={aggregates.routePreparation}
+      routePreparationLoading={aggregates.routePreparationLoading}
+      showTravelInboxPanel={travelInboxManualOpen || Boolean(aggregates.tripOperationsInboxPreview)}
+      ticketMetas={aggregates.ticketMetas}
+      travelInboxRefreshVersion={travelInboxRefreshVersion}
+      trip={trip}
+      tripOperationsInboxPreview={aggregates.tripOperationsInboxPreview}
+      tripOperationsLocalState={tripOperationsLocalState}
+    />
   )
-}
-
-function buildTripOperationsInboxSummary({
-  accountSources,
-  errorEntryCount,
-  previewCheckedCount,
-  readyEntryCount,
-  tripId,
-}: {
-  accountSources: TravelInboxAccountSource[]
-  errorEntryCount: number
-  previewCheckedCount: number
-  readyEntryCount: number
-  tripId: string
-}): TripOperationsInboxSummary {
-  const scopedAccountSources = accountSources.filter((source) => source.targetTripId === tripId || source.classification?.targetTripId === tripId)
-  return {
-    accountErrorCount: scopedAccountSources.filter((source) => source.status === 'error').length,
-    accountNeedsAssignmentCount: scopedAccountSources.filter((source) => source.status === 'needs_assignment').length,
-    accountPreviewCount: scopedAccountSources.filter((source) => source.status === 'preview_ready').length,
-    errorEntryCount,
-    readyEntryCount,
-    selectedPreviewDiffCount: previewCheckedCount,
-  }
-}
-
-type TripHomeFocus = {
-  day: Day
-  dayIndex: number
-  items: ItineraryItem[]
-}
-
-function TripHomeQuickActions({
-  mappedItemCount,
-  onOpenLedger,
-  onOpenRoutePreparation,
-  onOpenTickets,
-  onOpenTravelInbox,
-  routePreparation,
-  routePreparationLoading,
-  ticketCount,
-  totalItemCount,
-}: {
-  mappedItemCount: number
-  onOpenLedger: () => void
-  onOpenRoutePreparation: () => void
-  onOpenTickets: () => void
-  onOpenTravelInbox: () => void
-  routePreparation: TripRoutePreparation | null
-  routePreparationLoading: boolean
-  ticketCount: number
-  totalItemCount: number
-}) {
-  return (
-    <section className="space-y-2" data-testid="trip-home-quick-actions">
-      <div className="flex items-center justify-between gap-3 px-1">
-        <h3 className="text-sm font-semibold text-on-surface">常用操作</h3>
-        <p className="text-xs text-on-surface-variant">已定位 {mappedItemCount}/{totalItemCount}</p>
-      </div>
-      <div className="divide-y divide-outline-variant/45 border-y border-outline-variant/45">
-        <TripHomeActionRow
-          detail="粘贴、上传、整理"
-          icon={<Inbox className="size-4" />}
-          label="添加材料"
-          onClick={onOpenTravelInbox}
-          testId="trip-action-travel-inbox"
-        />
-        <TripHomeActionRow
-          detail={`${ticketCount} 张票据`}
-          icon={<Ticket className="size-4" />}
-          label="票据库"
-          onClick={onOpenTickets}
-          testId="trip-action-ticket-library"
-        />
-        <TripHomeActionRow
-          detail={describeRouteReadiness(routePreparation, routePreparationLoading)}
-          icon={<Route className="size-4" />}
-          label="路线准备"
-          onClick={onOpenRoutePreparation}
-          testId="trip-action-route-preparation"
-        />
-        <TripHomeActionRow
-          detail="费用和结算"
-          icon={<WalletCards className="size-4" />}
-          label="旅行账本"
-          onClick={onOpenLedger}
-          testId="trip-action-ledger"
-        />
-      </div>
-    </section>
-  )
-}
-
-function TripHomeActionRow({
-  detail,
-  icon,
-  label,
-  onClick,
-  testId,
-}: {
-  detail: string
-  icon: ReactNode
-  label: string
-  onClick: () => void
-  testId?: string
-}) {
-  return (
-    <button
-      className="flex min-h-14 w-full items-center gap-3 px-1 text-left transition hover:bg-surface-container-low active:scale-[0.99] tm-focus"
-      data-testid={testId}
-      onClick={onClick}
-      type="button"
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-container-low text-primary">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-on-surface">{label}</span>
-        <span className="mt-0.5 block truncate text-xs text-on-surface-variant">{detail}</span>
-      </span>
-      <ChevronRight className="size-4 text-outline" />
-    </button>
-  )
-}
-
-function FocusDayTimelinePreview({
-  focus,
-  onAddItem,
-  onOpenItem,
-}: {
-  focus: TripHomeFocus | null
-  onAddItem: (day: Day) => void
-  onOpenItem: (item: ItineraryItem) => void
-}) {
-  if (!focus) {
-    return null
-  }
-
-  return (
-    <section className="flex flex-col gap-3" data-testid="trip-home-focus-timeline">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold text-on-surface">
-            {focus.day.title || `第 ${focus.dayIndex + 1} 天`}
-          </h2>
-          <p className="mt-0.5 text-xs text-on-surface-variant">
-            第 {focus.dayIndex + 1} 天 · {formatDate(focus.day.date)} · {focus.items.length} 个地点
-          </p>
-        </div>
-        <button
-          aria-label="添加行程点"
-          className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-surface text-primary tm-focus"
-          onClick={() => onAddItem(focus.day)}
-          title="添加行程点"
-          type="button"
-        >
-          <Plus className="size-5" />
-        </button>
-      </div>
-
-      {focus.items.length === 0 ? (
-        <div className="py-10 text-center">
-          <p className="text-sm font-semibold text-on-surface">这一天还没有行程点</p>
-          <button
-            className="mt-3 min-h-11 px-3 text-sm font-semibold text-primary tm-focus"
-            onClick={() => onAddItem(focus.day)}
-            type="button"
-          >
-            添加第一个地点
-          </button>
-        </div>
-      ) : (
-        <div className="relative" role="list">
-          <div className="absolute bottom-8 left-[71px] top-8 w-px bg-outline-variant" />
-          {focus.items.map((item, index) => {
-            return (
-              <button
-                className="group relative z-10 grid min-h-[68px] w-full grid-cols-[56px_16px_minmax(0,1fr)] items-start gap-2 border-b border-outline-variant py-3 text-left transition hover:bg-surface-container-high active:scale-[0.99] tm-focus"
-                key={item.id}
-                onClick={() => onOpenItem(item)}
-                role="listitem"
-                type="button"
-              >
-                <time className="pt-0.5 text-right text-sm font-semibold text-on-surface-variant">
-                  {item.startTime || '--:--'}
-                </time>
-                <span className="mt-1.5 flex justify-center">
-                  <span className={`size-3 rounded-full border-2 ring-4 ring-surface group-hover:ring-surface-container-high ${
-                    index === 0
-                      ? 'border-primary bg-primary'
-                      : 'border-outline bg-surface'
-                  }`} />
-                </span>
-                <span className="min-w-0">
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-on-surface">{item.title}</span>
-                      <span className="mt-1 block overflow-hidden text-ellipsis whitespace-nowrap text-xs text-on-surface-variant">
-                        {item.locationName || item.address || describeItemTime(item)}
-                      </span>
-                    </span>
-                    {item.ticketIds.length > 0 ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
-                        <Ticket className="size-3" />
-                        {item.ticketIds.length}
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function buildTripHomeFocus({
-  days,
-  itemsByDay,
-  liveDay,
-  selectedDay,
-}: {
-  days: Day[]
-  itemsByDay: Record<string, ItineraryItem[]>
-  liveDay: Day | null
-  selectedDay: Day | null
-}): TripHomeFocus | null {
-  const day = liveDay ?? selectedDay ?? days[0] ?? null
-  if (!day) {
-    return null
-  }
-
-  const dayIndex = Math.max(0, days.findIndex((candidate) => candidate.id === day.id))
-  const items = itemsByDay[day.id] ?? []
-  return {
-    day,
-    dayIndex,
-    items,
-  }
-}
-
-function hasUsableCoordinates(item: ItineraryItem) {
-  return typeof item.lat === 'number' && Number.isFinite(item.lat)
-    && typeof item.lng === 'number' && Number.isFinite(item.lng)
-}
-
-function hasTripHomeInboxAttention(
-  summary: TripOperationsInboxSummary | null,
-  preview: TravelInboxPreviewRecord | null,
-) {
-  if (preview) return true
-  if (!summary) return false
-  return summary.readyEntryCount > 0
-    || summary.errorEntryCount > 0
-    || summary.accountNeedsAssignmentCount > 0
-    || summary.accountPreviewCount > 0
-    || summary.accountErrorCount > 0
-}
-
-function describeRouteReadiness(preparation: TripRoutePreparation | null, loading: boolean) {
-  if (loading || !preparation) {
-    return '正在检查路线缓存'
-  }
-  if (preparation.eligibleDayCount === 0) {
-    return '补充坐标后可生成'
-  }
-  if (preparation.targetDayIds.length === 0 && preparation.cachedDayCount === preparation.eligibleDayCount) {
-    return `${preparation.cachedDayCount} 天已准备`
-  }
-  if (preparation.cachedDayCount > 0) {
-    return `${preparation.cachedDayCount} 天已缓存，${preparation.targetDayIds.length} 天待生成`
-  }
-  return `${preparation.targetDayIds.length} 天可生成`
-}
-
-function DailyItineraryList({
-  days,
-  itemsByDay,
-  onOpenDay,
-  selectedDayId,
-}: {
-  days: Day[]
-  itemsByDay: Record<string, { id: string }[]>
-  onOpenDay: (day: Day) => void
-  selectedDayId?: string | null
-}) {
-  return (
-    <section aria-label="选择日期">
-      <div className="-mx-4 overflow-x-auto px-4 py-1 app-scrollbar" data-testid="trip-day-selector">
-        <div className="flex min-w-max gap-1">
-        {days.map((day, index) => {
-          const itemCount = itemsByDay[day.id]?.length ?? 0
-          const active = day.id === selectedDayId
-          return (
-            <button
-              aria-current={active ? 'page' : undefined}
-              className={`relative z-10 flex min-h-12 w-[76px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 py-1 text-center transition active:scale-[0.98] tm-focus ${
-                active
-                  ? 'border-primary bg-primary text-on-primary'
-                  : 'border-transparent bg-transparent text-on-surface hover:bg-surface-container-high'
-              }`}
-              data-testid="trip-day-link"
-              key={day.id}
-              onClick={() => onOpenDay(day)}
-              type="button"
-            >
-              <span className="text-[11px] font-semibold">
-                第 {index + 1} 天
-              </span>
-              <span className={`mt-0.5 text-xs ${active ? 'text-on-primary' : 'text-on-surface-variant'}`}>
-                {formatShortDate(day.date)}
-              </span>
-              <span className="sr-only">{day.title} · {itemCount} 个行程点</span>
-            </button>
-          )
-        })}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function RoutePreparationPanel({
-  error,
-  loading,
-  onGenerate,
-  preparation,
-  result,
-  submitting,
-}: {
-  error: string | null
-  loading: boolean
-  onGenerate: () => void
-  preparation: TripRoutePreparation | null
-  result: RouteGenerationBatchResult | null
-  submitting: boolean
-}) {
-  const eligibleCount = preparation?.eligibleDayCount ?? 0
-  const targetCount = preparation?.targetDayIds.length ?? 0
-  const cachedCount = preparation?.cachedDayCount ?? 0
-  const hasUnavailableProvider = Boolean(preparation && !preparation.providerConfigured && eligibleCount > cachedCount)
-  const canGenerate = Boolean(preparation?.canGenerate && !submitting)
-
-  return (
-    <Card className="space-y-3" data-testid="route-preparation-panel" id="route-preparation-panel" variant="grouped">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Route className="size-4 shrink-0 text-sky-600 dark:text-sky-300 dark:text-sky-300" />
-            <h3 className="text-sm font-semibold text-on-surface dark:text-on-surface">路线准备</h3>
-          </div>
-          <p className="mt-1 text-xs leading-5 tm-muted" data-testid="route-preparation-summary">
-            {describeRoutePreparation(preparation, loading)}
-          </p>
-          {cachedCount > 0 ? (
-            <p className="mt-0.5 text-[11px] leading-5 tm-muted">已有 {cachedCount} 天路线缓存</p>
-          ) : null}
-          {hasUnavailableProvider ? (
-            <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-200" data-testid="route-preparation-provider-warning">
-              当前路线服务不可用
-            </p>
-          ) : null}
-        </div>
-        <Button
-          className="min-h-11 shrink-0 px-3 text-xs"
-          disabled={!canGenerate}
-          icon={submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Route className="size-3.5" />}
-          loading={submitting}
-          onClick={onGenerate}
-          variant="secondary"
-        >
-          生成路线预览
-        </Button>
-      </div>
-      {result ? (
-        <p className="flex items-start gap-2 rounded-xl bg-sky-50/75 px-3 py-2 text-xs leading-5 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200" data-testid="route-preparation-result">
-          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
-          <span>{describeRouteGenerationResult(result)}</span>
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-500/10 dark:text-red-300" data-testid="route-preparation-error">
-          {error}
-        </p>
-      ) : null}
-      {targetCount > 0 && preparation?.staleDayCount ? (
-        <p className="text-[11px] leading-5 tm-muted">有 {preparation.staleDayCount} 天路线可能需要更新。</p>
-      ) : null}
-    </Card>
-  )
-}
-
-function describeRoutePreparation(preparation: TripRoutePreparation | null, loading: boolean) {
-  if (loading || !preparation) {
-    return '正在检查路线缓存…'
-  }
-  if (preparation.eligibleDayCount === 0) {
-    return '补充至少两个有坐标的行程点后，可生成路线预览。'
-  }
-  if (preparation.targetDayIds.length === 0 && preparation.cachedDayCount === preparation.eligibleDayCount) {
-    return '路线预览已准备'
-  }
-  if (!preparation.providerConfigured) {
-    return `可为 ${preparation.eligibleDayCount - preparation.cachedDayCount} 天生成路线预览`
-  }
-  return `可为 ${preparation.targetDayIds.length} 天生成路线预览`
-}
-
-function describeRouteGenerationResult(result: RouteGenerationBatchResult) {
-  const parts = [`已生成 ${result.generatedCount} 天路线预览`]
-  if (result.failedCount > 0) {
-    parts.push(`${result.failedCount} 天失败`)
-  }
-  if (!result.previewCacheSaved && result.generatedCount > 0) {
-    parts.push('地图预览缓存未更新')
-  }
-  return `${parts.join('，')}。`
-}
-
-function buildRouteGenerationConfirmBody(preparation: TripRoutePreparation | null) {
-  const count = preparation?.targetDayIds.length ?? 0
-  return `将为 ${count} 天生成路线预览。只用已有坐标，不会自动调整行程顺序。`
 }

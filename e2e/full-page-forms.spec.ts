@@ -60,7 +60,7 @@ async function readDayOrder(page: import('@playwright/test').Page, dayId: string
 test('新建旅行页面可以创建旅行并跳转到工作台', async ({ page }) => {
   await clearTravelDatabase(page)
 
-  await page.getByRole('button', { name: '新建旅行' }).click()
+  await page.getByRole('button', { name: '手动新建' }).click()
   await expect(page).toHaveURL(/#\/trip\/new/)
   await expect(page.getByTestId('trip-form-page')).toBeVisible()
   await expect(page.getByRole('heading', { name: '新建旅行' })).toBeVisible()
@@ -75,13 +75,36 @@ test('新建旅行页面可以创建旅行并跳转到工作台', async ({ page 
   await expect(page).toHaveURL(/#\/trip\?tripId=/)
   await expect(page.getByRole('button', { name: '当前旅行：测试旅行' })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '行程内容' })).toBeVisible()
-  await expect(page.getByText('北京', { exact: true })).toBeVisible()
+  const createdTripId = new URLSearchParams(new URL(page.url()).hash.split('?')[1] ?? '').get('tripId')
+  expect(createdTripId).toBeTruthy()
+  await expect.poll(() => readTripDestination(page, createdTripId!)).toBe('北京')
 })
+
+async function readTripDestination(page: import('@playwright/test').Page, tripId: string) {
+  return page.evaluate(async (targetTripId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('TravelConsoleDB')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    try {
+      const transaction = db.transaction('trips', 'readonly')
+      const record = await new Promise<{ destination?: string } | undefined>((resolve, reject) => {
+        const request = transaction.objectStore('trips').get(targetTripId)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+      return record?.destination ?? null
+    } finally {
+      db.close()
+    }
+  }, tripId)
+}
 
 test('新建旅行页面取消按钮返回首页', async ({ page }) => {
   await clearTravelDatabase(page)
 
-  await page.getByRole('button', { name: '新建旅行' }).click()
+  await page.getByRole('button', { name: '手动新建' }).click()
   await expect(page).toHaveURL(/#\/trip\/new/)
 
   await page.getByTestId('trip-form-cancel').click()

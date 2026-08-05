@@ -6,7 +6,7 @@ test('建立加密资料库并保存多人证件', async ({ page }) => {
   await page.goto(`/#/documents?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByRole('heading', { name: '资料' })).toBeVisible()
-  await page.getByRole('button', { name: '证件', exact: true }).click()
+  await page.getByRole('tab', { name: '证件', exact: true }).click()
   await page.getByLabel('恢复口令').fill('tripmap recovery phrase')
   await page.getByLabel('再次输入').fill('tripmap recovery phrase')
   await page.getByRole('button', { name: '建立资料库' }).click()
@@ -42,11 +42,11 @@ test('建立加密资料库并保存多人证件', async ({ page }) => {
 test('保存跨时区多段交通并保留外部跳转', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
   await page.goto(`/#/documents?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: '证件', exact: true }).click()
+  await page.getByRole('tab', { name: '证件', exact: true }).click()
   await page.getByLabel('恢复口令').fill('transport recovery phrase')
   await page.getByLabel('再次输入').fill('transport recovery phrase')
   await page.getByRole('button', { name: '建立资料库' }).click()
-  await page.getByRole('button', { name: '交通', exact: true }).click()
+  await page.getByRole('tab', { name: '交通', exact: true }).click()
   await page.getByRole('button', { name: '添加大交通订单' }).click()
 
   await page.getByLabel('订单名称').fill('伦敦往返联程')
@@ -102,7 +102,7 @@ test('旧票据地址兼容跳转到资料中心附件页', async ({ page }) => 
 test('Package 6 资料建议保持脱敏且过期风险只能稍后处理', async ({ page }) => {
   const tripId = await createDemoTripViaUi(page)
   await page.goto(`/#/documents?tripId=${tripId}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: '证件', exact: true }).click()
+  await page.getByRole('tab', { name: '证件', exact: true }).click()
   await page.getByLabel('恢复口令').fill('redacted document test phrase')
   await page.getByLabel('再次输入').fill('redacted document test phrase')
   await page.getByRole('button', { name: '建立资料库' }).click()

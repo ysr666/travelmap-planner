@@ -10,7 +10,7 @@ import {
 import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Clock3, Crosshair, Locate, MapPin, Navigation, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { EmptyState } from '../ui/EmptyState'
-import { hasValidCoordinates } from '../../lib/mapLinks'
+import { buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
 import { describeItemTime } from '../../lib/itinerary'
 import { formatDate } from '../../lib/dates'
 import { DEFAULT_DAY_MAP_PADDING, normalizeEdgeInsets, type ScreenRect } from '../../lib/dayMapViewport'
@@ -463,6 +463,7 @@ export function DayMapView({
             onMapReady={() => setMapReadyToken((current) => current + 1)}
             onSelectItem={handleSelectItem}
             markerFocusPadding={markerFocusPadding}
+            routeLineKind={routeResult?.status === 'road' ? 'road' : 'sequence'}
             routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
@@ -545,73 +546,93 @@ function MarkerPreviewCard({
 
   return (
     <div
-      className="absolute bottom-[max(2.25rem,calc(env(safe-area-inset-bottom)+1.5rem))] left-4 right-4 z-50"
+      aria-label={`已选择 ${item.title}`}
+      className="day-map-place-sheet"
       ref={containerRef}
+      role="region"
     >
       <div
-        className="rounded-lg border border-outline-variant bg-surface/96 p-3 shadow-2xl backdrop-blur-md"
+        className="day-map-place-sheet-panel"
         data-testid="map-marker-card"
       >
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">
-            {Math.max(0, itemIndex) + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-primary">第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站</p>
-            <h3 className="mt-0.5 line-clamp-2 break-words text-base font-semibold leading-5 text-on-surface">{item.title}</h3>
-            <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
-              <Clock3 className="size-3.5 shrink-0" />
-              <span className="truncate">{describeItemTime(item)}</span>
+        <div className="day-map-place-sheet-topline">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">
+              {Math.max(0, itemIndex) + 1}
+            </span>
+            <p className="truncate text-xs font-semibold text-primary">
+              第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站
             </p>
-            {item.locationName || item.address ? (
-              <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
-                <MapPin className="size-3.5 shrink-0" />
-                <span className="truncate">{item.locationName || item.address}</span>
-              </p>
-            ) : null}
-            {item.ticketIds.length > 0 ? (
-              <p className="mt-1 text-xs font-semibold text-primary">{item.ticketIds.length} 张票据</p>
-            ) : null}
           </div>
-          <button
-            aria-label="关闭地点卡片"
-            className="flex size-10 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container-high hover:text-on-surface active:scale-95 tm-focus"
-            data-testid="map-marker-card-close"
-            onClick={onClose}
-            type="button"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              aria-label="上一站"
+              className="day-map-place-sheet-icon tm-focus"
+              data-testid="map-marker-card-prev"
+              disabled={!previousItem}
+              onClick={() => previousItem && onSelectItem(previousItem)}
+              type="button"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <button
+              aria-label="下一站"
+              className="day-map-place-sheet-icon tm-focus"
+              data-testid="map-marker-card-next"
+              disabled={!nextItem}
+              onClick={() => nextItem && onSelectItem(nextItem)}
+              type="button"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+            <button
+              aria-label="关闭地点卡片"
+              className="day-map-place-sheet-icon tm-focus"
+              data-testid="map-marker-card-close"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
-        <div className="mt-3 grid grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
-          <button
-            aria-label="上一站"
-            className="inline-flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 tm-focus"
-            data-testid="map-marker-card-prev"
-            disabled={!previousItem}
-            onClick={() => previousItem && onSelectItem(previousItem)}
-            type="button"
+        <h3 className="mt-1 min-w-0 break-words text-xl font-semibold leading-7 text-on-surface">
+          {item.title}
+        </h3>
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-on-surface-variant">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Clock3 className="size-4 shrink-0" />
+            <span>{describeItemTime(item)}</span>
+          </span>
+          {item.ticketIds.length > 0 ? (
+            <span className="font-medium text-primary">{item.ticketIds.length} 张票据</span>
+          ) : null}
+        </div>
+        {item.locationName || item.address ? (
+          <p className="mt-2 flex min-w-0 items-start gap-1.5 text-sm leading-5 text-on-surface-variant">
+            <MapPin className="mt-0.5 size-4 shrink-0" />
+            <span className="min-w-0 break-words">{item.address || item.locationName}</span>
+          </p>
+        ) : null}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <a
+            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
+            data-testid="map-marker-card-navigate"
+            href={buildGoogleMapsUrl(item)}
+            rel="noreferrer"
+            target="_blank"
           >
-            <ChevronLeft className="size-4" />
-          </button>
+            <Navigation className="size-4 shrink-0" />
+            <span className="truncate">开始导航</span>
+          </a>
           <button
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
+            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg border border-primary bg-surface px-3 text-sm font-semibold text-primary transition active:scale-[0.98] tm-focus"
             data-testid="map-marker-card-open"
             onClick={() => onOpenItem(item)}
             type="button"
           >
             <Navigation className="size-4" />
             查看地点
-          </button>
-          <button
-            aria-label="下一站"
-            className="inline-flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface transition hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 tm-focus"
-            data-testid="map-marker-card-next"
-            disabled={!nextItem}
-            onClick={() => nextItem && onSelectItem(nextItem)}
-            type="button"
-          >
-            <ChevronRight className="size-4" />
           </button>
         </div>
       </div>

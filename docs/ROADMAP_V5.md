@@ -1,12 +1,14 @@
 # 旅图 TripMap 路线图 v5
 
-更新时间：2026-08-05
+更新时间：2026-08-06
 
 产品定义：[产品定位与核心体验](PRODUCT_POSITIONING.md)
 
 战略来源：[产品战略](PRODUCT_STRATEGY.md)
 
 UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
+
+产品质感增强计划：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 
 ## 总目标
 
@@ -37,6 +39,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - Shared Trip 与账号对象缺少统一 Realtime 订阅和服务端版本合同。
 - AI 仍有关键词兼容路由，动作覆盖不完整，长任务没有统一 job runtime。
 - 实时地点、交通、天气、航班/铁路和票务 Provider 尚未形成统一事实模型。
+- 地点/酒店照片、航司/保险品牌、完整订单字段和设计图直接对照尚未形成生产主路径。
 - 用户仍需在多个页面手动触发查询、修复和同步。
 
 ## Phase 0：UI V3 Product Shell
@@ -99,6 +102,25 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - 查看今日安排不超过 1 次点击，打开票据、导航和编辑行程不超过 3 次点击。
 - 地点详情和票据页面首屏首先展示真实对象。
 - 触控、对比度、键盘、焦点、`200%` 文字放大和真实设备记录全部通过。
+
+## UI V3 产品质感增强 Track
+
+状态：**Target**
+
+执行合同：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
+
+该 Track 不重新设计 App Shell，而是在现有 V3 结构上补齐 Selected Target 依赖的真实内容层：
+
+- 真实地点、酒店、餐厅和交通媒体，以及受控航司、铁路和保险品牌注册表。
+- 航班、住宿、保险、门票和交通对象的完整结构化字段。
+- 带来源、观测时间和有效期的天气、营业、航班/铁路与路线事实。
+- 资料、订单、行程点和“今日”的可解释匹配、一次确认与票据直达。
+- 道路路线、活动路段、当前位置、编号 Marker 与单一地点 Sheet。
+- 出发前 Today、旅行中 Today、Trip 和 Documents 的富信息构图与直接设计对照。
+
+该 Track 横跨 Phase 1 的云端版本、Phase 2 的 Action Gateway 和 Phase 3 的实时事实，但展示层、Provider/数据合同和受保护存储必须拆分 PR。媒体或实时 Provider 尚未就绪时可以先用稳定 mock 验证组件，不得在生产伪装为真实内容。
+
+退出条件以新计划 F1-F8 为准；在全部收据合并前不得宣称景点照片、航司 Logo、实时天气或完整设计稿质感已经上线。
 
 ## Phase 1：Realtime Cloud Core
 
@@ -232,16 +254,16 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## 接下来十项
 
-1. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
-2. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
-3. 建立 `RealtimeFact` schema、TTL 和来源 UI。
-4. 建立 AI job runtime，并把剩余关键词动作迁入 Action Gateway 注册表。
-5. 扩展 Place Provider，并接入天气、航班/铁路状态的 mock、合同和受限真实 smoke。
-6. 让“一键智能修复”消费实时事实，让 Shared Trip 复用 Realtime 事件和服务端版本。
-7. 建立在线延迟、Provider 成本、事实新鲜度和 AI 动作完成率仪表。
-8. 观察 UI V3 生产错误、性能和 PWA 升级收敛，按同一 Golden/CI 门槛修复回归。
-9. 将真实 iPhone/Android 性能、文件选择和网络差异作为可选 Beta 观察补录。
-10. 在 Realtime Cloud Core 稳定后评估 Native Beta，不提前建立平行数据合同。
+1. 建立 `product-fidelity` fixture、四个核心页面的设计差异台账和媒体授权清单。
+2. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
+3. 锁定 `TravelMediaAssetV1`、`BrandIdentityV1`、`RealtimeFactV1` 与结构化旅行对象合同。
+4. 用 mock adapter 完成媒体、品牌、实时事实和统一对象 ViewModel，不触发真实 Provider。
+5. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
+6. 扩展 Place Provider，并接入天气、航班/铁路状态的合同、mock 和受限真实 smoke。
+7. 完成资料候选匹配、一次确认、票据直达，并让一键修复消费实时事实。
+8. 完成道路路线、活动路段、当前位置、Marker 与地点 Sheet 的地图精修。
+9. 按出发前 Today、旅行中 Today、Trip、Documents 顺序完成富信息构图和设计图直接对照。
+10. 完成全量自动化、平台模拟器、同 SHA CI/部署，并建立媒体错误、Provider 成本和事实新鲜度监控。
 
 ## 保持不变的工程底线
 

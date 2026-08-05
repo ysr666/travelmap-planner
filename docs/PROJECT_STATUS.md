@@ -1,6 +1,6 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-08-05
+更新时间：2026-08-06
 
 ## 发布判断
 
@@ -34,6 +34,7 @@
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
 - **Current receipt:** 2026-08-05 已完成 M0-M6、平台模拟器、最终候选远端、合并与 Production 验收，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+- **Target fidelity track:** 景点/酒店照片、航司/铁路/保险品牌、完整订单字段、有来源实时事实、资料与行程联动、地图细节和面向设计图的直接验收尚未全部上线；实施顺序与门槛见 [UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 是当前生产视觉与信息架构；Realtime Cloud、统一实时事实和 AI job runtime 仍是 Target，不因 UI 发布而变成 Current。
 
@@ -131,6 +132,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 已知发布风险
 
 - 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
+- 地点/酒店照片和航司/保险 Logo 尚无完整生产资产管线；当前真实票据缩略图能力不能被描述为已完成所有设计稿媒体效果。
 - AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
 - iPhone/Android 实体机性能、文件选择和网络差异为发布后运营观察，不再阻塞 UI V3。
 - MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验留作运营观察。
@@ -146,6 +148,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 当前路线图：[ROADMAP_V5.md](ROADMAP_V5.md)
 - UI V3 规范：[UI_REFACTOR_V3.md](UI_REFACTOR_V3.md)
 - UI V3 实施计划：[UI_V3_IMPLEMENTATION_PLAN.md](UI_V3_IMPLEMENTATION_PLAN.md)
+- UI V3 产品质感增强计划：[UI_V3_PRODUCT_FIDELITY_PLAN.md](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 - UI V3 M6 完成度审计：[UI_V3_M6_COMPLETION_AUDIT.md](UI_V3_M6_COMPLETION_AUDIT.md)
 - Design System：[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)
 - 历史路线图：[ROADMAP_V4.md](ROADMAP_V4.md)

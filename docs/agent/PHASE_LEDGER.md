@@ -2718,3 +2718,37 @@ Validation:
 - `npm run build` passed; bundle budget remained at 868.3 KiB initial JS, 249.6 KiB gzip, and 2301.0 KiB/94-entry precache.
 - The full serial E2E run passed all 156 tests in approximately 7.3 minutes.
 - `git diff --check` passed.
+
+## 2026-08-05 UI V3 S1-S3 Structural Qualification
+
+Status: implemented and locally validated; final branch-head remote, physical-device, and production qualification pending.
+
+Branch: `feature/ui-v3-selected-target`
+
+Goal:
+
+- Close the M6 structural plan without changing visible behavior, Golden output, data contracts, Provider contracts, or AI write protections.
+
+Result:
+
+- S1 split Settings and Ticket Library into route entries, controller hooks, ViewModels, and presentation components.
+- S2 split Trip, Day, and Item data aggregation, view models, menus, map loading, and presentation boundaries.
+- S3 split Global AI orchestration from its command-bar shell and split AI Draft into request-form state, Provider/draft orchestration, and focused map, variant, import, and workspace views.
+- Action Gateway registry validation, privacy filtering, real preview, one final confirmation, stale-state protection, idempotency, and failed-step retry behavior remained unchanged.
+- No IndexedDB/Supabase schema, sync semantics, route cache, ticket/blob storage, Provider contract, secret, or real Provider call changed.
+
+Commits:
+
+- S1: `1d6dfb4`, documentation receipt `73fe5af`.
+- S2: `e9aedaa`, `fb5abf8`, `012ed76`.
+- S3: `193b8ca`, `3a9fb8c`.
+
+Validation:
+
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run build` passed.
+- `npm run test:unit` passed: 191 files and 1578 tests.
+- AI Draft focused unit tests passed 118/118; AI Draft, form, and Golden focused E2E passed 47/47.
+- `npm run test:e2e:serial` passed 175/175 in approximately 6.6 minutes.
+- `npm run test:e2e:pwa-upgrade` passed 5/5 in approximately 46 seconds.
+- Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2337.3 KiB/114-entry precache.
+- S1 remote baseline `73fe5af` passed GitHub Actions run `30992807064` and Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`.

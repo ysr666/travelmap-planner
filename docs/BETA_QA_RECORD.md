@@ -10,6 +10,9 @@
 - 候选代码 `68b2945` 新增固定 Git commit/tree/lock 的四页面 Golden 像素回归，差异预算为 `maxDiffPixelRatio <= 0.005`；成功时不提交截图，失败时才保留 Playwright 对比 artifact。
 - Reduced Motion 新增真实浏览器 media emulation 和全局 CSS 合同测试；首页、AI Action Sheet 和有限时长动画在该偏好下停用可见动效。
 - Home 页面控制器拆分为 Today 工作区和数据聚合，资料中心拆分为控制器与资料/证件/交通展示；页面单测、资料 E2E 和 Golden 均证明行为与像素未回归。
+- S1 将设置和票据库拆成薄路由入口、controller hook、ViewModel 与展示组件；提交 `73fe5af` 的 GitHub Actions run `30992807064` 五项 required jobs 全部通过，Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436` 为 Active。
+- S2 将 Trip、Day 和 Item 的数据聚合、ViewModel、菜单/Sheet 和详情展示拆出；原有地图/日程上下文、返回来源、长文本和 Golden 保持不变。
+- S3 将 Global AI 的 Action Gateway/兼容编辑编排移入 `useGlobalAiCommandController.ts`，并把 AI Draft 拆成请求表单状态、Provider/草稿控制器和独立展示组件；没有改变隐私过滤、一次最终确认、stale guard 或失败项重试。
 - Selected Target 的出发前、旅行中、行程和资料四个核心状态均完成 `390 x 844` 同状态并排审查；没有待修复的 P0、P1 或 P2 视觉问题。
 - Golden/视觉流程覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`，并覆盖长文本、200% 文本、软件键盘、浅色/深色和无横向溢出。
 - `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1578 个测试。
@@ -18,6 +21,13 @@
 - 当前设备探测只有一台离线 iPhone，Android 未连接。不得用桌面移动视口或模拟器代替实体机发布结论。
 - 候选验收提交 `f825dfe` 的 GitHub Actions run `30989177863` 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`，其中 E2E job 用时约 5 分 41 秒；Cloudflare Pages Preview deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 也指向同一 SHA 并为 Active。
 - Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，实体机和生产部署结论仍待补录。
+
+### S1-S3 结构收口复验
+
+- 最终结构代码基线为 `3a9fb8c`；`npm run typecheck`、`npm run lint`、191 文件/1578 单测、`npm run build` 和 bundle/PWA budget 全部通过。
+- AI Draft 聚焦单测 118/118，通过 47/47 AI Draft、表单与 Golden 移动端 E2E；全量串行 E2E 最终为 175/175，约 6.6 分钟。
+- PWA 升级 5/5 通过，入口 468.2 KiB、初始 JS 852.4 KiB、初始 gzip 245.5 KiB、预缓存 2337.3 KiB/114 项。
+- 包含 S2-S3 的最终分支头仍需推送后核验同 SHA GitHub CI 与 Cloudflare Pages Preview；本段不把 S1 的旧远端收据复用为最终分支头收据。
 
 ### 模拟器补充记录
 

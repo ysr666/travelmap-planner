@@ -10,8 +10,9 @@
 - [UI V3 重构规范](UI_REFACTOR_V3.md)
 - [Selected Design](DESIGN.md)
 - [Design System](DESIGN_SYSTEM.md)
+- [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收、模拟器补充验收和实现候选 `2a858d5` 的同 SHA GitHub CI / Cloudflare Pages Preview；真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收和模拟器补充验收；最新已推送候选 `c538986` 的同 SHA GitHub CI / Cloudflare Pages Preview 通过，候选代码 `68b2945` 又补齐了可执行 Golden、Reduced Motion 和页面边界收口。最终分支头、真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 实施进度
 
@@ -20,10 +21,10 @@
 | M0 基线与改动隔离 | 完成 | `UI_V3_M0_AUDIT.md`、基线检查、fixture 归属 |
 | M1 Shell 与共享组件 | 完成 | 四项导航、按需 AI、共享 Row/Section/Disclosure/Form 组件 |
 | M2 核心纵向流程 | 完成 | 阶段化 Today、资料编辑式列表、一键修复入口 |
-| M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单和五视口 Golden |
+| M3 行程、地图与表单 | 体验完成 / 结构持续收口 | 连续时间轴、单一地图 Sheet、渐进表单和五视口 Golden；大型控制页债见 M6 审计 |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | 浏览器、自动化、模拟器及 `2a858d5` 同 SHA 候选远端检查已通过；实体机与 Production 证据待补 |
+| M6 产品级验收与发布 | 进行中 | 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden 和模拟器通过；最终远端、实体机与 Production 待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -68,13 +69,13 @@ Selected Target 固定为：
 
 保护边界继续成立：AI 写入必须保留真实预览、一次最终确认、状态指纹、幂等和失败项重试。
 
-## 3. 当前实施起点
+## 3. 实施起点（历史快照）
 
-规划快照：2026-08-05。
+规划快照：2026-08-05。以下内容记录开始实施时的约束，不再代表候选分支当前工作树状态；当前完成度以 [M6 审计](UI_V3_M6_COMPLETION_AUDIT.md) 为准。
 
-- 当前工作分支为 `feature/ui-v3-selected-target`。
-- 工作区已有 App Shell、地图、票据、设置、表单和 E2E 的未提交改动；执行前必须先审计并拆分，禁止覆盖或重置现有改动。
-- `GlobalAiCommandBar.tsx`、`HomePage.tsx`、`TripWorkspacePage.tsx`、`DayViewPage.tsx`、`ItemDetailPage.tsx`、`TicketLibraryPage.tsx` 和 `SettingsPage.tsx` 均已超过目标页面规模，迁移时必须拆分 ViewModel、状态和展示组件。
+- 实施分支为 `feature/ui-v3-selected-target`。
+- 起点工作区已有 App Shell、地图、票据、设置、表单和 E2E 改动；它们已按 M0 审计保留并归类，没有通过 reset 或覆盖清除。
+- 原始大型页面需拆分 ViewModel、状态和展示组件。首页和资料中心已完成本轮边界收口，其余页面进入 M6 审计的 S1-S3 结构计划。
 - 当前 Hash URL 和深链接继续兼容；UI V3 先替换呈现和导航映射，不同时重写路由合同。
 - 现有 E2E 已覆盖首页、行程、地图、地点、资料、AI、表单、设置、账本、同行和 PWA 升级，可作为迁移基线。
 
@@ -391,9 +392,10 @@ npm run test:e2e:pwa-upgrade
 
 **额外门槛**
 
-- 核心静态 Golden Screenshot 目标 `maxDiffPixelRatio <= 0.005`。
+- 核心静态 Golden 通过固定 commit/tree/lock 的临时真实构建执行，目标 `maxDiffPixelRatio <= 0.005`；不得只保留人工截图命令。
 - 每个核心页面满足 `scrollWidth <= clientWidth`。
 - axe/WCAG 2.2 AA、焦点顺序、Sheet 焦点陷阱和触控目标通过。
+- `prefers-reduced-motion: reduce` 必须在真实浏览器 media emulation 下停用可见动效，并由 CSS 合同单测防止全局规则丢失。
 - Bundle budget 不回归；Map、PDF、OCR、AI 和 JSZip 保持按需加载。
 - 真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、键盘、地图、票据和弱网测试。
 - 真实 AI、搜索、路线、地图或其他 Provider 冒烟测试仍需当前任务明确授权；默认使用 fixture/mock，且不得用未授权真实调用替代自动化。
@@ -405,6 +407,8 @@ npm run test:e2e:pwa-upgrade
 - 真实代码 Golden Screenshots 已替代生成图成为当前验收基线。
 - 全量自动化和实体机记录完整。
 - `PROJECT_STATUS.md`、`README.md` 和 Beta 指南正确标注 Current/Target/Historical。
+
+完整结果、Golden 更新规则、结构债和平台缺口以 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md) 为准。
 
 ## 6. 共享组件到现有代码的映射
 
@@ -482,7 +486,8 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 
 ## 11. 下一执行动作
 
-1. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、弱网和升级矩阵。
-2. 实体机通过后，对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+1. 推送当前最终候选，核验同 SHA GitHub required checks 与 Cloudflare Pages Preview。
+2. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
 3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
 4. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。
+5. Candidate 发布后按 M6 审计的 S1-S3 顺序继续拆分 Settings/Tickets、Trip/Day/Item 和 AI 控制器；每组保持零行为和零 Golden 回归。

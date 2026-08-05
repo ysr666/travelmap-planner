@@ -7,13 +7,16 @@
 ## 2026-08-05 UI V3 候选浏览器验收
 
 - 候选分支实现四项主导航、阶段化 Today、按需 AI Action Sheet、连续时间轴、单一地点 Sheet、资料编辑式预览列表、渐进表单和四组设置。
+- 候选代码 `68b2945` 新增固定 Git commit/tree/lock 的四页面 Golden 像素回归，差异预算为 `maxDiffPixelRatio <= 0.005`；成功时不提交截图，失败时才保留 Playwright 对比 artifact。
+- Reduced Motion 新增真实浏览器 media emulation 和全局 CSS 合同测试；首页、AI Action Sheet 和有限时长动画在该偏好下停用可见动效。
+- Home 页面控制器拆分为 Today 工作区和数据聚合，资料中心拆分为控制器与资料/证件/交通展示；页面单测、资料 E2E 和 Golden 均证明行为与像素未回归。
 - Selected Target 的出发前、旅行中、行程和资料四个核心状态均完成 `390 x 844` 同状态并排审查；没有待修复的 P0、P1 或 P2 视觉问题。
 - Golden/视觉流程覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`，并覆盖长文本、200% 文本、软件键盘、浅色/深色和无横向溢出。
-- `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1577 个测试。
+- `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1578 个测试。
 - `npm run test:e2e:pwa-upgrade` 5/5 通过；历史生产包专用空状态断言保留历史文案，未用 V3 文案改写旧产物事实。
-- `npm run test:e2e:serial` 最终重跑 173/173 通过，串行耗时约 6.3 分钟。
+- `npm run test:e2e:serial` 最终重跑 175/175 通过，串行耗时约 6.4 分钟。
 - 当前设备探测只有一台离线 iPhone，Android 未连接。不得用桌面移动视口或模拟器代替实体机发布结论。
-- 实现候选 `2a858d5` 的 GitHub Actions run `30982017519` 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`；Cloudflare Pages Preview deployment `0375f835-2990-422b-8cff-0c711cab43d2` 也指向同一 SHA 并通过。
+- 最新已推送候选 `c538986` 的 GitHub Actions 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`；Cloudflare Pages Preview 也指向同一 SHA 并通过。`68b2945` 及文档提交的最终远端结果待本轮推送后补录。
 - Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，实体机和生产部署结论仍待补录。
 
 ### 模拟器补充记录
@@ -23,7 +26,7 @@
 - Android WebView 103 不支持 `dvh/svh`，暴露 App Shell 半屏高度问题。增加 `100vh` 回退后，`innerHeight`、`#root`、`.app-viewport` 和底部导航底边均收敛到约 `867px`；软件键盘打开后同步收敛到约 `554px`。
 - 上述模拟器结果不覆盖 Chrome/PWA 安装、冷启动、真实设备性能、真实文件选择、弱网或升级，实体机表仍保持待人工补录。
 
-完整视觉与发布边界见仓库根目录 `design-qa.md`。
+完整视觉与发布边界见仓库根目录 `design-qa.md` 和 [UI V3 M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 2026-07-28 历史生产 PWA 迁移矩阵
 

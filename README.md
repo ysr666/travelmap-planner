@@ -4,7 +4,7 @@
 
 实时在线和 AI 优先是实现这项承诺的技术战略，不是要求用户理解的产品类别。当前代码已经具备完整旅行主路径、账号对象同步、Provider Proxy 和 AI Action Gateway，是向目标架构迁移的稳定基线。目标状态以云端账号数据为事实源，以 Realtime 推送跨设备变化；IndexedDB 保留为启动缓存、弱网 outbox 和应急查看能力。
 
-当前生产界面仍以 [项目状态](docs/PROJECT_STATUS.md) 为准。`feature/ui-v3-selected-target` 已完成第三次 UI 重构的候选实现：`今日 | 行程 | 资料 | 我的`、Toolbar AI、按需 Action Sheet、阶段化首页、资料编辑式列表和自适应壳层均已进入真实代码与 Golden 验收。实现候选 `2a858d5` 已通过同 SHA GitHub required checks 与 Cloudflare Pages Preview；实体机和合并后的生产部署仍未完成，因此不能描述为已上线 Current。完整合同见 [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)、[UI V3 重构规范](docs/UI_REFACTOR_V3.md)、[Selected Design](docs/DESIGN.md)、[实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md) 和 [Design QA](design-qa.md)。
+当前生产界面仍以 [项目状态](docs/PROJECT_STATUS.md) 为准。`feature/ui-v3-selected-target` 已完成第三次 UI 重构的候选实现：`今日 | 行程 | 资料 | 我的`、Toolbar AI、按需 Action Sheet、阶段化首页、资料编辑式列表和自适应壳层均已进入真实代码与可执行 Golden 验收。最新已推送候选 `c538986` 的同 SHA GitHub required checks 与 Cloudflare Pages Preview 通过；当前候选又补齐 Reduced Motion 和页面边界收口，最终分支头、实体机和合并后的生产部署仍未完成，因此不能描述为已上线 Current。完整合同见 [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)、[UI V3 重构规范](docs/UI_REFACTOR_V3.md)、[Selected Design](docs/DESIGN.md)、[实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)、[M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md) 和 [Design QA](design-qa.md)。
 
 ## 项目定位
 
@@ -74,6 +74,7 @@ AI 是旅图的默认任务入口。当前版本已经支持全局 AI Action Gat
 - [路线图 v5](docs/ROADMAP_V5.md)
 - [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
 - [UI V3 实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)
+- [UI V3 M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)
 - [Design System](docs/DESIGN_SYSTEM.md)
 - [Limited Beta 用户指南](docs/BETA_USER_GUIDE.md)
 - [Limited Beta 发布说明](docs/LIMITED_BETA_RELEASE_NOTES.md)
@@ -237,6 +238,7 @@ reference / external 模式不会包含实际文件内容，只会保留位置�
 - [产品战略](docs/PRODUCT_STRATEGY.md)
 - [路线图 v5](docs/ROADMAP_V5.md)
 - [UI V3 重构规范](docs/UI_REFACTOR_V3.md)
+- [UI V3 M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)
 - [Design System](docs/DESIGN_SYSTEM.md)
 - [历史路线图 v4](docs/ROADMAP_V4.md)
 

@@ -1,0 +1,157 @@
+# TripMap UI V3 M6 完成度审计
+
+更新时间：2026-08-05
+
+状态：**Candidate browser qualification passed; release qualification pending**
+
+候选代码基线：`68b2945`
+
+上游合同：
+
+- [产品定位与核心体验](PRODUCT_POSITIONING.md)
+- [UI V3 重构规范](UI_REFACTOR_V3.md)
+- [Selected Design](DESIGN.md)
+- [Design System](DESIGN_SYSTEM.md)
+- [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
+
+本文是 UI V3 的完成度收据和后续实施边界。它区分已经由真实代码证明的候选能力、仍需实体机或生产环境证明的发布门槛，以及不影响当前用户路径但需要继续治理的工程债。
+
+## 1. 审计结论
+
+- **M0-M5 候选实现：通过。** 四项导航、阶段化今日、连续日程、真实地图、地点详情、资料编辑式列表、按需 AI Action Sheet、费用、同行和四组设置均已进入真实 React 代码。
+- **M6 浏览器资格：通过。** 固定视口、长内容、200% 文本、软件键盘、Reduced Motion、Light/Dark、无障碍、固定交互面、Golden、完整 E2E 和 PWA 升级均有自动化证据。
+- **M6 候选代码本地质量门：通过。** `68b2945` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过。
+- **M6 发布资格：未完成。** 真实 iPhone Safari/PWA、真实 Android Chrome/PWA、最终分支头远端检查、合并和同 SHA Production 部署仍待完成。
+- **结构治理：部分完成。** 首页和资料中心已拆分控制、数据与展示边界；其余大型控制页登记为后续工程债，不把行数本身伪装成用户可见缺陷，也不把未拆分状态写成已经完成。
+
+因此 UI V3 继续标记为 **Candidate**，不能改写为 Production Current。
+
+## 2. 状态定义
+
+| 状态 | 判定方式 |
+| --- | --- |
+| `passed` | 对应代码、测试收据或平台记录已经存在，并在当前候选上可复现 |
+| `partial` | 用户路径已经可用，但计划中的工程治理或平台覆盖仍有明确缺口 |
+| `pending` | 依赖尚未执行的实体机、远端或生产证据 |
+| `historical` | 只描述旧方向或旧提交，不再作为当前视觉权威 |
+
+不得用桌面移动视口或模拟器替代实体机发布结论；不得用生成稿替代真实组件；不得用旧远端通过记录替代最终待合并分支头。
+
+## 3. 里程碑收据
+
+| 里程碑 | 状态 | 已落地结果 | 主要收据 |
+| --- | --- | --- | --- |
+| M0 基线与隔离 | passed | Selected Target、fixture、改动归属和历史边界固定 | `UI_V3_M0_AUDIT.md`、`DESIGN.md` |
+| M1 Shell 与共享组件 | passed | `今日 / 行程 / 资料 / 我的`、按需 AI、响应式 Tab/Rail/Sidebar、单一固定交互面 | `design-system-layout.spec.ts`、`mobile-ux-a11y.spec.ts` |
+| M2 核心纵向流程 | passed | 导入、出发前准备、旅行中下一站、真实票据打开闭环 | `home-to-trip.spec.ts`、`documents-v3-visual.spec.ts`、`ticket-library.spec.ts` |
+| M3 行程、地图与表单 | passed / structural partial | 连续时间轴、真实地图、单一地点 Sheet、地点详情和渐进表单通过；大型控制页继续拆分 | `trip-v3-visual.spec.ts`、`map-v3-visual.spec.ts`、`forms-v3-visual.spec.ts` |
+| M4 搜索与 AI | passed | 上下文 Action Sheet、只读直达、一次确认、stale guard、部分失败重试 | `global-ai-command-bar.spec.ts`、`search.spec.ts` |
+| M5 工具与设置 | passed | 费用、同行、低频页和四组设置统一到 V3 层级 | `low-frequency-v3-visual.spec.ts`、`settings-v3-visual.spec.ts` |
+| M6 浏览器资格 | passed | 响应式、状态、无障碍、Golden、性能、完整 E2E、PWA | 本文第 4-7 节 |
+| M6 实体机与发布 | pending | 真实设备、最终远端、合并和 Production | 本文第 8-9 节 |
+
+## 4. 体验验收矩阵
+
+| 合同 | 自动化或记录 | 状态 |
+| --- | --- | --- |
+| `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900` | `home-v3-visual.spec.ts`、各页面视觉 E2E、Desktop smoke | passed |
+| 长中文、长英文、无空格文件名不横向溢出 | `home-to-trip.spec.ts`、`ticket-library.spec.ts`、`item-detail.spec.ts` | passed |
+| 200% 文本仍可操作 | `home-to-trip.spec.ts`、`mobile-ux-a11y.spec.ts` | passed |
+| 软件键盘不遮挡核心输入和保存 | 表单 E2E、AI Sheet E2E、iOS/Android 模拟器记录 | passed for browser/simulator |
+| Light / Dark | `appearance.spec.ts`、视觉 E2E | passed |
+| Reduced Motion | `home-to-trip.spec.ts` 的真实 media emulation；`index.css.test.ts` 的全局合同 | passed |
+| 同一时刻只展开一个固定底部交互面 | `home-to-trip.spec.ts`、地图 Sheet 与 AI Sheet E2E | passed |
+| Loading、Empty、Error、Offline、Stale、Partial success | 页面单测、Provider/AI E2E、同步与 PWA E2E | passed |
+| AI 关闭、输入、计划、确认、执行、部分失败 | `global-ai-command-bar.spec.ts` | passed |
+| 无旅行、出发前、旅行中、旅行后 | Home 单测与视觉 E2E | passed |
+| 地图 Canvas、Marker、路线、选中和降级列表 | `map-v3-visual.spec.ts`、`map-floating-info.spec.ts` | passed |
+| 严重 axe 问题、焦点、触控目标 | `mobile-ux-a11y.spec.ts` 和 Modal/Sheet 组件测试 | passed |
+
+真实 Provider 可用性不属于本次默认 fixture 验收。任何真实 AI、地点、路线、地图或其他 Provider 冒烟仍需要当前任务单独授权。
+
+## 5. Golden 合同
+
+Golden 不再只是截图命令，而是可执行回归：
+
+- 测试入口：`e2e/ui-v3-golden-regression.spec.ts`。
+- 基线装配：`e2e/uiV3GoldenBaseline.ts`。
+- 固定基线提交：`2a858d5cd485ad4b19415f0288d1b36c25a1d098`。
+- 同时固定 Git tree 和 `package-lock.json` object；任一不匹配即失败。
+- 当前构建与基线构建使用同一脱敏 fixture、固定时钟、`390x844`、Light 和停用动画状态。
+- 比较出发前今日、行程总览、资料列表和地点详情四个静态核心状态。
+- 任一通道差值大于 `16` 的像素才计为变化，页面总差异比例必须 `<= 0.005`。
+- 基线构建只存在于测试临时目录；成功时不提交截图，失败时才将当前图和基线图附加到 Playwright artifact。
+
+有意修改核心视觉时，必须在同一审查中：
+
+1. 证明变化符合 `DESIGN.md` 与 `DESIGN_SYSTEM.md`。
+2. 更新固定 commit、tree 和 lock object 三项值。
+3. 重新运行 Golden、五视口、Light/Dark、200% 文本和完整 E2E。
+4. 在本审计或新的 QA 记录中说明批准的视觉变化。
+
+不得仅提高差异阈值来消除失败。
+
+## 6. 代码边界与后续结构计划
+
+本轮已完成：
+
+- `HomePage.tsx` 从混合页面收敛为约 205 行路由/加载控制器；旅行中展示和地图状态进入 `TodayWorkspace.tsx`，数据库聚合进入 `homeTripSnapshots.ts`。
+- `TravelDocumentCenterPage.tsx` 收敛为约 447 行控制器；资料、证件、交通、同步和表单展示进入 `TravelDocumentCenterSections.tsx`。
+- 两次拆分都由页面单测、资料中心 E2E 和 Golden 证明行为与像素未回归。
+
+仍需治理的大型控制页：
+
+| 优先级 | 页面 | 后续边界 | 完成条件 |
+| --- | --- | --- | --- |
+| S1 | `SettingsPage.tsx`、`TicketLibraryPage.tsx` | 拆分分组 ViewModel、编辑/预览状态和展示区域 | 路由控制器约 500 行；设置和票据全量回归不变 |
+| S2 | `TripWorkspacePage.tsx`、`DayViewPage.tsx`、`ItemDetailPage.tsx` | 拆分数据聚合 hook、页面 ViewModel、Sheet/菜单展示 | 地图/日程上下文、返回来源和 Golden 不变 |
+| S3 | `AiDraftPage.tsx`、`GlobalAiCommandBar.tsx` | 拆分编排控制器、表单状态机和结果展示 | 不改变 Action Gateway、隐私过滤或确认门控 |
+
+这些工作是 Candidate 之后的可维护性计划，不授权顺带重写 IndexedDB、Supabase、Provider、路线缓存、票据 Blob 或 AI 安全合同。每一组必须独立提交，并以现有 Golden 和完整 E2E 作为零行为回归门槛。
+
+## 7. 当前自动化证据
+
+候选代码 `68b2945` 的本地结果：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run typecheck` | passed，覆盖应用、Provider runtime 和 Travel Inbox Worker |
+| `npm run lint` | passed，无 warning |
+| `npm run test:unit` | `191 / 191` 文件、`1578 / 1578` 测试 passed |
+| `npm run build` | passed；入口 `468.2 KiB`，初始 JS `852.5 KiB`，初始 gzip `245.5 KiB` |
+| Bundle/PWA budget | passed；`8` 个启动 chunk，`2327.3 KiB / 114` 项 precache |
+| `npm run test:e2e:serial` | `175 / 175` passed，约 `6.4m` |
+| `npm run test:e2e:pwa-upgrade` | `5 / 5` passed，约 `45s` |
+| `git diff --check` | passed |
+
+最新已推送远端候选 `c538986` 的 GitHub required checks 和 Cloudflare Pages Preview 已通过。`68b2945` 及其文档提交的同 SHA 远端结果必须在本轮推送后重新记录，不能沿用旧提交结论。
+
+## 8. 平台与发布矩阵
+
+| 环境 | 状态 | 结论 |
+| --- | --- | --- |
+| Chromium 固定视口 | passed | 完整自动化与 Golden 通过 |
+| Desktop `1440x900` | passed | 核心页面和 AI 确认边界通过 |
+| iPhone 16 / iOS 26.5 Simulator Safari | passed as supplemental | 布局、键盘、地图和 AI Sheet 通过；不替代实体机 |
+| Android API 33 Emulator WebView | passed as supplemental | `100vh` 回退、键盘、地图和横向溢出通过；不替代 Chrome/PWA 实体机 |
+| 真实 iPhone Safari/PWA | pending | 当前没有在线可用设备 |
+| 真实 Android Chrome/PWA | pending | 当前没有连接设备 |
+| Cloudflare Pages Preview | pending for final branch head | 推送后按最终待合并 SHA 核验 |
+| Cloudflare Pages Production | pending | 只在实体机门槛通过并合并后核验 |
+
+## 9. 发布执行顺序
+
+1. 推送当前功能分支，确认最终待合并提交的 GitHub 五项 required checks 和 Cloudflare Pages Preview 同 SHA 通过。
+2. 在真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、登录、软件键盘、地图、票据、文件选择、弱网和升级。
+3. 将实体机结果补录到 `BETA_QA_RECORD.md`；任一 P0/P1/P2 先修复并重跑完整门槛。
+4. 通过 PR 合并到 `main`，不使用实体机模拟记录替代发布确认。
+5. 核验 Cloudflare Pages Production 指向合并后的同一 SHA，并执行不触发真实 Provider 的生产 smoke。
+6. 只有全部完成后，才将 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Production Current。
+
+回退单位是最近一个已通过 required checks 的提交。UI 回退不得连带回滚用户数据、schema、云端权限或票据存储。
+
+## 10. 最终判定
+
+当前判定：**视觉与浏览器候选验收通过；实体机、最终远端与生产发布待完成。**
+
+这份审计关闭“规划是否真正落到代码和可执行门槛”的问题，但不关闭尚未发生的实体机和生产事实。

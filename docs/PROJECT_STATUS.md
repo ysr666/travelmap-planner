@@ -4,7 +4,7 @@
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现、本地浏览器验收和实现候选 `2a858d5` 的同 SHA GitHub CI / Cloudflare Pages Preview；尚未完成实体机与合并后的 Production 发布门槛，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现和浏览器验收；最新已推送候选 `c538986` 的同 SHA GitHub CI / Cloudflare Pages Preview 通过，候选代码 `68b2945` 又补齐了可执行 Golden、Reduced Motion 和页面边界收口。最终分支头远端检查、实体机与合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -31,10 +31,10 @@
 - **Production Current:** 合并与部署前仍以现有生产版本为准，不从本地候选分支推断线上界面。
 - **Candidate:** `feature/ui-v3-selected-target` 已实现阶段化“今日”、`今日 | 行程 | 资料 | 我的`、资料内待整理状态、按需 AI Action Sheet、编辑式资料列表、渐进表单和自适应壳层。
 - **Candidate:** AI 关闭时不挂载常驻底部输入；只读导航自动完成，写入保留真实预览和一次最终确认。
-- **Candidate:** Home、Documents、Global AI 等大型展示已拆出生命周期视图、资料行和 AI 展示层；核心页面共享 Section、Row、Status、Disclosure 与 Form 组件。
+- **Candidate:** Home 已拆为页面控制器、Today 工作区和数据聚合；Documents 已拆为页面控制器与资料/证件/交通展示；Global AI 已拆出展示层。其余大型控制页登记为发布后的结构治理，不伪装成已完成。
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
-- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收、iOS/Android 模拟器补充验收及 `2a858d5` 同 SHA 候选远端检查；M6 实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)。
+- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收和 iOS/Android 模拟器补充验收；M6 最终远端、实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 尚未合并部署，不能把候选分支能力描述为生产 Current。
 
@@ -97,17 +97,17 @@
 
 - `npm run typecheck`：通过，覆盖前端、Pages provider runtime 和 Travel Inbox Worker。
 - `npm run lint`：通过。
-- `npm run test:unit`：191 个文件、1577 个测试通过。
+- `npm run test:unit`：191 个文件、1578 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
-- 全量 Playwright：173/173 通过，串行耗时约 6.3 分钟；实现候选 `2a858d5` 的 GitHub Actions 五项 required jobs 与 Cloudflare Pages Preview 均按同一 SHA 通过。
+- 全量 Playwright：175/175 通过，串行耗时约 6.4 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。最新已推送候选 `c538986` 的 GitHub Actions 五项 required jobs 与 Cloudflare Pages Preview 均按同一 SHA 通过；当前最终分支头待推送后复核。
 - `git diff --check`：通过。
 
 补充平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出。该结果只证明旧 WebView 布局兼容，不替代 Android Chrome/PWA 实体机发布记录。
 
 候选入口 JS 为 468.2 KiB，初始静态 JS 图为 852.5 KiB，gzip 245.5 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
-候选 Service Worker 预缓存为约 2327.2 KiB/114 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 Provider 网络执行实现保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
+候选 Service Worker 预缓存为约 2327.3 KiB/114 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 Provider 网络执行实现保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
 
 账号同步 E2E 同时确认网络离线时云端 fixture 不发生写入、对象 outbox 不提前消失；网络恢复后同一旅行快照原地更新，trip/item 对象各保持一条，自动快照状态收敛为 `synced`，刷新不会丢失离线修改。
 
@@ -147,6 +147,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 当前路线图：[ROADMAP_V5.md](ROADMAP_V5.md)
 - UI V3 规范：[UI_REFACTOR_V3.md](UI_REFACTOR_V3.md)
 - UI V3 实施计划：[UI_V3_IMPLEMENTATION_PLAN.md](UI_V3_IMPLEMENTATION_PLAN.md)
+- UI V3 M6 完成度审计：[UI_V3_M6_COMPLETION_AUDIT.md](UI_V3_M6_COMPLETION_AUDIT.md)
 - Design System：[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)
 - 历史路线图：[ROADMAP_V4.md](ROADMAP_V4.md)
 - Beta 验收：[LIMITED_BETA_READINESS.md](LIMITED_BETA_READINESS.md)

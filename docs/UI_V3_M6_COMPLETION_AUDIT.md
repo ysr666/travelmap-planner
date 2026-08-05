@@ -4,7 +4,7 @@
 
 状态：**Candidate browser qualification passed; release qualification pending**
 
-候选代码基线：`3a9fb8c`
+候选代码基线：`0b464be`
 
 上游合同：
 
@@ -20,8 +20,8 @@
 
 - **M0-M5 候选实现：通过。** 四项导航、阶段化今日、连续日程、真实地图、地点详情、资料编辑式列表、按需 AI Action Sheet、费用、同行和四组设置均已进入真实 React 代码。
 - **M6 浏览器资格：通过。** 固定视口、长内容、200% 文本、软件键盘、Reduced Motion、Light/Dark、无障碍、固定交互面、Golden、完整 E2E 和 PWA 升级均有自动化证据。
-- **M6 候选代码本地质量门：通过。** `3a9fb8c` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过。
-- **M6 已推送结构基线远端资格：通过。** `73fe5af` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过；包含 S2-S3 的最终分支头仍需在推送后重跑远端资格。
+- **M6 候选代码本地质量门：通过。** `3a9fb8c` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过；`0b464be` 的最终 ref 依赖修复另通过类型检查、Lint 和 20 项 Global AI/Golden 聚焦 E2E。
+- **M6 最终候选远端资格：通过。** `0b464be` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过。
 - **M6 发布资格：未完成。** 真实 iPhone Safari/PWA、真实 Android Chrome/PWA、合并和同 SHA Production 部署仍待完成。
 - **结构治理：S1-S3 已完成。** 首页、资料中心、设置、票据库、行程、日期、地点详情、全局 AI 和 AI 创建行程均已拆分控制、状态、ViewModel 与展示边界；现有保护合同和 Golden 未回归。
 
@@ -118,7 +118,7 @@ S1-S3 结构计划已关闭。后续工程治理仍不得顺带重写 IndexedDB�
 
 ## 7. 当前自动化证据
 
-最终候选代码 `3a9fb8c` 的本地结果：
+最终候选功能代码 `3a9fb8c`（最终 ref 依赖修复 `0b464be`）的本地结果：
 
 | 命令 | 结果 |
 | --- | --- |
@@ -133,11 +133,10 @@ S1-S3 结构计划已关闭。后续工程治理仍不得顺带重写 IndexedDB�
 | `npm run test:e2e:pwa-upgrade` | `5 / 5` passed，约 `46s` |
 | `git diff --check` | passed |
 
-已推送的 S1 结构基线 `73fe5af` 的远端结果：
+最终候选 `0b464be` 的远端结果：
 
-- GitHub Actions run `30992807064` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m09s`。
-- Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436` 为 Active，Source 为 `73fe5af`。
-- 包含 S2-S3 的最终分支头需在推送后重新核验；不得复用本段的旧 SHA 结果。
+- GitHub Actions run `30998260337` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m28s`。
+- Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 为 Active，Source 为 `0b464be`。
 
 ## 8. 平台与发布矩阵
 
@@ -149,23 +148,22 @@ S1-S3 结构计划已关闭。后续工程治理仍不得顺带重写 IndexedDB�
 | Android API 33 Emulator WebView | passed as supplemental | `100vh` 回退、键盘、地图和横向溢出通过；不替代 Chrome/PWA 实体机 |
 | 真实 iPhone Safari/PWA | pending | 当前没有在线可用设备 |
 | 真实 Android Chrome/PWA | pending | 当前没有连接设备 |
-| Cloudflare Pages Preview | passed for S1 baseline | deployment `4e2542bd-19b8-442d-90b8-8f1697dad436` 指向 `73fe5af` 并为 Active；S2-S3 最终分支头待重跑 |
+| Cloudflare Pages Preview | passed | deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 指向 `0b464be` 并为 Active |
 | Cloudflare Pages Production | pending | 只在实体机门槛通过并合并后核验 |
 
 ## 9. 发布执行顺序
 
-1. 推送包含 S2-S3 与本审计的最终候选分支头，核验 GitHub 五项 required checks 和 Cloudflare Pages Preview 指向同一 SHA。
-2. 在真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、登录、软件键盘、地图、票据、文件选择、弱网和升级。
-3. 将实体机结果补录到 `BETA_QA_RECORD.md`；任一 P0/P1/P2 先修复并重跑完整门槛。
-4. 若实体机修复改变候选代码，再次核验最终待合并提交的 GitHub 五项 required checks 和 Cloudflare Pages Preview。
-5. 通过 PR 合并到 `main`，不使用实体机模拟记录替代发布确认。
-6. 核验 Cloudflare Pages Production 指向合并后的同一 SHA，并执行不触发真实 Provider 的生产 smoke。
-7. 只有全部完成后，才将 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Production Current。
+1. 在真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、登录、软件键盘、地图、票据、文件选择、弱网和升级。
+2. 将实体机结果补录到 `BETA_QA_RECORD.md`；任一 P0/P1/P2 先修复并重跑完整门槛。
+3. 若实体机修复改变候选代码，再次核验最终待合并提交的 GitHub 五项 required checks 和 Cloudflare Pages Preview。
+4. 通过 PR 合并到 `main`，不使用实体机模拟记录替代发布确认。
+5. 核验 Cloudflare Pages Production 指向合并后的同一 SHA，并执行不触发真实 Provider 的生产 smoke。
+6. 只有全部完成后，才将 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Production Current。
 
 回退单位是最近一个已通过 required checks 的提交。UI 回退不得连带回滚用户数据、schema、云端权限或票据存储。
 
 ## 10. 最终判定
 
-当前判定：**视觉、浏览器和 S1-S3 结构验收通过；最终候选远端、实体机与生产发布待完成。**
+当前判定：**视觉、浏览器、S1-S3 结构和最终候选远端验收通过；实体机与生产发布待完成。**
 
 这份审计关闭“规划是否真正落到代码和可执行门槛”的问题，但不关闭尚未发生的实体机和生产事实。

@@ -38,7 +38,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - AI 仍有关键词兼容路由，动作覆盖不完整，长任务没有统一 job runtime。
 - 实时地点、交通、天气、航班/铁路和票务 Provider 尚未形成统一事实模型。
 - 用户仍需在多个页面手动触发查询、修复和同步。
-- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界收口；最终分支头远端、实体机与发布证据尚未完成。
+- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界收口和最终候选远端资格；实体机与发布证据尚未完成。
 
 ## Phase 0：UI V3 Product Shell
 
@@ -50,7 +50,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 执行合同：[UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
 
-完成收据：M0-M5、浏览器 M6、模拟器补充验收及 S1-S3 结构治理已完成；当前只剩最终分支头远端、真实 iPhone/Android 和 Production 发布门槛。
+完成收据：M0-M5、浏览器 M6、模拟器补充验收、S1-S3 结构治理及最终候选远端资格已完成；当前只剩真实 iPhone/Android 和 Production 发布门槛。
 
 ### V3.0 设计锁定
 

@@ -12,7 +12,7 @@
 - [Design System](DESIGN_SYSTEM.md)
 - [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收、模拟器补充验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口；候选代码 `3a9fb8c` 通过完整本地门槛。`73fe5af` 的 S1 结构基线已通过同 SHA GitHub CI 与 Cloudflare Pages Preview；包含 S2-S3 的最终分支头远端资格、真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收、模拟器补充验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口；候选代码 `0b464be` 已通过完整本地与同 SHA GitHub CI / Cloudflare Pages Preview 门槛。真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 实施进度
 
@@ -24,7 +24,7 @@
 | M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单、五视口 Golden 和 S2 控制边界拆分 |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | S1-S3 本地 191 文件/1578 单测、175/175 E2E、5/5 PWA 和可执行 Golden 通过；`73fe5af` 同 SHA 远端通过，最终分支头、实体机与 Production 待补 |
+| M6 产品级验收与发布 | 进行中 | S1-S3 本地 191 文件/1578 单测、175/175 E2E、5/5 PWA 和可执行 Golden 通过；`0b464be` 同 SHA CI/Preview 通过，实体机与 Production 待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -486,8 +486,7 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 
 ## 11. 下一执行动作
 
-1. 推送包含 S2-S3 的最终候选分支头，并核验同 SHA GitHub required checks 与 Cloudflare Pages Preview。
-2. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
-3. 若实体机修复改变候选代码，对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
-4. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
-5. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。
+1. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
+2. 若实体机修复改变候选代码，对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
+4. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。

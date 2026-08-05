@@ -4,7 +4,7 @@
 
 状态：**Candidate implementation acceptance**
 
-候选代码基线：`3a9fb8c`
+候选代码基线：`0b464be`
 
 本页记录 2026-08-05 `feature/ui-v3-selected-target` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并、部署或完成实体机验证的候选版本写成生产 Current。逐项完成度、Golden 合同和发布顺序见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
 
@@ -12,7 +12,7 @@
 
 - **视觉实现：passed。** Selected Target 的四个核心状态已经用同状态并排图审查，没有待修复的 P0、P1 或 P2 视觉问题。
 - **浏览器产品验收：passed。** 核心流程、固定视口、长内容、200% 文本、软件键盘、Reduced Motion、浅色/深色、无障碍和横向溢出门槛已由真实组件与 E2E 覆盖。
-- **已推送结构基线远端检查：passed。** `73fe5af` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过；包含 S2-S3 的最终分支头需在推送后复验。
+- **最终候选远端检查：passed。** `0b464be` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
 - **结构验收：passed。** S1-S3 已把设置、票据、Trip、Day、Item、Global AI 和 AI Draft 拆成控制、状态、ViewModel 与展示边界，Golden 和保护合同未回归。
 - **发布资格：pending。** 真实 iPhone 当前离线，Android 未连接；实体机与合并后的 Cloudflare Pages Production 尚未完成。
 
@@ -108,8 +108,8 @@ Selected Target：
 - `npm run test:e2e:serial`：`175 / 175` passed，串行耗时约 `6.6m`。
 - `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
 - `git diff --check`：passed。
-- GitHub Actions run `30992807064`：同 SHA `73fe5af` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m09s`。
-- Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`：同 SHA `73fe5af` 为 Active。包含 S2-S3 的最终分支头和 Production 仍待核验。
+- GitHub Actions run `30998260337`：同 SHA `0b464be` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m28s`。
+- Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26`：同 SHA `0b464be` 为 Active。Production 仍待核验。
 
 ## 7. 模拟器补充验收
 
@@ -137,4 +137,4 @@ Selected Target：
 
 2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
 
-当前最终结果：**visual, browser, and S1-S3 structural acceptance passed; final-head remote, physical-device, and production qualification remain pending.**
+当前最终结果：**visual, browser, S1-S3 structural, and final-head remote acceptance passed; physical-device and production qualification remain pending.**

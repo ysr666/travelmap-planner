@@ -2752,3 +2752,5 @@ Validation:
 - `npm run test:e2e:pwa-upgrade` passed 5/5 in approximately 46 seconds.
 - Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2337.3 KiB/114-entry precache.
 - S1 remote baseline `73fe5af` passed GitHub Actions run `30992807064` and Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`.
+- Final candidate `0b464be` passed GitHub Actions run `30998260337`; Lint, Type Check, Unit Tests, Build, and E2E Tests all passed, with E2E completing in approximately 5 minutes 28 seconds.
+- Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` is Active for the same `0b464be` source revision.

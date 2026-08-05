@@ -27,7 +27,7 @@
 - 最终结构代码基线为 `3a9fb8c`；`npm run typecheck`、`npm run lint`、191 文件/1578 单测、`npm run build` 和 bundle/PWA budget 全部通过。
 - AI Draft 聚焦单测 118/118，通过 47/47 AI Draft、表单与 Golden 移动端 E2E；全量串行 E2E 最终为 175/175，约 6.6 分钟。
 - PWA 升级 5/5 通过，入口 468.2 KiB、初始 JS 852.4 KiB、初始 gzip 245.5 KiB、预缓存 2337.3 KiB/114 项。
-- 包含 S2-S3 的最终分支头仍需推送后核验同 SHA GitHub CI 与 Cloudflare Pages Preview；本段不把 S1 的旧远端收据复用为最终分支头收据。
+- 最终代码 `0b464be` 已完成复验：GitHub Actions run `30998260337` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过，E2E job 约 5 分 28 秒；Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 同 SHA 为 Active。
 
 ### 模拟器补充记录
 

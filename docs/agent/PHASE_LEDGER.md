@@ -2758,3 +2758,64 @@ Validation:
 - S1 remote baseline `73fe5af` passed GitHub Actions run `30992807064` and Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`.
 - Final candidate `0b464be` passed GitHub Actions run `30998260337`; Lint, Type Check, Unit Tests, Build, and E2E Tests all passed, with E2E completing in approximately 5 minutes 28 seconds.
 - Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` is Active for the same `0b464be` source revision.
+
+## 2026-08-06 UI V3 Product Fidelity P0-P8
+
+Status: in progress.
+
+Branch: `feature/ui-v3-product-fidelity`
+
+Goal:
+
+- Implement the complete `UI_V3_PRODUCT_FIDELITY_PLAN.md` contract so the four core travel surfaces derive their density and visual quality from real, attributable media, structured travel objects, sourced realtime facts, direct document actions, and road-aware maps.
+
+Scope:
+
+- P0: freeze one deterministic product-fidelity fixture, a design-to-code difference ledger, and a media rights manifest.
+- P1-P3: add versioned media, brand, travel-object, and realtime-fact contracts; controlled adapters; shared presentation components; and Provider Proxy boundaries.
+- P4-P6: add explainable document linking, one-confirmation writes, direct ticket opening, route-aware map details, and the selected Today, Trip, Documents, and Item Detail compositions.
+- P7-P8: finish responsive states, accessibility, motion, performance, design-target comparison, full automated validation, simulator qualification, and remote release receipts.
+
+No-go:
+
+- No generated or untraceable image may impersonate a real place, hotel, ticket, carrier, insurer, route, or current fact.
+- No arbitrary remote media URL, AI-selected logo, private ticket blob, OCR body, secret, Provider payload, or internal network address may cross the media boundary.
+- No stale or source-less fact may be presented as current; no write may bypass Action Gateway preview, one final confirmation, idempotency, or stale-state protection.
+- No return to card walls, persistent AI copy, stacked bottom surfaces, decorative gradients, or placeholder density.
+
+Likely files:
+
+- `src/types.ts`, `src/db/*`, `src/lib/media/*`, `src/lib/realtime/*`, `src/lib/travelObjects/*`
+- `server/providerProxy/*`, `src/lib/ai/providerProxyContract.ts`
+- `src/components/home/*`, `src/components/trip/*`, `src/components/documents/*`, `src/pages/ItemDetailPage.tsx`, `src/components/DayMap.tsx`, `src/index.css`
+- `e2e/fixtures/product-fidelity-v1.json`, `e2e/assets/product-fidelity/*`, focused unit/component/E2E tests, and Golden/design comparison tooling
+- `docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md`, project status/roadmap/release evidence, and licensed fixture media
+
+Validation:
+
+- Per-phase focused unit, contract, component, and E2E tests plus `git diff --check` before each phase commit.
+- Final typecheck, lint, full unit suite, production build, full serial E2E, built-dist PWA migration suite, fixed viewport design comparison, light/dark and 200% text checks.
+- iPhone Simulator Safari/home-screen PWA and Android Emulator Chrome/WebView qualification; physical devices remain optional.
+- After push, verify the same SHA in GitHub Actions, Cloudflare Pages, and relevant Supabase/provider diagnostics without exposing secrets or raw responses.
+
+Risk:
+
+- High: the work crosses media security, Provider contracts, cloud-compatible object semantics, ticket permissions, route rendering, responsive composition, and release validation. Each protected boundary remains isolated behind versioned schemas, deterministic mocks, focused tests, and a phase receipt.
+
+Stop conditions:
+
+- Stop the affected phase if rights cannot be verified, a remote asset can escape the Provider allowlist, a migration loses or rewrites existing data, an AI/provider response can select an arbitrary resource or function, a write bypasses confirmation/stale guards, a realtime fact lacks source/expiry, or a core viewport overflows or stacks fixed surfaces.
+
+P0 result:
+
+- Added the canonical four-scenario `product-fidelity-v1` fixture with one coherent 12-day UK trip, structured flight/rail/lodging/insurance/document records, explainable links, route geometry, and sourced realtime facts.
+- Added seven licensed photo variants and four reviewed brand marks under the E2E-only asset boundary; production builds do not copy or precache the fixture media.
+- Recorded author, source, license, derivative operation, integrity hash, dimensions, and byte budget for every asset.
+- Added a deterministic integrity checker that rejects missing or altered files, path escapes, unreviewed formats, oversized media, and executable/external SVG references.
+- Added the design-to-code difference ledger with explicit Visual P0/P1/P2 ownership and allowed platform differences. Missing Provider data or missing fields remain open rather than approved.
+
+P0 validation:
+
+- `npm run check:fidelity-assets` passed for all 11 assets.
+- Both JSON fixtures passed strict `jq` parsing; the canonical fixture contains 1 trip, 12 days, 9 key items, 6 documents, 7 media records, and 4 realtime facts.
+- `git diff --check` passed.

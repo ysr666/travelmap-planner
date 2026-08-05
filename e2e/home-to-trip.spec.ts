@@ -91,6 +91,32 @@ test('首页只展开一个底部交互面并支持 200% 文字放大', async ({
   await expect(sheet).toBeVisible()
 })
 
+test('首页和 AI Action Sheet 在 Reduced Motion 下停用可见动效', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setActiveDemoDate(page)
+  await clearTravelDatabase(page)
+  await page.getByRole('button', { name: '创建示例旅行' }).click()
+
+  await expect(page.getByTestId('today-trip-sheet')).toBeVisible()
+  expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
+  await expectReducedMotionDurations(page, '.page-transition')
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('button', { name: 'AI 助手' }).click()
+  await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeVisible()
+  await expectReducedMotionDurations(page, '.ai-action-sheet')
+  await expect.poll(() => page.evaluate(() => (
+    document.getAnimations().filter((animation) => {
+      const duration = Number(animation.effect?.getTiming().duration ?? 0)
+      return animation.playState === 'running' && Number.isFinite(duration) && duration > 1
+    }).length
+  ))).toBe(0)
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('button', { name: '关闭 AI 助手' }).click()
+  await expect(page.getByTestId('today-trip-sheet')).toBeVisible()
+})
+
 test('首页长内容在规定的移动端、平板和桌面尺寸下不溢出', async ({ page }) => {
   await setActiveDemoDate(page)
   await clearTravelDatabase(page)
@@ -121,6 +147,28 @@ test('首页长内容在规定的移动端、平板和桌面尺寸下不溢出',
 
 async function setActiveDemoDate(page: Page) {
   await page.clock.setFixedTime(new Date('2026-04-14T10:00:00.000+09:00'))
+}
+
+async function expectReducedMotionDurations(page: Page, selector: string) {
+  const durations = await page.locator(selector).evaluate((element) => {
+    const style = window.getComputedStyle(element)
+    return {
+      animationDuration: style.animationDuration,
+      transitionDuration: style.transitionDuration,
+    }
+  })
+
+  expect(parseCssDurationMs(durations.animationDuration)).toBeLessThanOrEqual(0.02)
+  expect(parseCssDurationMs(durations.transitionDuration)).toBeLessThanOrEqual(0.02)
+}
+
+function parseCssDurationMs(value: string) {
+  return Math.max(...value.split(',').map((part) => {
+    const normalized = part.trim()
+    if (normalized.endsWith('ms')) return Number.parseFloat(normalized)
+    if (normalized.endsWith('s')) return Number.parseFloat(normalized) * 1000
+    return 0
+  }))
 }
 
 async function updateHomeLongContent(page: Page, tripId: string, itemId: string) {

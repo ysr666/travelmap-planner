@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 
-export async function clearTravelDatabase(page: Page) {
-  await page.goto('/favicon.svg', { waitUntil: 'domcontentloaded' })
+export async function clearTravelDatabase(page: Page, appOrigin = '') {
+  await page.goto(resolveAppUrl('/favicon.svg', appOrigin), { waitUntil: 'domcontentloaded' })
   await page.evaluate(async () => {
     window.localStorage.removeItem('tripmap:e2e:cloud-fixture')
     window.localStorage.removeItem('tripmap:cloud-auto-snapshot:enabled')
@@ -38,9 +38,13 @@ export async function clearTravelDatabase(page: Page) {
       deleteDatabase('TripMapRouteCacheDB'),
     ])
   })
-  await page.goto('/#/home', { waitUntil: 'domcontentloaded' })
+  await page.goto(resolveAppUrl('/#/home', appOrigin), { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('today-empty')).toBeVisible({ timeout: 15_000 })
+}
+
+function resolveAppUrl(path: string, appOrigin: string) {
+  return appOrigin ? new URL(path, appOrigin).toString() : path
 }
 
 export async function createDemoTripViaUi(page: Page) {

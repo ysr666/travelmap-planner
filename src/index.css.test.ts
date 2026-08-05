@@ -30,4 +30,12 @@ describe('application viewport compatibility', () => {
       viewportDeclarations.indexOf('min-height: 100svh;'),
     )
   })
+
+  it('keeps the global reduced-motion override', () => {
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(styles).toContain('animation-duration: 0.01ms !important;')
+    expect(styles).toContain('animation-iteration-count: 1 !important;')
+    expect(styles).toContain('scroll-behavior: auto !important;')
+    expect(styles).toContain('transition-duration: 0.01ms !important;')
+  })
 })

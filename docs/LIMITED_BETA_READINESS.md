@@ -4,7 +4,7 @@
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `68b2945` 已完成本地浏览器和自动化资格；最新已推送候选 `c538986` 的同 SHA GitHub required checks 和 Cloudflare Pages Preview 通过，最终分支头仍需推送后复核。实体机与合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `68b2945` 已完成本地浏览器和自动化资格；候选验收提交 `f825dfe` 的同 SHA GitHub required checks 和 Cloudflare Pages Preview 通过。实体机与合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 验收矩阵
 
@@ -18,12 +18,12 @@
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查；2026-08-05 只读复核 migrations 与 security/performance advisors | 本轮无 DDL；剩余 advisor 均已记录 |
-| CI / E2E | 本地候选通过 / 最终远端待复核 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`c538986` 同 SHA CI/Preview 通过 | 最终合并头仍需保持全绿 |
+| CI / E2E | 候选远端通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`f825dfe` 同 SHA CI/Preview 通过 | 最终合并头仍需保持全绿 |
 | 实体机 | 待完成 | 自动化覆盖移动视口；iOS 26.5 Simulator 与 Android API 33 Emulator 已补充验证核心页面、地图和 AI 键盘布局 | iPhone Safari/PWA 与 Android Chrome/PWA 仍需实体机人工记录 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 浏览器候选完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、五视口与四页面像素 Golden、Reduced Motion | 最终远端、实体机与同 SHA Production 后才转为 Current |
+| UI V3 | 候选远端完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、五视口与四页面像素 Golden、Reduced Motion | 实体机与同 SHA Production 后才转为 Current |
 
 ## 发布必过
 

@@ -16,7 +16,7 @@
 - `npm run test:e2e:pwa-upgrade` 5/5 通过；历史生产包专用空状态断言保留历史文案，未用 V3 文案改写旧产物事实。
 - `npm run test:e2e:serial` 最终重跑 175/175 通过，串行耗时约 6.4 分钟。
 - 当前设备探测只有一台离线 iPhone，Android 未连接。不得用桌面移动视口或模拟器代替实体机发布结论。
-- 最新已推送候选 `c538986` 的 GitHub Actions 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`；Cloudflare Pages Preview 也指向同一 SHA 并通过。`68b2945` 及文档提交的最终远端结果待本轮推送后补录。
+- 候选验收提交 `f825dfe` 的 GitHub Actions run `30989177863` 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`，其中 E2E job 用时约 5 分 41 秒；Cloudflare Pages Preview deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 也指向同一 SHA 并为 Active。
 - Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，实体机和生产部署结论仍待补录。
 
 ### 模拟器补充记录

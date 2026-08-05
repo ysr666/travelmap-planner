@@ -12,7 +12,7 @@
 - [Design System](DESIGN_SYSTEM.md)
 - [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收和模拟器补充验收；最新已推送候选 `c538986` 的同 SHA GitHub CI / Cloudflare Pages Preview 通过，候选代码 `68b2945` 又补齐了可执行 Golden、Reduced Motion 和页面边界收口。最终分支头、真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收和模拟器补充验收；候选代码 `68b2945` 补齐了可执行 Golden、Reduced Motion 和页面边界收口，候选验收提交 `f825dfe` 的同 SHA GitHub CI / Cloudflare Pages Preview 已通过。真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 实施进度
 
@@ -24,7 +24,7 @@
 | M3 行程、地图与表单 | 体验完成 / 结构持续收口 | 连续时间轴、单一地图 Sheet、渐进表单和五视口 Golden；大型控制页债见 M6 审计 |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden 和模拟器通过；最终远端、实体机与 Production 待补 |
+| M6 产品级验收与发布 | 进行中 | 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden、模拟器和 `f825dfe` 同 SHA 远端通过；实体机与 Production 待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -486,8 +486,8 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 
 ## 11. 下一执行动作
 
-1. 推送当前最终候选，核验同 SHA GitHub required checks 与 Cloudflare Pages Preview。
-2. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
+1. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
+2. 若实体机修复改变候选代码，对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
 3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
 4. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。
 5. Candidate 发布后按 M6 审计的 S1-S3 顺序继续拆分 Settings/Tickets、Trip/Day/Item 和 AI 控制器；每组保持零行为和零 Golden 回归。

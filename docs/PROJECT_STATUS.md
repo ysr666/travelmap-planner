@@ -4,7 +4,7 @@
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现和浏览器验收；候选代码 `68b2945` 补齐了可执行 Golden、Reduced Motion 和页面边界收口，候选验收提交 `f825dfe` 的同 SHA GitHub CI / Cloudflare Pages Preview 已通过。实体机与合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现和浏览器验收；候选代码 `1d6dfb4` 已完成 S1 设置/票据结构收口并通过全量本地门槛，上一候选 `f528538` 的同 SHA GitHub CI / Cloudflare Pages Preview 已通过。S1 最终分支头、实体机与合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
 发布仍以同一提交同时满足以下条件为准：
 
@@ -31,10 +31,10 @@
 - **Production Current:** 合并与部署前仍以现有生产版本为准，不从本地候选分支推断线上界面。
 - **Candidate:** `feature/ui-v3-selected-target` 已实现阶段化“今日”、`今日 | 行程 | 资料 | 我的`、资料内待整理状态、按需 AI Action Sheet、编辑式资料列表、渐进表单和自适应壳层。
 - **Candidate:** AI 关闭时不挂载常驻底部输入；只读导航自动完成，写入保留真实预览和一次最终确认。
-- **Candidate:** Home 已拆为页面控制器、Today 工作区和数据聚合；Documents 已拆为页面控制器与资料/证件/交通展示；Global AI 已拆出展示层。其余大型控制页登记为发布后的结构治理，不伪装成已完成。
+- **Candidate:** Home、Documents、Settings 和 Ticket Library 已拆分路由入口、控制/数据、ViewModel 与展示边界；Global AI 已拆出展示层。Trip/Day/Item 与 AI 编排控制器继续登记为 S2-S3 结构治理，不伪装成已完成。
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
-- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收、iOS/Android 模拟器补充验收和 `f825dfe` 同 SHA 候选远端检查；M6 实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收、iOS/Android 模拟器补充验收和 S1 结构治理；`f528538` 上一候选远端已通过，S1 最终分支头、M6 实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 尚未合并部署，不能把候选分支能力描述为生产 Current。
 
@@ -100,7 +100,7 @@
 - `npm run test:unit`：191 个文件、1578 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
-- 全量 Playwright：175/175 通过，串行耗时约 6.4 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。候选验收提交 `f825dfe` 的 GitHub Actions 五项 required jobs 与 Cloudflare Pages Preview 均按同一 SHA 通过。
+- 全量 Playwright：175/175 通过，串行耗时约 6.5 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。上一候选 `f528538` 的 GitHub Actions 五项 required jobs 与 Cloudflare Pages Preview 均按同一 SHA 通过，S1 最终分支头待重跑。
 - `git diff --check`：通过。
 
 补充平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出。该结果只证明旧 WebView 布局兼容，不替代 Android Chrome/PWA 实体机发布记录。

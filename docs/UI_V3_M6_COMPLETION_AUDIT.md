@@ -4,7 +4,7 @@
 
 状态：**Candidate browser qualification passed; release qualification pending**
 
-候选代码基线：`68b2945`
+候选代码基线：`1d6dfb4`
 
 上游合同：
 
@@ -20,10 +20,10 @@
 
 - **M0-M5 候选实现：通过。** 四项导航、阶段化今日、连续日程、真实地图、地点详情、资料编辑式列表、按需 AI Action Sheet、费用、同行和四组设置均已进入真实 React 代码。
 - **M6 浏览器资格：通过。** 固定视口、长内容、200% 文本、软件键盘、Reduced Motion、Light/Dark、无障碍、固定交互面、Golden、完整 E2E 和 PWA 升级均有自动化证据。
-- **M6 候选代码本地质量门：通过。** `68b2945` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过。
-- **M6 候选远端资格：通过。** `f825dfe` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过。
+- **M6 候选代码本地质量门：通过。** `1d6dfb4` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过。
+- **M6 上一候选远端资格：通过。** `f528538` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过；S1 最终分支头仍需重跑远端资格。
 - **M6 发布资格：未完成。** 真实 iPhone Safari/PWA、真实 Android Chrome/PWA、合并和同 SHA Production 部署仍待完成。
-- **结构治理：部分完成。** 首页和资料中心已拆分控制、数据与展示边界；其余大型控制页登记为后续工程债，不把行数本身伪装成用户可见缺陷，也不把未拆分状态写成已经完成。
+- **结构治理：S1 已完成，S2-S3 待完成。** 首页、资料中心、设置和票据库已拆分控制、ViewModel 与展示边界；行程/日期/地点和 AI 大型控制器继续登记为后续工程债，不把行数本身伪装成用户可见缺陷，也不把未拆分状态写成已经完成。
 
 因此 UI V3 继续标记为 **Candidate**，不能改写为 Production Current。
 
@@ -98,21 +98,23 @@ Golden 不再只是截图命令，而是可执行回归：
 
 - `HomePage.tsx` 从混合页面收敛为约 205 行路由/加载控制器；旅行中展示和地图状态进入 `TodayWorkspace.tsx`，数据库聚合进入 `homeTripSnapshots.ts`。
 - `TravelDocumentCenterPage.tsx` 收敛为约 447 行控制器；资料、证件、交通、同步和表单展示进入 `TravelDocumentCenterSections.tsx`。
-- 两次拆分都由页面单测、资料中心 E2E 和 Golden 证明行为与像素未回归。
+- S1 的 `SettingsPage.tsx` 收敛为 12 行路由入口；浏览器存储、导入、偏好和 PWA 编排进入 `useSettingsPageController.ts`，四组设置进入 `SettingsPageView.tsx` / `SettingsSections.tsx`，纯展示计算进入 `settingsViewModel.ts`。
+- S1 的 `TicketLibraryPage.tsx` 收敛为 25 行路由入口；票据加载、同步、编辑和确认编排进入 `useTicketLibraryController.ts`，列表、添加、编辑、预览与确认展示进入 `TicketLibraryView.tsx`，筛选、统计、搜索和输入归一化进入 `ticketLibraryViewModel.ts`。
+- 上述拆分由页面单测、25 项设置/票据聚焦 E2E、Golden、完整串行 E2E 和 PWA 升级证明行为与像素未回归。
 
-仍需治理的大型控制页：
+结构计划状态：
 
-| 优先级 | 页面 | 后续边界 | 完成条件 |
+| 优先级 | 状态 | 页面 | 边界与完成条件 |
 | --- | --- | --- | --- |
-| S1 | `SettingsPage.tsx`、`TicketLibraryPage.tsx` | 拆分分组 ViewModel、编辑/预览状态和展示区域 | 路由控制器约 500 行；设置和票据全量回归不变 |
-| S2 | `TripWorkspacePage.tsx`、`DayViewPage.tsx`、`ItemDetailPage.tsx` | 拆分数据聚合 hook、页面 ViewModel、Sheet/菜单展示 | 地图/日程上下文、返回来源和 Golden 不变 |
-| S3 | `AiDraftPage.tsx`、`GlobalAiCommandBar.tsx` | 拆分编排控制器、表单状态机和结果展示 | 不改变 Action Gateway、隐私过滤或确认门控 |
+| S1 | passed | `SettingsPage.tsx`、`TicketLibraryPage.tsx` | 薄路由入口 + controller hook + ViewModel + 展示组件；设置、票据和 Golden 全量回归不变 |
+| S2 | pending | `TripWorkspacePage.tsx`、`DayViewPage.tsx`、`ItemDetailPage.tsx` | 拆分数据聚合 hook、页面 ViewModel、Sheet/菜单展示；地图/日程上下文、返回来源和 Golden 不变 |
+| S3 | pending | `AiDraftPage.tsx`、`GlobalAiCommandBar.tsx` | 拆分编排控制器、表单状态机和结果展示；不改变 Action Gateway、隐私过滤或确认门控 |
 
-这些工作是 Candidate 之后的可维护性计划，不授权顺带重写 IndexedDB、Supabase、Provider、路线缓存、票据 Blob 或 AI 安全合同。每一组必须独立提交，并以现有 Golden 和完整 E2E 作为零行为回归门槛。
+剩余 S2-S3 是 Candidate 阶段的可维护性计划，不授权顺带重写 IndexedDB、Supabase、Provider、路线缓存、票据 Blob 或 AI 安全合同。每一组必须独立提交，并以现有 Golden 和完整 E2E 作为零行为回归门槛。
 
 ## 7. 当前自动化证据
 
-候选代码 `68b2945` 的本地结果：
+S1 候选代码 `1d6dfb4` 的本地结果：
 
 | 命令 | 结果 |
 | --- | --- |
@@ -120,15 +122,17 @@ Golden 不再只是截图命令，而是可执行回归：
 | `npm run lint` | passed，无 warning |
 | `npm run test:unit` | `191 / 191` 文件、`1578 / 1578` 测试 passed |
 | `npm run build` | passed；入口 `468.2 KiB`，初始 JS `852.5 KiB`，初始 gzip `245.5 KiB` |
-| Bundle/PWA budget | passed；`8` 个启动 chunk，`2327.3 KiB / 114` 项 precache |
-| `npm run test:e2e:serial` | `175 / 175` passed，约 `6.4m` |
-| `npm run test:e2e:pwa-upgrade` | `5 / 5` passed，约 `45s` |
+| Bundle/PWA budget | passed；`8` 个启动 chunk，`2332.4 KiB / 114` 项 precache |
+| 设置/票据聚焦 E2E + Golden | `25 / 25` passed，约 `1.2m` |
+| `npm run test:e2e:serial` | `175 / 175` passed，约 `6.5m` |
+| `npm run test:e2e:pwa-upgrade` | `5 / 5` passed，约 `47s` |
 | `git diff --check` | passed |
 
-候选验收提交 `f825dfe` 的远端结果：
+S1 之前候选验收提交 `f528538` 的远端结果：
 
-- GitHub Actions run `30989177863` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m41s`。
-- Cloudflare Pages Preview deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 为 Active，Source 为 `f825dfe`。
+- GitHub Actions run `30989929335` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m16s`。
+- Cloudflare Pages Preview deployment `8870262e-fa04-42a6-88d8-8eb806e8dcb3` 为 Active，Source 为 `f528538`。
+- S1 最终分支头的同 SHA 远端资格需在推送后重新核验；不得复用本段的旧 SHA 结果。
 
 ## 8. 平台与发布矩阵
 
@@ -140,7 +144,7 @@ Golden 不再只是截图命令，而是可执行回归：
 | Android API 33 Emulator WebView | passed as supplemental | `100vh` 回退、键盘、地图和横向溢出通过；不替代 Chrome/PWA 实体机 |
 | 真实 iPhone Safari/PWA | pending | 当前没有在线可用设备 |
 | 真实 Android Chrome/PWA | pending | 当前没有连接设备 |
-| Cloudflare Pages Preview | passed | deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 指向 `f825dfe` 并为 Active |
+| Cloudflare Pages Preview | passed for prior candidate | deployment `8870262e-fa04-42a6-88d8-8eb806e8dcb3` 指向 `f528538` 并为 Active；S1 分支头待重跑 |
 | Cloudflare Pages Production | pending | 只在实体机门槛通过并合并后核验 |
 
 ## 9. 发布执行顺序

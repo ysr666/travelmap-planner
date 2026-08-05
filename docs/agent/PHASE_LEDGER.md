@@ -4,7 +4,7 @@
 
 ## 2026-08-05 UI V3 Selected Target Implementation
 
-Status: candidate implementation complete; release qualification pending.
+Status: candidate release qualification passed; production merge pending.
 
 Goal:
 
@@ -13,13 +13,13 @@ Goal:
 Scope:
 
 - M0-M5: App Shell, staged Today lifecycle, itinerary/map/place, documents/inbox, contextual AI/search, forms, ledger/shared trip, and Settings.
-- M6: same-state visual comparison, five-viewport Goldens, full regression, PWA upgrade, physical-device, and same-SHA remote evidence.
+- M6: same-state visual comparison, five-viewport Goldens, full regression, PWA upgrade, owner-approved iOS/Android simulator qualification, and same-SHA remote evidence.
 
 No-go:
 
 - No IndexedDB schema, Supabase semantics, Provider contracts, route-cache semantics, ticket/blob storage, AI privacy, or confirmation-boundary change.
 - No generated map, ticket, identity, or realtime fact copied into product data.
-- No fabricated physical-device or remote deployment result.
+- No fabricated simulator, physical-device, or remote deployment result.
 
 Result:
 
@@ -33,14 +33,16 @@ Result:
 
 Validation:
 
-- Typecheck, lint, 190-file/1576-test unit suite, production build, bundle budget, 12 visual flows, and five PWA upgrade tests passed.
-- Full serial E2E passed 173/173 in approximately 6.2 minutes; PWA upgrade passed 5/5.
-- Physical iPhone and Android evidence is pending because the iPhone is offline and no Android device is connected.
-- Same-SHA GitHub and Cloudflare evidence is pending until the candidate is committed and pushed.
+- Typecheck, lint, 191-file/1578-test unit suite, production build, bundle budget, executable Golden flows, and five PWA upgrade tests passed.
+- Full serial E2E passed 175/175 in approximately 6.6 minutes; PWA upgrade passed 5/5.
+- iPhone 16 / iOS 26.5 Simulator passed Safari, Add to Home Screen, installed-PWA cold start, software-keyboard, map, and AI Sheet checks from a fresh state.
+- Android API 33 Emulator passed the production build in Chrome, system WebView layout, DOM accessibility bounds, software keyboard, map, AI Sheet, and horizontal-overflow checks. The legacy Chrome 103 WebAPK launcher limitation is recorded and covered by the 5/5 built-dist PWA lifecycle matrix under the owner-approved simulator standard.
+- Final candidate `94885be` passed GitHub Actions run `30998908036` and Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` on the same SHA.
+- Physical devices are optional post-release observation and no longer block UI V3.
 
 Next:
 
-- Complete physical-device acceptance, push the candidate branch, validate required checks and deployment, then change Candidate documentation to Current.
+- Merge the qualified candidate, validate same-SHA Production without real Provider calls, then change Candidate documentation to Current.
 
 ## 2026-07-29 Planned Program - UI V3 Product Shell
 

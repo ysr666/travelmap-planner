@@ -4,7 +4,7 @@
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `0b464be` 已完成本地浏览器、自动化和 S1-S3 结构资格，并通过同 SHA GitHub required checks 和 Cloudflare Pages Preview。实体机与合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `94885be` 已完成本地浏览器、自动化、S1-S3 结构和项目所有者批准的平台模拟器资格，并通过同 SHA GitHub required checks 和 Cloudflare Pages Preview；仅合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 验收矩阵
 
@@ -18,12 +18,12 @@
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查；2026-08-05 只读复核 migrations 与 security/performance advisors | 本轮无 DDL；剩余 advisor 均已记录 |
-| CI / E2E | 最终候选通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`0b464be` 同 SHA CI/Preview 通过 | 实体机修复或合并后仍需保持全绿 |
-| 实体机 | 待完成 | 自动化覆盖移动视口；iOS 26.5 Simulator 与 Android API 33 Emulator 已补充验证核心页面、地图和 AI 键盘布局 | iPhone Safari/PWA 与 Android Chrome/PWA 仍需实体机人工记录 |
+| CI / E2E | 最终候选通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`94885be` 同 SHA CI/Preview 通过 | 合并后仍需保持全绿 |
+| 平台模拟器 | 发布资格通过 | iOS 26.5 Simulator 完成 Safari、主屏 PWA 安装/冷启动和键盘；Android API 33 Emulator 完成 Chrome/WebView、可访问性边界、地图、AI Sheet 和无溢出 | Android Chrome 103 WebAPK launcher 限制由 5/5 built-dist PWA 生命周期覆盖；实体机为发布后观察 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 候选本地与远端完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、S1-S3 结构边界、五视口与四页面像素 Golden、Reduced Motion | 实体机与同 SHA Production 后才转为 Current |
+| UI V3 | 候选发布资格完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、S1-S3 结构边界、五视口、四页面像素 Golden、Reduced Motion 和平台模拟器 | 同 SHA Production 后转为 Current |
 
 ## 发布必过
 
@@ -37,7 +37,7 @@
 - GitHub Actions 五个 required jobs 全绿。
 - Cloudflare Pages production 指向同一提交。
 - Supabase migration、RLS、授权和 advisors 复核。
-- iPhone Safari、iOS 主屏 PWA、Android Chrome 补录。
+- iPhone Simulator Safari/主屏 PWA、Android Emulator Chrome/WebView 和 built-dist PWA 生命周期记录。
 
 ## 必须保持的系统合同
 
@@ -50,7 +50,7 @@
 
 ## 已知非阻塞项
 
-- MapLibre 独立 chunk 首次使用仍需网络；自动化已覆盖中断、配额不足和多标签连续升级，实体机弱网体验仍需记录。
+- MapLibre 独立 chunk 首次使用仍需网络；自动化已覆盖中断、配额不足和多标签连续升级，实体机弱网体验作为发布后观察。
 - Provider 本地合同仍是共享 chunk；后续只在收益明确时按操作拆分，不能削弱本地校验。
 - Supabase leaked-password protection 需要按 [Auth 密码安全指南](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)完成计划/配置决策。
 - `travel_inbox_connector_secrets` 启用 RLS 但无客户端 policy 是有意 fail-closed；[advisor 信息项](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)保留，不为消除提示开放读取。

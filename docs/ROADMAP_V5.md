@@ -38,11 +38,11 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - AI 仍有关键词兼容路由，动作覆盖不完整，长任务没有统一 job runtime。
 - 实时地点、交通、天气、航班/铁路和票务 Provider 尚未形成统一事实模型。
 - 用户仍需在多个页面手动触发查询、修复和同步。
-- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界收口和最终候选远端资格；实体机与发布证据尚未完成。
+- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界、平台模拟器和最终候选远端资格；仅生产发布证据尚未完成。
 
 ## Phase 0：UI V3 Product Shell
 
-状态：**Candidate implementation complete; release qualification pending**
+状态：**Candidate release qualification passed; production merge pending**
 
 周期：5-7 周，可与 Realtime Cloud Core 的合同设计并行，但不在同一 PR 中混改数据和展示层。
 
@@ -50,7 +50,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 执行合同：[UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
 
-完成收据：M0-M5、浏览器 M6、模拟器补充验收、S1-S3 结构治理及最终候选远端资格已完成；当前只剩真实 iPhone/Android 和 Production 发布门槛。
+完成收据：M0-M5、浏览器 M6、项目所有者批准的平台模拟器验收、S1-S3 结构治理及最终候选远端资格已完成；当前只剩 Production 发布门槛。真实 iPhone/Android 转为发布后运营观察。
 
 ### V3.0 设计锁定
 
@@ -90,7 +90,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 ### V3.5 产品验收
 
 - 完成固定视口 Golden Screenshots、无障碍、性能、全量 E2E 和 PWA 升级测试。
-- 真实 iPhone Safari/PWA 与 Android Chrome/PWA 各完成一轮人工验收。
+- iPhone Simulator Safari/主屏 PWA、Android Emulator Chrome/WebView 与 built-dist PWA 生命周期各完成一轮验收。
 - 静态核心页面目标 `maxDiffPixelRatio <= 0.005`，所有核心页面从 `320px` 起无横向溢出。
 
 退出条件：
@@ -233,9 +233,9 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## 接下来十项
 
-1. 完成 UI V3 真实 iPhone Safari/PWA 与 Android Chrome/PWA 验收。
-2. 提交并推送 `feature/ui-v3-product-shell`，核验同 SHA GitHub CI、PR 和 Cloudflare 预览。
-3. 合并后核验生产部署，并把 UI V3 从 Candidate 转为 Current。
+1. 合并已通过平台模拟器、GitHub CI 和 Cloudflare Preview 的 UI V3 候选 PR。
+2. 核验同 SHA Cloudflare Production 并执行不触发真实 Provider 的生产 smoke。
+3. 补录生产证据，把 UI V3 从 Candidate 转为 Current。
 4. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
 5. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
 6. 建立 `RealtimeFact` schema、TTL 和来源 UI。

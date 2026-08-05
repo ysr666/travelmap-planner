@@ -18,9 +18,9 @@
 - `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1578 个测试。
 - `npm run test:e2e:pwa-upgrade` 5/5 通过；历史生产包专用空状态断言保留历史文案，未用 V3 文案改写旧产物事实。
 - `npm run test:e2e:serial` 最终重跑 175/175 通过，串行耗时约 6.4 分钟。
-- 当前设备探测只有一台离线 iPhone，Android 未连接。不得用桌面移动视口或模拟器代替实体机发布结论。
+- 2026-08-05 项目所有者将 UI V3 设备发布标准调整为 iOS/Android 模拟器加 built-dist PWA 自动化；实体机转为发布后观察，不再阻塞合并。
 - 候选验收提交 `f825dfe` 的 GitHub Actions run `30989177863` 已通过 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests`，其中 E2E job 用时约 5 分 41 秒；Cloudflare Pages Preview deployment `7f483215-cd84-4a2b-b49f-04d8d02a030e` 也指向同一 SHA 并为 Active。
-- Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，实体机和生产部署结论仍待补录。
+- Cloudflare Pages Production 仍保持 `main@b77cf24`；候选未合并，生产部署结论仍待补录。
 
 ### S1-S3 结构收口复验
 
@@ -29,12 +29,15 @@
 - PWA 升级 5/5 通过，入口 468.2 KiB、初始 JS 852.4 KiB、初始 gzip 245.5 KiB、预缓存 2337.3 KiB/114 项。
 - 最终代码 `0b464be` 已完成复验：GitHub Actions run `30998260337` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过，E2E job 约 5 分 28 秒；Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 同 SHA 为 Active。
 
-### 模拟器补充记录
+### 平台模拟器发布记录
 
-- iPhone 16 / iOS 26.5 Simulator Safari 已验证无旅行、旅行后 Today、行程时间轴、地图、资料、我的和 AI Action Sheet；输入获得焦点后，Sheet 保持在软件键盘可见区域内。
-- Android API 33 Emulator 使用临时本地 WebView 壳加载同一 PWA，验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；核心页面均满足 `scrollWidth === clientWidth`。
+- iPhone 16 / iOS 26.5 Simulator 已擦除后全新启动，在 Safari 打开同 SHA Preview，将 `旅图` 添加到主屏幕并完成安装后冷启动；登录页、核心页面、地图、资料、我的和 AI Action Sheet 正常，完整软件键盘未遮挡输入。
+- Android API 33 Emulator 的 Chrome 加载真实 production build，Today、四项导航、AI Action Sheet 和软件键盘通过；UI Automator 可访问性树内的控件边界均落在 `1080px` 视口内。
+- 同一 Android Emulator 使用系统 WebView 壳验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；核心页面均满足 `scrollWidth === clientWidth`。
 - Android WebView 103 不支持 `dvh/svh`，暴露 App Shell 半屏高度问题。增加 `100vh` 回退后，`innerHeight`、`#root`、`.app-viewport` 和底部导航底边均收敛到约 `867px`；软件键盘打开后同步收敛到约 `554px`。
-- 上述模拟器结果不覆盖 Chrome/PWA 安装、冷启动、真实设备性能、真实文件选择、弱网或升级，实体机表仍保持待人工补录。
+- Android 镜像内置 Chrome 103 的 WebAPK launcher 安装未完成，代理下还会触发该旧镜像的 GPU 进程限制；这是模拟器环境限制。5/5 built-dist PWA 测试覆盖安装/升级合同、等待确认、多标签收敛、历史数据保留与缓存恢复，项目所有者已接受该组合证据作为 Android 发布门槛。
+- 候选文档头 `94885be` 的 GitHub Actions run `30998908036` 五项 required jobs 全部通过；Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 指向同一 SHA 并为 Active。
+- 真实设备性能、相机/文件选择和网络差异列为 Beta 运营观察，不阻塞 UI V3 发布。
 
 完整视觉与发布边界见仓库根目录 `design-qa.md` 和 [UI V3 M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
@@ -164,13 +167,13 @@ Action Gateway V1 覆盖票据打开、地点补全和行程修复；E2E 验证�
 
 备注：2026-07-05 本轮全量 E2E 由 Playwright webServer 直接管理并通过；未保留额外 dev server。
 
-## 实体机检查
+## 实体机运营观察（可选）
 
-实体机结果必须人工补录，不得由自动化假填。
+实体机不再是 UI V3 发布门槛。后续如执行，结果必须按实际设备人工补录，不得由模拟器或自动化假填。
 
 | 设备 | 浏览器 | 状态 | 记录 |
 | --- | --- | --- | --- |
-| iPhone | Safari | 待人工补录 | 需检查登录、PWA 添加到主屏幕、Trip/Day/Ticket/Settings、刷新更新 |
-| Android | Chrome | 待人工补录 | 需检查登录、Trip/Day Map、Item、Ledger、Documents、PWA 刷新 |
+| iPhone | Safari | 发布后观察 | 登录、PWA 添加到主屏幕、Trip/Day/Ticket/Settings、刷新更新 |
+| Android | Chrome | 发布后观察 | 登录、Trip/Day Map、Item、Ledger、Documents、PWA 刷新 |
 
 截图和录屏保持未跟踪，不提交到仓库。

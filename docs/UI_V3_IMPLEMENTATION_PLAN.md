@@ -2,7 +2,7 @@
 
 更新时间：2026-08-05
 
-状态：**Candidate implementation complete; release qualification pending**
+状态：**Candidate release qualification passed; production merge pending**
 
 上游合同：
 
@@ -12,7 +12,7 @@
 - [Design System](DESIGN_SYSTEM.md)
 - [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器验收、模拟器补充验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口；候选代码 `0b464be` 已通过完整本地与同 SHA GitHub CI / Cloudflare Pages Preview 门槛。真实 iPhone/Android 与合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器与平台模拟器验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口；候选代码 `94885be` 已通过完整本地与同 SHA GitHub CI / Cloudflare Pages Preview 门槛。项目所有者已批准以 iOS/Android 模拟器和 built-dist PWA 自动化作为发布设备标准，实体机不再阻塞本次发布。合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 实施进度
 
@@ -24,7 +24,7 @@
 | M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单、五视口 Golden 和 S2 控制边界拆分 |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | S1-S3 本地 191 文件/1578 单测、175/175 E2E、5/5 PWA 和可执行 Golden 通过；`0b464be` 同 SHA CI/Preview 通过，实体机与 Production 待补 |
+| M6 产品级验收与发布 | 进行中 | S1-S3 本地 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden 和 iOS/Android 模拟器通过；`94885be` 同 SHA CI/Preview 通过，仅 Production 待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -57,7 +57,7 @@ Selected Target 固定为：
 - 资料列表、票据详情、待整理材料和来源与导入。
 - 全局搜索、AI Action Sheet 和 AI 创建行程。
 - 费用、费用详情、同行、我的和全部设置页面。
-- 响应式、无障碍、性能、Golden Screenshot、E2E、PWA 和实体机验收。
+- 响应式、无障碍、性能、Golden Screenshot、E2E、PWA 和平台模拟器验收。
 
 ### 本计划不包含
 
@@ -356,7 +356,7 @@ flowchart LR
 
 **目标**
 
-用真实代码截图、自动化和实体机结果替代生成稿，完成可发布判断。
+用真实代码截图、自动化和平台模拟器结果替代生成稿，完成可发布判断。
 
 **视觉矩阵**
 
@@ -397,7 +397,9 @@ npm run test:e2e:pwa-upgrade
 - axe/WCAG 2.2 AA、焦点顺序、Sheet 焦点陷阱和触控目标通过。
 - `prefers-reduced-motion: reduce` 必须在真实浏览器 media emulation 下停用可见动效，并由 CSS 合同单测防止全局规则丢失。
 - Bundle budget 不回归；Map、PDF、OCR、AI 和 JSZip 保持按需加载。
-- 真实 iPhone Safari/PWA 和 Android Chrome/PWA 完成安装、冷启动、键盘、地图、票据和弱网测试。
+- iPhone 16 / iOS 26.5 Simulator 完成 Safari、主屏 PWA 安装、冷启动和软件键盘验收；Android API 33 Emulator 完成 Chrome/系统 WebView、软件键盘、可访问性树和横向溢出验收。
+- Android Emulator 的旧版 Chrome 103 WebAPK launcher 安装不作为独立门槛；安装与升级语义由 5/5 built-dist PWA 测试覆盖，并在 QA 记录中保留该模拟器限制。
+- 真实 iPhone/Android 作为发布后运营观察，不阻塞 UI V3 合并或发布。
 - 真实 AI、搜索、路线、地图或其他 Provider 冒烟测试仍需当前任务明确授权；默认使用 fixture/mock，且不得用未授权真实调用替代自动化。
 - 推送后同 SHA 的 GitHub CI、Cloudflare Pages Preview 和必要的安全诊断通过；合并后 Production 必须再次指向同一发布 SHA。
 
@@ -405,7 +407,7 @@ npm run test:e2e:pwa-upgrade
 
 - `design-qa.md` 对 Selected Target 的最终结果为 `passed`，没有 P0/P1/P2 视觉问题。
 - 真实代码 Golden Screenshots 已替代生成图成为当前验收基线。
-- 全量自动化和实体机记录完整。
+- 全量自动化和平台模拟器记录完整。
 - `PROJECT_STATUS.md`、`README.md` 和 Beta 指南正确标注 Current/Target/Historical。
 
 完整结果、Golden 更新规则、结构债和平台缺口以 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md) 为准。
@@ -437,7 +439,7 @@ npm run test:e2e:pwa-upgrade
 | 3 | `feature/ui-v3-itinerary-map` | M3 行程、地图、地点与表单 |
 | 4 | `feature/ui-v3-ai-search` | M4 搜索与 AI 动作层 |
 | 5 | `feature/ui-v3-tools-settings` | M5 费用、同行与设置 |
-| 6 | `feature/ui-v3-release-qualification` | M6 Golden、全量 E2E、实体机与发布证据 |
+| 6 | `feature/ui-v3-release-qualification` | M6 Golden、全量 E2E、平台模拟器与发布证据 |
 
 执行规则：
 
@@ -480,13 +482,13 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 - 四项导航、AI Action Sheet、资料编辑式列表和阶段化 Today 全部上线。
 - Hash 深链接、返回上下文、PWA 升级和历史数据迁移未回归。
 - 所有固定视口、状态、无障碍、性能和自动化门槛通过。
-- 真实 iPhone 与 Android 验收完成。
+- iOS Simulator、Android Emulator 与 built-dist PWA 生命周期验收完成。
 - 同 SHA 的 CI 和生产部署成功。
 - 真实代码 Golden Screenshots 成为新的视觉权威，生成稿只保留为 Historical 设计证据。
 
 ## 11. 下一执行动作
 
-1. 完成真实 iPhone Safari/PWA 与 Android Chrome/PWA 的安装、冷启动、键盘、地图、票据、文件选择、弱网和升级矩阵。
-2. 若实体机修复改变候选代码，对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
-3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并补录发布证据。
-4. 只有上述门槛全部通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。
+1. 将已通过的平台模拟器验收与 Android WebAPK 环境限制补录到 QA 文档。
+2. 对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并执行不触发真实 Provider 的生产 smoke。
+4. 只有 Production 门槛通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。

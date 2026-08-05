@@ -286,12 +286,12 @@ Search 与 AI Draft 通过来源上下文返回，不获得独立 Tab。
 
 选定效果图只作为方向参考。实现必须满足：
 
-- `UI_REFACTOR_V3.md` 的固定视口、固定状态、点击数、无障碍、性能和实体机矩阵。
+- `UI_REFACTOR_V3.md` 的固定视口、固定状态、点击数、无障碍、性能和平台模拟器矩阵。
 - `390 x 844` 同状态截图与 2026-08-04 Selected Target 具有相同的信息层级、密度、色彩和空间重心；2026-07-30 融合稿不再是验收基线。
 - 动态地图通过 Canvas 像素、Marker、路线、控件和遮挡结构验证。
 - 每个核心页面 `scrollWidth <= clientWidth`。
 - Golden Screenshot、axe、typecheck、lint、单测、build、相关 E2E、全量串行 E2E 和 PWA 升级测试通过。
-- 发布前在真实 iPhone Safari/PWA 与 Android Chrome/PWA 记录结果。
+- 发布前完成 iPhone Simulator Safari/PWA、Android Emulator Chrome/WebView 与 built-dist PWA 生命周期记录；实体机作为发布后观察，不阻塞 UI V3。
 
 ## 11. Stitch 设计追踪
 

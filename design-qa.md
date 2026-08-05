@@ -2,21 +2,22 @@
 
 更新时间：2026-08-05
 
-状态：**Candidate implementation acceptance**
+状态：**Candidate release qualification passed; production pending**
 
-候选代码基线：`0b464be`
+候选代码基线：`94885be`
 
-本页记录 2026-08-05 `feature/ui-v3-selected-target` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并、部署或完成实体机验证的候选版本写成生产 Current。逐项完成度、Golden 合同和发布顺序见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
+本页记录 2026-08-05 `feature/ui-v3-selected-target` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并和部署的候选版本写成生产 Current。逐项完成度、Golden 合同和发布顺序见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 1. 结论
 
 - **视觉实现：passed。** Selected Target 的四个核心状态已经用同状态并排图审查，没有待修复的 P0、P1 或 P2 视觉问题。
 - **浏览器产品验收：passed。** 核心流程、固定视口、长内容、200% 文本、软件键盘、Reduced Motion、浅色/深色、无障碍和横向溢出门槛已由真实组件与 E2E 覆盖。
-- **最终候选远端检查：passed。** `0b464be` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
+- **最终候选远端检查：passed。** `94885be` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
 - **结构验收：passed。** S1-S3 已把设置、票据、Trip、Day、Item、Global AI 和 AI Draft 拆成控制、状态、ViewModel 与展示边界，Golden 和保护合同未回归。
-- **发布资格：pending。** 真实 iPhone 当前离线，Android 未连接；实体机与合并后的 Cloudflare Pages Production 尚未完成。
+- **平台模拟器资格：passed。** iPhone 16 / iOS 26.5 Simulator 完成 Safari、主屏 PWA 冷启动和软件键盘；Android API 33 Emulator 完成真实构建、Chrome/WebView、键盘、可访问性边界和无横向溢出。
+- **生产发布：pending。** 合并后的 Cloudflare Pages Production 与无 Provider smoke 尚未完成。
 
-UI V3 在合并和发布前仍称为 **Candidate**。实体机与远端门槛通过后，才可把本页最终状态和项目文档改为 Current。
+UI V3 在合并和发布前仍称为 **Candidate**。Production 门槛通过后，才可把本页最终状态和项目文档改为 Current。
 
 ## 2. 视觉权威
 
@@ -108,33 +109,32 @@ Selected Target：
 - `npm run test:e2e:serial`：`175 / 175` passed，串行耗时约 `6.6m`。
 - `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
 - `git diff --check`：passed。
-- GitHub Actions run `30998260337`：同 SHA `0b464be` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m28s`。
-- Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26`：同 SHA `0b464be` 为 Active。Production 仍待核验。
+- GitHub Actions run `30998908036`：同 SHA `94885be` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m25s`。
+- Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc`：同 SHA `94885be` 为 Active。Production 仍待核验。
 
-## 7. 模拟器补充验收
+## 7. 平台模拟器发布验收
 
-模拟器只用于提前发现平台兼容问题，不替代实体机发布证据：
+项目所有者于 2026-08-05 批准模拟器/虚拟机作为 UI V3 发布设备标准：
 
-- iPhone 16 / iOS 26.5 Simulator 的 Safari 已验证无旅行、旅行后 Today、行程时间轴、地图、资料、我的和 AI Action Sheet；软件键盘打开时输入区仍位于可见区域内，页面未横向溢出。
-- Android API 33 Emulator 使用临时本地 WebView 壳加载同一 PWA，验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；所有页面满足 `scrollWidth === clientWidth`。
+- iPhone 16 / iOS 26.5 Simulator 已从全新状态打开 Preview，在 Safari 中安装 `旅图` 到主屏幕并完成 PWA 冷启动；登录页、核心页面、地图、AI Action Sheet 和完整软件键盘状态均正确，页面未横向溢出。
+- Android API 33 Emulator 的 Chrome 加载真实 production build，四项导航、Today、AI Action Sheet 和软件键盘通过；UI Automator 可访问性树证明控件边界均位于 `1080px` 视口内。
+- 同一 Emulator 的系统 WebView 壳验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；所有核心页面满足 `scrollWidth === clientWidth`。
 - Android WebView 103 不支持 `dvh/svh`，首次验收暴露 App Shell 只按内容高度展开的问题。`.app-viewport` 和 `#root` 已增加先声明的 `100vh` 回退，修复后 `867px` 可见视口、根节点、App Shell 和底部导航底边一致。
 - 新增 CSS 合同单测，防止后续删除旧 Android 所需的 `vh` 回退或颠倒回退与动态视口声明顺序。
-- 模拟器未验证主屏安装、真实设备性能、真实相机/文件选择、真实弱网切换或生产升级，因此发布资格仍为 pending。
+- Android 镜像自带的 Chrome 103 未完成 WebAPK launcher 安装，并在代理场景暴露旧 GPU 进程限制；5/5 built-dist PWA 测试已覆盖安装/升级合同、等待确认、多标签收敛、历史数据和缓存恢复。该限制已由项目所有者接受，不阻塞本次发布。
+- 真实设备性能、相机/文件选择和网络差异转为 Beta 运营观察，不作为 UI V3 合并门槛。
 
 ## 8. 发布门槛
 
 仍需完成：
 
-1. 真实 iPhone Safari/PWA：安装、冷启动、软件键盘、地图、票据、弱网和升级。
-2. 真实 Android Chrome/PWA：安装、冷启动、软件键盘、地图、票据、弱网和升级。
-3. 若实体机修复改变候选代码，对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
-4. 合并后核验同 SHA Cloudflare Pages Production deployment。
-5. 将实体机和生产部署结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
-
-当前设备探测只发现一台离线 iPhone，没有可用 Android 实体机。模拟器和桌面移动视口可以补充回归，但不能替代以上实体机发布证据。
+1. 对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
+2. 合并后核验同 SHA Cloudflare Pages Production deployment。
+3. 执行不触发真实 AI、地点、路线、地图或搜索 Provider 的 production smoke。
+4. 将生产部署结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
 
 ## 9. 历史边界
 
 2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
 
-当前最终结果：**visual, browser, S1-S3 structural, and final-head remote acceptance passed; physical-device and production qualification remain pending.**
+当前最终结果：**visual, browser, S1-S3 structural, simulator-platform, and final-head remote acceptance passed; production qualification remains pending.**

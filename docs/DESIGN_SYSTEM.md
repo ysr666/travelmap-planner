@@ -98,4 +98,4 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - Static Golden Screenshots target `maxDiffPixelRatio <= 0.005`.
 - Dynamic maps use stable fixture data plus canvas, marker, control, and overlap assertions.
 - Every page checks that `scrollWidth <= clientWidth`.
-- Real iPhone Safari/PWA and Android Chrome/PWA remain required before release; simulator results cannot replace the device record.
+- Release qualification uses the owner-approved iPhone Simulator and Android Emulator matrix plus built-dist PWA lifecycle tests. Physical devices are post-release observation coverage, not a UI V3 release blocker.

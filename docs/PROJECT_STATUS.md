@@ -4,14 +4,14 @@
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现、浏览器验收和 S1-S3 结构收口；候选代码 `0b464be` 已通过全量本地门槛及同 SHA GitHub CI / Cloudflare Pages Preview。实体机与合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现、浏览器验收、S1-S3 结构收口和项目所有者批准的平台模拟器发布资格；候选代码 `94885be` 已通过全量本地门槛及同 SHA GitHub CI / Cloudflare Pages Preview。合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
 发布仍以同一提交同时满足以下条件为准：
 
 - GitHub Actions 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过。
 - Cloudflare Pages 生产部署成功并指向同一提交。
 - Supabase 迁移、RLS、授权和 advisors 已复核。
-- iPhone Safari 与 Android Chrome 实体机结果补录到 [BETA_QA_RECORD.md](BETA_QA_RECORD.md)。
+- iPhone Simulator Safari/主屏 PWA、Android Emulator Chrome/WebView 与 built-dist PWA 生命周期结果已补录到 [BETA_QA_RECORD.md](BETA_QA_RECORD.md)。
 
 ## 产品定位
 
@@ -34,7 +34,7 @@
 - **Candidate:** Home、Documents、Settings、Ticket Library、Trip、Day、Item、Global AI 和 AI Draft 已完成 S1-S3 路由入口、控制/数据、表单状态、ViewModel 与展示边界拆分；Action Gateway、Provider 隐私过滤、确认门控和 stale guard 保持原合同。
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
-- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器验收、iOS/Android 模拟器补充验收和 S1-S3 结构治理；`0b464be` 的最终候选远端已通过，M6 实体机与 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器与平台模拟器验收和 S1-S3 结构治理；`94885be` 的最终候选远端已通过，仅 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 尚未合并部署，不能把候选分支能力描述为生产 Current。
 
@@ -100,10 +100,10 @@
 - `npm run test:unit`：191 个文件、1578 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
-- 全量 Playwright：175/175 通过，串行耗时约 6.6 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。S3 另有 118/118 聚焦单测与 47/47 AI Draft/Golden 聚焦 E2E。`0b464be` 的 GitHub Actions run `30998260337` 五项 required jobs 与 Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` 均按同一 SHA 通过。
+- 全量 Playwright：175/175 通过，串行耗时约 6.6 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。S3 另有 118/118 聚焦单测与 47/47 AI Draft/Golden 聚焦 E2E。`94885be` 的 GitHub Actions run `30998908036` 五项 required jobs 与 Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 均按同一 SHA 通过。
 - `git diff --check`：通过。
 
-补充平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出。该结果只证明旧 WebView 布局兼容，不替代 Android Chrome/PWA 实体机发布记录。
+平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出；Chrome 真实构建、软件键盘、可访问性边界和 AI Sheet 也通过。旧 Chrome 103 未完成 WebAPK launcher 安装的环境限制由 5/5 built-dist PWA 生命周期测试覆盖，并已按项目所有者批准的模拟器发布标准记录。
 
 候选入口 JS 为 468.2 KiB，初始静态 JS 图为 852.4 KiB，gzip 245.5 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
@@ -133,10 +133,10 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 - 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
 - AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
-- iPhone Safari、Android Chrome 和安装到主屏幕后的实体机回归仍需人工完成。
-- MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验仍待记录。
+- iPhone/Android 实体机性能、文件选择和网络差异为发布后运营观察，不再阻塞 UI V3。
+- MapLibre 独立 chunk 仍超过 1 MB，首次成功下载仍需网络；自动化已覆盖下载中断重试，实体机弱网体验留作运营观察。
 - 浏览器旧 service worker 可能显示旧 UI；当前版本改为显式更新提示，仍需生产升级观察。
-- 自动化已覆盖当前构建的 `v1 → v2 → v3`，以及 `4c8f60ec → 4c748935 → 当前候选` 的真实历史生产迁移；更早版本和实体机升级仍以 Beta 观察为准。
+- 自动化已覆盖当前构建的 `v1 → v2 → v3`，以及 `4c8f60ec → 4c748935 → 当前候选` 的真实历史生产迁移；更早版本和实体机升级以 Beta 观察为准。
 - 真实 provider 可用性还依赖 Cloudflare env、供应商配额、区域网络和当前登录 session；自动化主要覆盖合同、边界、mock 和失败语义。
 - Action Gateway 当前覆盖十五个注册动作；复杂账本和长文本行程编辑仍有兼容路径，不能声称“任意一句话都能完成所有功能”。
 

@@ -200,6 +200,7 @@ Selected Target 不得改变以下合同：
 - 移动底部导航高度为 `56px + env(safe-area-inset-bottom)`。
 - AI 关闭时不保留输入框、上下文标签或空面板。
 - 页面底部 padding 由 App Shell 统一计算，不允许各页面使用超大固定 padding 猜测遮挡高度。
+- 全高壳层必须先声明 `100vh` 回退，再声明 `100dvh/100svh`；支持动态视口的浏览器使用新单位，旧 Android WebView 仍必须铺满可见高度。
 - 同一时刻最多存在一个固定底部交互面：主导航、Modal Sheet 或地图详情 Sheet。
 - Modal 打开时可以覆盖底部导航，关闭后恢复原页面和触发按钮焦点。
 

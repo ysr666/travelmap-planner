@@ -18,8 +18,8 @@
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查、security/performance advisors | 剩余 advisor 均已记录 |
-| CI / E2E | 本地候选就绪 | 190/1576 unit、173/173 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
-| 实体机 | 待完成 | 自动化覆盖移动视口和桌面 | iPhone/Android 需人工记录 |
+| CI / E2E | 本地候选就绪 | 191/1577 unit、173/173 E2E、bundle/PWA budget、真实 runtime typecheck | 推送后仍以同 SHA 为准 |
+| 实体机 | 待完成 | 自动化覆盖移动视口；iOS 26.5 Simulator 与 Android API 33 Emulator 已补充验证核心页面、地图和 AI 键盘布局 | iPhone Safari/PWA 与 Android Chrome/PWA 仍需实体机人工记录 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |

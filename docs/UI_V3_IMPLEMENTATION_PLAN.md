@@ -23,7 +23,7 @@
 | M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单和五视口 Golden |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | 浏览器视觉/自动化已通过；实体机与同 SHA 远端证据待补 |
+| M6 产品级验收与发布 | 进行中 | 浏览器视觉/自动化及模拟器补充验收已通过；实体机与同 SHA 远端证据待补 |
 
 阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
 
@@ -72,7 +72,7 @@ Selected Target 固定为：
 
 规划快照：2026-08-05。
 
-- 当前工作分支为 `feature/ui-v3-product-shell`。
+- 当前工作分支为 `feature/ui-v3-selected-target`。
 - 工作区已有 App Shell、地图、票据、设置、表单和 E2E 的未提交改动；执行前必须先审计并拆分，禁止覆盖或重置现有改动。
 - `GlobalAiCommandBar.tsx`、`HomePage.tsx`、`TripWorkspacePage.tsx`、`DayViewPage.tsx`、`ItemDetailPage.tsx`、`TicketLibraryPage.tsx` 和 `SettingsPage.tsx` 均已超过目标页面规模，迁移时必须拆分 ViewModel、状态和展示组件。
 - 当前 Hash URL 和深链接继续兼容；UI V3 先替换呈现和导航映射，不同时重写路由合同。

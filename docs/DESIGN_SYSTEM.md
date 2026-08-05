@@ -78,6 +78,7 @@ Target spacing sequence is `4, 8, 12, 16, 24, 32`. Mobile page margins are `16px
 - `600–1023px`: navigation rail or stable top navigation and optional list-detail split.
 - `>=1024px`: sidebar and master-detail layout; do not render the app as a centered phone column.
 - App Shell owns safe-area insets, fixed navigation height, content padding, and z-index.
+- Full-height shells declare `100vh` before `100dvh/100svh`; dynamic units may override the fallback, but older Android WebView must still fill the visible viewport.
 - Text and controls must remain usable at `320px`, with software keyboard open, and at `200%` text zoom.
 
 ## Accessibility

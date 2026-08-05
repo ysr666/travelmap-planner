@@ -4,7 +4,7 @@
 
 状态：**Candidate implementation acceptance**
 
-本页记录 2026-08-05 `feature/ui-v3-product-shell` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并、部署或完成实体机验证的候选版本写成生产 Current。
+本页记录 2026-08-05 `feature/ui-v3-selected-target` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并、部署或完成实体机验证的候选版本写成生产 Current。
 
 ## 1. 结论
 
@@ -92,16 +92,26 @@ Selected Target：
 
 - `npm run typecheck`：passed，覆盖应用、Provider runtime 和 Travel Inbox Worker。
 - `npm run lint`：passed，无 warning。
-- `npm run test:unit`：passed，`190` 个文件、`1576` 个测试。
+- `npm run test:unit`：passed，`191` 个文件、`1577` 个测试。
 - `npm run build`：passed。
 - Bundle budget：入口 `468.2 KiB`；初始 JS `852.5 KiB`；初始 gzip `245.5 KiB`；启动 chunk `8` 个。
-- PWA precache：`2327.3 KiB / 114` 项，仍低于 `2500 KiB` 门槛。
+- PWA precache：`2327.2 KiB / 114` 项，仍低于 `2500 KiB` 门槛。
 - V3 Golden/视觉流程：`12 / 12` passed，覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`。
-- `npm run test:e2e:serial`：`173 / 173` passed，串行耗时约 `6.2m`。
+- `npm run test:e2e:serial`：`173 / 173` passed，串行耗时约 `6.3m`。
 - `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
 - `git diff --check`：passed。
 
-## 7. 发布门槛
+## 7. 模拟器补充验收
+
+模拟器只用于提前发现平台兼容问题，不替代实体机发布证据：
+
+- iPhone 16 / iOS 26.5 Simulator 的 Safari 已验证无旅行、旅行后 Today、行程时间轴、地图、资料、我的和 AI Action Sheet；软件键盘打开时输入区仍位于可见区域内，页面未横向溢出。
+- Android API 33 Emulator 使用临时本地 WebView 壳加载同一 PWA，验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；所有页面满足 `scrollWidth === clientWidth`。
+- Android WebView 103 不支持 `dvh/svh`，首次验收暴露 App Shell 只按内容高度展开的问题。`.app-viewport` 和 `#root` 已增加先声明的 `100vh` 回退，修复后 `867px` 可见视口、根节点、App Shell 和底部导航底边一致。
+- 新增 CSS 合同单测，防止后续删除旧 Android 所需的 `vh` 回退或颠倒回退与动态视口声明顺序。
+- 模拟器未验证主屏安装、真实设备性能、真实相机/文件选择、真实弱网切换或生产升级，因此发布资格仍为 pending。
+
+## 8. 发布门槛
 
 仍需完成：
 
@@ -111,9 +121,9 @@ Selected Target：
 4. 合并后核验同 SHA Cloudflare Pages production deployment。
 5. 将实体机和远端结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
 
-当前设备探测只发现一台离线 iPhone，`adb devices -l` 没有 Android 设备。模拟器和桌面移动视口可以补充回归，但不能替代以上实体机发布证据。
+当前设备探测只发现一台离线 iPhone，没有可用 Android 实体机。模拟器和桌面移动视口可以补充回归，但不能替代以上实体机发布证据。
 
-## 8. 历史边界
+## 9. 历史边界
 
 2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
 

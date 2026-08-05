@@ -9,11 +9,18 @@
 - 候选分支实现四项主导航、阶段化 Today、按需 AI Action Sheet、连续时间轴、单一地点 Sheet、资料编辑式预览列表、渐进表单和四组设置。
 - Selected Target 的出发前、旅行中、行程和资料四个核心状态均完成 `390 x 844` 同状态并排审查；没有待修复的 P0、P1 或 P2 视觉问题。
 - Golden/视觉流程覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`，并覆盖长文本、200% 文本、软件键盘、浅色/深色和无横向溢出。
-- `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 190 个文件、1576 个测试。
+- `npm run typecheck`、`npm run lint`、`npm run test:unit` 和 `npm run build` 通过；单测为 191 个文件、1577 个测试。
 - `npm run test:e2e:pwa-upgrade` 5/5 通过；历史生产包专用空状态断言保留历史文案，未用 V3 文案改写旧产物事实。
-- `npm run test:e2e:serial` 最终重跑 173/173 通过，串行耗时约 6.2 分钟。
+- `npm run test:e2e:serial` 最终重跑 173/173 通过，串行耗时约 6.3 分钟。
 - 当前设备探测只有一台离线 iPhone，Android 未连接。不得用桌面移动视口或模拟器代替实体机发布结论。
 - 远端 CI 和 Cloudflare 结果必须在候选提交推送后按同一 SHA 补录；本记录当前只证明本地候选。
+
+### 模拟器补充记录
+
+- iPhone 16 / iOS 26.5 Simulator Safari 已验证无旅行、旅行后 Today、行程时间轴、地图、资料、我的和 AI Action Sheet；输入获得焦点后，Sheet 保持在软件键盘可见区域内。
+- Android API 33 Emulator 使用临时本地 WebView 壳加载同一 PWA，验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；核心页面均满足 `scrollWidth === clientWidth`。
+- Android WebView 103 不支持 `dvh/svh`，暴露 App Shell 半屏高度问题。增加 `100vh` 回退后，`innerHeight`、`#root`、`.app-viewport` 和底部导航底边均收敛到约 `867px`；软件键盘打开后同步收敛到约 `554px`。
+- 上述模拟器结果不覆盖 Chrome/PWA 安装、冷启动、真实设备性能、真实文件选择、弱网或升级，实体机表仍保持待人工补录。
 
 完整视觉与发布边界见仓库根目录 `design-qa.md`。
 

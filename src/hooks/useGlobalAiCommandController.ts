@@ -195,7 +195,7 @@ export function useGlobalAiCommandController({
       window.cancelAnimationFrame(frame)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [aiApplyConfirmOpen, aiSendConfirmOpen, dismissPanel, initialCommand, open, writeConfirmOpen])
+  }, [aiApplyConfirmOpen, aiSendConfirmOpen, commandRef, dismissPanel, initialCommand, open, sheetRef, writeConfirmOpen])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

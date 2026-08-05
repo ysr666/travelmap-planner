@@ -24,6 +24,7 @@ import type {
 } from './actionGateway/types'
 import { listAiActionCatalog } from './actionGateway/registry'
 import { validateAiActionPlan } from './actionGateway/validation'
+import { isGooglePlacesPhotoRef } from '../media/travelMedia'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -33,6 +34,7 @@ export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
+export const PROVIDER_PROXY_PLACE_PHOTO_OPERATION = 'place_photo' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
@@ -63,7 +65,7 @@ export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -696,9 +698,41 @@ export type ProviderProxyPlaceDetailsResult = {
   priceLevel?: string
   priceRangeText?: string
   editorialSummary?: string
+  photos?: ProviderProxyPlacePhotoReference[]
   provider: 'google_places'
   retrievedAt: string
 }
+
+export type ProviderProxyPlacePhotoAttribution = {
+  displayName: string
+  uri?: string
+}
+
+export type ProviderProxyPlacePhotoReference = {
+  photoRef: string
+  width: number
+  height: number
+  authorAttributions: ProviderProxyPlacePhotoAttribution[]
+  googleMapsUri?: string
+}
+
+export type ProviderProxyPlacePhotoRequest = {
+  operation: typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  photoRef: string
+  maxWidthPx?: number
+  maxHeightPx?: number
+}
+
+export type ProviderProxyValidatedPlacePhotoRequest = ProviderProxyPlacePhotoRequest & {
+  maxWidthPx: number
+  maxHeightPx: number
+}
+
+export type ProviderProxyPlacePhotoValidationResult =
+  | { ok: true; request: ProviderProxyValidatedPlacePhotoRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyPlaceDetailsSuccessResponse = {
   ok: true
@@ -1101,6 +1135,14 @@ const FORBIDDEN_PLACE_DETAILS_FIELDS = new Set([
   'query',
   'search',
 ])
+const PLACE_PHOTO_ALLOWED_FIELDS = new Set([
+  'maxHeightPx',
+  'maxWidthPx',
+  'operation',
+  'photoRef',
+  'quotaSessionId',
+  'requestId',
+])
 const FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS = new Set([
   'apikey',
   'authorization',
@@ -1262,6 +1304,9 @@ const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
 const MAX_PLACE_LOOKUP_QUERY_LENGTH = 200
 const DEFAULT_PLACE_LOOKUP_MAX_RESULTS = 5
 const MAX_PLACE_ID_LENGTH = 220
+const MAX_PLACE_PHOTO_REF_LENGTH = 1_500
+const MIN_PLACE_PHOTO_DIMENSION = 64
+const MAX_PLACE_PHOTO_DIMENSION = 1_600
 const MAX_TRIP_CONTENT_ENRICHMENT_ITEMS = 6
 const MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM = 8
 const MAX_TRIP_CONTENT_ENRICHMENT_TEXT = 700
@@ -1572,6 +1617,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return '地点详情服务返回的内容无法解析。'
     return '地点详情服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_PLACE_PHOTO_OPERATION) {
+    if (code === 'quota_exceeded') return '今日地点图片次数已达上限。'
+    if (code === 'invalid_request') return '地点图片请求无效。'
+    if (code === 'provider_error') return '地点图片服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前地点图片请求暂不支持。'
+    if (code === 'invalid_response') return '地点图片服务返回的内容无法使用。'
+    return '地点图片服务暂不可用。'
+  }
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     if (code === 'quota_exceeded') return '今日内容补充次数已达上限。'
     if (code === 'invalid_request') return '内容补充请求无效。'
@@ -1748,6 +1802,16 @@ function readOptionalPositiveInteger(value: unknown) {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
   return undefined
+}
+
+function readPlacePhotoDimension(value: unknown, fallback: number) {
+  if (value === undefined) return fallback
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MIN_PLACE_PHOTO_DIMENSION
+    && value <= MAX_PLACE_PHOTO_DIMENSION
+    ? value
+    : 0
 }
 
 function readInterestTags(value: unknown): { ok: true; tags?: string[] } | { message: string; ok: false } {
@@ -2031,6 +2095,18 @@ function placeDetailsInvalidRequest(message: string, requestId?: string): Provid
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function placePhotoInvalidRequest(message: string, requestId?: string): ProviderProxyPlacePhotoValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
       requestId,
     }),
     ok: false,
@@ -3239,6 +3315,41 @@ export function validateProviderProxyPlaceDetailsRequest(input: unknown): Provid
       placeId,
       quotaSessionId: readOptionalString(record.quotaSessionId, 160),
       region: region || undefined,
+      requestId,
+    },
+  }
+}
+
+export function validateProviderProxyPlacePhotoRequest(input: unknown): ProviderProxyPlacePhotoValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_PLACE_PHOTO_OPERATION) {
+    return placePhotoInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  if (!Object.keys(record).every((field) => PLACE_PHOTO_ALLOWED_FIELDS.has(field))) {
+    return placePhotoInvalidRequest('地点图片请求包含未知字段。', requestId)
+  }
+
+  const photoRef = typeof record.photoRef === 'string' ? record.photoRef.trim() : ''
+  if (!photoRef || photoRef.length > MAX_PLACE_PHOTO_REF_LENGTH || !isGooglePlacesPhotoRef(photoRef)) {
+    return placePhotoInvalidRequest('地点图片引用无效。', requestId)
+  }
+
+  const maxWidthPx = readPlacePhotoDimension(record.maxWidthPx, 1_200)
+  const maxHeightPx = readPlacePhotoDimension(record.maxHeightPx, 1_200)
+  if (!maxWidthPx || !maxHeightPx) {
+    return placePhotoInvalidRequest(`地点图片尺寸必须在 ${MIN_PLACE_PHOTO_DIMENSION}-${MAX_PLACE_PHOTO_DIMENSION}px 之间。`, requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      maxHeightPx,
+      maxWidthPx,
+      operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
+      photoRef,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
       requestId,
     },
   }

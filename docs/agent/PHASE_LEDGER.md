@@ -2819,3 +2819,24 @@ P0 validation:
 - `npm run check:fidelity-assets` passed for all 11 assets.
 - Both JSON fixtures passed strict `jq` parsing; the canonical fixture contains 1 trip, 12 days, 9 key items, 6 documents, 7 media records, and 4 realtime facts.
 - `git diff --check` passed.
+
+P1 result:
+
+- Added strict `TravelMediaAssetV1` and `BrandIdentityV1` contracts. Render references are limited to a Google Places photo resource name, a reviewed fixture asset ID, or an existing private ticket ID; arbitrary URLs and unknown fields are rejected.
+- Added a controlled brand registry for Air China, LNER, National Rail, and Allianz. Unknown or URL-shaped values use a generic Lucide icon instead of selecting an unreviewed asset.
+- Extended Place Details with a fixed photo field mask and normalized photo references, dimensions, Google attribution, and source links.
+- Added a two-stage Place Photo proxy. It obtains a Google-issued media location, accepts only HTTPS Google media hosts, refuses redirects, streams at most 3 MB, rejects SVG and non-image MIME types, parses image dimensions from bytes, and returns private, `nosniff` media responses.
+- Reused the existing Provider Proxy Auth, Origin, edge identity, place quota, daily budget, and kill-switch controls for `place_photo`; no Provider key, resolved media URL, or raw payload is returned to the client.
+- Added `TravelObjectMedia`, `MediaFallback`, and `BrandMark` with fixed ratios, lazy loading, expired/error fallbacks, focal-point cropping, source attribution, and object URL cleanup.
+- Kept licensed fidelity images under the E2E-only boundary. Production code resolves fixture IDs only when the existing E2E bypass build flag is enabled, and the normal production build does not copy the fixture photos.
+- Updated the canonical fixture to the strict media contract and added a test proving every fixture media ID is registered exactly once.
+- No IndexedDB/Supabase schema, ticket Blob semantics, AI write path, route cache, production fact claim, or real Provider call changed.
+
+P1 validation:
+
+- Focused media, brand, Provider contract/client/provider/handler, operations guard, and quota tests passed: 11 files and 156 tests.
+- The canonical fixture contract test passed for all seven media records and the seven controlled fixture IDs.
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed.
+- `npm run test:unit` passed: 198 files and 1617 tests.
+- Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2340.2 KiB/114-entry precache.
+- `git diff --check` passed.

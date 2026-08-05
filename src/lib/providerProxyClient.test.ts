@@ -11,6 +11,7 @@ import {
   fetchProviderProxyAssistantAnswer,
   fetchProviderProxyAiActionPlan,
   fetchProviderProxyPlaceLookup,
+  fetchProviderProxyPlacePhoto,
   fetchProviderProxyTravelSearch,
   fetchProviderProxyTripOperationsSummary,
   getProviderProxyConfig,
@@ -797,6 +798,70 @@ describe('provider proxy place_lookup client', () => {
       message: '地点查询服务暂不可用。',
       status: 503,
     })
+  })
+})
+
+describe('provider proxy place_photo client', () => {
+  const photoRef = 'places/ChIJN1t_tDeuEmsRUsoyG83frY4/photos/ATKogpcFidelityPhotoReference'
+
+  it('posts only a resource name and returns a bounded image blob', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body).toMatchObject({
+        maxHeightPx: 480,
+        maxWidthPx: 640,
+        operation: 'place_photo',
+        photoRef,
+      })
+      expect(JSON.stringify(body)).not.toContain('Authorization')
+      expect(JSON.stringify(body)).not.toContain('apiKey')
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer access-token')
+      return new Response(new Blob(['image-bytes'], { type: 'image/webp' }), {
+        headers: { 'Content-Length': '11', 'Content-Type': 'image/webp' },
+        status: 200,
+      })
+    }) as unknown as typeof fetch
+
+    const result = await fetchProviderProxyPlacePhoto({
+      maxHeightPx: 480,
+      maxWidthPx: 640,
+      operation: 'place_photo',
+      photoRef,
+    }, '/api/provider-proxy', {
+      accessToken: 'access-token',
+      fetcher,
+      storage: memoryStorage(),
+    })
+
+    expect(result.type).toBe('image/webp')
+    expect(result.size).toBe(11)
+  })
+
+  it('rejects unsafe requests and non-image or oversized responses', async () => {
+    const unsafeFetcher = vi.fn() as unknown as typeof fetch
+    await expect(fetchProviderProxyPlacePhoto({
+      operation: 'place_photo',
+      photoRef: 'http://127.0.0.1/private.png',
+    }, '/api/provider-proxy', { fetcher: unsafeFetcher })).rejects.toBeInstanceOf(ProviderProxyClientError)
+    expect(unsafeFetcher).not.toHaveBeenCalled()
+
+    const htmlFetcher = vi.fn(async () => new Response('<html>not an image</html>', {
+      headers: { 'Content-Type': 'text/html' },
+      status: 200,
+    })) as unknown as typeof fetch
+    await expect(fetchProviderProxyPlacePhoto({
+      operation: 'place_photo',
+      photoRef,
+    }, '/api/provider-proxy', { fetcher: htmlFetcher })).rejects.toMatchObject({ code: 'invalid_response' })
+
+    const oversizedFetcher = vi.fn(async () => new Response(new Blob(['x'], { type: 'image/png' }), {
+      headers: { 'Content-Length': '3000001', 'Content-Type': 'image/png' },
+      status: 200,
+    })) as unknown as typeof fetch
+    await expect(fetchProviderProxyPlacePhoto({
+      operation: 'place_photo',
+      photoRef,
+    }, '/api/provider-proxy', { fetcher: oversizedFetcher })).rejects.toMatchObject({ code: 'invalid_response' })
   })
 })
 

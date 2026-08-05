@@ -77,6 +77,11 @@ export const fetchProviderProxyPlaceDetails: ProviderProxyClientCore['fetchProvi
   return core.fetchProviderProxyPlaceDetails(...args)
 }
 
+export const fetchProviderProxyPlacePhoto: ProviderProxyClientCore['fetchProviderProxyPlacePhoto'] = async (...args) => {
+  const core = await loadProviderProxyClientCore()
+  return core.fetchProviderProxyPlacePhoto(...args)
+}
+
 export const fetchProviderProxyTripContentEnrichment: ProviderProxyClientCore['fetchProviderProxyTripContentEnrichment'] = async (...args) => {
   const core = await loadProviderProxyClientCore()
   return core.fetchProviderProxyTripContentEnrichment(...args)

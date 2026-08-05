@@ -27,6 +27,7 @@ import {
   PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+  PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
@@ -397,7 +398,11 @@ export function getProviderProxyQuotaBucketConfig(
   if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
     return { bucket: 'ai_trip_operations|', maxRequests: limits.maxAiTripOperationsSummaryRequestsPerWindow }
   }
-  if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
+  if (
+    operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+    || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION
+    || operation === PROVIDER_PROXY_PLACE_PHOTO_OPERATION
+  ) {
     return { bucket: 'place|', maxRequests: limits.maxPlaceLookupRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {

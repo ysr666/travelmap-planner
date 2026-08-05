@@ -2879,6 +2879,78 @@ button.v3-record-row:active {
   animation: page-enter 180ms ease-out both;
 }
 
+.travel-object-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  border-radius: 6px;
+  background: var(--color-surface-container-low);
+  contain: layout paint;
+}
+
+.travel-object-media-hero {
+  border-radius: 8px;
+}
+
+.travel-object-media-attribution {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  max-width: calc(100% - 8px);
+  min-height: 20px;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(16 24 22 / 72%);
+  padding: 3px 5px;
+  color: white;
+  font-size: 10px;
+  line-height: 14px;
+  text-decoration: none;
+}
+
+.travel-object-media-attribution span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-object-media-thumbnail .travel-object-media-attribution {
+  width: 22px;
+  min-height: 22px;
+  justify-content: center;
+  padding: 0;
+}
+
+.travel-object-media-thumbnail .travel-object-media-attribution span {
+  display: none;
+}
+
+.brand-mark {
+  display: inline-flex;
+  width: 76px;
+  height: 32px;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-on-surface-variant);
+}
+
+.brand-mark-monochrome img {
+  filter: grayscale(1) contrast(1.15);
+}
+
+.dark .brand-mark-monochrome img {
+  filter: grayscale(1) invert(1) contrast(1.05);
+}
+
 @keyframes page-enter {
   from {
     opacity: 0;

@@ -7,6 +7,7 @@ import {
   PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+  PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
   PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION,
   PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
@@ -29,6 +30,7 @@ import {
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlaceLookupRequest,
+  validateProviderProxyPlacePhotoRequest,
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTripOperationsSummaryRequest,
@@ -148,6 +150,13 @@ import {
   type PlaceDetailsProvider,
   type PlaceDetailsProviderErrorCode,
 } from './placeDetailsProvider'
+import {
+  createDisabledPlacePhotoProvider,
+  createGooglePlacesPhotoProvider,
+  createUnavailablePlacePhotoProvider,
+  type PlacePhotoProvider,
+  type PlacePhotoProviderErrorCode,
+} from './placePhotoProvider'
 import {
   buildTripContentEnrichmentProviderInput,
   createDisabledTripContentEnrichmentProvider,
@@ -477,6 +486,10 @@ export async function handleProviderProxyRequest({
 
   if (operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
     return handlePlaceDetailsRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
+  }
+
+  if (operation === PROVIDER_PROXY_PLACE_PHOTO_OPERATION) {
+    return handlePlacePhotoRequest({ body, corsHeaders, env, fetcher, quotaHasher, quotaLimits, quotaStorage: selectedQuotaStorage, request })
   }
 
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
@@ -1520,6 +1533,91 @@ function mapPlaceDetailsErrorCodeToStatus(code: PlaceDetailsProviderErrorCode): 
     case 'quota_exceeded': return 429
     case 'unsupported': return 501
     case 'network_error': return 502
+    case 'provider_error': return 502
+    default: return 502
+  }
+}
+
+async function handlePlacePhotoRequest({
+  body,
+  corsHeaders,
+  env,
+  fetcher,
+  quotaHasher,
+  quotaLimits,
+  quotaStorage,
+  request,
+}: {
+  body: unknown
+  corsHeaders: Record<string, string>
+  env: ProviderProxyHandlerEnv
+  fetcher: typeof fetch
+  quotaHasher?: ProviderProxyQuotaHasher
+  quotaLimits?: Partial<ProviderProxyQuotaLimits>
+  quotaStorage: ProviderProxyQuotaStorage
+  request: Request
+}): Promise<Response> {
+  const validation = validateProviderProxyPlacePhotoRequest(body)
+  if (!validation.ok) return jsonResponse(validation.error, 400, corsHeaders)
+
+  const photoRequest = validation.request
+  const quotaResponse = await consumeQuotaOrBuildErrorResponse({
+    coordinateCount: 0,
+    corsHeaders,
+    operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
+    quotaHasher,
+    quotaLimits,
+    quotaSessionId: photoRequest.quotaSessionId,
+    quotaStorage,
+    request,
+    requestId: photoRequest.requestId,
+  })
+  if (quotaResponse) return quotaResponse
+
+  try {
+    const provider = selectPlacePhotoProvider(env, fetcher)
+    const result = await provider.getPhoto(photoRequest)
+    if (!result.ok) {
+      throw new ProviderProxyServerError(result.errorCode, mapPlacePhotoErrorCodeToStatus(result.errorCode))
+    }
+    const bytes = new Uint8Array(result.media.bytes.byteLength)
+    bytes.set(result.media.bytes)
+    return new Response(bytes, {
+      headers: {
+        ...corsHeaders,
+        'Cache-Control': 'private, max-age=300',
+        'Content-Length': String(result.media.bytes.byteLength),
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'Content-Type': result.media.contentType,
+        'X-Content-Type-Options': 'nosniff',
+      },
+      status: 200,
+    })
+  } catch (caught) {
+    const error = normalizeProviderProxyHandlerError(caught, PROVIDER_PROXY_PLACE_PHOTO_OPERATION, photoRequest.requestId)
+    return jsonResponse(error.body, error.status, corsHeaders)
+  }
+}
+
+function selectPlacePhotoProvider(env: ProviderProxyHandlerEnv, fetcher: typeof fetch): PlacePhotoProvider {
+  if (isMockMode(env)) return createDisabledPlacePhotoProvider()
+  const provider = env.TRIPMAP_PLACE_PROVIDER?.trim().toLowerCase()
+  if (provider === 'disabled' || provider === 'mock') return createDisabledPlacePhotoProvider()
+  if (provider === 'google_places' || (!provider && getGooglePlacesApiKey(env))) {
+    return getGooglePlacesApiKey(env)
+      ? createGooglePlacesPhotoProvider(env, fetcher)
+      : createUnavailablePlacePhotoProvider()
+  }
+  return provider ? createDisabledPlacePhotoProvider() : createUnavailablePlacePhotoProvider()
+}
+
+function mapPlacePhotoErrorCodeToStatus(code: PlacePhotoProviderErrorCode): number {
+  switch (code) {
+    case 'provider_unavailable': return 503
+    case 'quota_exceeded': return 429
+    case 'unsupported': return 501
+    case 'network_error': return 502
+    case 'invalid_response': return 502
     case 'provider_error': return 502
     default: return 502
   }

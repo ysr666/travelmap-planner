@@ -466,16 +466,17 @@
         "subjectId": "item_edinburgh_castle",
         "kind": "place_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:Edinburgh_Castle_-_Front_side.jpg",
-        "attribution": "Ingo Mehling · CC BY-SA 4.0",
+        "providerRef": "media_edinburgh_castle_hero_v1",
+        "attribution": [{ "label": "Ingo Mehling · CC BY-SA 4.0", "uri": "https://commons.wikimedia.org/wiki/File:Edinburgh_Castle_-_Front_side.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:Edinburgh_Castle_-_Front_side.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 1200,
         "height": 800,
         "aspectRatio": 1.5,
         "focalPoint": { "x": 0.5, "y": 0.52 },
-        "renderRef": "/fixtures/product-fidelity/edinburgh-castle-hero.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_edinburgh_castle_hero_v1" }
       },
       {
         "id": "media_edinburgh_castle_thumb_v1",
@@ -485,15 +486,16 @@
         "subjectId": "item_edinburgh_castle",
         "kind": "place_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:Edinburgh_Castle_-_Front_side.jpg",
-        "attribution": "Ingo Mehling · CC BY-SA 4.0",
+        "providerRef": "media_edinburgh_castle_thumb_v1",
+        "attribution": [{ "label": "Ingo Mehling · CC BY-SA 4.0", "uri": "https://commons.wikimedia.org/wiki/File:Edinburgh_Castle_-_Front_side.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:Edinburgh_Castle_-_Front_side.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/edinburgh-castle-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_edinburgh_castle_thumb_v1" }
       },
       {
         "id": "media_british_museum_thumb_v1",
@@ -503,15 +505,16 @@
         "subjectId": "item_british_museum",
         "kind": "place_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:British_Museum_Great_Court.jpg",
-        "attribution": "Andres Rueda · CC BY 2.0",
+        "providerRef": "media_british_museum_thumb_v1",
+        "attribution": [{ "label": "Andres Rueda · CC BY 2.0", "uri": "https://commons.wikimedia.org/wiki/File:British_Museum_Great_Court.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by/2.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:British_Museum_Great_Court.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/british-museum-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_british_museum_thumb_v1" }
       },
       {
         "id": "media_dishoom_thumb_v1",
@@ -521,15 +524,16 @@
         "subjectId": "item_dishoom",
         "kind": "restaurant_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:Dishoom_London_Fleischgericht.jpg",
-        "attribution": "Dale Cruse · CC BY 2.0",
+        "providerRef": "media_dishoom_thumb_v1",
+        "attribution": [{ "label": "Dale Cruse · CC BY 2.0", "uri": "https://commons.wikimedia.org/wiki/File:Dishoom_London_Fleischgericht.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by/2.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:Dishoom_London_Fleischgericht.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/dishoom-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_dishoom_thumb_v1" }
       },
       {
         "id": "media_tower_bridge_thumb_v1",
@@ -539,15 +543,16 @@
         "subjectId": "item_tower_bridge",
         "kind": "place_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:Tower_Bridge_London_1.jpg",
-        "attribution": "CrisNYCa · CC BY-SA 4.0",
+        "providerRef": "media_tower_bridge_thumb_v1",
+        "attribution": [{ "label": "CrisNYCa · CC BY-SA 4.0", "uri": "https://commons.wikimedia.org/wiki/File:Tower_Bridge_London_1.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:Tower_Bridge_London_1.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/tower-bridge-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_tower_bridge_thumb_v1" }
       },
       {
         "id": "media_lner_azuma_thumb_v1",
@@ -557,15 +562,16 @@
         "subjectId": "booking_lner",
         "kind": "transport_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:LNER_Azuma_Walter_Baxter.jpg",
-        "attribution": "Walter Baxter · CC BY-SA 2.0",
+        "providerRef": "media_lner_azuma_thumb_v1",
+        "attribution": [{ "label": "Walter Baxter · CC BY-SA 2.0", "uri": "https://commons.wikimedia.org/wiki/File:An_LNER_Azuma_train_on_the_East_Coast_Railway_Line,_geograph_6275180_by_Walter_Baxter.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by-sa/2.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:An_LNER_Azuma_train_on_the_East_Coast_Railway_Line,_geograph_6275180_by_Walter_Baxter.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/lner-azuma-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_lner_azuma_thumb_v1" }
       },
       {
         "id": "media_hotel_room_thumb_v1",
@@ -575,15 +581,16 @@
         "subjectId": "lodging_london",
         "kind": "hotel_photo",
         "source": "fixture_registry",
-        "providerRef": "commons:Washington_Mayfair_Hotel_Bedroom.jpg",
-        "attribution": "Mastcraft · CC BY-SA 4.0",
+        "providerRef": "media_hotel_room_thumb_v1",
+        "attribution": [{ "label": "Mastcraft · CC BY-SA 4.0", "uri": "https://commons.wikimedia.org/wiki/File:Washington_Mayfair_Hotel,_Bedroom.jpg" }],
         "rightsRef": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "sourceUri": "https://commons.wikimedia.org/wiki/File:Washington_Mayfair_Hotel,_Bedroom.jpg",
         "observedAt": "2026-08-01T00:00:00.000Z",
         "expiresAt": "2036-08-01T00:00:00.000Z",
         "width": 640,
         "height": 480,
         "aspectRatio": 1.333333,
-        "renderRef": "/fixtures/product-fidelity/hotel-room-thumb.webp"
+        "renderRef": { "type": "fixture_asset", "assetId": "media_hotel_room_thumb_v1" }
       }
     ],
     "realtimeFacts": [

@@ -19,6 +19,7 @@ export const GOOGLE_PLACES_DETAILS_FIELD_MASK = [
   'priceLevel',
   'priceRange',
   'editorialSummary',
+  'photos',
 ].join(',')
 
 export type PlaceDetailsProviderErrorCode = Extract<ProviderProxyErrorCode, 'provider_unavailable' | 'provider_error' | 'network_error' | 'unsupported' | 'quota_exceeded'>
@@ -48,6 +49,8 @@ const GOOGLE_PLACES_REQUEST_TIMEOUT_MS = 20_000
 const MAX_DISPLAY_NAME_LENGTH = 160
 const MAX_FORMATTED_ADDRESS_LENGTH = 300
 const MAX_EDITORIAL_SUMMARY_LENGTH = 700
+const MAX_PLACE_PHOTOS = 3
+const MAX_PHOTO_DIMENSION = 20_000
 
 export function createMockPlaceDetailsProvider(options: GooglePlacesDetailsProviderOptions = {}): PlaceDetailsProvider {
   const retrievedAt = normalizeRetrievedAt(options.now)
@@ -193,6 +196,7 @@ function normalizeGooglePlaceDetails(input: unknown, retrievedAt: string): Provi
   const priceLevel = readNonEmptyString(place.priceLevel)
   const priceRangeText = normalizePriceRangeText(place.priceRange)
   const editorialSummary = normalizeEditorialSummary(place.editorialSummary)
+  const photos = normalizePlacePhotos(place.photos)
 
   if (formattedAddress) result.formattedAddress = formattedAddress
   if (location) result.location = location
@@ -202,6 +206,7 @@ function normalizeGooglePlaceDetails(input: unknown, retrievedAt: string): Provi
   if (priceLevel) result.priceLevel = priceLevel
   if (priceRangeText) result.priceRangeText = priceRangeText
   if (editorialSummary) result.editorialSummary = editorialSummary
+  if (photos.length > 0) result.photos = photos
   return result
 }
 
@@ -217,6 +222,13 @@ function buildMockPlaceDetails(
     googleMapsUri: `https://maps.google.com/?cid=${encodeURIComponent(request.placeId)}`,
     location: { lat: 30.25, lng: 120.16 },
     placeId: request.placeId,
+    photos: [{
+      authorAttributions: [{ displayName: 'Google Maps 示例' }],
+      googleMapsUri: `https://maps.google.com/?cid=${encodeURIComponent(request.placeId)}`,
+      height: 900,
+      photoRef: `places/${request.placeId}/photos/ATKogpcMockPhotoReference01`,
+      width: 1200,
+    }],
     provider: 'google_places',
     regularOpeningHours: {
       openNow: true,
@@ -225,6 +237,56 @@ function buildMockPlaceDetails(
     retrievedAt,
     websiteUri: `https://places.example/${encodeURIComponent(suffix)}`,
   }
+}
+
+function normalizePlacePhotos(value: unknown): NonNullable<ProviderProxyPlaceDetailsResult['photos']> {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((input) => {
+    const record = readRecord(input)
+    const photoRef = readNonEmptyString(record.name)
+    const width = Number(record.widthPx)
+    const height = Number(record.heightPx)
+    if (
+      !/^places\/[A-Za-z0-9_-]{3,220}\/photos\/[A-Za-z0-9_-]{8,1200}$/.test(photoRef)
+      || !Number.isInteger(width)
+      || !Number.isInteger(height)
+      || width < 1
+      || height < 1
+      || width > MAX_PHOTO_DIMENSION
+      || height > MAX_PHOTO_DIMENSION
+    ) {
+      return []
+    }
+    const authorAttributions = normalizePhotoAttributions(record.authorAttributions)
+    const googleMapsUri = normalizeSafeHttpUrl(record.googleMapsUri)
+    return [{
+      authorAttributions: authorAttributions.length > 0
+        ? authorAttributions
+        : [{ displayName: 'Google Maps' }],
+      googleMapsUri,
+      height,
+      photoRef,
+      width,
+    }]
+  }).slice(0, MAX_PLACE_PHOTOS)
+}
+
+function normalizePhotoAttributions(value: unknown): NonNullable<ProviderProxyPlaceDetailsResult['photos']>[number]['authorAttributions'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((input) => {
+    const record = readRecord(input)
+    const displayName = clampText(readNonEmptyString(record.displayName), 120)
+    if (!displayName) return []
+    const uri = normalizeGoogleAttributionUri(record.uri)
+    return [{ displayName, uri }]
+  }).slice(0, 5)
+}
+
+function normalizeGoogleAttributionUri(value: unknown) {
+  const uri = normalizeSafeHttpUrl(value)
+  if (!uri) return undefined
+  const hostname = new URL(uri).hostname.toLowerCase()
+  return hostname === 'google.com' || hostname.endsWith('.google.com') ? uri : undefined
 }
 
 function normalizeGooglePlaceLocation(value: unknown): ProviderProxyPlaceDetailsResult['location'] {

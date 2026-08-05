@@ -113,7 +113,7 @@ export function isStrictProviderEnvironment(environment: ProviderRuntimeEnvironm
 
 export function getProviderOperationGroup(operation: ProviderProxyOperation | string | undefined): ProviderOperationGroup {
   if (operation === 'travel_search') return 'search'
-  if (operation === 'place_lookup' || operation === 'place_details') return 'place'
+  if (operation === 'place_lookup' || operation === 'place_details' || operation === 'place_photo') return 'place'
   if (operation === 'route_preview' || operation === 'route_order_suggestion') return 'route'
   if (operation === 'exchange_rate') return 'fx'
   return 'ai'

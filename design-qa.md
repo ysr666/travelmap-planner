@@ -2,22 +2,22 @@
 
 更新时间：2026-08-05
 
-状态：**Candidate release qualification passed; production pending**
+状态：**Production Current; passed**
 
-候选代码基线：`94885be`
+发布代码基线：`9317a9a`
 
-本页记录 2026-08-05 `feature/ui-v3-selected-target` 的真实代码验收。它替代 2026-07-30 地图主导方向的验收结论，但不把尚未合并和部署的候选版本写成生产 Current。逐项完成度、Golden 合同和发布顺序见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
+本页记录 2026-08-05 UI V3 的真实代码与生产验收。它替代 2026-07-30 地图主导方向的验收结论；逐项完成度、Golden 合同和发布收据见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 1. 结论
 
 - **视觉实现：passed。** Selected Target 的四个核心状态已经用同状态并排图审查，没有待修复的 P0、P1 或 P2 视觉问题。
 - **浏览器产品验收：passed。** 核心流程、固定视口、长内容、200% 文本、软件键盘、Reduced Motion、浅色/深色、无障碍和横向溢出门槛已由真实组件与 E2E 覆盖。
-- **最终候选远端检查：passed。** `94885be` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
+- **最终候选远端检查：passed。** `76e35ca` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
 - **结构验收：passed。** S1-S3 已把设置、票据、Trip、Day、Item、Global AI 和 AI Draft 拆成控制、状态、ViewModel 与展示边界，Golden 和保护合同未回归。
 - **平台模拟器资格：passed。** iPhone 16 / iOS 26.5 Simulator 完成 Safari、主屏 PWA 冷启动和软件键盘；Android API 33 Emulator 完成真实构建、Chrome/WebView、键盘、可访问性边界和无横向溢出。
-- **生产发布：pending。** 合并后的 Cloudflare Pages Production 与无 Provider smoke 尚未完成。
+- **生产发布：passed。** PR #33 merge SHA `9317a9a` 的 GitHub required checks、Cloudflare Pages Production 与无 Provider smoke 全部通过。
 
-UI V3 在合并和发布前仍称为 **Candidate**。Production 门槛通过后，才可把本页最终状态和项目文档改为 Current。
+UI V3 已作为 **Production Current** 发布。
 
 ## 2. 视觉权威
 
@@ -109,8 +109,9 @@ Selected Target：
 - `npm run test:e2e:serial`：`175 / 175` passed，串行耗时约 `6.6m`。
 - `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
 - `git diff --check`：passed。
-- GitHub Actions run `30998908036`：同 SHA `94885be` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m25s`。
-- Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc`：同 SHA `94885be` 为 Active。Production 仍待核验。
+- GitHub Actions run `31014432123`：同 SHA `76e35ca` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m39s`。
+- Cloudflare Pages Preview deployment `3fa543de-5895-4b17-b557-6f8b58dca308`：同 SHA `76e35ca` 为 Active。
+- GitHub Actions main run `31015131693` 与 Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3`：merge SHA `9317a9a` 全部 passed。
 
 ## 7. 平台模拟器发布验收
 
@@ -126,15 +127,15 @@ Selected Target：
 
 ## 8. 发布门槛
 
-仍需完成：
+全部完成：
 
-1. 对准备合并的最终分支头重新核验 GitHub required checks 与 Cloudflare Pages Preview。
-2. 合并后核验同 SHA Cloudflare Pages Production deployment。
-3. 执行不触发真实 AI、地点、路线、地图或搜索 Provider 的 production smoke。
-4. 将生产部署结果补录到 `docs/BETA_QA_RECORD.md` 与 `docs/LIMITED_BETA_READINESS.md`。
+1. 最终候选分支头的 GitHub required checks 与 Cloudflare Pages Preview 同 SHA passed。
+2. PR #33 合并后，merge SHA `9317a9a` 的 GitHub required checks 与 Cloudflare Pages Production passed。
+3. Production 根文档、Manifest、Service Worker 和入口资源 smoke passed，未触发真实 Provider。
+4. 平台模拟器、生产部署和 Supabase 只读诊断结果已补录。
 
 ## 9. 历史边界
 
 2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
 
-当前最终结果：**visual, browser, S1-S3 structural, simulator-platform, and final-head remote acceptance passed; production qualification remains pending.**
+当前最终结果：**visual, browser, S1-S3 structural, simulator-platform, final-head remote, and production acceptance passed.**

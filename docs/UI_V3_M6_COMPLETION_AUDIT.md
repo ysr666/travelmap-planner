@@ -2,9 +2,9 @@
 
 更新时间：2026-08-05
 
-状态：**Candidate release qualification passed; production merge pending**
+状态：**Production Current; M0-M6 passed**
 
-候选代码基线：`94885be`
+发布代码基线：`9317a9a`
 
 上游合同：
 
@@ -14,19 +14,19 @@
 - [Design System](DESIGN_SYSTEM.md)
 - [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
 
-本文是 UI V3 的完成度收据和后续实施边界。它区分已经由真实代码、自动化和平台模拟器证明的候选能力、仍需生产环境证明的发布门槛，以及不影响当前用户路径但需要继续治理的工程债。
+本文是 UI V3 的完成度与发布收据。它区分已经由真实代码、自动化、平台模拟器和生产环境证明的 Current 能力，以及不影响当前用户路径但需要继续治理的工程债。
 
 ## 1. 审计结论
 
 - **M0-M5 候选实现：通过。** 四项导航、阶段化今日、连续日程、真实地图、地点详情、资料编辑式列表、按需 AI Action Sheet、费用、同行和四组设置均已进入真实 React 代码。
 - **M6 浏览器资格：通过。** 固定视口、长内容、200% 文本、软件键盘、Reduced Motion、Light/Dark、无障碍、固定交互面、Golden、完整 E2E 和 PWA 升级均有自动化证据。
 - **M6 候选代码本地质量门：通过。** `3a9fb8c` 的类型检查、Lint、单测、构建、Bundle budget、175 项串行 E2E 和 5 项 PWA 升级均通过；`0b464be` 的最终 ref 依赖修复另通过类型检查、Lint 和 20 项 Global AI/Golden 聚焦 E2E。
-- **M6 最终候选远端资格：通过。** `94885be` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过。
+- **M6 最终候选远端资格：通过。** `76e35ca` 的 GitHub 五项 required checks 与 Cloudflare Pages Preview 按同一 SHA 通过。
 - **M6 平台发布资格：通过。** 项目所有者批准以 iPhone 16 / iOS 26.5 Simulator、Android API 33 Emulator 和 built-dist PWA 自动化作为本次发布设备标准；实体机转为发布后运营观察。
-- **M6 生产资格：未完成。** 合并和同 SHA Production 部署仍待完成。
+- **M6 生产资格：通过。** PR #33 合并提交 `9317a9a` 的 GitHub 五项 required jobs、Cloudflare Pages Production 和无 Provider smoke 全部通过。
 - **结构治理：S1-S3 已完成。** 首页、资料中心、设置、票据库、行程、日期、地点详情、全局 AI 和 AI 创建行程均已拆分控制、状态、ViewModel 与展示边界；现有保护合同和 Golden 未回归。
 
-因此 UI V3 已达到可合并的 **Candidate**，但在 Production 同 SHA 部署完成前仍不能改写为 Production Current。
+因此 UI V3 已从 Candidate 转为 **Production Current**。
 
 ## 2. 状态定义
 
@@ -51,7 +51,7 @@
 | M5 工具与设置 | passed | 费用、同行、低频页和四组设置统一到 V3 层级 | `low-frequency-v3-visual.spec.ts`、`settings-v3-visual.spec.ts` |
 | M6 浏览器资格 | passed | 响应式、状态、无障碍、Golden、性能、完整 E2E、PWA | 本文第 4-7 节 |
 | M6 平台模拟器 | passed | iOS PWA 安装/冷启动、Android Chrome/WebView/键盘/溢出和 built-dist PWA 生命周期 | 本文第 8 节 |
-| M6 Production 发布 | pending | 合并、同 SHA Production 和无 Provider smoke | 本文第 8-9 节 |
+| M6 Production 发布 | passed | PR #33 合并、同 SHA Production 和无 Provider smoke | 本文第 8-9 节 |
 
 ## 4. 体验验收矩阵
 
@@ -135,10 +135,10 @@ S1-S3 结构计划已关闭。后续工程治理仍不得顺带重写 IndexedDB�
 | `npm run test:e2e:pwa-upgrade` | `5 / 5` passed，约 `46s` |
 | `git diff --check` | passed |
 
-最终候选 `94885be` 的远端结果：
+最终候选 `76e35ca` 的远端结果：
 
-- GitHub Actions run `30998908036` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m25s`。
-- Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 为 Active，Source 为 `94885be`。
+- GitHub Actions run `31014432123` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 用时约 `5m39s`。
+- Cloudflare Pages Preview deployment `3fa543de-5895-4b17-b557-6f8b58dca308` 为 Active，Source 为 `76e35ca`。
 
 ## 8. 平台与发布矩阵
 
@@ -150,23 +150,23 @@ S1-S3 结构计划已关闭。后续工程治理仍不得顺带重写 IndexedDB�
 | Android API 33 Emulator Chrome/WebView | passed with recorded limitation | 真实构建、四项导航、DOM 可访问性边界、`100vh` 回退、软件键盘、AI Sheet、地图和横向溢出通过 |
 | Android built-dist PWA lifecycle | passed | 5/5 覆盖安装/升级合同、等待确认、多标签收敛、历史数据保留和缓存恢复 |
 | 真实 iPhone/Android | optional observation | 不阻塞本次发布；后续 Beta 记录真实性能、文件选择和网络差异 |
-| Cloudflare Pages Preview | passed | deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 指向 `94885be` 并为 Active |
-| Cloudflare Pages Production | pending | 合并后核验同一发布 SHA |
+| Cloudflare Pages Preview | passed | deployment `3fa543de-5895-4b17-b557-6f8b58dca308` 指向 `76e35ca` 并为 Active |
+| Cloudflare Pages Production | passed | deployment `6647a145-87c9-45a3-b602-059deb450ac3` 指向 merge SHA `9317a9a` 并为 Active |
 
 Android 模拟器自带 Chrome 103 可展示 `Install app`，但 WebAPK launcher 安装未在该旧镜像中完成；代理场景还会触发该镜像的 Chrome GPU 进程崩溃。这是已记录的模拟器镜像限制，不是应用错误。项目所有者接受以模拟器中的真实构建交互、系统 WebView 壳和 5/5 built-dist PWA 生命周期测试共同关闭 Android 发布门槛。
 
-## 9. 发布执行顺序
+## 9. 生产发布收据
 
-1. 将平台模拟器结果和 Android 旧 Chrome/WebAPK 限制补录到 `BETA_QA_RECORD.md`；当前无 P0/P1/P2。
-2. 再次核验最终待合并提交的 GitHub 五项 required checks 和 Cloudflare Pages Preview。
-3. 通过 PR 合并到 `main`。
-4. 核验 Cloudflare Pages Production 指向合并后的同一 SHA，并执行不触发真实 Provider 的生产 smoke。
-5. 全部完成后，将 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Production Current。
+1. PR #33 于 2026-08-05 合并到 `main`，merge SHA 为 `9317a9a`。
+2. GitHub Actions run `31015131693` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部 passed；E2E job 约 `4m35s`。
+3. Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 对应同一 merge SHA 并成功。
+4. `https://travelmap-planner.pages.dev/`、`manifest.webmanifest` 和 `sw.js` 均返回 `200`；入口资源与 precache 清单存在，整个 smoke 未调用真实 AI、地点、路线、地图或搜索 Provider。
+5. Supabase migrations 与 security/performance advisors 只读复核完成；本次无 DDL、RLS、Storage 或 Provider 配置变化。
 
 回退单位是最近一个已通过 required checks 的提交。UI 回退不得连带回滚用户数据、schema、云端权限或票据存储。
 
 ## 10. 最终判定
 
-当前判定：**视觉、浏览器、S1-S3 结构、平台模拟器和最终候选远端验收通过；仅合并与生产发布待完成。**
+当前判定：**视觉、浏览器、S1-S3 结构、平台模拟器、最终候选远端和 Production 验收全部通过。**
 
-这份审计关闭“规划是否真正落到代码和可执行门槛”以及本次平台模拟器发布资格问题，但不关闭尚未发生的生产事实。
+这份审计关闭 UI V3 的 M0-M6 实施与发布计划。后续 Realtime、统一实时事实和 AI job runtime 继续按 Roadmap V5 单独实施。

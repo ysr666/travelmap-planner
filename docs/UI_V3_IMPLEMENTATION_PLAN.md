@@ -2,7 +2,7 @@
 
 更新时间：2026-08-05
 
-状态：**Candidate release qualification passed; production merge pending**
+状态：**Current; M0-M6 complete**
 
 上游合同：
 
@@ -12,7 +12,7 @@
 - [Design System](DESIGN_SYSTEM.md)
 - [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)
 
-本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 候选分支已经完成 M0-M5、M6 浏览器与平台模拟器验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口；候选代码 `94885be` 已通过完整本地与同 SHA GitHub CI / Cloudflare Pages Preview 门槛。项目所有者已批准以 iOS/Android 模拟器和 built-dist PWA 自动化作为发布设备标准，实体机不再阻塞本次发布。合并后的 Production 仍未完成，因此 UI V3 尚未成为生产 Current。逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+本页把已经选定的 UI V3 方向转化为可分批开发、独立验收和安全合并的工程计划。2026-08-05 已完成 M0-M5、M6 浏览器与平台模拟器验收，以及 S1 Settings/Tickets、S2 Trip/Day/Item、S3 AI 控制边界收口。PR #33 合并提交 `9317a9a` 的 GitHub Actions run `31015131693` 五项 required jobs、Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 和无 Provider 生产冒烟均通过。项目所有者批准以 iOS/Android 模拟器和 built-dist PWA 自动化作为发布设备标准，实体机为发布后观察。UI V3 现为 Production Current；逐项收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 实施进度
 
@@ -24,9 +24,9 @@
 | M3 行程、地图与表单 | 完成 | 连续时间轴、单一地图 Sheet、渐进表单、五视口 Golden 和 S2 控制边界拆分 |
 | M4 搜索与 AI | 完成 | 上下文 Action Sheet、一次确认、部分失败重试和展示层拆分 |
 | M5 费用、同行与设置 | 完成 | 行程 More、低频页统一、四组设置与默认收起技术项 |
-| M6 产品级验收与发布 | 进行中 | S1-S3 本地 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden 和 iOS/Android 模拟器通过；`94885be` 同 SHA CI/Preview 通过，仅 Production 待补 |
+| M6 产品级验收与发布 | 完成 | 191 文件/1578 单测、175/175 E2E、5/5 PWA、可执行 Golden、iOS/Android 模拟器、同 SHA CI/Preview/Production 和无 Provider smoke 全部通过 |
 
-阶段完成表示候选实现和本地质量门完成，不表示已经合并或部署。严格 Definition Of Done 继续以第 10 节为准。
+M0-M6 已全部完成并发布；后续变化继续以第 10 节的 Definition Of Done 防止回归。
 
 ## 1. 交付目标
 
@@ -486,9 +486,8 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 - 同 SHA 的 CI 和生产部署成功。
 - 真实代码 Golden Screenshots 成为新的视觉权威，生成稿只保留为 Historical 设计证据。
 
-## 11. 下一执行动作
+## 11. 发布后动作
 
-1. 将已通过的平台模拟器验收与 Android WebAPK 环境限制补录到 QA 文档。
-2. 对最终待合并提交重新核验 GitHub required checks 与 Cloudflare Pages Preview。
-3. 合并后核验 Cloudflare Pages Production 指向同一 SHA，并执行不触发真实 Provider 的生产 smoke。
-4. 只有 Production 门槛通过后，才把 UI V3、`design-qa.md`、`PROJECT_STATUS.md` 和 Beta Readiness 改为 Current。
+1. 将实体机性能、文件选择和真实网络差异作为 Beta 运营观察，不回退模拟器发布标准。
+2. 按 [Roadmap V5](ROADMAP_V5.md) 进入 Realtime Cloud Core，不在 UI V3 收尾中改写同步或 Provider 合同。
+3. 后续共享 UI 改动继续运行固定视口、Golden、完整 E2E 和 PWA 升级门槛。

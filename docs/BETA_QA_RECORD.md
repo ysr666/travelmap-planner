@@ -4,6 +4,17 @@
 
 最新记录：2026-08-05
 
+## 2026-08-05 UI V3 Production 发布
+
+- PR #33 已合并到 `main`，merge SHA 为 `9317a9a`。
+- GitHub Actions run `31015131693` 的 `Lint`、`Type Check`、`Unit Tests`、`Build` 和 `E2E Tests` 全部通过，E2E job 约 4 分 35 秒。
+- Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 指向同一 merge SHA 并成功。
+- Production 根文档、`manifest.webmanifest`、`sw.js`、入口 JS/CSS 和 precache 清单均可访问；该 smoke 未触发真实 AI、地点、路线、地图或搜索 Provider。
+- 发布 smoke 发现 HTML 与 Manifest 仍有 Historical “本地优先”公开描述；发布收尾已统一改为“复杂出境自由行的智能旅行管家”产品描述。
+- Supabase 生产 migrations 只读复核到 `20260724152320 index_companion_ticket_foreign_keys`；本次无 DDL、RLS、Storage 或 Auth 写入。
+- Security advisor 仅保留有意 fail-closed 的 `travel_inbox_connector_secrets` 信息项和 leaked-password protection 警告；Performance advisor 保留低使用率索引信息项及 `cloud_ticket_blobs` 双 permissive SELECT policy 警告，均未在 UI 发布中擅自修改。
+- UI V3 已从 Candidate 转为 Production Current。真实 iPhone/Android 继续作为可选 Beta 运营观察。
+
 ## 2026-08-05 UI V3 候选浏览器验收
 
 - 候选分支实现四项主导航、阶段化 Today、按需 AI Action Sheet、连续时间轴、单一地点 Sheet、资料编辑式预览列表、渐进表单和四组设置。

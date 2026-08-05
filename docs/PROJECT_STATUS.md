@@ -4,9 +4,9 @@
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Release Candidate**。`feature/ui-v3-selected-target` 已完成 UI V3 候选实现、浏览器验收、S1-S3 结构收口和项目所有者批准的平台模拟器发布资格；候选代码 `94885be` 已通过全量本地门槛及同 SHA GitHub CI / Cloudflare Pages Preview。合并后的 Production 发布门槛尚未完成，因此当前生产仍以已部署版本为准。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Current**。UI V3 已完成浏览器验收、S1-S3 结构收口和项目所有者批准的平台模拟器发布资格；PR #33 merge SHA `9317a9a` 的 GitHub Actions run `31015131693` 五项 required jobs、Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 和无 Provider 生产冒烟均通过。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
 
-发布仍以同一提交同时满足以下条件为准：
+本次发布满足以下条件，后续发布继续沿用：
 
 - GitHub Actions 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过。
 - Cloudflare Pages 生产部署成功并指向同一提交。
@@ -28,15 +28,14 @@
 
 ## UI 状态
 
-- **Production Current:** 合并与部署前仍以现有生产版本为准，不从本地候选分支推断线上界面。
-- **Candidate:** `feature/ui-v3-selected-target` 已实现阶段化“今日”、`今日 | 行程 | 资料 | 我的`、资料内待整理状态、按需 AI Action Sheet、编辑式资料列表、渐进表单和自适应壳层。
-- **Candidate:** AI 关闭时不挂载常驻底部输入；只读导航自动完成，写入保留真实预览和一次最终确认。
-- **Candidate:** Home、Documents、Settings、Ticket Library、Trip、Day、Item、Global AI 和 AI Draft 已完成 S1-S3 路由入口、控制/数据、表单状态、ViewModel 与展示边界拆分；Action Gateway、Provider 隐私过滤、确认门控和 stale guard 保持原合同。
+- **Production Current:** 阶段化“今日”、`今日 | 行程 | 资料 | 我的`、资料内待整理状态、按需 AI Action Sheet、编辑式资料列表、渐进表单和自适应壳层已经上线。
+- **Production Current:** AI 关闭时不挂载常驻底部输入；只读导航自动完成，写入保留真实预览和一次最终确认。
+- **Production Current:** Home、Documents、Settings、Ticket Library、Trip、Day、Item、Global AI 和 AI Draft 已完成 S1-S3 路由入口、控制/数据、表单状态、ViewModel 与展示边界拆分；Action Gateway、Provider 隐私过滤、确认门控和 stale guard 保持原合同。
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
-- **Candidate plan:** 2026-08-05 已完成 M0-M5、M6 浏览器与平台模拟器验收和 S1-S3 结构治理；`94885be` 的最终候选远端已通过，仅 Production 证据待补，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+- **Current receipt:** 2026-08-05 已完成 M0-M6、平台模拟器、最终候选远端、合并与 Production 验收，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
-- **Release boundary:** UI V3 尚未合并部署，不能把候选分支能力描述为生产 Current。
+- **Release boundary:** UI V3 是当前生产视觉与信息架构；Realtime Cloud、统一实时事实和 AI job runtime 仍是 Target，不因 UI 发布而变成 Current。
 
 ## 当前主路径
 
@@ -100,7 +99,7 @@
 - `npm run test:unit`：191 个文件、1578 个测试通过。
 - `npm run build`：通过；构建会强制执行 bundle budget。
 - `npm run test:e2e:pwa-upgrade`：5 个测试通过；当前构建连续升级为 20/20，历史生产迁移为 5/5。
-- 全量 Playwright：175/175 通过，串行耗时约 6.6 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。S3 另有 118/118 聚焦单测与 47/47 AI Draft/Golden 聚焦 E2E。`94885be` 的 GitHub Actions run `30998908036` 五项 required jobs 与 Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` 均按同一 SHA 通过。
+- 全量 Playwright：175/175 通过，串行耗时约 6.6 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。S3 另有 118/118 聚焦单测与 47/47 AI Draft/Golden 聚焦 E2E。merge SHA `9317a9a` 的 GitHub Actions run `31015131693` 五项 required jobs 与 Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 均通过。
 - `git diff --check`：通过。
 
 平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出；Chrome 真实构建、软件键盘、可访问性边界和 AI Sheet 也通过。旧 Chrome 103 未完成 WebAPK launcher 安装的环境限制由 5/5 built-dist PWA 生命周期测试覆盖，并已按项目所有者批准的模拟器发布标准记录。

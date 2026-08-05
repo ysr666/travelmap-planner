@@ -70,7 +70,8 @@ export default defineConfig({
       manifest: {
         name: '旅图 TripMap',
         short_name: '旅图',
-        description: '本地优先的出国旅行行程、地图路线、交通记录与票据管理工具。',
+        description:
+          '复杂出境自由行的智能旅行管家：整理行程、地点与票据，让下一站、出发时间和所需资料一眼清楚。',
         lang: 'zh-CN',
         start_url: '/#/home',
         scope: '/',

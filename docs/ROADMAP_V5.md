@@ -38,11 +38,10 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - AI 仍有关键词兼容路由，动作覆盖不完整，长任务没有统一 job runtime。
 - 实时地点、交通、天气、航班/铁路和票务 Provider 尚未形成统一事实模型。
 - 用户仍需在多个页面手动触发查询、修复和同步。
-- UI V3 候选分支已解决 App Shell、常驻 AI、重复导航、阶段化 Today、资料默认结构，并完成 S1-S3 页面控制边界、平台模拟器和最终候选远端资格；仅生产发布证据尚未完成。
 
 ## Phase 0：UI V3 Product Shell
 
-状态：**Candidate release qualification passed; production merge pending**
+状态：**Production Current; complete**
 
 周期：5-7 周，可与 Realtime Cloud Core 的合同设计并行，但不在同一 PR 中混改数据和展示层。
 
@@ -50,7 +49,7 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 执行合同：[UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md)
 
-完成收据：M0-M5、浏览器 M6、项目所有者批准的平台模拟器验收、S1-S3 结构治理及最终候选远端资格已完成；当前只剩 Production 发布门槛。真实 iPhone/Android 转为发布后运营观察。
+完成收据：M0-M6、项目所有者批准的平台模拟器验收、S1-S3 结构治理、最终候选远端、PR #33 合并、同 SHA Production 和无 Provider smoke 全部完成。UI V3 已是 Production Current；真实 iPhone/Android 为发布后运营观察。
 
 ### V3.0 设计锁定
 
@@ -233,16 +232,16 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## 接下来十项
 
-1. 合并已通过平台模拟器、GitHub CI 和 Cloudflare Preview 的 UI V3 候选 PR。
-2. 核验同 SHA Cloudflare Production 并执行不触发真实 Provider 的生产 smoke。
-3. 补录生产证据，把 UI V3 从 Candidate 转为 Current。
-4. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
-5. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
-6. 建立 `RealtimeFact` schema、TTL 和来源 UI。
-7. 建立 AI job runtime，并把剩余关键词动作迁入 Action Gateway 注册表。
-8. 扩展 Place Provider，并接入天气、航班/铁路状态的 mock、合同和受限真实 smoke。
-9. 让“一键智能修复”消费实时事实，让 Shared Trip 复用 Realtime 事件和服务端版本。
-10. 建立在线延迟、Provider 成本、事实新鲜度和 AI 动作完成率仪表。
+1. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。
+2. 把在线写入改为 cloud-first ack + IndexedDB edge cache，保留失败 outbox。
+3. 建立 `RealtimeFact` schema、TTL 和来源 UI。
+4. 建立 AI job runtime，并把剩余关键词动作迁入 Action Gateway 注册表。
+5. 扩展 Place Provider，并接入天气、航班/铁路状态的 mock、合同和受限真实 smoke。
+6. 让“一键智能修复”消费实时事实，让 Shared Trip 复用 Realtime 事件和服务端版本。
+7. 建立在线延迟、Provider 成本、事实新鲜度和 AI 动作完成率仪表。
+8. 观察 UI V3 生产错误、性能和 PWA 升级收敛，按同一 Golden/CI 门槛修复回归。
+9. 将真实 iPhone/Android 性能、文件选择和网络差异作为可选 Beta 观察补录。
+10. 在 Realtime Cloud Core 稳定后评估 Native Beta，不提前建立平行数据合同。
 
 ## 保持不变的工程底线
 

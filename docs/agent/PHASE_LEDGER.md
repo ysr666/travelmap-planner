@@ -4,7 +4,7 @@
 
 ## 2026-08-05 UI V3 Selected Target Implementation
 
-Status: candidate release qualification passed; production merge pending.
+Status: completed and released to Production.
 
 Goal:
 
@@ -37,12 +37,14 @@ Validation:
 - Full serial E2E passed 175/175 in approximately 6.6 minutes; PWA upgrade passed 5/5.
 - iPhone 16 / iOS 26.5 Simulator passed Safari, Add to Home Screen, installed-PWA cold start, software-keyboard, map, and AI Sheet checks from a fresh state.
 - Android API 33 Emulator passed the production build in Chrome, system WebView layout, DOM accessibility bounds, software keyboard, map, AI Sheet, and horizontal-overflow checks. The legacy Chrome 103 WebAPK launcher limitation is recorded and covered by the 5/5 built-dist PWA lifecycle matrix under the owner-approved simulator standard.
-- Final candidate `94885be` passed GitHub Actions run `30998908036` and Cloudflare Pages Preview deployment `2756c9da-a57a-4ae3-8bb4-34069807f2bc` on the same SHA.
+- Final candidate `76e35ca` passed GitHub Actions run `31014432123` and Cloudflare Pages Preview deployment `3fa543de-5895-4b17-b557-6f8b58dca308` on the same SHA.
 - Physical devices are optional post-release observation and no longer block UI V3.
+- PR #33 merged as `9317a9a`; GitHub Actions main run `31015131693` and Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` passed for the merge SHA.
+- Production root, Manifest, Service Worker, entry assets, and precache smoke passed without real Provider calls. Supabase migrations and advisors were inspected read-only; no cloud contract changed.
 
 Next:
 
-- Merge the qualified candidate, validate same-SHA Production without real Provider calls, then change Candidate documentation to Current.
+- Continue with Roadmap V5 Realtime Cloud Core as a separately bounded phase; keep physical-device observations optional and retain UI V3 regression gates.
 
 ## 2026-07-29 Planned Program - UI V3 Product Shell
 

@@ -4,7 +4,7 @@
 
 实时在线和 AI 优先是实现这项承诺的技术战略，不是要求用户理解的产品类别。当前代码已经具备完整旅行主路径、账号对象同步、Provider Proxy 和 AI Action Gateway，是向目标架构迁移的稳定基线。目标状态以云端账号数据为事实源，以 Realtime 推送跨设备变化；IndexedDB 保留为启动缓存、弱网 outbox 和应急查看能力。
 
-当前生产界面仍以 [项目状态](docs/PROJECT_STATUS.md) 为准。`feature/ui-v3-selected-target` 已完成第三次 UI 重构的候选实现：`今日 | 行程 | 资料 | 我的`、Toolbar AI、按需 Action Sheet、阶段化首页、资料编辑式列表和自适应壳层均已进入真实代码与可执行 Golden 验收。候选 `94885be` 的 GitHub required checks、Cloudflare Pages Preview 以及项目所有者批准的 iOS/Android 模拟器发布资格均已通过；合并后的生产部署仍未完成，因此暂不描述为已上线 Current。完整合同见 [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)、[UI V3 重构规范](docs/UI_REFACTOR_V3.md)、[Selected Design](docs/DESIGN.md)、[实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)、[M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md) 和 [Design QA](design-qa.md)。
+UI V3 已作为当前生产界面发布：`今日 | 行程 | 资料 | 我的`、Toolbar AI、按需 Action Sheet、阶段化首页、资料编辑式列表和自适应壳层均已进入真实代码与可执行 Golden 验收。PR #33 合并提交 `9317a9a` 的 GitHub required checks、Cloudflare Pages Production、无 Provider 生产冒烟以及项目所有者批准的 iOS/Android 模拟器发布资格均已通过。完整合同见 [产品定位与核心体验](docs/PRODUCT_POSITIONING.md)、[UI V3 重构规范](docs/UI_REFACTOR_V3.md)、[Selected Design](docs/DESIGN.md)、[实施计划](docs/UI_V3_IMPLEMENTATION_PLAN.md)、[M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md) 和 [Design QA](design-qa.md)。
 
 ## 项目定位
 

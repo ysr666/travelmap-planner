@@ -4,26 +4,26 @@
 
 ## 结论
 
-当前代码达到 Limited Beta Release Candidate。UI V3 候选代码 `94885be` 已完成本地浏览器、自动化、S1-S3 结构和项目所有者批准的平台模拟器资格，并通过同 SHA GitHub required checks 和 Cloudflare Pages Preview；仅合并后的 Production 尚未完成。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
+当前代码达到 **Limited Beta Current**。UI V3 已完成本地浏览器、自动化、S1-S3 结构和项目所有者批准的平台模拟器资格；PR #33 merge SHA `9317a9a` 的 GitHub required checks、Cloudflare Pages Production 和无 Provider smoke 全部通过。cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 仍是路线图 v5 工作，不能将当前 Beta 描述为完整实时产品。UI 发布收据见 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
 
 ## 验收矩阵
 
 | 区域 | 状态 | 当前证据 | 发布边界 |
 | --- | --- | --- | --- |
 | Trip / Day / Item | 就绪 | 核心导航、时间轴、地图、详情和移动端溢出 E2E | 路线是预览，不是导航 |
-| Ticket Library | 候选就绪 | 编辑式预览列表、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
+| Ticket Library | 就绪 | 编辑式预览列表、真实缩略图、筛选/编辑/预览 E2E | OCR 和钱包导入后续 |
 | 全局 AI | V1 就绪但有限 | 票据、地点、行程修复的注册表校验、预览、确认、stale guard 和部分失败 E2E | 只能执行登记动作，不是任意自主代理 |
 | AI Draft / Edit / Repair | 就绪但需确认 | schema validation、diff、stale guard、二次确认 | 不自动写库，不读取票据原件 |
 | Place / Route / Search | 就绪但依赖 provider | proxy 合同、Auth/Origin/quota、失败语义测试 | 实时事实必须有来源 |
 | PWA | 就绪 | 当前连续三版本、两个固定历史生产产物、双标签收敛、IndexedDB 保留、配额压力恢复和按需缓存测试 | 地图/provider/cloud 首次使用不离线 |
 | Cloud / Shared Trip | 就绪但需运营观察 | RLS、对象同步、离线恢复在线续传、票据 Blob、Companion smoke | 不是端到端加密或无冲突实时协作 |
 | Supabase schema | 就绪 | 空库重建、生产 SQL 检查；2026-08-05 只读复核 migrations 与 security/performance advisors | 本轮无 DDL；剩余 advisor 均已记录 |
-| CI / E2E | 最终候选通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；`94885be` 同 SHA CI/Preview 通过 | 合并后仍需保持全绿 |
+| CI / E2E | Production 通过 | 191/1578 unit、175/175 E2E、5/5 PWA、可执行 Golden、bundle/PWA budget、真实 runtime typecheck；merge SHA `9317a9a` 的 main CI run `31015131693` 全绿 | 后续发布继续保持全绿 |
 | 平台模拟器 | 发布资格通过 | iOS 26.5 Simulator 完成 Safari、主屏 PWA 安装/冷启动和键盘；Android API 33 Emulator 完成 Chrome/WebView、可访问性边界、地图、AI Sheet 和无溢出 | Android Chrome 103 WebAPK launcher 限制由 5/5 built-dist PWA 生命周期覆盖；实体机为发布后观察 |
 | Realtime Cloud | 目标能力 | 当前对象同步、outbox 和恢复 E2E | 尚无统一 cloud-first ack、revision 和 Realtime 订阅 |
 | Realtime Facts | 目标能力 | Place/Route/Search 基础合同 | 天气、航班、铁路、票务和统一 TTL/source 模型待接入 |
 | AI Job Runtime | 目标能力 | 当前同步 Action Gateway | 异步 job、跨设备进度和后台恢复待实现 |
-| UI V3 | 候选发布资格完成 | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、S1-S3 结构边界、五视口、四页面像素 Golden、Reduced Motion 和平台模拟器 | 同 SHA Production 后转为 Current |
+| UI V3 | Production Current | 四项导航、阶段化 Today、Toolbar AI、Action Sheet、资料编辑式列表、S1-S3 结构边界、五视口、四页面像素 Golden、Reduced Motion、平台模拟器和同 SHA Production | 后续变化按同一门槛防回归 |
 
 ## 发布必过
 

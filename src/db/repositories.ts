@@ -37,6 +37,7 @@ type UpdateTicketMetaInput = {
   note?: string
   sharedVisibility?: TicketMeta['sharedVisibility']
   scope: TicketScope
+  structuredFields?: TicketMeta['structuredFields']
   ticketCategory?: TicketMeta['ticketCategory']
   title?: string
 }
@@ -896,6 +897,9 @@ export async function updateTicketMeta(
         note: input.note,
         scope: input.scope,
         sharedVisibility: input.sharedVisibility,
+        structuredFields: Object.prototype.hasOwnProperty.call(input, 'structuredFields')
+          ? input.structuredFields
+          : ticket.structuredFields,
         ticketCategory: input.ticketCategory,
         title: input.title,
         updatedAt: now,

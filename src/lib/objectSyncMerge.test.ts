@@ -3,7 +3,7 @@ import {
   mergeObjectPayloadFields,
   resolveObjectSyncConflictPayload,
 } from './objectSyncMerge'
-import type { ItineraryItem, ObjectSyncConflict, Trip, TripReplanRecord } from '../types'
+import type { ItineraryItem, ObjectSyncConflict, TicketMeta, Trip, TripReplanRecord } from '../types'
 
 describe('object sync field merge', () => {
   it('auto merges different fields from the same base', () => {
@@ -70,6 +70,51 @@ describe('object sync field merge', () => {
     if (result.status === 'conflict') {
       expect(result.conflicts.map((field) => field.fieldPath)).toEqual(['startTimeZone'])
     }
+  })
+
+  it('merges structured ticket fields and reports divergent edits as one conflict', () => {
+    const base = buildTicket()
+    const local = buildTicket({ ...base, title: '大英博物馆门票' })
+    const remote = buildTicket({
+      ...base,
+      structuredFields: {
+        entryTime: '09:30',
+        schemaVersion: 1,
+        serviceDate: '2026-08-13',
+        status: 'ready',
+      },
+    })
+
+    const merged = mergeObjectPayloadFields({
+      basePayload: base,
+      localPayload: local,
+      objectType: 'ticket_meta',
+      remotePayload: remote,
+    })
+    expect(merged.status).toBe('merged')
+    if (merged.status === 'merged') {
+      expect(merged.payload).toMatchObject({
+        structuredFields: remote.structuredFields,
+        title: '大英博物馆门票',
+      })
+    }
+
+    const conflict = mergeObjectPayloadFields({
+      basePayload: base,
+      localPayload: buildTicket({
+        ...base,
+        structuredFields: { schemaVersion: 1, serviceDate: '2026-08-13', status: 'needs_review' },
+      }),
+      objectType: 'ticket_meta',
+      remotePayload: remote,
+    })
+    expect(conflict).toMatchObject({
+      conflicts: [expect.objectContaining({
+        fieldPath: 'structuredFields',
+        label: '结构化展示字段',
+      })],
+      status: 'conflict',
+    })
   })
 
   it('treats execution state and its timestamp as one atomic conflict field', () => {
@@ -204,6 +249,20 @@ function buildItem(patch: Partial<ItineraryItem> = {}): ItineraryItem {
     ticketIds: [],
     sortOrder: 1,
     title: '涩谷散步',
+    tripId: 'trip_1',
+    updatedAt: 100,
+    ...patch,
+  }
+}
+
+function buildTicket(patch: Partial<TicketMeta> = {}): TicketMeta {
+  return {
+    createdAt: 1,
+    fileName: 'ticket.pdf',
+    fileType: 'pdf',
+    id: 'ticket_1',
+    mimeType: 'application/pdf',
+    size: 1,
     tripId: 'trip_1',
     updatedAt: 100,
     ...patch,

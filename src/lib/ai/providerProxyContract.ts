@@ -16,7 +16,7 @@ import type {
   ExistingTripImportProviderResult,
   ExistingTripImportSourceKind,
 } from './existingTripImport'
-import type { LedgerExpenseCategory, TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
+import type { LedgerExpenseCategory, TicketCategory, TicketReadinessStatus, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
 import { validateLedgerQueryPlan, type LedgerQueryPlan } from '../ledgerArchive'
 import type {
   AiActionCatalogDescriptor,
@@ -511,6 +511,12 @@ export type ProviderProxyExistingTripImportTicketSummary = {
   summaryId: string
   ticketCategory?: TicketCategory
   title: string
+  structuredFields?: {
+    entryTime?: string
+    schemaVersion: 1
+    serviceDate?: string
+    status?: TicketReadinessStatus
+  }
 }
 
 export type ProviderProxyExistingTripImportRequest = {
@@ -1337,7 +1343,8 @@ const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 60000
 const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
 const MAX_TRAVEL_INBOX_CLASSIFY_TRIPS = 30
 const VALID_TRAVEL_INBOX_CATEGORIES = new Set<TravelInboxEntryCategory>(['unclassified', 'itinerary', 'ticket', 'note', 'mixed'])
-const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'summaryId', 'ticketCategory', 'title'])
+const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'structuredFields', 'summaryId', 'ticketCategory', 'title'])
+const EXISTING_TRIP_IMPORT_TICKET_STRUCTURED_ALLOWED_FIELDS = new Set(['entryTime', 'schemaVersion', 'serviceDate', 'status'])
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -2945,13 +2952,15 @@ function readExistingTripImportTicketSummaries(
     const itemId = readOptionalString(record.itemId, 128)
     const scope = record.scope
     const ticketCategory = record.ticketCategory
+    const structuredFields = readExistingTripImportTicketStructuredFields(record.structuredFields)
     if (
       !summaryId ||
       summaryIds.has(summaryId) ||
       !title ||
       (itemId !== undefined && !itemIds.has(itemId)) ||
       (scope !== undefined && scope !== 'trip' && scope !== 'item' && scope !== 'unassigned') ||
-      (ticketCategory !== undefined && !isExistingTripImportTicketCategory(ticketCategory))
+      (ticketCategory !== undefined && !isExistingTripImportTicketCategory(ticketCategory)) ||
+      (record.structuredFields !== undefined && !structuredFields)
     ) {
       return { message: '现有票据摘要无效。', ok: false }
     }
@@ -2960,11 +2969,38 @@ function readExistingTripImportTicketSummaries(
       itemId,
       scope: scope as TicketScope | undefined,
       summaryId,
+      structuredFields: structuredFields ?? undefined,
       ticketCategory: ticketCategory as TicketCategory | undefined,
       title,
     })
   }
   return { existingTicketSummaries, ok: true }
+}
+
+function readExistingTripImportTicketStructuredFields(
+  input: unknown,
+): ProviderProxyExistingTripImportTicketSummary['structuredFields'] | null | undefined {
+  if (input === undefined) return undefined
+  const record = readRecord(input)
+  if (
+    record.schemaVersion !== 1
+    || !Object.keys(record).every((key) => EXISTING_TRIP_IMPORT_TICKET_STRUCTURED_ALLOWED_FIELDS.has(key))
+  ) return null
+  const serviceDate = typeof record.serviceDate === 'string' && isValidPlainDate(record.serviceDate)
+    ? record.serviceDate
+    : undefined
+  const entryTime = typeof record.entryTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(record.entryTime)
+    ? record.entryTime
+    : undefined
+  const status = typeof record.status === 'string' && ['ready', 'needs_review', 'expired', 'unavailable'].includes(record.status)
+    ? record.status as TicketReadinessStatus
+    : undefined
+  if (
+    (record.serviceDate !== undefined && !serviceDate)
+    || (record.entryTime !== undefined && !entryTime)
+    || (record.status !== undefined && !status)
+  ) return null
+  return { entryTime, schemaVersion: 1, serviceDate, status }
 }
 
 function isExistingTripImportTicketCategory(input: unknown): input is TicketCategory {

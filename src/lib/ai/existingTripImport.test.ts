@@ -154,6 +154,7 @@ describe('applyExistingTripImportPreview', () => {
         candidateId: 't1',
         confidence: 'high',
         date: '2026-04-01',
+        entryTime: '10:00',
         fileName: 'ticket.pdf',
         itemTitle: '西湖',
         sourceFileId: 'source:pasted-text',
@@ -184,7 +185,15 @@ describe('applyExistingTripImportPreview', () => {
     expect(items[0].ticketIds).toHaveLength(1)
     const tickets = await listTicketsByTrip(trip.id)
     expect(tickets).toHaveLength(1)
-    expect(tickets[0]).toMatchObject({ fileName: expect.stringContaining('ticket'), fileType: 'pdf', itemId: items[0].id, scope: 'item', storageMode: 'copy', ticketCategory: 'admission_ticket' })
+    expect(tickets[0]).toMatchObject({
+      fileName: expect.stringContaining('ticket'),
+      fileType: 'pdf',
+      itemId: items[0].id,
+      scope: 'item',
+      storageMode: 'copy',
+      structuredFields: { entryTime: '10:00', serviceDate: '2026-04-01', status: 'ready' },
+      ticketCategory: 'admission_ticket',
+    })
     expect(applyResult.ok && applyResult.appliedChanges).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: 'created', kind: 'item', title: '西湖' }),
       expect.objectContaining({ action: 'created', kind: 'ticket', title: '西湖门票' }),

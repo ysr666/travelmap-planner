@@ -169,6 +169,7 @@ const FIELD_DEFS: Record<SyncObjectType, FieldDef[]> = {
     { label: 'MIME 类型', path: 'mimeType' },
     { label: '大小', path: 'size' },
     { label: '备注', notes: true, path: 'note' },
+    { label: '结构化展示字段', path: 'structuredFields' },
   ],
   trip: [
     { label: '标题', path: 'title' },

@@ -230,9 +230,15 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 246000,
-        "documentNumber": "ETKT-4720-CA849",
-        "serviceDate": "2026-08-12",
-        "status": "ready",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-12",
+          "status": "ready",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_ca849", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_ca849", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       },
@@ -249,10 +255,17 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 276000,
-        "documentNumber": "WMH-0812-3N",
-        "serviceDate": "2026-08-12",
-        "status": "ready",
-        "previewMediaAssetId": "media_hotel_room_thumb_v1",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-12",
+          "status": "ready",
+          "previewMediaAssetId": "media_hotel_room_thumb_v1",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_london_hotel", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_london_hotel", "confidence": "high" },
+            "previewMediaAssetId": { "sourceType": "fixture", "sourceId": "ticket_london_hotel", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       },
@@ -268,9 +281,15 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 312000,
-        "documentNumber": "AWTI2608123456",
-        "serviceDate": "2026-08-12",
-        "status": "ready",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-12",
+          "status": "ready",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_allianz_policy", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_allianz_policy", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       },
@@ -287,11 +306,19 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 246000,
-        "documentNumber": "BM-1234567890",
-        "serviceDate": "2026-08-13",
-        "entryTime": "09:00",
-        "status": "ready",
-        "previewMediaAssetId": "media_british_museum_thumb_v1",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-13",
+          "entryTime": "09:00",
+          "status": "ready",
+          "previewMediaAssetId": "media_british_museum_thumb_v1",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_british_museum", "confidence": "high" },
+            "entryTime": { "sourceType": "fixture", "sourceId": "ticket_british_museum", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_british_museum", "confidence": "high" },
+            "previewMediaAssetId": { "sourceType": "fixture", "sourceId": "ticket_british_museum", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       },
@@ -309,12 +336,19 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 198000,
-        "documentNumber": "LNER-0813-1700",
-        "serviceDate": "2026-08-13",
-        "entryTime": "17:00",
-        "seat": "45A",
-        "status": "ready",
-        "previewMediaAssetId": "media_lner_azuma_thumb_v1",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-13",
+          "entryTime": "17:00",
+          "status": "ready",
+          "previewMediaAssetId": "media_lner_azuma_thumb_v1",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_lner", "confidence": "high" },
+            "entryTime": { "sourceType": "fixture", "sourceId": "ticket_lner", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_lner", "confidence": "high" },
+            "previewMediaAssetId": { "sourceType": "fixture", "sourceId": "ticket_lner", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       },
@@ -331,11 +365,19 @@
         "fileType": "pdf",
         "mimeType": "application/pdf",
         "size": 184000,
-        "documentNumber": "EC-0818-1100",
-        "serviceDate": "2026-08-18",
-        "entryTime": "11:00",
-        "status": "ready",
-        "previewMediaAssetId": "media_edinburgh_castle_thumb_v1",
+        "structuredFields": {
+          "schemaVersion": 1,
+          "serviceDate": "2026-08-18",
+          "entryTime": "11:00",
+          "status": "ready",
+          "previewMediaAssetId": "media_edinburgh_castle_thumb_v1",
+          "fieldEvidence": {
+            "serviceDate": { "sourceType": "fixture", "sourceId": "ticket_edinburgh_castle", "confidence": "high" },
+            "entryTime": { "sourceType": "fixture", "sourceId": "ticket_edinburgh_castle", "confidence": "high" },
+            "status": { "sourceType": "fixture", "sourceId": "ticket_edinburgh_castle", "confidence": "high" },
+            "previewMediaAssetId": { "sourceType": "fixture", "sourceId": "ticket_edinburgh_castle", "confidence": "high" }
+          }
+        },
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       }
@@ -415,14 +457,28 @@
         "arrivalTimeZone": "Europe/London",
         "platform": "5",
         "arrivalPlatform": "11",
-        "seat": "45A",
         "status": "scheduled",
         "createdAt": 1785830400000,
         "updatedAt": 1785830400000
       }
     ],
+    "bookingSecrets": [
+      {
+        "bookingId": "booking_ca849",
+        "travelerIds": [],
+        "pnr": "CA849P",
+        "ticketNumbers": ["ETKT-4720-CA849"]
+      },
+      {
+        "bookingId": "booking_lner",
+        "travelerIds": [],
+        "orderNumber": "LNER-0813-1700",
+        "segmentSeats": [{ "segmentIndex": 1, "seat": "45A" }]
+      }
+    ],
     "lodgingReservations": [
       {
+        "schemaVersion": 1,
         "id": "lodging_london",
         "tripId": "trip_uk_product_fidelity",
         "itemId": "item_london_hotel",
@@ -437,12 +493,12 @@
         "confirmationNumber": "WMH-0812-3N",
         "status": "confirmed",
         "mediaAssetId": "media_hotel_room_thumb_v1",
-        "createdAt": 1785830400000,
-        "updatedAt": 1785830400000
+        "source": { "sourceType": "fixture", "sourceId": "ticket_london_hotel", "confidence": "high" }
       }
     ],
     "insurancePolicies": [
       {
+        "schemaVersion": 1,
         "id": "insurance_allianz",
         "tripId": "trip_uk_product_fidelity",
         "ticketId": "ticket_allianz_policy",
@@ -453,8 +509,7 @@
         "effectiveFrom": "2026-08-12T00:00:00+08:00",
         "effectiveTo": "2026-08-23T23:59:59+08:00",
         "status": "active",
-        "createdAt": 1785830400000,
-        "updatedAt": 1785830400000
+        "source": { "sourceType": "fixture", "sourceId": "ticket_allianz_policy", "confidence": "high" }
       }
     ],
     "mediaAssets": [

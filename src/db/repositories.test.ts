@@ -285,6 +285,16 @@ describe('Ticket CRUD', () => {
       itemId: second.id,
       note: '改到第二站',
       scope: 'item',
+      structuredFields: {
+        entryTime: '09:30',
+        fieldEvidence: {
+          entryTime: { confidence: 'high', sourceType: 'manual' },
+          serviceDate: { confidence: 'high', sourceType: 'ticket' },
+        },
+        schemaVersion: 1,
+        serviceDate: '2025-04-02',
+        status: 'ready',
+      },
       ticketCategory: 'train_ticket',
       title: '新票据',
     })
@@ -294,6 +304,12 @@ describe('Ticket CRUD', () => {
       itemId: second.id,
       note: '改到第二站',
       scope: 'item',
+      structuredFields: {
+        entryTime: '09:30',
+        schemaVersion: 1,
+        serviceDate: '2025-04-02',
+        status: 'ready',
+      },
       ticketCategory: 'train_ticket',
       title: '新票据',
     })
@@ -314,7 +330,19 @@ describe('Ticket CRUD', () => {
       scope: 'unassigned',
       ticketCategory: 'other',
     })
+    expect((await getTicketMeta(ticket.id))?.structuredFields).toMatchObject({
+      entryTime: '09:30',
+      schemaVersion: 1,
+      serviceDate: '2025-04-02',
+      status: 'ready',
+    })
     await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [] })
+
+    await updateTicketMeta(ticket.id, {
+      scope: 'unassigned',
+      structuredFields: undefined,
+    })
+    expect((await getTicketMeta(ticket.id))?.structuredFields).toBeUndefined()
   })
 
   it('rejects ticket rebinds to items outside the ticket trip without mutating metadata', async () => {

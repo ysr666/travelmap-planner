@@ -2840,3 +2840,30 @@ P1 validation:
 - `npm run test:unit` passed: 198 files and 1617 tests.
 - Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2340.2 KiB/114-entry precache.
 - `git diff --check` passed.
+
+P2 plan:
+
+- Goal: make flights, rail segments, lodging, insurance, admissions, and documents render from one versioned travel-object model instead of page-local filename and note heuristics.
+- Scope: add optional schema-compatible structured fields to existing ticket/transport records; define lodging and insurance input contracts without adding storage tables; normalize local transport imports with field evidence; build one collection/selectors for Today, Timeline, Documents, and Item Detail; validate the canonical fixture through the same builders.
+- No-go: no IndexedDB version, Supabase migration, unencrypted PNR/order-number persistence, Provider call, ticket Blob/OCR-body exposure, automatic write, or page redesign in this phase.
+- Likely files: `src/types.ts`, `src/lib/transportImport.ts`, `src/lib/travelObjects/*`, focused tests, the product-fidelity fixture, and only the minimal current import form wiring needed to retain normalized fields after confirmation.
+- Validation: schema/normalization/privacy/ViewModel tests, import component tests, canonical fixture assertions, typecheck, lint, full unit suite, production build, and `git diff --check`.
+- Risk: medium-high because optional record fields flow through IndexedDB and cloud object payloads even though no index or table changes.
+- Stop conditions: stop and repair if a sensitive booking value leaves the encrypted vault, a page needs to parse raw Provider/import payloads, old records fail normalization, fixture objects need fabricated fields, or any optional field changes current sync semantics.
+
+P2 result:
+
+- Added versioned ticket display fields, transport field evidence, lodging/insurance input contracts, and one `TravelObjectViewModelV1` collection for Today, Timeline, Documents, and Item Detail consumers.
+- Normalized local transport imports into carrier/airport/station codes, terminals/platforms, dates/times, and source confidence while keeping PNR, order number, and seat inside the encrypted booking secret.
+- Extended existing-trip AI import with strict, provider-safe ticket date/time/category fields. Unknown fields and private identifiers are rejected or omitted; confirmed writes retain evidence and structured metadata.
+- Added deterministic media, lodging, insurance, ticket, flight, rail, and encrypted-secret records to the canonical fixture and validated every record through production parsers/builders.
+- Ticket metadata updates now preserve structured fields when older callers omit the new property, while an explicit `undefined` still clears it. Object-sync field merge now tracks the structured ticket object and reports divergent edits as one resolvable conflict.
+- No IndexedDB schema/version, Supabase table, ticket Blob contract, route cache, real Provider call, or automatic write behavior changed.
+
+P2 validation:
+
+- Focused import, contract, privacy, repository, sync-merge, Provider normalization, and fixture ViewModel tests passed: 9 files and 76 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 200 files and 1635 tests.
+- `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2347.2 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.

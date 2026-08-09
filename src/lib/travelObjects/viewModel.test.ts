@@ -85,6 +85,7 @@ describe('travel object view model', () => {
     expect(castle).toMatchObject({ media: { id: 'media_edinburgh_castle_hero_v1' }, ticketIds: ['ticket_edinburgh_castle'] })
     expect(collection.byTicketId.get('ticket_british_museum')).toMatchObject({
       dateLabel: '2026-08-13',
+      documentLink: { label: '已关联行程', status: 'confirmed' },
       media: { id: 'media_british_museum_thumb_v1' },
       status: { label: '已就绪' },
       timeLabel: '09:00',
@@ -129,5 +130,26 @@ describe('travel object view model', () => {
 
     expect(collection.byItemId.get('item')?.title).toBe('旧行程点')
     expect(collection.byTicketId.get('ticket')).toMatchObject({ status: { label: '已就绪' }, title: 'old.pdf' })
+  })
+
+  it('surfaces one explainable suggestion without mutating an unbound ticket', () => {
+    const records = loadFixtureRecords()
+    const source = records.ticketMetas.find((ticket) => ticket.id === 'ticket_edinburgh_castle')!
+    const ticket = { ...source, itemId: undefined, scope: 'unassigned' as const }
+    const collection = buildTravelObjectCollection({
+      days: records.days,
+      items: records.itineraryItems,
+      tickets: [ticket],
+      tripId: ticket.tripId,
+    })
+
+    expect(collection.byTicketId.get(ticket.id)?.documentLink).toMatchObject({
+      confidence: 1,
+      label: '建议关联',
+      status: 'suggested',
+      subjectId: 'item_edinburgh_castle',
+      subjectType: 'item',
+    })
+    expect(ticket.itemId).toBeUndefined()
   })
 })

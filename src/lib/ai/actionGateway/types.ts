@@ -22,6 +22,7 @@ export type AiActionId =
   | 'ledger.expense.draft@1'
   | 'place.enrich@1'
   | 'route.preview@1'
+  | 'ticket.bind@1'
   | 'ticket.open@1'
   | 'trip.replan.apply@1'
   | 'trip.repair@1'
@@ -43,6 +44,11 @@ export type AiActionStepStatus =
 
 export type AiActionTicketOpenArgs = {
   query?: string
+}
+
+export type AiActionTicketBindArgs = {
+  target: string
+  ticket: string
 }
 
 export type AiActionItemTimeUpdateArgs = {
@@ -156,6 +162,7 @@ export type AiActionArgsById = {
   'ledger.expense.draft@1': AiActionLedgerExpenseDraftArgs
   'place.enrich@1': AiActionPlaceEnrichArgs
   'route.preview@1': AiActionRoutePreviewArgs
+  'ticket.bind@1': AiActionTicketBindArgs
   'ticket.open@1': AiActionTicketOpenArgs
   'trip.replan.apply@1': AiActionTripReplanApplyArgs
   'trip.repair@1': AiActionTripRepairArgs

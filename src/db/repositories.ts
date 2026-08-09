@@ -30,9 +30,24 @@ type UpdateItineraryItemPatch = Partial<
 >
 
 export class ItineraryBaselineConflictError extends Error {}
+export class TicketBaselineConflictError extends Error {}
 
 type CreateTicketMetaInput = Omit<TicketMeta, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTicketMetaInput = {
+  expectedBinding?: {
+    currentItem?: {
+      id: string
+      ticketIds: string[]
+      updatedAt: number
+    }
+    itemId?: string
+    targetItem: {
+      id: string
+      ticketIds: string[]
+      updatedAt: number
+    }
+    ticketUpdatedAt: number
+  }
   itemId?: string
   note?: string
   sharedVisibility?: TicketMeta['sharedVisibility']
@@ -864,6 +879,16 @@ export async function updateTicketMeta(
       const ticket = await db.ticketMetas.get(ticketId)
       if (!ticket) return undefined
 
+      if (
+        input.expectedBinding
+        && (
+          ticket.updatedAt !== input.expectedBinding.ticketUpdatedAt
+          || ticket.itemId !== input.expectedBinding.itemId
+        )
+      ) {
+        throw new TicketBaselineConflictError('票据绑定已变化，请重新生成预览。')
+      }
+
       const now = Date.now()
       const nextItemId = input.scope === 'item' ? input.itemId : undefined
 
@@ -875,6 +900,28 @@ export async function updateTicketMeta(
       const targetItem = nextItemId ? tripItems.find((item) => item.id === nextItemId) : undefined
       if (nextItemId && !targetItem) {
         throw new Error('绑定的行程点不存在。')
+      }
+      if (input.expectedBinding) {
+        const expectedTarget = input.expectedBinding.targetItem
+        const currentItem = input.expectedBinding.currentItem
+          ? tripItems.find((item) => item.id === input.expectedBinding?.currentItem?.id)
+          : undefined
+        if (
+          !targetItem
+          || targetItem.id !== expectedTarget.id
+          || targetItem.updatedAt !== expectedTarget.updatedAt
+          || !sameStringSet(targetItem.ticketIds, expectedTarget.ticketIds)
+          || (
+            input.expectedBinding.currentItem
+            && (
+              !currentItem
+              || currentItem.updatedAt !== input.expectedBinding.currentItem.updatedAt
+              || !sameStringSet(currentItem.ticketIds, input.expectedBinding.currentItem.ticketIds)
+            )
+          )
+        ) {
+          throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
+        }
       }
 
       const changedItems = tripItems.flatMap((item) => {
@@ -914,6 +961,13 @@ export async function updateTicketMeta(
       return { changedItems, ticket: nextTicket }
     },
   )
+}
+
+function sameStringSet(first: string[], second: string[]) {
+  const sortedFirst = [...first].sort()
+  const sortedSecond = [...second].sort()
+  return sortedFirst.length === sortedSecond.length
+    && sortedFirst.every((value, index) => value === sortedSecond[index])
 }
 
 export async function deleteTicket(ticketId: string) {

@@ -56,6 +56,274 @@ describe('AI Action Gateway runtime', () => {
     })])
   })
 
+  it('binds a semantic ticket after one confirmation, preserves its file permissions, and opens it directly', async () => {
+    const seed = buildSeed()
+    seed.item.title = '爱丁堡城堡'
+    await seedDatabase(seed)
+    const ticket: TicketMeta = {
+      createdAt: 1,
+      fileName: 'edinburgh-castle.pdf',
+      fileType: 'pdf',
+      id: 'ticket-castle',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      sharedVisibility: { memberIds: ['member-reader'], mode: 'assigned' },
+      size: 4,
+      storageMode: 'copy',
+      structuredFields: {
+        entryTime: '11:00',
+        schemaVersion: 1,
+        serviceDate: seed.day.date,
+        status: 'ready',
+      },
+      ticketCategory: 'admission_ticket',
+      title: '爱丁堡城堡门票',
+      tripId: seed.trip.id,
+      updatedAt: 1,
+    }
+    await db.transaction('rw', [db.ticketMetas, db.ticketBlobs], async () => {
+      await db.ticketMetas.put(ticket)
+      await db.ticketBlobs.put({ blob: new Blob(['PDF'], { type: 'application/pdf' }), ticketId: ticket.id })
+    })
+    const context = runtimeContext(seed, { tickets: [ticket] })
+    const plan = buildDeterministicAiActionPlan('把「爱丁堡城堡门票」绑定到「爱丁堡城堡」')
+    expect(plan).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{ actionId: 'ticket.bind@1', args: { target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' } }],
+    })
+
+    const prepared = await prepareAiActionPlan(plan!, context)
+    expect(prepared.steps[0]).toMatchObject({
+      affectedLabels: ['爱丁堡城堡门票', '爱丁堡城堡'],
+      hasWrite: true,
+      status: 'prepared',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({ ticketIds: [] })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      effects: [{
+        kind: 'navigate',
+        params: { tab: 'attachments', ticketId: ticket.id, tripId: seed.trip.id },
+        route: 'documents',
+      }],
+    })
+    await expect(db.ticketMetas.get(ticket.id)).resolves.toMatchObject({
+      itemId: seed.item.id,
+      scope: 'item',
+      sharedVisibility: { memberIds: ['member-reader'], mode: 'assigned' },
+      structuredFields: ticket.structuredFields,
+      title: ticket.title,
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
+    await expect(db.ticketBlobs.get(ticket.id)).resolves.toBeDefined()
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+
+    const replay = await executeAiActionPlan(prepared, context)
+    expect(replay.status).toBe('completed')
+    expect(replay.steps[0].message).toContain('未重复写入')
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(1)
+  })
+
+  it('blocks a ticket binding when its metadata changes after preview', async () => {
+    const seed = buildSeed()
+    seed.item.title = '爱丁堡城堡'
+    await seedDatabase(seed)
+    const ticket: TicketMeta = {
+      createdAt: 1,
+      fileName: 'castle.pdf',
+      fileType: 'pdf',
+      id: 'ticket-stale',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      title: '爱丁堡城堡门票',
+      tripId: seed.trip.id,
+      updatedAt: 1,
+    }
+    await db.ticketMetas.put(ticket)
+    const context = runtimeContext(seed, { tickets: [ticket] })
+    const plan = buildDeterministicAiActionPlan('把「爱丁堡城堡门票」关联到「爱丁堡城堡」')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.ticketMetas.update(ticket.id, { title: '用户刚修改的票据', updatedAt: 2 })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({
+      requiresFreshConfirmation: true,
+      status: 'failed',
+    })
+    expect(result.message).toContain('票据绑定已变化')
+    const unchanged = await db.ticketMetas.get(ticket.id)
+    expect(unchanged?.title).toBe('用户刚修改的票据')
+    expect(unchanged?.itemId).toBeUndefined()
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('blocks a ticket binding when the target item changes after preview', async () => {
+    const seed = buildSeed()
+    seed.item.title = '爱丁堡城堡'
+    await seedDatabase(seed)
+    const ticket: TicketMeta = {
+      createdAt: 1,
+      fileName: 'castle.pdf',
+      fileType: 'pdf',
+      id: 'ticket-target-stale',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      title: '爱丁堡城堡门票',
+      tripId: seed.trip.id,
+      updatedAt: 1,
+    }
+    await db.ticketMetas.put(ticket)
+    const context = runtimeContext(seed, { tickets: [ticket] })
+    const plan = buildDeterministicAiActionPlan('把「爱丁堡城堡门票」关联到「爱丁堡城堡」')!
+    const prepared = await prepareAiActionPlan(plan, context)
+    await db.itineraryItems.update(seed.item.id, {
+      ticketIds: ['ticket-added-elsewhere'],
+      updatedAt: seed.item.updatedAt + 1,
+    })
+
+    const result = await executeAiActionPlan(prepared, context)
+
+    expect(result).toMatchObject({ requiresFreshConfirmation: true, status: 'failed' })
+    expect(result.message).toContain('重新生成预览')
+    await expect(db.ticketMetas.get(ticket.id)).resolves.not.toHaveProperty('itemId')
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({
+      ticketIds: ['ticket-added-elsewhere'],
+    })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(0)
+  })
+
+  it('rejects ambiguous semantic ticket names before any write', async () => {
+    const seed = buildSeed()
+    const tickets: TicketMeta[] = [1, 2].map((index) => ({
+      createdAt: index,
+      fileName: `castle-${index}.pdf`,
+      fileType: 'pdf',
+      id: `ticket-${index}`,
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      title: '城堡门票',
+      tripId: seed.trip.id,
+      updatedAt: 1,
+    }))
+    const validation = validateAiActionPlan({
+      schemaVersion: 'ai_action_plan.v1',
+      steps: [{
+        actionId: 'ticket.bind@1',
+        args: { target: 'first_item', ticket: '城堡门票' },
+        dependsOn: [],
+        id: 'bind',
+      }],
+      summary: '关联票据',
+    })
+    expect(validation.ok).toBe(true)
+    if (!validation.ok) return
+
+    const prepared = await prepareAiActionPlan(validation.plan, runtimeContext(seed, { tickets }))
+
+    expect(prepared.steps[0]).toMatchObject({
+      error: '找到多个同名票据，请写清楚文件名。',
+      hasWrite: false,
+      status: 'failed',
+    })
+    await expect(db.ticketMetas.count()).resolves.toBe(0)
+  })
+
+  it('retries only a failed ticket binding without repeating the successful binding', async () => {
+    const seed = buildSeed()
+    seed.item.title = '爱丁堡城堡'
+    const secondItem: ItineraryItem = {
+      ...seed.item,
+      id: 'item-museum',
+      sortOrder: 2,
+      title: '大英博物馆',
+    }
+    const tickets: TicketMeta[] = [
+      {
+        createdAt: 1,
+        fileName: 'castle.pdf',
+        fileType: 'pdf',
+        id: 'ticket-castle',
+        mimeType: 'application/pdf',
+        scope: 'unassigned',
+        size: 1,
+        title: '爱丁堡城堡门票',
+        tripId: seed.trip.id,
+        updatedAt: 1,
+      },
+      {
+        createdAt: 2,
+        fileName: 'museum.pdf',
+        fileType: 'pdf',
+        id: 'ticket-museum',
+        mimeType: 'application/pdf',
+        scope: 'unassigned',
+        size: 1,
+        title: '大英博物馆门票',
+        tripId: seed.trip.id,
+        updatedAt: 1,
+      },
+    ]
+    await seedDatabase(seed)
+    await db.transaction('rw', [db.itineraryItems, db.ticketMetas], async () => {
+      await db.itineraryItems.put(secondItem)
+      await db.ticketMetas.bulkPut(tickets)
+    })
+    const context = runtimeContext(seed, { tickets })
+    context.commandContext.items = [seed.item, secondItem]
+    const validation = validateAiActionPlan({
+      schemaVersion: 'ai_action_plan.v1',
+      steps: [
+        { actionId: 'ticket.bind@1', args: { target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' }, dependsOn: [], id: 'castle' },
+        { actionId: 'ticket.bind@1', args: { target: '大英博物馆', ticket: '大英博物馆门票' }, dependsOn: [], id: 'museum' },
+      ],
+      summary: '关联两张票据',
+    })
+    expect(validation.ok).toBe(true)
+    if (!validation.ok) return
+    const prepared = await prepareAiActionPlan(validation.plan, context)
+    await db.ticketMetas.update('ticket-museum', { updatedAt: 2 })
+
+    const firstRun = await executeAiActionPlan(prepared, context)
+
+    expect(firstRun).toMatchObject({
+      completedStepIds: ['castle'],
+      failedStepIds: ['museum'],
+      status: 'partial',
+    })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({ ticketIds: ['ticket-castle'] })
+    await expect(db.itineraryItems.get(secondItem.id)).resolves.toMatchObject({ ticketIds: [] })
+
+    const [freshTrip, freshItems, freshTickets] = await Promise.all([
+      db.trips.get(seed.trip.id),
+      db.itineraryItems.toArray(),
+      db.ticketMetas.toArray(),
+    ])
+    expect(freshTrip).toBeTruthy()
+    const retryContext = runtimeContext({ ...seed, item: freshItems.find((item) => item.id === seed.item.id)!, trip: freshTrip! }, { tickets: freshTickets })
+    retryContext.commandContext.items = freshItems
+    const retryPrepared = await prepareAiActionPlan(validation.plan, retryContext, {
+      completedStepIds: firstRun.completedStepIds,
+      executionId: prepared.executionId,
+    })
+    const retryRun = await executeAiActionPlan(retryPrepared, retryContext, {
+      completedStepIds: firstRun.completedStepIds,
+    })
+
+    expect(retryRun.status).toBe('completed')
+    expect(retryRun.steps[0]).toMatchObject({ id: 'castle', status: 'skipped' })
+    await expect(db.itineraryItems.get(seed.item.id)).resolves.toMatchObject({ ticketIds: ['ticket-castle'] })
+    await expect(db.itineraryItems.get(secondItem.id)).resolves.toMatchObject({ ticketIds: ['ticket-museum'] })
+    await expect(db.tripIntelligenceAppliedChanges.count()).resolves.toBe(2)
+  })
+
   it('opens a registered semantic workspace target without a provider request', async () => {
     const seed = buildSeed()
     const fetchSpy = vi.spyOn(globalThis, 'fetch')

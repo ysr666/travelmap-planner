@@ -4,6 +4,7 @@ import {
   db,
   deleteItineraryItemReversible,
   getItineraryItem,
+  getTicketMeta,
   getLedgerSettingsByTrip,
   getTrip,
   ItineraryBaselineConflictError,
@@ -15,8 +16,10 @@ import {
   listTicketsByTrip,
   moveItineraryItemBetweenDays,
   reorderDayItems,
+  TicketBaselineConflictError,
   undoItineraryItemDeletion,
   updateItineraryItem,
+  updateTicketMeta,
 } from '../../../db'
 import { createId } from '../../../db/ids'
 import type {
@@ -33,6 +36,8 @@ import type {
   TripReplanRecord,
 } from '../../../types'
 import { buildAiTripEditLocalStateFingerprint } from '../aiTripEditApply'
+import { scoreTicketItemCandidate } from '../../documentLinking'
+import { getTicketDisplayTitle } from '../../tickets'
 import { buildTripContext } from '../aiTripContext'
 import {
   applyTripContentEnrichmentPreviewsToDb,
@@ -126,6 +131,7 @@ import {
   type AiActionRunResult,
   type AiActionRoutePreviewArgs,
   type AiActionStepRunResult,
+  type AiActionTicketBindArgs,
   type AiActionTicketOpenArgs,
   type AiActionTripReplanApplyArgs,
   type AiActionTripRepairArgs,
@@ -142,6 +148,20 @@ export type AiActionGatewayRuntimeContext = {
 type PreparedTicketAction = {
   kind: 'ticket'
   navigation: GlobalAiNavigationResult
+}
+
+type PreparedTicketBindAction = {
+  changed: boolean
+  expectedItemId?: string
+  expectedTicketUpdatedAt: number
+  kind: 'ticket-bind'
+  matchConfidence: number
+  matchReason: string
+  operationFingerprint: string
+  previousItem?: ItineraryItem
+  target: ItineraryItem
+  ticket: TicketMeta
+  trip: Trip
 }
 
 type PreparedWorkspaceAction = {
@@ -325,6 +345,7 @@ type PreparedAction =
   | PreparedLedgerExpenseDraftAction
   | PreparedPlaceAction
   | PreparedRoutePreviewAction
+  | PreparedTicketBindAction
   | PreparedTicketAction
   | PreparedTripRepairAction
   | PreparedWorkspaceAction
@@ -569,6 +590,31 @@ const ACTION_RUNTIME_DEFINITIONS: Record<AiActionId, AiActionRuntimeDefinition> 
         text: route.targetDayIds.length > 0
           ? `将为 ${route.targetDayIds.length} 天生成路线预览；确认后才调用路线服务。`
           : '所选日期已有可用路线预览，无需重复生成。',
+      }
+    },
+  },
+  'ticket.bind@1': {
+    execute: async (prepared) =>
+      executeTicketBindAction(requirePreparedKind(prepared, 'ticket-bind')),
+    prepare: (args, context, preparation) =>
+      prepareTicketBindAction(
+        args as AiActionTicketBindArgs,
+        context,
+        preparation,
+      ),
+    preview: (prepared) => {
+      const binding = requirePreparedKind(prepared, 'ticket-bind')
+      const ticketTitle = getTicketDisplayTitle(binding.ticket)
+      const movePrefix = binding.previousItem && binding.previousItem.id !== binding.target.id
+        ? `从「${binding.previousItem.title}」改为`
+        : '关联到'
+      return {
+        affectedLabels: [ticketTitle, binding.target.title],
+        details: [`匹配依据：${binding.matchReason} · ${Math.round(binding.matchConfidence * 100)}%`, '票据原件与共享范围保持不变。'],
+        hasWrite: binding.changed,
+        text: binding.changed
+          ? `「${ticketTitle}」将${movePrefix}「${binding.target.title}」。`
+          : `「${ticketTitle}」已关联「${binding.target.title}」。`,
       }
     },
   },
@@ -970,6 +1016,46 @@ async function prepareTicketAction(
   const result = await resolveGlobalAiCommand(command, context.commandContext)
   if (result.kind !== 'navigation') throw new Error('无法生成票据入口。')
   return { kind: 'ticket', navigation: result }
+}
+
+async function prepareTicketBindAction(
+  args: AiActionTicketBindArgs,
+  context: AiActionGatewayRuntimeContext,
+  preparation: {
+    executionId: string
+    idempotencyKey: string
+  },
+): Promise<PreparedTicketBindAction> {
+  const trip = requireTrip(context.commandContext)
+  const ticket = resolveTicketTarget(args.ticket, context.commandContext)
+  const target = resolveItemTarget(args.target, context.commandContext)
+  if (ticket.tripId !== trip.id || target.tripId !== trip.id) {
+    throw new Error('票据或行程点不属于当前旅行。')
+  }
+  const previousItem = ticket.itemId
+    ? context.commandContext.items.find((item) => item.id === ticket.itemId)
+    : undefined
+  if (ticket.itemId && !previousItem) {
+    throw new Error('票据原绑定已不存在，请先检查资料。')
+  }
+  const day = context.commandContext.days.find((candidate) => candidate.id === target.dayId)
+  const match = scoreTicketItemCandidate(ticket, target, day)
+  return {
+    changed: ticket.itemId !== target.id || !target.ticketIds.includes(ticket.id),
+    expectedItemId: ticket.itemId,
+    expectedTicketUpdatedAt: ticket.updatedAt,
+    kind: 'ticket-bind',
+    matchConfidence: match.confidence,
+    matchReason: match.evidence.length > 0 ? match.reason : '用户明确指定',
+    operationFingerprint: buildActionOperationFingerprint(
+      preparation.executionId,
+      preparation.idempotencyKey,
+    ),
+    previousItem,
+    target,
+    ticket,
+    trip,
+  }
 }
 
 async function prepareWorkspaceAction(
@@ -2078,6 +2164,16 @@ async function canReplayPersistedPreparedPlan(
     if (!preparedStep.prepared) return false
     const prepared = preparedStep.prepared as PreparedAction
     try {
+      if (prepared.kind === 'ticket-bind') {
+        if (!await hasPersistedActionChange(
+          prepared.trip.id,
+          prepared.operationFingerprint,
+        )) {
+          return false
+        }
+        await assertPersistedTicketBindingState(prepared)
+        continue
+      }
       if (prepared.kind === 'item-move') {
         if (!await hasPersistedActionChange(
           prepared.trip.id,
@@ -2138,6 +2234,23 @@ async function canReplayPersistedPreparedPlan(
     }
   }
   return hasPendingWrite
+}
+
+async function assertPersistedTicketBindingState(
+  prepared: PreparedTicketBindAction,
+) {
+  const [ticket, target] = await Promise.all([
+    getTicketMeta(prepared.ticket.id),
+    getItineraryItem(prepared.target.id),
+  ])
+  if (
+    !ticket || ticket.itemId !== prepared.target.id
+    || !target || !target.ticketIds.includes(ticket.id)
+    || stableStringify(ticket.sharedVisibility) !== stableStringify(prepared.ticket.sharedVisibility)
+  ) {
+    throw new FreshConfirmationRequiredError('票据关联结果已变化，请重新生成预览。')
+  }
+  return ticket
 }
 
 async function assertPersistedItemExecutionState(
@@ -2373,6 +2486,109 @@ async function executeRoutePreviewAction(
     message: saved.length > 0
       ? `已生成 ${saved.length} 天路线预览。`
       : '路线服务没有生成可用预览。',
+  }
+}
+
+async function executeTicketBindAction(
+  prepared: PreparedTicketBindAction,
+): Promise<ActionExecutionResult> {
+  const effect = buildTicketDocumentEffect(prepared.trip.id, prepared.ticket.id)
+  if (!prepared.changed) {
+    return {
+      appliedChanges: [],
+      effects: [effect],
+      errors: [],
+      message: `「${getTicketDisplayTitle(prepared.ticket)}」已关联目标行程，未重复写入。`,
+    }
+  }
+
+  let output: { replayed: boolean; ticket: TicketMeta } | undefined
+  try {
+    await db.transaction(
+      'rw',
+      [
+        db.itineraryItems,
+        db.trips,
+        db.ticketMetas,
+        db.syncOutbox,
+        db.objectSyncStates,
+        db.tripIntelligenceAppliedChanges,
+        db.tripIntelligenceSuggestionStates,
+      ],
+      async () => {
+        if (await hasPersistedActionChange(prepared.trip.id, prepared.operationFingerprint)) {
+          output = {
+            replayed: true,
+            ticket: await assertPersistedTicketBindingState(prepared),
+          }
+          return
+        }
+        const result = await updateTicketMeta(prepared.ticket.id, {
+          expectedBinding: {
+            ...(prepared.previousItem && prepared.previousItem.id !== prepared.target.id
+              ? {
+                  currentItem: {
+                    id: prepared.previousItem.id,
+                    ticketIds: [...prepared.previousItem.ticketIds],
+                    updatedAt: prepared.previousItem.updatedAt,
+                  },
+                }
+              : {}),
+            ...(prepared.expectedItemId ? { itemId: prepared.expectedItemId } : {}),
+            targetItem: {
+              id: prepared.target.id,
+              ticketIds: [...prepared.target.ticketIds],
+              updatedAt: prepared.target.updatedAt,
+            },
+            ticketUpdatedAt: prepared.expectedTicketUpdatedAt,
+          },
+          itemId: prepared.target.id,
+          note: prepared.ticket.note,
+          scope: 'item',
+          sharedVisibility: prepared.ticket.sharedVisibility,
+          structuredFields: prepared.ticket.structuredFields,
+          ticketCategory: prepared.ticket.ticketCategory,
+          title: prepared.ticket.title,
+        })
+        if (!result) {
+          throw new FreshConfirmationRequiredError('票据已不存在，请重新生成预览。')
+        }
+        const change = buildAppliedChange({
+          actionType: 'global_ai_ticket_bound',
+          detail: `已确认关联到「${prepared.target.title}」；票据原件与共享范围保持不变。`,
+          idempotencyKey: prepared.operationFingerprint,
+          occurredAt: result.ticket.updatedAt,
+          targetId: result.ticket.id,
+          targetType: 'ticket',
+          title: getTicketDisplayTitle(result.ticket),
+        })
+        await appendTripIntelligenceExecutionResult(prepared.trip.id, {
+          result: {
+            appliedChanges: [change],
+            message: 'AI 动作计划已完成。',
+            status: 'completed',
+          },
+          source: 'operations',
+          title: '关联票据',
+        }, change.occurredAt)
+        output = { replayed: false, ticket: result.ticket }
+      },
+    )
+  } catch (caught) {
+    if (caught instanceof TicketBaselineConflictError) {
+      throw new FreshConfirmationRequiredError(caught.message)
+    }
+    throw caught
+  }
+  if (!output) throw new Error('票据关联事务没有返回结果。')
+  if (!output.replayed) emitTravelDataChanged()
+  return {
+    appliedChanges: [],
+    effects: [effect],
+    errors: [],
+    message: output.replayed
+      ? `「${getTicketDisplayTitle(output.ticket)}」已经关联，未重复写入。`
+      : `已将「${getTicketDisplayTitle(output.ticket)}」关联到「${prepared.target.title}」。`,
   }
 }
 
@@ -2749,6 +2965,37 @@ function resolveScopedItemActionTarget(
   return { day, target, trip }
 }
 
+function resolveTicketTarget(target: string, context: GlobalAiCommandContext) {
+  const tickets = [...context.tickets]
+    .filter((ticket) => !context.trip || ticket.tripId === context.trip.id)
+    .sort((first, second) => first.createdAt - second.createdAt || first.id.localeCompare(second.id))
+  if (target === 'first_ticket') {
+    const first = tickets[0]
+    if (!first) throw new Error('当前旅行还没有票据。')
+    return first
+  }
+  if (target === 'first_unbound_ticket') {
+    const first = tickets.find((ticket) => !ticket.itemId)
+    if (!first) throw new Error('当前旅行没有待关联票据。')
+    return first
+  }
+  const normalized = normalizeText(target)
+  const candidates = tickets.map((ticket) => ({
+    fields: [getTicketDisplayTitle(ticket), ticket.fileName, ticket.fileName.replace(/\.[^.]+$/, '')]
+      .map(normalizeText),
+    ticket,
+  }))
+  const exact = candidates.filter((candidate) => candidate.fields.includes(normalized))
+  if (exact.length === 1) return exact[0].ticket
+  if (exact.length > 1) throw new Error('找到多个同名票据，请写清楚文件名。')
+  const matches = candidates.filter((candidate) =>
+    candidate.fields.some((value) => value.includes(normalized) || normalized.includes(value)),
+  )
+  if (matches.length === 1) return matches[0].ticket
+  if (matches.length > 1) throw new Error('找到多个匹配票据，请写清楚名称。')
+  throw new Error('没有找到目标票据。')
+}
+
 function resolveItemTarget(target: string, context: GlobalAiCommandContext) {
   const ordered = orderItems(context.days, context.items)
   if (target === 'current_item') {
@@ -3114,6 +3361,14 @@ function buildDayScheduleEffect(tripId: string, dayId: string): AiActionRunEffec
     kind: 'navigate',
     params: { dayId, tripId, view: 'schedule' },
     route: 'day',
+  }
+}
+
+function buildTicketDocumentEffect(tripId: string, ticketId: string): AiActionRunEffect {
+  return {
+    kind: 'navigate',
+    params: { tab: 'attachments', ticketId, tripId },
+    route: 'documents',
   }
 }
 

@@ -22,6 +22,29 @@ describe('AI Action Gateway V1 contract', () => {
     })
   })
 
+  it('keeps ticket binding semantic and confirmation gated', () => {
+    expect(buildDeterministicAiActionPlan('把「爱丁堡城堡门票」绑定到「爱丁堡城堡」')).toMatchObject({
+      requiresConfirmation: true,
+      steps: [{
+        actionId: 'ticket.bind@1',
+        args: { target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' },
+        risk: 'local_write',
+      }],
+    })
+    for (const args of [
+      { itemId: 'item-secret', target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' },
+      { target: 'item_secret', ticket: '爱丁堡城堡门票' },
+      { target: '爱丁堡城堡', ticket: 'ticket_secret' },
+      { target: '爱丁堡城堡', ticket: 'https://example.com/ticket.pdf' },
+    ]) {
+      expect(validateAiActionPlan({
+        schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+        steps: [{ actionId: 'ticket.bind@1', args, id: 'bind' }],
+        summary: '关联票据',
+      }).ok).toBe(false)
+    }
+  })
+
   it('builds place and broad repair actions without conflating them', () => {
     expect(buildDeterministicAiActionPlan('补全第一站地点信息')).toMatchObject({
       requiresConfirmation: true,
@@ -567,6 +590,7 @@ describe('AI Action Gateway V1 contract', () => {
       'ledger.expense.draft@1',
       'place.enrich@1',
       'route.preview@1',
+      'ticket.bind@1',
       'ticket.open@1',
       'trip.replan.apply@1',
       'trip.repair@1',

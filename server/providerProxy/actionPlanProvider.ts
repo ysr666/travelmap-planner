@@ -60,6 +60,7 @@ export function buildAiActionPlanProviderInput(
       'trip.replan.apply@1 只能输出语义目标、固定策略和 1-240 分钟延误；不得输出事件 ID、记录 ID、证据、备注、时间戳、快照、patch、路线、函数或 Provider。',
       '行程进度、重排偏好或突发重排动作必须与其他写入动作分开。',
       'target 优先使用 current_item、first_item，或上下文中唯一且明确的行程点名称。目标不明确时不要猜测具体名称。',
+      'ticket.bind@1 只能在用户明确要求绑定或关联时使用；ticket 与 target 都必须是用户指令中出现的语义名称，不得输出 ticketId、itemId、文件路径、Blob 或权限字段。',
       'place.enrich@1 与 trip.repair@1 不得出现在同一计划中。',
       '输出必须是 JSON，不要 Markdown、代码块或解释。',
       `schema: {"schemaVersion":"${AI_ACTION_PLAN_SCHEMA_VERSION}","summary":"一句中文摘要","steps":[{"id":"step-id","actionId":"registered.action@1","args":{},"dependsOn":[]}]}`,
@@ -192,6 +193,23 @@ function buildMockPlan(request: ProviderProxyAiActionPlanRequest) {
         id: 'apply-adaptive-replan',
       }],
       summary: '应用突发重排',
+    }
+  }
+  const deterministicTicketBinding = deterministic?.steps.length === 1
+    && deterministic.steps[0].actionId === 'ticket.bind@1'
+    && allowed.has('ticket.bind@1')
+    ? deterministic.steps[0]
+    : null
+  if (deterministicTicketBinding) {
+    return {
+      schemaVersion: AI_ACTION_PLAN_SCHEMA_VERSION,
+      steps: [{
+        actionId: deterministicTicketBinding.actionId,
+        args: deterministicTicketBinding.args,
+        dependsOn: [],
+        id: 'bind-ticket',
+      }],
+      summary: '关联票据',
     }
   }
   const steps: Array<Record<string, unknown>> = []
@@ -380,6 +398,7 @@ function extractTicketQuery(command: string) {
 function summarizeMockSteps(steps: Array<Record<string, unknown>>) {
   const ids = new Set(steps.map((step) => step.actionId))
   return [
+    ids.has('ticket.bind@1') ? '关联票据' : '',
     ids.has('ticket.open@1') ? '打开票据' : '',
     ids.has('history.undo@1') ? '撤销行程点删除' : '',
     ids.has('item.delete@1') ? '删除行程点' : '',

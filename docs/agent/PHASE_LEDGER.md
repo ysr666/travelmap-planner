@@ -2896,3 +2896,29 @@ P3 validation:
 - `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2357.7 KiB/114-entry precache.
 - `npm run check:fidelity-assets` and `git diff --check` passed.
 - The D1 `0002 -> 0003` in-memory migration check preserved existing usage, alert, and disabled-control state, added the enabled weather control, and accepted weather usage and alert rows.
+
+P4 plan:
+
+- Goal: connect imported ticket/document metadata to the correct itinerary object through explainable local matching, one Action Gateway confirmation, direct ticket opening, and a shared link status consumed by the travel-object ViewModel.
+- Scope: add a strict non-persistent document-link contract and deterministic matcher; register `ticket.bind@1` with semantic-only inputs; add real prepare/preview/execute behavior with per-record stale guards, idempotency, partial retry, and tracked sync writes; expose a bounded multi-ticket suggestion plan for import completion; retain exact local ticket navigation and ambiguous gallery fallback.
+- No-go: no IndexedDB or Supabase schema, ticket Blob/OCR-body read, arbitrary URL/provider call, internal ID in Provider-planned args, original-file mutation, order cancellation, permission bypass, silent overwrite of an existing binding, or write outside the Action Gateway confirmation path.
+- Likely files: `src/lib/documentLinking/*`, `src/lib/travelObjects/*`, `src/lib/ai/actionGateway/*`, `server/providerProxy/actionPlanProvider.ts`, focused fixture/contract/runtime tests, and only minimal ViewModel fields required to expose confirmed/suggested/conflict state.
+- Validation: link schema and scoring tests; ambiguous/conflict/long-name/privacy cases; Action Gateway registry, validation, planner, Provider mock, confirmation, stale-state, idempotency, partial retry, and permission-preserving tests; canonical fixture validation; typecheck, lint, full unit suite, production build, fidelity asset check, and `git diff --check`.
+- Risk: high because binding updates both ticket metadata and itinerary ticket IDs and then enters object sync, while Provider planning must remain restricted to semantic targets.
+- Stop conditions: stop and repair if any unconfirmed write occurs, a stale or pre-bound ticket is silently overwritten, a Provider can select an internal ID or unknown field, matching reads ticket contents, a failed step repeats a successful write, item/ticket references diverge, or member visibility is widened.
+
+P4 result:
+
+- Added a strict, versioned, non-persistent `TravelDocumentLinkV1` contract and deterministic metadata matcher. Existing references become confirmed links; bounded text/date/time/category evidence can produce suggestions or conflicts without reading ticket Blobs, OCR bodies, arbitrary URLs, or Provider payloads.
+- Registered `ticket.bind@1` in the shared Action Gateway with semantic ticket and itinerary names only. Deterministic and Provider planners reject unknown fields, internal IDs, URLs, ambiguity, and implicit writes; import completion can prepare at most six non-conflicting targets under one final confirmation.
+- Added real prepare, compact preview, transactional execute, direct exact-ticket navigation, Trip Intelligence history, object-sync tracking, persisted idempotency, and partial retry behavior. The original file, structured fields, title, note, category, and assigned-member visibility are preserved.
+- Added atomic ticket, previous-item, and target-item baselines around the reciprocal ticket/item update. Global trip fingerprints and repository-level compare-and-write checks both require a fresh preview when either side changes; missing or ambiguous prior links fail before any write.
+- Exposed confirmed, suggested, and conflict link state through the shared travel-object ViewModel and updated the canonical product-fidelity fixture to the versioned evidence contract. No IndexedDB/Supabase schema, ticket Blob format, Provider contract outside the registered action plan, permission model, or real Provider call changed.
+
+P4 validation:
+
+- Focused repository, Action Gateway runtime, and ticket-binding-plan tests passed: 3 files and 70 tests.
+- `npm run lint` passed; `npm run test:unit` passed with 211 files and 1712 tests.
+- `npm run build` passed, including typecheck and bundle budget: 469.1 KiB entry, 853.4 KiB initial JS, 245.8 KiB initial gzip, and 2359.2 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+- The complete mobile Global AI command-bar E2E spec passed at `390x844`: 20 tests, including one-confirmation binding, pre-confirmation no-write, exact-ticket navigation, assigned-member visibility preservation, stale-plan rejection, and partial retry without duplicate success writes.

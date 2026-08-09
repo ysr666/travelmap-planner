@@ -168,6 +168,17 @@ const ACTION_METADATA: Record<AiActionId, AiActionMetadata> = {
     retryPolicy: { maxAttempts: 2, retryable: true },
     risk: 'local_write',
   },
+  'ticket.bind@1': {
+    description: '把一张名称明确的本地票据关联到一个名称明确的行程点；只读取票据 metadata，写入前必须确认。',
+    id: 'ticket.bind@1',
+    idempotencyNamespace: 'ticket-bind',
+    input: '{"ticket":"票据显示名称","target":"current_item|first_item|行程点名称"}',
+    inputSchema: { allowedFields: ['ticket', 'target'], requiredFields: ['ticket', 'target'] },
+    label: '关联票据',
+    requiresTrip: true,
+    retryPolicy: { maxAttempts: 2, retryable: true },
+    risk: 'local_write',
+  },
   'ticket.open@1': {
     description: '只使用本地票据 metadata 查找并打开票据或票据画廊。',
     id: 'ticket.open@1',

@@ -1,4 +1,5 @@
 import { getTicketDisplayTitle } from '../tickets'
+import { buildTravelDocumentLinks, type TravelDocumentLinkV1 } from '../documentLinking'
 import { isTravelMediaAssetCurrent, selectTravelMediaAsset, type TravelMediaAssetV1 } from '../media/travelMedia'
 import { normalizeTicketStructuredFieldsV1, type InsurancePolicyV1, type LodgingReservationV1 } from './contracts'
 import type { BrandIdentityInput, BrandNamespace } from '../media/brandRegistry'
@@ -53,6 +54,13 @@ export type TravelObjectViewModelV1 = {
   brand?: BrandIdentityInput
   media?: TravelMediaAssetV1
   fields: TravelObjectDisplayField[]
+  documentLink?: {
+    confidence: number
+    label: string
+    status: TravelDocumentLinkV1['status']
+    subjectId: string
+    subjectType: TravelDocumentLinkV1['subjectType']
+  }
   ticketIds: string[]
   sourceRefs: TravelObjectSourceRef[]
   sortKey: string
@@ -101,6 +109,18 @@ export function buildTravelObjectCollection(input: BuildTravelObjectCollectionIn
   const secretByBookingId = new Map((input.bookingSecrets ?? []).map((secret) => [secret.bookingId, secret]))
   const ticketsByItemId = groupBy(tickets.filter((ticket) => ticket.itemId), (ticket) => ticket.itemId as string)
   const ticketsByBookingId = groupBy(tickets.filter((ticket) => ticket.bookingId), (ticket) => ticket.bookingId as string)
+  const documentLinks = buildTravelDocumentLinks({
+    days,
+    insurancePolicies: input.insurancePolicies,
+    items,
+    lodgingReservations: input.lodgingReservations,
+    now: typeof input.now === 'number' ? input.now : input.now ? new Date(input.now).getTime() : undefined,
+    tickets,
+    transportBookings: bookings,
+    transportSegments: segments,
+    tripId: input.tripId,
+  })
+  const documentLinksByTicketId = groupBy(documentLinks, (link) => link.ticketId)
 
   const itemObjects = items.map((item) => buildItemObject({
     day: dayById.get(item.dayId),
@@ -127,7 +147,12 @@ export function buildTravelObjectCollection(input: BuildTravelObjectCollectionIn
   const insuranceObjects = (input.insurancePolicies ?? [])
     .filter((policy) => policy.tripId === input.tripId)
     .map((policy) => buildInsuranceObject(policy))
-  const ticketObjects = tickets.map((ticket) => buildTicketObject(ticket, mediaAssets, input.now))
+  const ticketObjects = tickets.map((ticket) => buildTicketObject(
+    ticket,
+    mediaAssets,
+    input.now,
+    selectPrimaryDocumentLink(documentLinksByTicketId.get(ticket.id) ?? []),
+  ))
   const all = [...itemObjects, ...transportObjects, ...lodgingObjects, ...insuranceObjects, ...ticketObjects]
     .sort((left, right) => left.sortKey.localeCompare(right.sortKey) || left.id.localeCompare(right.id))
   const byId = new Map(all.map((object) => [object.id, object]))
@@ -333,11 +358,19 @@ function buildTicketObject(
   ticket: TicketMeta,
   mediaAssets: TravelMediaAssetV1[],
   now?: Date | number | string,
+  documentLink?: TravelDocumentLinkV1,
 ): TravelObjectViewModelV1 {
   const structured = normalizeTicketStructuredFieldsV1(ticket.structuredFields)
   const status = getTicketStatus(ticket, structured?.status)
   return {
     dateLabel: structured?.serviceDate,
+    documentLink: documentLink ? {
+      confidence: documentLink.confidence,
+      label: formatDocumentLinkLabel(documentLink),
+      status: documentLink.status,
+      subjectId: documentLink.subjectId,
+      subjectType: documentLink.subjectType,
+    } : undefined,
     fields: compactFields([
       field('date', '日期', structured?.serviceDate),
       field('entry-time', '时间', structured?.entryTime),
@@ -358,6 +391,38 @@ function buildTicketObject(
     title: getTicketDisplayTitle(ticket),
     tripId: ticket.tripId,
   }
+}
+
+function selectPrimaryDocumentLink(links: TravelDocumentLinkV1[]) {
+  const subjectRank: Record<TravelDocumentLinkV1['subjectType'], number> = {
+    item: 0,
+    booking: 1,
+    lodging: 2,
+    insurance: 3,
+    day: 4,
+    trip: 5,
+  }
+  const statusRank: Record<TravelDocumentLinkV1['status'], number> = {
+    confirmed: 0,
+    suggested: 1,
+    conflict: 2,
+  }
+  return [...links].sort((left, right) =>
+    statusRank[left.status] - statusRank[right.status]
+    || subjectRank[left.subjectType] - subjectRank[right.subjectType]
+    || right.confidence - left.confidence,
+  )[0]
+}
+
+function formatDocumentLinkLabel(link: TravelDocumentLinkV1) {
+  if (link.status === 'suggested') return '建议关联'
+  if (link.status === 'conflict') return '待确认'
+  if (link.subjectType === 'item') return '已关联行程'
+  if (link.subjectType === 'booking') return '已关联订单'
+  if (link.subjectType === 'lodging') return '已关联住宿'
+  if (link.subjectType === 'insurance') return '已关联保险'
+  if (link.subjectType === 'day') return '已关联日期'
+  return '旅行资料'
 }
 
 function findMediaByIdOrSubject(

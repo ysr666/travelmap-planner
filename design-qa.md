@@ -1,141 +1,137 @@
-# TripMap UI V3 Design QA
+# TripMap UI V3 产品质感 Design QA
 
-更新时间：2026-08-05
+更新时间：2026-08-10
 
-状态：**Production Current; passed**
+状态：**Target release candidate；视觉、浏览器与模拟器验收通过，待远端同 SHA 检查和合并发布**
 
-发布代码基线：`9317a9a`
-
-本页记录 2026-08-05 UI V3 的真实代码与生产验收。它替代 2026-07-30 地图主导方向的验收结论；逐项完成度、Golden 合同和发布收据见 [M6 完成度审计](docs/UI_V3_M6_COMPLETION_AUDIT.md)。
+候选代码：`113b205`（`feature/ui-v3-product-fidelity`）
 
 ## 1. 结论
 
-- **视觉实现：passed。** Selected Target 的四个核心状态已经用同状态并排图审查，没有待修复的 P0、P1 或 P2 视觉问题。
-- **浏览器产品验收：passed。** 核心流程、固定视口、长内容、200% 文本、软件键盘、Reduced Motion、浅色/深色、无障碍和横向溢出门槛已由真实组件与 E2E 覆盖。
-- **最终候选远端检查：passed。** `76e35ca` 的 GitHub required checks 与 Cloudflare Pages Preview 均按同一 SHA 通过。
-- **结构验收：passed。** S1-S3 已把设置、票据、Trip、Day、Item、Global AI 和 AI Draft 拆成控制、状态、ViewModel 与展示边界，Golden 和保护合同未回归。
-- **平台模拟器资格：passed。** iPhone 16 / iOS 26.5 Simulator 完成 Safari、主屏 PWA 冷启动和软件键盘；Android API 33 Emulator 完成真实构建、Chrome/WebView、键盘、可访问性边界和无横向溢出。
-- **生产发布：passed。** PR #33 merge SHA `9317a9a` 的 GitHub required checks、Cloudflare Pages Production 与无 Provider smoke 全部通过。
-
-UI V3 已作为 **Production Current** 发布。
+- **视觉：passed。** Selected Target 的出发前今日、旅行中今日、行程和资料已按同一 `390x844` 数据语义并排审查，没有未关闭的 Visual P0/P1/P2。
+- **产品流程：passed。** 真实对象、受控媒体、有来源事实、票据直达、地点补全、地图和 AI 一次确认共同工作；错误态保持短、明确且不写入。
+- **浏览器自动化：passed。** 215 个单测文件、1730 个单测、194 个串行 E2E、5 个独立 PWA 升级场景、Golden、Axe、五视口和素材门禁全部通过。
+- **模拟器：passed。** iPhone 16 / iOS 26.5 主屏 PWA 与 Android API 33 Chrome/WebView 完成发布级检查；实体机按项目决定不作为门槛。
+- **远端发布：pending。** GitHub、Cloudflare、Supabase 诊断和最终 `main` SHA 收据必须在推送后填写；完成前不把本轮增强写成 Production Current。
 
 ## 2. 视觉权威
 
 规范优先级：
 
 1. `docs/PRODUCT_POSITIONING.md`
-2. `docs/UI_REFACTOR_V3.md`
-3. `docs/DESIGN_SYSTEM.md` 与语义 Token
-4. 固定 fixture 渲染的真实 React 组件和可执行 Golden 回归
-5. Selected Target 生成稿
+2. `docs/DESIGN.md` 与 `docs/UI_REFACTOR_V3.md`
+3. `docs/DESIGN_SYSTEM.md` 的语义 Token 与交互合同
+4. `docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md` 的逐项差异收据
+5. 固定 fixture 渲染的真实 React 组件和 Golden
+6. Selected Target 生成稿
 
 Selected Target：
 
 `/Users/ysradmin/.codex/generated_images/019f408f-a034-7262-a9d4-36f429207ee6/exec-084f9e07-16d8-463e-99ac-fc66c2aca5ae.png`
 
-目标组合保持不变：出发前首页采用第一套左上角的信息组织，整体采用第二套“随身旅夹”视觉语言，资料采用第三套编辑式预览列表。生成稿只决定层级、密度、色彩和空间重心，不负责真实地图道路、票据内容、Provider 事实或数据模型。
-
-`e2e/ui-v3-golden-regression.spec.ts` 会从固定 commit/tree/lock 构建批准基线，并与当前真实构建逐像素比较出发前今日、行程、资料和地点详情。差异比例必须 `<= 0.005`；成功时不提交截图，失败时才附加当前图和基线图。完整更新规则见 M6 审计。
+目标组合仍是：第一套左上角的出发前 Today 信息结构、第二套整体旅行对象视觉语言、第三套资料编辑式列表。生成稿定义层级、密度、色彩和空间重心；真实地图、照片、票面、Provider 事实和系统字体不要求复制生成稿像素。
 
 ## 3. 同状态比对
 
-全部比对统一为 `390 x 844`，左侧为 Selected Target，右侧为真实实现：
+左侧为 Selected Target，右侧为真实实现；以下是本机运行产物，不提交仓库：
 
-- `output/playwright/ui-v3-selected-comparisons/predeparture-reference-vs-implementation.png`
-- `output/playwright/ui-v3-selected-comparisons/active-reference-vs-implementation.png`
-- `output/playwright/ui-v3-selected-comparisons/trip-reference-vs-implementation.png`
-- `output/playwright/ui-v3-selected-comparisons/documents-reference-vs-implementation.png`
+- `output/playwright/product-fidelity-design-qa/today-predeparture-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/today-active-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/itinerary-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/documents-side-by-side.png`
 
 ### 出发前今日
 
-- 实现保留倒计时、唯一阻塞项、机票/住宿/保险和单一主操作。
-- 删除生成稿中无法由旅行事实可靠推导的天气和装饰图片，不用虚构内容换取像素相似。
-- 已就绪对象使用线性列表，不恢复大块建议、统计卡或默认地图。
+- 首屏按“上海 → 伦敦”、出发日期、倒计时、唯一阻塞项、航班、住宿、保险和必要天气排列。
+- 航司/保险品牌、两地时间、机场、酒店日期、保单号和来源状态来自结构化对象，不由页面猜测。
+- 没有默认地图、大块建议、重复摘要或第二个主要操作。
 
 ### 旅行中今日
 
-- 下一站、出发倒计时、交通、票据和导航在首屏一次扫清。
-- 地图位于操作对象之后，保持真实 Canvas、Marker 和路线语义；缺少 Provider 道路几何时使用明确的点序列降级，不伪造道路。
-- 生成稿中的城堡照片不是用户数据，未复制进产品 fixture。
+- 下一站真实媒体、日期/城市、倒计时、交通、入场时间和精确票据形成一个 Hero；唯一主要动作是开始导航。
+- 真实 MapLibre Canvas、道路几何、编号 Marker、活动路段和单一地点 Sheet 接续在 Hero 后。
+- 没有常驻 AI 文案、假地点图、路线直线冒充道路或多个底部交互层。
 
 ### 行程
 
-- `日程 | 地图` 是唯一视图切换；资料、费用和工具不再形成重复标签栏。
-- 日期条、连续时间轴、交通连接和添加入口保持高信息量，但没有独立厚卡片。
-- 真实标题、地址和交通数据优先于生成稿图片；页面在 `320px` 和长英文下仍不横向溢出。
+- 紧凑日期条、日程/地图切换和连续时间线立即开始。
+- 地点、餐厅、景点与铁路使用对应媒体和结构化票据状态；交通连接保持轻量。
+- 排序、编辑和删除留在工具栏或更多菜单，不把每个行程点做成厚卡片。
 
 ### 资料
 
-- 默认是左侧真实预览、右侧名称与关键元数据的编辑式列表，不是双列画廊或文件类型头图。
-- 图片、PDF 首页和外部链接分别使用真实可用预览；不把护照、二维码或订单图片伪造进 fixture。
-- 分类、来源与导入、筛选和新增保持可操作，长无空格文件名最多两行且不撑宽页面。
+- 页面使用单列编辑式列表，优先真实票面、PDF 首页或受控对象媒体；品牌和文件类型只作为有序降级。
+- 每行显示名称、类别、日期/时间、关键字段和关联状态，点击直接预览。
+- 分类、搜索、筛选和新增保持紧凑；长无空格文件名与 `200%` 文本不会挤掉操作。
 
-## 4. 页面覆盖
+## 4. 关键产品合同
 
-| 页面组 | 已验收状态 |
+- 移动主导航固定为 `今日 | 行程 | 资料 | 我的`；AI 和搜索是按需命令。
+- AI 关闭时不占空间；导航成功后关闭。只读动作可直接完成，写入计划只有一次最终确认。
+- 地点补全成功候选先预览再写入；invalid、quota、Provider disabled、歧义和 stale plan 均不写入。
+- 精确票据一次点击打开；宽泛目标进入当前旅行的资料列表，不返回只有名称的文本答案。
+- RealtimeFact 必须有来源、观察时间与有效期；过期或无来源事实不显示成“当前”。
+- 远程媒体只接受登记 Provider 和受控引用；票据 Blob、Token、Provider 密钥和完整数据库不进入 AI/媒体请求。
+- 同一时刻只显示一个展开的底部交互层；AI、地点 Sheet、sticky action 与主导航不形成可见叠层。
+
+## 5. 自动化证据
+
+| 检查 | 结果 |
 | --- | --- |
-| 今日 | 无旅行、出发前、旅行中、旅行后、长内容、200% 文本 |
-| 行程 | 紧凑日期条、连续时间轴、日程/地图切换、跨日期上下文 |
-| 地图 | 动态 Canvas、Marker、路线、当前位置、单一地点 Sheet、降级状态 |
-| 地点 | 导航、票据、来源确认、长名称/地址、返回上下文 |
-| 资料 | 编辑式预览列表、空状态、预览、编辑、绑定、待整理、来源与导入 |
-| AI 与搜索 | 上下文搜索、Action Sheet、计划、一次确认、部分失败和失败项重试 |
-| 表单 | 旅行与行程点新建/编辑、渐进披露、软件键盘、sticky save |
-| 低频页面 | 费用、费用详情、同行、AI Draft、我的及四组二级设置 |
+| `npm run typecheck` | passed |
+| `npm run lint` | passed，无 warning |
+| `npm run test:unit` | passed，215 文件 / 1730 测试 |
+| `npm run build` | passed |
+| Bundle budget | entry 469.4 KiB；initial 853.9 KiB；gzip 246.0 KiB；8 startup chunks |
+| PWA precache | 2449.9 KiB / 121 项，低于 2500 KiB 门槛 |
+| `npm run check:fidelity-assets` | passed，11 项受控素材 |
+| Product fidelity Golden | passed，固定候选基线 |
+| `npm run test:e2e:serial` | passed，194/194，约 7.3 分钟 |
+| `npm run test:e2e:pwa-upgrade` | passed，5/5，约 50.2 秒 |
+| `git diff --check` | passed |
 
-## 5. 交互合同
+覆盖包括：`320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`；浅/深色、长内容、`200%` 文本、Reduced Motion、软件键盘、触控尺寸、严重/关键 Axe、媒体 loading/error/expired/offline/reduced-data、CLS、地图 Canvas 像素和零意外 Provider 请求。
 
-- 移动主导航固定为 `今日 | 行程 | 资料 | 我的`；AI 和搜索是 Toolbar/内容命令。
-- AI 关闭时不占内容空间；导航成功后自动关闭。
-- 只读动作可直接完成；写入计划只保留一次最终确认。
-- 一键修复从首页直接生成统一预览，成功步骤不因失败项重试而重复执行。
-- 同一时刻只有一个固定底部交互面展开；AI、地点 Sheet、sticky action 和主导航不叠加。
-- 设置一级只有四组，技术项进入二级并默认收起。
-- 所有生成稿之外的真实地图、票据、文件和地点事实仍服从数据来源与隐私边界。
+## 6. 平台模拟器
 
-## 6. 自动化证据
+### iPhone
 
-截至本页写入时：
+- iPhone 16 / iOS 26.5 Simulator 从 Safari 打开候选源码的 QA build 并安装 `旅图` 到主屏；该 build 仅启用 E2E 登录旁路，不包含真实 Provider 调用。
+- 独立 PWA 启动时没有 Safari 控件，App Shell 覆盖完整可见区域，底栏和安全区正确，无横向溢出。
+- 证据：`output/simulator-p8/ios-pwa-launch.png`、`output/simulator-p8/ios-current-after-viewport-fix.png`。
 
-- `npm run typecheck`：passed，覆盖应用、Provider runtime 和 Travel Inbox Worker。
-- `npm run lint`：passed，无 warning。
-- `npm run test:unit`：passed，`191` 个文件、`1578` 个测试。
-- `npm run build`：passed。
-- Bundle budget：入口 `468.2 KiB`；初始 JS `852.4 KiB`；初始 gzip `245.5 KiB`；启动 chunk `8` 个。
-- PWA precache：`2337.3 KiB / 114` 项，仍低于 `2500 KiB` 门槛。
-- V3 Golden/视觉流程：passed；新增固定 Git 基线的四页面逐像素回归，`maxDiffPixelRatio <= 0.005`，并继续覆盖 `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`。
-- Reduced Motion：真实浏览器 media emulation 与全局 CSS 合同测试均 passed。
-- S3 聚焦验证：AI Draft 单测 `118 / 118`，AI Draft/表单/Golden E2E `47 / 47` passed。
-- `npm run test:e2e:serial`：`175 / 175` passed，串行耗时约 `6.6m`。
-- `npm run test:e2e:pwa-upgrade`：`5 / 5` passed。
-- `git diff --check`：passed。
-- GitHub Actions run `31014432123`：同 SHA `76e35ca` 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部 passed；E2E job 用时约 `5m39s`。
-- Cloudflare Pages Preview deployment `3fa543de-5895-4b17-b557-6f8b58dca308`：同 SHA `76e35ca` 为 Active。
-- GitHub Actions main run `31015131693` 与 Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3`：merge SHA `9317a9a` 全部 passed。
+### Android
 
-## 7. 平台模拟器发布验收
+- Android API 33 Emulator 通过系统代理验证 Chrome/WebView；WebView QA 壳加载同一 built app，不调用真实 Provider。
+- Today、行程、资料、我的、真实 MapLibre 地图、道路/Marker、单一地点 Sheet 和 AI Action Sheet 均通过视觉与几何检查。
+- 软件键盘打开后 `innerHeight`、`visualViewport`、`#root` 与 `.app-viewport` 同步缩至约 `554px`；AI 输入和发送按钮仍可见，页面 `scrollWidth === clientWidth === 411`。
+- CDP Accessibility 树确认四项主导航、AI 对话框、上下文切换、关闭、文本框和发送按钮均有可访问名称；可见交互控件没有横向越界。
+- 证据：`output/simulator-p8/android-webview-map.png`、`android-webview-map-sheet.png`、`android-webview-documents.png`、`android-webview-settings.png`、`android-webview-ai-keyboard.png`。
 
-项目所有者于 2026-08-05 批准模拟器/虚拟机作为 UI V3 发布设备标准：
+### 兼容修复
 
-- iPhone 16 / iOS 26.5 Simulator 已从全新状态打开 Preview，在 Safari 中安装 `旅图` 到主屏幕并完成 PWA 冷启动；登录页、核心页面、地图、AI Action Sheet 和完整软件键盘状态均正确，页面未横向溢出。
-- Android API 33 Emulator 的 Chrome 加载真实 production build，四项导航、Today、AI Action Sheet 和软件键盘通过；UI Automator 可访问性树证明控件边界均位于 `1080px` 视口内。
-- 同一 Emulator 的系统 WebView 壳验证 Today、行程、地图 Canvas、资料、我的和 AI Action Sheet；所有核心页面满足 `scrollWidth === clientWidth`。
-- Android WebView 103 不支持 `dvh/svh`，首次验收暴露 App Shell 只按内容高度展开的问题。`.app-viewport` 和 `#root` 已增加先声明的 `100vh` 回退，修复后 `867px` 可见视口、根节点、App Shell 和底部导航底边一致。
-- 新增 CSS 合同单测，防止后续删除旧 Android 所需的 `vh` 回退或颠倒回退与动态视口声明顺序。
-- Android 镜像自带的 Chrome 103 未完成 WebAPK launcher 安装，并在代理场景暴露旧 GPU 进程限制；5/5 built-dist PWA 测试已覆盖安装/升级合同、等待确认、多标签收敛、历史数据和缓存恢复。该限制已由项目所有者接受，不阻塞本次发布。
-- 真实设备性能、相机/文件选择和网络差异转为 Beta 运营观察，不作为 UI V3 合并门槛。
+Android WebView 103 不支持 `svh/dvh`。首次正式产物检查发现 Lightning CSS 合并相邻声明后只保留动态视口单位，导致 `#root` 和 App Shell 只有 `538px` 高，而可见视口为约 `866px`。修复后：
 
-## 8. 发布门槛
+- `100vh` 保持在基础规则，`svh/dvh` 放入独立 `@supports` 渐进增强块。
+- 正式产物的根节点、App Shell 和底栏底边均为约 `866.29px`。
+- `scripts/check-bundle-budget.mjs` 会直接检查 emitted CSS，防止压缩再次删除旧内核回退。
 
-全部完成：
+## 7. 已接受差异
 
-1. 最终候选分支头的 GitHub required checks 与 Cloudflare Pages Preview 同 SHA passed。
-2. PR #33 合并后，merge SHA `9317a9a` 的 GitHub required checks 与 Cloudflare Pages Production passed。
-3. Production 根文档、Manifest、Service Worker 和入口资源 smoke passed，未触发真实 Provider。
-4. 平台模拟器、生产部署和 Supabase 只读诊断结果已补录。
+- iOS、Android 与桌面的系统字体栅格、原生安全区和键盘像素不同。
+- 动态地图瓦片、POI 标签和用户位置由真实运行环境决定；道路几何与交互语义必须存在。
+- Provider/受控素材可使用与生成稿不同但语义正确的对象照片；媒体比例、裁切与层级必须一致。
+- 无合法品牌资源时使用通用 Lucide 图标和名称；无来源或已过期事实隐藏或显示短过期状态。
+- `200%` 文本允许纵向增长与换行，不允许横向滚动、遮挡和操作消失。
 
-## 9. 历史边界
+## 8. 发布收据
 
-2026-07-30 的地图主导 `2 + 3` 方向、旧五项导航、`收件箱`一级入口、票据双列画廊和常驻 AI 输入均为 Historical。相关旧截图只证明当时实现，不再是 UI V3 当前视觉权威。
+待推送后填写：
 
-当前最终结果：**visual, browser, S1-S3 structural, simulator-platform, final-head remote, and production acceptance passed.**
+- GitHub required checks：pending
+- Cloudflare Pages Preview：pending
+- Supabase migrations/advisors/logs：pending（只读）
+- 最终 `main` CI 与 Cloudflare Production：pending
+- 真实 Provider smoke：未授权，本轮不执行；mock/合同覆盖已通过
+
+发布门槛全部满足且合并后，本文件状态才更新为 **Production Current; passed**。

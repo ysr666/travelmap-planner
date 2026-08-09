@@ -3018,3 +3018,23 @@ P8 plan:
 - Validation: focused unit and product-fidelity browser tests; strict same-state reference/implementation comparisons; place Provider mock success/disabled/invalid/ambiguous/no-write checks; typecheck, lint, full unit suite, build, asset and bundle checks, full serial E2E, PWA-upgrade E2E, current Golden; iPhone Simulator Safari/home-screen PWA and Android Emulator Chrome/WebView; same-SHA GitHub/Cloudflare plus read-only Supabase/provider diagnostics; `git diff --check`.
 - Risk: medium-high because intentional layout changes can invalidate the previous Golden and can expose overflow or fixed-surface regressions at compact heights and `200%` text.
 - Stop conditions: stop and repair if a selected-target P0/P1/P2 difference remains unexplained, place enrichment writes before final confirmation, any Provider/auth/privacy boundary regresses, required local validation fails, a simulator cannot complete the critical PWA flow, the Golden is pinned before the candidate commit, or remote evidence is not tied to the published SHA.
+
+P8 result (local release candidate):
+
+- Refined the selected four-screen compositions: pre-departure Today now leads with the city route and structured travel objects; active Today uses the media-led next-stop Hero and one navigation action; itinerary keeps a compact map switch and richer continuous rows; Documents uses the editorial single-column preview list.
+- Added and visually inspected same-state `390x844` Selected Target comparisons for pre-departure Today, active Today, itinerary, and Documents. Every Visual P0/P1/P2 receipt is now `verified`; remaining map/photo pixel differences are the documented real-data differences, not missing product behavior.
+- Completed Item Detail place-enrichment coverage for successful candidates, invalid requests, quota limits, Provider unavailable, ambiguity, and no-write-before-confirmation. Existing Action Gateway confirmation, stale-plan, idempotency, privacy, exact-ticket, and partial-retry contracts remain intact.
+- Pinned the product-fidelity Golden after the final composition commit and fixed the resulting document physical-type metadata regression without weakening the assertion.
+- Validated iPhone 16 / iOS 26.5 Safari and installed home-screen PWA. Validated Android API 33 Chrome and a signed WebView QA shell across Today, itinerary, real MapLibre map, one place Sheet, Documents, Settings, AI Action Sheet, software keyboard, and accessibility names.
+- Simulator QA found that production CSS minification removed adjacent `100vh` declarations in favor of unsupported dynamic viewport units on WebView 103. Dynamic units now live in isolated `@supports` blocks, and the production bundle gate verifies all legacy viewport fallbacks in the emitted stylesheet.
+- No real AI, search, route, media, or other Provider call was made. Map connectivity used the documented macOS proxy; Provider semantics were exercised with deterministic mocks and contract tests.
+
+P8 validation (local and simulator):
+
+- `npm run typecheck`, `npm run lint`, and `npm run test:unit` passed: 215 files and 1730 tests.
+- `npm run build` passed, including emitted-CSS viewport fallback checks and bundle budget: 469.4 KiB entry, 853.9 KiB initial JS, 246.0 KiB initial gzip, and 2449.9 KiB/121-entry precache.
+- `npm run check:fidelity-assets` passed for all 11 controlled assets; the current product-fidelity Golden passed.
+- `npm run test:e2e:serial` passed 194/194 in 7.3 minutes. `npm run test:e2e:pwa-upgrade` passed 5/5 in 50.2 seconds.
+- Five required browser viewports, dark mode, long content, `200%` text, Reduced Motion, keyboard-height, touch targets, serious/critical Axe checks, media failure states, CLS, and zero unexpected Provider-request assertions passed.
+- Android WebView post-fix measurements: `innerHeight`, `#root`, and `.app-viewport` all approximately `866.29px`; bottom navigation ends at the same edge; document/settings/AI keyboard states keep `scrollWidth === clientWidth === 411`.
+- Branch publication, same-SHA GitHub/Cloudflare receipts, Supabase read-only diagnostics, merge, and production verification remain the only open P8 release receipts.

@@ -2,7 +2,7 @@
 
 更新时间：2026-08-10
 
-状态：**P0 Baseline Current；P1-P7 已完成本地验证，剩余设计对照、Provider 流程、模拟器与发布差异待 P8 关闭**
+状态：**P0-P8 visual baseline verified；无未关闭 Visual P0/P1/P2，待候选合并发布**
 
 上游合同：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 
@@ -31,7 +31,7 @@ Selected Target 是 2026-08-04 确认的四屏组合稿：出发前今日、旅�
 | ID | 级别 | Selected Target | 当前实现 | 责任阶段 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | G-01 | P0 | 四项底栏固定为“今日、行程、资料、我的”，AI 只在右上按需打开 | 已实现四项底栏和按需 AI | P6 | verified |
-| G-02 | P0 | AI、地图地点 Sheet、sticky action 与底栏不叠加 | 富媒体 Hero、地图和单一地点 Sheet 已在核心场景共同回归；最终设备复核待 P8 | P6/P8 | implemented |
+| G-02 | P0 | AI、地图地点 Sheet、sticky action 与底栏不叠加 | 浏览器与 Android WebView 软件键盘实测均只显示一个展开底部交互层；地图保持单一地点 Sheet | P6/P8 | verified |
 | G-03 | P1 | 信息密度来自真实对象、品牌、图片和结构化字段 | 四个核心页面已统一消费旅行对象、受控媒体、品牌和结构化字段 | P1/P2/P6 | verified |
 | G-04 | P1 | 页面是无框分组、行、分隔线与少量独立记录 | Today 与时间轴使用无框分组和分隔线；资料仅为独立文档记录保留边界，五屏重拍无卡片墙 | P6/P7 | verified |
 | G-05 | P1 | 顶栏、标题、日期条、内容和底栏在四屏具有统一节奏 | 五个核心构图已按同一 `390x844` fixture 重拍并完成视觉复核 | P6/P7 | verified |
@@ -42,7 +42,7 @@ Selected Target 是 2026-08-04 确认的四屏组合稿：出发前今日、旅�
 
 | ID | 级别 | Selected Target | 当前实现 | 责任阶段 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| U-01 | P0 | 首屏先显示“上海 → 伦敦”、出发日期与 8 天倒计时 | 已由结构化航段显示 `PVG → LHR`、出发日期和倒计时 | P2/P6 | verified |
+| U-01 | P0 | 首屏先显示“上海 → 伦敦”、出发日期与 8 天倒计时 | 已由结构化航段显示“上海 → 伦敦”、出发日期和倒计时；机场代码留在航班对象行 | P2/P6 | verified |
 | U-02 | P0 | 只有一个简短阻塞条与“一键补全”主动作 | 单一阻塞条继续直达 Action Gateway 一键补全，准备对象不重复解释 | P4/P6 | verified |
 | U-03 | P0 | 航班行显示 Air China 品牌、CA849、出票状态、日期、两地时间、机场和航站楼 | 已从航段 ViewModel 显示品牌、航班号、状态、日期时间和机场；详细航站楼保留在对象字段 | P1/P2/P3/P6 | verified |
 | U-04 | P1 | 酒店行显示真实缩略图、名称、入住/退房、晚数和地址 | 已显示受控酒店照片、名称、入住/退房、晚数和确认号 | P1/P2/P6 | verified |
@@ -90,8 +90,8 @@ Selected Target 是 2026-08-04 确认的四屏组合稿：出发前今日、旅�
 
 | ID | 级别 | Selected Target | 当前实现 | 责任阶段 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| I-01 | P0 | 地点详情复用真实地点媒体、营业/天气事实、地址、导航和关联票据 | 已复用真实地点媒体、对象状态、地址、导航和关联票据；上下文事实的最终选择规则待 P7 | P1/P2/P3/P4/P6 | implemented |
-| I-02 | P0 | 查找地点成功返回真实候选；无效、歧义、quota 和 Provider disabled 都有短错误且不写入 | 基础 Provider 合同存在，产品流程需回归并覆盖真实候选 | P3/P8 | open |
+| I-01 | P0 | 地点详情复用真实地点媒体、营业/天气事实、地址、导航和关联票据 | 已复用同一对象媒体、未过期来源事实、地址、导航和精确票据；无来源事实不显示为当前状态 | P1/P2/P3/P4/P6/P7 | verified |
+| I-02 | P0 | 查找地点成功返回真实候选；无效、歧义、quota 和 Provider disabled 都有短错误且不写入 | mock Provider 成功候选只在最终确认后写入；disabled、invalid、quota、歧义均显示短错误并保持零写入 | P3/P8 | verified |
 | I-03 | P1 | 同一个旅行对象在 Today、Timeline、Documents 和 Detail 使用一致标题、品牌、媒体和状态 | 五个页面已消费同一版本化旅行对象集合与共享呈现组件 | P2/P6 | verified |
 | I-04 | P2 | 所有媒体支持 loading/error/expired/offline/reduced-data，且不改变布局尺寸 | 五种状态均由共享组件覆盖；离线/省流不请求 Provider，恢复联网后可重试，布局尺寸稳定 | P1/P7 | verified |
 
@@ -111,5 +111,26 @@ Selected Target 是 2026-08-04 确认的四屏组合稿：出发前今日、旅�
 - 固定素材清单：`e2e/assets/product-fidelity/assets.json`。
 - 素材权利与署名：`e2e/assets/product-fidelity/LICENSES.md`。
 - 固定旅行对象：`e2e/fixtures/product-fidelity-v1.json`。
-- 设计差异：本文件；所有未实现项保持 `open`，不会把未来能力写成 Current。
-- P8 只有在每个 Visual P0/P1/P2 项均为 `verified` 或有明确平台理由时才可完成。
+- 设计差异：本文件；所有 Visual P0/P1/P2 项已关闭为 `verified`，没有用缺失 Provider、字段或素材换取允许差异。
+- P8 的本地、浏览器和模拟器验收已完成；远端发布状态单独记录，不改变本文件的视觉事实。
+
+## 10. P8 设计与设备收据
+
+同状态并排图（本机运行产物，不提交仓库）：
+
+- `output/playwright/product-fidelity-design-qa/today-predeparture-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/today-active-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/itinerary-side-by-side.png`
+- `output/playwright/product-fidelity-design-qa/documents-side-by-side.png`
+
+允许差异的实际使用：
+
+- 地图底图、POI 标签和照片像素使用真实运行结果，不复制生成稿；路线几何、选中状态、媒体比例、裁切、信息层级和操作位置已校准。
+- iOS 与 Android 保留系统字体栅格、安全区和键盘差异；两端都没有横向滚动、不可达主操作或可见固定层叠加。
+- 无合法品牌资源或无来源实时事实时使用受控图标或隐藏事实，不用假 Logo、假天气和假状态补图。
+
+设备证据：
+
+- iPhone 16 / iOS 26.5 Simulator：Safari、安装到主屏、独立 PWA 启动和全高 App Shell 通过。
+- Android API 33 Emulator：Chrome/WebView、真实地图 Canvas、道路/Marker、单一地点 Sheet、资料、我的、AI Action Sheet 和软件键盘通过；可访问性树中的导航、对话框、文本框和操作按钮均有名称。
+- Android WebView 103 在修复前把 `#root`/`.app-viewport` 压缩为内容高度；修复后可见视口、根节点、App Shell 与底栏底边一致，`scrollWidth === clientWidth === 411`。

@@ -2,7 +2,7 @@
 
 更新时间：2026-08-10
 
-状态：**Target；P0-P7 已在功能分支完成本地验证，P8 发布验收进行中**
+状态：**Target release candidate；P0-P8 本地与模拟器验收通过，待同 SHA 远端检查和合并发布**
 
 上游合同：
 
@@ -330,3 +330,22 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 8. 完成路线几何、活动路段、当前位置和地点 Sheet 的地图精修。
 9. 按出发前 Today、旅行中 Today、Trip、Documents 顺序完成页面构图。
 10. 完成设计图直接对照、全量自动化、平台模拟器和远端发布收据。
+
+## 12. P8 候选收据
+
+候选代码：`113b205`（`feature/ui-v3-product-fidelity`）。P0-P8 的实现提交和阶段结果记录在 [阶段台账](agent/PHASE_LEDGER.md)，逐项视觉状态记录在 [产品质感基线](UI_V3_PRODUCT_FIDELITY_BASELINE.md)。
+
+已完成：
+
+- Selected Target 与出发前今日、旅行中今日、行程、资料四个真实实现按同一 `390x844` 语义状态并排复核；没有未关闭的 Visual P0/P1/P2 差异。
+- 固定 Golden 已锁定到最终构图候选；动态照片和地图只按真实对象、媒体槽、路线语义与控件关系验收，不要求复刻生成稿像素。
+- `320x568`、`390x844`、`430x932`、`768x1024`、`1440x900`，以及深色、长内容、`200%` 文本、Reduced Motion、软件键盘均通过。
+- iPhone 16 / iOS 26.5 Simulator 的 Safari 与主屏独立 PWA 通过；Android API 33 Emulator 的 Chrome/WebView、真实 MapLibre Canvas、单一地点 Sheet、资料、我的、AI 键盘和可访问名称通过。
+- Android WebView 103 暴露了生产 CSS 压缩后丢失 `100vh` 回退的问题；已用独立 `@supports` 渐进增强修复，并把产物级回退检查加入 bundle gate。
+- `npm run typecheck`、`npm run lint`、`npm run test:unit`（215 文件、1730 测试）、`npm run build`、11 项 fidelity 资产检查、`npm run test:e2e:serial`（194/194）和 `npm run test:e2e:pwa-upgrade`（5/5）通过。
+
+待完成：
+
+- 推送候选并核对 GitHub required checks、Cloudflare Pages 与 Supabase 只读诊断。
+- 合并后以最终 `main` SHA 再核对 CI 与生产部署；完成前本计划仍为 Target，不提前写成 Current。
+- 本轮没有真实 AI、搜索、路线或媒体 Provider 请求；Provider 行为由 mock、合同测试和既有安全边界验证。

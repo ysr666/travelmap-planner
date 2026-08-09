@@ -2,7 +2,7 @@
 
 更新时间：2026-08-10
 
-状态：**P0-P8 visual baseline verified；无未关闭 Visual P0/P1/P2，待候选合并发布**
+状态：**Production Current；P0-P8 visual baseline verified，无未关闭 Visual P0/P1/P2**
 
 上游合同：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 
@@ -112,7 +112,7 @@ Selected Target 是 2026-08-04 确认的四屏组合稿：出发前今日、旅�
 - 素材权利与署名：`e2e/assets/product-fidelity/LICENSES.md`。
 - 固定旅行对象：`e2e/fixtures/product-fidelity-v1.json`。
 - 设计差异：本文件；所有 Visual P0/P1/P2 项已关闭为 `verified`，没有用缺失 Provider、字段或素材换取允许差异。
-- P8 的本地、浏览器和模拟器验收已完成；远端发布状态单独记录，不改变本文件的视觉事实。
+- P8 的本地、浏览器、模拟器与远端发布验收均已完成；发布收据记录在 `design-qa.md` 与阶段台账中。
 
 ## 10. P8 设计与设备收据
 

@@ -10,7 +10,8 @@
     {
       "binding": "TRIPMAP_PROVIDER_QUOTA_D1",
       "database_name": "tripmap_provider_quota",
-      "database_id": "d2f1b40d-4a5f-4ed5-99b0-5bf0669f75e4"
+      "database_id": "d2f1b40d-4a5f-4ed5-99b0-5bf0669f75e4",
+      "migrations_dir": "cloudflare/d1/migrations"
     }
   ]
 }

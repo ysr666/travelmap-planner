@@ -2,9 +2,9 @@
 
 更新时间：2026-08-10
 
-状态：**Target release candidate；视觉、浏览器与模拟器验收通过，待远端同 SHA 检查和合并发布**
+状态：**Production Current; passed**
 
-候选代码：`113b205`（`feature/ui-v3-product-fidelity`）
+发布代码：`177f78f`（`main`，PR #34）；候选分支头：`f20cb90`
 
 ## 1. 结论
 
@@ -12,7 +12,7 @@
 - **产品流程：passed。** 真实对象、受控媒体、有来源事实、票据直达、地点补全、地图和 AI 一次确认共同工作；错误态保持短、明确且不写入。
 - **浏览器自动化：passed。** 215 个单测文件、1730 个单测、194 个串行 E2E、5 个独立 PWA 升级场景、Golden、Axe、五视口和素材门禁全部通过。
 - **模拟器：passed。** iPhone 16 / iOS 26.5 主屏 PWA 与 Android API 33 Chrome/WebView 完成发布级检查；实体机按项目决定不作为门槛。
-- **远端发布：pending。** GitHub、Cloudflare、Supabase 诊断和最终 `main` SHA 收据必须在推送后填写；完成前不把本轮增强写成 Production Current。
+- **远端发布：passed。** 候选分支与合并后的 `main` 均通过 GitHub required checks；同 SHA 的 Cloudflare Preview 与 Production 部署均为 Active，Supabase 与 Provider 基础设施只读诊断已完成。
 
 ## 2. 视觉权威
 
@@ -126,12 +126,11 @@ Android WebView 103 不支持 `svh/dvh`。首次正式产物检查发现 Lightni
 
 ## 8. 发布收据
 
-待推送后填写：
-
-- GitHub required checks：pending
-- Cloudflare Pages Preview：pending
-- Supabase migrations/advisors/logs：pending（只读）
-- 最终 `main` CI 与 Cloudflare Production：pending
-- 真实 Provider smoke：未授权，本轮不执行；mock/合同覆盖已通过
-
-发布门槛全部满足且合并后，本文件状态才更新为 **Production Current; passed**。
+- PR：[#34](https://github.com/ysr666/travelmap-planner/pull/34)，候选 SHA `f20cb90`。
+- GitHub 候选检查：run `31330053266`，Build、Lint、Type Check、Unit、E2E 与 Cloudflare Pages 全部通过。
+- Cloudflare Preview：deployment `b356f0ad-e003-425c-998d-d71f44cb4d64`，来源 `f20cb90`，状态 Active。
+- 合并：`main` merge SHA `177f78f`；GitHub run `31330366741` 的 Build、Lint、Type Check、Unit 与 E2E 全部通过。
+- Cloudflare Production：deployment `b0766ac0-baff-47f0-9899-ea324b845261`，来源 `177f78f`，状态 Active。
+- Supabase：本轮没有 schema 变更；16 项既有 migration 可见，过去 24 小时 Auth/Edge Function 日志无新增错误。Advisor 仅保留既有配置项：泄露密码保护未开启、`cloud_ticket_blobs` 存在多个 permissive SELECT policy，以及若干未使用索引；均非本轮代码引入。
+- Cloudflare D1：发布诊断发现 `0003_add_weather_provider_group.sql` 因 Wrangler 未声明迁移目录而未执行。已补齐 `migrations_dir`、移除 D1 不接受的显式事务语句并加入构建门禁；生产 migration 已成功应用，`weather` 控制记录启用，三张 Provider 表均允许 `weather`，当前无待执行 migration，既有 usage/alert 数据未受影响。
+- 真实 Provider smoke：未授权，本轮未执行；mock、合同和边界测试通过，没有真实 AI、搜索、路线、天气或媒体请求。

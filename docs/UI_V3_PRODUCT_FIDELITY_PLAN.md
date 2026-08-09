@@ -2,7 +2,7 @@
 
 更新时间：2026-08-10
 
-状态：**Target release candidate；P0-P8 本地与模拟器验收通过，待同 SHA 远端检查和合并发布**
+状态：**Current；P0-P8 已完成并发布到 Production**
 
 上游合同：
 
@@ -25,8 +25,8 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 
 发布边界：
 
-- 当前生产 UI V3 继续标记为 **Production Current**。
-- 本计划及其八个工作流在各自代码、测试、截图和远端检查合并前均为 **Target**。
+- UI V3 产品质感增强已作为 **Production Current** 合并并发布；阶段实施记录保留原始 Target 状态作为历史证据。
+- 后续新增 Provider、schema、存储或媒体类别仍必须重新经过代码、测试、截图、模拟器和远端检查，不能沿用本轮 Current 结论。
 - 设计图不是虚构生产数据的许可。真实内容、授权、隐私、无障碍和状态正确性高于任意单个像素。
 - 本计划不自动授权真实 Provider 调用、生产 schema 修改或云端配置写入；受保护改动仍需独立 PR、预览环境和明确验证。
 
@@ -331,9 +331,9 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 9. 按出发前 Today、旅行中 Today、Trip、Documents 顺序完成页面构图。
 10. 完成设计图直接对照、全量自动化、平台模拟器和远端发布收据。
 
-## 12. P8 候选收据
+## 12. P8 生产收据
 
-候选代码：`113b205`（`feature/ui-v3-product-fidelity`）。P0-P8 的实现提交和阶段结果记录在 [阶段台账](agent/PHASE_LEDGER.md)，逐项视觉状态记录在 [产品质感基线](UI_V3_PRODUCT_FIDELITY_BASELINE.md)。
+候选分支头为 `f20cb90`，通过 PR #34 合并为 `main` 的 `177f78f`。P0-P8 的实现提交和阶段结果记录在 [阶段台账](agent/PHASE_LEDGER.md)，逐项视觉状态记录在 [产品质感基线](UI_V3_PRODUCT_FIDELITY_BASELINE.md)。
 
 已完成：
 
@@ -344,8 +344,8 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 - Android WebView 103 暴露了生产 CSS 压缩后丢失 `100vh` 回退的问题；已用独立 `@supports` 渐进增强修复，并把产物级回退检查加入 bundle gate。
 - `npm run typecheck`、`npm run lint`、`npm run test:unit`（215 文件、1730 测试）、`npm run build`、11 项 fidelity 资产检查、`npm run test:e2e:serial`（194/194）和 `npm run test:e2e:pwa-upgrade`（5/5）通过。
 
-待完成：
-
-- 推送候选并核对 GitHub required checks、Cloudflare Pages 与 Supabase 只读诊断。
-- 合并后以最终 `main` SHA 再核对 CI 与生产部署；完成前本计划仍为 Target，不提前写成 Current。
-- 本轮没有真实 AI、搜索、路线或媒体 Provider 请求；Provider 行为由 mock、合同测试和既有安全边界验证。
+- 候选 SHA `f20cb90` 的 GitHub run `31330053266` 与 Cloudflare Preview deployment `b356f0ad-e003-425c-998d-d71f44cb4d64` 通过。
+- 合并 SHA `177f78f` 的 GitHub run `31330366741` 全部通过；Cloudflare Production deployment `b0766ac0-baff-47f0-9899-ea324b845261` 为 Active。
+- Supabase 只读检查确认本轮没有 schema 变更；既有 advisor 项已记录在 `design-qa.md`，没有将其误记为本轮回归。
+- Cloudflare D1 检查发现并修复 Wrangler migration 目录漏配；`0003_add_weather_provider_group.sql` 已应用到生产，当前无待执行 migration，构建会拒绝缺失目录或含显式事务的 D1 migration。
+- 本轮没有真实 AI、搜索、路线、天气或媒体 Provider 请求；Provider 行为由 mock、合同测试和既有安全边界验证。

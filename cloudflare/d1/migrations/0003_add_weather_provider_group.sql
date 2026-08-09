@@ -1,5 +1,3 @@
-BEGIN TRANSACTION;
-
 CREATE TABLE provider_daily_usage_v2 (
   id TEXT PRIMARY KEY,
   environment TEXT NOT NULL CHECK (environment IN ('production', 'preview', 'development')),
@@ -66,5 +64,3 @@ ON provider_alerts (sent_at);
 CREATE INDEX provider_alerts_pending_idx
 ON provider_alerts (created_at)
 WHERE sent_at IS NULL;
-
-COMMIT;

@@ -3019,7 +3019,7 @@ P8 plan:
 - Risk: medium-high because intentional layout changes can invalidate the previous Golden and can expose overflow or fixed-surface regressions at compact heights and `200%` text.
 - Stop conditions: stop and repair if a selected-target P0/P1/P2 difference remains unexplained, place enrichment writes before final confirmation, any Provider/auth/privacy boundary regresses, required local validation fails, a simulator cannot complete the critical PWA flow, the Golden is pinned before the candidate commit, or remote evidence is not tied to the published SHA.
 
-P8 result (local release candidate):
+P8 result (production release):
 
 - Refined the selected four-screen compositions: pre-departure Today now leads with the city route and structured travel objects; active Today uses the media-led next-stop Hero and one navigation action; itinerary keeps a compact map switch and richer continuous rows; Documents uses the editorial single-column preview list.
 - Added and visually inspected same-state `390x844` Selected Target comparisons for pre-departure Today, active Today, itinerary, and Documents. Every Visual P0/P1/P2 receipt is now `verified`; remaining map/photo pixel differences are the documented real-data differences, not missing product behavior.
@@ -3037,4 +3037,9 @@ P8 validation (local and simulator):
 - `npm run test:e2e:serial` passed 194/194 in 7.3 minutes. `npm run test:e2e:pwa-upgrade` passed 5/5 in 50.2 seconds.
 - Five required browser viewports, dark mode, long content, `200%` text, Reduced Motion, keyboard-height, touch targets, serious/critical Axe checks, media failure states, CLS, and zero unexpected Provider-request assertions passed.
 - Android WebView post-fix measurements: `innerHeight`, `#root`, and `.app-viewport` all approximately `866.29px`; bottom navigation ends at the same edge; document/settings/AI keyboard states keep `scrollWidth === clientWidth === 411`.
-- Branch publication, same-SHA GitHub/Cloudflare receipts, Supabase read-only diagnostics, merge, and production verification remain the only open P8 release receipts.
+- Candidate SHA `f20cb90` passed GitHub Actions run `31330053266`; Cloudflare Preview deployment `b356f0ad-e003-425c-998d-d71f44cb4d64` was Active on the same SHA.
+- PR #34 merged as `main` SHA `177f78f`. GitHub Actions run `31330366741` passed Build, Lint, Type Check, Unit, and E2E; Cloudflare Production deployment `b0766ac0-baff-47f0-9899-ea324b845261` was Active on the same SHA.
+- Supabase read-only diagnostics found no branch-owned schema change or recent Auth/Edge Function error. Existing advisor items remain tracked separately: leaked-password protection is disabled, `cloud_ticket_blobs` has multiple permissive SELECT policies, and several indexes are unused.
+- Cloudflare D1 release diagnostics found that `0003_add_weather_provider_group.sql` had not been discovered because the maintenance Wrangler config omitted `migrations_dir`. The config now names the repository migration directory, a build gate rejects missing migrations and explicit D1 transactions, and the production migration was applied successfully after a failed explicit-transaction attempt rolled back without changing schema or data.
+- Post-migration checks found no pending D1 migration, seven Provider controls including enabled `weather`, zero daily-usage rows, zero alert rows, and `weather` accepted by all three constrained Provider tables. No real Provider call was made.
+- P0-P8 are complete and released. Simulator acceptance is the project-approved device gate; no physical-device receipt is required.

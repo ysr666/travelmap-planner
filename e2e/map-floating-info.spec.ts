@@ -46,7 +46,7 @@ test('点击地图 marker 更新浮动信息栏并可进入详情', async ({ pag
   await expect(markerCard).toHaveCount(0)
   await hotelMarker.click()
   await expect(markerCard).toBeVisible({ timeout: 15000 })
-  await expect(markerCard.getByTestId('map-marker-card-open')).toContainText('查看地点')
+  await expect(markerCard.getByTestId('map-marker-card-open')).toContainText('详情')
   await expect(markerCard.getByTestId('map-marker-card-prev')).toBeDisabled()
   await markerCard.getByTestId('map-marker-card-next').click()
   await markerCard.getByTestId('map-marker-card-next').click()

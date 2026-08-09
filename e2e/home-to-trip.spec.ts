@@ -24,7 +24,7 @@ test('首页可以手动创建示例旅行并进入旅行工作台', async ({ pa
   await expect(page).toHaveURL(/#\/day\?/)
   await expect(page).toHaveURL(/view=schedule/)
   await expect(page.getByTestId('day-selector')).toBeVisible()
-  await expect(page.getByTestId('view-switch-schedule')).toBeVisible()
+  await expect(page.getByTestId('view-switch-schedule')).toHaveCount(0)
   await expect(page.getByTestId('view-switch-map')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

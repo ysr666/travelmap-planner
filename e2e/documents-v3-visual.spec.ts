@@ -272,10 +272,17 @@ async function expectDocumentListLayout(page: Page) {
   }
   for (const thumbnail of layout.thumbnails) {
     expect(thumbnail.width).toBeGreaterThan(0)
-    expect(thumbnail.height).toBeGreaterThanOrEqual(83)
-    expect(thumbnail.height).toBeLessThanOrEqual(93)
-    expect(thumbnail.width).toBeGreaterThanOrEqual(79)
-    expect(thumbnail.width).toBeLessThanOrEqual(97)
+    if (layout.viewportWidth < 360) {
+      expect(thumbnail.height).toBeGreaterThanOrEqual(85)
+      expect(thumbnail.height).toBeLessThanOrEqual(87)
+      expect(thumbnail.width).toBeGreaterThanOrEqual(87)
+      expect(thumbnail.width).toBeLessThanOrEqual(89)
+    } else {
+      expect(thumbnail.height).toBeGreaterThanOrEqual(101)
+      expect(thumbnail.height).toBeLessThanOrEqual(103)
+      expect(thumbnail.width).toBeGreaterThanOrEqual(111)
+      expect(thumbnail.width).toBeLessThanOrEqual(113)
+    }
   }
   for (const title of layout.titles) {
     expect(title.rect.left).toBeGreaterThanOrEqual(layout.gallery.left - 1)

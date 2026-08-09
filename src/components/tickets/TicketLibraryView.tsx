@@ -453,8 +453,12 @@ export function TicketLibraryView({
 }
 
 function describeDocumentObject(object: TravelObjectViewModelV1 | undefined, ticket: TicketMeta) {
-  if (!object) return describeCompactTicketMeta(ticket)
-  return [object.subtitle, object.dateLabel, object.timeLabel]
+  if (!object || object.kind === 'ticket') {
+    return [describeCompactTicketMeta(ticket), object?.dateLabel, object?.timeLabel]
+      .filter((value): value is string => Boolean(value))
+      .join(' · ')
+  }
+  return [object.subtitle || describeCompactTicketMeta(ticket), object.dateLabel, object.timeLabel]
     .filter((value): value is string => Boolean(value))
     .join(' · ')
 }

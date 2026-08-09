@@ -92,7 +92,7 @@ test('资料页使用真实预览、对象元数据和关联状态', async ({ pa
   await expect(gallery).toBeVisible()
   await expect(gallery.getByTestId('ticket-card')).toHaveCount(records.ticketMetas.length)
   await expect(gallery.locator('[data-media-state="ready"]')).toHaveCount(4, { timeout: 15_000 })
-  await expect(gallery.getByText('门票 · 2026-08-18 · 11:00', { exact: true })).toBeVisible()
+  await expect(gallery.getByText('门票 · 位置 · 2026-08-18 · 11:00', { exact: true })).toBeVisible()
   await expect(gallery.getByText('已关联行程', { exact: true }).first()).toBeVisible()
   await expectNoHorizontalOverflow(page)
   await capture(page, 'documents-390x844.png')

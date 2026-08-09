@@ -441,7 +441,7 @@ function BookingRow({ booking, highlighted, onDelete, segments }: { booking: Tra
 
 export function CenterTabControls({ activeTab, onChange }: { activeTab: CenterTab; onChange: (tab: CenterTab) => void }) {
   return (
-    <div aria-label="资料分类" className="flex min-w-max items-center gap-2" role="tablist">
+    <div aria-label="资料分类" className="document-center-tabs" role="tablist">
       <TabButton active={activeTab === 'attachments'} label="票据" onClick={() => onChange('attachments')} tab="attachments" />
       <TabButton active={activeTab === 'documents'} label="证件" onClick={() => onChange('documents')} tab="documents" />
       <TabButton active={activeTab === 'transport'} label="交通" onClick={() => onChange('transport')} tab="transport" />
@@ -454,11 +454,7 @@ function TabButton({ active, label, onClick, tab }: { active: boolean; label: st
     <button
       aria-controls={`document-center-panel-${tab}`}
       aria-selected={active}
-      className={`min-h-11 rounded-full border px-3 text-sm font-medium tm-focus ${
-        active
-          ? 'border-primary bg-primary-container text-on-primary-container'
-          : 'border-outline-variant/45 bg-surface text-on-surface-variant'
-      }`}
+      className={`document-center-tab tm-focus ${active ? 'document-center-tab-active' : ''}`}
       onClick={onClick}
       id={`document-center-tab-${tab}`}
       role="tab"

@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChevronRight,
   CloudSun,
+  ArrowRight,
   FileText,
   Hotel,
   Import,
@@ -67,7 +68,10 @@ export function UpcomingTodayView({ error, otherTrips, overview, snapshot }: Tod
   })
   const preparationObjects = collection.preparation.slice(0, 3)
   const departureObject = preparationObjects.find((object) => object.kind === 'transport')
-  const destinationRoute = getDepartureRouteLabel(departureObject)
+  const destinationRoute = getDepartureRouteLabel(
+    departureObject,
+    overview.trip.destination,
+  )
   const weather = useMemo(() => selectRealtimeFact(facts, {
     kind: 'weather_forecast',
     now,
@@ -179,11 +183,14 @@ function PreparationObjectRow({
   object: TravelObjectViewModelV1
   onOpen: () => void
 }) {
+  if (object.kind === 'transport') {
+    return <TransportPreparationObjectRow object={object} onOpen={onOpen} />
+  }
   const detail = getPreparationDetail(object)
   const privateDetail = object.fields.find((field) => field.visibility === 'private')
   return (
     <button className="today-preparation-object tm-focus" onClick={onOpen} type="button">
-      <TravelObjectLeading object={object} preferBrand={object.kind === 'transport' || object.kind === 'insurance'} />
+      <TravelObjectLeading object={object} preferBrand={object.kind === 'insurance'} />
       <span className="today-preparation-object-content">
         <span className="today-preparation-object-title">
           <strong>{object.title}</strong>
@@ -194,6 +201,47 @@ function PreparationObjectRow({
         {privateDetail ? <small>{privateDetail.label} {privateDetail.value}</small> : null}
       </span>
       <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-on-surface-variant" />
+    </button>
+  )
+}
+
+function TransportPreparationObjectRow({
+  object,
+  onOpen,
+}: {
+  object: TravelObjectViewModelV1
+  onOpen: () => void
+}) {
+  const departure = object.fields.find((field) => field.id === 'departure')?.value
+  const arrival = object.fields.find((field) => field.id === 'arrival')?.value
+  const departureDetail = object.fields.find((field) => field.id === 'departure-detail')?.value
+  const arrivalDetail = object.fields.find((field) => field.id === 'arrival-detail')?.value
+  const [departureTime = '--:--', arrivalTime = '--:--'] = object.timeLabel?.split(' → ') ?? []
+
+  return (
+    <button className="today-preparation-object today-preparation-transport tm-focus" onClick={onOpen} type="button">
+      <span className="today-preparation-transport-heading">
+        <TravelObjectLeading className="today-preparation-transport-brand" object={object} preferBrand />
+        <span className="min-w-0 flex-1">
+          <span className="today-preparation-object-title">
+            <strong>{object.title}</strong>
+            <TravelObjectStatusBadge status={object.status} />
+          </span>
+          {object.dateLabel ? <small>{formatShortDate(object.dateLabel)}</small> : null}
+        </span>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-on-surface-variant" />
+      </span>
+      <span className="today-preparation-transport-times">
+        <span>
+          <strong>{departureTime}</strong>
+          <small>{formatTransportStop(departure, departureDetail)}</small>
+        </span>
+        <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-outline" />
+        <span>
+          <strong>{arrivalTime.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')}</strong>
+          <small>{formatTransportStop(arrival, arrivalDetail)}</small>
+        </span>
+      </span>
     </button>
   )
 }
@@ -381,16 +429,30 @@ function getReadyTicketSubtitle(ticket: TicketMeta) {
   return ticket.fileType?.toUpperCase() || '旅行资料'
 }
 
-function getDepartureRouteLabel(object: TravelObjectViewModelV1 | undefined) {
+function getDepartureRouteLabel(
+  object: TravelObjectViewModelV1 | undefined,
+  destination?: string,
+) {
   if (!object) return ''
   const departure = object.fields.find((field) => field.id === 'departure')?.value
   const arrival = object.fields.find((field) => field.id === 'arrival')?.value
   if (!departure || !arrival) return object.subtitle ?? ''
-  return `${compactTransportPlace(departure)} → ${compactTransportPlace(arrival)}`
+  return `${compactTransportCity(departure)} → ${getPrimaryPlaceName(destination) || compactTransportCity(arrival)}`
 }
 
-function compactTransportPlace(value: string) {
-  return value.match(/\(([A-Z0-9]{3,5})\)$/)?.[1] ?? value.replace(/\s*\([^)]*\)$/, '')
+function getPrimaryPlaceName(value?: string) {
+  return value?.split(/[、,，;；|]/, 1)[0]?.trim() ?? ''
+}
+
+function compactTransportCity(value: string) {
+  const place = value
+    .replace(/\s*\([A-Z0-9]{3,5}\)$/, '')
+    .replace(/国际机场|机场|International Airport|Airport/gi, '')
+    .trim()
+  const airportQualifier = /^(.*?)(?:浦东|虹桥|首都|大兴|白云|宝安|天府|双流|萧山|咸阳|禄口|天河|江北|高崎|长乐|新郑|桃仙|太平|滨海|美兰|地窝堡|河东)/
+  const city = place.match(airportQualifier)?.[1]?.trim()
+  if (city) return city
+  return place.includes(' ') ? place.split(/\s+/, 1)[0] : place
 }
 
 function getPreparationDetail(object: TravelObjectViewModelV1) {
@@ -398,14 +460,24 @@ function getPreparationDetail(object: TravelObjectViewModelV1) {
     return [object.dateLabel, object.timeLabel, object.locationLabel].filter(Boolean).join(' · ')
   }
   const preferredFieldIds = object.kind === 'lodging'
-    ? ['dates', 'nights', 'address']
+    ? ['address']
     : object.kind === 'insurance'
-      ? ['product', 'validity']
+      ? ['validity']
       : ['date', 'entry-time', 'format']
   return preferredFieldIds
     .flatMap((id) => object.fields.find((field) => field.id === id)?.value ?? [])
     .slice(0, 2)
     .join(' · ')
+}
+
+function formatTransportStop(place?: string, detail?: string) {
+  if (!place) return detail ?? ''
+  const code = place.match(/\(([A-Z0-9]{3,5})\)$/)?.[1]
+  const name = place
+    .replace(/\s*\([A-Z0-9]{3,5}\)$/, '')
+    .replace(/国际机场|机场/g, '')
+    .trim()
+  return [code, name, detail].filter(Boolean).join(' · ')
 }
 
 function openPreparationObject(object: TravelObjectViewModelV1, tripId: string) {

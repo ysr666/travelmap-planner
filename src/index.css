@@ -565,6 +565,89 @@ button {
   font-weight: 600;
 }
 
+.today-map-place-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  min-width: 0;
+  min-height: 78px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-outline-variant);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+  box-shadow: 0 -6px 20px rgba(10, 18, 16, 0.1);
+  padding: 10px 14px 10px 18px;
+  backdrop-filter: blur(14px);
+}
+
+.today-map-place-sheet-copy {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-on-surface);
+  text-align: left;
+}
+
+.today-map-place-sheet-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.today-map-place-sheet-heading strong,
+.today-map-place-sheet-heading time,
+.today-map-place-sheet-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-map-place-sheet-heading strong {
+  flex: 0 1 auto;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.today-map-place-sheet-heading time {
+  flex: 1 1 0;
+  border-left: 1px solid var(--color-outline-variant);
+  color: var(--color-on-surface-variant);
+  padding-left: 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-map-place-sheet-copy small {
+  margin-top: 4px;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+.today-map-place-sheet-ticket {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
 .day-map-marker-root-detailed {
   position: relative;
   overflow: visible;
@@ -1925,10 +2008,8 @@ button.v3-record-row:active {
 }
 
 .document-preview-list {
-  overflow: hidden;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-surface);
+  display: grid;
+  gap: 8px;
 }
 
 .document-preview-row {
@@ -1936,20 +2017,19 @@ button.v3-record-row:active {
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 112px;
+  min-height: 124px;
   align-items: stretch;
-  border-bottom: 1px solid var(--color-outline-variant);
-}
-
-.document-preview-row:last-child {
-  border-bottom: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 7px;
+  background: var(--color-surface);
 }
 
 .document-preview-open {
   display: grid;
   min-width: 0;
   flex: 1;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   gap: 12px;
   border: 0;
   background: transparent;
@@ -1963,8 +2043,8 @@ button.v3-record-row:active {
 }
 
 .document-preview-thumbnail {
-  width: 96px;
-  height: 92px;
+  width: 112px;
+  height: 102px;
   align-self: center;
   border-radius: 6px;
 }
@@ -2036,26 +2116,58 @@ button.v3-record-row:active {
 
 @media (max-width: 359px) {
   .document-preview-open {
-    grid-template-columns: 80px minmax(0, 1fr);
+    grid-template-columns: 88px minmax(0, 1fr);
     gap: 10px;
     padding-left: 8px;
   }
 
   .document-preview-thumbnail {
-    width: 80px;
-    height: 84px;
+    width: 88px;
+    height: 86px;
   }
 }
 
 @media (min-width: 768px) {
   .document-preview-list {
-    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .document-preview-row:nth-child(odd) {
-    border-right: 1px solid var(--color-outline-variant);
-  }
+.document-center-tabs {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.document-center-tab {
+  position: relative;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.document-center-tab::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: transparent;
+  content: '';
+}
+
+.document-center-tab-active {
+  color: var(--color-primary);
+}
+
+.document-center-tab-active::after {
+  background: var(--color-primary);
 }
 
 .trip-context-tab:active {
@@ -3049,7 +3161,7 @@ button.v3-record-row:active {
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 72px;
+  min-height: 88px;
   align-items: center;
   gap: 12px;
   border: 0;
@@ -3062,6 +3174,71 @@ button.v3-record-row:active {
 
 .today-preparation-object:last-child {
   border-bottom: 0;
+}
+
+.today-preparation-transport {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.today-preparation-transport-heading,
+.today-preparation-transport-times {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.today-preparation-transport-heading {
+  gap: 10px;
+}
+
+.today-preparation-transport-heading small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.today-preparation-transport-brand {
+  width: 72px;
+  height: 38px;
+  min-width: 72px;
+}
+
+.today-preparation-transport-times {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+  gap: 8px;
+  padding-left: 82px;
+}
+
+.today-preparation-transport-times > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.today-preparation-transport-times strong {
+  color: var(--color-on-surface);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 25px;
+}
+
+.today-preparation-transport-times small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-on-surface-variant);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .today-preparation-object-content,
@@ -3117,21 +3294,22 @@ button.v3-record-row:active {
   min-width: 0;
   overflow: hidden;
   grid-template-columns: minmax(0, 1.4fr) minmax(116px, 1fr);
+  grid-template-rows: minmax(214px, auto) 68px;
   grid-template-areas:
     "copy media"
     "action action";
   border-bottom: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  background: var(--color-primary);
 }
 
 .today-active-hero-copy {
   grid-area: copy;
   min-width: 0;
-  padding: 16px 14px 12px 18px;
+  padding: 16px 14px 14px 18px;
 }
 
 .today-active-hero-overline {
-  color: var(--color-primary);
+  color: var(--color-on-primary);
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
@@ -3140,7 +3318,7 @@ button.v3-record-row:active {
 .today-active-hero h2 {
   margin-top: 4px;
   overflow-wrap: anywhere;
-  color: var(--color-on-surface);
+  color: var(--color-on-primary);
   font-size: 23px;
   font-weight: 700;
   line-height: 29px;
@@ -3153,13 +3331,13 @@ button.v3-record-row:active {
   align-items: center;
   gap: 5px;
   margin-top: 8px;
-  color: var(--color-on-surface-variant);
+  color: color-mix(in srgb, var(--color-on-primary) 88%, transparent);
   font-size: 12px;
   line-height: 18px;
 }
 
 .today-active-departure strong {
-  color: var(--color-primary);
+  color: var(--color-on-primary);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
@@ -3173,17 +3351,18 @@ button.v3-record-row:active {
 
 .today-active-ticket {
   display: flex;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
-  min-height: 48px;
+  min-height: 42px;
   align-items: center;
   gap: 7px;
   margin-top: 10px;
-  border: 0;
-  border-top: 1px solid var(--color-outline-variant);
-  background: transparent;
-  color: var(--color-primary);
-  padding: 8px 0 0;
+  border: 1px solid color-mix(in srgb, var(--color-on-primary) 42%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-on-primary) 8%, transparent);
+  color: var(--color-on-primary);
+  padding: 5px 8px;
   text-align: left;
 }
 
@@ -3197,13 +3376,14 @@ button.v3-record-row:active {
 }
 
 .today-active-ticket strong {
-  color: var(--color-on-surface);
+  color: var(--color-on-primary);
   font-size: 12px;
   line-height: 17px;
 }
 
 .today-active-ticket small,
 .today-active-ticket > span:last-child {
+  color: var(--color-on-primary);
   font-size: 10px;
   line-height: 15px;
 }
@@ -3211,8 +3391,13 @@ button.v3-record-row:active {
 .today-active-hero-media {
   grid-area: media;
   height: 100%;
-  min-height: 190px;
+  min-height: 282px;
+  grid-row: 1 / -1;
   border-radius: 0;
+}
+
+.today-active-hero-media .travel-object-media-attribution {
+  bottom: 68px;
 }
 
 .today-active-navigation {
@@ -3222,8 +3407,12 @@ button.v3-record-row:active {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
+  z-index: 2;
+  margin: 0 18px 14px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+  color: var(--color-primary);
   font-size: 15px;
   font-weight: 700;
 }
@@ -3240,9 +3429,9 @@ button.v3-record-row:active {
 }
 
 .day-timeline-object-leading {
-  width: 68px;
-  height: 64px;
-  min-width: 68px;
+  width: 84px;
+  height: 68px;
+  min-width: 84px;
 }
 
 .day-timeline-object-copy,
@@ -3314,9 +3503,9 @@ button.v3-record-row:active {
 @media (max-width: 359px) {
   .travel-object-leading,
   .day-timeline-object-leading {
-    width: 56px;
-    height: 56px;
-    min-width: 56px;
+    width: 64px;
+    height: 58px;
+    min-width: 64px;
   }
 
   .today-active-hero {
@@ -3325,6 +3514,10 @@ button.v3-record-row:active {
 
   .today-active-hero-copy {
     padding-left: 14px;
+  }
+
+  .today-preparation-transport-times {
+    padding-left: 0;
   }
 
   .today-active-hero h2 {

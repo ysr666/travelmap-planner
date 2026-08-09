@@ -184,7 +184,7 @@ export function DayTimelineView({
             </>
           ) : null}
           {!isOrdering && onSwitchToMap ? (
-            <button aria-label="打开地图" className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus" onClick={onSwitchToMap} title="打开地图" type="button">
+            <button aria-label="打开地图" className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus" data-testid="view-switch-map" onClick={onSwitchToMap} title="打开地图" type="button">
               <Navigation className="size-4" />
             </button>
           ) : null}

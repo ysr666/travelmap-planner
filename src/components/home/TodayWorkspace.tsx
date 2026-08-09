@@ -65,7 +65,7 @@ import type { ItineraryItem, TicketMeta, TransportMode } from '../../types'
 
 const E2E_MODE = import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
 const E2E_USE_LIVE_MAP = import.meta.env.VITE_E2E_USE_LIVE_MAP === '1'
-const TODAY_MAP_VIEWPORT_PADDING = { top: 60, right: 76, bottom: 52, left: 60 } as const
+const TODAY_MAP_VIEWPORT_PADDING = { top: 60, right: 76, bottom: 132, left: 60 } as const
 
 type OriginRouteState = { lineString: LngLat[]; signature: string }
 type TodayRouteGeometry = { kind: RouteLineKind; lineStrings: LngLat[][] }
@@ -446,6 +446,45 @@ export function TodayWorkspace({
 
         {locationStatus === 'error' ? (
           <p className="today-map-notice" role="status">暂时无法取得位置</p>
+        ) : null}
+
+        {overview.status === 'ongoing' && day && selectedItem ? (
+          <div className="today-map-place-sheet" data-testid="today-map-place-sheet">
+            <button
+              className="today-map-place-sheet-copy tm-focus"
+              onClick={() => navigateTo('item', {
+                dayId: day.id,
+                itemId: selectedItem.id,
+                tripId: overview.trip.id,
+                view: 'map',
+              })}
+              type="button"
+            >
+              <span className="today-map-place-sheet-heading">
+                <strong>{selectedItem.title}</strong>
+                {selectedItem.startTime ? <time>{selectedItem.startTime} 入场</time> : null}
+              </span>
+              <small>
+                {selectedTicket && selectedTicketPresentation
+                  ? `门票 · ${selectedTicketPresentation.status}`
+                  : selectedItem.locationName || selectedItem.address || '查看地点详情'}
+              </small>
+            </button>
+            {selectedTicket ? (
+              <button
+                aria-label={`打开票据 ${getTicketDisplayTitle(selectedTicket)}`}
+                className="today-map-place-sheet-ticket tm-focus"
+                onClick={() => navigateTo('tickets', {
+                  ticketId: selectedTicket.id,
+                  tripId: overview.trip.id,
+                })}
+                title="打开票据"
+                type="button"
+              >
+                <Ticket className="size-5" />
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </section>
 

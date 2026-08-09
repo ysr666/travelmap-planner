@@ -57,6 +57,7 @@ for (const viewport of viewports) {
     await auditRichSurface(page, timeline, `${viewport.label} itinerary`)
 
     await page.goto(productFidelityFixture.scenarios.documents.route, { waitUntil: 'domcontentloaded' })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     const gallery = page.getByTestId('ticket-gallery')
     await expect(gallery).toBeVisible()
     await expect(gallery.locator('[data-media-state="ready"]')).toHaveCount(4, { timeout: 15_000 })

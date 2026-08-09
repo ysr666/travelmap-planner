@@ -31,7 +31,7 @@ test('出发前今日使用航班、住宿、保险和必要天气组成首屏',
   await page.reload({ waitUntil: 'domcontentloaded' })
 
   await expect(page.getByTestId('today-upcoming')).toBeVisible()
-  await expect(page.getByText('PVG → LHR', { exact: true })).toBeVisible()
+  await expect(page.getByText('上海 → 伦敦', { exact: true })).toBeVisible()
   await expect(page.getByText('CA849', { exact: true })).toBeVisible()
   await expect(page.getByText('Washington Mayfair Hotel', { exact: true })).toBeVisible()
   await expect(page.getByText('安联境外旅行保险', { exact: true })).toBeVisible()
@@ -58,6 +58,8 @@ test('旅行中今日以真实地点媒体、票据和单一导航动作构成�
   await expect(hero.getByText('爱丁堡城堡门票', { exact: true })).toBeVisible()
   await expect(hero.getByRole('link', { exact: true, name: '开始导航' })).toHaveCount(1)
   await expect(page.getByTestId('day-map-marker')).toHaveCount(3)
+  await expect(page.getByTestId('today-map-place-sheet')).toContainText('爱丁堡城堡')
+  await expect(page.getByTestId('today-map-place-sheet').getByRole('button', { name: '打开票据 爱丁堡城堡门票' })).toHaveCount(1)
   await expectNoHorizontalOverflow(page)
   await capture(page, 'today-active-390x844.png')
   expect(providerRequests.count).toBe(0)

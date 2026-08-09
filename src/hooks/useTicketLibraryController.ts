@@ -176,7 +176,7 @@ export function useTicketLibraryController({
     [ticketBlobPresence, tickets],
   )
   const visibleTicketCategoryFilters = getVisibleTicketCategoryFilters(ticketLibraryStats)
-  const showEmbeddedScopeFilters = embedded && (visibleTicketCategoryFilters.length > 2 || filter !== 'all')
+  const showEmbeddedScopeFilters = embedded && filter !== 'all'
 
   const ticketLedgerDraftCandidates = useMemo(() => {
     if (!trip || !ledgerSettings) return []

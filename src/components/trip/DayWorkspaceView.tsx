@@ -176,14 +176,13 @@ export function DayWorkspace({
               selectedDayId={selectedDay.id}
             />
 
-            <ViewSwitch activeView={view} onSwitch={onSwitchView} />
-
             <DayTimelineView
               compact
               day={selectedDay}
               items={items}
               onItemsChange={onRefreshItems}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
+              onSwitchToMap={() => onSwitchView('map')}
               sourceView="schedule"
               travelObjects={travelObjects}
               trip={trip}

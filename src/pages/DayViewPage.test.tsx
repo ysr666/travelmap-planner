@@ -155,7 +155,11 @@ vi.mock('../components/ai/DayBriefCard', () => ({
 }))
 
 vi.mock('../components/trip/DayTimelineView', () => ({
-  DayTimelineView: () => <div data-testid="day-timeline-view" />,
+  DayTimelineView: ({ onSwitchToMap }: { onSwitchToMap?: () => void }) => (
+    <div data-testid="day-timeline-view">
+      {onSwitchToMap ? <button data-testid="view-switch-map" onClick={onSwitchToMap} type="button">地图</button> : null}
+    </div>
+  ),
 }))
 
 vi.mock('../components/trip/DaySelector', () => ({
@@ -355,13 +359,13 @@ describe('DayViewPage', () => {
     expect(document.body.textContent).toContain('返回首页')
   })
 
-  it('renders view switch buttons', async () => {
+  it('renders a compact map switch inside the schedule toolbar', async () => {
     await act(async () => {
       root?.render(<DayViewPage />)
     })
 
     expect(container?.querySelector('[data-testid="view-switch-map"]')).toBeTruthy()
-    expect(container?.querySelector('[data-testid="view-switch-schedule"]')).toBeTruthy()
+    expect(container?.querySelector('[data-testid="view-switch-schedule"]')).toBeFalsy()
   })
 
   it('renders return to home button in error state', async () => {

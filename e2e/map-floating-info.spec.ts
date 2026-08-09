@@ -290,13 +290,19 @@ async function expectNoTextOverflow(locator: Locator) {
 async function expectLocationNoticeAlignedWithButton(page: Page) {
   const noticeBox = await page.getByTestId('map-location-notice').boundingBox()
   const locationButtonBox = await page.getByTestId('map-user-location-button').boundingBox()
+  const routeStatusBox = await page.getByTestId('map-route-status').boundingBox()
 
   expect(noticeBox).not.toBeNull()
   expect(locationButtonBox).not.toBeNull()
-  if (!noticeBox || !locationButtonBox) {
-    throw new Error('定位提示或定位按钮没有可用布局盒')
+  expect(routeStatusBox).not.toBeNull()
+  if (!noticeBox || !locationButtonBox || !routeStatusBox) {
+    throw new Error('定位提示、定位按钮或路线状态没有可用布局盒')
   }
 
-  expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(locationButtonBox.x - 6)
-  expect(Math.abs((noticeBox.y + noticeBox.height / 2) - (locationButtonBox.y + locationButtonBox.height / 2))).toBeLessThanOrEqual(48)
+  expect(noticeBox.y).toBeGreaterThanOrEqual(Math.max(
+    locationButtonBox.y + locationButtonBox.height,
+    routeStatusBox.y + routeStatusBox.height,
+  ) + 6)
+  expect(noticeBox.x).toBeGreaterThanOrEqual(0)
+  expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(page.viewportSize()!.width)
 }

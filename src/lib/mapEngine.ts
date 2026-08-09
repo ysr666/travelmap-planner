@@ -34,6 +34,7 @@ export type MapInitOptions = {
 
 export type MapEventType = 'load' | 'idle' | 'error' | 'moveend' | 'resize' | 'zoom'
 export type RouteLineKind = 'road' | 'sequence'
+export type ActiveRouteLineKind = 'drive' | 'estimate' | 'other' | 'transit' | 'walk'
 
 export type MarkerHandle = {
   setLngLat(lngLat: LngLat): void
@@ -51,6 +52,7 @@ export interface MapInstance {
   addMarker(lngLat: LngLat, element: HTMLElement): MarkerHandle
   setRouteLine(lineStrings: LngLat[][], kind?: RouteLineKind): void
   setRouteConnectorLine(lineStrings: LngLat[][]): void
+  setActiveRouteLine(lineStrings: LngLat[][], kind?: ActiveRouteLineKind): void
   setRouteVisibility(visible: boolean): void
   waitForIdle(): Promise<'idle' | 'timeout'>
   on(event: MapEventType, handler: () => void): void

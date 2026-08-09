@@ -2922,3 +2922,32 @@ P4 validation:
 - `npm run build` passed, including typecheck and bundle budget: 469.1 KiB entry, 853.4 KiB initial JS, 245.8 KiB initial gzip, and 2359.2 KiB/114-entry precache.
 - `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
 - The complete mobile Global AI command-bar E2E spec passed at `390x844`: 20 tests, including one-confirmation binding, pre-confirmation no-write, exact-ticket navigation, assigned-member visibility preservation, stale-plan rejection, and partial retry without duplicate success writes.
+
+P5 plan:
+
+- Goal: make the day map an honest, route-aware travel surface with real cached road geometry, a visibly distinct active segment, numbered stops, current location, one coherent place sheet, and short route degradation states.
+- Scope: add a pure day-map experience ViewModel derived from ordered itinerary objects and the existing `RouteCacheEntry`; render road/mixed/estimated/unavailable states and source freshness without exposing cache keys; add a transport-aware active-route overlay to both MapLibre and Google adapters; reuse the existing explicit route generator for a user-triggered recalculation; unify external navigation, transport duration, ticket count, exact ticket entry, and place detail in the selected-stop sheet; extend deterministic map E2E with seeded road geometry, active segment, location, refresh, degradation, canvas, fit-bound, and overlap assertions.
+- No-go: no route-cache database version, signature, expiry, provider request/response, quota, authentication, map-key, realtime-fact, itinerary, ticket, or cloud-sync contract change; no background route call, raw Provider error, straight line styled or labelled as a road route, user location persisted, second bottom Sheet, or real Provider request during local validation.
+- Likely files: `src/lib/dayMapExperience.ts`, `src/lib/mapEngine.ts`, `src/lib/maplibreAdapter.ts`, `src/lib/googleMapsAdapter.ts`, `src/components/DayMap.tsx`, `src/components/trip/DayMapView.tsx`, `src/components/trip/DayWorkspaceView.tsx`, focused unit/component tests, `e2e/map-v3-visual.spec.ts`, `e2e/map-floating-info.spec.ts`, and the existing product-fidelity route fixture only if its shape needs alignment.
+- Validation: pure ViewModel route/status/navigation tests; map engine and component tests for active geometry, transport mode, explicit refresh, failure fallback, exact ticket entry, and compact text; `320x568` through `1440x900` layout checks; MapLibre canvas/marker/route/location/controls/single-Sheet assertions; route request counts; typecheck, lint, full unit suite, production build, fidelity asset check, and `git diff --check`.
+- Risk: medium-high because the map has two engine adapters and camera padding must remain stable while route status and place-sheet content change; route refresh touches the existing local cache through the established generator.
+- Stop conditions: stop and repair if route generation occurs without a user action, a failed refresh discards valid cached geometry, current location expands a far-away itinerary viewport, straight geometry receives road styling, cache/provider internals enter product copy, a ticket opens without the current item scope, or any overlay/Sheet/control overlaps at a required viewport.
+
+P5 result:
+
+- Added one pure day-map experience ViewModel that orders mapped stops, derives numbered markers, active transport mode, ticket count, external navigation, route metrics, and honest `road | mixed | estimate | unavailable` presentation from the existing itinerary and route-cache contracts.
+- Added transport-aware active-route overlays to both MapLibre and Google adapters. Cached road geometry remains visually distinct from dashed sequence estimates; straight lines are never labelled or styled as road routes.
+- Kept route generation strictly user-triggered through the compact route-status control. A failed refresh preserves the last valid cache or current estimate, returns a short message, and can be retried without a background Provider call.
+- Consolidated date/sequence, time, transport duration, address, ticket count, exact-ticket entry, external navigation, and item detail into one selected-place Sheet. The Sheet keeps one primary navigation action and uses a compact `详情` command at narrow widths.
+- Connected ephemeral current location without persisting it or allowing a far-away coordinate to expand the trip camera. Added measured camera padding for the date selector, route status, location control, notice, and Sheet.
+- Aligned the canonical fixture so day road geometry and the optional origin connector are separate semantic objects. No route-cache schema/signature, Provider contract, quota/authentication, realtime-fact, itinerary, ticket, or cloud-sync contract changed.
+
+P5 validation:
+
+- Focused map-link, day-map ViewModel, and DayMapView tests passed: 3 files and 38 tests.
+- Product-fidelity map E2E passed for seeded road geometry, active walking segment, numbered stops, current location, nonblank map canvas, exact ticket opening, zero background Provider requests, failed-refresh preservation, retry, and successful road-route replacement: 2 tests.
+- Existing floating-info and V3 map suites passed together with the product map suite: 10 tests on the `Mobile 390x844` project. The V3 suite additionally validated `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900` with no horizontal overflow or overlay/Sheet/control overlap.
+- A deterministic `390x844` light-mode capture was visually inspected; the map remained the full-bleed primary surface, real route geometry remained legible, and the selected-place Sheet retained a single dominant action.
+- `npm run typecheck`, `npm run lint`, and `npm run test:unit` passed: 212 files and 1720 tests.
+- `npm run build` passed with the bundle budget at 469.1 KiB entry, 853.5 KiB initial JS, 245.8 KiB initial gzip, and 2370.1 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.

@@ -5,6 +5,7 @@ import { DEFAULT_MAP_STYLE, FALLBACK_MAP_STYLE } from '../lib/mapConfig'
 import { getGoogleMapsApiKey, waitForGoogleMaps } from '../lib/googleMaps'
 import { loadMapLibreAdapter } from '../lib/maplibreAdapterLoader'
 import type {
+  ActiveRouteLineKind,
   EdgeInsets,
   MapEngineAdapter,
   MapInstance,
@@ -46,6 +47,8 @@ type DayMapProps = {
   viewportPadding?: EdgeInsets
   markerFocusPadding?: EdgeInsets
   originRouteLineString?: LngLat[]
+  activeRouteLineKind?: ActiveRouteLineKind
+  activeRouteLineStrings?: LngLat[][]
   routeLineKind?: RouteLineKind
   routeLineStrings?: LngLat[][]
   userLocation?: LngLat | null
@@ -149,6 +152,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   viewportPadding,
   markerFocusPadding,
   originRouteLineString,
+  activeRouteLineKind = 'other',
+  activeRouteLineStrings,
   routeLineKind = 'sequence',
   routeLineStrings,
   userLocation,
@@ -173,6 +178,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   const coordinateKeyRef = useRef('')
   const routeLineStringsRef = useRef<LngLat[][] | undefined>(routeLineStrings)
   const routeLineKindRef = useRef<RouteLineKind>(routeLineKind)
+  const activeRouteLineStringsRef = useRef<LngLat[][] | undefined>(activeRouteLineStrings)
+  const activeRouteLineKindRef = useRef<ActiveRouteLineKind>(activeRouteLineKind)
   const originRouteLineStringRef = useRef<LngLat[] | undefined>(originRouteLineString)
   const userLocationRef = useRef<LngLat | null>(userLocation ?? null)
   const viewportPaddingRef = useRef<EdgeInsets>(DEFAULT_DAY_MAP_PADDING)
@@ -206,8 +213,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     [validItems],
   )
   const routeLineKey = useMemo(
-    () => `${routeLineKind}:${buildRouteLineKey(routeLineStrings)}::origin:${buildRouteLineKey(originRouteLineString ? [originRouteLineString] : undefined)}`,
-    [originRouteLineString, routeLineKind, routeLineStrings],
+    () => `${routeLineKind}:${buildRouteLineKey(routeLineStrings)}::active:${activeRouteLineKind}:${buildRouteLineKey(activeRouteLineStrings)}::origin:${buildRouteLineKey(originRouteLineString ? [originRouteLineString] : undefined)}`,
+    [activeRouteLineKind, activeRouteLineStrings, originRouteLineString, routeLineKind, routeLineStrings],
   )
   const userLocationKey = useMemo(() => (
     userLocation ? `${userLocation[0].toFixed(6)},${userLocation[1].toFixed(6)}` : ''
@@ -227,6 +234,8 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
   coordinateKeyRef.current = coordinateKey
   routeLineStringsRef.current = routeLineStrings
   routeLineKindRef.current = routeLineKind
+  activeRouteLineStringsRef.current = activeRouteLineStrings
+  activeRouteLineKindRef.current = activeRouteLineKind
   originRouteLineStringRef.current = originRouteLineString
   userLocationRef.current = userLocation ?? null
   selectedItemIdRef.current = selectedItemId
@@ -529,6 +538,10 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
       routePresentation.road.length > 0 ? 'road' : 'sequence',
     )
     map.setRouteConnectorLine(routePresentation.connector as unknown as MapLngLat[][])
+    map.setActiveRouteLine(
+      normalizeLineStrings(activeRouteLineStringsRef.current) as unknown as MapLngLat[][],
+      activeRouteLineKindRef.current,
+    )
 
     const directionLines = routePresentation.road
     directionLines.forEach((lineString) => {
@@ -731,9 +744,11 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
     coordinateKeyRef.current = coordinateKey
     routeLineStringsRef.current = routeLineStrings
     routeLineKindRef.current = routeLineKind
+    activeRouteLineStringsRef.current = activeRouteLineStrings
+    activeRouteLineKindRef.current = activeRouteLineKind
     originRouteLineStringRef.current = originRouteLineString
     userLocationRef.current = userLocation ?? null
-  }, [coordinateKey, originRouteLineString, routeLineKind, routeLineStrings, userLocation, validItems])
+  }, [activeRouteLineKind, activeRouteLineStrings, coordinateKey, originRouteLineString, routeLineKind, routeLineStrings, userLocation, validItems])
 
   useEffect(() => {
     onBaseLoadingChangeRef.current?.(showBaseLoading)
@@ -935,6 +950,7 @@ export const DayMap = forwardRef<DayMapHandle, DayMapProps>(function DayMap({
           : `relative ${heightClassName} overflow-hidden rounded-2xl border border-white/80 bg-slate-100 shadow-[0_8px_22px_rgba(47,65,88,0.08)] transition-[height,min-height] duration-300`
       }
       data-route-source={routeLineStrings?.some((lineString) => lineString.length >= 2) ? routeLineKind : 'sequence'}
+      data-active-route-kind={activeRouteLineStrings?.some((lineString) => lineString.length >= 2) ? activeRouteLineKind : 'none'}
       data-origin-route-source={originRouteLineString && originRouteLineString.length >= 2 ? 'road' : 'connector'}
     >
       <div className="h-full w-full" ref={containerRef} />

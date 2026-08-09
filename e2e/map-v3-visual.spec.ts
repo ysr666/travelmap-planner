@@ -39,6 +39,8 @@ test('UI V3 地图保持全屏画布和单一地点 Sheet', async ({ page }) => 
   await expect(page.getByTestId('map-marker-card-navigate')).toHaveAttribute('href', /google\.com\/maps/)
   await expect(page.getByTestId('map-marker-card-open')).toBeVisible()
   await expect(page.locator('[data-route-source="sequence"]')).toBeVisible()
+  await expect(page.locator('[data-active-route-kind="estimate"]')).toBeVisible()
+  await expect(page.getByTestId('map-route-status-label')).toHaveText('路线为估算')
   await expect(page.getByTestId('day-map-route-direction')).toHaveCount(0)
   await expect(page.getByTestId('view-switch-map')).toHaveCount(0)
   await expect(page.getByTestId('view-switch-schedule')).toBeVisible()
@@ -71,7 +73,10 @@ async function expectMapLayout(page: Page) {
     const sheet = document.querySelector<HTMLElement>('.day-map-place-sheet-panel')
     const scheduleControl = document.querySelector<HTMLElement>('[data-testid="view-switch-schedule"]')
     const primaryAction = document.querySelector<HTMLElement>('[data-testid="map-marker-card-navigate"]')
-    if (!map || !canvas || !sheet || !scheduleControl || !primaryAction) return null
+    const routeStatus = document.querySelector<HTMLElement>('[data-testid="map-route-status"]')
+    const daySelector = document.querySelector<HTMLElement>('[data-testid="day-selector"]')
+    const locationControl = document.querySelector<HTMLElement>('[data-testid="map-user-location-button"]')
+    if (!map || !canvas || !sheet || !scheduleControl || !primaryAction || !routeStatus || !daySelector || !locationControl) return null
 
     const rect = (element: HTMLElement) => {
       const bounds = element.getBoundingClientRect()
@@ -86,8 +91,11 @@ async function expectMapLayout(page: Page) {
     }
     return {
       canvas: rect(canvas),
+      daySelector: rect(daySelector),
+      locationControl: rect(locationControl),
       map: rect(map),
       primaryAction: rect(primaryAction),
+      routeStatus: rect(routeStatus),
       scheduleControl: rect(scheduleControl),
       sheet: rect(sheet),
       viewportHeight: innerHeight,
@@ -102,9 +110,13 @@ async function expectMapLayout(page: Page) {
   expect(layout.map.left).toBeGreaterThanOrEqual(-1)
   expect(layout.map.right).toBeLessThanOrEqual(layout.viewportWidth + 1)
   expect(layout.primaryAction.height).toBeGreaterThanOrEqual(48)
+  expect(layout.routeStatus.height).toBeGreaterThanOrEqual(44)
   expect(layout.scheduleControl.width).toBeGreaterThanOrEqual(44)
   expect(layout.scheduleControl.height).toBeGreaterThanOrEqual(44)
   expect(layout.sheet.left).toBeGreaterThanOrEqual(-1)
   expect(layout.sheet.right).toBeLessThanOrEqual(layout.viewportWidth + 1)
   expect(layout.sheet.bottom).toBeLessThanOrEqual(layout.viewportHeight + 1)
+  expect(layout.routeStatus.top).toBeGreaterThanOrEqual(layout.daySelector.bottom - 1)
+  expect(layout.routeStatus.right).toBeLessThanOrEqual(layout.locationControl.left - 4)
+  expect(layout.routeStatus.bottom).toBeLessThanOrEqual(layout.sheet.top - 8)
 }

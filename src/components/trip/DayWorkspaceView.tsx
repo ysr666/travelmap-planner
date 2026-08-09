@@ -103,6 +103,11 @@ export function DayWorkspace({
                 items={items}
                 onBackToSchedule={() => onSwitchView('schedule')}
                 onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'map' })}
+                onOpenTickets={(item) => navigateTo('tickets', {
+                  itemId: item.id,
+                  ...(item.ticketIds.length === 1 ? { ticketId: item.ticketIds[0] } : {}),
+                  tripId: trip.id,
+                })}
                 prewarmEnabled={false}
                 resizeSignal={mapResizeToken}
                 showDefaultMarkerCard={false}

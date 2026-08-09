@@ -714,13 +714,14 @@
     "provider": "fixture_routes",
     "status": "road",
     "dayId": "day_uk_07",
+    "userLocation": [-3.2031, 55.9476],
+    "originLineString": [[-3.2031, 55.9476], [-3.2018, 55.9479], [-3.2007, 55.9482], [-3.1999135, 55.9485947]],
     "lineStrings": [
-      [[-3.2031, 55.9476], [-3.2018, 55.9479], [-3.2007, 55.9482], [-3.1999135, 55.9485947]],
       [[-3.1999135, 55.9485947], [-3.1979, 55.9490], [-3.1935, 55.9495], [-3.188985, 55.950108]],
       [[-3.188985, 55.950108], [-3.1842, 55.9505], [-3.1781, 55.9515], [-3.172273, 55.952684]]
     ],
+    "originSegment": { "fromItemId": "current-location", "toItemId": "item_edinburgh_castle", "durationSeconds": 960, "distanceMeters": 1200 },
     "segments": [
-      { "fromItemId": "current-location", "toItemId": "item_edinburgh_castle", "durationSeconds": 960, "distanceMeters": 1200 },
       { "fromItemId": "item_edinburgh_castle", "toItemId": "item_royal_mile", "durationSeconds": 720, "distanceMeters": 850 },
       { "fromItemId": "item_royal_mile", "toItemId": "item_holyroodhouse", "durationSeconds": 1080, "distanceMeters": 1400 }
     ]

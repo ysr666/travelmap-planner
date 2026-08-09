@@ -153,11 +153,20 @@ export function buildTravelObjectCollection(input: BuildTravelObjectCollectionIn
     input.now,
     selectPrimaryDocumentLink(documentLinksByTicketId.get(ticket.id) ?? []),
   ))
-  const all = [...itemObjects, ...transportObjects, ...lodgingObjects, ...insuranceObjects, ...ticketObjects]
+  const linkedObjects = [...transportObjects, ...lodgingObjects, ...insuranceObjects]
+  const presentationTicketObjects = ticketObjects.map((ticketObject) => {
+    const linkedObject = linkedObjects.find((object) => object.ticketIds.includes(ticketObject.subjectId))
+    return linkedObject ? {
+      ...ticketObject,
+      brand: ticketObject.brand ?? linkedObject.brand,
+      media: ticketObject.media ?? linkedObject.media,
+    } : ticketObject
+  })
+  const all = [...itemObjects, ...transportObjects, ...lodgingObjects, ...insuranceObjects, ...presentationTicketObjects]
     .sort((left, right) => left.sortKey.localeCompare(right.sortKey) || left.id.localeCompare(right.id))
   const byId = new Map(all.map((object) => [object.id, object]))
   const byItemId = new Map(itemObjects.map((object) => [object.subjectId, object]))
-  const byTicketId = new Map(ticketObjects.map((object) => [object.subjectId, object]))
+  const byTicketId = new Map(presentationTicketObjects.map((object) => [object.subjectId, object]))
   const preparation = [...transportObjects.filter((object) => object.brand?.namespace === 'airline'), ...lodgingObjects, ...insuranceObjects]
     .sort((left, right) => preparationRank(left) - preparationRank(right) || left.sortKey.localeCompare(right.sortKey))
 
@@ -185,6 +194,29 @@ export function toProviderSafeTravelObjectSummary(object: TravelObjectViewModelV
 
 export function getTravelObjectsForDay(collection: TravelObjectCollectionV1, date: string) {
   return collection.all.filter((object) => object.dateLabel === date && (object.kind === 'place' || object.kind === 'transport'))
+}
+
+export function getTravelObjectForItineraryItem(
+  collection: TravelObjectCollectionV1,
+  item: Pick<ItineraryItem, 'id' | 'ticketIds'>,
+): TravelObjectViewModelV1 | undefined {
+  const primary = collection.byItemId.get(item.id)
+  if (!primary || primary.media) return primary
+  const ticketIds = new Set(item.ticketIds)
+  if (ticketIds.size === 0) return primary
+  const linked = collection.all.find((object) => (
+    object.id !== primary.id
+    && (object.kind === 'transport' || object.kind === 'lodging')
+    && object.ticketIds.some((ticketId) => ticketIds.has(ticketId))
+    && Boolean(object.media || object.brand || object.status)
+  ))
+  if (!linked) return primary
+  return {
+    ...primary,
+    brand: primary.brand ?? linked.brand,
+    media: primary.media ?? linked.media,
+    status: primary.status ?? linked.status,
+  }
 }
 
 function buildItemObject({

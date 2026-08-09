@@ -9,7 +9,10 @@ export async function clearTravelDatabase(page: Page, appOrigin = '') {
     window.localStorage.setItem('tripmap:dev:route-proxy-provider', '')
     window.localStorage.setItem('tripmap:dev:route-proxy-url', '')
     window.localStorage.removeItem('tripmap:provider-proxy:session-id')
+    window.localStorage.removeItem('tripmap:media:travel-object-v1')
+    window.localStorage.removeItem('tripmap:realtime:travel-object-v1')
     window.sessionStorage.removeItem('tripmap:cloud-snapshot-check:dismissed')
+    window.sessionStorage.removeItem('tripmap:e2e:travel-object-context-v1')
     function deleteDatabase(name: string) {
       return new Promise<void>((resolve, reject) => {
         const request = indexedDB.deleteDatabase(name)
@@ -122,6 +125,8 @@ export async function seedTravelRecords(page: Page, seed: {
   itineraryItems?: unknown[]
   ticketBlobs?: unknown[]
   ticketMetas?: unknown[]
+  transportBookings?: unknown[]
+  transportSegments?: unknown[]
   trips: unknown[]
 }) {
   await page.evaluate(async (nextSeed) => {
@@ -133,7 +138,7 @@ export async function seedTravelRecords(page: Page, seed: {
 
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(
-        ['trips', 'days', 'itineraryItems', 'ticketMetas', 'ticketBlobs'],
+        ['trips', 'days', 'itineraryItems', 'ticketMetas', 'ticketBlobs', 'transportBookings', 'transportSegments'],
         'readwrite',
       )
       transaction.oncomplete = () => {
@@ -148,8 +153,29 @@ export async function seedTravelRecords(page: Page, seed: {
       for (const item of nextSeed.itineraryItems ?? []) transaction.objectStore('itineraryItems').put(item)
       for (const ticket of nextSeed.ticketMetas ?? []) transaction.objectStore('ticketMetas').put(ticket)
       for (const blob of nextSeed.ticketBlobs ?? []) transaction.objectStore('ticketBlobs').put(blob)
+      for (const booking of nextSeed.transportBookings ?? []) transaction.objectStore('transportBookings').put(booking)
+      for (const segment of nextSeed.transportSegments ?? []) transaction.objectStore('transportSegments').put(segment)
     })
   }, seed)
+}
+
+export async function seedTravelObjectRuntimeContext(page: Page, context: {
+  insurancePolicies?: unknown[]
+  lodgingReservations?: unknown[]
+  mediaAssets?: unknown[]
+  realtimeFacts?: unknown[]
+  tripId: string
+}) {
+  await page.evaluate((value) => {
+    window.sessionStorage.setItem('tripmap:e2e:travel-object-context-v1', JSON.stringify({
+      insurancePolicies: value.insurancePolicies ?? [],
+      lodgingReservations: value.lodgingReservations ?? [],
+      mediaAssets: value.mediaAssets ?? [],
+      realtimeFacts: value.realtimeFacts ?? [],
+      schemaVersion: 1,
+      tripId: value.tripId,
+    }))
+  }, context)
 }
 
 export async function seedRouteCacheRecords(page: Page, entries: unknown[]) {

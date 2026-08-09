@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,6 +27,8 @@ import {
 } from '../../db'
 import { TicketPreview } from '../TicketPreview'
 import { TicketThumbnail } from '../tickets/TicketThumbnail'
+import { TravelObjectStatusBadge } from '../travel/TravelObjectPresentation'
+import { TravelObjectMedia } from '../media/TravelObjectMedia'
 import { ItemContentEnrichmentCard } from '../ai/TripContentEnrichmentPanel'
 import { Button } from '../ui/Button'
 import { Collapsible } from '../ui/Collapsible'
@@ -44,6 +46,8 @@ import {
   formatWeather,
 } from '../../lib/ai/globalAiCommandRouter'
 import { buildItemFieldContext } from '../../lib/itemFieldContext'
+import { getTravelObjectForItineraryItem } from '../../lib/travelObjects'
+import { useTravelObjectPresentation } from '../../hooks/useTravelObjectPresentation'
 import {
   ProviderProxyClientError,
   fetchProviderProxyPlaceLookup,
@@ -116,6 +120,22 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
     const timeout = window.setTimeout(() => void loadRelations(), 0)
     return () => window.clearTimeout(timeout)
   }, [loadRelations])
+
+  const presentationDays = useMemo(() => [day], [day])
+  const presentationItems = useMemo(() => (
+    dayItems.some((candidate) => candidate.id === item.id)
+      ? dayItems
+      : [item, ...dayItems]
+  ), [dayItems, item])
+  const mediaItemIds = useMemo(() => [item.id], [item.id])
+  const { collection: travelObjects } = useTravelObjectPresentation({
+    days: presentationDays,
+    items: presentationItems,
+    mediaItemIds,
+    tickets,
+    trip,
+  })
+  const travelObject = getTravelObjectForItineraryItem(travelObjects, item)
 
   const fieldContext = buildItemFieldContext({ day, dayItems, item, tickets })
   const previousItem = fieldContext.previousItem
@@ -247,6 +267,16 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
   return (
     <>
       <div className="item-detail-content">
+        {travelObject?.media ? (
+          <TravelObjectMedia
+            alt={travelObject.title}
+            asset={travelObject.media}
+            className="item-detail-media"
+            eager
+            sizes="(max-width: 767px) 100vw, 768px"
+            variant="hero"
+          />
+        ) : null}
         <section className="item-detail-intro" data-testid="item-detail-core">
           <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-on-surface-variant">
             {transportDescription ? <Navigation className="size-4 shrink-0" /> : <Clock3 className="size-4 shrink-0" />}
@@ -254,7 +284,10 @@ export function ItemDetailContent({ trip, day, item, onItemDeleted, onItemUpdate
               {transportDescription ? `${transportDescription} · 出发 ${describeItemTime(item)}` : describeItemTime(item)}
             </span>
           </p>
-          <h1 className="mt-3 break-words text-[2rem] font-bold leading-[1.18] text-on-surface [overflow-wrap:anywhere]">{item.title}</h1>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="min-w-0 flex-1 break-words text-[2rem] font-bold leading-[1.18] text-on-surface [overflow-wrap:anywhere]">{item.title}</h1>
+            <TravelObjectStatusBadge status={travelObject?.status} />
+          </div>
           <p className="mt-3 min-w-0 break-words text-base leading-6 text-on-surface-variant [overflow-wrap:anywhere]">
             {item.address || item.locationName || '地点待补充'}
           </p>

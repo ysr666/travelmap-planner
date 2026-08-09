@@ -16,6 +16,7 @@ import {
 } from './contracts'
 import {
   buildTravelObjectCollection,
+  getTravelObjectForItineraryItem,
   getTravelObjectsForDay,
   toProviderSafeTravelObjectSummary,
 } from './viewModel'
@@ -89,6 +90,14 @@ describe('travel object view model', () => {
       media: { id: 'media_british_museum_thumb_v1' },
       status: { label: '已就绪' },
       timeLabel: '09:00',
+    })
+    expect(collection.byTicketId.get('ticket_ca849')).toMatchObject({
+      brand: { canonicalCode: 'CA', namespace: 'airline' },
+    })
+    const railItem = records.itineraryItems.find((item) => item.id === 'item_lner_to_edinburgh')!
+    expect(getTravelObjectForItineraryItem(collection, railItem)).toMatchObject({
+      brand: { canonicalCode: 'LNER', namespace: 'rail' },
+      media: { id: 'media_lner_azuma_thumb_v1' },
     })
     expect(getTravelObjectsForDay(collection, '2026-08-13').map((object) => object.kind)).toContain('transport')
   })

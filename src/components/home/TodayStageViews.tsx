@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   ChevronRight,
+  CloudSun,
   FileText,
   Hotel,
   Import,
@@ -13,12 +14,21 @@ import {
   Ticket,
   WalletCards,
 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { getTicketDisplayTitle } from '../../lib/tickets'
 import { formatDateRange, formatShortDate } from '../../lib/dates'
 import { navigateTo } from '../../lib/routes'
 import { plainDateDaysBetween } from '../../lib/timeSemantics'
 import type { HomeTripOverview, HomeTripSnapshot } from '../../lib/homeOverview'
-import type { TicketMeta } from '../../types'
+import { selectRealtimeFact, type RealtimeFactV1 } from '../../lib/realtime'
+import type { TravelObjectViewModelV1 } from '../../lib/travelObjects'
+import { useTravelObjectPresentation } from '../../hooks/useTravelObjectPresentation'
+import type { ItineraryItem, TicketMeta } from '../../types'
+import { RealtimeFactStatus } from '../realtime/RealtimeFactStatus'
+import {
+  TravelObjectLeading,
+  TravelObjectStatusBadge,
+} from '../travel/TravelObjectPresentation'
 import { Button } from '../ui/Button'
 import { DisclosureRow } from '../ui/DisclosureRow'
 import { EmptyState } from '../ui/EmptyState'
@@ -38,17 +48,43 @@ export function UpcomingTodayView({ error, otherTrips, overview, snapshot }: Tod
   const daysUntilDeparture = plainDateDaysBetween(overview.today, overview.trip.startDate)
   const issues = getUpcomingIssues(snapshot)
   const readyTickets = getReadyTickets(snapshot.tickets)
+  const [now] = useState(Date.now)
+  const weatherAnchor = snapshot.items.find(hasCoordinates)
+  const { collection, facts } = useTravelObjectPresentation({
+    days: snapshot.days,
+    items: snapshot.items,
+    now,
+    tickets: snapshot.tickets,
+    trip: overview.trip,
+    weatherTarget: weatherAnchor ? {
+      date: overview.trip.startDate,
+      latitude: weatherAnchor.lat,
+      locationName: overview.trip.destination || weatherAnchor.locationName || weatherAnchor.title,
+      longitude: weatherAnchor.lng,
+      subject: { id: overview.trip.id, type: 'trip' },
+      timeZone: overview.trip.timeZone || 'UTC',
+    } : undefined,
+  })
+  const preparationObjects = collection.preparation.slice(0, 3)
+  const departureObject = preparationObjects.find((object) => object.kind === 'transport')
+  const destinationRoute = getDepartureRouteLabel(departureObject)
+  const weather = useMemo(() => selectRealtimeFact(facts, {
+    kind: 'weather_forecast',
+    now,
+    subjectId: overview.trip.id,
+    subjectType: 'trip',
+  }), [facts, now, overview.trip.id])
 
   return (
     <div className="today-stage-page" data-testid="today-upcoming">
       <header className="today-stage-hero">
-        <p className="today-stage-kicker">{formatShortDate(overview.trip.startDate)}出发</p>
-        <h2 className="today-stage-title">
+        <h2 className="today-stage-title">{destinationRoute || overview.trip.destination || overview.trip.title}</h2>
+        <p className="today-stage-destination">
+          {formatShortDate(overview.trip.startDate)}出发
           {typeof daysUntilDeparture === 'number' && daysUntilDeparture > 0
-            ? <>还有 <strong>{daysUntilDeparture}</strong> 天</>
-            : '准备出发'}
-        </h2>
-        <p className="today-stage-destination">{overview.trip.destination || overview.trip.title}</p>
+            ? <> · 还有 <strong>{daysUntilDeparture}</strong> 天</>
+            : ' · 准备出发'}
+        </p>
       </header>
 
       {issues.total > 0 ? (
@@ -89,7 +125,13 @@ export function UpcomingTodayView({ error, otherTrips, overview, snapshot }: Tod
         title="出发准备"
       >
         <div className="today-ready-list">
-          {readyTickets.length > 0 ? readyTickets.map((ticket) => (
+          {preparationObjects.length > 0 ? preparationObjects.map((object) => (
+            <PreparationObjectRow
+              key={object.id}
+              object={object}
+              onOpen={() => openPreparationObject(object, overview.trip.id)}
+            />
+          )) : readyTickets.length > 0 ? readyTickets.map((ticket) => (
             <RecordRow
               key={ticket.id}
               leading={<ReadyTicketIcon ticket={ticket} />}
@@ -113,6 +155,10 @@ export function UpcomingTodayView({ error, otherTrips, overview, snapshot }: Tod
         </div>
       </Section>
 
+      {weather.fact && (weather.fact.kind === 'weather_forecast') ? (
+        <UpcomingWeatherRow fact={weather.fact} now={now} />
+      ) : null}
+
       <Button
         className="w-full"
         icon={<CalendarDays className="size-4" />}
@@ -123,6 +169,46 @@ export function UpcomingTodayView({ error, otherTrips, overview, snapshot }: Tod
 
       <OtherTrips overviews={otherTrips} />
     </div>
+  )
+}
+
+function PreparationObjectRow({
+  object,
+  onOpen,
+}: {
+  object: TravelObjectViewModelV1
+  onOpen: () => void
+}) {
+  const detail = getPreparationDetail(object)
+  const privateDetail = object.fields.find((field) => field.visibility === 'private')
+  return (
+    <button className="today-preparation-object tm-focus" onClick={onOpen} type="button">
+      <TravelObjectLeading object={object} preferBrand={object.kind === 'transport' || object.kind === 'insurance'} />
+      <span className="today-preparation-object-content">
+        <span className="today-preparation-object-title">
+          <strong>{object.title}</strong>
+          <TravelObjectStatusBadge status={object.status} />
+        </span>
+        {object.subtitle ? <span>{object.subtitle}</span> : null}
+        {detail ? <small>{detail}</small> : null}
+        {privateDetail ? <small>{privateDetail.label} {privateDetail.value}</small> : null}
+      </span>
+      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-on-surface-variant" />
+    </button>
+  )
+}
+
+function UpcomingWeatherRow({ fact, now }: { fact: Extract<RealtimeFactV1, { kind: 'weather_forecast' }>; now: number }) {
+  const value = fact.value
+  return (
+    <section className="today-weather-row" data-testid="today-weather-fact">
+      <CloudSun aria-hidden="true" className="size-5 shrink-0 text-primary" />
+      <span className="min-w-0 flex-1">
+        <strong>{value.locationName} {Math.round(value.minCelsius)}–{Math.round(value.maxCelsius)}°C · {formatWeatherCondition(value.condition)}</strong>
+        {value.shortAdvice ? <small>{value.shortAdvice}</small> : null}
+      </span>
+      <RealtimeFactStatus className="shrink-0" fact={fact} now={now} />
+    </section>
   )
 }
 
@@ -293,6 +379,62 @@ function getReadyTicketSubtitle(ticket: TicketMeta) {
   if (ticket.ticketCategory === 'train_ticket') return '火车票'
   if (ticket.ticketCategory === 'admission_ticket') return '门票'
   return ticket.fileType?.toUpperCase() || '旅行资料'
+}
+
+function getDepartureRouteLabel(object: TravelObjectViewModelV1 | undefined) {
+  if (!object) return ''
+  const departure = object.fields.find((field) => field.id === 'departure')?.value
+  const arrival = object.fields.find((field) => field.id === 'arrival')?.value
+  if (!departure || !arrival) return object.subtitle ?? ''
+  return `${compactTransportPlace(departure)} → ${compactTransportPlace(arrival)}`
+}
+
+function compactTransportPlace(value: string) {
+  return value.match(/\(([A-Z0-9]{3,5})\)$/)?.[1] ?? value.replace(/\s*\([^)]*\)$/, '')
+}
+
+function getPreparationDetail(object: TravelObjectViewModelV1) {
+  if (object.kind === 'transport') {
+    return [object.dateLabel, object.timeLabel, object.locationLabel].filter(Boolean).join(' · ')
+  }
+  const preferredFieldIds = object.kind === 'lodging'
+    ? ['dates', 'nights', 'address']
+    : object.kind === 'insurance'
+      ? ['product', 'validity']
+      : ['date', 'entry-time', 'format']
+  return preferredFieldIds
+    .flatMap((id) => object.fields.find((field) => field.id === id)?.value ?? [])
+    .slice(0, 2)
+    .join(' · ')
+}
+
+function openPreparationObject(object: TravelObjectViewModelV1, tripId: string) {
+  const ticketId = object.ticketIds[0]
+  if (ticketId) {
+    navigateTo('documents', { tab: 'attachments', ticketId, tripId })
+    return
+  }
+  navigateTo('documents', {
+    ...(object.kind === 'transport' ? { bookingId: object.subjectId, tab: 'transport' } : { tab: 'attachments' }),
+    tripId,
+  })
+}
+
+function hasCoordinates(item: ItineraryItem): item is ItineraryItem & { lat: number; lng: number } {
+  return typeof item.lat === 'number' && Number.isFinite(item.lat)
+    && typeof item.lng === 'number' && Number.isFinite(item.lng)
+}
+
+function formatWeatherCondition(condition: Extract<RealtimeFactV1, { kind: 'weather_forecast' }>['value']['condition']) {
+  if (condition === 'clear' || condition === 'mainly_clear') return '晴'
+  if (condition === 'partly_cloudy') return '多云转晴'
+  if (condition === 'overcast') return '阴'
+  if (condition === 'fog') return '有雾'
+  if (condition === 'drizzle') return '小雨'
+  if (condition === 'rain' || condition === 'showers') return '阵雨'
+  if (condition === 'snow') return '有雪'
+  if (condition === 'thunderstorm') return '雷雨'
+  return '天气待更新'
 }
 
 function openSmartRepair() {

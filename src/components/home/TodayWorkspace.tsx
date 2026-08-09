@@ -25,6 +25,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
+import { TravelObjectMedia } from '../media/TravelObjectMedia'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { formatDateRange, formatShortDate } from '../../lib/dates'
@@ -55,6 +56,11 @@ import {
 } from '../../lib/dayMapViewport'
 import { getTicketDisplayTitle } from '../../lib/tickets'
 import { useLiveClock } from '../../hooks/useLiveClock'
+import { useTravelObjectPresentation } from '../../hooks/useTravelObjectPresentation'
+import {
+  getTravelObjectForItineraryItem,
+  type TravelObjectViewModelV1,
+} from '../../lib/travelObjects'
 import type { ItineraryItem, TicketMeta, TransportMode } from '../../types'
 
 const E2E_MODE = import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
@@ -127,6 +133,18 @@ export function TodayWorkspace({
         trip: overview.trip,
       })
     : null
+  const mediaItemIds = useMemo(() => selectedItem ? [selectedItem.id] : [], [selectedItem])
+  const { collection: travelObjects } = useTravelObjectPresentation({
+    days: snapshot.days,
+    items: snapshot.items,
+    mediaItemIds,
+    now: liveNow,
+    tickets: snapshot.tickets,
+    trip: overview.trip,
+  })
+  const selectedTravelObject = selectedItem
+    ? getTravelObjectForItineraryItem(travelObjects, selectedItem)
+    : undefined
   const relatedItems = selectedItem
     ? items.filter((item) => item.id !== selectedItem.id)
     : items
@@ -456,82 +474,100 @@ export function TodayWorkspace({
 
           {selectedItem ? (
             <>
-              <div className="today-next-stop">
-                <div className="min-w-0 flex-1">
-                  <p className="today-overline">{overview.status === 'completed' ? '旅程回顾' : '下一站'}</p>
-                  <div className="mt-1 flex min-w-0 items-start gap-3">
-                    <span className="today-stop-number">{selectedItemIndex + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <h2>{selectedItem.title}</h2>
-                      <p>{selectedItem.locationName || selectedItem.address || overview.trip.destination}</p>
-                    </div>
-                  </div>
-                  {transportSummary ? (
-                    <p className="today-transport">
-                      <TransportModeIcon mode={selectedItem.previousTransportMode} />
-                      <span>{transportSummary}</span>
-                    </p>
-                  ) : null}
-                </div>
-                {departure ? (
-                  <div
-                    aria-label={departure.accessibleLabel}
-                    className="today-departure"
-                    data-testid="today-departure-countdown"
-                  >
-                    <span className="today-departure-label">
-                      <Clock3 className="size-4" />
-                      {departure.label}
-                    </span>
-                    <strong>{departure.value}</strong>
-                    <small>{departure.footer}</small>
-                  </div>
-                ) : null}
-              </div>
-
-              {selectedTicket && selectedTicketPresentation ? (
-                <button
-                  className="today-ticket-row tm-focus"
-                  onClick={() => navigateTo('tickets', {
+              {selectedTravelObject?.media && overview.status !== 'completed' ? (
+                <ActiveTodayHero
+                  departure={departure}
+                  item={selectedItem}
+                  object={selectedTravelObject}
+                  onOpenTicket={selectedTicket ? () => navigateTo('tickets', {
                     tripId: overview.trip.id,
                     ticketId: selectedTicket.id,
-                  })}
-                  type="button"
-                >
-                  <span className="today-ticket-icon"><Ticket /></span>
-                  <span className="min-w-0 flex-1">
-                    <strong>
-                      {getTicketDisplayTitle(selectedTicket)}
-                      {selectedTicketPresentation.detail ? <span> · {selectedTicketPresentation.detail}</span> : null}
-                    </strong>
-                    <small>{selectedTicketPresentation.status}</small>
-                  </span>
-                  <span className="today-ticket-action">
-                    <SquarePlus aria-hidden="true" className="size-4" />
-                    打开门票
-                  </span>
-                </button>
-              ) : null}
-
-              {overview.status === 'completed' ? (
-                <button
-                  className="today-navigation-action tm-focus"
-                  onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
-                  type="button"
-                >
-                  <CalendarDays className="size-5" />
-                  查看行程
-                </button>
+                  }) : undefined}
+                  selectedTicket={selectedTicket}
+                  selectedTicketPresentation={selectedTicketPresentation}
+                  stopNumber={selectedItemIndex + 1}
+                  transportSummary={transportSummary}
+                />
               ) : (
-                <a
-                  className="today-navigation-action tm-focus"
-                  href={buildGoogleMapsUrl(selectedItem)}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <Navigation className="size-5" />
-                  开始导航
-                </a>
+                <>
+                  <div className="today-next-stop">
+                    <div className="min-w-0 flex-1">
+                      <p className="today-overline">{overview.status === 'completed' ? '旅程回顾' : '下一站'}</p>
+                      <div className="mt-1 flex min-w-0 items-start gap-3">
+                        <span className="today-stop-number">{selectedItemIndex + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <h2>{selectedItem.title}</h2>
+                          <p>{selectedItem.locationName || selectedItem.address || overview.trip.destination}</p>
+                        </div>
+                      </div>
+                      {transportSummary ? (
+                        <p className="today-transport">
+                          <TransportModeIcon mode={selectedItem.previousTransportMode} />
+                          <span>{transportSummary}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                    {departure ? (
+                      <div
+                        aria-label={departure.accessibleLabel}
+                        className="today-departure"
+                        data-testid="today-departure-countdown"
+                      >
+                        <span className="today-departure-label">
+                          <Clock3 className="size-4" />
+                          {departure.label}
+                        </span>
+                        <strong>{departure.value}</strong>
+                        <small>{departure.footer}</small>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {selectedTicket && selectedTicketPresentation ? (
+                    <button
+                      className="today-ticket-row tm-focus"
+                      onClick={() => navigateTo('tickets', {
+                        tripId: overview.trip.id,
+                        ticketId: selectedTicket.id,
+                      })}
+                      type="button"
+                    >
+                      <span className="today-ticket-icon"><Ticket /></span>
+                      <span className="min-w-0 flex-1">
+                        <strong>
+                          {getTicketDisplayTitle(selectedTicket)}
+                          {selectedTicketPresentation.detail ? <span> · {selectedTicketPresentation.detail}</span> : null}
+                        </strong>
+                        <small>{selectedTicketPresentation.status}</small>
+                      </span>
+                      <span className="today-ticket-action">
+                        <SquarePlus aria-hidden="true" className="size-4" />
+                        打开门票
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {overview.status === 'completed' ? (
+                    <button
+                      className="today-navigation-action tm-focus"
+                      onClick={() => navigateTo('trip', { tripId: overview.trip.id })}
+                      type="button"
+                    >
+                      <CalendarDays className="size-5" />
+                      查看行程
+                    </button>
+                  ) : (
+                    <a
+                      className="today-navigation-action tm-focus"
+                      href={buildGoogleMapsUrl(selectedItem)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <Navigation className="size-5" />
+                      开始导航
+                    </a>
+                  )}
+                </>
               )}
 
               {relatedItems.length > 0 ? (
@@ -608,6 +644,82 @@ export function TodayWorkspace({
         </div>
       </section>
     </div>
+  )
+}
+
+function ActiveTodayHero({
+  departure,
+  item,
+  object,
+  onOpenTicket,
+  selectedTicket,
+  selectedTicketPresentation,
+  stopNumber,
+  transportSummary,
+}: {
+  departure: ReturnType<typeof getHomeDeparturePresentation>
+  item: ItineraryItem
+  object: TravelObjectViewModelV1
+  onOpenTicket?: () => void
+  selectedTicket: TicketMeta | null
+  selectedTicketPresentation: ReturnType<typeof getTicketPresentation> | null
+  stopNumber: number
+  transportSummary: string | null
+}) {
+  return (
+    <section className="today-active-hero" data-testid="today-active-hero">
+      <div className="today-active-hero-copy">
+        <p className="today-active-hero-overline">第 {stopNumber} 站 · 下一站</p>
+        <h2>{item.title}</h2>
+        {departure ? (
+          <div
+            aria-label={departure.accessibleLabel}
+            className="today-active-departure"
+            data-testid="today-departure-countdown"
+          >
+            <Clock3 aria-hidden="true" className="size-4 shrink-0" />
+            <span>{departure.label}</span>
+            <strong>{departure.value}</strong>
+          </div>
+        ) : null}
+        {transportSummary ? (
+          <p className="today-active-transport">
+            <TransportModeIcon mode={item.previousTransportMode} />
+            <span>{transportSummary}</span>
+          </p>
+        ) : null}
+        {selectedTicket && selectedTicketPresentation && onOpenTicket ? (
+          <button className="today-active-ticket tm-focus" onClick={onOpenTicket} type="button">
+            <Ticket aria-hidden="true" className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <strong>{getTicketDisplayTitle(selectedTicket)}</strong>
+              <small>
+                {selectedTicketPresentation.detail ? `${selectedTicketPresentation.detail} · ` : ''}
+                {selectedTicketPresentation.status}
+              </small>
+            </span>
+            <span>打开门票</span>
+          </button>
+        ) : null}
+      </div>
+      <TravelObjectMedia
+        alt={object.title}
+        asset={object.media}
+        className="today-active-hero-media"
+        eager
+        sizes="(max-width: 599px) 38vw, 320px"
+        variant="hero"
+      />
+      <a
+        className="today-active-navigation tm-focus"
+        href={buildGoogleMapsUrl(item)}
+        rel="noreferrer"
+        target="_blank"
+      >
+        <Navigation className="size-5" />
+        开始导航
+      </a>
+    </section>
   )
 }
 

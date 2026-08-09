@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { TicketPreview } from '../TicketPreview'
 import { DocumentPreviewRow } from './DocumentPreviewRow'
+import { TravelObjectMedia } from '../media/TravelObjectMedia'
 import { BottomSheet } from '../ui/BottomSheet'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -30,7 +31,9 @@ import {
 } from '../ui/FormField'
 import { InlineStatus } from '../ui/InlineStatus'
 import { SkeletonLine } from '../ui/SkeletonLine'
+import { TravelObjectLeading, TravelObjectStatusBadge } from '../travel/TravelObjectPresentation'
 import type { TicketLibraryController } from '../../hooks/useTicketLibraryController'
+import { useTravelObjectPresentation } from '../../hooks/useTravelObjectPresentation'
 import { navigateTo } from '../../lib/routes'
 import {
   describeTicketMetaLine,
@@ -53,6 +56,7 @@ import type {
   TicketMeta,
   TicketStorageMode,
 } from '../../types'
+import type { TravelObjectViewModelV1 } from '../../lib/travelObjects'
 
 const storageOptions: Array<{ value: TicketStorageMode; label: string; icon: ReactNode }> = [
   { value: 'copy', label: '文件', icon: <Upload className="size-4" /> },
@@ -80,6 +84,7 @@ export function TicketLibraryView({
     confirmCreateExpenseDraft,
     confirmDeleteTicket,
     deletingTicketId,
+    days,
     editingTicket,
     externalUrl,
     fileInputKey,
@@ -94,6 +99,7 @@ export function TicketLibraryView({
     isLoading,
     isSavingTicketEdit,
     isUploading,
+    items,
     itemById,
     loadError,
     note,
@@ -145,6 +151,12 @@ export function TicketLibraryView({
     trip,
     visibleTicketCategoryFilters,
   } = controller
+  const { collection: travelObjects } = useTravelObjectPresentation({
+    days,
+    items,
+    tickets,
+    trip,
+  })
 
   function renderDocumentPreviewRow(ticket: TicketMeta) {
     const displayTitle = getTicketDisplayTitle(ticket)
@@ -152,6 +164,7 @@ export function TicketLibraryView({
     const canClearCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus === 'cached' && Boolean(blobSyncState.cloudStoragePath)
     const canRestoreCache = blobSyncState?.uploadStatus === 'synced' && blobSyncState.cacheStatus !== 'cached' && Boolean(blobSyncState.cloudStoragePath)
     const canRetryUpload = blobSyncState?.uploadStatus === 'error'
+    const object = travelObjects.byTicketId.get(ticket.id)
     return (
       <DocumentPreviewRow
         action={(
@@ -170,11 +183,23 @@ export function TicketLibraryView({
           />
         )}
         blobSyncState={blobSyncState}
-        detail={ticket.note?.trim() || describeTicketBinding(ticket, itemById)}
+        detail={object?.documentLink?.label || describeTicketBinding(ticket, itemById)}
         key={ticket.id}
         meta={ticket.size > 0 ? formatFileSize(ticket.size) : undefined}
         onOpen={() => openTicketPreview(ticket)}
-        subtitle={describeCompactTicketMeta(ticket)}
+        preview={object?.media ? (
+          <TravelObjectMedia
+            alt={object.title}
+            asset={object.media}
+            className="document-preview-thumbnail"
+            sizes="96px"
+            variant="document"
+          />
+        ) : object?.brand ? (
+          <TravelObjectLeading className="document-preview-thumbnail" object={object} preferBrand />
+        ) : undefined}
+        status={<TravelObjectStatusBadge status={object?.status} />}
+        subtitle={describeDocumentObject(object, ticket)}
         ticket={ticket}
         title={displayTitle}
       />
@@ -425,6 +450,13 @@ export function TicketLibraryView({
       />
     </div>
   )
+}
+
+function describeDocumentObject(object: TravelObjectViewModelV1 | undefined, ticket: TicketMeta) {
+  if (!object) return describeCompactTicketMeta(ticket)
+  return [object.subtitle, object.dateLabel, object.timeLabel]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ')
 }
 
 function TicketMetadataEditor({

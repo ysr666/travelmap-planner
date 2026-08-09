@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -22,6 +22,33 @@ const appCommitSha = (
   ?? process.env.VITE_APP_COMMIT_SHA
   ?? ''
 ).trim().slice(0, 8)
+
+const productFidelityFixtureFiles = [
+  'british-museum-thumb.webp',
+  'dishoom-thumb.webp',
+  'edinburgh-castle-hero.webp',
+  'edinburgh-castle-thumb.webp',
+  'hotel-room-thumb.webp',
+  'lner-azuma-thumb.webp',
+  'tower-bridge-thumb.webp',
+] as const
+
+function productFidelityFixtureAssets(): Plugin {
+  return {
+    apply: 'build',
+    generateBundle() {
+      if (process.env.VITE_E2E_AUTH_BYPASS !== '1') return
+      for (const fileName of productFidelityFixtureFiles) {
+        this.emitFile({
+          fileName: `fixtures/product-fidelity/${fileName}`,
+          source: readFileSync(new URL(`./e2e/assets/product-fidelity/${fileName}`, import.meta.url)),
+          type: 'asset',
+        })
+      }
+    },
+    name: 'tripmap-product-fidelity-fixtures',
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -64,6 +91,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    productFidelityFixtureAssets(),
     VitePWA({
       registerType: 'prompt',
       injectRegister: null,

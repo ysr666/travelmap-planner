@@ -2951,3 +2951,33 @@ P5 validation:
 - `npm run typecheck`, `npm run lint`, and `npm run test:unit` passed: 212 files and 1720 tests.
 - `npm run build` passed with the bundle budget at 469.1 KiB entry, 853.5 KiB initial JS, 245.8 KiB initial gzip, and 2370.1 KiB/114-entry precache.
 - `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+
+P6 plan:
+
+- Goal: recompose pre-departure Today, active Today, the day itinerary, Documents, and Item Detail around the shared travel-object, media, brand, realtime-fact, document-link, and map ViewModels so the selected four-screen target is reflected by real product data rather than page-local heuristics.
+- Scope: add a read-only presentation runtime that combines existing trips/days/items/tickets with transport bookings and segments, controlled media, optional lodging/insurance inputs, and bounded realtime facts; expose the same collection to all five surfaces; add a compact preparation composition, media-led active stop, media timeline rows, structured document metadata, and media/detail reuse; add deterministic product-fidelity E2E and captures at the canonical `390x844` state.
+- Runtime data boundary: normal product media can come only from private ticket previews, validated cached media, or a photo reference returned for an already-confirmed Places identity through the existing Provider Proxy. E2E-only lodging, insurance, media, and realtime inputs use one strict session fixture envelope gated by the existing E2E build flag; production bundles do not import fixture JSON or its assets.
+- Interaction contract: each first viewport retains one primary action; AI, Search, More, filters, repair details, and technical tools stay on demand; missing rich data collapses naturally to the existing object fields without placeholder copy or fabricated images/facts.
+- No-go: no IndexedDB/Supabase schema, ticket Blob format, transport/cloud semantics, Provider request/response, media allowlist, realtime TTL, Action Gateway confirmation, route cache, navigation route, or write behavior change; no arbitrary URL, unverified logo, source-less current fact, page-local raw Provider parsing, background location lookup for an unconfirmed place, or effect-image data embedded in production components.
+- Likely files: `src/lib/travelObjects/*`, `src/lib/media/*`, one presentation hook, shared travel-object presentation components, `HomePage`/Today views, `DayViewPage`/timeline, ticket library rows, Item Detail, focused tests, `e2e/helpers.ts`, and a dedicated product-fidelity composition spec.
+- Validation: runtime schema/privacy/cache tests; component tests for sparse/rich/long states and action priority; canonical four-screen E2E at `390x844`; required viewport no-overflow checks; no unexpected Provider calls with complete fixture data; visual comparison against the selected target; typecheck, lint, full unit suite, production build, fidelity asset integrity, and `git diff --check`.
+- Risk: medium-high because five routes must consume one display model without widening sensitive fields, creating fetch loops, breaking ticket previews, or regressing fixed mobile surfaces.
+- Stop conditions: stop and repair if fixture-only records enter production paths, private fields cross Provider-safe summaries, an unknown media/fact passes validation, page load triggers lookup for an unconfirmed place, a ticket/media action loses its exact object scope, a sparse page invents density, or any required viewport overflows or shows more than one dominant action.
+
+P6 result:
+
+- Added one read-only presentation runtime that combines existing trip records, transport bookings/segments, private ticket-image previews, validated media cache, sourced realtime facts, and a strict E2E-only supplement envelope. The envelope rejects unknown fields, cross-trip data, oversize input, invalid media/facts, and sensitive extras.
+- Added a bounded media cache and a controlled Google Place Details photo adapter. Automatic media lookup is attempted only for an item that already has a confirmed `placeId`; missing or failed media stays absent without inventing a replacement or exposing Provider diagnostics.
+- Rebuilt pre-departure Today around structured route, flight, lodging, insurance, weather, and one primary itinerary action. Rebuilt active Today around a real-media next-stop Hero, countdown, transport, exact ticket action, one navigation action, and the existing real map.
+- Added media-led continuous day timeline rows, structured Documents metadata and link status, brand fallback for travel documents without a viewable page, and a real-media Item Detail Hero. Sparse records retain the prior compact text layouts.
+- Added E2E-only build emission for seven licensed WebP fixtures. A normal production build contains no fixture directory or fixture reference in the service worker; no fixture JSON or licensed test photo is imported by production components.
+- Added deterministic five-surface browser coverage at `390x844`. The complete fixture produced zero Provider requests, loaded all expected media, retained exact ticket scope, kept one primary action, and had no horizontal overflow.
+
+P6 validation:
+
+- New cache, Place-photo, strict runtime-envelope, and shared ViewModel tests passed: 4 files and 10 tests.
+- Focused page/component regressions passed: 4 files and 39 tests.
+- Product-fidelity composition E2E passed: 5/5 for pre-departure Today, active Today, itinerary, Documents, and Item Detail; all five captures were visually inspected.
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 215 files and 1726 tests.
+- Normal `npm run build` passed at 469.4 KiB entry, 853.8 KiB initial JS, 245.9 KiB initial gzip, and 2441.5 KiB/120-entry precache. The increased entry and precache remain within the existing budget.
+- `npm run check:fidelity-assets`, normal-build fixture exclusion checks, and `git diff --check` passed.

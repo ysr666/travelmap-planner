@@ -1,6 +1,7 @@
 export { db } from './database'
 export {
   ItineraryBaselineConflictError,
+  TicketBaselineConflictError,
   getDay,
   getItineraryItem,
   getTicketBlob,

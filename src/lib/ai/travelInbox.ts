@@ -184,6 +184,7 @@ export function buildTravelInboxTicketSummaries(tickets: TicketMeta[]): Existing
       ticketCategory: ticket.ticketCategory ?? 'other',
       ticketId: ticket.id,
       title: ticket.title?.trim() || ticket.note?.trim() || '未命名票据',
+      structuredFields: ticket.structuredFields,
     }))
 }
 
@@ -194,6 +195,14 @@ export function buildTravelInboxProviderTicketSummaries(
     itemId: summary.itemId,
     scope: summary.scope,
     summaryId: summary.summaryId,
+    ...(summary.structuredFields ? {
+      structuredFields: {
+        ...(summary.structuredFields.entryTime ? { entryTime: summary.structuredFields.entryTime } : {}),
+        schemaVersion: 1 as const,
+        ...(summary.structuredFields.serviceDate ? { serviceDate: summary.structuredFields.serviceDate } : {}),
+        ...(summary.structuredFields.status ? { status: summary.structuredFields.status } : {}),
+      },
+    } : {}),
     ticketCategory: summary.ticketCategory,
     title: summary.title,
   }))

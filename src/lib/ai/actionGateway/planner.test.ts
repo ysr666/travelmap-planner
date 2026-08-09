@@ -249,6 +249,12 @@ describe('AI Action Gateway planner', () => {
     expect(buildDeterministicAiActionPlan('找一下爱丁堡的门票')?.steps[0]).toMatchObject({
       actionId: 'ticket.open@1',
     })
+    expect(buildDeterministicAiActionPlan('把「爱丁堡城堡门票」绑定到「爱丁堡城堡」')?.steps[0]).toMatchObject({
+      actionId: 'ticket.bind@1',
+      args: { target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' },
+    })
+    expect(buildDeterministicAiActionPlan('不要把「爱丁堡城堡门票」绑定到「爱丁堡城堡」')).toBeNull()
+    expect(buildDeterministicAiActionPlan('能不能把「爱丁堡城堡门票」关联到「爱丁堡城堡」？')).toBeNull()
     expect(buildDeterministicAiActionPlan('补全第一站地点信息')?.steps[0]).toMatchObject({
       actionId: 'place.enrich@1',
       args: { target: 'first_item' },
@@ -306,6 +312,19 @@ describe('AI Action Gateway planner', () => {
     expect(validateAiActionPlanCommandBinding(
       '把缺失地点、路线和建议全部修复',
       partialRepair.plan,
+    )).toMatchObject({ ok: false })
+
+    const ticketBinding = buildProviderPlan('ticket.bind@1', {
+      target: '爱丁堡城堡',
+      ticket: '爱丁堡城堡门票',
+    })
+    expect(validateAiActionPlanCommandBinding(
+      '把「爱丁堡城堡门票」绑定到「爱丁堡城堡」',
+      ticketBinding,
+    )).toEqual({ ok: true })
+    expect(validateAiActionPlanCommandBinding(
+      '把「大英博物馆门票」绑定到「爱丁堡城堡」',
+      ticketBinding,
     )).toMatchObject({ ok: false })
   })
 

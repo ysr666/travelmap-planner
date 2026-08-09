@@ -7,14 +7,20 @@ import {
   useState,
   type RefObject,
 } from 'react'
-import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Clock3, Crosshair, Locate, MapPin, Navigation, X } from 'lucide-react'
+import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Clock3, Crosshair, Info, Locate, MapPin, Navigation, RefreshCw, Route, Ticket, X } from 'lucide-react'
 import { DayMap, type DayMapHandle } from '../DayMap'
 import { EmptyState } from '../ui/EmptyState'
-import { buildGoogleMapsUrl, hasValidCoordinates } from '../../lib/mapLinks'
+import { hasValidCoordinates } from '../../lib/mapLinks'
 import { describeItemTime } from '../../lib/itinerary'
 import { formatDate } from '../../lib/dates'
 import { DEFAULT_DAY_MAP_PADDING, normalizeEdgeInsets, type ScreenRect } from '../../lib/dayMapViewport'
 import type { EdgeInsets } from '../../lib/mapEngine'
+import {
+  buildDayMapExperience,
+  type DayMapRouteInput,
+  type DayMapRoutePresentation,
+  type DayMapStopPresentation,
+} from '../../lib/dayMapExperience'
 import {
   ROUTING_CONFIG_CHANGED_EVENT,
   getRoutingConfig,
@@ -22,12 +28,13 @@ import {
   type LngLat,
   type RoutingConfig,
 } from '../../lib/routing'
+import { generateAndCacheDayRoutePreview } from '../../lib/routeGeneration'
 import { getPersistentRouteProvider } from '../../lib/routePreparation'
 import {
   ROUTE_CACHE_CHANGED_EVENT,
   buildCurrentRouteCacheIdentity,
+  listRouteCachesForDay,
   loadRouteCache,
-  pruneStaleRouteCachesForDay,
   type RouteCacheEntry,
 } from '../../lib/routeCache'
 import { buildDayPrewarmQueue, shouldSkipMapPrewarm } from '../../lib/mapPrewarm'
@@ -51,6 +58,7 @@ type DayMapViewProps = {
   resizeSignal?: number
   onBackToSchedule?: () => void
   onOpenItem: (item: ItineraryItem) => void
+  onOpenTickets?: (item: ItineraryItem) => void
 }
 
 const FAR_USER_LOCATION_MESSAGE = '当前位置距离行程较远，已优先回到当天行程范围'
@@ -58,7 +66,7 @@ const LOCATION_UNAVAILABLE_MESSAGE = '暂时无法取得位置，请稍后重试
 const LOCATION_PERMISSION_MESSAGE = '定位失败，请在地址栏允许位置后重试'
 const MAP_OVERLAY_GAP = 12
 const MARKER_EDGE_RESERVE = 112
-const MARKER_CARD_FALLBACK_HEIGHT = 196
+const MARKER_CARD_FALLBACK_HEIGHT = 236
 
 export function DayMapView({
   trip,
@@ -75,6 +83,7 @@ export function DayMapView({
   resizeSignal,
   onBackToSchedule,
   onOpenItem,
+  onOpenTickets,
 }: DayMapViewProps) {
   const [selectedItemSelection, setSelectedItemSelection] = useState<{
     dayId: string
@@ -83,6 +92,8 @@ export function DayMapView({
   const [mapError, setMapError] = useState<string | null>(null)
   const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() => getRoutingConfig())
   const [routeResult, setRouteResult] = useState<DayRouteResult | null>(null)
+  const [routeCacheEntry, setRouteCacheEntry] = useState<RouteCacheEntry | null>(null)
+  const [routeRefreshStatus, setRouteRefreshStatus] = useState<'error' | 'idle' | 'loading'>('idle')
   const [mapBaseLoading, setMapBaseLoading] = useState(() => items.some(hasValidCoordinates))
   const [markerCardSelection, setMarkerCardSelection] = useState<{
     dayId: string
@@ -101,6 +112,7 @@ export function DayMapView({
   const markerCardRef = useRef<HTMLDivElement | null>(null)
   const floatingControlsRef = useRef<HTMLDivElement | null>(null)
   const mapControlNoticeRef = useRef<HTMLDivElement | null>(null)
+  const routeStatusRef = useRef<HTMLButtonElement | HTMLDivElement | null>(null)
   const pendingUserLocationRecenterRef = useRef(false)
   const [mapReadyToken, setMapReadyToken] = useState(0)
   const [mapViewportPadding, setMapViewportPadding] = useState<EdgeInsets>(() =>
@@ -110,48 +122,54 @@ export function DayMapView({
     getFallbackMapPadding({ includeMarkerCard: false, showFloatingHeader }),
   )
 
-  const mappedItems = useMemo(() => items.filter(hasValidCoordinates), [items])
   const selectedItemId = selectedItemSelection?.dayId === day.id ? selectedItemSelection.itemId : null
+  const routeInput = useMemo(
+    () => buildDayMapRouteInput(routeResult, routeCacheEntry),
+    [routeCacheEntry, routeResult],
+  )
+  const mapExperience = useMemo(() => buildDayMapExperience({
+    items,
+    providerConfigured: Boolean(getPersistentRouteProvider(routingConfig)),
+    route: routeInput,
+    selectedItemId,
+  }), [items, routeInput, routingConfig, selectedItemId])
+  const mappedItems = useMemo(() => mapExperience.stops.map((stop) => stop.item), [mapExperience.stops])
   const selectedItemSource = selectedItemId ? 'marker' : null
   const markerCardItemId = markerCardSelection?.dayId === day.id ? markerCardSelection.itemId : null
   const mapControlNoticeMessage = mapControlNotice?.dayId === day.id ? mapControlNotice.message : null
-  const markerCardItem = useMemo(() => {
+  const markerCardStop = useMemo(() => {
     if (!markerCardItemId) {
       if (!showDefaultMarkerCard) {
         return null
       }
-      return markerCardDismissedDayId === day.id ? null : (mappedItems[0] ?? null)
+      return markerCardDismissedDayId === day.id ? null : (mapExperience.stops[0] ?? null)
     }
-    return mappedItems.find((item) => item.id === markerCardItemId) ?? null
-  }, [day.id, mappedItems, markerCardDismissedDayId, markerCardItemId, showDefaultMarkerCard])
-  const markerCardItemIndex = useMemo(() => {
-    if (!markerCardItem) {
-      return -1
-    }
-    return mappedItems.findIndex((item) => item.id === markerCardItem.id)
-  }, [mappedItems, markerCardItem])
-  const previousMarkerCardItem = markerCardItemIndex > 0 ? mappedItems[markerCardItemIndex - 1] : null
-  const nextMarkerCardItem = markerCardItemIndex >= 0 && markerCardItemIndex < mappedItems.length - 1
-    ? mappedItems[markerCardItemIndex + 1]
+    return mapExperience.stops.find((stop) => stop.item.id === markerCardItemId) ?? null
+  }, [day.id, mapExperience.stops, markerCardDismissedDayId, markerCardItemId, showDefaultMarkerCard])
+  const markerCardItemIndex = markerCardStop ? markerCardStop.sequence - 1 : -1
+  const previousMarkerCardStop = markerCardItemIndex > 0 ? mapExperience.stops[markerCardItemIndex - 1] : null
+  const nextMarkerCardStop = markerCardItemIndex >= 0 && markerCardItemIndex < mapExperience.stops.length - 1
+    ? mapExperience.stops[markerCardItemIndex + 1]
     : null
   const markerCardVisible = Boolean(
     isVisible
-    && markerCardItem
+    && markerCardStop
     && !mapBaseLoading
     && !mapError,
   )
-  const persistentRouteProvider = getPersistentRouteProvider(routingConfig) ?? 'openrouteservice'
-  const routeCacheIdentity = useMemo(
-    () => buildCurrentRouteCacheIdentity({
-      tripId: trip.id,
-      dayId: day.id,
-      items,
-      provider: persistentRouteProvider,
-    }),
-    [day.id, items, persistentRouteProvider, trip.id],
+  const configuredRouteProvider = getPersistentRouteProvider(routingConfig)
+  const routeCacheIdentities = useMemo(
+    () => (configuredRouteProvider ? [configuredRouteProvider] : ['openrouteservice', 'google'] as const)
+      .map((provider) => buildCurrentRouteCacheIdentity({
+        tripId: trip.id,
+        dayId: day.id,
+        items,
+        provider,
+      })),
+    [configuredRouteProvider, day.id, items, trip.id],
   )
-  const routeIdentityKey = routeCacheIdentity.signature
-  const routeLineStrings = routeResult?.lineStrings
+  const routeIdentityKey = routeCacheIdentities.map((identity) => identity.signature).join('|')
+  const routeLineStrings = mapExperience.route.lineStrings
   const routeCacheRefreshKey = `${cacheRefreshToken}:${routingConfig.provider}:${routingConfig.configured}:${routingConfig.source}`
   const prewarmItemsByDayId = useMemo(
     () => ({
@@ -196,6 +214,7 @@ export function DayMapView({
       markerCardRect: includeMarkerCard
         ? toScreenRect(markerCardRef.current?.getBoundingClientRect() ?? null)
         : null,
+      routeStatusRect: toScreenRect(routeStatusRef.current?.getBoundingClientRect() ?? null),
       stageRect,
     })
   }, [showFloatingHeader])
@@ -219,6 +238,7 @@ export function DayMapView({
       setMarkerCardSelection(null)
       setMarkerCardDismissedDayId(null)
       setMapControlNotice(null)
+      setRouteRefreshStatus('idle')
     })
   }, [day.id])
 
@@ -238,20 +258,26 @@ export function DayMapView({
 
     async function refreshCachedRoute() {
       try {
-        await pruneStaleRouteCachesForDay(trip.id, day.id, routeIdentityKey)
-        const cached = await loadRouteCache(routeIdentityKey)
+        const validSignatures = new Set(routeCacheIdentities.map((identity) => identity.signature))
+        const entries = (await listRouteCachesForDay(trip.id, day.id))
+          .filter((entry) => validSignatures.has(entry.signature))
+          .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
+        const cached = entries[0] ? await loadRouteCache(entries[0].signature) : null
         if (cancelled) {
           return
         }
         if (cached) {
+          setRouteCacheEntry(cached)
           setRouteResult(buildRouteResultFromCache(cached))
           return
         }
+        setRouteCacheEntry(null)
         setRouteResult(null)
       } catch {
         if (cancelled) {
           return
         }
+        setRouteCacheEntry(null)
         setRouteResult(null)
       }
     }
@@ -261,7 +287,7 @@ export function DayMapView({
     return () => {
       cancelled = true
     }
-  }, [day.id, routeCacheRefreshKey, routeIdentityKey, trip.id])
+  }, [day.id, routeCacheIdentities, routeCacheRefreshKey, routeIdentityKey, trip.id])
 
   useEffect(() => {
     return () => {
@@ -408,6 +434,39 @@ export function DayMapView({
     )
   }
 
+  async function handleRefreshRoute() {
+    if (routeRefreshStatus === 'loading' || !mapExperience.route.canRefresh) return
+    const config = getRoutingConfig()
+    if (!getPersistentRouteProvider(config)) {
+      setRouteRefreshStatus('error')
+      setCurrentMapControlNotice('路线服务暂不可用。')
+      return
+    }
+
+    setRouteRefreshStatus('loading')
+    setCurrentMapControlNotice(null)
+    try {
+      const outcome = await generateAndCacheDayRoutePreview({
+        config,
+        day,
+        items,
+        tripId: trip.id,
+      })
+      if (!outcome.result || (outcome.result.status !== 'road' && outcome.result.status !== 'mixed')) {
+        setRouteRefreshStatus('error')
+        setCurrentMapControlNotice('道路路线暂不可用，已保留当前显示。')
+        return
+      }
+      setRouteCacheEntry(outcome.cacheEntry ?? null)
+      setRouteResult(outcome.result)
+      setRouteRefreshStatus('idle')
+      setCurrentMapControlNotice('路线已更新。')
+    } catch {
+      setRouteRefreshStatus('error')
+      setCurrentMapControlNotice('道路路线暂不可用，已保留当前显示。')
+    }
+  }
+
   const updateMapOverlayPadding = useCallback(() => {
     const nextBasePadding = getCurrentMapPadding(false)
     const nextFocusPadding = getCurrentMapPadding(markerCardVisible)
@@ -427,6 +486,7 @@ export function DayMapView({
       markerCardRef.current,
       mapControlNoticeRef.current,
       floatingControlsRef.current,
+      routeStatusRef.current,
     ].filter((element): element is HTMLDivElement => element !== null)
 
     observedElements.forEach((element) => resizeObserver.observe(element))
@@ -455,6 +515,9 @@ export function DayMapView({
         ) : (
           <DayMap
             ref={dayMapRef}
+            activeRouteLineKind={mapExperience.route.activeLineKind}
+            activeRouteLineStrings={mapExperience.route.activeLineStrings}
+            connectUserLocationToFirst
             heightClassName="h-full min-h-0"
             items={items}
             markerLabel="sequence"
@@ -463,7 +526,7 @@ export function DayMapView({
             onMapReady={() => setMapReadyToken((current) => current + 1)}
             onSelectItem={handleSelectItem}
             markerFocusPadding={markerFocusPadding}
-            routeLineKind={routeResult?.status === 'road' ? 'road' : 'sequence'}
+            routeLineKind={mapExperience.route.lineKind}
             routeLineStrings={routeLineStrings}
             resizeSignal={resizeSignal}
             selectedItemId={selectedItemId}
@@ -474,24 +537,37 @@ export function DayMapView({
           />
         )}
 
-        {markerCardVisible && markerCardItem ? (
+        {markerCardVisible && markerCardStop ? (
           <MarkerPreviewCard
             containerRef={markerCardRef}
+            dayLabel={formatDate(day.date)}
             itemIndex={markerCardItemIndex}
-            item={markerCardItem}
+            stop={markerCardStop}
             onClose={() => {
               setMarkerCardSelection(null)
               setSelectedItemSelection(null)
               setMarkerCardDismissedDayId(day.id)
             }}
             onOpenItem={onOpenItem}
-            onSelectItem={handleSelectItem}
-            nextItem={nextMarkerCardItem}
-            previousItem={previousMarkerCardItem}
-            totalItems={mappedItems.length}
+            onOpenTickets={onOpenTickets}
+            onSelectStop={(stop) => handleSelectItem(stop.item)}
+            nextStop={nextMarkerCardStop}
+            previousStop={previousMarkerCardStop}
+            route={mapExperience.route}
+            totalItems={mapExperience.stops.length}
           />
         ) : null}
       </div>
+
+      {isVisible && items.length > 0 && !mapBaseLoading && !mapError ? (
+        <MapRouteStatus
+          containerRef={routeStatusRef}
+          onRefresh={() => void handleRefreshRoute()}
+          refreshStatus={routeRefreshStatus}
+          route={mapExperience.route}
+          showFloatingHeader={showFloatingHeader}
+        />
+      ) : null}
 
       {isVisible && !minimalOverlay && items.length > 0 && !mapBaseLoading && !mapError ? (
         <MapFloatingControls
@@ -524,25 +600,35 @@ export function DayMapView({
 
 function MarkerPreviewCard({
   containerRef,
+  dayLabel,
   itemIndex,
-  item,
-  nextItem,
+  nextStop,
   onClose,
   onOpenItem,
-  onSelectItem,
-  previousItem,
+  onOpenTickets,
+  onSelectStop,
+  previousStop,
+  route,
+  stop,
   totalItems,
 }: {
   containerRef?: RefObject<HTMLDivElement | null>
+  dayLabel: string
   itemIndex: number
-  item: ItineraryItem
-  nextItem: ItineraryItem | null
+  nextStop: DayMapStopPresentation | null
   onClose: () => void
   onOpenItem: (item: ItineraryItem) => void
-  onSelectItem: (item: ItineraryItem) => void
-  previousItem: ItineraryItem | null
+  onOpenTickets?: (item: ItineraryItem) => void
+  onSelectStop: (stop: DayMapStopPresentation) => void
+  previousStop: DayMapStopPresentation | null
+  route: DayMapRoutePresentation
+  stop: DayMapStopPresentation
   totalItems: number
 }) {
+  const item = stop.item
+  const canOpenTickets = stop.ticketCount > 0 && Boolean(onOpenTickets)
+  const journeyLabel = stop.transportLabel
+    ?? (route.geometryKind === 'road' ? route.detail : null)
 
   return (
     <div
@@ -561,7 +647,7 @@ function MarkerPreviewCard({
               {Math.max(0, itemIndex) + 1}
             </span>
             <p className="truncate text-xs font-semibold text-primary">
-              第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站
+              {dayLabel} · 第 {Math.max(0, itemIndex) + 1}/{Math.max(1, totalItems)} 站
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -569,8 +655,8 @@ function MarkerPreviewCard({
               aria-label="上一站"
               className="day-map-place-sheet-icon tm-focus"
               data-testid="map-marker-card-prev"
-              disabled={!previousItem}
-              onClick={() => previousItem && onSelectItem(previousItem)}
+              disabled={!previousStop}
+              onClick={() => previousStop && onSelectStop(previousStop)}
               type="button"
             >
               <ChevronLeft className="size-4" />
@@ -579,8 +665,8 @@ function MarkerPreviewCard({
               aria-label="下一站"
               className="day-map-place-sheet-icon tm-focus"
               data-testid="map-marker-card-next"
-              disabled={!nextItem}
-              onClick={() => nextItem && onSelectItem(nextItem)}
+              disabled={!nextStop}
+              onClick={() => nextStop && onSelectStop(nextStop)}
               type="button"
             >
               <ChevronRight className="size-4" />
@@ -604,8 +690,14 @@ function MarkerPreviewCard({
             <Clock3 className="size-4 shrink-0" />
             <span>{describeItemTime(item)}</span>
           </span>
-          {item.ticketIds.length > 0 ? (
-            <span className="font-medium text-primary">{item.ticketIds.length} 张票据</span>
+          {journeyLabel ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Route className="size-4 shrink-0" />
+              <span>{journeyLabel}</span>
+            </span>
+          ) : null}
+          {stop.ticketCount > 0 ? (
+            <span className="font-medium text-primary">{stop.ticketCount} 张票据</span>
           ) : null}
         </div>
         {item.locationName || item.address ? (
@@ -614,28 +706,101 @@ function MarkerPreviewCard({
             <span className="min-w-0 break-words">{item.address || item.locationName}</span>
           </p>
         ) : null}
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className={`mt-4 grid gap-2 ${canOpenTickets ? 'grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)]' : 'grid-cols-2'}`}>
           <a
-            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
+            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-2 text-sm font-semibold text-on-primary transition active:scale-[0.98] tm-focus"
             data-testid="map-marker-card-navigate"
-            href={buildGoogleMapsUrl(item)}
+            href={stop.navigationHref}
             rel="noreferrer"
             target="_blank"
           >
             <Navigation className="size-4 shrink-0" />
             <span className="truncate">开始导航</span>
           </a>
+          {canOpenTickets ? (
+            <button
+              aria-label={`打开 ${item.title} 的票据`}
+              className="inline-flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-2 text-sm font-semibold text-on-surface transition active:scale-[0.98] tm-focus"
+              data-testid="map-marker-card-tickets"
+              onClick={() => onOpenTickets?.(item)}
+              type="button"
+            >
+              <Ticket className="size-4 shrink-0" />
+              <span className="truncate">票据</span>
+            </button>
+          ) : null}
           <button
-            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-lg border border-primary bg-surface px-3 text-sm font-semibold text-primary transition active:scale-[0.98] tm-focus"
+            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-2 text-sm font-semibold text-on-surface transition active:scale-[0.98] tm-focus"
             data-testid="map-marker-card-open"
             onClick={() => onOpenItem(item)}
             type="button"
           >
-            <Navigation className="size-4" />
-            查看地点
+            <Info className="size-4 shrink-0" />
+            <span className="truncate">详情</span>
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function MapRouteStatus({
+  containerRef,
+  onRefresh,
+  refreshStatus,
+  route,
+  showFloatingHeader,
+}: {
+  containerRef?: RefObject<HTMLButtonElement | HTMLDivElement | null>
+  onRefresh: () => void
+  refreshStatus: 'error' | 'idle' | 'loading'
+  route: DayMapRoutePresentation
+  showFloatingHeader: boolean
+}) {
+  const label = refreshStatus === 'loading'
+    ? '正在更新路线'
+    : refreshStatus === 'error'
+      ? route.geometryKind === 'road' ? '道路路线（刷新失败）' : '道路路线暂不可用'
+      : route.label
+  const className = `absolute left-4 z-20 flex min-h-11 max-w-[calc(100%-6rem)] items-center gap-2 rounded-lg border border-outline-variant bg-surface/94 px-3 text-xs font-semibold text-on-surface shadow-sm backdrop-blur ${showFloatingHeader ? 'top-[5.75rem]' : 'top-[7.25rem]'}`
+  const content = (
+    <>
+      <Route className="size-4 shrink-0 text-primary" />
+      <span className="min-w-0 truncate" data-testid="map-route-status-label">{label}</span>
+      {route.canRefresh ? (
+        <RefreshCw className={`size-3.5 shrink-0 text-on-surface-variant ${refreshStatus === 'loading' ? 'animate-spin' : ''}`} />
+      ) : null}
+    </>
+  )
+
+  if (route.canRefresh) {
+    return (
+      <button
+        aria-label={`重新计算路线，当前${label}，${route.detail}`}
+        className={`${className} tm-focus`}
+        data-route-state={route.geometryKind}
+        data-testid="map-route-status"
+        disabled={refreshStatus === 'loading'}
+        onClick={onRefresh}
+        ref={containerRef as RefObject<HTMLButtonElement | null>}
+        title="重新计算路线"
+        type="button"
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <div
+      aria-label={`${label}，${route.detail}`}
+      className={className}
+      data-route-state={route.geometryKind}
+      data-testid="map-route-status"
+      ref={containerRef as RefObject<HTMLDivElement | null>}
+      role="status"
+    >
+      {content}
     </div>
   )
 }
@@ -727,7 +892,7 @@ function MapControlNotice({
 }) {
   return (
       <div
-        className="absolute right-[calc(1rem+44px+8px)] top-[calc(56px+16px+44px+12px)] z-20 flex min-h-11 w-fit max-w-[calc(100%-5.75rem)] items-center rounded-2xl px-3 py-2 text-xs font-medium leading-5 text-on-surface-variant backdrop-blur-xl tm-surface dark:text-outline-variant"
+        className="pointer-events-none absolute right-4 top-[11.25rem] z-20 flex min-h-11 w-fit max-w-[calc(100%-2rem)] items-center rounded-lg px-3 py-2 text-xs font-medium leading-5 text-on-surface-variant backdrop-blur-xl tm-surface dark:text-outline-variant"
         data-testid="map-location-notice"
         ref={containerRef}
       >
@@ -745,6 +910,26 @@ function isFiniteLngLat([lng, lat]: LngLat) {
     lat >= -90 &&
     lat <= 90
   )
+}
+
+function buildDayMapRouteInput(
+  result: DayRouteResult | null,
+  cacheEntry: RouteCacheEntry | null,
+): DayMapRouteInput | null {
+  if (!result) return null
+  return {
+    distanceMeters: cacheEntry?.distanceMeters ?? sumRouteMetric(result.segments.map((segment) => segment.distanceMeters)),
+    durationSeconds: cacheEntry?.durationSeconds ?? sumRouteMetric(result.segments.map((segment) => segment.durationSeconds)),
+    lineStrings: result.lineStrings,
+    provider: result.provider,
+    status: result.status,
+    warnings: result.warnings,
+  }
+}
+
+function sumRouteMetric(values: Array<number | undefined>) {
+  const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return present.length > 0 ? present.reduce((sum, value) => sum + value, 0) : undefined
 }
 
 function buildRouteResultFromCache(entry: RouteCacheEntry): DayRouteResult {
@@ -823,12 +1008,14 @@ function getMeasuredMapPadding({
   fallbackPadding,
   floatingControlsRect,
   markerCardRect,
+  routeStatusRect,
   stageRect,
 }: {
   controlNoticeRect: ScreenRect | null
   fallbackPadding: EdgeInsets
   floatingControlsRect: ScreenRect | null
   markerCardRect: ScreenRect | null
+  routeStatusRect: ScreenRect | null
   stageRect: ScreenRect | null
 }): EdgeInsets {
   const fallback = normalizeEdgeInsets(fallbackPadding)
@@ -842,6 +1029,7 @@ function getMeasuredMapPadding({
       fallback.top,
       getTopInset(stageRect, floatingControlsRect),
       getTopInset(stageRect, controlNoticeRect),
+      getTopInset(stageRect, routeStatusRect),
     ),
     right: measuredRight,
     bottom: Math.max(

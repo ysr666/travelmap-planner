@@ -92,6 +92,25 @@ const initialRawBytes = initialChunks.reduce((total, chunk) => total + chunk.raw
 const initialGzipBytes = initialChunks.reduce((total, chunk) => total + chunk.gzipBytes, 0)
 const failures = []
 
+const applicationStyles = entryChunk.css ?? []
+if (applicationStyles.length !== 1) {
+  failures.push(`expected one application stylesheet, found ${applicationStyles.length}`)
+} else {
+  const applicationCss = await readFile(path.join(DIST_DIR, applicationStyles[0]), 'utf8')
+  for (const [selector, declaration] of [
+    ['body', 'min-height:100vh'],
+    ['#root', 'min-height:100vh'],
+    ['.app-viewport', 'height:100vh'],
+    ['.app-viewport', 'min-height:100vh'],
+  ]) {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const rulePattern = new RegExp(`(?:^|})[^{}]*${escapedSelector}[^{}]*\\{[^{}]*${declaration}`)
+    if (!rulePattern.test(applicationCss)) {
+      failures.push(`application CSS lost the legacy viewport fallback (${selector} ${declaration})`)
+    }
+  }
+}
+
 if (entryBytes > BUDGETS.entryRaw) {
   failures.push(`entry JS is ${formatKib(entryBytes)} (limit ${formatKib(BUDGETS.entryRaw)})`)
 }

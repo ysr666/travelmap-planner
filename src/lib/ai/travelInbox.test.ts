@@ -195,6 +195,15 @@ describe('travel inbox local queue', () => {
       scope: 'item',
       size: 10,
       storageMode: 'copy',
+      structuredFields: {
+        fieldEvidence: {
+          serviceDate: { confidence: 'high', sourceId: 'ticket-secret-id', sourceType: 'ticket' },
+        },
+        previewMediaAssetId: 'media_private_ticket_thumb_v1',
+        schemaVersion: 1,
+        serviceDate: '2026-08-12',
+        status: 'ready',
+      },
       ticketCategory: 'hotel_booking',
       title: '酒店订单',
       tripId: 'trip_inbox',
@@ -203,6 +212,7 @@ describe('travel inbox local queue', () => {
 
     expect(summaries[0]).toMatchObject({
       summaryId: 'existing-ticket:1',
+      structuredFields: { schemaVersion: 1, serviceDate: '2026-08-12', status: 'ready' },
       ticketCategory: 'hotel_booking',
       ticketId: 'ticket-secret-id',
       title: '酒店订单',
@@ -210,12 +220,14 @@ describe('travel inbox local queue', () => {
     expect(buildTravelInboxProviderTicketSummaries(summaries)[0]).toEqual({
       itemId: 'item-1',
       scope: 'item',
+      structuredFields: { schemaVersion: 1, serviceDate: '2026-08-12', status: 'ready' },
       summaryId: 'existing-ticket:1',
       ticketCategory: 'hotel_booking',
       title: '酒店订单',
     })
     expect(JSON.stringify(buildTravelInboxProviderTicketSummaries(summaries))).not.toContain('private-order-file')
     expect(JSON.stringify(buildTravelInboxProviderTicketSummaries(summaries))).not.toContain('ticket-secret-id')
+    expect(JSON.stringify(buildTravelInboxProviderTicketSummaries(summaries))).not.toContain('media_private_ticket_thumb_v1')
   })
 
   it('persists one active preview per trip and removes it with source entries', async () => {

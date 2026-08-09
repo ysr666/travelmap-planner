@@ -38,6 +38,16 @@ describe('place details provider', () => {
       googleMapsUri: 'https://maps.google.com/west-lake',
       id: 'place-west-lake',
       location: { latitude: 30.25, longitude: 120.14 },
+      photos: [{
+        authorAttributions: [{
+          displayName: 'Google contributor',
+          uri: 'https://www.google.com/maps/contrib/123',
+        }],
+        googleMapsUri: 'https://maps.google.com/place/west-lake',
+        heightPx: 900,
+        name: 'places/ChIJN1t_tDeuEmsRUsoyG83frY4/photos/ATKogpcFidelityPhotoReference',
+        widthPx: 1200,
+      }],
       priceLevel: 'PRICE_LEVEL_FREE',
       regularOpeningHours: {
         openNow: true,
@@ -79,6 +89,15 @@ describe('place details provider', () => {
         googleMapsUri: 'https://maps.google.com/west-lake',
         location: { lat: 30.25, lng: 120.14 },
         priceLevel: 'PRICE_LEVEL_FREE',
+        photos: [{
+          authorAttributions: [{
+            displayName: 'Google contributor',
+            uri: 'https://www.google.com/maps/contrib/123',
+          }],
+          height: 900,
+          photoRef: 'places/ChIJN1t_tDeuEmsRUsoyG83frY4/photos/ATKogpcFidelityPhotoReference',
+          width: 1200,
+        }],
         websiteUri: 'https://westlake.example/',
       })
     }

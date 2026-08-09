@@ -41,6 +41,11 @@ export type ProviderProxyDiagnosticsResponse = {
       hasApiKey: boolean
       provider: 'disabled' | 'mock' | 'tavily' | 'unknown' | 'unconfigured'
     }
+    weather: {
+      configured: boolean
+      defaultedToOpenMeteo: boolean
+      provider: 'disabled' | 'mock' | 'open_meteo' | 'unknown'
+    }
   }
   retrievedAt: string
   security: {
@@ -72,6 +77,7 @@ export function buildProviderProxyDiagnosticsResponse(
   const hasGooglePlacesKey = googleMaps.hasGoogleMapsPlatformApiKey || googleMaps.hasTripmapGooglePlacesApiKey
   const placeProvider = normalizePlaceProvider(env.TRIPMAP_PLACE_PROVIDER)
   const searchProvider = normalizeSearchProvider(env.TRIPMAP_SEARCH_PROVIDER)
+  const weatherProvider = normalizeWeatherProvider(env.TRIPMAP_WEATHER_PROVIDER)
   const aiProvider = normalizeAiProvider(env.TRIPMAP_AI_PROVIDER)
   const hasOpenRouteServiceApiKey = hasSecret(env.OPENROUTESERVICE_API_KEY)
   const environment = normalizeEnvironment(env.TRIPMAP_PROVIDER_PROXY_ENV)
@@ -117,6 +123,11 @@ export function buildProviderProxyDiagnosticsResponse(
         hasApiKey: hasSecret(env.TRIPMAP_SEARCH_API_KEY),
         provider: mockMode ? 'mock' : searchProvider,
       },
+      weather: {
+        configured: mockMode || weatherProvider === 'mock' || weatherProvider === 'open_meteo',
+        defaultedToOpenMeteo: !mockMode && !normalizeProviderText(env.TRIPMAP_WEATHER_PROVIDER),
+        provider: mockMode ? 'mock' : weatherProvider,
+      },
     },
     retrievedAt: normalizeRetrievedAt(now),
     security: {
@@ -156,6 +167,13 @@ function normalizeSearchProvider(value: unknown): ProviderProxyDiagnosticsRespon
   const provider = normalizeProviderText(value)
   if (!provider) return 'unconfigured'
   if (provider === 'disabled' || provider === 'mock' || provider === 'tavily') return provider
+  return 'unknown'
+}
+
+function normalizeWeatherProvider(value: unknown): ProviderProxyDiagnosticsResponse['providers']['weather']['provider'] {
+  const provider = normalizeProviderText(value)
+  if (!provider || provider === 'open_meteo') return 'open_meteo'
+  if (provider === 'disabled' || provider === 'mock') return provider
   return 'unknown'
 }
 

@@ -16,6 +16,9 @@ import {
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
+  validateProviderProxyPlacePhotoRequest,
+  validateProviderProxyWeatherForecastRequest,
+  validateProviderProxyWeatherForecastSuccessResponse,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
@@ -50,6 +53,10 @@ import {
   type ProviderProxyPlaceDetailsRequest,
   type ProviderProxyPlaceDetailsResponse,
   type ProviderProxyPlaceDetailsSuccessResponse,
+  type ProviderProxyPlacePhotoRequest,
+  type ProviderProxyWeatherForecastRequest,
+  type ProviderProxyWeatherForecastResponse,
+  type ProviderProxyWeatherForecastSuccessResponse,
   type ProviderProxyOperation,
   type ProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyRouteOrderSuggestionResponse,
@@ -560,6 +567,98 @@ export async function fetchProviderProxyPlaceDetails(
     throw new ProviderProxyClientError(parsed, response.status)
   }
   return parsed
+}
+
+export async function fetchProviderProxyWeatherForecast(
+  request: ProviderProxyWeatherForecastRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyWeatherForecastSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyWeatherForecastRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+
+  let response: Response
+  try {
+    response = await (options.fetcher ?? fetch)(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: await buildProviderProxyHeaders(options),
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' }), response.status)
+  }
+  const parsed = parseProviderProxyWeatherForecastResponse(body, validation.request)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
+  return parsed
+}
+
+export async function fetchProviderProxyPlacePhoto(
+  request: ProviderProxyPlacePhotoRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<Blob> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyPlacePhotoRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+
+  const fetcher = options.fetcher ?? fetch
+  let response: Response
+  try {
+    response = await fetcher(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: await buildProviderProxyHeaders(options),
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_photo' }))
+  }
+
+  if (!response.ok) {
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      body = null
+    }
+    const record = readRecord(body)
+    const code = typeof record.code === 'string' ? normalizeErrorCode(record.code) : 'network_error'
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({
+      code,
+      message: typeof record.message === 'string' ? record.message : undefined,
+      operation: 'place_photo',
+      requestId: typeof record.requestId === 'string' ? record.requestId : request.requestId,
+    }), response.status)
+  }
+
+  const contentType = response.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase()
+  const declaredLength = Number(response.headers.get('Content-Length'))
+  if (
+    !contentType
+    || !['image/jpeg', 'image/png', 'image/webp'].includes(contentType)
+    || (Number.isFinite(declaredLength) && declaredLength > 3_000_000)
+  ) {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'place_photo' }), response.status)
+  }
+  const blob = await response.blob()
+  if (blob.size < 1 || blob.size > 3_000_000 || blob.type.split(';', 1)[0].toLowerCase() !== contentType) {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'place_photo' }), response.status)
+  }
+  return blob
 }
 
 export async function fetchProviderProxyTripContentEnrichment(
@@ -1178,6 +1277,27 @@ function parseProviderProxyPlaceDetailsResponse(input: unknown): ProviderProxyPl
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_details' })
 }
 
+function parseProviderProxyWeatherForecastResponse(
+  input: unknown,
+  request: ProviderProxyWeatherForecastRequest,
+): ProviderProxyWeatherForecastResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyWeatherForecastSuccessResponse(record, request)
+    return validation ?? buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'weather_forecast' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: readProviderProxyErrorMessage(record, code, 'weather_forecast'),
+      operation: 'weather_forecast',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' })
+}
+
 function parseProviderProxyTripContentEnrichmentResponse(
   input: unknown,
   request: ProviderProxyTripContentEnrichmentRequest,
@@ -1461,6 +1581,7 @@ function validateProviderProxyPlaceDetailsSuccessResponse(record: Record<string,
   const googleMapsUri = detailsRecord.googleMapsUri
   const websiteUri = detailsRecord.websiteUri
   const regularOpeningHours = readRegularOpeningHours(detailsRecord.regularOpeningHours)
+  const photos = readPlacePhotoReferences(detailsRecord.photos)
   if (
     !isNonEmptyString(detailsRecord.placeId)
     || !isNonEmptyString(detailsRecord.displayName)
@@ -1471,6 +1592,7 @@ function validateProviderProxyPlaceDetailsSuccessResponse(record: Record<string,
     || (hasLocation && (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180))
     || (googleMapsUri !== undefined && (!isNonEmptyString(googleMapsUri) || !isSafeHttpUrl(googleMapsUri)))
     || (websiteUri !== undefined && (!isNonEmptyString(websiteUri) || !isSafeHttpUrl(websiteUri)))
+    || (detailsRecord.photos !== undefined && !photos)
   ) {
     return null
   }
@@ -1483,6 +1605,7 @@ function validateProviderProxyPlaceDetailsSuccessResponse(record: Record<string,
       googleMapsUri: googleMapsUri as string | undefined,
       location: hasLocation ? { lat, lng } : undefined,
       placeId: detailsRecord.placeId,
+      photos: photos ?? undefined,
       priceLevel: typeof detailsRecord.priceLevel === 'string' ? detailsRecord.priceLevel : undefined,
       priceRangeText: typeof detailsRecord.priceRangeText === 'string' ? detailsRecord.priceRangeText : undefined,
       provider: 'google_places',
@@ -1499,6 +1622,60 @@ function validateProviderProxyPlaceDetailsSuccessResponse(record: Record<string,
       ? record.warnings.filter((w): w is string => typeof w === 'string')
       : undefined,
   }
+}
+
+function readPlacePhotoReferences(input: unknown): ProviderProxyPlaceDetailsSuccessResponse['details']['photos'] | null | undefined {
+  if (input === undefined) return undefined
+  if (!Array.isArray(input) || input.length > 3) return null
+  const photos: NonNullable<ProviderProxyPlaceDetailsSuccessResponse['details']['photos']> = []
+  for (const raw of input) {
+    const record = readRecord(raw)
+    const photoRef = record.photoRef
+    const width = Number(record.width)
+    const height = Number(record.height)
+    const googleMapsUri = record.googleMapsUri
+    if (
+      !isNonEmptyString(photoRef)
+      || !/^places\/[A-Za-z0-9_-]{3,220}\/photos\/[A-Za-z0-9_-]{8,1200}$/.test(photoRef)
+      || !Number.isInteger(width)
+      || !Number.isInteger(height)
+      || width < 1
+      || height < 1
+      || width > 20_000
+      || height > 20_000
+      || (googleMapsUri !== undefined && (!isNonEmptyString(googleMapsUri) || !isSafeHttpUrl(googleMapsUri)))
+      || !Array.isArray(record.authorAttributions)
+      || record.authorAttributions.length < 1
+      || record.authorAttributions.length > 5
+    ) {
+      return null
+    }
+    const authorAttributions = record.authorAttributions.flatMap((value) => {
+      const attribution = readRecord(value)
+      if (!isNonEmptyString(attribution.displayName)) return []
+      const uri = attribution.uri
+      if (uri !== undefined && (!isNonEmptyString(uri) || !isSafeGoogleAttributionUrl(uri))) return []
+      return [{
+        displayName: attribution.displayName,
+        uri: typeof uri === 'string' ? uri : undefined,
+      }]
+    })
+    if (authorAttributions.length !== record.authorAttributions.length) return null
+    photos.push({
+      authorAttributions,
+      googleMapsUri: typeof googleMapsUri === 'string' ? googleMapsUri : undefined,
+      height,
+      photoRef,
+      width,
+    })
+  }
+  return photos
+}
+
+function isSafeGoogleAttributionUrl(value: string) {
+  if (!isSafeHttpUrl(value)) return false
+  const hostname = new URL(value).hostname.toLowerCase()
+  return hostname === 'google.com' || hostname.endsWith('.google.com')
 }
 
 function validateProviderProxyTripContentEnrichmentSuccessResponse(

@@ -13,6 +13,7 @@ import {
   validateProviderProxyAiTripEditPlanRequest,
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
+  validateProviderProxyPlacePhotoRequest,
   validateProviderProxyTripContentEnrichmentRequest,
   validateProviderProxyTripDailyTipRequest,
   validateProviderProxyTripOperationsSummaryRequest,
@@ -271,6 +272,45 @@ describe('provider proxy place_details contract', () => {
       ticketIds: ['ticket'],
     })
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('provider proxy place_photo contract', () => {
+  const photoRef = 'places/ChIJN1t_tDeuEmsRUsoyG83frY4/photos/ATKogpcFidelityPhotoReference'
+
+  it('accepts only a controlled Google photo resource name and bounded dimensions', () => {
+    const result = validateProviderProxyPlacePhotoRequest({
+      maxHeightPx: 900,
+      maxWidthPx: 1200,
+      operation: 'place_photo',
+      photoRef,
+      requestId: 'photo-1',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.request).toMatchObject({ maxHeightPx: 900, maxWidthPx: 1200, photoRef })
+    }
+  })
+
+  it('defaults dimensions without accepting arbitrary URLs or fields', () => {
+    const accepted = validateProviderProxyPlacePhotoRequest({ operation: 'place_photo', photoRef })
+    expect(accepted.ok).toBe(true)
+    if (accepted.ok) {
+      expect(accepted.request.maxHeightPx).toBe(1200)
+      expect(accepted.request.maxWidthPx).toBe(1200)
+    }
+
+    for (const request of [
+      { operation: 'place_photo', photoRef: 'https://places.googleapis.com/v1/private' },
+      { operation: 'place_photo', photoRef: 'http://127.0.0.1/admin' },
+      { operation: 'place_photo', photoRef, redirectUrl: 'https://evil.example/image.jpg' },
+      { operation: 'place_photo', photoRef, token: 'secret' },
+      { operation: 'place_photo', photoRef, maxWidthPx: 63 },
+      { operation: 'place_photo', photoRef, maxHeightPx: 1601 },
+    ]) {
+      expect(validateProviderProxyPlacePhotoRequest(request).ok).toBe(false)
+    }
   })
 })
 

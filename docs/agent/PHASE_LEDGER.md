@@ -2758,3 +2758,283 @@ Validation:
 - S1 remote baseline `73fe5af` passed GitHub Actions run `30992807064` and Cloudflare Pages Preview deployment `4e2542bd-19b8-442d-90b8-8f1697dad436`.
 - Final candidate `0b464be` passed GitHub Actions run `30998260337`; Lint, Type Check, Unit Tests, Build, and E2E Tests all passed, with E2E completing in approximately 5 minutes 28 seconds.
 - Cloudflare Pages Preview deployment `d2399786-4796-431f-8f9b-3e4311ea5a26` is Active for the same `0b464be` source revision.
+
+## 2026-08-06 UI V3 Product Fidelity P0-P8
+
+Status: in progress.
+
+Branch: `feature/ui-v3-product-fidelity`
+
+Goal:
+
+- Implement the complete `UI_V3_PRODUCT_FIDELITY_PLAN.md` contract so the four core travel surfaces derive their density and visual quality from real, attributable media, structured travel objects, sourced realtime facts, direct document actions, and road-aware maps.
+
+Scope:
+
+- P0: freeze one deterministic product-fidelity fixture, a design-to-code difference ledger, and a media rights manifest.
+- P1-P3: add versioned media, brand, travel-object, and realtime-fact contracts; controlled adapters; shared presentation components; and Provider Proxy boundaries.
+- P4-P6: add explainable document linking, one-confirmation writes, direct ticket opening, route-aware map details, and the selected Today, Trip, Documents, and Item Detail compositions.
+- P7-P8: finish responsive states, accessibility, motion, performance, design-target comparison, full automated validation, simulator qualification, and remote release receipts.
+
+No-go:
+
+- No generated or untraceable image may impersonate a real place, hotel, ticket, carrier, insurer, route, or current fact.
+- No arbitrary remote media URL, AI-selected logo, private ticket blob, OCR body, secret, Provider payload, or internal network address may cross the media boundary.
+- No stale or source-less fact may be presented as current; no write may bypass Action Gateway preview, one final confirmation, idempotency, or stale-state protection.
+- No return to card walls, persistent AI copy, stacked bottom surfaces, decorative gradients, or placeholder density.
+
+Likely files:
+
+- `src/types.ts`, `src/db/*`, `src/lib/media/*`, `src/lib/realtime/*`, `src/lib/travelObjects/*`
+- `server/providerProxy/*`, `src/lib/ai/providerProxyContract.ts`
+- `src/components/home/*`, `src/components/trip/*`, `src/components/documents/*`, `src/pages/ItemDetailPage.tsx`, `src/components/DayMap.tsx`, `src/index.css`
+- `e2e/fixtures/product-fidelity-v1.json`, `e2e/assets/product-fidelity/*`, focused unit/component/E2E tests, and Golden/design comparison tooling
+- `docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md`, project status/roadmap/release evidence, and licensed fixture media
+
+Validation:
+
+- Per-phase focused unit, contract, component, and E2E tests plus `git diff --check` before each phase commit.
+- Final typecheck, lint, full unit suite, production build, full serial E2E, built-dist PWA migration suite, fixed viewport design comparison, light/dark and 200% text checks.
+- iPhone Simulator Safari/home-screen PWA and Android Emulator Chrome/WebView qualification; physical devices remain optional.
+- After push, verify the same SHA in GitHub Actions, Cloudflare Pages, and relevant Supabase/provider diagnostics without exposing secrets or raw responses.
+
+Risk:
+
+- High: the work crosses media security, Provider contracts, cloud-compatible object semantics, ticket permissions, route rendering, responsive composition, and release validation. Each protected boundary remains isolated behind versioned schemas, deterministic mocks, focused tests, and a phase receipt.
+
+Stop conditions:
+
+- Stop the affected phase if rights cannot be verified, a remote asset can escape the Provider allowlist, a migration loses or rewrites existing data, an AI/provider response can select an arbitrary resource or function, a write bypasses confirmation/stale guards, a realtime fact lacks source/expiry, or a core viewport overflows or stacks fixed surfaces.
+
+P0 result:
+
+- Added the canonical four-scenario `product-fidelity-v1` fixture with one coherent 12-day UK trip, structured flight/rail/lodging/insurance/document records, explainable links, route geometry, and sourced realtime facts.
+- Added seven licensed photo variants and four reviewed brand marks under the E2E-only asset boundary; production builds do not copy or precache the fixture media.
+- Recorded author, source, license, derivative operation, integrity hash, dimensions, and byte budget for every asset.
+- Added a deterministic integrity checker that rejects missing or altered files, path escapes, unreviewed formats, oversized media, and executable/external SVG references.
+- Added the design-to-code difference ledger with explicit Visual P0/P1/P2 ownership and allowed platform differences. Missing Provider data or missing fields remain open rather than approved.
+
+P0 validation:
+
+- `npm run check:fidelity-assets` passed for all 11 assets.
+- Both JSON fixtures passed strict `jq` parsing; the canonical fixture contains 1 trip, 12 days, 9 key items, 6 documents, 7 media records, and 4 realtime facts.
+- `git diff --check` passed.
+
+P1 result:
+
+- Added strict `TravelMediaAssetV1` and `BrandIdentityV1` contracts. Render references are limited to a Google Places photo resource name, a reviewed fixture asset ID, or an existing private ticket ID; arbitrary URLs and unknown fields are rejected.
+- Added a controlled brand registry for Air China, LNER, National Rail, and Allianz. Unknown or URL-shaped values use a generic Lucide icon instead of selecting an unreviewed asset.
+- Extended Place Details with a fixed photo field mask and normalized photo references, dimensions, Google attribution, and source links.
+- Added a two-stage Place Photo proxy. It obtains a Google-issued media location, accepts only HTTPS Google media hosts, refuses redirects, streams at most 3 MB, rejects SVG and non-image MIME types, parses image dimensions from bytes, and returns private, `nosniff` media responses.
+- Reused the existing Provider Proxy Auth, Origin, edge identity, place quota, daily budget, and kill-switch controls for `place_photo`; no Provider key, resolved media URL, or raw payload is returned to the client.
+- Added `TravelObjectMedia`, `MediaFallback`, and `BrandMark` with fixed ratios, lazy loading, expired/error fallbacks, focal-point cropping, source attribution, and object URL cleanup.
+- Kept licensed fidelity images under the E2E-only boundary. Production code resolves fixture IDs only when the existing E2E bypass build flag is enabled, and the normal production build does not copy the fixture photos.
+- Updated the canonical fixture to the strict media contract and added a test proving every fixture media ID is registered exactly once.
+- No IndexedDB/Supabase schema, ticket Blob semantics, AI write path, route cache, production fact claim, or real Provider call changed.
+
+P1 validation:
+
+- Focused media, brand, Provider contract/client/provider/handler, operations guard, and quota tests passed: 11 files and 156 tests.
+- The canonical fixture contract test passed for all seven media records and the seven controlled fixture IDs.
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed.
+- `npm run test:unit` passed: 198 files and 1617 tests.
+- Bundle budget passed at 468.2 KiB entry, 852.4 KiB initial JS, 245.5 KiB initial gzip, and 2340.2 KiB/114-entry precache.
+- `git diff --check` passed.
+
+P2 plan:
+
+- Goal: make flights, rail segments, lodging, insurance, admissions, and documents render from one versioned travel-object model instead of page-local filename and note heuristics.
+- Scope: add optional schema-compatible structured fields to existing ticket/transport records; define lodging and insurance input contracts without adding storage tables; normalize local transport imports with field evidence; build one collection/selectors for Today, Timeline, Documents, and Item Detail; validate the canonical fixture through the same builders.
+- No-go: no IndexedDB version, Supabase migration, unencrypted PNR/order-number persistence, Provider call, ticket Blob/OCR-body exposure, automatic write, or page redesign in this phase.
+- Likely files: `src/types.ts`, `src/lib/transportImport.ts`, `src/lib/travelObjects/*`, focused tests, the product-fidelity fixture, and only the minimal current import form wiring needed to retain normalized fields after confirmation.
+- Validation: schema/normalization/privacy/ViewModel tests, import component tests, canonical fixture assertions, typecheck, lint, full unit suite, production build, and `git diff --check`.
+- Risk: medium-high because optional record fields flow through IndexedDB and cloud object payloads even though no index or table changes.
+- Stop conditions: stop and repair if a sensitive booking value leaves the encrypted vault, a page needs to parse raw Provider/import payloads, old records fail normalization, fixture objects need fabricated fields, or any optional field changes current sync semantics.
+
+P2 result:
+
+- Added versioned ticket display fields, transport field evidence, lodging/insurance input contracts, and one `TravelObjectViewModelV1` collection for Today, Timeline, Documents, and Item Detail consumers.
+- Normalized local transport imports into carrier/airport/station codes, terminals/platforms, dates/times, and source confidence while keeping PNR, order number, and seat inside the encrypted booking secret.
+- Extended existing-trip AI import with strict, provider-safe ticket date/time/category fields. Unknown fields and private identifiers are rejected or omitted; confirmed writes retain evidence and structured metadata.
+- Added deterministic media, lodging, insurance, ticket, flight, rail, and encrypted-secret records to the canonical fixture and validated every record through production parsers/builders.
+- Ticket metadata updates now preserve structured fields when older callers omit the new property, while an explicit `undefined` still clears it. Object-sync field merge now tracks the structured ticket object and reports divergent edits as one resolvable conflict.
+- No IndexedDB schema/version, Supabase table, ticket Blob contract, route cache, real Provider call, or automatic write behavior changed.
+
+P2 validation:
+
+- Focused import, contract, privacy, repository, sync-merge, Provider normalization, and fixture ViewModel tests passed: 9 files and 76 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 200 files and 1635 tests.
+- `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2347.2 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+
+P3 plan:
+
+- Goal: make every user-visible current weather, opening, route ETA, flight/rail, and ticket status consume one strict `RealtimeFactV1` contract with source, observation time, expiry, confidence, and a controlled opaque reference.
+- Scope: add kind-specific fact schemas, TTL policy, selection/stale fallback, a bounded cache, and compact source/freshness UI; adapt current Place Details and Route Preview results; add an authenticated Open-Meteo weather operation plus mock/disabled modes; adapt flight/rail and ticket status through the same contract without overwriting booking or ticket records.
+- Provider boundary: weather requests contain only a controlled subject, coordinates, location label, date, and IANA time zone. The proxy uses one fixed HTTPS host, rejects redirects/unknown fields/oversized or malformed responses, and reuses existing Origin, Auth, edge quota, daily budget, kill switch, and sanitized error handling.
+- No-go: no new IndexedDB or Supabase schema, raw Provider body, arbitrary source URL, AI-selected fact/resource ID, background polling, automatic itinerary write, order/ticket mutation, or unlabelled mock/expired state.
+- Likely files: `src/lib/realtime/*`, `src/components/realtime/*`, `src/lib/ai/providerProxyContract.ts`, `src/lib/providerProxyClient*`, `server/providerProxy/weatherProvider.ts`, `server/providerProxy/providerProxyHandler.ts`, Provider guard/quota tests, current Place/Route/flight adapters, and the canonical fixture contract test.
+- Validation: schema/TTL/cache/privacy tests; Place/Route/Weather/flight/rail/ticket adapter tests; weather Provider normalization and handler Auth/Origin/quota/budget/kill-switch tests; component tests for current/stale/unavailable states; typecheck, lint, full unit suite, production build, and `git diff --check`.
+- Risk: high because a new real network operation crosses the Provider Proxy and current-fact claims can mislead users if timestamps, source, or fallback state are wrong.
+- Stop conditions: stop and repair if a fact without a source or expiry validates, an expired fact renders as current, Provider input can select a URL or internal ID, redirects or oversized payloads are followed, privacy fields cross the request, mock data loses its label, or a fact mutates durable travel data.
+
+P3 result:
+
+- Added a strict, versioned `RealtimeFactV1` union for current/forecast weather, place opening, route ETA, flight/rail status, and ticket readiness. Every fact requires a controlled subject, allowlisted source, observation/expiry times, confidence, bounded opaque reference, and a kind-specific TTL.
+- Added current/stale/future selection, a bounded validated cache with stale fallback, and deterministic adapters for Place Details, Route Preview, flight/rail snapshots, and local ticket readiness. No adapter writes back to durable travel records.
+- Added the authenticated `weather_forecast` Provider Proxy operation with deterministic mock/disabled modes and a fixed-host Open-Meteo adapter. The adapter refuses redirects, caps responses at 512 KiB, requests one date and a fixed field set, and returns only strict request-bound facts.
+- Reused shared Origin, Auth, edge quota, account/IP/global daily budgets, the new isolated `weather` quota group and kill switch, short error semantics, and sanitized diagnostics. Unknown fields, URL/provider selection, sensitive context, malformed values, source mismatches, duplicate kinds, and excessive TTLs fail closed.
+- Added a compact one-line source/freshness component for current, stale, and unavailable states. It exposes neither raw references nor Provider diagnostics and remains width-bounded at the 320px floor.
+- Added a Cloudflare D1 migration that preserves existing usage/control/alert rows while extending only the constrained Provider group enum with `weather`; this is required so the existing fail-closed daily budget path works in production. No IndexedDB/Supabase schema, booking/ticket record, route cache, automatic write, background polling, raw Provider payload, or real Provider call changed.
+
+P3 validation:
+
+- Focused realtime contract/cache/adapter/UI, weather contract/provider/handler/client, diagnostics, operations guard, and quota tests passed: 13 files and 86 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 209 files and 1696 tests.
+- `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2357.7 KiB/114-entry precache.
+- `npm run check:fidelity-assets` and `git diff --check` passed.
+- The D1 `0002 -> 0003` in-memory migration check preserved existing usage, alert, and disabled-control state, added the enabled weather control, and accepted weather usage and alert rows.
+
+P4 plan:
+
+- Goal: connect imported ticket/document metadata to the correct itinerary object through explainable local matching, one Action Gateway confirmation, direct ticket opening, and a shared link status consumed by the travel-object ViewModel.
+- Scope: add a strict non-persistent document-link contract and deterministic matcher; register `ticket.bind@1` with semantic-only inputs; add real prepare/preview/execute behavior with per-record stale guards, idempotency, partial retry, and tracked sync writes; expose a bounded multi-ticket suggestion plan for import completion; retain exact local ticket navigation and ambiguous gallery fallback.
+- No-go: no IndexedDB or Supabase schema, ticket Blob/OCR-body read, arbitrary URL/provider call, internal ID in Provider-planned args, original-file mutation, order cancellation, permission bypass, silent overwrite of an existing binding, or write outside the Action Gateway confirmation path.
+- Likely files: `src/lib/documentLinking/*`, `src/lib/travelObjects/*`, `src/lib/ai/actionGateway/*`, `server/providerProxy/actionPlanProvider.ts`, focused fixture/contract/runtime tests, and only minimal ViewModel fields required to expose confirmed/suggested/conflict state.
+- Validation: link schema and scoring tests; ambiguous/conflict/long-name/privacy cases; Action Gateway registry, validation, planner, Provider mock, confirmation, stale-state, idempotency, partial retry, and permission-preserving tests; canonical fixture validation; typecheck, lint, full unit suite, production build, fidelity asset check, and `git diff --check`.
+- Risk: high because binding updates both ticket metadata and itinerary ticket IDs and then enters object sync, while Provider planning must remain restricted to semantic targets.
+- Stop conditions: stop and repair if any unconfirmed write occurs, a stale or pre-bound ticket is silently overwritten, a Provider can select an internal ID or unknown field, matching reads ticket contents, a failed step repeats a successful write, item/ticket references diverge, or member visibility is widened.
+
+P4 result:
+
+- Added a strict, versioned, non-persistent `TravelDocumentLinkV1` contract and deterministic metadata matcher. Existing references become confirmed links; bounded text/date/time/category evidence can produce suggestions or conflicts without reading ticket Blobs, OCR bodies, arbitrary URLs, or Provider payloads.
+- Registered `ticket.bind@1` in the shared Action Gateway with semantic ticket and itinerary names only. Deterministic and Provider planners reject unknown fields, internal IDs, URLs, ambiguity, and implicit writes; import completion can prepare at most six non-conflicting targets under one final confirmation.
+- Added real prepare, compact preview, transactional execute, direct exact-ticket navigation, Trip Intelligence history, object-sync tracking, persisted idempotency, and partial retry behavior. The original file, structured fields, title, note, category, and assigned-member visibility are preserved.
+- Added atomic ticket, previous-item, and target-item baselines around the reciprocal ticket/item update. Global trip fingerprints and repository-level compare-and-write checks both require a fresh preview when either side changes; missing or ambiguous prior links fail before any write.
+- Exposed confirmed, suggested, and conflict link state through the shared travel-object ViewModel and updated the canonical product-fidelity fixture to the versioned evidence contract. No IndexedDB/Supabase schema, ticket Blob format, Provider contract outside the registered action plan, permission model, or real Provider call changed.
+
+P4 validation:
+
+- Focused repository, Action Gateway runtime, and ticket-binding-plan tests passed: 3 files and 70 tests.
+- `npm run lint` passed; `npm run test:unit` passed with 211 files and 1712 tests.
+- `npm run build` passed, including typecheck and bundle budget: 469.1 KiB entry, 853.4 KiB initial JS, 245.8 KiB initial gzip, and 2359.2 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+- The complete mobile Global AI command-bar E2E spec passed at `390x844`: 20 tests, including one-confirmation binding, pre-confirmation no-write, exact-ticket navigation, assigned-member visibility preservation, stale-plan rejection, and partial retry without duplicate success writes.
+
+P5 plan:
+
+- Goal: make the day map an honest, route-aware travel surface with real cached road geometry, a visibly distinct active segment, numbered stops, current location, one coherent place sheet, and short route degradation states.
+- Scope: add a pure day-map experience ViewModel derived from ordered itinerary objects and the existing `RouteCacheEntry`; render road/mixed/estimated/unavailable states and source freshness without exposing cache keys; add a transport-aware active-route overlay to both MapLibre and Google adapters; reuse the existing explicit route generator for a user-triggered recalculation; unify external navigation, transport duration, ticket count, exact ticket entry, and place detail in the selected-stop sheet; extend deterministic map E2E with seeded road geometry, active segment, location, refresh, degradation, canvas, fit-bound, and overlap assertions.
+- No-go: no route-cache database version, signature, expiry, provider request/response, quota, authentication, map-key, realtime-fact, itinerary, ticket, or cloud-sync contract change; no background route call, raw Provider error, straight line styled or labelled as a road route, user location persisted, second bottom Sheet, or real Provider request during local validation.
+- Likely files: `src/lib/dayMapExperience.ts`, `src/lib/mapEngine.ts`, `src/lib/maplibreAdapter.ts`, `src/lib/googleMapsAdapter.ts`, `src/components/DayMap.tsx`, `src/components/trip/DayMapView.tsx`, `src/components/trip/DayWorkspaceView.tsx`, focused unit/component tests, `e2e/map-v3-visual.spec.ts`, `e2e/map-floating-info.spec.ts`, and the existing product-fidelity route fixture only if its shape needs alignment.
+- Validation: pure ViewModel route/status/navigation tests; map engine and component tests for active geometry, transport mode, explicit refresh, failure fallback, exact ticket entry, and compact text; `320x568` through `1440x900` layout checks; MapLibre canvas/marker/route/location/controls/single-Sheet assertions; route request counts; typecheck, lint, full unit suite, production build, fidelity asset check, and `git diff --check`.
+- Risk: medium-high because the map has two engine adapters and camera padding must remain stable while route status and place-sheet content change; route refresh touches the existing local cache through the established generator.
+- Stop conditions: stop and repair if route generation occurs without a user action, a failed refresh discards valid cached geometry, current location expands a far-away itinerary viewport, straight geometry receives road styling, cache/provider internals enter product copy, a ticket opens without the current item scope, or any overlay/Sheet/control overlaps at a required viewport.
+
+P5 result:
+
+- Added one pure day-map experience ViewModel that orders mapped stops, derives numbered markers, active transport mode, ticket count, external navigation, route metrics, and honest `road | mixed | estimate | unavailable` presentation from the existing itinerary and route-cache contracts.
+- Added transport-aware active-route overlays to both MapLibre and Google adapters. Cached road geometry remains visually distinct from dashed sequence estimates; straight lines are never labelled or styled as road routes.
+- Kept route generation strictly user-triggered through the compact route-status control. A failed refresh preserves the last valid cache or current estimate, returns a short message, and can be retried without a background Provider call.
+- Consolidated date/sequence, time, transport duration, address, ticket count, exact-ticket entry, external navigation, and item detail into one selected-place Sheet. The Sheet keeps one primary navigation action and uses a compact `详情` command at narrow widths.
+- Connected ephemeral current location without persisting it or allowing a far-away coordinate to expand the trip camera. Added measured camera padding for the date selector, route status, location control, notice, and Sheet.
+- Aligned the canonical fixture so day road geometry and the optional origin connector are separate semantic objects. No route-cache schema/signature, Provider contract, quota/authentication, realtime-fact, itinerary, ticket, or cloud-sync contract changed.
+
+P5 validation:
+
+- Focused map-link, day-map ViewModel, and DayMapView tests passed: 3 files and 38 tests.
+- Product-fidelity map E2E passed for seeded road geometry, active walking segment, numbered stops, current location, nonblank map canvas, exact ticket opening, zero background Provider requests, failed-refresh preservation, retry, and successful road-route replacement: 2 tests.
+- Existing floating-info and V3 map suites passed together with the product map suite: 10 tests on the `Mobile 390x844` project. The V3 suite additionally validated `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900` with no horizontal overflow or overlay/Sheet/control overlap.
+- A deterministic `390x844` light-mode capture was visually inspected; the map remained the full-bleed primary surface, real route geometry remained legible, and the selected-place Sheet retained a single dominant action.
+- `npm run typecheck`, `npm run lint`, and `npm run test:unit` passed: 212 files and 1720 tests.
+- `npm run build` passed with the bundle budget at 469.1 KiB entry, 853.5 KiB initial JS, 245.8 KiB initial gzip, and 2370.1 KiB/114-entry precache.
+- `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+
+P6 plan:
+
+- Goal: recompose pre-departure Today, active Today, the day itinerary, Documents, and Item Detail around the shared travel-object, media, brand, realtime-fact, document-link, and map ViewModels so the selected four-screen target is reflected by real product data rather than page-local heuristics.
+- Scope: add a read-only presentation runtime that combines existing trips/days/items/tickets with transport bookings and segments, controlled media, optional lodging/insurance inputs, and bounded realtime facts; expose the same collection to all five surfaces; add a compact preparation composition, media-led active stop, media timeline rows, structured document metadata, and media/detail reuse; add deterministic product-fidelity E2E and captures at the canonical `390x844` state.
+- Runtime data boundary: normal product media can come only from private ticket previews, validated cached media, or a photo reference returned for an already-confirmed Places identity through the existing Provider Proxy. E2E-only lodging, insurance, media, and realtime inputs use one strict session fixture envelope gated by the existing E2E build flag; production bundles do not import fixture JSON or its assets.
+- Interaction contract: each first viewport retains one primary action; AI, Search, More, filters, repair details, and technical tools stay on demand; missing rich data collapses naturally to the existing object fields without placeholder copy or fabricated images/facts.
+- No-go: no IndexedDB/Supabase schema, ticket Blob format, transport/cloud semantics, Provider request/response, media allowlist, realtime TTL, Action Gateway confirmation, route cache, navigation route, or write behavior change; no arbitrary URL, unverified logo, source-less current fact, page-local raw Provider parsing, background location lookup for an unconfirmed place, or effect-image data embedded in production components.
+- Likely files: `src/lib/travelObjects/*`, `src/lib/media/*`, one presentation hook, shared travel-object presentation components, `HomePage`/Today views, `DayViewPage`/timeline, ticket library rows, Item Detail, focused tests, `e2e/helpers.ts`, and a dedicated product-fidelity composition spec.
+- Validation: runtime schema/privacy/cache tests; component tests for sparse/rich/long states and action priority; canonical four-screen E2E at `390x844`; required viewport no-overflow checks; no unexpected Provider calls with complete fixture data; visual comparison against the selected target; typecheck, lint, full unit suite, production build, fidelity asset integrity, and `git diff --check`.
+- Risk: medium-high because five routes must consume one display model without widening sensitive fields, creating fetch loops, breaking ticket previews, or regressing fixed mobile surfaces.
+- Stop conditions: stop and repair if fixture-only records enter production paths, private fields cross Provider-safe summaries, an unknown media/fact passes validation, page load triggers lookup for an unconfirmed place, a ticket/media action loses its exact object scope, a sparse page invents density, or any required viewport overflows or shows more than one dominant action.
+
+P6 result:
+
+- Added one read-only presentation runtime that combines existing trip records, transport bookings/segments, private ticket-image previews, validated media cache, sourced realtime facts, and a strict E2E-only supplement envelope. The envelope rejects unknown fields, cross-trip data, oversize input, invalid media/facts, and sensitive extras.
+- Added a bounded media cache and a controlled Google Place Details photo adapter. Automatic media lookup is attempted only for an item that already has a confirmed `placeId`; missing or failed media stays absent without inventing a replacement or exposing Provider diagnostics.
+- Rebuilt pre-departure Today around structured route, flight, lodging, insurance, weather, and one primary itinerary action. Rebuilt active Today around a real-media next-stop Hero, countdown, transport, exact ticket action, one navigation action, and the existing real map.
+- Added media-led continuous day timeline rows, structured Documents metadata and link status, brand fallback for travel documents without a viewable page, and a real-media Item Detail Hero. Sparse records retain the prior compact text layouts.
+- Added E2E-only build emission for seven licensed WebP fixtures. A normal production build contains no fixture directory or fixture reference in the service worker; no fixture JSON or licensed test photo is imported by production components.
+- Added deterministic five-surface browser coverage at `390x844`. The complete fixture produced zero Provider requests, loaded all expected media, retained exact ticket scope, kept one primary action, and had no horizontal overflow.
+
+P6 validation:
+
+- New cache, Place-photo, strict runtime-envelope, and shared ViewModel tests passed: 4 files and 10 tests.
+- Focused page/component regressions passed: 4 files and 39 tests.
+- Product-fidelity composition E2E passed: 5/5 for pre-departure Today, active Today, itinerary, Documents, and Item Detail; all five captures were visually inspected.
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 215 files and 1726 tests.
+- Normal `npm run build` passed at 469.4 KiB entry, 853.8 KiB initial JS, 245.9 KiB initial gzip, and 2441.5 KiB/120-entry precache. The increased entry and precache remain within the existing budget.
+- `npm run check:fidelity-assets`, normal-build fixture exclusion checks, and `git diff --check` passed.
+
+P7 plan:
+
+- Goal: harden the new rich travel surfaces so media, facts, status, typography, controls, and fixed layers remain polished and operable across required viewports, appearance modes, text zoom, weak-network states, and accessibility preferences.
+- Scope: add explicit provider-media offline/reduced-data policy and retry-on-reconnect behavior; calibrate shared media/status/row/Hero dimensions and responsive wrapping; validate loading/error/expired/offline and layout-shift stability; add a deterministic resilience suite for `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900`, plus dark mode, `200%` text, Reduced Motion, software-keyboard height, long content, touch targets, and serious/critical axe checks.
+- No-go: no new Provider operation, background polling, production fixture import, fake media/fact, schema/storage/sync change, route-cache behavior, AI write path, navigation IA, decorative motion, or extra fixed surface.
+- Likely files: `TravelObjectMedia`, the shared travel-object presentation CSS, product-fidelity E2E helpers/specs, focused media/component tests, the design baseline, and this phase ledger.
+- Validation: focused media/component tests, full product-fidelity composition and resilience E2E, required viewport captures and geometry checks, typecheck, lint, full unit suite, production build, fixture exclusion, asset integrity, and `git diff --check`.
+- Risk: medium because text scaling and network changes can alter fixed media geometry or reveal hidden overlap even without changing underlying product behavior.
+- Stop conditions: stop and repair if a provider photo is fetched under offline/save-data policy, reconnect loops, content or controls overflow, a 44px target disappears, media loading shifts layout beyond `0.1`, serious axe issues appear, reduced motion still animates, or two bottom interaction layers are expanded together.
+
+P7 result:
+
+- Added one shared, multiplexed media-network policy for `online | offline | reduced-data`. Provider photos and confirmed-place photo enrichment do not run while offline or Save-Data is active; offline weather refresh also stays on cached facts. Local ticket previews and reviewed fixture assets remain available, and an online event retries deferred provider work.
+- Changed media readiness to follow the actual image `load` event rather than URL resolution. Loading, error, expired, offline, and reduced-data states now occupy the same fixed Hero or thumbnail box, with a measured layout-shift score below `0.1`.
+- Expanded image-source links to a 44px transparent touch target while retaining a compact 20px visual chip. Thumbnail and document attribution is non-interactive inside clickable rows, removing nested controls; full Hero attribution remains a direct source link.
+- Added one deterministic resilience suite spanning pre-departure Today, active Today, itinerary, Documents, and Item Detail at `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900`.
+- Added dark-mode serious/critical Axe checks, scoped 44px target checks, `320px + 200%` long Chinese and unbroken-English checks, Reduced Motion checks, software-keyboard-height checks, image loading/error/CLS checks, and offline/Save-Data Provider-request checks.
+- Reused one product-fidelity support module for composition and resilience tests so all browser evidence consumes the same fixture and seeded road geometry. No real Provider request, persistent schema, sync contract, route-cache behavior, ticket permission, or AI write boundary changed.
+
+P7 validation:
+
+- Media component tests passed: 7/7, including offline, Save-Data, reconnect, actual image load, error fallback, expiry, attribution, and object URL release behavior.
+- Product-fidelity resilience E2E passed 9/9; all five required viewports, dark mode, long content, `200%` text, Reduced Motion, keyboard-height, touch-target, Axe, media-state, CLS, and zero unexpected Provider-request assertions passed.
+- Product-fidelity composition E2E passed 5/5; the five fresh `390x844` captures were visually inspected after the P7 changes.
+- `npm run test:unit` passed: 215 files and 1730 tests. `npm run build` passed all three typechecks and the production bundle budget at 469.4 KiB entry, 853.8 KiB initial JS, 245.9 KiB initial gzip, and 2443.2 KiB/120-entry precache.
+- `npm run lint -- --quiet`, `npm run check:fidelity-assets` for all 11 controlled assets, and the focused media typecheck passed.
+
+P8 plan:
+
+- Goal: close the remaining selected-target composition gaps and produce one release-grade evidence set spanning strict visual comparison, complete local validation, simulator acceptance, and same-SHA remote receipts.
+- Scope: refine the four selected core surfaces without changing their product semantics; verify the place-enrichment success and failure flows through the existing Provider mock boundary; refresh the product-fidelity Golden only after the final visual candidate is committed; update the visual QA, fidelity baseline, implementation plan, and release evidence; run the full serial E2E and PWA lifecycle; validate the built PWA in iPhone and Android simulators; publish the branch and inspect GitHub, Cloudflare, and protected-area diagnostics.
+- No-go: no IndexedDB/Supabase schema, Provider request/response, auth, quota, route cache, AI confirmation, ticket permission, storage/sync, or product navigation contract change; no fake product facts, arbitrary remote media, real Provider request, physical-device requirement, or visual assertion that hides a known P0/P1/P2 difference.
+- Likely files: the Today, day-workspace/timeline, and Documents presentation components and shared CSS; focused component/E2E expectations; the product-fidelity Golden lock; `design-qa.md`; the fidelity baseline, implementation plan, and this ledger.
+- Validation: focused unit and product-fidelity browser tests; strict same-state reference/implementation comparisons; place Provider mock success/disabled/invalid/ambiguous/no-write checks; typecheck, lint, full unit suite, build, asset and bundle checks, full serial E2E, PWA-upgrade E2E, current Golden; iPhone Simulator Safari/home-screen PWA and Android Emulator Chrome/WebView; same-SHA GitHub/Cloudflare plus read-only Supabase/provider diagnostics; `git diff --check`.
+- Risk: medium-high because intentional layout changes can invalidate the previous Golden and can expose overflow or fixed-surface regressions at compact heights and `200%` text.
+- Stop conditions: stop and repair if a selected-target P0/P1/P2 difference remains unexplained, place enrichment writes before final confirmation, any Provider/auth/privacy boundary regresses, required local validation fails, a simulator cannot complete the critical PWA flow, the Golden is pinned before the candidate commit, or remote evidence is not tied to the published SHA.
+
+P8 result (local release candidate):
+
+- Refined the selected four-screen compositions: pre-departure Today now leads with the city route and structured travel objects; active Today uses the media-led next-stop Hero and one navigation action; itinerary keeps a compact map switch and richer continuous rows; Documents uses the editorial single-column preview list.
+- Added and visually inspected same-state `390x844` Selected Target comparisons for pre-departure Today, active Today, itinerary, and Documents. Every Visual P0/P1/P2 receipt is now `verified`; remaining map/photo pixel differences are the documented real-data differences, not missing product behavior.
+- Completed Item Detail place-enrichment coverage for successful candidates, invalid requests, quota limits, Provider unavailable, ambiguity, and no-write-before-confirmation. Existing Action Gateway confirmation, stale-plan, idempotency, privacy, exact-ticket, and partial-retry contracts remain intact.
+- Pinned the product-fidelity Golden after the final composition commit and fixed the resulting document physical-type metadata regression without weakening the assertion.
+- Validated iPhone 16 / iOS 26.5 Safari and installed home-screen PWA. Validated Android API 33 Chrome and a signed WebView QA shell across Today, itinerary, real MapLibre map, one place Sheet, Documents, Settings, AI Action Sheet, software keyboard, and accessibility names.
+- Simulator QA found that production CSS minification removed adjacent `100vh` declarations in favor of unsupported dynamic viewport units on WebView 103. Dynamic units now live in isolated `@supports` blocks, and the production bundle gate verifies all legacy viewport fallbacks in the emitted stylesheet.
+- No real AI, search, route, media, or other Provider call was made. Map connectivity used the documented macOS proxy; Provider semantics were exercised with deterministic mocks and contract tests.
+
+P8 validation (local and simulator):
+
+- `npm run typecheck`, `npm run lint`, and `npm run test:unit` passed: 215 files and 1730 tests.
+- `npm run build` passed, including emitted-CSS viewport fallback checks and bundle budget: 469.4 KiB entry, 853.9 KiB initial JS, 246.0 KiB initial gzip, and 2449.9 KiB/121-entry precache.
+- `npm run check:fidelity-assets` passed for all 11 controlled assets; the current product-fidelity Golden passed.
+- `npm run test:e2e:serial` passed 194/194 in 7.3 minutes. `npm run test:e2e:pwa-upgrade` passed 5/5 in 50.2 seconds.
+- Five required browser viewports, dark mode, long content, `200%` text, Reduced Motion, keyboard-height, touch targets, serious/critical Axe checks, media failure states, CLS, and zero unexpected Provider-request assertions passed.
+- Android WebView post-fix measurements: `innerHeight`, `#root`, and `.app-viewport` all approximately `866.29px`; bottom navigation ends at the same edge; document/settings/AI keyboard states keep `scrollWidth === clientWidth === 411`.
+- Branch publication, same-SHA GitHub/Cloudflare receipts, Supabase read-only diagnostics, merge, and production verification remain the only open P8 release receipts.

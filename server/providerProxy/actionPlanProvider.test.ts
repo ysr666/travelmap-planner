@@ -79,6 +79,30 @@ describe('actionPlanProvider', () => {
     expect(prompt).toContain('不得输出记录 ID、快照、指纹、状态或数据库字段')
   })
 
+  it('keeps mock ticket binding semantic and strips internal resources from the prompt contract', async () => {
+    const request = actionPlanRequest()
+    request.command = '把「爱丁堡城堡门票」绑定到「爱丁堡城堡」'
+    const result = await createMockAiActionPlanProvider(request)
+      .plan(buildAiActionPlanProviderInput(request))
+
+    expect(result).toMatchObject({
+      kind: 'plan',
+      ok: true,
+      response: {
+        plan: {
+          requiresConfirmation: true,
+          steps: [{
+            actionId: 'ticket.bind@1',
+            args: { target: '爱丁堡城堡', ticket: '爱丁堡城堡门票' },
+          }],
+        },
+      },
+    })
+    const prompt = buildAiActionPlanProviderInput(request).prompt
+    expect(prompt).toContain('不得输出 ticketId、itemId、文件路径、Blob 或权限字段')
+    expect(prompt).not.toContain('Bearer secret')
+  })
+
   it('keeps mock execution and preference writes inside bounded registered fields', async () => {
     const executionRequest = actionPlanRequest()
     executionRequest.command = '把「伦敦眼」标记为完成'

@@ -150,7 +150,7 @@ test('UI V3 Today matches the active three-stop visual fixture at every required
   await expect(page.getByTestId('today-departure-countdown')).toContainText('12:40')
   await expect(page.getByText('步行 · 16 分钟 (约 1.1 公里)')).toBeVisible()
   await expect(page.getByText('城堡门票')).toBeVisible()
-  await expect(page.getByText('11:00 入场', { exact: false })).toBeVisible()
+  await expect(page.getByTestId('today-map-place-sheet').getByText('11:00 入场', { exact: true })).toBeVisible()
   await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
   await expect(page.getByText('打开门票')).toBeVisible()
   await expect(page.getByRole('link', { name: '开始导航' })).toHaveCount(1)

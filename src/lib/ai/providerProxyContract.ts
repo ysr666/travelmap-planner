@@ -16,7 +16,7 @@ import type {
   ExistingTripImportProviderResult,
   ExistingTripImportSourceKind,
 } from './existingTripImport'
-import type { LedgerExpenseCategory, TicketCategory, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
+import type { LedgerExpenseCategory, TicketCategory, TicketReadinessStatus, TicketScope, TravelInboxClassification, TravelInboxEntryCategory } from '../../types'
 import { validateLedgerQueryPlan, type LedgerQueryPlan } from '../ledgerArchive'
 import type {
   AiActionCatalogDescriptor,
@@ -24,6 +24,12 @@ import type {
 } from './actionGateway/types'
 import { listAiActionCatalog } from './actionGateway/registry'
 import { validateAiActionPlan } from './actionGateway/validation'
+import { isGooglePlacesPhotoRef } from '../media/travelMedia'
+import { normalizeTimeZone } from '../timeZone'
+import {
+  validateRealtimeFactV1,
+  type RealtimeFactV1,
+} from '../realtime/realtimeFact'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -33,6 +39,8 @@ export const PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION = 'ai_trip_edit_plan' as
 export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
+export const PROVIDER_PROXY_PLACE_PHOTO_OPERATION = 'place_photo' as const
+export const PROVIDER_PROXY_WEATHER_FORECAST_OPERATION = 'weather_forecast' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
@@ -55,6 +63,7 @@ export const PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_TRAVEL_INBOX_CLASSIFY_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
+export const PROVIDER_PROXY_MAX_WEATHER_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW = 20
@@ -63,7 +72,7 @@ export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION | typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -509,6 +518,12 @@ export type ProviderProxyExistingTripImportTicketSummary = {
   summaryId: string
   ticketCategory?: TicketCategory
   title: string
+  structuredFields?: {
+    entryTime?: string
+    schemaVersion: 1
+    serviceDate?: string
+    status?: TicketReadinessStatus
+  }
 }
 
 export type ProviderProxyExistingTripImportRequest = {
@@ -696,9 +711,41 @@ export type ProviderProxyPlaceDetailsResult = {
   priceLevel?: string
   priceRangeText?: string
   editorialSummary?: string
+  photos?: ProviderProxyPlacePhotoReference[]
   provider: 'google_places'
   retrievedAt: string
 }
+
+export type ProviderProxyPlacePhotoAttribution = {
+  displayName: string
+  uri?: string
+}
+
+export type ProviderProxyPlacePhotoReference = {
+  photoRef: string
+  width: number
+  height: number
+  authorAttributions: ProviderProxyPlacePhotoAttribution[]
+  googleMapsUri?: string
+}
+
+export type ProviderProxyPlacePhotoRequest = {
+  operation: typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  photoRef: string
+  maxWidthPx?: number
+  maxHeightPx?: number
+}
+
+export type ProviderProxyValidatedPlacePhotoRequest = ProviderProxyPlacePhotoRequest & {
+  maxWidthPx: number
+  maxHeightPx: number
+}
+
+export type ProviderProxyPlacePhotoValidationResult =
+  | { ok: true; request: ProviderProxyValidatedPlacePhotoRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
 
 export type ProviderProxyPlaceDetailsSuccessResponse = {
   ok: true
@@ -717,6 +764,65 @@ export type ProviderProxyPlaceDetailsResponse =
 export type ProviderProxyPlaceDetailsValidationResult =
   | { ok: true; request: ProviderProxyValidatedPlaceDetailsRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyWeatherForecastRequest = {
+  operation: typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  tripId: string
+  subject: {
+    type: 'trip' | 'day' | 'item'
+    id: string
+  }
+  latitude: number
+  longitude: number
+  locationName: string
+  date: string
+  timeZone: string
+  includeCurrent?: boolean
+}
+
+export type ProviderProxyValidatedWeatherForecastRequest = ProviderProxyWeatherForecastRequest
+
+export type ProviderProxyWeatherFact = Extract<
+  RealtimeFactV1,
+  { kind: 'weather_current' | 'weather_forecast' }
+>
+
+export type ProviderProxyWeatherForecastSuccessResponse = {
+  facts: ProviderProxyWeatherFact[]
+  ok: true
+  operation: typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION
+  requestId?: string
+  retrievedAt: string
+  source: 'mock' | 'open_meteo'
+  warnings?: string[]
+}
+
+export type ProviderProxyWeatherForecastResponse =
+  | ProviderProxyWeatherForecastSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyWeatherForecastValidationResult =
+  | { ok: true; request: ProviderProxyValidatedWeatherForecastRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+const WEATHER_REQUEST_FIELDS = new Set([
+  'operation',
+  'requestId',
+  'quotaSessionId',
+  'tripId',
+  'subject',
+  'latitude',
+  'longitude',
+  'locationName',
+  'date',
+  'timeZone',
+  'includeCurrent',
+])
+const WEATHER_SUBJECT_FIELDS = new Set(['type', 'id'])
+const WEATHER_SUCCESS_FIELDS = new Set(['facts', 'ok', 'operation', 'requestId', 'retrievedAt', 'source', 'warnings'])
+const CONTROLLED_REALTIME_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$/
 
 export type ProviderProxyTripContentEnrichmentSourceSummary = {
   id: string
@@ -1101,6 +1207,14 @@ const FORBIDDEN_PLACE_DETAILS_FIELDS = new Set([
   'query',
   'search',
 ])
+const PLACE_PHOTO_ALLOWED_FIELDS = new Set([
+  'maxHeightPx',
+  'maxWidthPx',
+  'operation',
+  'photoRef',
+  'quotaSessionId',
+  'requestId',
+])
 const FORBIDDEN_TRIP_CONTENT_ENRICHMENT_FIELDS = new Set([
   'apikey',
   'authorization',
@@ -1262,6 +1376,9 @@ const DEFAULT_TRAVEL_SEARCH_MAX_RESULTS = 5
 const MAX_PLACE_LOOKUP_QUERY_LENGTH = 200
 const DEFAULT_PLACE_LOOKUP_MAX_RESULTS = 5
 const MAX_PLACE_ID_LENGTH = 220
+const MAX_PLACE_PHOTO_REF_LENGTH = 1_500
+const MIN_PLACE_PHOTO_DIMENSION = 64
+const MAX_PLACE_PHOTO_DIMENSION = 1_600
 const MAX_TRIP_CONTENT_ENRICHMENT_ITEMS = 6
 const MAX_TRIP_CONTENT_ENRICHMENT_SOURCES_PER_ITEM = 8
 const MAX_TRIP_CONTENT_ENRICHMENT_TEXT = 700
@@ -1292,7 +1409,8 @@ const MAX_EXISTING_TRIP_IMPORT_TOTAL_TEXT_LENGTH = 60000
 const MAX_EXISTING_TRIP_IMPORT_TEXT_FIELD = 240
 const MAX_TRAVEL_INBOX_CLASSIFY_TRIPS = 30
 const VALID_TRAVEL_INBOX_CATEGORIES = new Set<TravelInboxEntryCategory>(['unclassified', 'itinerary', 'ticket', 'note', 'mixed'])
-const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'summaryId', 'ticketCategory', 'title'])
+const EXISTING_TRIP_IMPORT_TICKET_SUMMARY_ALLOWED_FIELDS = new Set(['itemId', 'scope', 'structuredFields', 'summaryId', 'ticketCategory', 'title'])
+const EXISTING_TRIP_IMPORT_TICKET_STRUCTURED_ALLOWED_FIELDS = new Set(['entryTime', 'schemaVersion', 'serviceDate', 'status'])
 
 export function validateProviderProxyRoutePreviewRequest(input: unknown): ProviderProxyValidationResult {
   const record = readRecord(input)
@@ -1572,6 +1690,24 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return '地点详情服务返回的内容无法解析。'
     return '地点详情服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_PLACE_PHOTO_OPERATION) {
+    if (code === 'quota_exceeded') return '今日地点图片次数已达上限。'
+    if (code === 'invalid_request') return '地点图片请求无效。'
+    if (code === 'provider_error') return '地点图片服务请求失败。'
+    if (code === 'network_error') return '网络异常或请求超时。'
+    if (code === 'unsupported') return '当前地点图片请求暂不支持。'
+    if (code === 'invalid_response') return '地点图片服务返回的内容无法使用。'
+    return '地点图片服务暂不可用。'
+  }
+  if (operation === PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) {
+    if (code === 'quota_exceeded') return '今日天气查询次数已达上限。'
+    if (code === 'invalid_request') return '天气查询请求无效。'
+    if (code === 'provider_error') return '天气服务请求失败。'
+    if (code === 'network_error') return '网络异常或天气请求超时。'
+    if (code === 'unsupported') return '当前天气查询暂不支持。'
+    if (code === 'invalid_response') return '天气服务返回的内容无法使用。'
+    return '天气服务暂不可用。'
+  }
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     if (code === 'quota_exceeded') return '今日内容补充次数已达上限。'
     if (code === 'invalid_request') return '内容补充请求无效。'
@@ -1748,6 +1884,16 @@ function readOptionalPositiveInteger(value: unknown) {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
   return undefined
+}
+
+function readPlacePhotoDimension(value: unknown, fallback: number) {
+  if (value === undefined) return fallback
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MIN_PLACE_PHOTO_DIMENSION
+    && value <= MAX_PLACE_PHOTO_DIMENSION
+    ? value
+    : 0
 }
 
 function readInterestTags(value: unknown): { ok: true; tags?: string[] } | { message: string; ok: false } {
@@ -2031,6 +2177,30 @@ function placeDetailsInvalidRequest(message: string, requestId?: string): Provid
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function placePhotoInvalidRequest(message: string, requestId?: string): ProviderProxyPlacePhotoValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function weatherForecastInvalidRequest(message: string, requestId?: string): ProviderProxyWeatherForecastValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
       requestId,
     }),
     ok: false,
@@ -2869,13 +3039,15 @@ function readExistingTripImportTicketSummaries(
     const itemId = readOptionalString(record.itemId, 128)
     const scope = record.scope
     const ticketCategory = record.ticketCategory
+    const structuredFields = readExistingTripImportTicketStructuredFields(record.structuredFields)
     if (
       !summaryId ||
       summaryIds.has(summaryId) ||
       !title ||
       (itemId !== undefined && !itemIds.has(itemId)) ||
       (scope !== undefined && scope !== 'trip' && scope !== 'item' && scope !== 'unassigned') ||
-      (ticketCategory !== undefined && !isExistingTripImportTicketCategory(ticketCategory))
+      (ticketCategory !== undefined && !isExistingTripImportTicketCategory(ticketCategory)) ||
+      (record.structuredFields !== undefined && !structuredFields)
     ) {
       return { message: '现有票据摘要无效。', ok: false }
     }
@@ -2884,11 +3056,38 @@ function readExistingTripImportTicketSummaries(
       itemId,
       scope: scope as TicketScope | undefined,
       summaryId,
+      structuredFields: structuredFields ?? undefined,
       ticketCategory: ticketCategory as TicketCategory | undefined,
       title,
     })
   }
   return { existingTicketSummaries, ok: true }
+}
+
+function readExistingTripImportTicketStructuredFields(
+  input: unknown,
+): ProviderProxyExistingTripImportTicketSummary['structuredFields'] | null | undefined {
+  if (input === undefined) return undefined
+  const record = readRecord(input)
+  if (
+    record.schemaVersion !== 1
+    || !Object.keys(record).every((key) => EXISTING_TRIP_IMPORT_TICKET_STRUCTURED_ALLOWED_FIELDS.has(key))
+  ) return null
+  const serviceDate = typeof record.serviceDate === 'string' && isValidPlainDate(record.serviceDate)
+    ? record.serviceDate
+    : undefined
+  const entryTime = typeof record.entryTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(record.entryTime)
+    ? record.entryTime
+    : undefined
+  const status = typeof record.status === 'string' && ['ready', 'needs_review', 'expired', 'unavailable'].includes(record.status)
+    ? record.status as TicketReadinessStatus
+    : undefined
+  if (
+    (record.serviceDate !== undefined && !serviceDate)
+    || (record.entryTime !== undefined && !entryTime)
+    || (record.status !== undefined && !status)
+  ) return null
+  return { entryTime, schemaVersion: 1, serviceDate, status }
 }
 
 function isExistingTripImportTicketCategory(input: unknown): input is TicketCategory {
@@ -3239,6 +3438,163 @@ export function validateProviderProxyPlaceDetailsRequest(input: unknown): Provid
       placeId,
       quotaSessionId: readOptionalString(record.quotaSessionId, 160),
       region: region || undefined,
+      requestId,
+    },
+  }
+}
+
+export function validateProviderProxyWeatherForecastRequest(input: unknown): ProviderProxyWeatherForecastValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (
+    (record.requestId !== undefined && !isStrictOptionalString(record.requestId, 128))
+    || (record.quotaSessionId !== undefined && !isStrictOptionalString(record.quotaSessionId, 160))
+  ) {
+    return weatherForecastInvalidRequest('天气请求标识无效。', requestId)
+  }
+  if (record.operation !== PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) {
+    return weatherForecastInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  if (!Object.keys(record).every((field) => WEATHER_REQUEST_FIELDS.has(field))) {
+    return weatherForecastInvalidRequest('天气请求包含未知字段。', requestId)
+  }
+
+  const tripId = readControlledRealtimeId(record.tripId)
+  const subjectRecord = readRecord(record.subject)
+  const subjectId = readControlledRealtimeId(subjectRecord.id)
+  const subjectType = subjectRecord.type
+  if (
+    !tripId
+    || !Object.keys(subjectRecord).every((field) => WEATHER_SUBJECT_FIELDS.has(field))
+    || !subjectId
+    || (subjectType !== 'trip' && subjectType !== 'day' && subjectType !== 'item')
+  ) {
+    return weatherForecastInvalidRequest('天气查询对象无效。', requestId)
+  }
+
+  const latitude = record.latitude
+  const longitude = record.longitude
+  if (
+    typeof latitude !== 'number'
+    || !Number.isFinite(latitude)
+    || latitude < -90
+    || latitude > 90
+    || typeof longitude !== 'number'
+    || !Number.isFinite(longitude)
+    || longitude < -180
+    || longitude > 180
+  ) {
+    return weatherForecastInvalidRequest('天气查询坐标无效。', requestId)
+  }
+  const locationName = readStrictRequiredString(record.locationName, 160)
+  const date = typeof record.date === 'string' && isValidPlainDate(record.date) ? record.date : ''
+  const timeZone = normalizeTimeZone(record.timeZone)
+  if (!locationName || !date || !timeZone) {
+    return weatherForecastInvalidRequest('天气查询地点、日期或时区无效。', requestId)
+  }
+  if (record.includeCurrent !== undefined && typeof record.includeCurrent !== 'boolean') {
+    return weatherForecastInvalidRequest('天气实时条件无效。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      date,
+      includeCurrent: record.includeCurrent === true,
+      latitude,
+      locationName,
+      longitude,
+      operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      subject: { id: subjectId, type: subjectType },
+      timeZone,
+      tripId,
+    },
+  }
+}
+
+export function validateProviderProxyWeatherForecastSuccessResponse(
+  input: unknown,
+  request: ProviderProxyValidatedWeatherForecastRequest,
+): ProviderProxyWeatherForecastSuccessResponse | null {
+  const record = readRecord(input)
+  if (!Object.keys(record).every((field) => WEATHER_SUCCESS_FIELDS.has(field))) return null
+  if (record.ok !== true || record.operation !== PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) return null
+  const source = record.source === 'mock' || record.source === 'open_meteo' ? record.source : null
+  const retrievedAt = readStrictRequiredString(record.retrievedAt, 80)
+  const responseRequestId = readOptionalString(record.requestId, 128)
+  if (
+    !source
+    || !isValidIsoLikeDate(retrievedAt)
+    || responseRequestId !== request.requestId
+    || (record.requestId !== undefined && !isStrictOptionalString(record.requestId, 128))
+  ) return null
+  if (!Array.isArray(record.facts) || record.facts.length < 1 || record.facts.length > 2) return null
+
+  const facts: ProviderProxyWeatherFact[] = []
+  const kinds = new Set<string>()
+  for (const inputFact of record.facts) {
+    const validation = validateRealtimeFactV1(inputFact)
+    if (
+      !validation.ok
+      || (validation.value.kind !== 'weather_current' && validation.value.kind !== 'weather_forecast')
+      || validation.value.tripId !== request.tripId
+      || validation.value.subject.id !== request.subject.id
+      || validation.value.subject.type !== request.subject.type
+      || validation.value.value.locationName !== request.locationName
+      || validation.value.source.provider !== (source === 'mock' ? 'mock_weather' : 'open_meteo')
+      || kinds.has(validation.value.kind)
+    ) return null
+    if (validation.value.kind === 'weather_forecast' && validation.value.value.date !== request.date) return null
+    if (validation.value.kind === 'weather_current' && !request.includeCurrent) return null
+    kinds.add(validation.value.kind)
+    facts.push(validation.value)
+  }
+  if (!kinds.has('weather_forecast')) return null
+  const warnings = readStrictShortStringArray(record.warnings, 5, 160)
+  if (record.warnings !== undefined && !warnings) return null
+  return {
+    facts,
+    ok: true,
+    operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
+    requestId: responseRequestId,
+    retrievedAt: new Date(retrievedAt).toISOString(),
+    source,
+    warnings: warnings ?? undefined,
+  }
+}
+
+export function validateProviderProxyPlacePhotoRequest(input: unknown): ProviderProxyPlacePhotoValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+
+  if (record.operation !== PROVIDER_PROXY_PLACE_PHOTO_OPERATION) {
+    return placePhotoInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  if (!Object.keys(record).every((field) => PLACE_PHOTO_ALLOWED_FIELDS.has(field))) {
+    return placePhotoInvalidRequest('地点图片请求包含未知字段。', requestId)
+  }
+
+  const photoRef = typeof record.photoRef === 'string' ? record.photoRef.trim() : ''
+  if (!photoRef || photoRef.length > MAX_PLACE_PHOTO_REF_LENGTH || !isGooglePlacesPhotoRef(photoRef)) {
+    return placePhotoInvalidRequest('地点图片引用无效。', requestId)
+  }
+
+  const maxWidthPx = readPlacePhotoDimension(record.maxWidthPx, 1_200)
+  const maxHeightPx = readPlacePhotoDimension(record.maxHeightPx, 1_200)
+  if (!maxWidthPx || !maxHeightPx) {
+    return placePhotoInvalidRequest(`地点图片尺寸必须在 ${MIN_PLACE_PHOTO_DIMENSION}-${MAX_PLACE_PHOTO_DIMENSION}px 之间。`, requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      maxHeightPx,
+      maxWidthPx,
+      operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
+      photoRef,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
       requestId,
     },
   }
@@ -3898,6 +4254,27 @@ function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchT
 
 function isPlaceLookupLocale(value: unknown): value is ProviderProxyPlaceLookupLocale {
   return typeof value === 'string' && VALID_PLACE_LOOKUP_LOCALES.has(value as ProviderProxyPlaceLookupLocale)
+}
+
+function readControlledRealtimeId(input: unknown) {
+  return typeof input === 'string' && CONTROLLED_REALTIME_ID.test(input) ? input : ''
+}
+
+function readStrictRequiredString(input: unknown, maxLength: number) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  return value && value.length <= maxLength ? value : ''
+}
+
+function isStrictOptionalString(input: unknown, maxLength: number) {
+  return typeof input === 'string' && input.trim().length > 0 && input.trim().length <= maxLength
+}
+
+function readStrictShortStringArray(input: unknown, maxItems: number, maxLength: number) {
+  if (input === undefined) return undefined
+  if (!Array.isArray(input) || input.length > maxItems) return null
+  const values = input.map((value) => readStrictRequiredString(value, maxLength))
+  return values.every(Boolean) ? values : null
 }
 
 function isSafeHttpUrl(value: string): boolean {

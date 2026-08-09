@@ -285,6 +285,16 @@ describe('Ticket CRUD', () => {
       itemId: second.id,
       note: '改到第二站',
       scope: 'item',
+      structuredFields: {
+        entryTime: '09:30',
+        fieldEvidence: {
+          entryTime: { confidence: 'high', sourceType: 'manual' },
+          serviceDate: { confidence: 'high', sourceType: 'ticket' },
+        },
+        schemaVersion: 1,
+        serviceDate: '2025-04-02',
+        status: 'ready',
+      },
       ticketCategory: 'train_ticket',
       title: '新票据',
     })
@@ -294,6 +304,12 @@ describe('Ticket CRUD', () => {
       itemId: second.id,
       note: '改到第二站',
       scope: 'item',
+      structuredFields: {
+        entryTime: '09:30',
+        schemaVersion: 1,
+        serviceDate: '2025-04-02',
+        status: 'ready',
+      },
       ticketCategory: 'train_ticket',
       title: '新票据',
     })
@@ -314,7 +330,19 @@ describe('Ticket CRUD', () => {
       scope: 'unassigned',
       ticketCategory: 'other',
     })
+    expect((await getTicketMeta(ticket.id))?.structuredFields).toMatchObject({
+      entryTime: '09:30',
+      schemaVersion: 1,
+      serviceDate: '2025-04-02',
+      status: 'ready',
+    })
     await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [] })
+
+    await updateTicketMeta(ticket.id, {
+      scope: 'unassigned',
+      structuredFields: undefined,
+    })
+    expect((await getTicketMeta(ticket.id))?.structuredFields).toBeUndefined()
   })
 
   it('rejects ticket rebinds to items outside the ticket trip without mutating metadata', async () => {
@@ -346,6 +374,85 @@ describe('Ticket CRUD', () => {
       title: '机票',
     })
     await expect(getItineraryItem(otherItem.id)).resolves.toMatchObject({ ticketIds: [] })
+  })
+
+  it('rejects a stale ticket binding baseline without changing either side', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 1, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      fileName: 'a.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      title: 'A ticket',
+      tripId: trip.id,
+    })
+    await updateTicketMeta(ticket.id, {
+      scope: 'unassigned',
+      title: 'User changed title',
+    })
+    await db.ticketMetas.update(ticket.id, { updatedAt: ticket.updatedAt + 100 })
+
+    await expect(updateTicketMeta(ticket.id, {
+      expectedBinding: {
+        itemId: undefined,
+        targetItem: {
+          id: item.id,
+          ticketIds: [...item.ticketIds],
+          updatedAt: item.updatedAt,
+        },
+        ticketUpdatedAt: ticket.updatedAt,
+      },
+      itemId: item.id,
+      scope: 'item',
+      title: ticket.title,
+    })).rejects.toThrow('票据绑定已变化')
+    await expect(getTicketMeta(ticket.id)).resolves.toMatchObject({
+      itemId: undefined,
+      scope: 'unassigned',
+      title: 'User changed title',
+    })
+    await expect(getItineraryItem(item.id)).resolves.toMatchObject({ ticketIds: [] })
+  })
+
+  it('rejects a stale target-item binding baseline without changing the ticket', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 1, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      fileName: 'a.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      title: 'A ticket',
+      tripId: trip.id,
+    })
+    await db.itineraryItems.update(item.id, {
+      ticketIds: ['ticket-added-elsewhere'],
+      updatedAt: item.updatedAt + 100,
+    })
+
+    await expect(updateTicketMeta(ticket.id, {
+      expectedBinding: {
+        itemId: undefined,
+        targetItem: {
+          id: item.id,
+          ticketIds: [...item.ticketIds],
+          updatedAt: item.updatedAt,
+        },
+        ticketUpdatedAt: ticket.updatedAt,
+      },
+      itemId: item.id,
+      scope: 'item',
+      title: ticket.title,
+    })).rejects.toThrow('票据关联目标已变化')
+    const unchangedTicket = await getTicketMeta(ticket.id)
+    expect(unchangedTicket?.itemId).toBeUndefined()
+    expect(unchangedTicket?.scope).toBe('unassigned')
+    await expect(getItineraryItem(item.id)).resolves.toMatchObject({ ticketIds: ['ticket-added-elsewhere'] })
   })
 })
 

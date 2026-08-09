@@ -489,5 +489,6 @@ UI V3 只有满足以下全部条件才能从 Target 改为 Current：
 ## 11. 发布后动作
 
 1. 将实体机性能、文件选择和真实网络差异作为 Beta 运营观察，不回退模拟器发布标准。
-2. 按 [Roadmap V5](ROADMAP_V5.md) 进入 Realtime Cloud Core，不在 UI V3 收尾中改写同步或 Provider 合同。
-3. 后续共享 UI 改动继续运行固定视口、Golden、完整 E2E 和 PWA 升级门槛。
+2. 按 [UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md) 补齐真实媒体、结构化对象、实时事实、行程联动和设计图直接对照；这些能力在各阶段合并前保持 Target。
+3. 按 [Roadmap V5](ROADMAP_V5.md) 进入 Realtime Cloud Core，不在 UI V3 收尾中改写同步或 Provider 合同。
+4. 后续共享 UI 改动继续运行固定视口、Golden、完整 E2E 和 PWA 升级门槛。

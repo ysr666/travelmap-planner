@@ -252,6 +252,14 @@ function validateArgs<TActionId extends AiActionId>(
     if (record.query !== undefined && !query) errors.push(`${path}.query 无效。`)
     return (query ? { query } : {}) as AiActionArgsById[TActionId]
   }
+  if (actionId === 'ticket.bind@1') {
+    const ticket = readSemanticTarget(record.ticket, MAX_TARGET_LENGTH)
+    const target = readSemanticTarget(record.target, MAX_TARGET_LENGTH)
+    if (!ticket) errors.push(`${path}.ticket 必须是语义票据名称。`)
+    if (!target) errors.push(`${path}.target 必须是语义行程点目标。`)
+    if (!ticket || !target) return null
+    return { target, ticket } as AiActionArgsById[TActionId]
+  }
   if (actionId === 'item.create@1') {
     const day = readSemanticTarget(record.day, MAX_TARGET_LENGTH)
     const title = readText(record.title, MAX_ITEM_TITLE_LENGTH)
@@ -680,6 +688,7 @@ function readSemanticTarget(input: unknown, maxLength: number) {
   const value = readText(input, maxLength)
   if (!value) return ''
   if (/[?#=&]/.test(value)) return ''
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value) || /^(?:\/|\.\/|\.\.\/)/.test(value)) return ''
   if (/^(?:item|trip|ticket|ledger|expense)[_:-][a-z0-9_-]+$/i.test(value)) return ''
   if (/^day[_-][a-z0-9_-]+$/i.test(value)) return ''
   if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) return ''

@@ -16,6 +16,7 @@ import {
   PROVIDER_PROXY_MAX_COORDINATES,
   PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
+  PROVIDER_PROXY_MAX_WEATHER_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
@@ -27,6 +28,7 @@ import {
   PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW,
   PROVIDER_PROXY_PLACE_DETAILS_OPERATION,
   PROVIDER_PROXY_PLACE_LOOKUP_OPERATION,
+  PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
   PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION,
   PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION,
   PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION,
@@ -39,6 +41,7 @@ export type ProviderProxyQuotaBucket =
   | 'route|'
   | 'search|'
   | 'place|'
+  | 'weather|'
   | 'ai_draft|'
   | 'ai_draft_refine|'
   | 'ai_draft_repair|'
@@ -67,6 +70,7 @@ export type ProviderProxyQuotaLimits = {
   maxCoordinatesPerRequest: number
   maxDaysPerBatch: number
   maxPlaceLookupRequestsPerWindow: number
+  maxWeatherRequestsPerWindow: number
   maxRouteRequestsPerWindow: number
   maxTravelSearchRequestsPerWindow: number
   maxExchangeRateRequestsPerWindow: number
@@ -161,6 +165,7 @@ export const DEFAULT_PROVIDER_PROXY_QUOTA_LIMITS: ProviderProxyQuotaLimits = {
   maxCoordinatesPerRequest: PROVIDER_PROXY_MAX_COORDINATES,
   maxDaysPerBatch: PROVIDER_PROXY_MAX_DAYS_PER_BATCH,
   maxPlaceLookupRequestsPerWindow: PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW,
+  maxWeatherRequestsPerWindow: PROVIDER_PROXY_MAX_WEATHER_REQUESTS_PER_WINDOW,
   maxRouteRequestsPerWindow: 60,
   maxTravelSearchRequestsPerWindow: PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW,
   maxExchangeRateRequestsPerWindow: PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW,
@@ -397,11 +402,18 @@ export function getProviderProxyQuotaBucketConfig(
   if (operation === PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION) {
     return { bucket: 'ai_trip_operations|', maxRequests: limits.maxAiTripOperationsSummaryRequestsPerWindow }
   }
-  if (operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION) {
+  if (
+    operation === PROVIDER_PROXY_PLACE_LOOKUP_OPERATION
+    || operation === PROVIDER_PROXY_PLACE_DETAILS_OPERATION
+    || operation === PROVIDER_PROXY_PLACE_PHOTO_OPERATION
+  ) {
     return { bucket: 'place|', maxRequests: limits.maxPlaceLookupRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION) {
     return { bucket: 'search|', maxRequests: limits.maxTravelSearchRequestsPerWindow }
+  }
+  if (operation === 'weather_forecast') {
+    return { bucket: 'weather|', maxRequests: limits.maxWeatherRequestsPerWindow }
   }
   if (operation === PROVIDER_PROXY_EXCHANGE_RATE_OPERATION) {
     return { bucket: 'fx|', maxRequests: limits.maxExchangeRateRequestsPerWindow }

@@ -9,7 +9,9 @@ import { InlineStatus } from '../ui/InlineStatus'
 import { SectionHeader } from '../ui/SectionHeader'
 import { describePreviousTransport, transportModeLabels } from '../../lib/itinerary'
 import { buildAppleMapsDirectionsUrl, buildGoogleMapsDirectionsUrl } from '../../lib/mapLinks'
+import { getTravelObjectForItineraryItem, type TravelObjectCollectionV1 } from '../../lib/travelObjects'
 import type { Day, ItineraryItem, Trip } from '../../types'
+import { TravelObjectLeading, TravelObjectStatusBadge } from '../travel/TravelObjectPresentation'
 
 type DayTimelineViewProps = {
   trip: Trip
@@ -20,6 +22,7 @@ type DayTimelineViewProps = {
   compact?: boolean
   onSwitchToMap?: () => void
   sourceView?: 'schedule' | 'map'
+  travelObjects?: TravelObjectCollectionV1
 }
 
 export function DayTimelineView({
@@ -31,6 +34,7 @@ export function DayTimelineView({
   compact = false,
   onSwitchToMap,
   sourceView = 'schedule',
+  travelObjects,
 }: DayTimelineViewProps) {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
   const [pendingDeleteItem, setPendingDeleteItem] = useState<ItineraryItem | null>(null)
@@ -180,7 +184,7 @@ export function DayTimelineView({
             </>
           ) : null}
           {!isOrdering && onSwitchToMap ? (
-            <button aria-label="打开地图" className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus" onClick={onSwitchToMap} title="打开地图" type="button">
+            <button aria-label="打开地图" className="flex size-11 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface tm-focus" data-testid="view-switch-map" onClick={onSwitchToMap} title="打开地图" type="button">
               <Navigation className="size-4" />
             </button>
           ) : null}
@@ -260,6 +264,10 @@ export function DayTimelineView({
               const previousItem = index > 0 ? displayedItems[index - 1] : null
               const previousTransportDescription = describePreviousTransport(item)
               const itemMenuOpen = openItemMenuId === item.id
+              const travelObject = travelObjects
+                ? getTravelObjectForItineraryItem(travelObjects, item)
+                : undefined
+              const showLeading = Boolean(travelObject?.media || travelObject?.brand)
 
               return (
                 <div className="relative" key={item.id}>
@@ -288,22 +296,28 @@ export function DayTimelineView({
                         <p className="mt-1 truncate text-xs text-on-surface-variant">{item.locationName || item.address || '地点未填写'}</p>
                       </div>
                     ) : (
-                      <button aria-label={`打开行程点 ${item.title}`} className="min-w-0 text-left tm-focus" onClick={() => onOpenItem(item)} type="button">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-on-surface">{item.title}</h3>
-                          {item.ticketIds.length > 0 ? (
-                            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
-                              <Ticket className="size-3" />
-                              {item.ticketIds.length}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-on-surface-variant">
-                          <MapPin className="size-3.5 shrink-0" />
-                          <span className="truncate">{item.locationName || item.address || '地点未填写'}</span>
-                        </span>
-                        <span className="mt-1 block truncate text-xs text-on-surface-variant">
-                          {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
+                      <button aria-label={`打开行程点 ${item.title}`} className="day-timeline-object tm-focus" onClick={() => onOpenItem(item)} type="button">
+                        {showLeading && travelObject ? (
+                          <TravelObjectLeading className="day-timeline-object-leading" object={travelObject} />
+                        ) : null}
+                        <span className="day-timeline-object-copy">
+                          <span className="day-timeline-object-heading">
+                            <h3>{item.title}</h3>
+                            <TravelObjectStatusBadge status={travelObject?.status} />
+                            {item.ticketIds.length > 0 ? (
+                              <span className="day-timeline-object-ticket" aria-label={`${item.ticketIds.length} 份资料`}>
+                                <Ticket className="size-3" />
+                                {item.ticketIds.length}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="day-timeline-object-place">
+                            <MapPin className="size-3.5 shrink-0" />
+                            <span>{travelObject?.locationLabel || item.locationName || item.address || '地点未填写'}</span>
+                          </span>
+                          <span className="day-timeline-object-transport">
+                            {item.transportMode ? transportModeLabels[item.transportMode] : '交通未定'}
+                          </span>
                         </span>
                       </button>
                     )}

@@ -53,6 +53,16 @@ export function buildGoogleMapsUrl(item: ItineraryItem) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
 }
 
+export function buildGoogleMapsNavigationUrl(item: ItineraryItem, mode?: TransportMode) {
+  const destination = getDirectionsPoint(item)
+  if (!destination) return buildGoogleMapsUrl(item)
+
+  const params = ['api=1', `destination=${destination}`, 'dir_action=navigate']
+  const googleMode = mapGoogleDirectionsMode(mode)
+  if (googleMode) params.push(`travelmode=${googleMode}`)
+  return `https://www.google.com/maps/dir/?${params.join('&')}`
+}
+
 export function buildAppleMapsDirectionsUrl(
   fromItem: ItineraryItem,
   toItem: ItineraryItem,

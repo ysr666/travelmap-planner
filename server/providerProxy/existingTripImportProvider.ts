@@ -59,10 +59,11 @@ export function buildExistingTripImportProviderInput(
       '当前旅行摘要只用于匹配现有日期/行程点，不能输出 route/cache/cloud/ticket blob/provider metadata 操作。',
       '若能高置信合并到现有行程点，填写 targetItemId；低置信不要强行合并。',
       '票据候选只能来自明确订单、门票、航班、火车、酒店确认、二维码/凭证等文本；sourceFileId 必须引用来源 id。',
+      '票据候选只返回类别、服务日期和入场/出发时间；不要返回订单号、PNR、票号、座位、二维码、链接或其他敏感字段。',
       '多材料或长行程时保持输出紧凑：每天最多 3 个核心行程点，每个 reason 不超过 20 个中文字符，note 仅保留会影响执行的提醒。',
       '必须返回完整可解析 JSON；如果内容太多，优先保留日期、固定时间、酒店、交通、门票，省略低置信 notes。',
       '输出中文 reason，短句。不要输出 Markdown、解释文字或代码块。',
-      '输出 schema：{"days":[{"candidateId":"d1","date":"YYYY-MM-DD","title":"...","confidence":"medium","reason":"...","sourceIds":["..."]}],"items":[{"candidateId":"i1","date":"YYYY-MM-DD","title":"...","startTime":"HH:mm","endTime":"HH:mm","locationName":"...","address":"...","transportMode":"walk","previousTransportMode":"transit","previousTransportDurationMinutes":30,"previousTransportNote":"...","note":"...","targetItemId":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"tickets":[{"candidateId":"t1","title":"...","date":"YYYY-MM-DD","itemTitle":"...","targetItemId":"...","sourceFileId":"...","fileName":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"notes":[{"candidateId":"n1","text":"...","date":"YYYY-MM-DD","confidence":"medium","reason":"...","sourceIds":["..."]}],"warnings":["..."]}',
+      '输出 schema：{"days":[{"candidateId":"d1","date":"YYYY-MM-DD","title":"...","confidence":"medium","reason":"...","sourceIds":["..."]}],"items":[{"candidateId":"i1","date":"YYYY-MM-DD","title":"...","startTime":"HH:mm","endTime":"HH:mm","locationName":"...","address":"...","transportMode":"walk","previousTransportMode":"transit","previousTransportDurationMinutes":30,"previousTransportNote":"...","note":"...","targetItemId":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"tickets":[{"candidateId":"t1","title":"...","date":"YYYY-MM-DD","serviceDate":"YYYY-MM-DD","entryTime":"HH:mm","ticketCategory":"admission_ticket","itemTitle":"...","targetItemId":"...","sourceFileId":"...","fileName":"...","confidence":"high","reason":"...","sourceIds":["..."]}],"notes":[{"candidateId":"n1","text":"...","date":"YYYY-MM-DD","confidence":"medium","reason":"...","sourceIds":["..."]}],"warnings":["..."]}',
       `requestId: ${requestId ?? request.requestId ?? 'unknown'}`,
       `request: ${JSON.stringify(compactRequest(request))}`,
     ].join('\n'),
@@ -195,11 +196,13 @@ function buildMockExistingTripImportResult(request: ProviderProxyExistingTripImp
       candidateId: 'mock-ticket-1',
       confidence: 'medium',
       date,
+      entryTime: time,
       fileName: firstSource?.fileName,
       itemTitle: title,
       reason: 'Mock 识别到票据或订单关键词。',
       sourceFileId: firstSource?.id,
       sourceIds,
+      serviceDate: date,
       targetItemId: items[0].targetItemId,
       title: `${title} 票据`,
     }]
@@ -314,13 +317,16 @@ function normalizeTickets(
       candidateId: readText(record.candidateId, 80) || `ticket-${index + 1}`,
       confidence: readConfidence(record.confidence),
       date: readDate(record.date),
+      entryTime: readTime(record.entryTime),
       fileName: readText(record.fileName, 180),
       itemTitle: readText(record.itemTitle, 160),
       note: readText(record.note, 700),
       reason: readText(record.reason, 300),
       sourceFileId: readText(record.sourceFileId, 128),
       sourceIds: readSourceIds(record.sourceIds, validSourceIds),
+      serviceDate: readDate(record.serviceDate),
       targetItemId: targetItemId && itemIds.has(targetItemId) ? targetItemId : undefined,
+      ticketCategory: readTicketCategory(record.ticketCategory),
       title,
     }]
   }).slice(0, 100)
@@ -435,6 +441,18 @@ function readDuration(value: unknown) {
 
 function readConfidence(value: unknown): ExistingTripImportConfidence {
   return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium'
+}
+
+function readTicketCategory(value: unknown): ExistingTripImportProviderCandidateTicket['ticketCategory'] {
+  return value === 'admission_ticket'
+    || value === 'train_ticket'
+    || value === 'flight_ticket'
+    || value === 'hotel_booking'
+    || value === 'restaurant_reservation'
+    || value === 'transport_booking'
+    || value === 'other'
+    ? value
+    : undefined
 }
 
 function readSourceIds(input: unknown, validSourceIds: Set<string>) {

@@ -98,7 +98,7 @@ function readEnvironment(value: unknown): ProviderRuntimeEnvironment | undefined
 }
 
 function readGroup(value: unknown): ProviderOperationGroup | undefined {
-  return value === 'ai' || value === 'search' || value === 'place' || value === 'route' || value === 'fx' ? value : undefined
+  return value === 'ai' || value === 'search' || value === 'place' || value === 'route' || value === 'weather' || value === 'fx' ? value : undefined
 }
 
 function readInteger(value: unknown) {

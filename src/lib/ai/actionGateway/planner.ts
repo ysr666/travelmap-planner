@@ -23,6 +23,7 @@ import {
   type AiActionPlanV1,
   type AiActionRoutePreviewArgs,
   type AiActionStepV1,
+  type AiActionTicketBindArgs,
   type AiActionTripReplanApplyArgs,
 } from './types'
 import { validateAiActionPlan } from './validation'
@@ -48,6 +49,8 @@ const ACTION_VERBS = [
   '新增',
   '添加',
   '记录',
+  '绑定',
+  '关联',
   '记一笔',
   '创建',
   '删除',
@@ -65,8 +68,18 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
   const steps: Array<Record<string, unknown>> = []
   const intent = parseGlobalAiCommandIntent(normalized)
   const adaptiveReplanIntent = parseAdaptiveReplanIntent(normalized, intent)
+  const ticketBinding = parseDeterministicTicketBinding(normalized)
 
-  if (intent.kind === 'ticket_lookup') {
+  if (ticketBinding) {
+    steps.push({
+      actionId: 'ticket.bind@1',
+      args: ticketBinding,
+      dependsOn: [],
+      id: 'bind-ticket',
+    })
+  }
+
+  if (!ticketBinding && intent.kind === 'ticket_lookup') {
     steps.push({
       actionId: 'ticket.open@1',
       args: intent.query ? { query: intent.query } : {},
@@ -268,6 +281,42 @@ export function buildDeterministicAiActionPlan(command: string): AiActionPlanV1 
     summary: summarizeSteps(safeSteps),
   })
   return validation.ok ? validation.plan : null
+}
+
+function parseDeterministicTicketBinding(command: string): AiActionTicketBindArgs | null {
+  if (
+    isHypotheticalCommand(command)
+    || isNonAffirmativeWriteCommand(command)
+    || !/(?:绑定|关联|归入)/.test(command)
+  ) return null
+
+  const quoted = [...command.matchAll(/[「“"]([^」”"]{1,80})[」”"]/g)]
+    .map((match) => match[1].trim())
+  if (quoted.length >= 2 && normalizePlannerSelector(quoted[0]) !== normalizePlannerSelector(quoted[1])) {
+    return { target: quoted[1], ticket: quoted[0] }
+  }
+
+  const match = command.match(/^(?:请|麻烦|帮我|给我|把|将|替我|\s)*(.{1,100}?)(?:绑定|关联|归入)(?:到|至|给|进)?\s*(.{1,100}?)\s*[。.!！]?$/)
+  if (!match) return null
+  const ticket = cleanTicketBindingSelector(match[1], true)
+  const targetText = cleanTicketBindingSelector(match[2], false)
+  const target = inferSemanticTarget(targetText) ?? targetText
+  if (
+    !ticket || !target
+    || ticket.length > 160 || target.length > 160
+    || normalizePlannerSelector(ticket) === normalizePlannerSelector(target)
+  ) return null
+  return { target, ticket }
+}
+
+function cleanTicketBindingSelector(value: string, ticket: boolean) {
+  const normalized = value
+    .replace(/^(?:请|麻烦|帮我|给我|把|将|替我|这张|这个|该|\s)+/g, '')
+    .replace(/(?:这张|这个|该)?(?:票据|文档|资料)\s*$/g, ticket ? '票据' : '')
+    .replace(/^[「“"]|[」”"]$/g, '')
+    .replace(/[，,。；;：:\s]+$/g, '')
+    .trim()
+  return normalized
 }
 
 export function shouldRequestAiActionPlan(command: string) {
@@ -960,6 +1009,10 @@ function isAiActionStepBoundToCommand(
     return false
   }
   switch (step.actionId) {
+    case 'ticket.bind@1':
+      return /(?:绑定|关联|归入)/.test(command)
+        && isSemanticTargetBound(args.ticket, command, 'literal')
+        && isSemanticTargetBound(args.target, command, 'item')
     case 'ticket.open@1':
       return intent.kind === 'ticket_lookup'
         || intent.kind === 'page_navigation' && intent.target === 'tickets'
@@ -1024,8 +1077,8 @@ function isAiActionStepBoundToCommand(
 }
 
 function isExplicitlyNegatedActionCommand(command: string) {
-  return /(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,64}(?:打开|查找|补全|补充|修复|处理|整理|完成|调整|移动|挪|生成|新增|添加|创建|删除|移除|撤销|恢复|跳过|标记|设为|记录|写入)/.test(command)
-    || /\b(?:do\s+not|don't|dont|never|no\s+need\s+to)\b[^.!?]{0,96}\b(?:open|find|search|enrich|repair|fix|adjust|move|generate|create|add|delete|remove|undo|restore|skip|mark|record|replan)\b/i.test(command)
+  return /(?:不要|别|无需|不用|不必|禁止|不允许)[^，。；;]{0,64}(?:打开|查找|补全|补充|修复|处理|整理|完成|调整|移动|挪|生成|新增|添加|创建|删除|移除|撤销|恢复|跳过|标记|设为|记录|写入|绑定|关联)/.test(command)
+    || /\b(?:do\s+not|don't|dont|never|no\s+need\s+to)\b[^.!?]{0,96}\b(?:open|find|search|enrich|repair|fix|adjust|move|generate|create|add|delete|remove|undo|restore|skip|mark|record|replan|bind|link)\b/i.test(command)
 }
 
 function isNonAffirmativeWriteCommand(command: string) {
@@ -1033,7 +1086,7 @@ function isNonAffirmativeWriteCommand(command: string) {
   if (!normalized) return true
   if (isExplicitlyNegatedActionCommand(normalized)) return true
   if (
-    /(?:删除|移除|修复|调整|重排|移动|挪|新增|添加|创建|记录|写入|生成|补全|补充|完成|跳过|标记|设为)[^，。；;]{0,48}(?:不用|不要了|不必|无需|算了|取消吧|别了)\s*[。.!！]?$/.test(normalized)
+    /(?:删除|移除|修复|调整|重排|移动|挪|新增|添加|创建|记录|写入|生成|补全|补充|完成|跳过|标记|设为|绑定|关联)[^，。；;]{0,48}(?:不用|不要了|不必|无需|算了|取消吧|别了)\s*[。.!！]?$/.test(normalized)
     || /\b(?:never\s+mind|cancel\s+that|do\s+not|don't|dont|no\s+need)\b/i.test(normalized)
   ) {
     return true
@@ -1355,6 +1408,7 @@ function summarizeSteps(steps: Array<Record<string, unknown>>) {
   const labels = [
     actionIds.has('workspace.open@1') ? '打开页面' : '',
     actionIds.has('ticket.open@1') ? '打开票据' : '',
+    actionIds.has('ticket.bind@1') ? '关联票据' : '',
     actionIds.has('history.undo@1') ? '撤销行程点删除' : '',
     actionIds.has('item.create@1') ? '新增行程点' : '',
     actionIds.has('item.delete@1') ? '删除行程点' : '',

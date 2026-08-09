@@ -80,6 +80,100 @@ test('全局 AI 查找票据后直接打开画廊目标并收起结果面板', a
   await expectNoHorizontalOverflow(page)
 })
 
+test('全局 AI 在移动端一次确认关联票据并保持成员可见范围', async ({ page }) => {
+  await page.setViewportSize({ height: 844, width: 390 })
+  await clearTravelDatabase(page)
+  const providerProxyRequests: string[] = []
+  await page.route('**/api/provider-proxy', (route) => {
+    providerProxyRequests.push(route.request().url())
+    return route.abort()
+  })
+  const now = Date.now()
+  await seedTravelRecords(page, {
+    days: [{
+      date: '2026-08-18',
+      id: 'gateway-ticket-day',
+      sortOrder: 1,
+      title: '爱丁堡老城',
+      tripId: 'gateway-ticket-trip',
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'gateway-ticket-day',
+      id: 'gateway-ticket-castle',
+      sortOrder: 1,
+      startTime: '11:00',
+      ticketIds: [],
+      title: '爱丁堡城堡',
+      tripId: 'gateway-ticket-trip',
+      updatedAt: now,
+    }],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'edinburgh-castle.pdf',
+      fileType: 'pdf',
+      id: 'gateway-ticket-document',
+      mimeType: 'application/pdf',
+      referenceLocation: 'TripMap/爱丁堡城堡.pdf',
+      scope: 'unassigned',
+      sharedVisibility: { memberIds: ['member-reader'], mode: 'assigned' },
+      size: 128,
+      storageMode: 'reference',
+      structuredFields: {
+        entryTime: '11:00',
+        schemaVersion: 1,
+        serviceDate: '2026-08-18',
+        status: 'ready',
+      },
+      ticketCategory: 'admission_ticket',
+      title: '爱丁堡城堡门票',
+      tripId: 'gateway-ticket-trip',
+      updatedAt: now,
+    }],
+    trips: [{
+      createdAt: now,
+      destination: '英国爱丁堡',
+      endDate: '2026-08-18',
+      id: 'gateway-ticket-trip',
+      startDate: '2026-08-18',
+      title: '票据关联测试旅行',
+      updatedAt: now,
+    }],
+  })
+  await page.goto('/#/trip?tripId=gateway-ticket-trip', { waitUntil: 'domcontentloaded' })
+
+  await openGlobalAi(page)
+  await page.getByLabel('全局 AI 指令').fill('把「爱丁堡城堡门票」绑定到「爱丁堡城堡」')
+  await page.getByRole('button', { name: '发送 AI 指令' }).click()
+
+  const result = page.getByTestId('global-ai-command-result')
+  await expect(result).toContainText('关联票据')
+  await expect(result).toContainText('「爱丁堡城堡门票」将关联到「爱丁堡城堡」')
+  await expect(page.getByTestId('global-ai-action-summary')).toContainText('1 个步骤 · 影响 2 项')
+  await expect(page.getByTestId('global-ai-action-details')).not.toHaveAttribute('open', '')
+  await expect(result.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  expect((await readItineraryItem(page, 'gateway-ticket-castle')).ticketIds).toEqual([])
+  expect(await readFirstStoreRecord(page, 'ticketMetas')).not.toHaveProperty('itemId')
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+
+  await result.getByRole('button', { name: '确认执行' }).click()
+
+  await expect(page).toHaveURL(/#\/documents\?/)
+  await expect(page).toHaveURL(/ticketId=gateway-ticket-document/)
+  await expect.poll(async () => (await readItineraryItem(page, 'gateway-ticket-castle')).ticketIds)
+    .toEqual(['gateway-ticket-document'])
+  expect(await readFirstStoreRecord(page, 'ticketMetas')).toMatchObject({
+    id: 'gateway-ticket-document',
+    itemId: 'gateway-ticket-castle',
+    scope: 'item',
+    sharedVisibility: { memberIds: ['member-reader'], mode: 'assigned' },
+  })
+  expect(await countStore(page, 'tripIntelligenceAppliedChanges')).toBe(1)
+  expect(providerProxyRequests).toHaveLength(0)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('全局 AI 通过注册动作直接打开资料中心且不调用 Provider', async ({ page }) => {
   await clearTravelDatabase(page)
   const providerProxyRequests: string[] = []

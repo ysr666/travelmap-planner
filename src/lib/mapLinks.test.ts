@@ -3,6 +3,7 @@ import {
   buildAppleMapsDirectionsUrl,
   buildAppleMapsUrl,
   buildGoogleMapsDirectionsUrl,
+  buildGoogleMapsNavigationUrl,
   buildGoogleMapsUrl,
   hasValidCoordinates,
   parseCoordinatesFromMapLink,
@@ -126,6 +127,25 @@ describe('buildGoogleMapsUrl', () => {
   it('uses query text when no coordinates', () => {
     const url = buildGoogleMapsUrl(makeItem({ locationName: 'Senso-ji' }))
     expect(url).toContain('query=Senso-ji')
+  })
+})
+
+describe('buildGoogleMapsNavigationUrl', () => {
+  it('opens destination directions with the matching travel mode', () => {
+    const url = buildGoogleMapsNavigationUrl(
+      makeItem({ lat: 55.9486, lng: -3.1999, locationName: 'Edinburgh Castle' }),
+      'walk',
+    )
+    expect(url).toContain('/maps/dir/')
+    expect(url).toContain('destination=55.9486,-3.1999')
+    expect(url).toContain('dir_action=navigate')
+    expect(url).toContain('travelmode=walking')
+  })
+
+  it('uses encoded destination text when coordinates are unavailable', () => {
+    const url = buildGoogleMapsNavigationUrl(makeItem({ address: 'Castlehill, Edinburgh' }), 'transit')
+    expect(url).toContain('destination=Castlehill%2C%20Edinburgh')
+    expect(url).toContain('travelmode=transit')
   })
 })
 

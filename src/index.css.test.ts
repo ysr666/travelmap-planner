@@ -16,19 +16,17 @@ function declarationsFor(selector: string) {
 }
 
 describe('application viewport compatibility', () => {
-  it('keeps vh fallbacks before dynamic viewport units', () => {
+  it('isolates dynamic viewport units so production minification preserves vh fallbacks', () => {
+    const bodyDeclarations = declarationsFor('body')
     const rootDeclarations = declarationsFor('#root')
     const viewportDeclarations = declarationsFor('.app-viewport')
 
-    expect(rootDeclarations.indexOf('min-height: 100vh;')).toBeLessThan(
-      rootDeclarations.indexOf('min-height: 100svh;'),
-    )
-    expect(viewportDeclarations.indexOf('height: 100vh;')).toBeLessThan(
-      viewportDeclarations.indexOf('height: 100dvh;'),
-    )
-    expect(viewportDeclarations.indexOf('min-height: 100vh;')).toBeLessThan(
-      viewportDeclarations.indexOf('min-height: 100svh;'),
-    )
+    expect(bodyDeclarations).toContain('min-height: 100vh;')
+    expect(rootDeclarations).toContain('min-height: 100vh;')
+    expect(viewportDeclarations).toContain('height: 100vh;')
+    expect(viewportDeclarations).toContain('min-height: 100vh;')
+    expect(styles).toMatch(/@supports \(min-height: 100svh\)\s*\{[\s\S]*?min-height: 100svh;/)
+    expect(styles).toMatch(/@supports \(height: 100dvh\)\s*\{[\s\S]*?height: 100dvh;/)
   })
 
   it('keeps the global reduced-motion override', () => {

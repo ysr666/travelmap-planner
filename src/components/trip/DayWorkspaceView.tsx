@@ -1,11 +1,12 @@
 import { AlertTriangle, CalendarDays, List, Map as MapIcon, MapPin, MoreHorizontal, Route, ShieldCheck, Ticket } from 'lucide-react'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { DayBriefCard } from '../ai/DayBriefCard'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Collapsible } from '../ui/Collapsible'
 import { SkeletonLine } from '../ui/SkeletonLine'
 import { loadDayMapView } from '../../lib/dayWorkspaceMapLoader'
+import { useTravelObjectPresentation } from '../../hooks/useTravelObjectPresentation'
 import { navigateTo } from '../../lib/routes'
 import { formatShortDate } from '../../lib/dates'
 import type { DayWorkspaceViewModel } from '../../lib/dayWorkspaceViewModel'
@@ -77,6 +78,16 @@ export function DayWorkspace({
   view,
 }: DayWorkspaceProps) {
   const isMapView = view === 'map'
+  const presentationItems = allItems.length > 0 ? allItems : items
+  const mediaItemIds = useMemo(() => items.slice(0, 4).map((item) => item.id), [items])
+  const { collection: travelObjects } = useTravelObjectPresentation({
+    days,
+    items: presentationItems,
+    mediaItemIds,
+    now: liveNow,
+    tickets,
+    trip,
+  })
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -103,6 +114,11 @@ export function DayWorkspace({
                 items={items}
                 onBackToSchedule={() => onSwitchView('schedule')}
                 onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'map' })}
+                onOpenTickets={(item) => navigateTo('tickets', {
+                  itemId: item.id,
+                  ...(item.ticketIds.length === 1 ? { ticketId: item.ticketIds[0] } : {}),
+                  tripId: trip.id,
+                })}
                 prewarmEnabled={false}
                 resizeSignal={mapResizeToken}
                 showDefaultMarkerCard={false}
@@ -160,15 +176,15 @@ export function DayWorkspace({
               selectedDayId={selectedDay.id}
             />
 
-            <ViewSwitch activeView={view} onSwitch={onSwitchView} />
-
             <DayTimelineView
               compact
               day={selectedDay}
               items={items}
               onItemsChange={onRefreshItems}
               onOpenItem={(item) => navigateTo('item', { tripId: trip.id, dayId: selectedDay.id, itemId: item.id, view: 'schedule' })}
+              onSwitchToMap={() => onSwitchView('map')}
               sourceView="schedule"
+              travelObjects={travelObjects}
               trip={trip}
             />
 

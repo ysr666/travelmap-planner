@@ -337,7 +337,10 @@ function TransportForm({ onSaved, travelers, trip, vaultUnlocked }: { onSaved: (
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState<TransportBookingKind>('flight')
   const [providerName, setProviderName] = useState('')
+  const [providerCode, setProviderCode] = useState('')
+  const [bookingFieldEvidence, setBookingFieldEvidence] = useState<TransportBooking['fieldEvidence']>()
   const [segments, setSegments] = useState<DraftSegment[]>([makeDraftSegment('flight', trip.startDate, zone)])
+  const [segmentSeats, setSegmentSeats] = useState<string[]>([''])
   const [pnr, setPnr] = useState('')
   const [orderNumber, setOrderNumber] = useState('')
   const [travelerIds, setTravelerIds] = useState<string[]>([])
@@ -349,17 +352,25 @@ function TransportForm({ onSaved, travelers, trip, vaultUnlocked }: { onSaved: (
   const [importText, setImportText] = useState('')
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importPreview, setImportPreview] = useState<TransportImportPreview | null>(null)
+  const [importApplied, setImportApplied] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
   const [busy, setBusy] = useState(false)
-  const updateSegment = (index: number, patch: Partial<DraftSegment>) => setSegments((current) => current.map((segment, currentIndex) => currentIndex === index ? { ...segment, ...patch } : segment))
+  const updateSegment = (index: number, patch: Partial<DraftSegment>) => setSegments((current) => current.map((segment, currentIndex) => currentIndex === index
+    ? { ...segment, ...patch, fieldEvidence: markSegmentPatchAsManual(segment.fieldEvidence, patch) }
+    : segment))
   async function save() {
     const externalActions = externalUrl ? [{ id: crypto.randomUUID(), kind: externalKind, label: externalLabel || '外部链接', url: externalUrl }] : []
     if (externalActions.some((action) => !isSafeExternalAction(action))) throw new Error('外部链接必须使用 HTTPS。')
     setBusy(true)
     try {
-      const secret = pnr || orderNumber || travelerIds.length ? { orderNumber: orderNumber || undefined, pnr: pnr || undefined, travelerIds } : undefined
-      if (secret && !vaultUnlocked) throw new Error('PNR、订单号和乘客属于敏感信息，请先解锁资料库。')
-      const result = await createTransportBooking({ booking: { externalActions, kind, providerName: providerName || undefined, sourceLabel: 'manual', status: 'confirmed', title, tripId: trip.id }, secret, segments })
+      const encryptedSeats = segmentSeats.flatMap((seat, segmentIndex) => seat.trim()
+        ? [{ seat: seat.trim(), segmentIndex }]
+        : [])
+      const secret = pnr || orderNumber || travelerIds.length || encryptedSeats.length
+        ? { orderNumber: orderNumber || undefined, pnr: pnr || undefined, segmentSeats: encryptedSeats, travelerIds }
+        : undefined
+      if (secret && !vaultUnlocked) throw new Error('PNR、订单号、座位和乘客属于敏感信息，请先解锁资料库。')
+      const result = await createTransportBooking({ booking: { externalActions, fieldEvidence: bookingFieldEvidence, kind, providerCode: providerCode || undefined, providerName: providerName || undefined, sourceLabel: importApplied ? 'local_import' : 'manual', status: 'confirmed', title, tripId: trip.id }, secret, segments })
       for (const segment of result.segments) {
         await scheduleTransportReminder({ kind: 'departure', minutesBefore: 120, segment })
         if (segment.kind === 'flight') await scheduleTransportReminder({ kind: 'check_in', minutesBefore: 24 * 60, segment })
@@ -379,23 +390,42 @@ function TransportForm({ onSaved, travelers, trip, vaultUnlocked }: { onSaved: (
     setKind(nextKind)
     setTitle(importPreview.title)
     setProviderName(importPreview.providerName ?? '')
+    setProviderCode(importPreview.providerCode ?? '')
+    setBookingFieldEvidence({
+      providerCode: importPreview.fieldEvidence.providerCode,
+      providerName: importPreview.fieldEvidence.providerName,
+    })
+    setPnr(importPreview.privateFields?.pnr ?? '')
+    setOrderNumber(importPreview.privateFields?.orderNumber ?? '')
+    setSegmentSeats([importPreview.privateFields?.seat ?? ''])
     setSegments([{
       ...makeDraftSegment(nextKind, importPreview.departureDate ?? trip.startDate, zone),
+      arrivalCode: importPreview.arrivalCode,
       arrivalDate: importPreview.arrivalDate ?? importPreview.departureDate ?? trip.startDate,
       arrivalPlace: importPreview.arrivalPlace ?? '',
+      arrivalPlatform: importPreview.arrivalPlatform,
+      arrivalTerminal: importPreview.arrivalTerminal,
       arrivalTime: importPreview.arrivalTime,
+      carrierCode: importPreview.providerCode,
+      departureCode: importPreview.departureCode,
       departurePlace: importPreview.departurePlace ?? '',
+      fieldEvidence: transportPreviewEvidence(importPreview),
+      platform: importPreview.departurePlatform,
       departureTime: importPreview.departureTime,
       serviceNumber: importPreview.serviceNumber,
+      terminal: importPreview.departureTerminal,
     }])
+    setImportApplied(true)
     setShowImport(false)
   }
   function changeKind(nextKind: TransportBookingKind) { setKind(nextKind); setSegments((current) => current.map((segment) => ({ ...segment, kind: nextKind }))) }
-  return <Card variant="grouped" className="space-y-3"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">新交通订单</h3><p className="text-xs tm-muted">票面班次保持原值；外部动态不会覆盖订单。</p></div><Button icon={<FileText className="size-4" />} onClick={() => setShowImport((value) => !value)} variant="secondary">本机导入</Button></div>{showImport ? <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-3"><label><span className={FIELD_LABEL_CLASS}>粘贴票据文本</span><textarea className={`${FIELD_TEXTAREA_CLASS} min-h-24`} onChange={(event) => setImportText(event.target.value)} value={importText} /></label><label><span className={FIELD_LABEL_CLASS}>或选择票据文件</span><input accept="image/*,.pdf,.txt,.eml,.html" className={FIELD_INPUT_CLASS} onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} type="file" /></label><Button className="w-full" loading={importBusy} onClick={() => void recognizeImport()} variant="secondary">生成本机预览</Button>{importPreview ? <div className="space-y-2 rounded-lg border border-outline-variant/30 bg-surface p-3"><p className="text-sm font-semibold">{importPreview.title}</p><p className="text-xs tm-muted">{bookingKindLabels[importPreview.kind]} · {importPreview.departureDate || '日期待补充'} · {importPreview.departurePlace || '出发地待补充'} → {importPreview.arrivalPlace || '到达地待补充'}</p>{importPreview.warnings.map((warning) => <p className="text-xs text-amber-700" key={warning}>{warning}</p>)}<Button className="w-full" onClick={applyImportPreview}>应用到表单</Button></div> : null}</div> : null}<FormField label="订单名称" onChange={setTitle} required value={title} /><div className="grid grid-cols-2 gap-2"><label><span className={FIELD_LABEL_CLASS}>交通类型</span><select className={FIELD_SELECT_CLASS} onChange={(event) => changeKind(event.target.value as TransportBookingKind)} value={kind}>{Object.entries(bookingKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><FormField label="承运方/平台" onChange={setProviderName} value={providerName} /></div>{segments.map((segment, index) => <SegmentForm index={index} key={index} onChange={(patch) => updateSegment(index, patch)} onRemove={segments.length > 1 ? () => setSegments((current) => current.filter((_, currentIndex) => currentIndex !== index)) : undefined} segment={segment} />)}<Button className="w-full" icon={<Plus className="size-4" />} onClick={() => setSegments((current) => [...current, makeDraftSegment(kind, current.at(-1)?.arrivalDate ?? trip.startDate, current.at(-1)?.arrivalTimeZone ?? zone)])} variant="secondary">增加交通段</Button><div className="border-t border-outline-variant/20 pt-3"><p className="mb-2 text-sm font-semibold">敏感订单信息（加密）</p><div className="grid grid-cols-2 gap-2"><FormField label="PNR/预订编号" onChange={setPnr} value={pnr} /><FormField label="订单号" onChange={setOrderNumber} value={orderNumber} /></div>{travelers.length ? <div className="mt-2 flex flex-wrap gap-2">{travelers.map((traveler) => <label className="tm-chip flex items-center gap-2 px-3 py-2 text-xs" key={traveler.id}><input checked={travelerIds.includes(traveler.id)} onChange={(event) => setTravelerIds((current) => event.target.checked ? [...current, traveler.id] : current.filter((id) => id !== traveler.id))} type="checkbox" />{traveler.data.displayName}</label>)}</div> : null}</div><div className="border-t border-outline-variant/20 pt-3"><p className="mb-2 text-sm font-semibold">外部跳转</p><div className="grid grid-cols-2 gap-2"><label><span className={FIELD_LABEL_CLASS}>操作</span><select className={FIELD_SELECT_CLASS} onChange={(event) => setExternalKind(event.target.value as ExternalActionKind)} value={externalKind}><option value="official">官网</option><option value="check_in">值机</option><option value="manage_booking">管理订单</option><option value="railway">铁路</option><option value="hanglv">航旅纵横</option><option value="other">其他</option></select></label><FormField label="显示名称" onChange={setExternalLabel} value={externalLabel} /></div><FormField label="HTTPS 链接" onChange={setExternalUrl} value={externalUrl} /></div><label className="flex items-start gap-2 rounded-xl border border-outline-variant/30 p-3 text-sm"><input checked={createItineraryItems} className="mt-1" onChange={(event) => setCreateItineraryItems(event.target.checked)} type="checkbox" /><span><strong className="block">确认后同步创建行程点</strong><span className="text-xs tm-muted">仅写入已有对应日期；每段交通仍保留两地当地时间与时区。</span></span></label><Button className="w-full" loading={busy} onClick={() => void save()}>保存订单并建立提醒</Button></Card>
+  return <Card variant="grouped" className="space-y-3"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">新交通订单</h3><p className="text-xs tm-muted">票面班次保持原值；外部动态不会覆盖订单。</p></div><Button icon={<FileText className="size-4" />} onClick={() => setShowImport((value) => !value)} variant="secondary">本机导入</Button></div>{showImport ? <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-3"><label><span className={FIELD_LABEL_CLASS}>粘贴票据文本</span><textarea className={`${FIELD_TEXTAREA_CLASS} min-h-24`} onChange={(event) => setImportText(event.target.value)} value={importText} /></label><label><span className={FIELD_LABEL_CLASS}>或选择票据文件</span><input accept="image/*,.pdf,.txt,.eml,.html" className={FIELD_INPUT_CLASS} onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} type="file" /></label><Button className="w-full" loading={importBusy} onClick={() => void recognizeImport()} variant="secondary">生成本机预览</Button>{importPreview ? <div className="space-y-2 rounded-lg border border-outline-variant/30 bg-surface p-3"><p className="text-sm font-semibold">{importPreview.title}</p><p className="text-xs tm-muted">{bookingKindLabels[importPreview.kind]} · {importPreview.departureDate || '日期待补充'} · {importPreview.departurePlace || '出发地待补充'} → {importPreview.arrivalPlace || '到达地待补充'}</p>{importPreview.warnings.map((warning) => <p className="text-xs text-amber-700" key={warning}>{warning}</p>)}<Button className="w-full" onClick={applyImportPreview}>应用到表单</Button></div> : null}</div> : null}<FormField label="订单名称" onChange={setTitle} required value={title} /><div className="grid grid-cols-2 gap-2"><label><span className={FIELD_LABEL_CLASS}>交通类型</span><select className={FIELD_SELECT_CLASS} onChange={(event) => changeKind(event.target.value as TransportBookingKind)} value={kind}>{Object.entries(bookingKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><FormField label="承运方/平台" onChange={(value) => { setProviderName(value); setBookingFieldEvidence((current) => ({ ...current, providerName: manualFieldEvidence() })) }} value={providerName} /></div><FormField label="承运方代码" onChange={(value) => { setProviderCode(value.toUpperCase()); setBookingFieldEvidence((current) => ({ ...current, providerCode: manualFieldEvidence() })) }} value={providerCode} />{segments.map((segment, index) => <SegmentForm index={index} key={index} onChange={(patch) => updateSegment(index, patch)} onRemove={segments.length > 1 ? () => { setSegments((current) => current.filter((_, currentIndex) => currentIndex !== index)); setSegmentSeats((current) => current.filter((_, currentIndex) => currentIndex !== index)) } : undefined} segment={segment} />)}<Button className="w-full" icon={<Plus className="size-4" />} onClick={() => { setSegments((current) => [...current, makeDraftSegment(kind, current.at(-1)?.arrivalDate ?? trip.startDate, current.at(-1)?.arrivalTimeZone ?? zone)]); setSegmentSeats((current) => [...current, '']) }} variant="secondary">增加交通段</Button><div className="border-t border-outline-variant/20 pt-3"><p className="mb-2 text-sm font-semibold">敏感订单信息（加密）</p><div className="grid grid-cols-2 gap-2"><FormField label="PNR/预订编号" onChange={setPnr} value={pnr} /><FormField label="订单号" onChange={setOrderNumber} value={orderNumber} /></div>{segmentSeats.map((seat, index) => <FormField key={index} label={`第 ${index + 1} 段座位`} onChange={(value) => setSegmentSeats((current) => current.map((entry, currentIndex) => currentIndex === index ? value : entry))} value={seat} />)}{travelers.length ? <div className="mt-2 flex flex-wrap gap-2">{travelers.map((traveler) => <label className="tm-chip flex items-center gap-2 px-3 py-2 text-xs" key={traveler.id}><input checked={travelerIds.includes(traveler.id)} onChange={(event) => setTravelerIds((current) => event.target.checked ? [...current, traveler.id] : current.filter((id) => id !== traveler.id))} type="checkbox" />{traveler.data.displayName}</label>)}</div> : null}</div><div className="border-t border-outline-variant/20 pt-3"><p className="mb-2 text-sm font-semibold">外部跳转</p><div className="grid grid-cols-2 gap-2"><label><span className={FIELD_LABEL_CLASS}>操作</span><select className={FIELD_SELECT_CLASS} onChange={(event) => setExternalKind(event.target.value as ExternalActionKind)} value={externalKind}><option value="official">官网</option><option value="check_in">值机</option><option value="manage_booking">管理订单</option><option value="railway">铁路</option><option value="hanglv">航旅纵横</option><option value="other">其他</option></select></label><FormField label="显示名称" onChange={setExternalLabel} value={externalLabel} /></div><FormField label="HTTPS 链接" onChange={setExternalUrl} value={externalUrl} /></div><label className="flex items-start gap-2 rounded-xl border border-outline-variant/30 p-3 text-sm"><input checked={createItineraryItems} className="mt-1" onChange={(event) => setCreateItineraryItems(event.target.checked)} type="checkbox" /><span><strong className="block">确认后同步创建行程点</strong><span className="text-xs tm-muted">仅写入已有对应日期；每段交通仍保留两地当地时间与时区。</span></span></label><Button className="w-full" loading={busy} onClick={() => void save()}>保存订单并建立提醒</Button></Card>
 }
 
 function SegmentForm({ index, onChange, onRemove, segment }: { index: number; onChange: (patch: Partial<DraftSegment>) => void; onRemove?: () => void; segment: DraftSegment }) {
-  return <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">第 {index + 1} 段</span>{onRemove ? <button aria-label="删除交通段" className="flex size-11 items-center justify-center rounded-xl tm-focus" onClick={onRemove} type="button"><Trash2 className="size-4 text-error" /></button> : null}</div><div className="grid grid-cols-2 gap-2"><FormField label="承运方" onChange={(value) => onChange({ carrier: value })} value={segment.carrier ?? ''} /><FormField label="航班/车次" onChange={(value) => onChange({ serviceNumber: value })} value={segment.serviceNumber ?? ''} /></div><div className="grid grid-cols-2 gap-2"><FormField label="出发地" onChange={(value) => onChange({ departurePlace: value })} required value={segment.departurePlace} /><FormField label="到达地" onChange={(value) => onChange({ arrivalPlace: value })} required value={segment.arrivalPlace} /></div><div className="grid grid-cols-2 gap-2"><FormField label="出发日期" onChange={(value) => onChange({ departureDate: value })} type="date" value={segment.departureDate} /><FormField label="出发时间" onChange={(value) => onChange({ departureTime: value })} type="time" value={segment.departureTime ?? ''} /></div><TimeZoneSelect label="出发时区" onChange={(value) => onChange({ departureTimeZone: value })} value={segment.departureTimeZone} /><div className="grid grid-cols-2 gap-2"><FormField label="到达日期" onChange={(value) => onChange({ arrivalDate: value })} type="date" value={segment.arrivalDate} /><FormField label="到达时间" onChange={(value) => onChange({ arrivalTime: value })} type="time" value={segment.arrivalTime ?? ''} /></div><TimeZoneSelect label="到达时区" onChange={(value) => onChange({ arrivalTimeZone: value })} value={segment.arrivalTimeZone} /></div>
+  const departureDetailLabel = segment.kind === 'flight' ? '出发航站楼' : '出发站台'
+  const arrivalDetailLabel = segment.kind === 'flight' ? '到达航站楼' : '到达站台'
+  return <div className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">第 {index + 1} 段</span>{onRemove ? <button aria-label="删除交通段" className="flex size-11 items-center justify-center rounded-xl tm-focus" onClick={onRemove} type="button"><Trash2 className="size-4 text-error" /></button> : null}</div><div className="grid grid-cols-2 gap-2"><FormField label="承运方" onChange={(value) => onChange({ carrier: value })} value={segment.carrier ?? ''} /><FormField label="航班/车次" onChange={(value) => onChange({ serviceNumber: value.toUpperCase() })} value={segment.serviceNumber ?? ''} /></div><div className="grid grid-cols-2 gap-2"><FormField label="承运方代码" onChange={(value) => onChange({ carrierCode: value.toUpperCase() })} value={segment.carrierCode ?? ''} /><span /></div><div className="grid grid-cols-2 gap-2"><FormField label="出发地" onChange={(value) => onChange({ departurePlace: value })} required value={segment.departurePlace} /><FormField label="到达地" onChange={(value) => onChange({ arrivalPlace: value })} required value={segment.arrivalPlace} /></div><div className="grid grid-cols-2 gap-2"><FormField label="出发代码" onChange={(value) => onChange({ departureCode: value.toUpperCase() })} value={segment.departureCode ?? ''} /><FormField label="到达代码" onChange={(value) => onChange({ arrivalCode: value.toUpperCase() })} value={segment.arrivalCode ?? ''} /></div><div className="grid grid-cols-2 gap-2"><FormField label="出发日期" onChange={(value) => onChange({ departureDate: value })} type="date" value={segment.departureDate} /><FormField label="出发时间" onChange={(value) => onChange({ departureTime: value })} type="time" value={segment.departureTime ?? ''} /></div><TimeZoneSelect label="出发时区" onChange={(value) => onChange({ departureTimeZone: value })} value={segment.departureTimeZone} /><div className="grid grid-cols-2 gap-2"><FormField label="到达日期" onChange={(value) => onChange({ arrivalDate: value })} type="date" value={segment.arrivalDate} /><FormField label="到达时间" onChange={(value) => onChange({ arrivalTime: value })} type="time" value={segment.arrivalTime ?? ''} /></div><TimeZoneSelect label="到达时区" onChange={(value) => onChange({ arrivalTimeZone: value })} value={segment.arrivalTimeZone} /><div className="grid grid-cols-2 gap-2"><FormField label={departureDetailLabel} onChange={(value) => onChange(segment.kind === 'flight' ? { terminal: value } : { platform: value })} value={segment.kind === 'flight' ? segment.terminal ?? '' : segment.platform ?? ''} /><FormField label={arrivalDetailLabel} onChange={(value) => onChange(segment.kind === 'flight' ? { arrivalTerminal: value } : { arrivalPlatform: value })} value={segment.kind === 'flight' ? segment.arrivalTerminal ?? '' : segment.arrivalPlatform ?? ''} /></div></div>
 }
 
 function BookingRow({ booking, highlighted, onDelete, segments }: { booking: TransportBooking; highlighted?: boolean; onDelete: () => void; segments: TransportSegment[] }) {
@@ -411,7 +441,7 @@ function BookingRow({ booking, highlighted, onDelete, segments }: { booking: Tra
 
 export function CenterTabControls({ activeTab, onChange }: { activeTab: CenterTab; onChange: (tab: CenterTab) => void }) {
   return (
-    <div aria-label="资料分类" className="flex min-w-max items-center gap-2" role="tablist">
+    <div aria-label="资料分类" className="document-center-tabs" role="tablist">
       <TabButton active={activeTab === 'attachments'} label="票据" onClick={() => onChange('attachments')} tab="attachments" />
       <TabButton active={activeTab === 'documents'} label="证件" onClick={() => onChange('documents')} tab="documents" />
       <TabButton active={activeTab === 'transport'} label="交通" onClick={() => onChange('transport')} tab="transport" />
@@ -424,11 +454,7 @@ function TabButton({ active, label, onClick, tab }: { active: boolean; label: st
     <button
       aria-controls={`document-center-panel-${tab}`}
       aria-selected={active}
-      className={`min-h-11 rounded-full border px-3 text-sm font-medium tm-focus ${
-        active
-          ? 'border-primary bg-primary-container text-on-primary-container'
-          : 'border-outline-variant/45 bg-surface text-on-surface-variant'
-      }`}
+      className={`document-center-tab tm-focus ${active ? 'document-center-tab-active' : ''}`}
       onClick={onClick}
       id={`document-center-tab-${tab}`}
       role="tab"
@@ -445,6 +471,62 @@ export function Notice({ children, tone }: { children: ReactNode; tone: 'error' 
 
 function travelerRoleLabel(role: TravelerRole) {
   return role === 'self' ? '本人' : role === 'child' ? '儿童' : role === 'companion' ? '同行人' : '其他'
+}
+
+function manualFieldEvidence() {
+  return { confidence: 'high' as const, sourceType: 'manual' as const }
+}
+
+function markSegmentPatchAsManual(
+  current: TransportSegment['fieldEvidence'],
+  patch: Partial<DraftSegment>,
+): TransportSegment['fieldEvidence'] {
+  const next = { ...current }
+  const trackedFields = new Set<keyof NonNullable<TransportSegment['fieldEvidence']>>([
+    'arrivalCode',
+    'arrivalDate',
+    'arrivalGate',
+    'arrivalPlace',
+    'arrivalPlatform',
+    'arrivalTerminal',
+    'arrivalTime',
+    'arrivalTimeZone',
+    'carrier',
+    'carrierCode',
+    'departureCode',
+    'departureDate',
+    'departurePlace',
+    'departureTime',
+    'departureTimeZone',
+    'gate',
+    'platform',
+    'serviceNumber',
+    'terminal',
+  ])
+  for (const key of Object.keys(patch) as Array<keyof DraftSegment>) {
+    if (trackedFields.has(key as keyof NonNullable<TransportSegment['fieldEvidence']>)) {
+      next[key as keyof NonNullable<TransportSegment['fieldEvidence']>] = manualFieldEvidence()
+    }
+  }
+  return next
+}
+
+function transportPreviewEvidence(preview: TransportImportPreview): TransportSegment['fieldEvidence'] {
+  return {
+    arrivalCode: preview.fieldEvidence.arrivalCode,
+    arrivalDate: preview.fieldEvidence.arrivalDate,
+    arrivalPlace: preview.fieldEvidence.arrivalPlace,
+    arrivalPlatform: preview.fieldEvidence.arrivalPlatform,
+    arrivalTerminal: preview.fieldEvidence.arrivalTerminal,
+    arrivalTime: preview.fieldEvidence.arrivalTime,
+    carrierCode: preview.fieldEvidence.providerCode,
+    departureCode: preview.fieldEvidence.departureCode,
+    departureDate: preview.fieldEvidence.departureDate,
+    departurePlace: preview.fieldEvidence.departurePlace,
+    platform: preview.fieldEvidence.departurePlatform,
+    serviceNumber: preview.fieldEvidence.serviceNumber,
+    terminal: preview.fieldEvidence.departureTerminal,
+  }
 }
 
 function makeDraftSegment(kind: TransportBookingKind, date: string, timeZone = getDeviceTimeZone()): DraftSegment {

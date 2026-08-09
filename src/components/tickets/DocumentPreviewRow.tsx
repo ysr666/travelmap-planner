@@ -8,12 +8,14 @@ type DocumentPreviewRowProps = {
   detail?: ReactNode
   meta?: ReactNode
   onOpen: () => void
+  preview?: ReactNode
+  status?: ReactNode
   subtitle?: ReactNode
   ticket: TicketMeta
   title: string
 }
 
-export function DocumentPreviewRow({ action, blobSyncState, detail, meta, onOpen, subtitle, ticket, title }: DocumentPreviewRowProps) {
+export function DocumentPreviewRow({ action, blobSyncState, detail, meta, onOpen, preview, status, subtitle, ticket, title }: DocumentPreviewRowProps) {
   return (
     <article className="document-preview-row" data-ticket-layout="row" data-testid="ticket-card">
       <button
@@ -22,13 +24,18 @@ export function DocumentPreviewRow({ action, blobSyncState, detail, meta, onOpen
         onClick={onOpen}
         type="button"
       >
-        <TicketThumbnail
-          blobSyncState={blobSyncState}
-          className="document-preview-thumbnail"
-          ticket={ticket}
-        />
+        {preview ?? (
+          <TicketThumbnail
+            blobSyncState={blobSyncState}
+            className="document-preview-thumbnail"
+            ticket={ticket}
+          />
+        )}
         <span className="document-preview-content">
-          <span className="document-preview-title" title={title}>{title}</span>
+          <span className="document-preview-heading">
+            <span className="document-preview-title" title={title}>{title}</span>
+            {status}
+          </span>
           {subtitle ? <span className="document-preview-subtitle">{subtitle}</span> : null}
           {detail ? <span className="document-preview-detail">{detail}</span> : null}
           {meta ? <span className="document-preview-meta">{meta}</span> : null}

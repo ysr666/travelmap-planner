@@ -13,6 +13,7 @@ describe('provider proxy diagnostics', () => {
       TRIPMAP_PLACE_PROVIDER: 'google_places',
       TRIPMAP_SEARCH_API_KEY: 'search-secret-value',
       TRIPMAP_SEARCH_PROVIDER: 'tavily',
+      TRIPMAP_WEATHER_PROVIDER: 'open_meteo',
       VITE_GOOGLE_MAPS_API_KEY: 'vite-google-secret-value',
     }, '2026-06-02T01:02:03.000Z')
 
@@ -25,6 +26,7 @@ describe('provider proxy diagnostics', () => {
         routeOrder: { configured: true, hasGoogleRoutesKey: true, provider: 'google' },
         routePreview: { configured: true, hasOpenRouteServiceApiKey: true, provider: 'openrouteservice' },
         travelSearch: { configured: true, hasApiKey: true, provider: 'tavily' },
+        weather: { configured: true, defaultedToOpenMeteo: false, provider: 'open_meteo' },
       },
       retrievedAt: '2026-06-02T01:02:03.000Z',
       security: {
@@ -64,6 +66,7 @@ describe('provider proxy diagnostics', () => {
     expect(response.providers.travelSearch).toMatchObject({ configured: false, hasApiKey: false, provider: 'unconfigured' })
     expect(response.providers.placeLookup).toMatchObject({ configured: false, hasGooglePlacesKey: false, provider: 'unconfigured' })
     expect(response.providers.routeOrder).toMatchObject({ configured: false, hasGoogleRoutesKey: false, provider: 'unconfigured' })
+    expect(response.providers.weather).toMatchObject({ configured: true, defaultedToOpenMeteo: true, provider: 'open_meteo' })
     expect(response.providers.ai).toMatchObject({ configured: false, hasApiKey: false, provider: 'unconfigured' })
   })
 

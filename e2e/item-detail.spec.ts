@@ -505,6 +505,56 @@ test('行程点详情地点查询不可用时显示可读状态', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
+for (const errorCase of [
+  {
+    code: 'invalid_request',
+    expectedMessage: '地点查询请求无效。',
+    label: '请求无效',
+    status: 400,
+  },
+  {
+    code: 'quota_exceeded',
+    expectedMessage: '今日地点查询次数已达上限。',
+    label: '次数受限',
+    status: 429,
+  },
+] as const) {
+  test(`行程点详情地点查询${errorCase.label}时显示短错误且不写入`, async ({ page }) => {
+    let placeLookupRequests = 0
+    await page.route('**/api/provider-proxy', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.operation !== 'place_lookup') {
+        await route.fallback()
+        return
+      }
+      placeLookupRequests += 1
+      await route.fulfill({
+        body: JSON.stringify({
+          code: errorCase.code,
+          ok: false,
+          operation: 'place_lookup',
+        }),
+        contentType: 'application/json',
+        status: errorCase.status,
+      })
+    })
+
+    const tripId = await createDemoTripViaUi(page)
+    await setRouteProxyConfig(page)
+    const { dayId, secondItemId } = await getDemoRecords(page, tripId)
+    const beforeItem = await getItemRecord(page, secondItemId)
+
+    await page.goto(`/#/item?tripId=${tripId}&dayId=${dayId}&itemId=${secondItemId}&view=schedule`, { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('item-place-lookup-toggle').click()
+    await page.getByTestId('item-place-lookup-search').click()
+
+    await expect(page.getByTestId('item-place-lookup-error')).toHaveText(errorCase.expectedMessage)
+    expect(placeLookupRequests).toBe(1)
+    expect(await getItemRecord(page, secondItemId)).toEqual(beforeItem)
+    await expectNoHorizontalOverflow(page)
+  })
+}
+
 test('行程点详情地点查询候选需确认后才更新当前行程点', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   let placeLookupRequests = 0

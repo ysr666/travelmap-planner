@@ -41,6 +41,12 @@ describe('validateProviderProxyExistingTripImportRequest', () => {
       itemId: 'item-1',
       scope: 'item',
       summaryId: 'existing-ticket:1',
+      structuredFields: {
+        entryTime: '10:00',
+        schemaVersion: 1,
+        serviceDate: '2026-04-01',
+        status: 'ready',
+      },
       ticketCategory: 'admission_ticket',
       title: '西湖门票',
     }]
@@ -52,6 +58,7 @@ describe('validateProviderProxyExistingTripImportRequest', () => {
       expect(result.request.sources[0].text).toContain('西湖')
       expect(result.request.existingTicketSummaries?.[0]).toMatchObject({
         summaryId: 'existing-ticket:1',
+        structuredFields: { serviceDate: '2026-04-01' },
         ticketCategory: 'admission_ticket',
       })
     }
@@ -80,6 +87,22 @@ describe('validateProviderProxyExistingTripImportRequest', () => {
       const result = validateProviderProxyExistingTripImportRequest(request)
 
       expect(result.ok, field).toBe(false)
+    }
+  })
+
+  it('rejects private fields and internal media references inside structured ticket summaries', () => {
+    for (const field of ['documentNumber', 'seat', 'orderNumber', 'previewMediaAssetId', 'fieldEvidence', 'token']) {
+      const request = validRequest() as unknown as Record<string, unknown>
+      request.existingTicketSummaries = [{
+        structuredFields: {
+          [field]: 'secret',
+          schemaVersion: 1,
+        },
+        summaryId: 'existing-ticket:1',
+        title: '西湖门票',
+      }]
+
+      expect(validateProviderProxyExistingTripImportRequest(request).ok, field).toBe(false)
     }
   })
 

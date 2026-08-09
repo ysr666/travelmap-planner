@@ -11,6 +11,27 @@ export type TicketSharedVisibility =
       mode: 'assigned'
     }
 export type TicketCategory = 'admission_ticket' | 'train_ticket' | 'flight_ticket' | 'hotel_booking' | 'restaurant_reservation' | 'transport_booking' | 'other'
+export type StructuredTravelFieldConfidence = 'high' | 'medium' | 'low'
+export type StructuredTravelFieldSourceType = 'manual' | 'local_import' | 'provider' | 'ticket' | 'fixture'
+
+export type StructuredTravelFieldEvidence = {
+  confidence: StructuredTravelFieldConfidence
+  observedAt?: string
+  sourceId?: string
+  sourceType: StructuredTravelFieldSourceType
+}
+
+export type TicketReadinessStatus = 'ready' | 'needs_review' | 'expired' | 'unavailable'
+export type TicketStructuredFieldKey = 'entryTime' | 'previewMediaAssetId' | 'serviceDate' | 'status'
+
+export type TicketStructuredFieldsV1 = {
+  schemaVersion: 1
+  entryTime?: string
+  fieldEvidence?: Partial<Record<TicketStructuredFieldKey, StructuredTravelFieldEvidence>>
+  previewMediaAssetId?: string
+  serviceDate?: string
+  status?: TicketReadinessStatus
+}
 export type ContentEnrichmentSourceType = 'google_places' | 'official' | 'map' | 'ticketing' | 'travel_site' | 'ai_estimate' | 'unknown'
 export type ContentEnrichmentConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type ItineraryExecutionStatus = 'completed' | 'skipped'
@@ -289,6 +310,7 @@ export type TicketMeta = {
   mimeType: string
   size: number
   note?: string
+  structuredFields?: TicketStructuredFieldsV1
   sharedVisibility?: TicketSharedVisibility
   createdAt: number
   updatedAt: number
@@ -953,6 +975,7 @@ export type BookingSecretData = {
   orderNumber?: string
   ticketNumbers?: string[]
   seatAssignments?: Array<{ segmentId: string; travelerId: string; seat: string }>
+  segmentSeats?: Array<{ segmentIndex: number; seat: string }>
   privateLinks?: ExternalAction[]
   notes?: string
 }
@@ -1040,6 +1063,8 @@ export type TransportBooking = {
   kind: TransportBookingKind
   status: TransportBookingStatus
   providerName?: string
+  providerCode?: string
+  fieldEvidence?: Partial<Record<'providerCode' | 'providerName', StructuredTravelFieldEvidence>>
   sourceLabel?: string
   secretObjectId?: string
   externalActions: ExternalAction[]
@@ -1054,9 +1079,12 @@ export type TransportSegment = {
   kind: TransportBookingKind
   sortOrder: number
   carrier?: string
+  carrierCode?: string
   serviceNumber?: string
   departurePlace: string
+  departureCode?: string
   arrivalPlace: string
+  arrivalCode?: string
   departureDate: string
   departureTime?: string
   departureTimeZone: string
@@ -1065,8 +1093,32 @@ export type TransportSegment = {
   arrivalTimeZone: string
   terminal?: string
   gate?: string
+  platform?: string
   arrivalTerminal?: string
   arrivalGate?: string
+  arrivalPlatform?: string
+  fieldEvidence?: Partial<Record<
+    | 'arrivalCode'
+    | 'arrivalDate'
+    | 'arrivalGate'
+    | 'arrivalPlace'
+    | 'arrivalPlatform'
+    | 'arrivalTerminal'
+    | 'arrivalTime'
+    | 'arrivalTimeZone'
+    | 'carrier'
+    | 'carrierCode'
+    | 'departureCode'
+    | 'departureDate'
+    | 'departurePlace'
+    | 'departureTime'
+    | 'departureTimeZone'
+    | 'gate'
+    | 'platform'
+    | 'serviceNumber'
+    | 'terminal',
+    StructuredTravelFieldEvidence
+  >>
   status: TransportSegmentStatus
   createdAt: number
   updatedAt: number

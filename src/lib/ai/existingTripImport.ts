@@ -5,7 +5,7 @@ import { enqueueObjectUpsert, markTicketBlobPendingUpload } from '../objectSyncL
 import { isValidPlainDate } from '../plainDate'
 import { normalizeTimeZone } from '../timeZone'
 import { recordTripWriteForSync } from '../tripSyncQueue'
-import type { Day, ItineraryItem, TicketBlob, TicketCategory, TicketMeta, TicketScope, TransportMode, Trip } from '../../types'
+import type { Day, ItineraryItem, TicketBlob, TicketCategory, TicketMeta, TicketScope, TicketStructuredFieldsV1, TransportMode, Trip } from '../../types'
 
 export type ExistingTripImportConfidence = 'high' | 'medium' | 'low'
 export type ExistingTripImportSourceKind = 'pasted_text' | 'text_file' | 'email' | 'html' | 'pdf' | 'image' | 'spreadsheet' | 'trip_plan' | 'ticket_file'
@@ -35,6 +35,7 @@ export type ExistingTripImportTicketSummary = {
   ticketCategory?: TicketCategory
   ticketId: string
   title: string
+  structuredFields?: TicketStructuredFieldsV1
 }
 
 export type ExistingTripImportProviderCandidateItem = {
@@ -63,12 +64,14 @@ export type ExistingTripImportProviderCandidateTicket = {
   candidateId: string
   confidence?: ExistingTripImportConfidence
   date?: string
+  entryTime?: string
   fileName?: string
   itemTitle?: string
   note?: string
   reason?: string
   sourceFileId?: string
   sourceIds?: string[]
+  serviceDate?: string
   targetExistingTicketSummaryId?: string
   targetItemId?: string
   ticketCategory?: TicketCategory
@@ -134,7 +137,7 @@ export type ExistingTripImportDiff =
   | (ExistingTripImportDiffBase & { data: { date: string; fields: ExistingTripImportItemFields; targetDayId?: string; tempDayKey?: string; tempItemKey: string }; type: 'create_item' })
   | (ExistingTripImportDiffBase & { data: { patch: ExistingTripImportItemPatch; targetItemId: string }; type: 'merge_item_fields' })
   | (ExistingTripImportDiffBase & { data: { note: string; targetItemId: string }; type: 'append_item_note' })
-  | (ExistingTripImportDiffBase & { data: { fileName?: string; note?: string; sourceFileId?: string; tempTicketKey: string; ticketCategory?: TicketCategory; title: string }; type: 'create_ticket' })
+  | (ExistingTripImportDiffBase & { data: { fileName?: string; note?: string; sourceFileId?: string; structuredFields?: TicketStructuredFieldsV1; tempTicketKey: string; ticketCategory?: TicketCategory; title: string }; type: 'create_ticket' })
   | (ExistingTripImportDiffBase & { data: { patch: ExistingTripImportTicketPatch; targetTicketId: string; targetTicketSummaryId?: string }; type: 'merge_ticket_meta' })
   | (ExistingTripImportDiffBase & { data: { targetItemId?: string; targetTempItemKey?: string; tempTicketKey: string }; type: 'bind_ticket' })
   | (ExistingTripImportDiffBase & { data: { targetItemId?: string; targetTempItemKey?: string; targetTicketId: string; targetTicketSummaryId?: string }; type: 'bind_existing_ticket' })
@@ -167,6 +170,7 @@ export type ExistingTripImportItemFields = {
 export type ExistingTripImportItemPatch = Partial<ExistingTripImportItemFields>
 export type ExistingTripImportTicketPatch = {
   note?: string
+  structuredFields?: TicketStructuredFieldsV1
   ticketCategory?: TicketCategory
   title?: string
 }
@@ -224,6 +228,7 @@ export function buildExistingTripImportBaselineFingerprint(context: ExistingTrip
         ticket.ticketCategory ?? '',
         ticket.scope ?? '',
         ticket.itemId ?? '',
+        JSON.stringify(ticket.structuredFields ?? null),
       ].join(':'))
     : undefined
 
@@ -403,10 +408,11 @@ export function buildExistingTripImportPreview({
     const tempTicketKey = `temp-ticket:${candidate.candidateId}`
     const confidence = normalizeConfidence(candidate.confidence)
     const sourceIdList = filterSourceIds(candidate.sourceIds, sourceIds)
+    const structuredFields = buildCandidateTicketStructuredFields(candidate, confidence, sourceIdList)
     const target = resolveTicketTarget({ candidate, context, tempItemByCandidateId, tempItemByDateTitle })
     const existingTicket = resolveExistingTicketSummary({ candidate, ticketSummariesById })
     if (existingTicket) {
-      const patch = buildTicketMergePatch(existingTicket, candidate)
+      const patch = buildTicketMergePatch(existingTicket, candidate, structuredFields)
       if (Object.keys(patch).length > 0) {
         diffs.push({
           category: 'tickets',
@@ -444,6 +450,7 @@ export function buildExistingTripImportPreview({
         fileName: normalizeText(candidate.fileName),
         note: normalizeText(candidate.note),
         sourceFileId: normalizeText(candidate.sourceFileId),
+        structuredFields,
         tempTicketKey,
         ticketCategory: normalizeTicketCategory(candidate.ticketCategory),
         title,
@@ -627,6 +634,7 @@ export async function applyExistingTripImportPreview({
           scope: 'unassigned',
           size: file?.size ?? 0,
           storageMode: file ? 'copy' : 'reference',
+          structuredFields: diff.data.structuredFields,
           ticketCategory: diff.data.ticketCategory ?? 'other',
           title: diff.data.title,
           tripId,
@@ -676,6 +684,7 @@ export async function applyExistingTripImportPreview({
         const nextTicket: TicketMeta = {
           ...ticket,
           note: diff.data.patch.note ? appendNote(ticket.note, diff.data.patch.note) : ticket.note,
+          structuredFields: diff.data.patch.structuredFields ?? ticket.structuredFields,
           ticketCategory: diff.data.patch.ticketCategory ?? ticket.ticketCategory,
           title: diff.data.patch.title ?? ticket.title,
           updatedAt: now,
@@ -841,6 +850,7 @@ function resolveExistingTicketSummary({
 function buildTicketMergePatch(
   target: ExistingTripImportTicketSummary,
   candidate: ExistingTripImportProviderCandidateTicket,
+  structuredFields?: TicketStructuredFieldsV1,
 ): ExistingTripImportTicketPatch {
   const patch: ExistingTripImportTicketPatch = {}
   const title = normalizeText(candidate.title)
@@ -855,6 +865,9 @@ function buildTicketMergePatch(
   if (note) {
     patch.note = note
   }
+  if (structuredFields && JSON.stringify(structuredFields) !== JSON.stringify(target.structuredFields)) {
+    patch.structuredFields = structuredFields
+  }
   return patch
 }
 
@@ -866,6 +879,7 @@ function buildFingerprintTicketSummaries(tickets: TicketMeta[]): ExistingTripImp
     ticketCategory: ticket.ticketCategory ?? 'other',
     ticketId: ticket.id,
     title: ticket.title?.trim() || ticket.note?.trim() || '未命名票据',
+    structuredFields: ticket.structuredFields,
   }))
 }
 
@@ -956,6 +970,32 @@ function normalizeTicketCategory(value: TicketCategory | undefined) {
     value === 'other'
     ? value
     : undefined
+}
+
+function buildCandidateTicketStructuredFields(
+  candidate: ExistingTripImportProviderCandidateTicket,
+  confidence: ExistingTripImportConfidence,
+  sourceIds: string[],
+): TicketStructuredFieldsV1 | undefined {
+  const serviceDate = normalizeDate(candidate.serviceDate ?? candidate.date)
+  const entryTime = normalizeTime(candidate.entryTime)
+  if (!serviceDate && !entryTime) return undefined
+  const evidence = {
+    confidence,
+    sourceId: sourceIds[0],
+    sourceType: 'provider' as const,
+  }
+  return {
+    entryTime,
+    fieldEvidence: {
+      ...(entryTime ? { entryTime: evidence } : {}),
+      ...(serviceDate ? { serviceDate: evidence } : {}),
+      status: evidence,
+    },
+    schemaVersion: 1,
+    serviceDate,
+    status: 'ready',
+  }
 }
 
 function normalizePositiveInteger(value: number | undefined) {

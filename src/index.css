@@ -134,7 +134,7 @@ html {
 
 body {
   min-width: 320px;
-  min-height: 100svh;
+  min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
   overscroll-behavior: none;
@@ -305,16 +305,27 @@ button {
 
 #root {
   min-height: 100vh;
-  min-height: 100svh;
   overscroll-behavior: none;
 }
 
 .app-viewport {
   height: 100vh;
   min-height: 100vh;
-  height: 100dvh;
-  min-height: 100svh;
   overscroll-behavior: contain;
+}
+
+@supports (min-height: 100svh) {
+  body,
+  #root,
+  .app-viewport {
+    min-height: 100svh;
+  }
+}
+
+@supports (height: 100dvh) {
+  .app-viewport {
+    height: 100dvh;
+  }
 }
 
 .app-scaffold {

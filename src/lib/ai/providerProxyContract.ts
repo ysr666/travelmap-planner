@@ -25,6 +25,11 @@ import type {
 import { listAiActionCatalog } from './actionGateway/registry'
 import { validateAiActionPlan } from './actionGateway/validation'
 import { isGooglePlacesPhotoRef } from '../media/travelMedia'
+import { normalizeTimeZone } from '../timeZone'
+import {
+  validateRealtimeFactV1,
+  type RealtimeFactV1,
+} from '../realtime/realtimeFact'
 
 export const PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION = 'route_preview' as const
 export const PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION = 'ai_trip_draft' as const
@@ -35,6 +40,7 @@ export const PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION = 'travel_search' as const
 export const PROVIDER_PROXY_PLACE_LOOKUP_OPERATION = 'place_lookup' as const
 export const PROVIDER_PROXY_PLACE_DETAILS_OPERATION = 'place_details' as const
 export const PROVIDER_PROXY_PLACE_PHOTO_OPERATION = 'place_photo' as const
+export const PROVIDER_PROXY_WEATHER_FORECAST_OPERATION = 'weather_forecast' as const
 export const PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION = 'trip_content_enrichment' as const
 export const PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION = 'trip_daily_tip' as const
 export const PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION = 'trip_operations_summary' as const
@@ -57,6 +63,7 @@ export const PROVIDER_PROXY_MAX_AI_EXISTING_TRIP_IMPORT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_TRAVEL_INBOX_CLASSIFY_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_TRAVEL_SEARCH_REQUESTS_PER_WINDOW = 20
 export const PROVIDER_PROXY_MAX_PLACE_LOOKUP_REQUESTS_PER_WINDOW = 30
+export const PROVIDER_PROXY_MAX_WEATHER_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_TRIP_CONTENT_ENRICHMENT_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_TRIP_OPERATIONS_SUMMARY_REQUESTS_PER_WINDOW = 10
 export const PROVIDER_PROXY_MAX_ASSISTANT_ANSWER_REQUESTS_PER_WINDOW = 20
@@ -65,7 +72,7 @@ export const PROVIDER_PROXY_MAX_EXCHANGE_RATE_REQUESTS_PER_WINDOW = 30
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_EXTRACT_REQUESTS_PER_WINDOW = 5
 export const PROVIDER_PROXY_MAX_AI_EXPENSE_QUERY_REQUESTS_PER_WINDOW = 10
 
-export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
+export type ProviderProxyOperation = typeof PROVIDER_PROXY_ROUTE_PREVIEW_OPERATION | typeof PROVIDER_PROXY_ROUTE_ORDER_SUGGESTION_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REPAIR_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_DRAFT_REFINE_OPERATION | typeof PROVIDER_PROXY_AI_TRIP_EDIT_PLAN_OPERATION | typeof PROVIDER_PROXY_AI_EXISTING_TRIP_IMPORT_OPERATION | typeof PROVIDER_PROXY_TRAVEL_INBOX_CLASSIFY_OPERATION | typeof PROVIDER_PROXY_TRAVEL_SEARCH_OPERATION | typeof PROVIDER_PROXY_PLACE_LOOKUP_OPERATION | typeof PROVIDER_PROXY_PLACE_DETAILS_OPERATION | typeof PROVIDER_PROXY_PLACE_PHOTO_OPERATION | typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION | typeof PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION | typeof PROVIDER_PROXY_TRIP_DAILY_TIP_OPERATION | typeof PROVIDER_PROXY_TRIP_OPERATIONS_SUMMARY_OPERATION | typeof PROVIDER_PROXY_ASSISTANT_ANSWER_OPERATION | typeof PROVIDER_PROXY_AI_ACTION_PLAN_OPERATION | typeof PROVIDER_PROXY_EXCHANGE_RATE_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_EXTRACT_OPERATION | typeof PROVIDER_PROXY_AI_EXPENSE_QUERY_OPERATION
 export type ProviderProxyConcreteProvider = 'google' | 'openrouteservice'
 export type ProviderProxyProvider = ProviderProxyConcreteProvider | 'auto'
 export type ProviderProxyRouteOrderSuggestionProvider = ProviderProxyConcreteProvider | 'mock'
@@ -757,6 +764,65 @@ export type ProviderProxyPlaceDetailsResponse =
 export type ProviderProxyPlaceDetailsValidationResult =
   | { ok: true; request: ProviderProxyValidatedPlaceDetailsRequest }
   | { error: ProviderProxyErrorResponse; ok: false }
+
+export type ProviderProxyWeatherForecastRequest = {
+  operation: typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION
+  requestId?: string
+  quotaSessionId?: string
+  tripId: string
+  subject: {
+    type: 'trip' | 'day' | 'item'
+    id: string
+  }
+  latitude: number
+  longitude: number
+  locationName: string
+  date: string
+  timeZone: string
+  includeCurrent?: boolean
+}
+
+export type ProviderProxyValidatedWeatherForecastRequest = ProviderProxyWeatherForecastRequest
+
+export type ProviderProxyWeatherFact = Extract<
+  RealtimeFactV1,
+  { kind: 'weather_current' | 'weather_forecast' }
+>
+
+export type ProviderProxyWeatherForecastSuccessResponse = {
+  facts: ProviderProxyWeatherFact[]
+  ok: true
+  operation: typeof PROVIDER_PROXY_WEATHER_FORECAST_OPERATION
+  requestId?: string
+  retrievedAt: string
+  source: 'mock' | 'open_meteo'
+  warnings?: string[]
+}
+
+export type ProviderProxyWeatherForecastResponse =
+  | ProviderProxyWeatherForecastSuccessResponse
+  | ProviderProxyErrorResponse
+
+export type ProviderProxyWeatherForecastValidationResult =
+  | { ok: true; request: ProviderProxyValidatedWeatherForecastRequest }
+  | { error: ProviderProxyErrorResponse; ok: false }
+
+const WEATHER_REQUEST_FIELDS = new Set([
+  'operation',
+  'requestId',
+  'quotaSessionId',
+  'tripId',
+  'subject',
+  'latitude',
+  'longitude',
+  'locationName',
+  'date',
+  'timeZone',
+  'includeCurrent',
+])
+const WEATHER_SUBJECT_FIELDS = new Set(['type', 'id'])
+const WEATHER_SUCCESS_FIELDS = new Set(['facts', 'ok', 'operation', 'requestId', 'retrievedAt', 'source', 'warnings'])
+const CONTROLLED_REALTIME_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$/
 
 export type ProviderProxyTripContentEnrichmentSourceSummary = {
   id: string
@@ -1633,6 +1699,15 @@ export function defaultProviderProxyErrorMessage(code: ProviderProxyErrorCode, o
     if (code === 'invalid_response') return '地点图片服务返回的内容无法使用。'
     return '地点图片服务暂不可用。'
   }
+  if (operation === PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) {
+    if (code === 'quota_exceeded') return '今日天气查询次数已达上限。'
+    if (code === 'invalid_request') return '天气查询请求无效。'
+    if (code === 'provider_error') return '天气服务请求失败。'
+    if (code === 'network_error') return '网络异常或天气请求超时。'
+    if (code === 'unsupported') return '当前天气查询暂不支持。'
+    if (code === 'invalid_response') return '天气服务返回的内容无法使用。'
+    return '天气服务暂不可用。'
+  }
   if (operation === PROVIDER_PROXY_TRIP_CONTENT_ENRICHMENT_OPERATION) {
     if (code === 'quota_exceeded') return '今日内容补充次数已达上限。'
     if (code === 'invalid_request') return '内容补充请求无效。'
@@ -2114,6 +2189,18 @@ function placePhotoInvalidRequest(message: string, requestId?: string): Provider
       code: 'invalid_request',
       message,
       operation: PROVIDER_PROXY_PLACE_PHOTO_OPERATION,
+      requestId,
+    }),
+    ok: false,
+  }
+}
+
+function weatherForecastInvalidRequest(message: string, requestId?: string): ProviderProxyWeatherForecastValidationResult {
+  return {
+    error: buildProviderProxyErrorResponse({
+      code: 'invalid_request',
+      message,
+      operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
       requestId,
     }),
     ok: false,
@@ -3356,6 +3443,128 @@ export function validateProviderProxyPlaceDetailsRequest(input: unknown): Provid
   }
 }
 
+export function validateProviderProxyWeatherForecastRequest(input: unknown): ProviderProxyWeatherForecastValidationResult {
+  const record = readRecord(input)
+  const requestId = readOptionalString(record.requestId, 128)
+  if (
+    (record.requestId !== undefined && !isStrictOptionalString(record.requestId, 128))
+    || (record.quotaSessionId !== undefined && !isStrictOptionalString(record.quotaSessionId, 160))
+  ) {
+    return weatherForecastInvalidRequest('天气请求标识无效。', requestId)
+  }
+  if (record.operation !== PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) {
+    return weatherForecastInvalidRequest('不支持的 provider proxy 操作。', requestId)
+  }
+  if (!Object.keys(record).every((field) => WEATHER_REQUEST_FIELDS.has(field))) {
+    return weatherForecastInvalidRequest('天气请求包含未知字段。', requestId)
+  }
+
+  const tripId = readControlledRealtimeId(record.tripId)
+  const subjectRecord = readRecord(record.subject)
+  const subjectId = readControlledRealtimeId(subjectRecord.id)
+  const subjectType = subjectRecord.type
+  if (
+    !tripId
+    || !Object.keys(subjectRecord).every((field) => WEATHER_SUBJECT_FIELDS.has(field))
+    || !subjectId
+    || (subjectType !== 'trip' && subjectType !== 'day' && subjectType !== 'item')
+  ) {
+    return weatherForecastInvalidRequest('天气查询对象无效。', requestId)
+  }
+
+  const latitude = record.latitude
+  const longitude = record.longitude
+  if (
+    typeof latitude !== 'number'
+    || !Number.isFinite(latitude)
+    || latitude < -90
+    || latitude > 90
+    || typeof longitude !== 'number'
+    || !Number.isFinite(longitude)
+    || longitude < -180
+    || longitude > 180
+  ) {
+    return weatherForecastInvalidRequest('天气查询坐标无效。', requestId)
+  }
+  const locationName = readStrictRequiredString(record.locationName, 160)
+  const date = typeof record.date === 'string' && isValidPlainDate(record.date) ? record.date : ''
+  const timeZone = normalizeTimeZone(record.timeZone)
+  if (!locationName || !date || !timeZone) {
+    return weatherForecastInvalidRequest('天气查询地点、日期或时区无效。', requestId)
+  }
+  if (record.includeCurrent !== undefined && typeof record.includeCurrent !== 'boolean') {
+    return weatherForecastInvalidRequest('天气实时条件无效。', requestId)
+  }
+
+  return {
+    ok: true,
+    request: {
+      date,
+      includeCurrent: record.includeCurrent === true,
+      latitude,
+      locationName,
+      longitude,
+      operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
+      quotaSessionId: readOptionalString(record.quotaSessionId, 160),
+      requestId,
+      subject: { id: subjectId, type: subjectType },
+      timeZone,
+      tripId,
+    },
+  }
+}
+
+export function validateProviderProxyWeatherForecastSuccessResponse(
+  input: unknown,
+  request: ProviderProxyValidatedWeatherForecastRequest,
+): ProviderProxyWeatherForecastSuccessResponse | null {
+  const record = readRecord(input)
+  if (!Object.keys(record).every((field) => WEATHER_SUCCESS_FIELDS.has(field))) return null
+  if (record.ok !== true || record.operation !== PROVIDER_PROXY_WEATHER_FORECAST_OPERATION) return null
+  const source = record.source === 'mock' || record.source === 'open_meteo' ? record.source : null
+  const retrievedAt = readStrictRequiredString(record.retrievedAt, 80)
+  const responseRequestId = readOptionalString(record.requestId, 128)
+  if (
+    !source
+    || !isValidIsoLikeDate(retrievedAt)
+    || responseRequestId !== request.requestId
+    || (record.requestId !== undefined && !isStrictOptionalString(record.requestId, 128))
+  ) return null
+  if (!Array.isArray(record.facts) || record.facts.length < 1 || record.facts.length > 2) return null
+
+  const facts: ProviderProxyWeatherFact[] = []
+  const kinds = new Set<string>()
+  for (const inputFact of record.facts) {
+    const validation = validateRealtimeFactV1(inputFact)
+    if (
+      !validation.ok
+      || (validation.value.kind !== 'weather_current' && validation.value.kind !== 'weather_forecast')
+      || validation.value.tripId !== request.tripId
+      || validation.value.subject.id !== request.subject.id
+      || validation.value.subject.type !== request.subject.type
+      || validation.value.value.locationName !== request.locationName
+      || validation.value.source.provider !== (source === 'mock' ? 'mock_weather' : 'open_meteo')
+      || kinds.has(validation.value.kind)
+    ) return null
+    if (validation.value.kind === 'weather_forecast' && validation.value.value.date !== request.date) return null
+    if (validation.value.kind === 'weather_current' && !request.includeCurrent) return null
+    kinds.add(validation.value.kind)
+    facts.push(validation.value)
+  }
+  if (!kinds.has('weather_forecast')) return null
+  const warnings = readStrictShortStringArray(record.warnings, 5, 160)
+  if (record.warnings !== undefined && !warnings) return null
+  return {
+    facts,
+    ok: true,
+    operation: PROVIDER_PROXY_WEATHER_FORECAST_OPERATION,
+    requestId: responseRequestId,
+    retrievedAt: new Date(retrievedAt).toISOString(),
+    source,
+    warnings: warnings ?? undefined,
+  }
+}
+
 export function validateProviderProxyPlacePhotoRequest(input: unknown): ProviderProxyPlacePhotoValidationResult {
   const record = readRecord(input)
   const requestId = readOptionalString(record.requestId, 128)
@@ -4045,6 +4254,27 @@ function isTravelSearchType(value: unknown): value is ProviderProxyTravelSearchT
 
 function isPlaceLookupLocale(value: unknown): value is ProviderProxyPlaceLookupLocale {
   return typeof value === 'string' && VALID_PLACE_LOOKUP_LOCALES.has(value as ProviderProxyPlaceLookupLocale)
+}
+
+function readControlledRealtimeId(input: unknown) {
+  return typeof input === 'string' && CONTROLLED_REALTIME_ID.test(input) ? input : ''
+}
+
+function readStrictRequiredString(input: unknown, maxLength: number) {
+  if (typeof input !== 'string') return ''
+  const value = input.trim()
+  return value && value.length <= maxLength ? value : ''
+}
+
+function isStrictOptionalString(input: unknown, maxLength: number) {
+  return typeof input === 'string' && input.trim().length > 0 && input.trim().length <= maxLength
+}
+
+function readStrictShortStringArray(input: unknown, maxItems: number, maxLength: number) {
+  if (input === undefined) return undefined
+  if (!Array.isArray(input) || input.length > maxItems) return null
+  const values = input.map((value) => readStrictRequiredString(value, maxLength))
+  return values.every(Boolean) ? values : null
 }
 
 function isSafeHttpUrl(value: string): boolean {

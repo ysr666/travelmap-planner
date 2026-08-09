@@ -2867,3 +2867,32 @@ P2 validation:
 - `npm run test:unit` passed: 200 files and 1635 tests.
 - `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2347.2 KiB/114-entry precache.
 - `npm run check:fidelity-assets`, strict fixture JSON parsing, and `git diff --check` passed.
+
+P3 plan:
+
+- Goal: make every user-visible current weather, opening, route ETA, flight/rail, and ticket status consume one strict `RealtimeFactV1` contract with source, observation time, expiry, confidence, and a controlled opaque reference.
+- Scope: add kind-specific fact schemas, TTL policy, selection/stale fallback, a bounded cache, and compact source/freshness UI; adapt current Place Details and Route Preview results; add an authenticated Open-Meteo weather operation plus mock/disabled modes; adapt flight/rail and ticket status through the same contract without overwriting booking or ticket records.
+- Provider boundary: weather requests contain only a controlled subject, coordinates, location label, date, and IANA time zone. The proxy uses one fixed HTTPS host, rejects redirects/unknown fields/oversized or malformed responses, and reuses existing Origin, Auth, edge quota, daily budget, kill switch, and sanitized error handling.
+- No-go: no new IndexedDB or Supabase schema, raw Provider body, arbitrary source URL, AI-selected fact/resource ID, background polling, automatic itinerary write, order/ticket mutation, or unlabelled mock/expired state.
+- Likely files: `src/lib/realtime/*`, `src/components/realtime/*`, `src/lib/ai/providerProxyContract.ts`, `src/lib/providerProxyClient*`, `server/providerProxy/weatherProvider.ts`, `server/providerProxy/providerProxyHandler.ts`, Provider guard/quota tests, current Place/Route/flight adapters, and the canonical fixture contract test.
+- Validation: schema/TTL/cache/privacy tests; Place/Route/Weather/flight/rail/ticket adapter tests; weather Provider normalization and handler Auth/Origin/quota/budget/kill-switch tests; component tests for current/stale/unavailable states; typecheck, lint, full unit suite, production build, and `git diff --check`.
+- Risk: high because a new real network operation crosses the Provider Proxy and current-fact claims can mislead users if timestamps, source, or fallback state are wrong.
+- Stop conditions: stop and repair if a fact without a source or expiry validates, an expired fact renders as current, Provider input can select a URL or internal ID, redirects or oversized payloads are followed, privacy fields cross the request, mock data loses its label, or a fact mutates durable travel data.
+
+P3 result:
+
+- Added a strict, versioned `RealtimeFactV1` union for current/forecast weather, place opening, route ETA, flight/rail status, and ticket readiness. Every fact requires a controlled subject, allowlisted source, observation/expiry times, confidence, bounded opaque reference, and a kind-specific TTL.
+- Added current/stale/future selection, a bounded validated cache with stale fallback, and deterministic adapters for Place Details, Route Preview, flight/rail snapshots, and local ticket readiness. No adapter writes back to durable travel records.
+- Added the authenticated `weather_forecast` Provider Proxy operation with deterministic mock/disabled modes and a fixed-host Open-Meteo adapter. The adapter refuses redirects, caps responses at 512 KiB, requests one date and a fixed field set, and returns only strict request-bound facts.
+- Reused shared Origin, Auth, edge quota, account/IP/global daily budgets, the new isolated `weather` quota group and kill switch, short error semantics, and sanitized diagnostics. Unknown fields, URL/provider selection, sensitive context, malformed values, source mismatches, duplicate kinds, and excessive TTLs fail closed.
+- Added a compact one-line source/freshness component for current, stale, and unavailable states. It exposes neither raw references nor Provider diagnostics and remains width-bounded at the 320px floor.
+- Added a Cloudflare D1 migration that preserves existing usage/control/alert rows while extending only the constrained Provider group enum with `weather`; this is required so the existing fail-closed daily budget path works in production. No IndexedDB/Supabase schema, booking/ticket record, route cache, automatic write, background polling, raw Provider payload, or real Provider call changed.
+
+P3 validation:
+
+- Focused realtime contract/cache/adapter/UI, weather contract/provider/handler/client, diagnostics, operations guard, and quota tests passed: 13 files and 86 tests.
+- `npm run typecheck` and `npm run lint` passed.
+- `npm run test:unit` passed: 209 files and 1696 tests.
+- `npm run build` passed; bundle budget remained at 468.4 KiB entry, 852.6 KiB initial JS, 245.6 KiB initial gzip, and 2357.7 KiB/114-entry precache.
+- `npm run check:fidelity-assets` and `git diff --check` passed.
+- The D1 `0002 -> 0003` in-memory migration check preserved existing usage, alert, and disabled-control state, added the enabled weather control, and accepted weather usage and alert rows.

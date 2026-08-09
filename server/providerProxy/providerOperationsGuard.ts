@@ -4,7 +4,7 @@ import {
   type ProviderProxyD1Database,
 } from './quotaGuard'
 
-export type ProviderOperationGroup = 'ai' | 'search' | 'place' | 'route' | 'fx'
+export type ProviderOperationGroup = 'ai' | 'search' | 'place' | 'route' | 'weather' | 'fx'
 export type ProviderControlGroup = 'global' | ProviderOperationGroup
 export type ProviderBudgetScope = 'account' | 'ip' | 'global'
 export type ProviderRuntimeEnvironment = 'production' | 'preview' | 'development'
@@ -62,9 +62,9 @@ export type ProviderDailyBudgetResult =
 export const PROVIDER_BUDGET_ALERT_RECIPIENT = 'ysr182@qq.com' as const
 
 export const PRODUCTION_PROVIDER_DAILY_BUDGETS: ProviderDailyBudgetLimits = {
-  account: { ai: 20, fx: 30, place: 60, route: 100, search: 20 },
-  global: { ai: 200, fx: 300, place: 600, route: 1000, search: 200 },
-  ip: { ai: 100, fx: 150, place: 300, route: 500, search: 100 },
+  account: { ai: 20, fx: 30, place: 60, route: 100, search: 20, weather: 60 },
+  global: { ai: 200, fx: 300, place: 600, route: 1000, search: 200, weather: 600 },
+  ip: { ai: 100, fx: 150, place: 300, route: 500, search: 100, weather: 300 },
 }
 
 const D1_CONSUME_DAILY_SQL = `
@@ -114,6 +114,7 @@ export function isStrictProviderEnvironment(environment: ProviderRuntimeEnvironm
 export function getProviderOperationGroup(operation: ProviderProxyOperation | string | undefined): ProviderOperationGroup {
   if (operation === 'travel_search') return 'search'
   if (operation === 'place_lookup' || operation === 'place_details' || operation === 'place_photo') return 'place'
+  if (operation === 'weather_forecast') return 'weather'
   if (operation === 'route_preview' || operation === 'route_order_suggestion') return 'route'
   if (operation === 'exchange_rate') return 'fx'
   return 'ai'

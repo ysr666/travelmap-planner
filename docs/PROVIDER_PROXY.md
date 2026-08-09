@@ -208,9 +208,9 @@ Quota identity combines available server-side signals before hashing:
 
 Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request headers, provider keys, SQL errors, stack traces, and internal row ids are never returned to the frontend. Production deployments should provide reliable IP/session signals. The anonymous fallback is only a last-resort local/dev path and is not sufficient abuse protection for public traffic.
 
-When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events without changing provider contracts.
+When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events, and `0003_add_weather_provider_group.sql` extends those constrained group columns with `weather` while preserving existing rows.
 
-Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production smoke confirmed missing/forged Origin is rejected before auth, and missing/forged Bearer is rejected before provider dispatch.
+Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. The Target weather release additionally requires `0003_add_weather_provider_group.sql`; do not describe its production D1 rollout as Current until remote migration verification is recorded. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production smoke confirmed missing/forged Origin is rejected before auth, and missing/forged Bearer is rejected before provider dispatch.
 
 The foundation table remains:
 
@@ -261,12 +261,13 @@ Current:
 - Item Detail calls `place_lookup` once when the user opens “查找地点信息”; retry remains explicit, and selecting a candidate still requires confirmation before updating that single item.
 - Travel Ledger can call `exchange_rate` while saving an expense, with local date/currency-pair caching and manual-rate fallback.
 - Travel Ledger can call `ai_expense_extract` at most once per confirmed batch preview; the response remains a preview until the user creates drafts.
+- `weather_forecast` returns strict `RealtimeFactV1` current/forecast facts from Open-Meteo or an explicitly labelled mock. It is read-only and never writes itinerary or ticket data.
 
 Next realtime scope:
 
 - Place details: opening hours, ratings, official website, phone, photos, accessibility, and source freshness.
 - Door-to-door mobility: transit departures, service alerts, traffic-aware ETA, rail and flight status.
-- Trip conditions: weather, venue disruptions, ticket availability, and official notices.
+- Trip conditions after the current weather foundation: venue disruptions, ticket availability, and official notices.
 - Long-running AI jobs: provider-backed planning, repair, monitoring, retry, and resumable execution.
 
 Every new operation must declare its request whitelist, normalized response schema, source and freshness fields, quota group, cache policy, kill switch, retry policy, and AI Action Registry mapping before release.
@@ -419,6 +420,23 @@ Item Detail write boundary:
 - Confirm updates only the current item: `locationName`, `address`, and `lat`/`lng` when the candidate includes valid coordinates.
 - `googleMapsUri` is displayed only transiently and is not persisted because `ItineraryItem` has no existing safe field for it.
 - Lookup does not generate routes, clear route cache, create or alter tickets, upload cloud snapshots, or call AI.
+
+## Weather Forecast Operation
+
+The `weather_forecast` operation is a read-only source for `weather_current` and `weather_forecast` facts. Missing `TRIPMAP_WEATHER_PROVIDER` defaults to `open_meteo`; `mock` is deterministic and visibly labelled, while `disabled` returns `unsupported`.
+
+Request boundary:
+
+- Allowed fields are only `operation`, request/quota identifiers, controlled trip and trip/day/item subject IDs, latitude, longitude, visible location name, one plain date, one valid IANA time zone, and `includeCurrent`.
+- Unknown fields, nested unknown fields, arbitrary URLs, Provider selection, database rows, ticket/blob data, tokens, headers, and non-numeric or out-of-range coordinates are rejected before the Provider call.
+- The proxy performs one `GET` to the fixed `https://api.open-meteo.com/v1/forecast` endpoint, refuses redirects, requests only bounded current/daily variables, and caps the response at 512 KiB.
+
+Response boundary:
+
+- Every returned fact has a controlled subject, source, observation time, expiry, confidence, and opaque source reference. Current facts expire within 90 minutes and forecast facts within six hours.
+- The success validator binds the fact trip, subject, location, date, and source back to the validated request. Duplicate kinds, extra fields, mismatched source, excessive TTL, malformed values, and unexpected current conditions are rejected.
+- Auth, Origin, edge quota, account/IP/global daily budget, the `weather` kill switch, sanitized errors, and diagnostic booleans reuse the shared Provider Proxy controls.
+- Open-Meteo requires no secret. The client receives normalized facts and the public documentation source URL, never an upstream body, internal header, or executable resource address.
 
 ## AI Trip Edit Plan Operation
 

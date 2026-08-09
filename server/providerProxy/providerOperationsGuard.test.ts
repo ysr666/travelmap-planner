@@ -15,12 +15,13 @@ describe('provider operations guard', () => {
     expect(getProviderOperationGroup('route_preview')).toBe('route')
     expect(getProviderOperationGroup('travel_search')).toBe('search')
     expect(getProviderOperationGroup('place_details')).toBe('place')
+    expect(getProviderOperationGroup('weather_forecast')).toBe('weather')
     expect(getProviderOperationGroup('exchange_rate')).toBe('fx')
     expect(getProviderOperationGroup('ai_trip_draft')).toBe('ai')
     expect(getProviderDailyBudgetLimits('preview')).toEqual({
-      account: { ai: 5, fx: 8, place: 15, route: 25, search: 5 },
-      global: { ai: 50, fx: 75, place: 150, route: 250, search: 50 },
-      ip: { ai: 25, fx: 38, place: 75, route: 125, search: 25 },
+      account: { ai: 5, fx: 8, place: 15, route: 25, search: 5, weather: 15 },
+      global: { ai: 50, fx: 75, place: 150, route: 250, search: 50, weather: 150 },
+      ip: { ai: 25, fx: 38, place: 75, route: 125, search: 25, weather: 75 },
     })
   })
 
@@ -112,6 +113,7 @@ describe('provider operations guard', () => {
   it('honors environment and D1 group kill switches', async () => {
     expect(isProviderKilledByEnvironment({ TRIPMAP_PROVIDER_PROXY_KILL_SWITCH: 'search,route' }, 'route')).toBe(true)
     expect(isProviderKilledByEnvironment({ TRIPMAP_PROVIDER_PROXY_KILL_SWITCH: 'search,route' }, 'ai')).toBe(false)
+    expect(isProviderKilledByEnvironment({ TRIPMAP_PROVIDER_PROXY_KILL_SWITCH: 'weather' }, 'weather')).toBe(true)
     await expect(checkProviderControl({
       env: {},
       group: 'route',

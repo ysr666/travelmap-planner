@@ -17,6 +17,8 @@ import {
   validateProviderProxyPlaceLookupRequest,
   validateProviderProxyPlaceDetailsRequest,
   validateProviderProxyPlacePhotoRequest,
+  validateProviderProxyWeatherForecastRequest,
+  validateProviderProxyWeatherForecastSuccessResponse,
   type ProviderProxyAiTripDraftRequest,
   type ProviderProxyAiTripDraftRepairRequest,
   type ProviderProxyAiTripDraftRepairResponse,
@@ -52,6 +54,9 @@ import {
   type ProviderProxyPlaceDetailsResponse,
   type ProviderProxyPlaceDetailsSuccessResponse,
   type ProviderProxyPlacePhotoRequest,
+  type ProviderProxyWeatherForecastRequest,
+  type ProviderProxyWeatherForecastResponse,
+  type ProviderProxyWeatherForecastSuccessResponse,
   type ProviderProxyOperation,
   type ProviderProxyRouteOrderSuggestionRequest,
   type ProviderProxyRouteOrderSuggestionResponse,
@@ -561,6 +566,40 @@ export async function fetchProviderProxyPlaceDetails(
   if (!parsed.ok) {
     throw new ProviderProxyClientError(parsed, response.status)
   }
+  return parsed
+}
+
+export async function fetchProviderProxyWeatherForecast(
+  request: ProviderProxyWeatherForecastRequest,
+  proxyUrl: string,
+  options: ProviderProxyClientOptions = {},
+): Promise<ProviderProxyWeatherForecastSuccessResponse> {
+  const requestWithSession = {
+    ...request,
+    quotaSessionId: request.quotaSessionId ?? getProviderProxySessionId(options.storage),
+  }
+  const validation = validateProviderProxyWeatherForecastRequest(requestWithSession)
+  if (!validation.ok) throw new ProviderProxyClientError(validation.error)
+
+  let response: Response
+  try {
+    response = await (options.fetcher ?? fetch)(proxyUrl, {
+      body: JSON.stringify(validation.request),
+      headers: await buildProviderProxyHeaders(options),
+      method: 'POST',
+      signal: options.signal,
+    })
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' }))
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ProviderProxyClientError(buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' }), response.status)
+  }
+  const parsed = parseProviderProxyWeatherForecastResponse(body, validation.request)
+  if (!parsed.ok) throw new ProviderProxyClientError(parsed, response.status)
   return parsed
 }
 
@@ -1236,6 +1275,27 @@ function parseProviderProxyPlaceDetailsResponse(input: unknown): ProviderProxyPl
   }
 
   return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'place_details' })
+}
+
+function parseProviderProxyWeatherForecastResponse(
+  input: unknown,
+  request: ProviderProxyWeatherForecastRequest,
+): ProviderProxyWeatherForecastResponse {
+  const record = readRecord(input)
+  if (record.ok === true) {
+    const validation = validateProviderProxyWeatherForecastSuccessResponse(record, request)
+    return validation ?? buildProviderProxyErrorResponse({ code: 'invalid_response', operation: 'weather_forecast' })
+  }
+  if (record.ok === false && typeof record.code === 'string') {
+    const code = normalizeErrorCode(record.code)
+    return buildProviderProxyErrorResponse({
+      code,
+      message: readProviderProxyErrorMessage(record, code, 'weather_forecast'),
+      operation: 'weather_forecast',
+      requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+    })
+  }
+  return buildProviderProxyErrorResponse({ code: 'network_error', operation: 'weather_forecast' })
 }
 
 function parseProviderProxyTripContentEnrichmentResponse(

@@ -1,22 +1,24 @@
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import productFidelityFixture from './fixtures/product-fidelity-v1.json' with { type: 'json' }
 import {
-  clearTravelDatabase,
   expectNoHorizontalOverflow,
   mockMapStyle,
   seedRouteCacheRecords,
-  seedTravelObjectRuntimeContext,
-  seedTravelRecords,
 } from './helpers'
+import {
+  buildProductFidelityRouteCacheEntry,
+  productFidelityFixture,
+  productFidelityRecords as records,
+  productFidelityTrip as trip,
+  seedProductFidelity,
+  trackUnexpectedProviderRequests,
+} from './productFidelitySupport'
 
 test.use({ colorScheme: 'light', locale: 'zh-CN', timezoneId: 'Europe/London' })
 
 const captureCompositions = process.env.CAPTURE_PRODUCT_FIDELITY_COMPOSITIONS === '1'
 const outputDirectory = resolve('output/playwright/product-fidelity-compositions')
-const records = productFidelityFixture.records
-const trip = records.trips[0]
 
 test.beforeEach(async ({ page }) => {
   await mockMapStyle(page)
@@ -45,7 +47,7 @@ test('出发前今日使用航班、住宿、保险和必要天气组成首屏',
 test('旅行中今日以真实地点媒体、票据和单一导航动作构成首屏', async ({ page }) => {
   const providerRequests = trackUnexpectedProviderRequests(page)
   await seedProductFidelity(page, productFidelityFixture.scenarios.activeToday.fixedNow)
-  await seedRouteCacheRecords(page, [buildActiveTodayRouteCacheEntry()])
+  await seedRouteCacheRecords(page, [buildProductFidelityRouteCacheEntry()])
   await page.goto(productFidelityFixture.scenarios.activeToday.route, { waitUntil: 'domcontentloaded' })
   await page.reload({ waitUntil: 'domcontentloaded' })
 
@@ -110,35 +112,6 @@ test('地点详情复用同一真实媒体、状态和票据直达能力', async
   expect(providerRequests.count).toBe(0)
 })
 
-async function seedProductFidelity(page: Page, fixedNow: string) {
-  await page.clock.setFixedTime(new Date(fixedNow))
-  await clearTravelDatabase(page)
-  await seedTravelRecords(page, {
-    days: records.days,
-    itineraryItems: records.itineraryItems,
-    ticketMetas: records.ticketMetas,
-    transportBookings: records.transportBookings,
-    transportSegments: records.transportSegments,
-    trips: records.trips,
-  })
-  await seedTravelObjectRuntimeContext(page, {
-    insurancePolicies: records.insurancePolicies,
-    lodgingReservations: records.lodgingReservations,
-    mediaAssets: records.mediaAssets,
-    realtimeFacts: records.realtimeFacts,
-    tripId: trip.id,
-  })
-}
-
-function trackUnexpectedProviderRequests(page: Page) {
-  const state = { count: 0 }
-  void page.route('**/api/provider-proxy', (route) => {
-    state.count += 1
-    return route.abort()
-  })
-  return state
-}
-
 async function capture(page: Page, fileName: string) {
   if (!captureCompositions) return
   await mkdir(outputDirectory, { recursive: true })
@@ -147,55 +120,4 @@ async function capture(page: Page, fileName: string) {
     caret: 'hide',
     path: resolve(outputDirectory, fileName),
   })
-}
-
-function buildActiveTodayRouteCacheEntry() {
-  const day = records.days.find((candidate) => candidate.id === 'day_uk_07')!
-  const items = records.itineraryItems
-    .filter((item) => item.dayId === day.id)
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-  const coordinateKey = items.map((item) => [
-    item.id,
-    item.lat,
-    item.lng,
-    item.sortOrder,
-    item.startTime ?? '',
-  ].join(':')).join('|')
-  const modeKey = items.slice(1).map((item, index) => [
-    items[index].id,
-    item.id,
-    item.previousTransportMode ?? item.transportMode ?? 'unknown',
-    'foot-walking',
-  ].join(':')).join('|')
-  const signature = [
-    'route-cache',
-    1,
-    'day-map',
-    'openrouteservice',
-    trip.id,
-    day.id,
-    coordinateKey,
-    modeKey,
-  ].join('::')
-  const now = '2026-08-18T09:31:00.000Z'
-  return {
-    coordinateKey,
-    createdAt: now,
-    dayId: day.id,
-    distanceMeters: 2250,
-    durationSeconds: 1800,
-    id: signature,
-    lastUsedAt: now,
-    lineStrings: productFidelityFixture.routeScenario.lineStrings,
-    modeKey,
-    provider: 'openrouteservice',
-    routingVersion: 1,
-    scope: 'day-map',
-    signature,
-    sizeBytes: 1024,
-    status: 'road',
-    tripId: trip.id,
-    updatedAt: now,
-    warnings: [],
-  }
 }

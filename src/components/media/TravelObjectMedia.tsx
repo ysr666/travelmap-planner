@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { loadTravelMedia, type LoadedTravelMedia } from '../../lib/media/mediaLoader'
 import { isTravelMediaAssetCurrent, type TravelMediaAssetV1 } from '../../lib/media/travelMedia'
+import { useMediaNetworkPolicy } from '../../hooks/useMediaNetworkPolicy'
 import { MediaFallback } from './MediaFallback'
 
 type TravelObjectMediaProps = {
@@ -28,13 +29,24 @@ export function TravelObjectMedia({
     media: LoadedTravelMedia | null
     status: 'empty' | 'ready' | 'error'
   } | null>(null)
+  const [imageReadyKey, setImageReadyKey] = useState('')
+  const networkPolicy = useMediaNetworkPolicy()
   const current = asset ? isTravelMediaAssetCurrent(asset, now) : false
+  const canLoad = Boolean(asset && (
+    asset.renderRef.type !== 'provider_photo' || networkPolicy === 'online'
+  ))
   const mediaKey = asset ? `${asset.id}:${asset.expiresAt}:${asset.renderRef.type}` : ''
   const matchingResult = loadResult?.key === mediaKey ? loadResult : null
   const loaded = matchingResult?.media ?? null
+  const hasLoadedSource = Boolean(loaded && matchingResult?.status === 'ready')
+  const imageReady = hasLoadedSource && imageReadyKey === mediaKey
   const state = !asset || !current
     ? 'empty'
-    : matchingResult?.status ?? 'loading'
+    : !canLoad
+      ? networkPolicy
+      : matchingResult?.status === 'ready'
+        ? imageReady ? 'ready' : 'loading'
+        : matchingResult?.status ?? 'loading'
   const style = useMemo(() => ({
     aspectRatio: asset?.aspectRatio ?? defaultAspectRatio(variant),
     objectPosition: asset?.focalPoint
@@ -46,7 +58,7 @@ export function TravelObjectMedia({
     let active = true
     let currentLoaded: LoadedTravelMedia | null = null
     const controller = new AbortController()
-    if (!asset || !current) {
+    if (!asset || !current || !canLoad) {
       return () => controller.abort()
     }
     void loadTravelMedia(asset, {
@@ -69,7 +81,7 @@ export function TravelObjectMedia({
       controller.abort()
       currentLoaded?.release()
     }
-  }, [asset, current, mediaKey, now, variant])
+  }, [asset, canLoad, current, mediaKey, now, variant])
 
   const sourceUri = asset?.sourceUri ?? asset?.attribution.find((entry) => entry.uri)?.uri
   const attribution = asset?.attribution.map((entry) => entry.label).join(' · ')
@@ -80,24 +92,26 @@ export function TravelObjectMedia({
       data-media-state={state}
       style={{ aspectRatio: style.aspectRatio }}
     >
-      {loaded && state !== 'error' ? (
+      {hasLoadedSource && loaded ? (
         <img
           alt={alt}
-          className="size-full object-cover"
+          className={`absolute inset-0 size-full object-cover transition-opacity ${imageReady ? 'opacity-100' : 'opacity-0'}`}
           decoding="async"
           loading={eager ? 'eager' : 'lazy'}
           onError={() => setLoadResult({ key: mediaKey, media: loaded, status: 'error' })}
+          onLoad={() => setImageReadyKey(mediaKey)}
           sizes={sizes}
           src={loaded.src}
           style={{ objectPosition: style.objectPosition }}
         />
-      ) : state === 'loading' ? (
-        <span aria-label="正在加载图片" className="block size-full animate-pulse bg-surface-container-low" role="status" />
-      ) : (
+      ) : null}
+      {state === 'loading' ? (
+        <span aria-label="正在加载图片" className="absolute inset-0 block size-full animate-pulse bg-surface-container-low" role="status" />
+      ) : state === 'ready' ? null : (
         <MediaFallback />
       )}
       {state === 'ready' && attribution ? (
-        sourceUri ? (
+        sourceUri && variant === 'hero' ? (
           <a
             aria-label={`查看图片来源：${attribution}`}
             className="travel-object-media-attribution tm-focus"
@@ -107,11 +121,13 @@ export function TravelObjectMedia({
             target="_blank"
             title={attribution}
           >
-            <ExternalLink className="size-3" />
-            <span>{attribution}</span>
+            <span className="travel-object-media-attribution-chip">
+              <ExternalLink className="size-3" />
+              <span>{attribution}</span>
+            </span>
           </a>
         ) : (
-          <figcaption className="travel-object-media-attribution" title={attribution}>{attribution}</figcaption>
+          <figcaption className="travel-object-media-attribution travel-object-media-attribution-static" title={attribution}>{attribution}</figcaption>
         )
       ) : null}
     </figure>

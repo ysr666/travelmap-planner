@@ -30,6 +30,7 @@ import type {
   TransportSegment,
   Trip,
 } from '../types'
+import { useMediaNetworkPolicy } from './useMediaNetworkPolicy'
 
 type WeatherTarget = {
   date: string
@@ -79,6 +80,7 @@ export function useTravelObjectPresentation({
 } {
   const [runtime, setRuntime] = useState<RuntimeState>(() => emptyRuntimeState())
   const [mountedAt] = useState(Date.now)
+  const mediaNetworkPolicy = useMediaNetworkPolicy()
   const mediaAttemptsRef = useRef(new Set<string>())
   const weatherAttemptsRef = useRef(new Set<string>())
   const nowKey = normalizeNowKey(now ?? mountedAt)
@@ -154,7 +156,7 @@ export function useTravelObjectPresentation({
   }) : EMPTY_COLLECTION, [days, effectiveNow, items, mediaAssets, runtime.bookings, runtime.segments, runtime.supplements.insurancePolicies, runtime.supplements.lodgingReservations, tickets, trip])
 
   useEffect(() => {
-    if (!trip || !mediaItemKey) return
+    if (!trip || !mediaItemKey || mediaNetworkPolicy !== 'online') return
     const targets = items.filter((item) => (
       mediaItemIds.includes(item.id)
       && !collection.byItemId.get(item.id)?.media
@@ -192,10 +194,10 @@ export function useTravelObjectPresentation({
     }
 
     return () => controllers.forEach((controller) => controller.abort())
-  }, [collection.byItemId, effectiveNow, items, mediaItemIds, mediaItemKey, trip])
+  }, [collection.byItemId, effectiveNow, items, mediaItemIds, mediaItemKey, mediaNetworkPolicy, trip])
 
   useEffect(() => {
-    if (!trip || !weatherTarget) return
+    if (!trip || !weatherTarget || mediaNetworkPolicy === 'offline') return
     const weatherFact = facts.find((fact) => (
       (fact.kind === 'weather_current' || fact.kind === 'weather_forecast')
       && fact.subject.id === weatherTarget.subject.id
@@ -239,7 +241,7 @@ export function useTravelObjectPresentation({
     })
 
     return () => controller.abort()
-  }, [effectiveNow, facts, trip, weatherTarget])
+  }, [effectiveNow, facts, mediaNetworkPolicy, trip, weatherTarget])
 
   return { collection, facts, isLoading: runtime.isLoading }
 }

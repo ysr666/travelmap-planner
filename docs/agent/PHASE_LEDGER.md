@@ -2981,3 +2981,30 @@ P6 validation:
 - `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 215 files and 1726 tests.
 - Normal `npm run build` passed at 469.4 KiB entry, 853.8 KiB initial JS, 245.9 KiB initial gzip, and 2441.5 KiB/120-entry precache. The increased entry and precache remain within the existing budget.
 - `npm run check:fidelity-assets`, normal-build fixture exclusion checks, and `git diff --check` passed.
+
+P7 plan:
+
+- Goal: harden the new rich travel surfaces so media, facts, status, typography, controls, and fixed layers remain polished and operable across required viewports, appearance modes, text zoom, weak-network states, and accessibility preferences.
+- Scope: add explicit provider-media offline/reduced-data policy and retry-on-reconnect behavior; calibrate shared media/status/row/Hero dimensions and responsive wrapping; validate loading/error/expired/offline and layout-shift stability; add a deterministic resilience suite for `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900`, plus dark mode, `200%` text, Reduced Motion, software-keyboard height, long content, touch targets, and serious/critical axe checks.
+- No-go: no new Provider operation, background polling, production fixture import, fake media/fact, schema/storage/sync change, route-cache behavior, AI write path, navigation IA, decorative motion, or extra fixed surface.
+- Likely files: `TravelObjectMedia`, the shared travel-object presentation CSS, product-fidelity E2E helpers/specs, focused media/component tests, the design baseline, and this phase ledger.
+- Validation: focused media/component tests, full product-fidelity composition and resilience E2E, required viewport captures and geometry checks, typecheck, lint, full unit suite, production build, fixture exclusion, asset integrity, and `git diff --check`.
+- Risk: medium because text scaling and network changes can alter fixed media geometry or reveal hidden overlap even without changing underlying product behavior.
+- Stop conditions: stop and repair if a provider photo is fetched under offline/save-data policy, reconnect loops, content or controls overflow, a 44px target disappears, media loading shifts layout beyond `0.1`, serious axe issues appear, reduced motion still animates, or two bottom interaction layers are expanded together.
+
+P7 result:
+
+- Added one shared, multiplexed media-network policy for `online | offline | reduced-data`. Provider photos and confirmed-place photo enrichment do not run while offline or Save-Data is active; offline weather refresh also stays on cached facts. Local ticket previews and reviewed fixture assets remain available, and an online event retries deferred provider work.
+- Changed media readiness to follow the actual image `load` event rather than URL resolution. Loading, error, expired, offline, and reduced-data states now occupy the same fixed Hero or thumbnail box, with a measured layout-shift score below `0.1`.
+- Expanded image-source links to a 44px transparent touch target while retaining a compact 20px visual chip. Thumbnail and document attribution is non-interactive inside clickable rows, removing nested controls; full Hero attribution remains a direct source link.
+- Added one deterministic resilience suite spanning pre-departure Today, active Today, itinerary, Documents, and Item Detail at `320x568`, `390x844`, `430x932`, `768x1024`, and `1440x900`.
+- Added dark-mode serious/critical Axe checks, scoped 44px target checks, `320px + 200%` long Chinese and unbroken-English checks, Reduced Motion checks, software-keyboard-height checks, image loading/error/CLS checks, and offline/Save-Data Provider-request checks.
+- Reused one product-fidelity support module for composition and resilience tests so all browser evidence consumes the same fixture and seeded road geometry. No real Provider request, persistent schema, sync contract, route-cache behavior, ticket permission, or AI write boundary changed.
+
+P7 validation:
+
+- Media component tests passed: 7/7, including offline, Save-Data, reconnect, actual image load, error fallback, expiry, attribution, and object URL release behavior.
+- Product-fidelity resilience E2E passed 9/9; all five required viewports, dark mode, long content, `200%` text, Reduced Motion, keyboard-height, touch-target, Axe, media-state, CLS, and zero unexpected Provider-request assertions passed.
+- Product-fidelity composition E2E passed 5/5; the five fresh `390x844` captures were visually inspected after the P7 changes.
+- `npm run test:unit` passed: 215 files and 1730 tests. `npm run build` passed all three typechecks and the production bundle budget at 469.4 KiB entry, 853.8 KiB initial JS, 245.9 KiB initial gzip, and 2443.2 KiB/120-entry precache.
+- `npm run lint -- --quiet`, `npm run check:fidelity-assets` for all 11 controlled assets, and the focused media typecheck passed.

@@ -4,9 +4,9 @@ import { access, copyFile, mkdir, readFile, rm, symlink, writeFile } from 'node:
 import { extname, join, resolve, sep } from 'node:path'
 
 export const UI_V3_GOLDEN_BASELINE = {
-  commit: '2a858d5cd485ad4b19415f0288d1b36c25a1d098',
+  commit: '5562097da3ae4bddbdfbd82dcde9124346d07999',
   expectedPackageLockObject: 'e6a9dbd786dccb50ad00964c2e21d54cbd69e38b',
-  expectedTree: '39ea4b1671f096151af9ea37120c562ecb34ea51',
+  expectedTree: 'd9069921148f27990dd935786d81ad310eb3c785',
 } as const
 
 export type UiV3GoldenServer = {

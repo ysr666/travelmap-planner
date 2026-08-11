@@ -96,11 +96,29 @@ export type AiJobV1 = {
   expiresAt: string
 }
 
+export type RedactedTicketMetaV1 = Pick<
+  TicketMeta,
+  | 'bookingId'
+  | 'createdAt'
+  | 'fileType'
+  | 'id'
+  | 'itemId'
+  | 'mimeType'
+  | 'scope'
+  | 'sharedVisibility'
+  | 'size'
+  | 'storageMode'
+  | 'ticketCategory'
+  | 'title'
+  | 'tripId'
+  | 'updatedAt'
+>
+
 export type AccountObjectPayloadByType = {
   trip: Trip
   day: Day
   item: ItineraryItem
-  ticket_meta: TicketMeta
+  ticket_meta: RedactedTicketMetaV1
   document_index: RedactedDocumentIndexV1
   document_trip_link: AccountDocumentTripLinkV1
   transport_booking: TransportBooking

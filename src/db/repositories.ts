@@ -20,6 +20,7 @@ import type {
 
 type CreateTripInput = Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripPatch = Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
+type ParentTripTouchOptions = { touchTrip?: boolean }
 
 type CreateDayInput = Omit<Day, 'id'>
 type UpdateDayPatch = Partial<Omit<Day, 'id' | 'tripId'>>
@@ -191,14 +192,16 @@ export async function deleteTripCascade(tripId: string) {
   )
 }
 
-export async function createDay(input: CreateDayInput) {
+export async function createDay(input: CreateDayInput, options: ParentTripTouchOptions = {}) {
   const day: Day = {
     ...input,
     id: createId('day'),
   }
 
   await db.days.add(day)
-  await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  if (options.touchTrip !== false) {
+    await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  }
   return day
 }
 
@@ -210,7 +213,11 @@ export async function getDay(dayId: string) {
   return db.days.get(dayId)
 }
 
-export async function updateDay(dayId: string, patch: UpdateDayPatch) {
+export async function updateDay(
+  dayId: string,
+  patch: UpdateDayPatch,
+  options: ParentTripTouchOptions = {},
+) {
   const day = await db.days.get(dayId)
   if (!day) {
     return undefined
@@ -218,7 +225,9 @@ export async function updateDay(dayId: string, patch: UpdateDayPatch) {
 
   await db.transaction('rw', db.days, db.trips, async () => {
     await db.days.update(dayId, patch)
-    await db.trips.update(day.tripId, { updatedAt: Date.now() })
+    if (options.touchTrip !== false) {
+      await db.trips.update(day.tripId, { updatedAt: Date.now() })
+    }
   })
 
   return getDay(dayId)
@@ -255,7 +264,10 @@ export async function deleteDayCascade(dayId: string) {
   )
 }
 
-export async function createItineraryItem(input: CreateItineraryItemInput) {
+export async function createItineraryItem(
+  input: CreateItineraryItemInput,
+  options: ParentTripTouchOptions = {},
+) {
   const now = Date.now()
   const item: ItineraryItem = {
     ...input,
@@ -266,7 +278,9 @@ export async function createItineraryItem(input: CreateItineraryItemInput) {
 
   await db.transaction('rw', db.itineraryItems, db.trips, async () => {
     await db.itineraryItems.add(item)
-    await db.trips.update(item.tripId, { updatedAt: now })
+    if (options.touchTrip !== false) {
+      await db.trips.update(item.tripId, { updatedAt: now })
+    }
   })
 
   return item
@@ -332,7 +346,11 @@ export async function getItineraryItem(itemId: string) {
   return db.itineraryItems.get(itemId)
 }
 
-export async function updateItineraryItem(itemId: string, patch: UpdateItineraryItemPatch) {
+export async function updateItineraryItem(
+  itemId: string,
+  patch: UpdateItineraryItemPatch,
+  options: ParentTripTouchOptions = {},
+) {
   const item = await db.itineraryItems.get(itemId)
   if (!item) {
     return undefined
@@ -344,7 +362,9 @@ export async function updateItineraryItem(itemId: string, patch: UpdateItinerary
       ...patch,
       updatedAt,
     })
-    await db.trips.update(item.tripId, { updatedAt })
+    if (options.touchTrip !== false) {
+      await db.trips.update(item.tripId, { updatedAt })
+    }
   })
 
   return getItineraryItem(itemId)

@@ -102,16 +102,28 @@
         "implementation": [
           "src/lib/accountCloud/contract.ts",
           "src/lib/accountCloud/client.ts",
+          "src/lib/accountCloud/localStore.ts",
+          "src/lib/accountCloud/coordinator.ts",
+          "src/lib/accountCloud/coreMutationRuntime.ts",
+          "src/lib/accountCloud/runtimeLoader.ts",
+          "src/lib/accountCloud/mutationBuilder.ts",
+          "src/components/cloud/AccountMutationJournalController.tsx",
           "supabase/migrations/20260811092148_account_cloud_core_v2.sql"
         ],
         "tests": [
           "src/lib/accountCloud/contract.test.ts",
           "src/lib/accountCloud/client.test.ts",
+          "src/lib/accountCloud/localStore.test.ts",
+          "src/lib/accountCloud/coordinator.test.ts",
+          "src/lib/accountCloud/coreMutationRuntime.test.ts",
+          "src/lib/accountCloud/mutationBuilder.test.ts",
+          "src/db/trackedMutations.accountCloud.test.ts",
+          "src/components/cloud/AccountMutationJournalController.test.tsx",
           "scripts/lib/account-cloud-migration.test.mjs"
         ],
         "receipts": ["docs/CLOUD_DATA_MODEL_V2.md"]
       },
-      "gaps": ["V2 revision/mutation 合同已在代码中建立，但 migration 尚未应用到 Preview，客户端仍为 IndexedDB 首写后同步，cloud-first、字段冲突、Realtime 和恢复尚未切换"],
+      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、Ticket 最小字段白名单和 Trip/Day/Item 单对象适配器已在本地实现，但写入硬门槛仍关闭；Preview migration、bootstrap/双读、完整批量 workflow、Ticket 完整读写/Blob/重绑协议、Realtime、空设备恢复和生产切换均未完成"],
       "operations": {
         "slo": "在线写入确认 P95 <= 2 秒",
         "alert": "确认失败率 > 1% 或检测到未解决的数据丢失",

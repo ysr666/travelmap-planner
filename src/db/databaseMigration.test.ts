@@ -19,6 +19,32 @@ beforeEach(async () => {
 })
 
 describe('TravelConsoleDB migrations', () => {
+  it('creates empty account-cloud revision and mutation stores when upgrading from v10 to v11', async () => {
+    const legacyDb = new Dexie('TravelConsoleDB')
+    legacyDb.version(10).stores({ trips: 'id, updatedAt' })
+    await legacyDb.open()
+    await legacyDb.table('trips').put({
+      createdAt: 1,
+      destination: 'London',
+      endDate: '2026-08-12',
+      id: 'trip_v10',
+      startDate: '2026-08-11',
+      title: 'London',
+      updatedAt: 1,
+    })
+    legacyDb.close()
+
+    await db.open()
+
+    await expect(db.trips.get('trip_v10')).resolves.toBeTruthy()
+    await expect(db.accountObjectRevisions.toArray()).resolves.toEqual([])
+    await expect(db.accountMutationJournal.toArray()).resolves.toEqual([])
+    expect(db.tables.map((table) => table.name)).toEqual(expect.arrayContaining([
+      'accountObjectRevisions',
+      'accountMutationJournal',
+    ]))
+  })
+
   it('creates persistent intelligence stores when upgrading from v9 to v10', async () => {
     const legacyDb = new Dexie('TravelConsoleDB')
     legacyDb.version(9).stores({ trips: 'id, updatedAt' })

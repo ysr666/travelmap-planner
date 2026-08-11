@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { AutoSnapshotBackupController } from './components/cloud/AutoSnapshotBackupController'
+import { AccountMutationJournalController } from './components/cloud/AccountMutationJournalController'
 import { StartupCloudSnapshotCheckController } from './components/cloud/StartupCloudSnapshotCheckController'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PwaLifecycleController } from './components/PwaLifecycleController'
@@ -152,6 +153,7 @@ function App() {
   return (
     <AppShell activeRoute={activeRoute} lastTripId={lastTripId} tripTitle={tripTitle}>
       <PwaLifecycleController />
+      <AccountMutationJournalController />
       <AutoSnapshotBackupController />
       <StartupCloudSnapshotCheckController />
       {activeRoute === 'home' ? (

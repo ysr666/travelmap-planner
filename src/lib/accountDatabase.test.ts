@@ -31,15 +31,55 @@ afterEach(async () => {
 
 describe('account-scoped travel database', () => {
   it('isolates records between account database namespaces', async () => {
-    await activateAccountDatabase(accountIds[0])
+    const { accountHash } = await activateAccountDatabase(accountIds[0])
     await db.trips.put(makeTrip('trip-a'))
+    await db.accountObjectRevisions.put({
+      acknowledgedAt: 1,
+      actorId: '22222222-2222-4222-8222-222222222222',
+      deletedAt: null,
+      deviceId: 'device-a',
+      mutationId: '11111111-1111-4111-8111-111111111111',
+      objectId: 'trip-a',
+      objectKey: 'trip:trip-a',
+      objectSchemaVersion: 1,
+      objectType: 'trip',
+      payload: makeTrip('trip-a'),
+      revision: 1,
+      serverCreatedAt: '2026-08-11T10:00:00.000Z',
+      serverUpdatedAt: '2026-08-11T10:00:00.000Z',
+      tombstone: false,
+      tripId: 'trip-a',
+      updatedAt: 1,
+    })
+    await db.accountMutationJournal.put({
+      accountHash,
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device-a',
+      expectedRevision: 1,
+      mutationId: '33333333-3333-4333-8333-333333333333',
+      objectId: 'trip-a',
+      objectKey: 'trip:trip-a',
+      objectSchemaVersion: 1,
+      objectType: 'trip',
+      operation: 'upsert',
+      payload: { ...makeTrip('trip-a'), title: 'Pending' },
+      requestFingerprint: 'test-only-fingerprint',
+      status: 'pending',
+      tripId: 'trip-a',
+      updatedAt: 1,
+    })
 
     await activateAccountDatabase(accountIds[1])
     expect(await db.trips.count()).toBe(0)
+    expect(await db.accountObjectRevisions.count()).toBe(0)
+    expect(await db.accountMutationJournal.count()).toBe(0)
     await db.trips.put(makeTrip('trip-b'))
 
     await activateAccountDatabase(accountIds[0])
     expect((await db.trips.toArray()).map((trip) => trip.id)).toEqual(['trip-a'])
+    expect(await db.accountObjectRevisions.count()).toBe(1)
+    expect(await db.accountMutationJournal.count()).toBe(1)
   })
 
   it('copies domain records, rebuilds sync state, and preserves the legacy database', async () => {

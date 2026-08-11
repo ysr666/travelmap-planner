@@ -20,6 +20,9 @@ declare const __TRIPMAP_E2E__: boolean
 declare const __TRIPMAP_UNIT_TEST__: boolean
 
 interface ImportMetaEnv {
+  readonly VITE_ACCOUNT_CLOUD_V2_ACCOUNT_HASHES?: string
+  readonly VITE_ACCOUNT_CLOUD_V2_MODE?: 'disabled' | 'enabled' | 'shadow'
+  readonly VITE_ACCOUNT_CLOUD_V2_MIGRATION?: string
   readonly VITE_SUPABASE_URL?: string
   readonly VITE_SUPABASE_ANON_KEY?: string
   readonly VITE_GOOGLE_MAPS_API_KEY?: string

@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  clearActiveAccountStorageScope,
+  setActiveAccountStorageScope,
+} from '../accountStorageScope'
 import {
   AccountCloudTransportError,
   commitAccountObjectMutationV1,
@@ -9,7 +13,11 @@ import type { AccountObjectMutationV1 } from './contract'
 
 const MUTATION_ID = '11111111-1111-4111-8111-111111111111'
 const ACTOR_ID = '22222222-2222-4222-8222-222222222222'
+const ACCOUNT_HASH = '0123456789abcdef0123456789abcdef'
 const NOW = '2026-08-11T09:30:00.000Z'
+
+beforeEach(() => setActiveAccountStorageScope(ACCOUNT_HASH))
+afterEach(() => clearActiveAccountStorageScope())
 
 describe('account cloud client', () => {
   it('sends only the registered RPC arguments and never sends owner or actor IDs', async () => {
@@ -18,6 +26,7 @@ describe('account cloud client', () => {
 
     expect(result.status).toBe('applied')
     expect(rpc).toHaveBeenCalledWith('account_apply_object_mutation_v1', {
+      target_account_hash: ACCOUNT_HASH,
       target_device_id: 'device_primary',
       target_expected_revision: 0,
       target_mutation_id: MUTATION_ID,
@@ -72,7 +81,22 @@ describe('account cloud client', () => {
     })
     await expect(commitAccountObjectMutationV1(makeMutation(), makeClient(rpc))).rejects.toMatchObject({
       code: 'invalid_response',
-      retryable: false,
+      retryable: true,
+    })
+  })
+
+  it('rejects an inconsistent idempotent replay revision', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        ...makeAppliedResult(),
+        currentRevision: 2,
+        status: 'idempotent',
+      },
+      error: null,
+    })
+    await expect(commitAccountObjectMutationV1(makeMutation(), makeClient(rpc))).rejects.toMatchObject({
+      code: 'invalid_response',
+      retryable: true,
     })
   })
 
@@ -92,14 +116,22 @@ describe('account cloud client', () => {
     })
   })
 
-  it('rejects malformed provider data as a non-retryable contract failure', async () => {
+  it('keeps malformed post-commit data replayable with the same mutation ID', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: { mutationId: MUTATION_ID, status: 'ran_arbitrary_function' },
       error: null,
     })
     await expect(commitAccountObjectMutationV1(makeMutation(), makeClient(rpc))).rejects.toEqual(
-      new AccountCloudTransportError('invalid_response', false),
+      new AccountCloudTransportError('invalid_response', true),
     )
+  })
+
+  it('treats thrown fetch failures and unknown server errors as replayable', async () => {
+    const thrownRpc = vi.fn().mockRejectedValue(new TypeError('network detail'))
+    await expect(commitAccountObjectMutationV1(makeMutation(), makeClient(thrownRpc)))
+      .rejects.toEqual(new AccountCloudTransportError('request_failed', true))
+    await expect(commitWithError({ code: '', message: 'gateway detail', status: 503 }))
+      .rejects.toEqual(new AccountCloudTransportError('request_failed', true))
   })
 
   it('creates only UUID mutation IDs', () => {
@@ -172,7 +204,7 @@ function makeClient(rpc: ReturnType<typeof vi.fn>) {
   return { rpc } as unknown as SupabaseClient
 }
 
-function commitWithError(error: { code: string; message: string }) {
+function commitWithError(error: { code: string; message: string; status?: number }) {
   const rpc = vi.fn().mockResolvedValue({ data: null, error })
   return commitAccountObjectMutationV1(makeMutation(), makeClient(rpc))
 }

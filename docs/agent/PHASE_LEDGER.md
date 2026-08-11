@@ -3170,3 +3170,67 @@ Local validation:
 - `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 221 files and 1,782 tests.
 - `npm run build` passed, including capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates. Ordinary output contained zero fixture files; bundle budget remained 468.3 KiB entry, 852.8 KiB initial JS, 245.6 KiB initial gzip, and 2444.4 KiB/121-entry precache.
 - `git diff --check` passed. Local SQL execution was unavailable because this Mac has no Docker daemon or Docker Desktop; the repository has no existing Supabase Preview branch. Preview migration application, SQL behavior/RLS/advisors, Realtime, and rollback remain mandatory before client cutover or any Current claim.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.2 Cloud-First Mutation Runtime
+
+Status: complete locally; Preview migration/bootstrap/full-write receipts remain P1 gates
+
+Goal:
+
+- Implement the local durable-revision, crash-journal, retry, conflict, and rollback runtime needed to make an online server ack the commit point while preserving the current production path behind a disabled rollout flag.
+- Prove the model on bounded single-object core writes before adding server-side batch mutations for reorders, moves, imports, ticket rebinds, ledger batches, or AI workflows.
+
+Scope:
+
+- Add IndexedDB v11 stores for V2 object revision receipts and exact mutation journal/outbox rows, with account-scoped isolation, leases, retry metadata, blocked states, and conflict snapshots.
+- Add strict local-store APIs that atomically record optimistic intent, mark offline/retry/auth/contract/conflict outcomes, and atomically convert an acknowledged mutation into a durable revision while removing its journal row.
+- Add a feature mode that is disabled by default and cannot silently enable V2 writes without explicit build configuration.
+- Add a cloud-first coordinator for `applied`, later `idempotent`, conflict, rejection, permission, authentication, contract-unavailable, malformed response, and transient network outcomes.
+- Integrate only bounded single-object Trip/Day/Item creates and simple updates where a safe local rollback exists. Existing records without a verified V2 revision stay on the legacy path until bootstrap; Ticket and multi-object operations stay on legacy until dedicated privacy-safe codecs and atomic protocols exist.
+- Preserve the legacy outbox, blob sync, vault, Provider, Action Gateway, route cache, and normal production behavior while the flag is disabled.
+
+No-go:
+
+- No production/Preview Supabase write; no default flag enablement; no direct table write; no mutation without the P1.1 RPC; no service-role client; no unverified revision guessed from timestamps.
+- No partial cloud execution of reorder, cross-day move, cascade delete, ticket binding, bulk ledger, import, repair, or AI workflow operations.
+- No clearing a journal row before ack, retrying permission/contract-invalid payloads as transient failures, exposing raw server errors, or claiming a local optimistic write is durable.
+- No sensitive vault/blob payload in the V2 journal or revision store.
+
+Likely files:
+
+- `src/db/database.ts`, database migration tests, `src/lib/accountCloud/localTypes.ts`, `localStore.ts`, `feature.ts`, `coordinator.ts`, focused tests, bounded tracked-mutation adapters/tests, cloud data contract/status docs, capability evidence, and this ledger.
+
+Validation:
+
+- v10 -> v11 and legacy -> v11 IndexedDB migrations; account isolation; intent/ack atomicity; crash recovery; offline queue; lease expiry; retry policy; 100 idempotent replays; conflict snapshots; rejected/permission rollback; no raw error persistence; disabled-mode behavior; existing tracked-mutation suite; typecheck, lint, full unit, build, PWA upgrade, and `git diff --check`.
+
+Risk:
+
+- High. The main hazards are a crash gap between optimistic data and its journal, deleting an outbox row before durable ack, replaying an operation with a different mutation ID, and applying a single-object protocol to a multi-object invariant.
+
+Stop conditions:
+
+- Stop and repair if an enabled online write reports success without an ack, a failed ack loses the local intent, a blocked/permission failure loops, a stale response overwrites a newer local revision, an existing unbootstrapped object guesses revision 0, a disabled production build changes legacy behavior, or any multi-object operation enters the single-object coordinator.
+
+Local result:
+
+- Added IndexedDB v11 account-object revision and mutation-journal stores. Journal rows are account-bound and retain the exact mutation content, optimistic before/after snapshots, retry state, conflict evidence, and a generation-specific lease token so a late tab cannot overwrite a newer worker's result.
+- Added a cloud mutation coordinator that treats the online server acknowledgement as the commit point, preserves the original mutation ID across ambiguous transport outcomes, retries unknown/5xx/429 failures, blocks definitive Auth/contract failures, and never accepts an advanced idempotent receipt as proof that stale local business data is current.
+- Added atomic optimistic rollback for dependent mutation chains. Definitive rejection restores the prior local state and removes the hidden replay; conflicts preserve their receipts and server snapshot; newer unrelated local edits are retained instead of being overwritten. Rollback resolution is recorded in the same transaction, and startup recovery only compensates terminal rows without that marker.
+- Added an account-context guard at every client transition and to the private SQL RPC. Each operation is bound to its captured account database instance as well as its hash; the RPC recomputes a bounded account hash from `auth.uid()`. Switching accounts during a request leaves the old journal for idempotent recovery and cannot read, acknowledge, or roll back a same-ID object in the new account.
+- Added bounded Trip/Day/Item create and simple-update adapters. Existing unbootstrapped objects, deletes, reorders, moves, imports, ledger/AI workflows, ticket writes, and every multi-object invariant continue through the legacy path and cannot be partially routed into V2.
+- Added a redacted Ticket metadata type and one aligned top-level field whitelist enforced by the mutation builder, generic contract parser, SQL RPC, and legacy backfill. It excludes filenames, local paths, URLs, notes, Blob/OCR data, structured private fields, and unregistered extras. V2 Ticket writes remain disabled until complete read, Blob, and multi-object rebind protocols exist.
+- Added an invisible journal controller for startup, reconnect, focus, visibility, and periodic drains. The controller and heavy runtime load through dynamic imports only after the feature gate passes.
+- Added a compile-time `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY = false` hard gate. Environment mode, migration receipt, and allowlist values cannot enable V2 writes in the current build; production behavior remains on the legacy path.
+- No Preview or production schema/data write and no real Provider call was made in this subphase.
+
+Review:
+
+- Independent read-only review identified seven material risks: partial V1/V2 divergence, account-switch cross-write, ambiguous-response receipt loss, advanced-idempotency stale overwrite, missing persistent rollback, Ticket metadata privacy, and expired-lease result races. A follow-up pass found a dynamic-database rollback reproduction, terminal/rollback crash gap, stale SQL signature, TypeScript narrowing error, and optional-only Ticket redaction. The implementation now binds database instances, reconciles atomically with restart receipts, cleans old RPC overloads, verifies the exact 11-argument signature, and enforces Ticket privacy on both client and server boundaries; focused regressions cover each repaired path.
+
+Local validation:
+
+- Final focused account-cloud, controller, Ticket privacy, and migration regression tests passed: 7 files and 78 tests. The complete unit suite passed: 228 files and 1,839 tests.
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed. Build included capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates; the final budget was 473.4 KiB entry, 859.0 KiB initial JS, 247.1 KiB initial gzip, and 2485.0 KiB/126-entry precache.
+- Full serial Playwright E2E passed earlier in the subphase: 194 tests. After final account-binding/privacy hardening, the 5-test PWA upgrade suite and Desktop Beta smoke both passed again; production behavior remains unchanged because the compile-time cutover gate is still closed.
+- `git diff --check` passed. Preview migration application, executable SQL/RLS/Realtime/rollback evidence, bootstrap and double-read drift receipts, and batch mutation evidence remain mandatory later P1 gates before any cutover or Current claim.

@@ -233,8 +233,17 @@ as $$
   );
 $$;
 
+-- Remove the superseded pre-account-context overload if an early Preview applied it.
+drop function if exists public.account_apply_object_mutation_v1(
+  integer, text, text, text, text, text, bigint, integer, text, jsonb
+);
+drop function if exists tripmap_private.account_apply_object_mutation_v1(
+  integer, text, text, text, text, text, bigint, integer, text, jsonb
+);
+
 create or replace function tripmap_private.account_apply_object_mutation_v1(
   target_schema_version integer,
+  target_account_hash text,
   target_mutation_id text,
   target_trip_id text,
   target_object_type text,
@@ -262,6 +271,26 @@ begin
   current_user_id := auth.uid();
   if current_user_id is null then
     raise exception using errcode = '28000', message = 'not_authenticated';
+  end if;
+
+  if target_account_hash is null
+     or target_account_hash !~ '^[a-f0-9]{32}$'
+     or target_account_hash <> pg_catalog.left(
+       pg_catalog.encode(
+         extensions.digest(
+           pg_catalog.convert_to(current_user_id::text, 'UTF8'),
+           'sha256'
+         ),
+         'hex'
+       ),
+       32
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', coalesce(target_mutation_id, ''),
+      'reason', 'account_context_mismatch'
+    );
   end if;
 
   if target_schema_version is null
@@ -372,6 +401,36 @@ begin
     );
   end if;
 
+  if target_operation = 'upsert'
+     and target_object_type = 'ticket_meta'
+     and exists (
+       select 1
+       from pg_catalog.jsonb_object_keys(target_payload) as ticket_field(field_name)
+       where ticket_field.field_name not in (
+         'bookingId',
+         'createdAt',
+         'fileType',
+         'id',
+         'itemId',
+         'mimeType',
+         'scope',
+         'sharedVisibility',
+         'size',
+         'storageMode',
+         'ticketCategory',
+         'title',
+         'tripId',
+         'updatedAt'
+       )
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', target_mutation_id,
+      'reason', 'invalid_or_sensitive_payload'
+    );
+  end if;
+
   if target_operation = 'delete' and target_payload is not null then
     return pg_catalog.jsonb_build_object(
       'schemaVersion', 1,
@@ -386,6 +445,7 @@ begin
       pg_catalog.convert_to(
         pg_catalog.jsonb_build_object(
           'schemaVersion', target_schema_version,
+          'accountHash', target_account_hash,
           'mutationId', target_mutation_id,
           'tripId', target_trip_id,
           'objectType', target_object_type,
@@ -585,6 +645,7 @@ $$;
 
 create or replace function public.account_apply_object_mutation_v1(
   target_schema_version integer,
+  target_account_hash text,
   target_mutation_id text,
   target_trip_id text,
   target_object_type text,
@@ -602,6 +663,7 @@ set search_path = ''
 as $$
   select tripmap_private.account_apply_object_mutation_v1(
     target_schema_version,
+    target_account_hash,
     target_mutation_id,
     target_trip_id,
     target_object_type,
@@ -619,17 +681,17 @@ revoke all on function tripmap_private.account_payload_has_forbidden_key(jsonb)
 revoke all on function tripmap_private.account_object_public_json(public.tripmap_account_objects)
   from public, anon, authenticated;
 revoke all on function tripmap_private.account_apply_object_mutation_v1(
-  integer, text, text, text, text, text, bigint, integer, text, jsonb
+  integer, text, text, text, text, text, text, bigint, integer, text, jsonb
 ) from public, anon, authenticated;
 grant execute on function tripmap_private.account_apply_object_mutation_v1(
-  integer, text, text, text, text, text, bigint, integer, text, jsonb
+  integer, text, text, text, text, text, text, bigint, integer, text, jsonb
 ) to authenticated, service_role;
 
 revoke all on function public.account_apply_object_mutation_v1(
-  integer, text, text, text, text, text, bigint, integer, text, jsonb
+  integer, text, text, text, text, text, text, bigint, integer, text, jsonb
 ) from public, anon;
 grant execute on function public.account_apply_object_mutation_v1(
-  integer, text, text, text, text, text, bigint, integer, text, jsonb
+  integer, text, text, text, text, text, text, bigint, integer, text, jsonb
 ) to authenticated, service_role;
 
 -- Copy compatible legacy records without updating or deleting any legacy row.
@@ -654,7 +716,28 @@ select
   legacy.trip_id,
   legacy.object_type,
   legacy.object_id,
-  case when legacy.deleted_at_ms is null then legacy.payload else null end,
+  case
+    when legacy.deleted_at_ms is not null then null
+    when legacy.object_type = 'ticket_meta' then pg_catalog.jsonb_strip_nulls(
+      pg_catalog.jsonb_build_object(
+        'bookingId', legacy.payload -> 'bookingId',
+        'createdAt', legacy.payload -> 'createdAt',
+        'fileType', legacy.payload -> 'fileType',
+        'id', legacy.payload -> 'id',
+        'itemId', legacy.payload -> 'itemId',
+        'mimeType', legacy.payload -> 'mimeType',
+        'scope', legacy.payload -> 'scope',
+        'sharedVisibility', legacy.payload -> 'sharedVisibility',
+        'size', legacy.payload -> 'size',
+        'storageMode', legacy.payload -> 'storageMode',
+        'ticketCategory', legacy.payload -> 'ticketCategory',
+        'title', legacy.payload -> 'title',
+        'tripId', legacy.payload -> 'tripId',
+        'updatedAt', legacy.payload -> 'updatedAt'
+      )
+    )
+    else legacy.payload
+  end,
   1,
   1,
   'legacy_' || pg_catalog.encode(
@@ -725,6 +808,6 @@ comment on table public.tripmap_account_objects is
 comment on table tripmap_private.account_mutation_receipts is
   'Private idempotency receipts retained independently from the latest object revision.';
 comment on function public.account_apply_object_mutation_v1(
-  integer, text, text, text, text, text, bigint, integer, text, jsonb
+  integer, text, text, text, text, text, text, bigint, integer, text, jsonb
 ) is
   'Authenticated cloud-first object mutation boundary with optimistic revision checks and mutation replay deduplication.';

@@ -16,6 +16,8 @@ const REQUIRED_FRAGMENTS = [
   'security definer',
   "set search_path = ''",
   'current_user_id := auth.uid()',
+  'target_account_hash',
+  "'account_context_mismatch'",
   'target_expected_revision',
   "'mutation_id_reused'",
   "'revision_mismatch'",
@@ -25,6 +27,7 @@ const REQUIRED_FRAGMENTS = [
   'account_mutation_receipts',
   'alter publication supabase_realtime add table public.tripmap_account_objects',
   'from public.cloud_sync_objects as legacy',
+  "when legacy.object_type = 'ticket_meta' then pg_catalog.jsonb_strip_nulls",
   'on conflict (owner_id, object_type, object_id) do nothing',
 ]
 
@@ -53,6 +56,17 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   )
   assertSameSet(contractTypes, tableTypes, 'table object types')
   assertSameSet(contractTypes, rpcTypes, 'RPC object types')
+  const ticketFields = extractQuotedList(
+    contractSource,
+    /ticket_meta_payload_fields\s*=\s*new\s+set\s*\(\s*\[([\s\S]*?)\]\s*\)/i,
+    'TypeScript Ticket metadata fields',
+  )
+  const sqlTicketFields = extractQuotedList(
+    migrationSql,
+    /target_object_type\s*=\s*'ticket_meta'[\s\S]*?ticket_field\.field_name\s+not\s+in\s*\(([\s\S]*?)\)\s*\)\s*then/i,
+    'SQL Ticket metadata fields',
+  )
+  assertSameSet(ticketFields, sqlTicketFields, 'Ticket metadata fields')
 
   if (countMatches(normalizedSql, /pg_catalog\.pg_advisory_xact_lock/g) < 2) {
     throw new Error('Account-cloud RPC must serialize both object identity and mutation identity.')
@@ -62,6 +76,29 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   }
   if (!/prior_receipt\.request_hash\s*<>\s*request_hash/i.test(migrationSql)) {
     throw new Error('Account-cloud RPC is missing mutation-content replay validation.')
+  }
+  if (!/target_account_hash\s*<>\s*pg_catalog\.left\s*\([\s\S]{0,260}current_user_id::text/i.test(migrationSql)) {
+    throw new Error('Account-cloud RPC is missing the authenticated account-context guard.')
+  }
+  const currentRpcSignature = String.raw`integer\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*bigint\s*,\s*integer\s*,\s*text\s*,\s*jsonb`
+  const supersededRpcSignature = String.raw`integer\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*bigint\s*,\s*integer\s*,\s*text\s*,\s*jsonb`
+  if (!new RegExp(
+    String.raw`comment\s+on\s+function\s+public\.account_apply_object_mutation_v1\s*\(\s*${currentRpcSignature}\s*\)\s+is`,
+    'i',
+  ).test(migrationSql)) {
+    throw new Error('Account-cloud RPC comment must reference the current 11-argument signature.')
+  }
+  if (!new RegExp(
+    String.raw`drop\s+function\s+if\s+exists\s+public\.account_apply_object_mutation_v1\s*\(\s*${supersededRpcSignature}\s*\)`,
+    'i',
+  ).test(migrationSql)) {
+    throw new Error('Account-cloud migration must remove the superseded public RPC overload.')
+  }
+  if (!new RegExp(
+    String.raw`drop\s+function\s+if\s+exists\s+tripmap_private\.account_apply_object_mutation_v1\s*\(\s*${supersededRpcSignature}\s*\)`,
+    'i',
+  ).test(migrationSql)) {
+    throw new Error('Account-cloud migration must remove the superseded private RPC overload.')
   }
 
   const publicFunction = extractFunctionBody(

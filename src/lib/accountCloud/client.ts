@@ -1,11 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireSupabaseClient } from '../supabaseClient'
+import { getActiveAccountHash } from '../accountStorageScope'
 import {
   AccountCloudContractError,
   parseAccountObjectMutationResultV1,
   parseAccountObjectMutationV1,
   type AccountObjectMutationResultV1,
   type AccountObjectMutationV1,
+  type AccountObjectRowV1,
 } from './contract'
 
 const APPLY_MUTATION_RPC = 'account_apply_object_mutation_v1'
@@ -32,20 +34,31 @@ export class AccountCloudTransportError extends Error {
 export async function commitAccountObjectMutationV1(
   input: AccountObjectMutationV1,
   client: SupabaseClient = requireSupabaseClient(),
+  expectedAccountHash: string | null = getActiveAccountHash(),
 ): Promise<AccountObjectMutationResultV1> {
   const mutation = parseAccountObjectMutationV1(input)
-  const { data, error } = await client.rpc(APPLY_MUTATION_RPC, {
-    target_device_id: mutation.deviceId,
-    target_expected_revision: mutation.expectedRevision,
-    target_mutation_id: mutation.mutationId,
-    target_object_id: mutation.objectId,
-    target_object_schema_version: mutation.objectSchemaVersion,
-    target_object_type: mutation.objectType,
-    target_operation: mutation.operation,
-    target_payload: mutation.payload ?? null,
-    target_schema_version: mutation.schemaVersion,
-    target_trip_id: mutation.tripId,
-  })
+  if (!expectedAccountHash || !/^[a-f0-9]{32}$/.test(expectedAccountHash)) {
+    throw new AccountCloudTransportError('authentication_required', false)
+  }
+  let response: Awaited<ReturnType<SupabaseClient['rpc']>>
+  try {
+    response = await client.rpc(APPLY_MUTATION_RPC, {
+      target_account_hash: expectedAccountHash,
+      target_device_id: mutation.deviceId,
+      target_expected_revision: mutation.expectedRevision,
+      target_mutation_id: mutation.mutationId,
+      target_object_id: mutation.objectId,
+      target_object_schema_version: mutation.objectSchemaVersion,
+      target_object_type: mutation.objectType,
+      target_operation: mutation.operation,
+      target_payload: mutation.payload ?? null,
+      target_schema_version: mutation.schemaVersion,
+      target_trip_id: mutation.tripId,
+    })
+  } catch {
+    throw new AccountCloudTransportError('request_failed', true)
+  }
+  const { data, error } = response
 
   if (error) throw normalizeRpcError(error)
 
@@ -54,7 +67,7 @@ export async function commitAccountObjectMutationV1(
     result = parseAccountObjectMutationResultV1(data)
   } catch (error) {
     if (error instanceof AccountCloudContractError) {
-      throw new AccountCloudTransportError('invalid_response', false)
+      throw new AccountCloudTransportError('invalid_response', true)
     }
     throw error
   }
@@ -75,7 +88,7 @@ function assertResultMatchesRequest(
   result: AccountObjectMutationResultV1,
 ) {
   if (result.mutationId !== mutation.mutationId) {
-    throw new AccountCloudTransportError('invalid_response', false)
+    throw new AccountCloudTransportError('invalid_response', true)
   }
   if (result.status === 'rejected') return
 
@@ -86,20 +99,55 @@ function assertResultMatchesRequest(
     || object.objectType !== mutation.objectType
     || object.objectId !== mutation.objectId
   ) {
-    throw new AccountCloudTransportError('invalid_response', false)
+    throw new AccountCloudTransportError('invalid_response', true)
   }
   if (result.status === 'applied') {
     if (
       result.appliedRevision !== result.currentRevision
       || result.object.revision !== result.currentRevision
       || result.object.mutationId !== mutation.mutationId
+      || !matchesAppliedPayload(mutation, result.object)
     ) {
-      throw new AccountCloudTransportError('invalid_response', false)
+      throw new AccountCloudTransportError('invalid_response', true)
     }
   }
-  if (result.status === 'conflict' && object.revision !== result.currentRevision) {
-    throw new AccountCloudTransportError('invalid_response', false)
+  if (result.status === 'idempotent' && (
+    result.object.revision !== result.currentRevision
+    || result.appliedRevision > result.currentRevision
+    || (
+      result.appliedRevision === result.currentRevision
+      && (
+        result.object.mutationId !== mutation.mutationId
+        || !matchesAppliedPayload(mutation, result.object)
+      )
+    )
+  )) {
+    throw new AccountCloudTransportError('invalid_response', true)
   }
+  if (result.status === 'conflict' && object.revision !== result.currentRevision) {
+    throw new AccountCloudTransportError('invalid_response', true)
+  }
+}
+
+function matchesAppliedPayload(
+  mutation: AccountObjectMutationV1,
+  object: AccountObjectRowV1,
+) {
+  const deleting = mutation.operation === 'delete'
+  return object.tombstone === deleting
+    && stableStringify(object.payload) === stableStringify(deleting ? null : mutation.payload)
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, nested]) => nested !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'undefined'
 }
 
 function normalizeRpcError(error: { code?: string; message?: string; status?: number }) {
@@ -113,7 +161,17 @@ function normalizeRpcError(error: { code?: string; message?: string; status?: nu
   if (code === '42883' || code === 'PGRST202') {
     return new AccountCloudTransportError('contract_unavailable', false)
   }
-  const retryable = code.startsWith('08') || code === '40001' || code === '40P01' || code === '57014' || code === 'PGRST000'
+  const status = error.status ?? 0
+  const retryable = status === 0
+    || status === 408
+    || status === 425
+    || status === 429
+    || status >= 500
+    || code.startsWith('08')
+    || code === '40001'
+    || code === '40P01'
+    || code === '57014'
+    || code === 'PGRST000'
   return new AccountCloudTransportError('request_failed', retryable)
 }
 

@@ -132,6 +132,7 @@ export type AccountObjectMutationResultV1 =
     }
 
 export type AccountObjectMutationRejection =
+  | 'account_context_mismatch'
   | 'delete_payload_not_allowed'
   | 'invalid_identifier_or_operation'
   | 'invalid_or_sensitive_payload'
@@ -209,6 +210,7 @@ const CONFLICT_RESULT_FIELDS = new Set([
 ])
 const REJECTED_RESULT_FIELDS = new Set(['schemaVersion', 'status', 'mutationId', 'reason'])
 const REJECTION_SET = new Set<AccountObjectMutationRejection>([
+  'account_context_mismatch',
   'delete_payload_not_allowed',
   'invalid_identifier_or_operation',
   'invalid_or_sensitive_payload',
@@ -255,6 +257,22 @@ const FORBIDDEN_PAYLOAD_KEYS = new Set([
   'passportnumber',
   'visanumber',
 ])
+const TICKET_META_PAYLOAD_FIELDS = new Set([
+  'bookingId',
+  'createdAt',
+  'fileType',
+  'id',
+  'itemId',
+  'mimeType',
+  'scope',
+  'sharedVisibility',
+  'size',
+  'storageMode',
+  'ticketCategory',
+  'title',
+  'tripId',
+  'updatedAt',
+])
 
 export function parseAccountObjectMutationV1(input: unknown): AccountObjectMutationV1 {
   const record = readRecord(input, 'invalid_envelope')
@@ -300,6 +318,7 @@ export function parseAccountObjectMutationV1(input: unknown): AccountObjectMutat
   const payload = readJsonObject(record.payload)
   assertPayloadIdentity(payload, { objectId, objectType, tripId })
   const canonicalPayload = assertPayloadBoundary(payload)
+  assertObjectSpecificPayloadBoundary(objectType, canonicalPayload)
   return {
     deviceId,
     expectedRevision,
@@ -333,6 +352,7 @@ export function parseAccountObjectRowV1(input: unknown): AccountObjectRowV1 {
   if (rawPayload) {
     assertPayloadIdentity(rawPayload, { objectId, objectType, tripId }, 'invalid_response')
     payload = assertPayloadBoundary(rawPayload, 'invalid_response')
+    assertObjectSpecificPayloadBoundary(objectType, payload, 'invalid_response')
   }
   return {
     actorId: readControlledId(record.actorId, UUID, 'invalid_response'),
@@ -461,6 +481,19 @@ function assertPayloadBoundary(
     fail('invalid_payload', 'Account-object payload exceeds the size limit.')
   }
   return JSON.parse(serialized) as JsonObject
+}
+
+function assertObjectSpecificPayloadBoundary(
+  objectType: AccountObjectType,
+  payload: JsonObject,
+  code: AccountCloudContractErrorCode = 'sensitive_payload',
+) {
+  if (objectType !== 'ticket_meta') return
+  for (const key of Object.keys(payload)) {
+    if (!TICKET_META_PAYLOAD_FIELDS.has(key)) {
+      fail(code, `Ticket metadata contains an unregistered field ${key}.`)
+    }
+  }
 }
 
 function validateJsonValue(

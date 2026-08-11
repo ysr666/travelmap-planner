@@ -12,6 +12,10 @@ import {
   deleteItineraryItemReversible as performReversibleItemDeletion,
   undoItineraryItemDeletion as performItemDeletionUndo,
 } from '../lib/itemDeletion'
+import {
+  createCoreAccountObjectIfEnabled,
+  updateCoreAccountObjectIfEnabled,
+} from '../lib/accountCloud/runtimeLoader'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
 import * as ledgerRepo from './ledgerRepositories'
@@ -28,6 +32,12 @@ export async function createDemoTrip() {
 }
 
 export async function createTrip(input: Parameters<typeof repo.createTrip>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createTrip(input),
+    objectType: 'trip',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const trip = await repo.createTrip(input)
   await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
   recordTripWriteForSync(trip.id, 'trip-created', { emitChangeEvent: false })
@@ -35,6 +45,14 @@ export async function createTrip(input: Parameters<typeof repo.createTrip>[0]) {
 }
 
 export async function updateTrip(tripId: string, patch: Parameters<typeof repo.updateTrip>[1]) {
+  const accountCloud = await updateCoreAccountObjectIfEnabled({
+    apply: () => repo.updateTrip(tripId, patch),
+    objectId: tripId,
+    objectType: 'trip',
+    tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const trip = await repo.updateTrip(tripId, patch)
   if (trip) {
     await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
@@ -49,6 +67,13 @@ export async function deleteTripCascade(tripId: string) {
 }
 
 export async function createDay(input: Parameters<typeof repo.createDay>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createDay(input, { touchTrip: false }),
+    objectType: 'day',
+    tripId: input.tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const day = await repo.createDay(input)
   await enqueueObjectUpsert({ object: day, objectType: 'day' })
   recordTripWriteForSync(day.tripId, 'day-created', { emitChangeEvent: false })
@@ -56,6 +81,17 @@ export async function createDay(input: Parameters<typeof repo.createDay>[0]) {
 }
 
 export async function updateDay(dayId: string, patch: Parameters<typeof repo.updateDay>[1]) {
+  const existing = await repo.getDay(dayId)
+  if (existing) {
+    const accountCloud = await updateCoreAccountObjectIfEnabled({
+      apply: () => repo.updateDay(dayId, patch, { touchTrip: false }),
+      objectId: dayId,
+      objectType: 'day',
+      tripId: existing.tripId,
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
   const day = await repo.updateDay(dayId, patch)
   if (day) {
     await enqueueObjectUpsert({ object: day, objectType: 'day' })
@@ -74,6 +110,13 @@ export async function deleteDayCascade(dayId: string) {
 }
 
 export async function createItineraryItem(input: Parameters<typeof repo.createItineraryItem>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createItineraryItem(input, { touchTrip: false }),
+    objectType: 'item',
+    tripId: input.tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const item = await repo.createItineraryItem(input)
   await enqueueObjectUpsert({ object: item, objectType: 'item' })
   recordTripWriteForSync(item.tripId, 'item-created', { emitChangeEvent: false })
@@ -94,6 +137,17 @@ export async function updateItineraryItem(
   itemId: string,
   patch: Parameters<typeof repo.updateItineraryItem>[1],
 ) {
+  const existing = await repo.getItineraryItem(itemId)
+  if (existing) {
+    const accountCloud = await updateCoreAccountObjectIfEnabled({
+      apply: () => repo.updateItineraryItem(itemId, patch, { touchTrip: false }),
+      objectId: itemId,
+      objectType: 'item',
+      tripId: existing.tripId,
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
   const item = await repo.updateItineraryItem(itemId, patch)
   if (item) {
     await enqueueObjectUpsert({ object: item, objectType: 'item' })

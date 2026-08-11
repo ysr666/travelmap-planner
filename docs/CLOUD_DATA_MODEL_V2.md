@@ -2,7 +2,7 @@
 
 更新时间：2026-08-11
 
-状态：**Target；P1.1 已在当前分支实现本地合同和增量 migration，尚未应用到 Supabase Preview 或 Production**
+状态：**Target；P1.1 合同/migration 与 P1.2 本地 mutation runtime 已实现，写入硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
 
 上游合同：
 
@@ -23,14 +23,14 @@
 
 ## 2. 当前与目标边界
 
-| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1 |
+| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1-P1.2 |
 | --- | --- | --- | --- |
-| 对象写入 | IndexedDB 首写，稍后 upsert `cloud_sync_objects` | 在线 cloud-first，离线才排队 | 新 RPC 和客户端合同已写，本地旧路径未切换 |
+| 对象写入 | IndexedDB 首写，稍后 upsert `cloud_sync_objects` | 在线 cloud-first，离线才排队 | Trip/Day/Item 单对象 adapter、revision/journal 与 coordinator 已写；硬切换常量为 `false`，旧生产路径未改变 |
 | 幂等 | 当前行保留 `op_id` | 独立 mutation receipt 永久识别已完成请求 | migration 已包含私有 receipt ledger |
-| 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | revision 和冲突结果已定义，字段合并待 P1.2 |
+| 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | revision、账号绑定、lease generation、持久冲突快照和依赖链回滚已实现；字段合并与 UI 恢复待后续 P1 |
 | 删除 | `deleted_at_ms` | Realtime 可过滤的 tombstone UPDATE | 新表使用 payload 为空的 tombstone |
-| Realtime | 核心旅行对象未发布 | 按 owner/trip 收敛对象和 job | migration 已声明 publication，订阅待 P1.3 |
-| 恢复 | 旅行级手工恢复 | 空设备自动恢复完整账号索引与旅行 | 回填存在，恢复编排待 P1.3 |
+| Realtime | 核心旅行对象未发布 | 按 owner/trip 收敛对象和 job | migration 已声明 publication，订阅待 P1.4 |
+| 恢复 | 旅行级手工恢复 | 空设备自动恢复完整账号索引与旅行 | 回填存在；bootstrap、双读、空设备恢复和 read codec 尚未实现 |
 | 私密资料 | 独立加密 vault 和 Storage | 继续分域，只同步最小索引 | V2 明确禁止正文、OCR、Blob、Token 和密钥 |
 
 ## 3. 正式对象目录
@@ -42,7 +42,7 @@
 | `trip` | `TripV1` | client mutable | 标题、目的地、日期、时区和用户备注 |
 | `day` | `DayV1` | client mutable | 日期、标题、时区和排序 |
 | `item` | `ItineraryItemV1` | client mutable | 时间、地点、坐标、交通、执行状态和票据引用 |
-| `ticket_meta` | `TicketMetaV1` | client mutable | 最小文件 metadata、分类、结构化字段和关系；不含 Blob |
+| `ticket_meta` | `RedactedTicketMetaV1` | client mutable | ID、关系、类别和显示所需的最小 metadata；明确排除 Blob、文件名、本机路径、外部/签名 URL、备注和结构化提取字段 |
 | `document_index` | `RedactedDocumentIndexV1` | client mutable | 证件类别、状态、有效期和附件数量；不含号码、正文或 OCR |
 | `document_trip_link` | `DocumentTripLinkV1` | client mutable | 资料与旅行对象的关系、状态、confidence 和来源 ID |
 | `transport_booking` | `TransportBookingV1` | client mutable | 预订公开字段和加密 secret 引用；不含 PNR/票号正文 |
@@ -88,7 +88,7 @@
 
 公开 Data API 只暴露 `public.account_apply_object_mutation_v1`。它是 `SECURITY INVOKER` 薄包装；真实实现位于未暴露的 `tripmap_private` schema，使用空 `search_path`、显式 `auth.uid()` 校验和最小函数授权。
 
-客户端请求只包含：
+客户端 mutation envelope 只包含：
 
 ```ts
 type AccountObjectMutationV1 = {
@@ -105,11 +105,11 @@ type AccountObjectMutationV1 = {
 }
 ```
 
-请求明确不含 `ownerId`、`actorId`、SQL、表名、函数名、路由、任意控制面 URL、Blob、Token、Provider key、OCR 正文或 raw Provider payload。
+适配器另外固定发送当前账号数据库的 32 位哈希 `target_account_hash`。服务端从 `auth.uid()` 独立重算并比较；它不是 owner ID，也不能改变写入 owner。请求明确不含 `ownerId`、`actorId`、SQL、表名、函数名、路由、任意控制面 URL、Blob、Token、Provider key、OCR 正文或 raw Provider payload。
 
 RPC 固定执行顺序：
 
-1. 从 JWT 读取 actor/owner，拒绝未认证调用。
+1. 从 JWT 读取 actor/owner，并验证账号哈希与当前 token 一致；拒绝未认证或跨账号上下文调用。
 2. 校验版本、注册对象、客户端写权限、ID、payload identity、大小和敏感字段。
 3. 对 `owner + object` 和 `owner + mutation` 获取事务级 advisory lock。
 4. 查找 mutation receipt；相同内容返回 `idempotent`，不同内容复用同 ID 返回 `mutation_id_reused`。
@@ -130,21 +130,23 @@ RPC 固定执行顺序：
 
 1. UI 生成 optimistic patch 和 rollback snapshot。
 2. 写入协调器读取本机已确认的 `baseRevision`。
-3. 调用 V2 RPC；此时 outbox 仍为空。
-4. `applied/idempotent` 后把返回对象写入 IndexedDB cache，并保存 revision receipt。
-5. `conflict` 进入字段策略；UI 不得显示“已保存”。
-6. 认证、权限、合同错误回滚 optimistic state；可恢复网络错误才进入 outbox。
+3. 事务性写入乐观对象和带账号哈希、原 mutation、before/after snapshot、lease generation 的本机 journal，再调用 V2 RPC。
+4. `applied` 或未前进的 `idempotent` ack 原子写入 revision receipt 并删除 journal。
+5. `idempotent` 若显示远端已进入更高 revision，必须转为冲突，不得把陈旧业务表标成已收敛。
+6. `conflict` 回滚当前 mutation 及其依赖的本机乐观链并保留冲突收据；UI 不得显示“已保存”。
+7. 认证失败保留 optimistic state 与 `blocked_auth` journal，重新登录后以原 mutation ID 恢复；权限、合同和确定性拒绝在同一事务回滚 optimistic state。网络中断、5xx、429、响应丢失或无法证明未提交的格式错误保留原 mutation ID 重放。
+8. 每次协调固定绑定开始时的账号数据库实例和账号哈希。RPC 中途切换账号只会让旧账号 journal 等待租约恢复，绝不使用新账号的动态数据库句柄执行 ack 或回滚。
 
 ### 6.2 离线写入
 
 1. 明确检测离线或网络级失败后，事务性写入本机对象与 outbox。
-2. outbox 保存原 mutation ID、expected revision、payload hash、尝试次数和下一次重试时间。
-3. 重连按 trip 和依赖顺序重放；成功前不得清除。
+2. journal 保存账号哈希、原 mutation ID、expected revision、完整内容比较、before/after rollback snapshot、尝试次数、lease token 和下一次重试时间。
+3. 重连按对象依赖顺序重放；成功前不得清除。多标签 worker 只能用当前 lease token 写回结果，旧 generation 的晚到响应不得覆盖新状态。
 4. 100 次相同重放只能生成一个服务端 revision。
 
 ### 6.3 多对象事务
 
-单对象 RPC 不足以安全完成重排、跨日移动、整批导入和组合 AI 操作。P1.2 必须增加注册 workflow mutation：服务端在一个事务中校验所有对象 revision，再全部写入或全部拒绝。客户端不能把多对象原子操作拆成若干“看起来成功”的独立写入。
+单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。后续 P1 子阶段必须增加注册 workflow mutation：服务端在一个事务中校验所有对象 revision，再全部写入或全部拒绝。客户端不能把多对象原子操作拆成若干“看起来成功”的独立写入。当前硬切换门槛在这些能力、bootstrap 和双读完成前不可打开。
 
 ## 7. 冲突合同
 
@@ -177,7 +179,7 @@ Postgres Changes 适用于 Limited Beta 的低并发阶段。达到约 3,000 同
 
 恢复必须记录游标、对象数、最大 revision、失败对象和重试状态。单对象损坏不得阻塞其余旅行；损坏对象进入可诊断 quarantine，不能被当作空值覆盖。
 
-P1.4 需要补齐：
+P1.5 需要补齐：
 
 - tombstone 默认保留 30 天，用户可恢复；到期后后台硬删除。
 - mutation receipt 至少覆盖 outbox 最大寿命和跨设备重放窗口，建议 180 天；清理前先验证无待重放客户端版本。
@@ -193,20 +195,30 @@ P1.4 需要补齐：
 - 只复制兼容 legacy rows；不更新或删除 legacy 表。
 - 客户端仅包含未启用 adapter 和严格解析器。
 
-### P1.2 双读、cloud-first 单写
+### P1.2 本地 mutation runtime（当前分支已完成）
 
-- feature flag 仅对白名单测试账号启用。
-- 首次读取比较 legacy 与 V2，记录 drift，不自动覆盖。
-- 在线单对象写改走 V2；网络错误才进入 V2 outbox。
-- 多对象 workflow RPC、字段合并和 durable revision cache 同批落地。
+- IndexedDB v11 增加账号隔离的 revision receipt 和 mutation journal。
+- coordinator 实现原 mutation 重放、租约 generation、退避、认证恢复、冲突快照、账号数据库绑定、依赖链原子回滚和不确定响应保护；终态 journal 携带回滚完成标记，启动恢复器只补偿未完成终态，避免崩溃窗口和重复回滚。
+- Trip/Day/Item 的创建与简单更新已接入受限 adapter；未 bootstrap 的旧对象继续走 legacy，Ticket 与所有多对象操作不进入 V2。
+- Ticket 的通用构建器、合同解析器、SQL RPC 和 legacy 回填均执行同一最小字段白名单；完整 Ticket 读写、Blob 与重绑协议仍未接入 V2。
+- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 固定为 `false`；即使环境变量和白名单被设置，也不能启用 V2 写入。
+- migration 仍未应用，当前生产数据语义和 UI 均未变化。
 
-### P1.3 Realtime 与完整恢复
+### P1.3 Preview、bootstrap 与完整写入面
+
+- 在 Supabase Preview 应用 migration，验证账号哈希 guard、RPC、RLS、grants、Realtime publication、并发幂等、advisors 和回滚。
+- 首次读取比较 legacy 与 V2，生成 bootstrap revision 和 drift receipt，不自动覆盖不一致数据。
+- 增加删除、重排、跨日移动、票据重绑、导入、账本与 AI 写入所需的注册 batch/workflow RPC。
+- 完成 Ticket 的专用读写/Blob/重绑协议，并为 Document、Booking、Lodging、Insurance 和 Ledger 建立专用 write/read codec；任何本机路径、签名 URL、自由文本秘密和正文不得进入通用表。
+- 完成字段冲突策略和用户可见恢复入口后，才允许 Preview 白名单解除代码硬门槛。
+
+### P1.4 Realtime 与完整恢复
 
 - 第二设备订阅、断线续订、token refresh、跨标签登出和账号切换。
 - 空设备恢复、tombstone、权限变化和 AI job 进度。
 - 连续 7 天 shadow compare 无数据差异后停止 legacy 双写。
 
-### P1.4 生命周期与生产切换
+### P1.5 生命周期与生产切换
 
 - export/delete/retention/recovery 完成。
 - RLS、越权、advisors、性能、100 次幂等、离线收敛、2 秒 SLO 全部通过。
@@ -215,9 +227,9 @@ P1.4 需要补齐：
 
 ## 11. 回退策略
 
-P1.1 回退只需停止客户端 flag；新表是增量的，legacy 路径未改变。禁止为回退删除已写入的 V2 数据。
+P1.1-P1.2 回退无需生产动作：代码硬门槛关闭、migration 未应用、legacy 路径未改变。禁止为回退删除未来已写入的 V2 数据。
 
-P1.2 以后若错误率、冲突率或恢复失败超过阈值：停止新 V2 mutation，保留 V2 只读与 outbox，继续收集差异；只有已确认没有 V2-only revision 时才可暂时恢复 legacy 写入。任何双向复制都必须以 revision 和 receipt 为依据，不能使用盲 upsert。
+Preview 启用以后若错误率、冲突率或恢复失败超过阈值：停止新 V2 mutation，保留 V2 只读与 journal，继续收集差异；只有已确认没有 V2-only revision 时才可暂时恢复 legacy 写入。任何双向复制都必须以 revision 和 receipt 为依据，不能使用盲 upsert。
 
 ## 12. 必须通过的验证
 
@@ -225,6 +237,8 @@ P1.2 以后若错误率、冲突率或恢复失败超过阈值：停止新 V2 mu
 
 - anon 调用 RPC、读取表、读 receipt：拒绝。
 - 用户 A 读取/修改用户 B 对象：拒绝。
+- A 账号数据库携带 B token，或账号在 RPC 中途切换：`account_context_mismatch`，不写任一账号。
+- RPC 返回期间切换到另一账号：旧账号乐观对象/journal 保留待重放，新账号同 ID 对象不被读取、ack 或回滚。
 - authenticated 直接 INSERT/UPDATE/DELETE：拒绝；自己的 SELECT：允许。
 - 同 mutation 同内容并发 100 次：一个 revision、一个 receipt。
 - 同 mutation 不同内容：`mutation_id_reused`，对象不变。
@@ -237,6 +251,10 @@ P1.2 以后若错误率、冲突率或恢复失败超过阈值：停止新 V2 mu
 
 - unknown field/type/status、owner/actor 注入、敏感 key、超大/循环 payload、跨对象响应全部拒绝。
 - 网络错误进入 outbox；权限/合同错误不重试；成功前 outbox 不清除。
+- 模拟终态落盘后崩溃：下次启动只补偿尚未标记完成的 rollback；已回滚冲突不会重复应用。
+- 响应丢失、未知 5xx/429、格式损坏：保留同一 mutation ID；advanced idempotent 不覆盖陈旧业务表。
+- 多标签 lease 过期后，旧 generation 的 applied/conflict/error 响应都不能修改新 generation 状态。
+- 离线乐观写入在页面重载后收到 conflict/permission/rejected 时，完整依赖链可回滚且不留下隐藏重放。
 - 第二设备 P95 2 秒内更新；断网编辑重连后收敛。
 - 清空 IndexedDB 后正式账号恢复所有用户可见对象和必要附件。
 

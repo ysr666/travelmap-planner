@@ -40,8 +40,8 @@ describe('account-cloud migration contract', () => {
 
   it('rejects owner or actor IDs in the client-callable mutation signature', () => {
     const changed = migrationSql.replace(
-      '  target_schema_version integer,\n  target_mutation_id text,',
-      '  target_schema_version integer,\n  owner_id uuid,\n  target_mutation_id text,',
+      '  target_schema_version integer,\n  target_account_hash text,',
+      '  target_schema_version integer,\n  owner_id uuid,\n  target_account_hash text,',
     )
     expect(() => validateAccountCloudMigration({ contractSource, migrationSql: changed }))
       .toThrow('must not accept owner or actor IDs')
@@ -56,6 +56,37 @@ describe('account-cloud migration contract', () => {
       contractSource,
       migrationSql: migrationSql.replace('prior_receipt.request_hash <> request_hash', 'prior_receipt.request_hash = request_hash'),
     })).toThrow('replay validation')
+  })
+
+  it('rejects removal of the authenticated account-context guard', () => {
+    const changed = migrationSql.replace(
+      'target_account_hash <> pg_catalog.left(',
+      'target_account_hash = target_account_hash or pg_catalog.left(',
+    )
+    expect(() => validateAccountCloudMigration({ contractSource, migrationSql: changed }))
+      .toThrow('account-context guard')
+  })
+
+  it('rejects Ticket metadata whitelist drift between TypeScript and SQL', () => {
+    const changed = migrationSql.replace("         'updatedAt'\n", '')
+    expect(() => validateAccountCloudMigration({ contractSource, migrationSql: changed }))
+      .toThrow('Ticket metadata fields do not match')
+  })
+
+  it('rejects a stale RPC comment signature or missing overload cleanup', () => {
+    const staleComment = migrationSql.replace(
+      'integer, text, text, text, text, text, text, bigint, integer, text, jsonb\n) is',
+      'integer, text, text, text, text, text, bigint, integer, text, jsonb\n) is',
+    )
+    expect(() => validateAccountCloudMigration({ contractSource, migrationSql: staleComment }))
+      .toThrow('current 11-argument signature')
+
+    const missingDrop = migrationSql.replace(
+      'drop function if exists public.account_apply_object_mutation_v1(',
+      '-- removed public overload cleanup (',
+    )
+    expect(() => validateAccountCloudMigration({ contractSource, migrationSql: missingDrop }))
+      .toThrow('superseded public RPC overload')
   })
 
   it('rejects any destructive legacy-table statement', () => {

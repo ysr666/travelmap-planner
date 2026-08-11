@@ -2,7 +2,7 @@
 
 更新时间：2026-08-11
 
-状态：**Target；P1.1 合同/migration 与 P1.2 本地 mutation runtime 已实现，写入硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
+状态：**Target；P1.1 合同/migration、P1.2 本地 mutation runtime 与 P1.3a 严格读取/bootstrap runtime 已实现，读写硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
 
 上游合同：
 
@@ -30,7 +30,7 @@
 | 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | revision、账号绑定、lease generation、持久冲突快照和依赖链回滚已实现；字段合并与 UI 恢复待后续 P1 |
 | 删除 | `deleted_at_ms` | Realtime 可过滤的 tombstone UPDATE | 新表使用 payload 为空的 tombstone |
 | Realtime | 核心旅行对象未发布 | 按 owner/trip 收敛对象和 job | migration 已声明 publication，订阅待 P1.4 |
-| 恢复 | 旅行级手工恢复 | 空设备自动恢复完整账号索引与旅行 | 回填存在；bootstrap、双读、空设备恢复和 read codec 尚未实现 |
+| 恢复 | 旅行级手工恢复 | 空设备自动恢复完整账号索引与旅行 | 严格 envelope read codec、两次稳定读取、漂移计划和非破坏 revision bootstrap 已在本地/mock 实现；各对象专用 payload codec、Preview 真实收据、空设备恢复和附件恢复尚未实现 |
 | 私密资料 | 独立加密 vault 和 Storage | 继续分域，只同步最小索引 | V2 明确禁止正文、OCR、Blob、Token 和密钥 |
 
 ## 3. 正式对象目录
@@ -207,7 +207,9 @@ P1.5 需要补齐：
 ### P1.3 Preview、bootstrap 与完整写入面
 
 - 在 Supabase Preview 应用 migration，验证账号哈希 guard、RPC、RLS、grants、Realtime publication、并发幂等、advisors 和回滚。
-- 首次读取比较 legacy 与 V2，生成 bootstrap revision 和 drift receipt，不自动覆盖不一致数据。
+- 本地 P1.3a 已增加固定表/固定字段、RLS 依赖、Supabase 会话账号哈希复核、有界分页和严格 snake-case 解码；两次完整读取必须一致后才进入 bootstrap。
+- 本地 P1.3a 已比较 legacy 与 V2，区分 exact、local-only、remote-only、payload/tombstone/schema drift、unsupported 和 pending mutation。持久化在同一 IndexedDB 事务内重新读取对象与两类 outbox，只为完全一致的 live row 或本机确实不存在的 tombstone 写 revision receipt，绝不改业务对象；Ticket 比较继续使用最小字段白名单。
+- `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 与完整写入门槛一样固定为 `false`。Preview 应用后仍需取得真实账号双读、漂移和 bootstrap 收据，才可逐账号开启 shadow。
 - 增加删除、重排、跨日移动、票据重绑、导入、账本与 AI 写入所需的注册 batch/workflow RPC。
 - 完成 Ticket 的专用读写/Blob/重绑协议，并为 Document、Booking、Lodging、Insurance 和 Ledger 建立专用 write/read codec；任何本机路径、签名 URL、自由文本秘密和正文不得进入通用表。
 - 完成字段冲突策略和用户可见恢复入口后，才允许 Preview 白名单解除代码硬门槛。

@@ -122,7 +122,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
 - P1.1 已在代码中建立 22 类账号对象、revision、mutation receipt、tombstone、受控 RPC、RLS/grants 和 Realtime publication 的增量 migration；RPC 还会把本机账号哈希与服务端 `auth.uid()` 原子比对，拒绝跨账号会话竞争。
 - P1.2 已在本地实现 IndexedDB v11 revision/journal、原 mutation 重放、lease generation、账号数据库绑定、可恢复的原子依赖链回滚，以及 Trip/Day/Item 单对象 adapter。Ticket 已有构建器/解析器/SQL/回填四层最小字段白名单，但完整读写、Blob 与重绑协议尚未完成，因此仍走 legacy。
-- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 当前固定为 `false`：环境变量和账号白名单不能启用写入。migration 尚未应用到 Preview/Production，bootstrap、双读、batch workflow、Realtime 和恢复仍是 Target。
+- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现；migration 尚未应用到 Preview/Production，真实 bootstrap 收据、batch workflow、Realtime 和恢复仍是 Target。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。
@@ -139,7 +139,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 已知发布风险
 
 - 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
-- Account Cloud V2 的本地运行时不代表可切换版本；在 Preview SQL/RLS 收据、完整写入面、双读/bootstrap、冲突恢复和第二设备收敛完成前，禁止解除代码硬门槛。
+- Account Cloud V2 的本地运行时不代表可切换版本；在 Preview SQL/RLS 收据、真实账号双读/bootstrap 收据、完整写入面、冲突恢复和第二设备收敛完成前，禁止解除任一代码硬门槛。
 - 地点/酒店照片和航司/保险 Logo 尚无完整生产资产管线；当前真实票据缩略图能力不能被描述为已完成所有设计稿媒体效果。
 - AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
 - iPhone/Android 实体机性能、文件选择和网络差异为发布后运营观察，不再阻塞 UI V3。

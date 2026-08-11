@@ -357,7 +357,7 @@ export async function acknowledgeAccountMutation(
       throw new AccountMutationJournalError('stale_lease')
     }
     if (result.mutationId !== mutationId) throw new AccountMutationJournalError('stale_ack')
-    const revision = revisionFromRow(result.object, now)
+    const revision = buildAccountObjectRevisionRecord(result.object, now)
     if (
       revision.objectKey !== entry.objectKey
       || revision.tripId !== entry.tripId
@@ -459,7 +459,10 @@ export function computeAccountMutationRetryAt(attempts: number, now = Date.now()
   return now + Math.min(1_000 * (2 ** exponent), MAX_RETRY_DELAY_MS)
 }
 
-function revisionFromRow(row: AccountObjectRowV1, now: number): AccountObjectRevisionRecord {
+export function buildAccountObjectRevisionRecord(
+  row: AccountObjectRowV1,
+  now = Date.now(),
+): AccountObjectRevisionRecord {
   if (ACCOUNT_OBJECT_DEFINITIONS[row.objectType].authority !== 'client_mutable') {
     throw new AccountMutationJournalError('stale_ack')
   }

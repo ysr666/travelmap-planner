@@ -28,6 +28,7 @@ import {
 } from './routeCache'
 import {
   clearActiveAccountStorageScope,
+  hashAccountStorageScopeId,
   setActiveAccountStorageScope,
 } from './accountStorageScope'
 
@@ -74,12 +75,7 @@ export type LegacyDatabaseMigrationResult = AccountDatabaseSummary & {
   queuedObjects: number
 }
 
-export async function hashAccountId(userId: string) {
-  const normalized = userId.trim()
-  if (!normalized) throw new Error('账号标识无效。')
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
-  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('').slice(0, 32)
-}
+export const hashAccountId = hashAccountStorageScopeId
 
 export function buildAccountTravelDatabaseName(accountHash: string) {
   return `${ACCOUNT_DB_PREFIX}${accountHash}`

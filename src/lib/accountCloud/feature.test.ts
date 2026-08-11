@@ -3,6 +3,7 @@ import {
   ACCOUNT_CLOUD_V2_REQUIRED_MIGRATION,
   getAccountCloudV2Mode,
   isAccountCloudV2AccountEnabled,
+  isAccountCloudV2ShadowReadEnabled,
 } from './feature'
 
 const ACCOUNT_HASH = '0123456789abcdef0123456789abcdef'
@@ -35,6 +36,10 @@ describe('account cloud v2 feature gate', () => {
     expect(isAccountCloudV2AccountEnabled('ffffffffffffffffffffffffffffffff', env)).toBe(false)
     expect(isAccountCloudV2AccountEnabled(null, env)).toBe(false)
     expect(isAccountCloudV2AccountEnabled(ACCOUNT_HASH, {
+      ...env,
+      VITE_ACCOUNT_CLOUD_V2_MODE: 'shadow',
+    })).toBe(false)
+    expect(isAccountCloudV2ShadowReadEnabled(ACCOUNT_HASH, {
       ...env,
       VITE_ACCOUNT_CLOUD_V2_MODE: 'shadow',
     })).toBe(false)

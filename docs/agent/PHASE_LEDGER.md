@@ -3234,3 +3234,72 @@ Local validation:
 - `npm run typecheck`, `npm run lint`, and `npm run build` passed. Build included capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates; the final budget was 473.4 KiB entry, 859.0 KiB initial JS, 247.1 KiB initial gzip, and 2485.0 KiB/126-entry precache.
 - Full serial Playwright E2E passed earlier in the subphase: 194 tests. After final account-binding/privacy hardening, the 5-test PWA upgrade suite and Desktop Beta smoke both passed again; production behavior remains unchanged because the compile-time cutover gate is still closed.
 - `git diff --check` passed. Preview migration application, executable SQL/RLS/Realtime/rollback evidence, bootstrap and double-read drift receipts, and batch mutation evidence remain mandatory later P1 gates before any cutover or Current claim.
+
+Remote validation for commit `78377ead3bc7d710d236f2ec3ced96d6597e7cee`:
+
+- GitHub Actions run `31486305733` passed all five required jobs: Build, Lint, Type Check, Unit Tests, and E2E Tests. The serial E2E job completed successfully in 6 minutes 12 seconds.
+- Cloudflare Pages deployment `29273540-cc34-4b8d-b509-547e34a1cdd1` passed for the same commit. Its immutable Preview URL returned HTTP 200.
+- These are code/build receipts only. They do not replace the missing Supabase Preview SQL, RLS, Realtime, bootstrap, second-device, and rollback receipts required to exit P1.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3a Strict Read, Bootstrap, and Shadow Drift
+
+Status: complete locally; Supabase Preview receipt remains a P1 gate
+
+Goal:
+
+- Establish the strict V2 account-object read path and a non-destructive bootstrap protocol that can prove which legacy/local objects are byte-equivalent to their revisioned cloud rows.
+- Make every mismatch explicit before any existing object is allowed onto the V2 mutation path; never infer a revision from timestamps or silently use remote data to replace local data.
+
+Scope:
+
+- Add a fixed-column, RLS-dependent Supabase reader for one trip with bounded deterministic pagination, strict snake-case row decoding, response substitution checks, sanitized errors, and account-context checks before and after every network page.
+- Add a pure shadow comparator for supported legacy object types. It must classify exact matches, local-only, remote-only, payload drift, tombstone drift, unsupported types, duplicate rows, and pending-mutation blocks.
+- Add account-database-bound bootstrap persistence that writes revision receipts only for exact live matches or exact local absence plus a remote tombstone, revalidates the current local object inside the persistence transaction, and never changes business data.
+- Use the same Ticket metadata redaction codec at read/compare boundaries so filenames, paths, URLs, notes, extracted content, Blob data, and unregistered fields cannot enter V2 receipts.
+- Add a separate compile-time closed shadow-read gate requiring the exact migration receipt, `shadow` mode, and an account allowlist; it must not weaken the existing full-cutover write gate.
+- Record aggregate drift receipts in memory/return values only for this subphase. Durable cross-device bootstrap state, quarantine, full restore, Realtime, and rollout telemetry remain later P1 work.
+
+No-go:
+
+- No Preview or production Supabase write, migration application, branch creation, real account data read, Provider call, feature enablement, legacy-row mutation, local business-object overwrite, Ticket Blob/vault read, or production status promotion.
+- No `select('*')`, owner ID in a client result, caller-supplied table/column/order expression, unbounded page, raw server error, timestamp-derived revision, automatic resolution of drift, or revision receipt for an unsupported/unverified payload.
+- No V2 delete, reorder, move, import, ticket rebind, ledger batch, AI batch, or other multi-object write; those require a separately registered atomic workflow RPC.
+
+Likely files:
+
+- `src/lib/accountCloud/client.ts`, new strict read/bootstrap modules and tests, `feature.ts`, `localStore.ts`, Account Cloud V2/status/capability documentation, and this ledger.
+
+Validation:
+
+- Fixed query shape and pagination; unknown/owner fields; malformed/duplicate/substituted rows; account switch during each page; unauthorized/missing-contract/transient errors; bounded maximum; every shadow classification; Ticket redaction; pending mutation; stale local data between plan and persist; atomic receipt writes; idempotent rerun; wrong account database; and closed-gate behavior.
+- Focused account-cloud tests, typecheck, lint, full unit, build, relevant PWA/desktop E2E if shared runtime changes, migration/capability gates, and `git diff --check`.
+
+Risk:
+
+- High. A false exact match can attach the wrong revision to local data and turn a later ordinary edit into a stale overwrite; an account-switch gap can bind another account's rows to the active IndexedDB database.
+
+Stop conditions:
+
+- Stop and repair if bootstrap writes any business table, accepts owner IDs or unknown response fields, seeds a receipt without an exact payload/absence proof, ignores a pending journal row, crosses account database instances, returns a partial page set as complete, or makes the existing V2 write gate reachable.
+
+Local result:
+
+- Added a strict `tripmap_account_objects` reader with a fixed 13-column projection, fixed trip filter and sort, bounded pagination, exact response-field validation, duplicate/substitution rejection, and sanitized transport errors. The browser never asks for or accepts `owner_id`, a caller-selected table/column, wildcard fields, or a partial max-page result.
+- Bound every read page to both the captured local account hash and the current Supabase authenticated user. The account hash is checked before and after the network request, and `auth.getUser()` is revalidated before the first query and before each returned page is accepted; account or session switching discards the response.
+- Added two-pass stable reads. Bootstrap planning receives a remote snapshot only when two independently completed, strictly decoded reads are byte-equivalent; changing revision, payload, mutation receipt, tombstone, or ordering evidence fails closed.
+- Added a pure legacy/V2 drift planner for all 12 currently synchronized legacy object kinds. It reports exact, local-only, remote-only, payload, tombstone, schema, unsupported, and pending-mutation states without modifying either source.
+- Ticket comparison uses the existing minimal metadata whitelist. Filename, local path, URL, notes, OCR/extracted text, Blob data, private structured fields, and unknown top-level fields cannot enter the bootstrap payload or revision receipt.
+- Added one IndexedDB transaction that re-reads the local business object and both legacy/V2 pending queues before persisting. It writes only a server revision receipt for an exact live payload or proven local absence plus a server tombstone; it never creates, updates, deletes, or restores a business object. Exact repeat execution is idempotent, while stale local state, pending work, unsupported schema, and conflicting receipts are skipped.
+- Added a separate compile-time `ACCOUNT_CLOUD_V2_SHADOW_READ_READY = false` gate. It still requires the exact migration receipt, `shadow` mode, and account allowlist, and cannot be enabled by environment configuration in this build. The production build tree-shook the bootstrap runtime from startup output; the existing write hard gate also remains closed.
+- No Supabase Preview/production schema or data write, real account cloud read, or Provider call was made in this subphase.
+
+Review:
+
+- The final self-review focused on response substitution, Supabase-token/local-database account mismatch, page races, stale plans, existing revision conflicts, pending legacy and V2 mutations, Ticket privacy, idempotent repeats, and accidental business-table writes. Focused regressions cover each boundary, including account switches before query and before accepting a returned page.
+
+Local validation:
+
+- Final focused Account Cloud and account-database suites passed: 10 files and 93 tests. The complete unit suite passed: 230 files and 1,854 tests.
+- `npm run typecheck:app`, `npm run lint`, `npm run build`, and `npm run check:capabilities` passed. Build gates reported 144 production-boundary files with zero fixture files; the final budget was 473.1 KiB entry, 859.0 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2485.2 KiB/126-entry precache.
+- The 5-test PWA upgrade suite and Desktop Beta smoke passed. `git diff --check` passed.
+- Supabase Preview application and real-account double-read/bootstrap receipts remain intentionally unexecuted. They require a cost-bearing Preview branch or an explicitly authorized reviewed production migration and remain mandatory before either V2 read or write gate can open.

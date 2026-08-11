@@ -33,16 +33,17 @@ export class AccountCloudTransportError extends Error {
 
 export async function commitAccountObjectMutationV1(
   input: AccountObjectMutationV1,
-  client: SupabaseClient = requireSupabaseClient(),
+  client?: SupabaseClient,
   expectedAccountHash: string | null = getActiveAccountHash(),
 ): Promise<AccountObjectMutationResultV1> {
   const mutation = parseAccountObjectMutationV1(input)
   if (!expectedAccountHash || !/^[a-f0-9]{32}$/.test(expectedAccountHash)) {
     throw new AccountCloudTransportError('authentication_required', false)
   }
+  const transport = client ?? requireAccountCloudClient()
   let response: Awaited<ReturnType<SupabaseClient['rpc']>>
   try {
-    response = await client.rpc(APPLY_MUTATION_RPC, {
+    response = await transport.rpc(APPLY_MUTATION_RPC, {
       target_account_hash: expectedAccountHash,
       target_device_id: mutation.deviceId,
       target_expected_revision: mutation.expectedRevision,
@@ -60,7 +61,7 @@ export async function commitAccountObjectMutationV1(
   }
   const { data, error } = response
 
-  if (error) throw normalizeRpcError(error)
+  if (error) throw normalizeAccountCloudError(error)
 
   let result: AccountObjectMutationResultV1
   try {
@@ -73,6 +74,14 @@ export async function commitAccountObjectMutationV1(
   }
   assertResultMatchesRequest(mutation, result)
   return result
+}
+
+export function requireAccountCloudClient() {
+  try {
+    return requireSupabaseClient()
+  } catch {
+    throw new AccountCloudTransportError('contract_unavailable', false)
+  }
 }
 
 export function createAccountObjectMutationId(randomUuid: () => string = defaultRandomUuid) {
@@ -150,7 +159,7 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined'
 }
 
-function normalizeRpcError(error: { code?: string; message?: string; status?: number }) {
+export function normalizeAccountCloudError(error: { code?: string; message?: string; status?: number }) {
   const code = error.code ?? ''
   if (error.status === 401 || code === '28000' || code === 'PGRST301') {
     return new AccountCloudTransportError('authentication_required', false)
@@ -158,7 +167,7 @@ function normalizeRpcError(error: { code?: string; message?: string; status?: nu
   if (error.status === 403 || code === '42501') {
     return new AccountCloudTransportError('permission_denied', false)
   }
-  if (code === '42883' || code === 'PGRST202') {
+  if (code === '42P01' || code === '42883' || code === 'PGRST202' || code === 'PGRST205') {
     return new AccountCloudTransportError('contract_unavailable', false)
   }
   const status = error.status ?? 0

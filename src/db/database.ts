@@ -3,6 +3,7 @@ import type {
   AccountMutationJournalEntry,
   AccountObjectRevisionRecord,
 } from '../lib/accountCloud/localTypes'
+import type { AccountWorkflowJournalEntry } from '../lib/accountCloud/workflowLocalTypes'
 import type {
   Day,
   ItineraryItem,
@@ -81,6 +82,7 @@ export class TravelConsoleDatabase extends Dexie {
   tripIntelligenceSuggestionStates!: Table<TripIntelligenceSuggestionStateRecord, string>
   accountObjectRevisions!: Table<AccountObjectRevisionRecord, string>
   accountMutationJournal!: Table<AccountMutationJournalEntry, string>
+  accountWorkflowJournal!: Table<AccountWorkflowJournalEntry, string>
 
   constructor(name = LEGACY_TRAVEL_DATABASE_NAME) {
     super(name)
@@ -466,6 +468,10 @@ export class TravelConsoleDatabase extends Dexie {
       tripIntelligenceSuggestionStates: 'id, tripId, suggestionKey, &[tripId+suggestionKey], status, until, updatedAt',
       accountObjectRevisions: 'objectKey, tripId, [objectType+objectId], revision, updatedAt',
       accountMutationJournal: 'mutationId, accountHash, tripId, objectKey, status, [tripId+status], retryAt, leaseExpiresAt, updatedAt',
+    })
+
+    this.version(12).stores({
+      accountWorkflowJournal: 'batchMutationId, accountHash, tripId, *objectKeys, status, [tripId+status], retryAt, leaseExpiresAt, createdAt, updatedAt',
     })
   }
 }

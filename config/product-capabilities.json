@@ -111,6 +111,10 @@
           "src/lib/accountCloud/mutationBuilder.ts",
           "src/lib/accountCloud/workflowContract.ts",
           "src/lib/accountCloud/workflowClient.ts",
+          "src/lib/accountCloud/workflowCoordinator.ts",
+          "src/lib/accountCloud/workflowLocalCodec.ts",
+          "src/lib/accountCloud/workflowLocalStore.ts",
+          "src/lib/accountCloud/workflowLocalTypes.ts",
           "src/components/cloud/AccountMutationJournalController.tsx",
           "supabase/migrations/20260811092148_account_cloud_core_v2.sql",
           "supabase/migrations/20260811134000_account_cloud_workflows_v1.sql"
@@ -126,6 +130,10 @@
           "src/lib/accountCloud/mutationBuilder.test.ts",
           "src/lib/accountCloud/workflowContract.test.ts",
           "src/lib/accountCloud/workflowClient.test.ts",
+          "src/lib/accountCloud/workflowCoordinator.test.ts",
+          "src/lib/accountCloud/workflowLocalCodec.test.ts",
+          "src/lib/accountCloud/workflowLocalStore.test.ts",
+          "src/db/databaseMigration.test.ts",
           "src/db/trackedMutations.accountCloud.test.ts",
           "src/components/cloud/AccountMutationJournalController.test.tsx",
           "scripts/lib/account-cloud-migration.test.mjs",
@@ -134,7 +142,7 @@
         ],
         "receipts": ["docs/CLOUD_DATA_MODEL_V2.md"]
       },
-      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、严格分页读取、双读漂移分类、非破坏 bootstrap receipt、Ticket 最小字段白名单、Trip/Day/Item 单对象适配器和首批 7 个注册原子 workflow 已在本地实现并通过 PostgreSQL pgTAP，但读写硬门槛仍关闭；workflow 尚未接入本机事务协调器，删除级联与完整对象 codec 尚未覆盖，Preview migration、真实 bootstrap/多连接并发幂等收据、Realtime、空设备恢复和生产切换均未完成"],
+      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、严格分页读取、双读漂移分类、非破坏 bootstrap receipt、Ticket 最小字段白名单、Trip/Day/Item 单对象适配器、首批 7 个注册原子 workflow 及其本机整批事务协调器已实现，但读写硬门槛仍关闭；七类 workflow 尚未接入产品写路径，删除级联与剩余对象 codec 尚未覆盖，Preview migration、真实 bootstrap/多连接并发幂等收据、Realtime、空设备恢复和生产切换均未完成"],
       "operations": {
         "slo": "在线写入确认 P95 <= 2 秒",
         "alert": "确认失败率 > 1% 或检测到未解决的数据丢失",

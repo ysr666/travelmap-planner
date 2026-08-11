@@ -372,6 +372,7 @@ function coreTransactionTables(
   const common = [
     database.accountMutationJournal,
     database.accountObjectRevisions,
+    database.accountWorkflowJournal,
     database.trips,
   ]
   switch (objectType) {

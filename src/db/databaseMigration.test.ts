@@ -19,6 +19,21 @@ beforeEach(async () => {
 })
 
 describe('TravelConsoleDB migrations', () => {
+  it('creates an empty atomic workflow journal when upgrading from v11 to v12', async () => {
+    const legacyDb = new Dexie('TravelConsoleDB')
+    legacyDb.version(11).stores({
+      accountMutationJournal: 'mutationId, accountHash, tripId, objectKey, status, [tripId+status], retryAt, leaseExpiresAt, updatedAt',
+      trips: 'id, updatedAt',
+    })
+    await legacyDb.open()
+    legacyDb.close()
+
+    await db.open()
+
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([])
+    expect(db.tables.map((table) => table.name)).toContain('accountWorkflowJournal')
+  })
+
   it('creates empty account-cloud revision and mutation stores when upgrading from v10 to v11', async () => {
     const legacyDb = new Dexie('TravelConsoleDB')
     legacyDb.version(10).stores({ trips: 'id, updatedAt' })
@@ -39,9 +54,11 @@ describe('TravelConsoleDB migrations', () => {
     await expect(db.trips.get('trip_v10')).resolves.toBeTruthy()
     await expect(db.accountObjectRevisions.toArray()).resolves.toEqual([])
     await expect(db.accountMutationJournal.toArray()).resolves.toEqual([])
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([])
     expect(db.tables.map((table) => table.name)).toEqual(expect.arrayContaining([
       'accountObjectRevisions',
       'accountMutationJournal',
+      'accountWorkflowJournal',
     ]))
   })
 

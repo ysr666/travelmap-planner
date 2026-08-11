@@ -2,7 +2,7 @@
 
 更新时间：2026-08-11
 
-状态：**Target；P1.1 合同/migration、P1.2 本地 mutation runtime 与 P1.3a 严格读取/bootstrap runtime 已实现，读写硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
+状态：**Target；P1.1 合同/migration、P1.2 单对象 mutation runtime、P1.3a 严格读取/bootstrap、P1.3b 注册 workflow 和 P1.3c 本机原子批次 runtime 已实现，读写硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
 
 上游合同：
 
@@ -23,11 +23,11 @@
 
 ## 2. 当前与目标边界
 
-| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1-P1.2 |
+| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1-P1.3c |
 | --- | --- | --- | --- |
 | 对象写入 | IndexedDB 首写，稍后 upsert `cloud_sync_objects` | 在线 cloud-first，离线才排队 | Trip/Day/Item 单对象 adapter、revision/journal 与 coordinator 已写；硬切换常量为 `false`，旧生产路径未改变 |
 | 幂等 | 当前行保留 `op_id` | 独立 mutation receipt 永久识别已完成请求 | migration 已包含私有 receipt ledger |
-| 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | revision、账号绑定、lease generation、持久冲突快照和依赖链回滚已实现；字段合并与 UI 恢复待后续 P1 |
+| 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | 单对象及注册批次的 revision、账号绑定、整批 lease、持久冲突快照和原子回滚已实现；字段合并与 UI 恢复待后续 P1 |
 | 删除 | `deleted_at_ms` | Realtime 可过滤的 tombstone UPDATE | 新表使用 payload 为空的 tombstone |
 | Realtime | 核心旅行对象未发布 | 按 owner/trip 收敛对象和 job | migration 已声明 publication，订阅待 P1.4 |
 | 恢复 | 旅行级手工恢复 | 空设备自动恢复完整账号索引与旅行 | 严格 envelope read codec、两次稳定读取、漂移计划和非破坏 revision bootstrap 已在本地/mock 实现；各对象专用 payload codec、Preview 真实收据、空设备恢复和附件恢复尚未实现 |
@@ -146,7 +146,7 @@ RPC 固定执行顺序：
 
 ### 6.3 多对象事务
 
-单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。P1.3b 已在本地增加首批注册 workflow mutation，但尚未部署或接入产品写路径；客户端仍不能把多对象原子操作拆成若干“看起来成功”的独立写入。当前硬切换门槛在完整 workflow 接入、bootstrap 和双读完成前不可打开。
+单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。P1.3b 已增加首批注册 workflow mutation，P1.3c 已增加 IndexedDB v12 原子批次 journal 与本机 coordinator；两者仍未部署到 Preview，也尚未接入产品写路径。产品操作不得把一个多对象动作拆成若干“看起来成功”的单对象提交。当前硬切换门槛在完整 workflow 产品接入、bootstrap 和双读完成前不可打开。
 
 ### 6.4 注册原子 Workflow（本地 Target）
 
@@ -154,7 +154,9 @@ RPC 固定执行顺序：
 
 `public.account_apply_workflow_v1` 是固定七参数的 `SECURITY INVOKER` 包装。私有实现从 `auth.uid()` 确定 owner/actor，复核账号哈希，拒绝未知字段、重复 step/mutation/object、服务端对象、敏感字段、超限深度/节点/字节和不合法 Ticket 关系。票据重绑还会锁定票据语义身份，并要求旧 metadata 目标及所有现存反向关联都进入同一批次。批次重试先按与单对象 RPC 相同的 object -> mutation 顺序获取 advisory lock，再检查不可读的私有 workflow receipt；所有 revision 与领域规则均在首笔写入前完成，之后对象、单步 receipt 和批次 receipt 在同一 PostgreSQL 事务提交。已完成批次只有在所有对象仍停留在其 applied revision 时才返回 `idempotent`，任一对象已前进则返回 `receipt_advanced` 冲突。
 
-当前迁移 `20260811134000_account_cloud_workflows_v1.sql` 已在本机 Supabase/PostgreSQL 从空库重放，并通过 43 项 pgTAP：实际函数授权/RLS、账号边界、敏感字段、事务异常回滚、100 次顺序幂等回放、advanced receipt、票据关系和跨账号同 ID 隔离。它未应用到 Preview/Production，尚无真实账号 bootstrap、多连接并发、网络不确定性或生产性能收据；本机 reorder/move/import/ticket/ledger/replan/repair 也尚未切换到该 RPC。删除级联和后续对象专用 workflow 必须在另一个有界子阶段补齐，不能用现有 ID 扩权。
+本机 P1.3c runtime 为每个 workflow 保存一个不可拆分的 batch ID、原始注册请求、严格 fingerprint、完整 before snapshot、整批对象键、lease/retry/Auth 状态和有界冲突收据。乐观对象与 journal 在同一 Dexie 事务落盘；成功时所有 server revision receipt 与 journal 删除在同一事务提交；确定性失败只在整个 after graph 仍完全一致时整批回滚。任一对象已被用户继续修改时不做部分补偿，保留用户数据并转入 `stale_local`；服务端已经成功但本机发生漂移时仍原子保存所有 revision receipt。单对象和 workflow journal 对同一对象互斥，响应写回还会在每个异步边界复核活动账号哈希与具体账号数据库实例。
+
+当前迁移 `20260811134000_account_cloud_workflows_v1.sql` 已在本机 Supabase/PostgreSQL 从空库重放，并通过 43 项 pgTAP：实际函数授权/RLS、账号边界、敏感字段、事务异常回滚、100 次顺序幂等回放、advanced receipt、票据关系和跨账号同 ID 隔离。本机 coordinator 另已覆盖离线、100 次原请求重放、Auth 恢复、响应替换、账号切换、成功后本机漂移、整批回滚、崩溃恢复和 IndexedDB 事务故障。它未应用到 Preview/Production，尚无真实账号 bootstrap、多连接并发、网络不确定性或生产性能收据；reorder/move/import/ticket/ledger/replan/repair 产品路径也尚未切换到该 runtime。删除级联和后续对象专用 workflow 必须在另一个有界子阶段补齐，不能用现有 ID 扩权。
 
 ## 7. 冲突合同
 
@@ -218,7 +220,9 @@ P1.5 需要补齐：
 - 本地 P1.3a 已增加固定表/固定字段、RLS 依赖、Supabase 会话账号哈希复核、有界分页和严格 snake-case 解码；两次完整读取必须一致后才进入 bootstrap。
 - 本地 P1.3a 已比较 legacy 与 V2，区分 exact、local-only、remote-only、payload/tombstone/schema drift、unsupported 和 pending mutation。持久化在同一 IndexedDB 事务内重新读取对象与两类 outbox，只为完全一致的 live row 或本机确实不存在的 tombstone 写 revision receipt，绝不改业务对象；Ticket 比较继续使用最小字段白名单。
 - `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 与完整写入门槛一样固定为 `false`。Preview 应用后仍需取得真实账号双读、漂移和 bootstrap 收据，才可逐账号开启 shadow。
-- 本地已增加重排、跨日移动、票据重绑、导入、账本、replan 与 AI repair 的首批注册 workflow RPC；继续补齐删除级联、对象专用 codec、本机原子 journal/rollback 接入和 Preview 并发/回滚收据。
+- 本地 P1.3b 已增加重排、跨日移动、票据重绑、导入、账本、replan 与 AI repair 的首批注册 workflow RPC。
+- 本地 P1.3c 已增加 IndexedDB v12 原子 workflow journal、12 类现有业务对象的严格本机 codec、整批 lease/retry/Auth/conflict/ack/rollback/crash recovery 和 coordinator；两个 rollout 常量仍固定为 `false`，runtime 只通过内部测试入口可达。
+- P1.3d 继续接入七类产品写路径，补齐删除级联和剩余对象 codec；Preview 阶段再取得真实并发、响应丢失、回滚和性能收据。
 - 完成 Ticket 的专用读写/Blob/重绑协议，并为 Document、Booking、Lodging、Insurance 和 Ledger 建立专用 write/read codec；任何本机路径、签名 URL、自由文本秘密和正文不得进入通用表。
 - 完成字段冲突策略和用户可见恢复入口后，才允许 Preview 白名单解除代码硬门槛。
 

@@ -157,13 +157,15 @@ export async function readPendingAccountObjectKeysForTripV1(
   tripId: string,
   database: TravelConsoleDatabase = getActiveTravelDatabase(),
 ) {
-  const [legacyEntries, v2Entries] = await Promise.all([
+  const [legacyEntries, v2Entries, workflowEntries] = await Promise.all([
     database.syncOutbox.where('tripId').equals(tripId).toArray(),
     database.accountMutationJournal.where('tripId').equals(tripId).toArray(),
+    database.accountWorkflowJournal.where('tripId').equals(tripId).toArray(),
   ])
   return new Set([
     ...legacyEntries.map((entry) => entry.objectKey),
     ...v2Entries.map((entry) => entry.objectKey),
+    ...workflowEntries.flatMap((entry) => entry.objectKeys),
   ])
 }
 
@@ -319,11 +321,12 @@ export async function persistAccountCloudBootstrapPlanV1(
         result.skipped.push({ objectKey, reason: 'schema_unsupported' })
         continue
       }
-      const [legacyPending, v2Pending] = await Promise.all([
+      const [legacyPending, v2Pending, workflowPending] = await Promise.all([
         database.syncOutbox.where('objectKey').equals(objectKey).count(),
         database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
+        database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
       ])
-      if (legacyPending > 0 || v2Pending > 0) {
+      if (legacyPending > 0 || v2Pending > 0 || workflowPending > 0) {
         result.skipped.push({ objectKey, reason: 'pending_mutation' })
         continue
       }
@@ -451,6 +454,7 @@ function getLegacyObjectTable(
 function accountBootstrapTransactionTables(database: TravelConsoleDatabase) {
   return [
     database.accountMutationJournal,
+    database.accountWorkflowJournal,
     database.accountObjectRevisions,
     database.syncOutbox,
     database.trips,

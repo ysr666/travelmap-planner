@@ -22,7 +22,7 @@ const DEFAULT_LEASE_MS = 30_000
 const MAX_RETRY_DELAY_MS = 5 * 60_000
 
 export class AccountMutationJournalError extends Error {
-  readonly code: 'mutation_reused' | 'stale_ack' | 'stale_lease' | 'unknown_mutation'
+  readonly code: 'mutation_reused' | 'object_busy' | 'stale_ack' | 'stale_lease' | 'unknown_mutation'
 
   constructor(code: AccountMutationJournalError['code']) {
     super(code)
@@ -79,7 +79,7 @@ export async function putAccountMutationIntent(
   entry: AccountMutationJournalEntry,
   database: TravelConsoleDatabase = getActiveTravelDatabase(),
 ) {
-  return database.transaction('rw', database.accountMutationJournal, async () => {
+  return database.transaction('rw', database.accountMutationJournal, database.accountWorkflowJournal, async () => {
     const existing = await database.accountMutationJournal.get(entry.mutationId)
     if (existing && !hasSameMutationContent(existing, entry)) {
       throw new AccountMutationJournalError('mutation_reused')
@@ -90,6 +90,13 @@ export async function putAccountMutationIntent(
           updatedAt: entry.updatedAt,
         }
       : entry
+    if (!existing) {
+      const workflowCount = await database.accountWorkflowJournal
+        .where('objectKeys')
+        .equals(entry.objectKey)
+        .count()
+      if (workflowCount > 0) throw new AccountMutationJournalError('object_busy')
+    }
     await database.accountMutationJournal.put(next)
     return next
   })
@@ -158,13 +165,26 @@ export async function leaseAccountMutation(
     now?: number
   } = {},
 ) {
-  return database.transaction('rw', database.accountMutationJournal, async () => {
+  return database.transaction('rw', database.accountMutationJournal, database.accountWorkflowJournal, async () => {
     const entry = await database.accountMutationJournal.get(mutationId)
     if (!entry || !isRunnable(entry, now)) return null
     const objectEntries = await database.accountMutationJournal.where('objectKey').equals(entry.objectKey).toArray()
     if (objectEntries.some((candidate) => (
       candidate.mutationId !== mutationId
       && compareJournalOrder(candidate, entry) < 0
+    ))) {
+      return null
+    }
+    const workflows = await database.accountWorkflowJournal
+      .where('objectKeys')
+      .equals(entry.objectKey)
+      .toArray()
+    if (workflows.some((workflow) => (
+      workflow.createdAt < entry.createdAt
+      || (
+        workflow.createdAt === entry.createdAt
+        && `workflow:${workflow.batchMutationId}`.localeCompare(`mutation:${entry.mutationId}`) < 0
+      )
     ))) {
       return null
     }

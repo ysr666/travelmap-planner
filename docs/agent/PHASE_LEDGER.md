@@ -3366,3 +3366,72 @@ Local validation:
 - `npm run typecheck`, `npm run lint`, `npm run test:unit`, and `npm run build` passed. The complete unit suite passed 233 files and 1,884 tests; the build reported 473.3 KiB entry, 859.1 KiB initial JS, 247.3 KiB initial gzip, and 2485.4 KiB/126-entry precache.
 - Full serial Playwright passed all 194 tests in 7 minutes 24 seconds. The prior documents/inbox route race stayed closed, and a focused 3x repeat of both affected mobile specs had already passed 27/27. `git diff --check`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, and bundle gates passed.
 - Supabase Preview application, real-account stable-read/bootstrap, independent multi-connection contention, network ambiguity, and production latency receipts remain mandatory before any V2 read/write gate can open.
+
+Remote validation:
+
+- Commit `f8770d83dd2b12ef7ef14328c22ae47b1204208a` passed GitHub Actions run `31493578605`: Build, Lint, Type Check, Unit Tests, and all 194 E2E tests succeeded.
+- Cloudflare Pages deployment/check `4cee2604-9bb9-4c40-8362-8c83df8cb4d8` passed for the same commit SHA. No Supabase Preview branch was created because that cost-bearing external write still requires explicit confirmation.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3c Local Atomic Workflow Runtime
+
+Status: complete locally; product-path integration and Supabase Preview remain P1 gates
+
+Goal:
+
+- Give every registered Account Cloud workflow one durable local batch identity and one all-or-nothing optimistic lifecycle across offline, retry, authentication recovery, conflict, response loss, crash recovery, acknowledgement, and rollback.
+- Prove that a multi-object workflow can never be drained as independent single-object mutations or leave a locally acknowledged partial result.
+
+Scope:
+
+- Add an IndexedDB v12 workflow journal keyed by batch mutation ID, with account/trip binding, strict request fingerprint, complete before/after snapshots, lease generation, retry metadata, sanitized terminal state, and conflict receipts.
+- Add explicit local codecs and table bindings for the object types used by the seven registered workflows. Ticket metadata must continue to use the minimal redacted payload; Blob, local path, URL, note, extracted text, unknown fields, and server-managed objects remain impossible to journal.
+- Add atomic local-store operations for intent creation, leasing, retry/auth/contract/conflict transitions, successful multi-revision acknowledgement, deterministic rollback, and crash-safe terminal reconciliation.
+- Add a workflow coordinator that always sends the original registered request, preserves one batch ID across retries, binds the captured account database and account hash, rejects stale or substituted responses, and drains only whole batches.
+- Keep the runtime callable only through an internal test seam while both Account Cloud rollout constants remain compile-time `false`. Product-path adapters, deletion-cascade workflow IDs, Preview execution, and gate enablement remain separate P1.3d/P1 Preview work.
+
+No-go:
+
+- No Supabase Preview/production write, real account mutation, Provider call, product write-path cutover, feature enablement, or claim that workflows are Current.
+- No reuse of the single-object mutation queue for workflow steps; no partial step lease, partial ack, partial rollback, best-effort continuation, regenerated retry ID, or caller-selected table/function.
+- No raw Ticket Blob, document/vault body, OCR/extracted text, local path, signed URL, secret, token, raw Provider payload, server-managed media/fact/job, or unregistered object type in local workflow snapshots.
+- No silent rollback over a user edit made after the optimistic batch. A changed local snapshot must remain visible and enter conflict recovery.
+
+Likely files:
+
+- `src/db/database.ts`, new workflow local types/store/codec/coordinator modules and tests under `src/lib/accountCloud/`, account-cloud exports, migration tests, Account Cloud/status/capability docs, and this ledger.
+
+Validation:
+
+- IndexedDB v11 -> v12 migration and account isolation; strict codec/redaction; duplicate/reused batch IDs; atomic intent; whole-batch lease generation; offline and bounded retry; Auth recovery; deterministic rejection; revision conflict; stale local snapshots; response substitution; 100 identical retries; advanced receipt; all-revision ack; rollback fault injection; crash-window recovery; drain ordering; account switch during request and response; full typecheck/lint/unit/build/capability/migration gates; `git diff --check`.
+
+Risk:
+
+- Critical. A batch journal that can acknowledge or compensate only some steps can create permanent cross-device corruption even when the server transaction itself is correct.
+
+Stop conditions:
+
+- Stop and repair if any batch can be split into single-object sends, an acknowledgement deletes the journal before every revision receipt is durable, a rollback changes only part of the local graph, a stale lease writes state, an account switch applies a response, a sensitive field enters a snapshot, a retry changes request content/identity, or either rollout constant becomes reachable.
+
+Local result:
+
+- Added IndexedDB v12 `accountWorkflowJournal` with one durable batch mutation identity, strict account/trip/object binding, canonical original request and fingerprint, complete before snapshots, whole-batch lease generation, bounded retry/Auth/contract/conflict state, and server acknowledgement metadata. The v11 -> v12 upgrade creates the store without changing existing business data.
+- Added explicit local codecs for the 12 object kinds currently used by the seven registered workflows. Ticket snapshots and comparisons retain only the cloud metadata whitelist; filename, local path, URL, note, OCR/extracted content, Blob-like values, tokens, secrets, unknown fields, and server-managed objects are rejected or excluded.
+- Optimistic business-object changes and the batch journal are created in one Dexie transaction only after every base revision and local payload exactly match. Successful responses atomically persist every revision receipt before deleting the batch; deterministic rejection rolls back the complete graph only when every optimistic after snapshot still matches.
+- A user edit made after the optimistic batch prevents all compensation writes. The journal enters `stale_local`; if the server already committed, every returned revision receipt remains durable and the acknowledged conflict cannot be replayed or silently rolled back.
+- Added a coordinator that sends only the exact original registered request under the same batch ID. Offline, 100 uncertain retries, Auth resume, malformed/substituted responses, server conflicts, stale leases, crashes, and account switches preserve the all-or-nothing boundary; independent batches continue while overlapping work remains ordered.
+- Single-object and workflow journals now mutually exclude the same object inside shared IndexedDB transactions. Bootstrap treats every workflow object as pending, and parent domain transactions include the workflow journal so a single-object intent cannot race a newly created batch.
+- Strict journal revalidation rejects unknown top-level fields, partial leases, unregistered conflict fields, changed fingerprints, malformed snapshots, and reused IDs before persistence. Account hash, active database instance, and account database name are rechecked after asynchronous writes so an account switch aborts the whole IndexedDB transaction.
+- Both Account Cloud compile-time rollout constants remain `false`. The production bundle contains the v12 database store definition needed for forward-compatible upgrades, but not the workflow coordinator, RPC client, or optimistic workflow executor. No Preview/production database write, real account mutation, or Provider call was made.
+
+Review:
+
+- The final boundary review found and fixed three defects before completion: an `inflight` entry could previously pass validation with only half of its lease pair; direct recovery could attempt to persist unnormalized conflict input before a later read rejected it; and an account switch occurring after revision `bulkPut` needed a final in-transaction guard to force rollback.
+- Fault-injection regressions prove that a mid-ack account switch and an IndexedDB error leave every prior revision and the journal intact. Success-after-local-drift proves that all server receipts are kept without overwriting the later local edit. Conflict and terminal recovery prove that no subset of the optimistic graph can roll back independently.
+- Remaining work is intentionally outside P1.3c: product adapters for all seven workflows, deletion cascades, remaining object codecs, user-facing conflict recovery, Preview execution, multi-connection server contention, Realtime, empty-device restore, and staged production rollout.
+
+Local validation:
+
+- Final focused database/account/workflow suites passed 7 files and 57 tests. The complete unit suite passed 236 files and 1,918 tests.
+- `npm run typecheck`, `npm run lint`, `npm run build`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, bundle-budget, JSON parse, and `git diff --check` passed. Build reported 473.5 KiB entry, 859.3 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2486.0 KiB/126-entry precache.
+- The focused PWA upgrade suite passed 5/5 and Desktop Beta smoke passed 1/1. Full serial Playwright passed all 194 tests in 7.0 minutes, including IndexedDB/PWA historical upgrades, offline account sync, AI confirmation gates, responsive/a11y checks, and Golden regression.
+- Supabase Preview and real-account workflow execution remain unrun by design. They require explicit approval for the cost-bearing Preview branch and remain mandatory before either V2 gate can open.

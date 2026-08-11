@@ -201,7 +201,7 @@ describe('account mutation local store', () => {
 
   it('joins a domain transaction so a crash cannot leave data without its intent', async () => {
     const mutation = makeMutation()
-    await expect(db.transaction('rw', db.itineraryItems, db.accountMutationJournal, async () => {
+    await expect(db.transaction('rw', db.itineraryItems, db.accountMutationJournal, db.accountWorkflowJournal, async () => {
       await db.itineraryItems.put(mutation.payload as never)
       await putAccountMutationIntent(buildAccountMutationJournalEntry(mutation, ACCOUNT_HASH, 100))
       throw new Error('simulated crash')
@@ -218,7 +218,7 @@ describe('account mutation local store', () => {
       optimisticAfter: mutation.payload,
       optimisticBefore: null,
     }
-    await db.transaction('rw', db.itineraryItems, db.accountMutationJournal, async () => {
+    await db.transaction('rw', db.itineraryItems, db.accountMutationJournal, db.accountWorkflowJournal, async () => {
       await db.itineraryItems.put(mutation.payload as never)
       await putAccountMutationIntent(entry)
     })

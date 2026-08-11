@@ -20,6 +20,7 @@ import {
 import type { AccountObjectMutationV1, AccountObjectRowV1, JsonObject } from './contract'
 import { buildAccountMutationJournalEntry } from './localStore'
 import { redactTicketMetaForAccountCloud } from './mutationBuilder'
+import { buildAccountWorkflowJournalEntry } from './workflowLocalStore'
 
 const ACTOR_ID = '22222222-2222-4222-8222-222222222222'
 const MUTATION_ID = '11111111-1111-4111-8111-111111111111'
@@ -239,6 +240,56 @@ describe('account cloud bootstrap', () => {
       seededObjectKeys: [],
       skipped: [{ objectKey: `trip:${TRIP_ID}`, reason: 'pending_mutation' }],
     })
+  })
+
+  it('treats every object in a pending atomic workflow as unbootstrapped work', async () => {
+    const item = makeItemPayload('item_workflow', 'Pending workflow')
+    await database.itineraryItems.put(item as never)
+    const request = {
+      batchMutationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      deviceId: 'device_primary',
+      schemaVersion: 1 as const,
+      steps: [{
+        expectedRevision: 0,
+        mutationId: '44444444-4444-4444-8444-444444444444',
+        objectId: 'item_workflow',
+        objectSchemaVersion: 1,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: { ...item, title: 'Workflow after' },
+        stepId: 'repair_item_workflow',
+      }],
+      tripId: TRIP_ID,
+      workflowId: 'trip.repair.apply@1' as const,
+    }
+    await database.accountWorkflowJournal.put(buildAccountWorkflowJournalEntry(
+      request,
+      accountHash,
+      [{
+        before: item,
+        objectId: 'item_workflow',
+        objectKey: 'item:item_workflow',
+        objectType: 'item',
+        stepId: 'repair_item_workflow',
+      }],
+      1,
+    ))
+    const row = makeRow('item', 'item_workflow', item)
+    const plan = await prepareAccountCloudBootstrapPlanV1({
+      accountHash,
+      database,
+      remoteRows: [row],
+      tripId: TRIP_ID,
+    })
+
+    expect(plan.entries).toEqual([
+      expect.objectContaining({ objectKey: 'item:item_workflow', status: 'pending_mutation' }),
+    ])
+    await expect(persistAccountCloudBootstrapPlanV1(plan, { accountHash, database }))
+      .resolves.toMatchObject({
+        seededObjectKeys: [],
+        skipped: [{ objectKey: 'item:item_workflow', reason: 'pending_mutation' }],
+      })
   })
 
   it('rejects a tampered plan and a different active account database', async () => {

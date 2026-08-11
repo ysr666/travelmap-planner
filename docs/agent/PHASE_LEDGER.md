@@ -3046,7 +3046,7 @@ P8 validation (local and simulator):
 
 ## 2026-08-11 Product-Grade Delivery W0 / P0 Capability Truth Gate
 
-Status: in progress
+Status: complete
 
 Goal:
 
@@ -3095,13 +3095,18 @@ Local result:
 
 Local validation:
 
-- Capability/release/boundary tests passed: 14/14. The manifest check reports 29 capabilities: 4 Current, 18 Partial, 1 Fixture-only, 6 Target, and 24 incomplete release blockers; all five release-facing documents are aligned.
+- Capability/release/boundary tests passed: 15/15. The manifest check reports 29 capabilities: 4 Current, 18 Partial, 1 Fixture-only, 6 Target, and 24 incomplete release blockers; all five release-facing documents are aligned.
 - Focused Provider Proxy and changed-runtime tests passed: 98/98. Full unit tests passed: 218 files and 1745 tests.
 - `npm run lint`, `npm run check:fidelity-assets`, and `git diff --check` passed.
 - Ordinary `npm run build` passed with 139 emitted files, zero fixture files, 468.3 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2444.2 KiB/121-entry precache.
 - Explicit E2E build passed with exactly seven registered fixture files, 468.4 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2450.4 KiB/126-entry precache.
 - Full serial E2E passed 194/194 in 7.1 minutes. The dedicated PWA upgrade gate passed 5/5 in 45.8 seconds.
 
-Remaining P0 receipt:
+Remote validation:
 
-- Publish the branch, verify GitHub Actions and Cloudflare against the published SHA, inspect Supabase and Provider production configuration read-only, then record the sanitized receipts before changing this phase to complete.
+- Candidate `62d995dcc4f45fee9fdd9c7c6e0ef679cf25c93c` passed GitHub Actions run `31475816551`: Build, Lint plus capability gate, Type Check, Unit Tests, and E2E Tests all succeeded; the E2E job completed in 6 minutes 41 seconds.
+- Cloudflare Preview deployment `e0545b7e-18fe-4d27-8b3d-adbc693632ce` was created from the same candidate SHA and returned HTTP 200. Current production remains `main` SHA `03fc0d025da44f5cf5987a28fb57ca29555650d3` until PR #35 is reviewed and merged.
+- The production diagnostics endpoint reported production environment, enforced Origin and Auth, durable D1 quota, and configured OpenAI-compatible AI, Tavily search, Google Places/Routes, OpenRouteService, and Open-Meteo adapters. No real Provider operation was invoked.
+- Remote D1 reported no pending migration. All seven `global | ai | search | place | route | weather | fx` controls are enabled, with zero current daily-usage rows and zero pending alerts. Alert delivery itself is not configured and is explicitly retained as a P13 blocker.
+- Supabase reported `ACTIVE_HEALTHY`; its production migration list and both advisor classes were read without schema or data writes. Existing findings are recorded in `docs/PRODUCTION_RUNTIME_STATUS.md`: leaked-password protection, one intentionally closed RLS table without a policy, one multiple-permissive-policy warning, and six unused-index notices.
+- P0 exits with the repository still correctly labelled Limited Beta: four capabilities are Current, 24 release-blocking capabilities remain incomplete, and every Partial/Target item names its gap and next phase.

@@ -3,7 +3,7 @@
   "updatedAt": "2026-08-11",
   "productStatus": "limited_beta",
   "sourcePlan": "docs/PRODUCT_GRADE_DELIVERY_PLAN.md",
-  "releaseReceipt": "design-qa.md",
+  "releaseReceipt": "docs/PRODUCTION_RUNTIME_STATUS.md",
   "capabilities": [
     {
       "id": "ui.app-shell",

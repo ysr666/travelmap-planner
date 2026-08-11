@@ -8,6 +8,8 @@
 
 机器可读能力真相位于 [`config/product-capabilities.json`](../config/product-capabilities.json)。`npm run check:capabilities` 校验状态、证据、依赖、owner、SLO、告警、回退和发布文案；普通生产构建还会拒绝 E2E fixture、session supplement 与测试账号旁路。
 
+脱敏后的生产配置、Provider、D1、Supabase 和同 SHA 发布收据位于 [`PRODUCTION_RUNTIME_STATUS.md`](PRODUCTION_RUNTIME_STATUS.md)。它只证明环境事实，不会把尚未完成的产品能力升级为 Current。
+
 本次发布满足以下条件，后续发布继续沿用：
 
 - GitHub Actions 的 `Lint`、`Type Check`、`Unit Tests`、`Build`、`E2E Tests` 全部通过。

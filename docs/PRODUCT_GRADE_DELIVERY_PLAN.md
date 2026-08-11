@@ -12,6 +12,7 @@
 - 视觉合同：[UI V3 Design](DESIGN.md) 与 [UI V3 重构规范](UI_REFACTOR_V3.md)
 - 视觉子计划：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 - 当前能力事实：[项目状态](PROJECT_STATUS.md)
+- 生产环境事实：[生产运行状态](PRODUCTION_RUNTIME_STATUS.md)
 
 本文件是从 Limited Beta 走到完整产品级交付的总执行合同。它取代“固定 fixture 通过、页面像素稳定、Mock 合同通过即可称为完成”的旧判断。UI V3、Golden、Mock 和模拟器仍是必要证据，但任何生产能力只有在正式数据模型、真实账号、真实 Provider、权限、失败恢复和同 SHA 发布证据全部通过后，才能标记为 `Current`。
 

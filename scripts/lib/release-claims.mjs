@@ -10,6 +10,7 @@ const RELEASE_DOCUMENT_REQUIREMENTS = {
   'docs/PROJECT_STATUS.md': [
     'Limited Beta Current',
     'PRODUCT_GRADE_DELIVERY_PLAN.md',
+    'PRODUCTION_RUNTIME_STATUS.md',
   ],
   'docs/ROADMAP_V5.md': [
     'Visual Current / Product Partial',

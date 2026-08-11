@@ -3,7 +3,7 @@ import { validateReleaseClaimDocuments } from './release-claims.mjs'
 
 const validDocuments = {
   'design-qa.md': 'Visual Current\n产品级交付：not complete\ndocs/PRODUCT_GRADE_DELIVERY_PLAN.md',
-  'docs/PROJECT_STATUS.md': 'Limited Beta Current\nPRODUCT_GRADE_DELIVERY_PLAN.md',
+  'docs/PROJECT_STATUS.md': 'Limited Beta Current\nPRODUCT_GRADE_DELIVERY_PLAN.md\nPRODUCTION_RUNTIME_STATUS.md',
   'docs/ROADMAP_V5.md': 'Visual Current / Product Partial\nPRODUCT_GRADE_DELIVERY_PLAN.md',
   'docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md': 'Visual Current\n产品内容接入仍为 Partial\nPRODUCT_GRADE_DELIVERY_PLAN.md',
   'docs/UI_V3_PRODUCT_FIDELITY_PLAN.md': 'Visual Current\n生产内容接入仍为 Partial\nPRODUCT_GRADE_DELIVERY_PLAN.md',
@@ -22,6 +22,16 @@ describe('release claim boundaries', () => {
 
     expect(() => validateReleaseClaimDocuments({ documents, productStatus: 'limited_beta' }))
       .toThrow('missing required claim boundary')
+  })
+
+  it('rejects a project status document without the production runtime receipt', () => {
+    const documents = {
+      ...validDocuments,
+      'docs/PROJECT_STATUS.md': 'Limited Beta Current\nPRODUCT_GRADE_DELIVERY_PLAN.md',
+    }
+
+    expect(() => validateReleaseClaimDocuments({ documents, productStatus: 'limited_beta' }))
+      .toThrow('PRODUCTION_RUNTIME_STATUS.md')
   })
 
   it('rejects obsolete visual receipts that claim whole-product completion', () => {

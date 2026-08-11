@@ -16,6 +16,8 @@ interface Window {
 
 declare const __APP_VERSION__: string
 declare const __APP_COMMIT_SHA__: string
+declare const __TRIPMAP_E2E__: boolean
+declare const __TRIPMAP_UNIT_TEST__: boolean
 
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string

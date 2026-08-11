@@ -3043,3 +3043,65 @@ P8 validation (local and simulator):
 - Cloudflare D1 release diagnostics found that `0003_add_weather_provider_group.sql` had not been discovered because the maintenance Wrangler config omitted `migrations_dir`. The config now names the repository migration directory, a build gate rejects missing migrations and explicit D1 transactions, and the production migration was applied successfully after a failed explicit-transaction attempt rolled back without changing schema or data.
 - Post-migration checks found no pending D1 migration, seven Provider controls including enabled `weather`, zero daily-usage rows, zero alert rows, and `weather` accepted by all three constrained Provider tables. No real Provider call was made.
 - P0-P8 are complete and released. Simulator acceptance is the project-approved device gate; no physical-device receipt is required.
+
+## 2026-08-11 Product-Grade Delivery W0 / P0 Capability Truth Gate
+
+Status: in progress
+
+Goal:
+
+- Establish one machine-readable source for shipped, partial, fixture-only, target, and historical capabilities before implementing the wider product-grade program.
+- Make ordinary production builds fail when E2E fidelity assets, session supplements, authentication bypasses, or fixture identifiers enter the artifact.
+- Align release claims with local implementation, test, operational, and production-receipt evidence.
+
+Scope:
+
+- Add a versioned capability manifest covering UI, data, import, documents, travel objects, media, Provider, AI, repair, maps, ledger, collaboration, PWA, security, and release acceptance.
+- Add strict schema, evidence-path, dependency-cycle, status-transition, and full-product completeness validation.
+- Add a built-artifact boundary check with separate ordinary-production and explicit E2E-fixture modes.
+- Wire both checks into package scripts, the production build, and CI; correct the current product-status documentation and retain historical visual receipts.
+- Add focused tests for malformed manifests and fixture leakage.
+
+No-go:
+
+- No Supabase, D1, IndexedDB, Provider, AI planning, ticket Blob, route cache, or user-data mutation in this phase.
+- No capability may be promoted to Current from documentation alone.
+- No existing visual, simulator, CI, or deployment receipt may be deleted or rewritten as a product-level receipt.
+
+Likely files:
+
+- `config/product-capabilities.json`, `scripts/lib/capability-manifest.mjs`, `scripts/check-capability-manifest.mjs`, `scripts/lib/production-boundaries.mjs`, `scripts/check-production-boundaries.mjs`, focused script tests, `package.json`, CI, and product/status documentation.
+
+Validation:
+
+- Focused manifest and production-boundary tests; manifest CLI; ordinary production build; explicit E2E-fixture build boundary; typecheck; lint; full unit suite; `git diff --check`.
+
+Risk:
+
+- Medium. A false-positive gate could block every build; a false-negative could let test-only product fidelity data reach production.
+
+Stop conditions:
+
+- Stop and repair if the ordinary production artifact contains a fixture/bypass marker, the E2E build accepts an unregistered fixture, a Current capability lacks code/test/release evidence, manifest dependencies cycle, or existing build/PWA budgets regress.
+
+Local result:
+
+- Added `config/product-capabilities.json` as the versioned capability source of truth. It currently records 29 capabilities with owners, dependencies, implementation/test/receipt evidence, operational SLOs, alerts, fallbacks, explicit gaps, and the next product phase.
+- Added strict capability and release-claim validators. They reject unknown fields, invalid statuses, missing Current evidence, dependency cycles, evidence paths outside the repository, broad full-product claims, and status drift across the five release-facing documents.
+- Added an emitted-artifact production boundary. Ordinary builds reject product-fidelity fixtures, E2E session supplements, authentication bypasses, fixture identifiers, test-only compile markers, and mock-cloud markers; explicit E2E builds accept only the seven registered visual assets.
+- Split the product-fidelity travel-object supplement and media registry behind compile-time E2E imports. The ordinary production artifact now contains zero fixture files and zero registered fixture markers while the browser test build retains the controlled fidelity dataset.
+- Disabled Provider mock selection in production at the server boundary, including explicit `provider=mock` requests and production environments configured with mock Provider bindings. Development, unit, and E2E contracts remain available outside production.
+- Wired the capability and production-boundary checks into the build and GitHub Actions, and aligned Product Strategy, Project Status, Roadmap, Design, Design QA, and both UI fidelity documents to the Limited Beta product truth.
+
+Local validation:
+
+- Capability/release/boundary tests passed: 14/14. The manifest check reports 29 capabilities: 4 Current, 18 Partial, 1 Fixture-only, 6 Target, and 24 incomplete release blockers; all five release-facing documents are aligned.
+- Focused Provider Proxy and changed-runtime tests passed: 98/98. Full unit tests passed: 218 files and 1745 tests.
+- `npm run lint`, `npm run check:fidelity-assets`, and `git diff --check` passed.
+- Ordinary `npm run build` passed with 139 emitted files, zero fixture files, 468.3 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2444.2 KiB/121-entry precache.
+- Explicit E2E build passed with exactly seven registered fixture files, 468.4 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2450.4 KiB/126-entry precache.
+- Full serial E2E passed 194/194 in 7.1 minutes. The dedicated PWA upgrade gate passed 5/5 in 45.8 seconds.
+
+Remaining P0 receipt:
+
+- Publish the branch, verify GitHub Actions and Cloudflare against the published SHA, inspect Supabase and Provider production configuration read-only, then record the sanitized receipts before changing this phase to complete.

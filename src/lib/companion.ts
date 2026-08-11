@@ -49,6 +49,9 @@ import type {
   Trip,
 } from '../types'
 
+declare const __TRIPMAP_E2E__: boolean
+declare const __TRIPMAP_UNIT_TEST__: boolean
+
 const CLOUD_FIXTURE_KEY = 'tripmap:e2e:cloud-fixture'
 const INVITE_TOKEN_BYTES = 24
 const MAX_COMMENT_LENGTH = 500
@@ -1488,6 +1491,7 @@ function sanitizeItemPatch(input: unknown): Partial<ItineraryItem> {
 }
 
 function readCompanionFixture(): CompanionFixture | null {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) return null
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(CLOUD_FIXTURE_KEY)
@@ -1500,6 +1504,7 @@ function readCompanionFixture(): CompanionFixture | null {
 }
 
 function writeCompanionFixture(fixture: CompanionFixture) {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) return
   if (typeof window === 'undefined') return
   window.localStorage.setItem(CLOUD_FIXTURE_KEY, JSON.stringify(fixture))
 }

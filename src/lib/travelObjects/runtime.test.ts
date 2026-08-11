@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   E2E_TRAVEL_OBJECT_CONTEXT_STORAGE_KEY,
   readE2eTravelObjectSupplements,
-} from './runtime'
+} from './e2eRuntime'
 
 type FixtureRecords = {
   insurancePolicies: unknown[]

@@ -8,6 +8,8 @@
 
 后续落地：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 
+产品级交付：[完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)
+
 ## 1. 方向状态
 
 2026-07-30 选定的 `2+3 融合稿`及其地图优先实现现已转为 **Historical**。它验证了白色主表面、克制青绿、真实对象、单一 Bottom Sheet 和按需 AI 的可行性，但错误地把旅行中移动场景扩展成了整个产品的固定首页。

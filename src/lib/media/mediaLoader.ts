@@ -1,7 +1,6 @@
 import { getTicketBlob } from '../../db'
 import { getProviderProxyConfig } from '../providerProxyClientShared'
 import { fetchProviderProxyPlacePhoto } from '../providerProxyClient'
-import { resolveFixtureMediaAsset } from './fixtureMediaRegistry'
 import { isTravelMediaAssetCurrent, type TravelMediaAssetV1 } from './travelMedia'
 
 export type LoadedTravelMedia = {
@@ -21,6 +20,8 @@ export async function loadTravelMedia(
   if (!isTravelMediaAssetCurrent(asset, options.now)) return null
 
   if (asset.renderRef.type === 'fixture_asset') {
+    if (!__TRIPMAP_E2E__) return null
+    const { resolveFixtureMediaAsset } = await import('./fixtureMediaRegistry')
     const src = resolveFixtureMediaAsset(asset.renderRef.assetId)
     return src ? { release: noOp, src } : null
   }

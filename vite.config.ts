@@ -87,6 +87,8 @@ export default defineConfig({
   define: {
     __APP_COMMIT_SHA__: JSON.stringify(appCommitSha),
     __APP_VERSION__: JSON.stringify(appVersion),
+    __TRIPMAP_E2E__: JSON.stringify(process.env.VITE_E2E_AUTH_BYPASS === '1'),
+    __TRIPMAP_UNIT_TEST__: false,
   },
   plugins: [
     react(),

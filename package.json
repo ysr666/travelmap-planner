@@ -6,10 +6,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && npm run check:cloudflare-migrations && vite build && npm run check:bundle",
+    "build": "npm run typecheck && npm run check:capabilities && npm run check:cloudflare-migrations && vite build && npm run check:production-boundaries && npm run check:bundle",
+    "check:capabilities": "node scripts/check-capability-manifest.mjs",
     "check:cloudflare-migrations": "node scripts/check-cloudflare-migrations.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "check:fidelity-assets": "node scripts/check-product-fidelity-assets.mjs",
+    "check:production-boundaries": "node scripts/check-production-boundaries.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:unit": "vitest run",

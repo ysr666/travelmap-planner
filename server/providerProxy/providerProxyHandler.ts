@@ -1350,7 +1350,7 @@ function selectTravelSearchProvider(env: ProviderProxyHandlerEnv, fetcher: typeo
     return createMockTravelSearchProvider()
   }
   const provider = env.TRIPMAP_SEARCH_PROVIDER?.trim().toLowerCase()
-  if (provider === 'mock') {
+  if (provider === 'mock' && canUseMockProviders(env)) {
     return createMockTravelSearchProvider()
   }
   if (provider === 'disabled') {
@@ -1436,7 +1436,7 @@ function selectPlaceLookupProvider(env: ProviderProxyHandlerEnv, fetcher: typeof
     return createMockPlaceLookupProvider()
   }
   const provider = env.TRIPMAP_PLACE_PROVIDER?.trim().toLowerCase()
-  if (provider === 'mock') {
+  if (provider === 'mock' && canUseMockProviders(env)) {
     return createMockPlaceLookupProvider()
   }
   if (provider === 'disabled') {
@@ -1523,7 +1523,7 @@ function selectPlaceDetailsProvider(env: ProviderProxyHandlerEnv, fetcher: typeo
     return createMockPlaceDetailsProvider()
   }
   const provider = env.TRIPMAP_PLACE_PROVIDER?.trim().toLowerCase()
-  if (provider === 'mock') {
+  if (provider === 'mock' && canUseMockProviders(env)) {
     return createMockPlaceDetailsProvider()
   }
   if (provider === 'disabled') {
@@ -1695,7 +1695,7 @@ function selectWeatherProvider(
   const options = { now: new Date(nowMs) }
   if (isMockMode(env)) return createMockWeatherProvider(options)
   const provider = env.TRIPMAP_WEATHER_PROVIDER?.trim().toLowerCase()
-  if (provider === 'mock') return createMockWeatherProvider(options)
+  if (provider === 'mock' && canUseMockProviders(env)) return createMockWeatherProvider(options)
   if (provider === 'disabled') return createDisabledWeatherProvider()
   if (!provider || provider === 'open_meteo') return createOpenMeteoWeatherProvider(fetcher, options)
   return createDisabledWeatherProvider()
@@ -2967,7 +2967,12 @@ function isJsonContentType(value: string | null) {
 }
 
 function isMockMode(env: ProviderProxyHandlerEnv) {
-  return env.TRIPMAP_PROVIDER_PROXY_MOCK === '1' || env.TRIPMAP_PROVIDER_PROXY_MOCK === 'true'
+  return canUseMockProviders(env)
+    && (env.TRIPMAP_PROVIDER_PROXY_MOCK === '1' || env.TRIPMAP_PROVIDER_PROXY_MOCK === 'true')
+}
+
+function canUseMockProviders(env: ProviderProxyHandlerEnv) {
+  return resolveProviderRuntimeEnvironment(env) !== 'production'
 }
 
 function jsonResponse(

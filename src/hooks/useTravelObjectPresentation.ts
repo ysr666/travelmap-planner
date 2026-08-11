@@ -17,7 +17,7 @@ import {
 import {
   buildLocalTicketRealtimeFacts,
   buildTicketBlobMediaAssets,
-  readE2eTravelObjectSupplements,
+  createEmptyTravelObjectRuntimeSupplements,
   TRAVEL_OBJECT_MEDIA_CACHE_KEY,
   TRAVEL_OBJECT_REALTIME_CACHE_KEY,
   type TravelObjectRuntimeSupplementsV1,
@@ -98,15 +98,10 @@ export function useTravelObjectPresentation({
 
     let cancelled = false
     const storage = getBrowserStorage('localStorage')
-    const sessionStorage = getBrowserStorage('sessionStorage')
     const cacheNow = Date.now()
     const mediaCache = new TravelMediaCache({ storage, storageKey: TRAVEL_OBJECT_MEDIA_CACHE_KEY })
     const realtimeCache = new RealtimeFactCache({ storage, storageKey: TRAVEL_OBJECT_REALTIME_CACHE_KEY })
-    const supplements = readE2eTravelObjectSupplements({
-      allowFixture: import.meta.env.VITE_E2E_AUTH_BYPASS === '1',
-      storage: sessionStorage,
-      tripId,
-    })
+    const supplements = createEmptyTravelObjectRuntimeSupplements()
     queueMicrotask(() => {
       if (cancelled) return
       setRuntime((current) => ({
@@ -117,6 +112,14 @@ export function useTravelObjectPresentation({
         supplements,
       }))
     })
+
+    if (__TRIPMAP_E2E__) {
+      void loadE2eTravelObjectSupplements(tripId).then((loadedSupplements) => {
+        if (!cancelled) {
+          setRuntime((current) => ({ ...current, supplements: loadedSupplements }))
+        }
+      })
+    }
 
     void listTransportBookings(tripId).then(async (bookings) => {
       const segments = (await Promise.all(bookings.map((booking) => listTransportSegments(booking.id)))).flat()
@@ -253,13 +256,18 @@ function emptyRuntimeState(isLoading = true): RuntimeState {
     cachedMedia: [],
     isLoading,
     segments: [],
-    supplements: {
-      insurancePolicies: [],
-      lodgingReservations: [],
-      mediaAssets: [],
-      realtimeFacts: [],
-    },
+    supplements: createEmptyTravelObjectRuntimeSupplements(),
   }
+}
+
+async function loadE2eTravelObjectSupplements(tripId: string) {
+  if (!__TRIPMAP_E2E__) return createEmptyTravelObjectRuntimeSupplements()
+  const { readE2eTravelObjectSupplements } = await import('../lib/travelObjects/e2eRuntime')
+  return readE2eTravelObjectSupplements({
+    allowFixture: true,
+    storage: getBrowserStorage('sessionStorage'),
+    tripId,
+  })
 }
 
 function getBrowserStorage(kind: 'localStorage' | 'sessionStorage'): Storage | null {

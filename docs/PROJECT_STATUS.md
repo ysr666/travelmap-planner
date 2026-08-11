@@ -1,10 +1,12 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-08-06
+更新时间：2026-08-11
 
 ## 发布判断
 
-旅图当前代码处于 **Limited Beta Current**。UI V3 已完成浏览器验收、S1-S3 结构收口和项目所有者批准的平台模拟器发布资格；PR #33 merge SHA `9317a9a` 的 GitHub Actions run `31015131693` 五项 required jobs、Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 和无 Provider 生产冒烟均通过。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；cloud-first 写入、Realtime 订阅、统一实时事实和 AI job runtime 尚未完成，不能把目标能力写成当前事实。
+旅图当前代码处于 **Limited Beta Current**。UI V3 的结构、固定视觉、浏览器自动化和项目所有者批准的平台模拟器基线已经发布，但这不等于完整产品级交付。核心旅行、票据、地图、账本、导入、账号同步、共享旅行、AI Action Gateway 和 Provider Proxy 已形成稳定迁移基线；真实媒体与完整品牌、住宿/保险正式对象、cloud-first 写入、Realtime、完整实时事实、完整 AI 动作面和真实复杂行程验收仍未闭环。完整缺口与退出标准以 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md) 为准。
+
+机器可读能力真相位于 [`config/product-capabilities.json`](../config/product-capabilities.json)。`npm run check:capabilities` 校验状态、证据、依赖、owner、SLO、告警、回退和发布文案；普通生产构建还会拒绝 E2E fixture、session supplement 与测试账号旁路。
 
 本次发布满足以下条件，后续发布继续沿用：
 
@@ -34,7 +36,7 @@
 - **Target contract:** [UI V3 重构规范](UI_REFACTOR_V3.md) 继续定义响应式、无障碍、真实对象优先和发布验收门槛。
 - **Selected Target:** 2026-08-04 已锁定“第一套左上角出发前首页的信息组织 + 第二套随身旅夹视觉系统 + 第三套资料编辑式列表”，并扩展到生命周期、行程、表单、资料、AI、费用、同行和设置页面；完整合同见 [DESIGN.md](DESIGN.md)。
 - **Current receipt:** 2026-08-05 已完成 M0-M6、平台模拟器、最终候选远端、合并与 Production 验收，详见 [UI V3 实施计划](UI_V3_IMPLEMENTATION_PLAN.md) 和 [M6 完成度审计](UI_V3_M6_COMPLETION_AUDIT.md)。
-- **Target fidelity track:** 景点/酒店照片、航司/铁路/保险品牌、完整订单字段、有来源实时事实、资料与行程联动、地图细节和面向设计图的直接验收尚未全部上线；实施顺序与门槛见 [UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)。
+- **Visual Current / Product Partial:** 固定 product-fidelity fixture 下的构图、媒体槽、品牌槽、地图语义和设计对照已完成；fixture 图片、E2E lodging/insurance supplement 和 Mock Provider 不能被描述为生产内容能力。真实交付见 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)。
 - **Historical:** 2026-07-30 的地图主导 `2+3` 融合稿及 2026-08-04 的三套继续润色地图方案均不再是视觉验收基线。
 - **Release boundary:** UI V3 是当前生产视觉与信息架构；Realtime Cloud、统一实时事实和 AI job runtime 仍是 Target，不因 UI 发布而变成 Current。
 
@@ -146,6 +148,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 产品定位与核心体验：[PRODUCT_POSITIONING.md](PRODUCT_POSITIONING.md)
 - 产品战略：[PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md)
 - 当前路线图：[ROADMAP_V5.md](ROADMAP_V5.md)
+- 完整产品级交付计划：[PRODUCT_GRADE_DELIVERY_PLAN.md](PRODUCT_GRADE_DELIVERY_PLAN.md)
 - UI V3 规范：[UI_REFACTOR_V3.md](UI_REFACTOR_V3.md)
 - UI V3 实施计划：[UI_V3_IMPLEMENTATION_PLAN.md](UI_V3_IMPLEMENTATION_PLAN.md)
 - UI V3 产品质感增强计划：[UI_V3_PRODUCT_FIDELITY_PLAN.md](UI_V3_PRODUCT_FIDELITY_PLAN.md)

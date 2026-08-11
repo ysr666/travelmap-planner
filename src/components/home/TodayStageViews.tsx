@@ -333,7 +333,7 @@ export function EmptyTodayView({
         <button className="today-empty-manual tm-focus" onClick={() => navigateTo('trip/new')} type="button">
           <Plus className="size-4" /> 手动新建
         </button>
-        {import.meta.env.VITE_E2E_AUTH_BYPASS === '1' ? (
+        {__TRIPMAP_E2E__ ? (
           <Button className="w-full" loading={isCreatingDemo} onClick={onCreateDemo} variant="ghost">
             创建示例旅行
           </Button>

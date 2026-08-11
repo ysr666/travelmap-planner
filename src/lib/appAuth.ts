@@ -1,5 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 
+declare const __TRIPMAP_E2E__: boolean
+
 const OFFLINE_ACCESS_LEASE_KEY = 'tripmap:auth:offline-access-lease'
 export const OFFLINE_ACCESS_LEASE_MS = 30 * 24 * 60 * 60 * 1000
 
@@ -10,7 +12,7 @@ type OfflineAccessLease = {
 }
 
 export function isE2eAuthBypassEnabled() {
-  return import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
+  return __TRIPMAP_E2E__
 }
 
 export function createE2eAuthUser(): User {

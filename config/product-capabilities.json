@@ -99,11 +99,19 @@
       "nextPhase": "P1",
       "dependencies": ["auth.account-session"],
       "evidence": {
-        "implementation": [],
-        "tests": [],
-        "receipts": []
+        "implementation": [
+          "src/lib/accountCloud/contract.ts",
+          "src/lib/accountCloud/client.ts",
+          "supabase/migrations/20260811092148_account_cloud_core_v2.sql"
+        ],
+        "tests": [
+          "src/lib/accountCloud/contract.test.ts",
+          "src/lib/accountCloud/client.test.ts",
+          "scripts/lib/account-cloud-migration.test.mjs"
+        ],
+        "receipts": ["docs/CLOUD_DATA_MODEL_V2.md"]
       },
-      "gaps": ["当前仍为 IndexedDB 首写后同步，缺少 cloud-first ack、revision 和统一冲突合同"],
+      "gaps": ["V2 revision/mutation 合同已在代码中建立，但 migration 尚未应用到 Preview，客户端仍为 IndexedDB 首写后同步，cloud-first、字段冲突、Realtime 和恢复尚未切换"],
       "operations": {
         "slo": "在线写入确认 P95 <= 2 秒",
         "alert": "确认失败率 > 1% 或检测到未解决的数据丢失",

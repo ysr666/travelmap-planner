@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && npm run check:capabilities && npm run check:cloudflare-migrations && vite build && npm run check:production-boundaries && npm run check:bundle",
+    "build": "npm run typecheck && npm run check:capabilities && npm run check:account-cloud-migration && npm run check:cloudflare-migrations && vite build && npm run check:production-boundaries && npm run check:bundle",
+    "check:account-cloud-migration": "node scripts/check-account-cloud-migration.mjs",
     "check:capabilities": "node scripts/check-capability-manifest.mjs",
     "check:cloudflare-migrations": "node scripts/check-cloudflare-migrations.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",

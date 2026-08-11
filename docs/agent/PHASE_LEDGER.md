@@ -3106,7 +3106,67 @@ Remote validation:
 
 - Candidate `62d995dcc4f45fee9fdd9c7c6e0ef679cf25c93c` passed GitHub Actions run `31475816551`: Build, Lint plus capability gate, Type Check, Unit Tests, and E2E Tests all succeeded; the E2E job completed in 6 minutes 41 seconds.
 - Cloudflare Preview deployment `e0545b7e-18fe-4d27-8b3d-adbc693632ce` was created from the same candidate SHA and returned HTTP 200. Current production remains `main` SHA `03fc0d025da44f5cf5987a28fb57ca29555650d3` until PR #35 is reviewed and merged.
+- Follow-up documentation candidate `0c809a0deb9f2494984bb019533c81370c1bc518` also passed all five GitHub Actions jobs in run `31476784375`; Cloudflare Preview deployment `2e7d7e30-411b-49d8-a399-c02cb9c27671` served HTTP 200 from the same SHA.
 - The production diagnostics endpoint reported production environment, enforced Origin and Auth, durable D1 quota, and configured OpenAI-compatible AI, Tavily search, Google Places/Routes, OpenRouteService, and Open-Meteo adapters. No real Provider operation was invoked.
 - Remote D1 reported no pending migration. All seven `global | ai | search | place | route | weather | fx` controls are enabled, with zero current daily-usage rows and zero pending alerts. Alert delivery itself is not configured and is explicitly retained as a P13 blocker.
 - Supabase reported `ACTIVE_HEALTHY`; its production migration list and both advisor classes were read without schema or data writes. Existing findings are recorded in `docs/PRODUCTION_RUNTIME_STATUS.md`: leaked-password protection, one intentionally closed RLS table without a policy, one multiple-permissive-policy warning, and six unused-index notices.
 - P0 exits with the repository still correctly labelled Limited Beta: four capabilities are Current, 24 release-blocking capabilities remain incomplete, and every Partial/Target item names its gap and next phase.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.1 Versioned Cloud Contract
+
+Status: complete locally; Preview database receipt remains a P1 exit requirement
+
+Goal:
+
+- Establish the additive server-side V2 object envelope and atomic mutation protocol required for cloud-first account data without disrupting the current Limited Beta sync path.
+- Make revision checks, mutation deduplication, actor attribution, tombstones, schema versions, ownership, and Realtime eligibility enforceable at the database boundary.
+
+Scope:
+
+- Add a versioned account-object registry covering trip, day, itinerary, ticket metadata, redacted document indexes and links, transport, lodging, insurance, controlled media, realtime facts, ledger, intelligence, shared tasks, replanning, and AI jobs.
+- Add an owner-scoped object table and a private mutation-receipt table with bounded identifiers and payloads, explicit grants, RLS, indexes, and Realtime publication.
+- Add one authenticated atomic mutation RPC with an expected revision, mutation ID, request fingerprint, idempotent replay result, tombstone semantics, and structured conflict result.
+- Backfill compatible legacy `cloud_sync_objects` rows additively and idempotently; retain the legacy table and current client behavior until a later cutover phase.
+- Add strict TypeScript request/response/row validators and a Supabase adapter that cannot send owner IDs, arbitrary object types, unknown fields, sensitive document payload kinds, or malformed mutations.
+- Add static migration-contract tests and focused client-contract tests before any preview database application.
+
+No-go:
+
+- No production or preview database write in this subphase; no client write-path cutover; no IndexedDB version change; no ticket Blob, encrypted vault, Storage, Provider, AI privacy, route-cache, or collaboration-permission contract change.
+- No raw passport, visa, insurance document body, OCR text, token, secret, arbitrary execution/routing URL, or raw Provider payload in the general account-object table; object-schema-approved user/source links remain a later codec responsibility.
+- No direct authenticated table insert, update, or delete; mutations must pass through the revision-gated RPC.
+- No destructive migration, legacy-row deletion, forced user re-import, service-role browser use, or status promotion to Current.
+
+Likely files:
+
+- A CLI-created migration under `supabase/migrations/`, `src/lib/accountCloud/*`, focused unit tests, a migration-contract checker and tests, package/CI wiring if needed, the product capability manifest, P1 design/runbook documentation, and this phase ledger.
+
+Validation:
+
+- Supabase changelog/current-doc review; migration filename/history checks; static SQL contract and security tests; request/row/result schema tests; adapter RPC-shape and error-normalization tests; 100-repeat idempotency model test; typecheck; lint; focused and full unit tests; production build; `git diff --check`.
+- Preview database application, SQL behavior checks, RLS/advisors, Realtime, rollback, and production drift remain required P1 receipts and will be completed in subsequent P1 subphases before P1 can exit.
+
+Risk:
+
+- High. An incorrect RPC, grant, RLS rule, backfill, or identity contract could create cross-account access, duplicate mutations, stale overwrites, or an unrecoverable migration path.
+
+Stop conditions:
+
+- Stop and repair if a client can choose `owner_id` or `actor_id`, reuse one mutation ID with different content, bypass expected revision, directly write either table, persist an unregistered or sensitive object kind, leak deleted payloads, subscribe across owners, or alter any legacy row during backfill.
+
+Local result:
+
+- Added a CLI-created additive Supabase migration with one revisioned account-object table, a private independent mutation-receipt ledger, explicit read-only browser grants, owner-only RLS, tombstones, indexes, `REPLICA IDENTITY FULL`, and conditional Realtime publication.
+- Added one private `SECURITY DEFINER` mutation implementation behind a public `SECURITY INVOKER` wrapper. The browser cannot submit owner/actor IDs, table/function names, or server-managed media/fact/job writes; the implementation authenticates with `auth.uid()`, uses empty search paths, serializes object and mutation identities, verifies request hashes, checks expected revisions, and writes the object plus receipt atomically.
+- Added a 22-kind TypeScript registry, exhaustive payload-type map, redacted document index/link, Shared Task, and AI Job models. General account payloads reject envelope forgery, secrets, credentials, Blob/OCR/document bodies, raw Provider payloads, invalid JSON, cycles, excessive depth/nodes, and payloads over 512 KiB.
+- Added a Supabase adapter that sends only the fixed RPC arguments, validates every response, rejects cross-trip/object substitution, and normalizes Auth, permission, missing-contract, transient, and malformed-response failures without exposing raw server details.
+- Added an executable migration gate that keeps the SQL table allowlist, private RPC allowlist, and TypeScript registry aligned and rejects direct authenticated writes, privileged public implementations, receipt exposure, missing revision/replay guards, or destructive legacy-table statements. Build and CI now run this gate.
+- Added `docs/CLOUD_DATA_MODEL_V2.md` as the detailed cloud-first, object, permission, conflict, Realtime, recovery, retention, staged rollout, and rollback contract. Capability and project-status evidence now point to it while retaining Target status.
+- Production was queried read-only before finalizing the backfill: 136 legacy rows, zero live rows with invalid/null payloads, maximum payload 1,544 bytes, and zero identifiers outside the additive migration bounds. No schema or data write was made.
+
+Local validation:
+
+- Focused account-cloud contract, adapter, attack-boundary, 100-repeat idempotency model, and migration tests passed: 3 files and 36 tests.
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 221 files and 1,782 tests.
+- `npm run build` passed, including capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates. Ordinary output contained zero fixture files; bundle budget remained 468.3 KiB entry, 852.8 KiB initial JS, 245.6 KiB initial gzip, and 2444.4 KiB/121-entry precache.
+- `git diff --check` passed. Local SQL execution was unavailable because this Mac has no Docker daemon or Docker Desktop; the repository has no existing Supabase Preview branch. Preview migration application, SQL behavior/RLS/advisors, Realtime, and rollback remain mandatory before client cutover or any Current claim.

@@ -109,6 +109,8 @@
 
 目标：让账号云端成为完整、可恢复、可协作的事实源。
 
+详细数据、权限、mutation、冲突、Realtime、恢复、迁移和回退合同见 [Account Cloud V2](CLOUD_DATA_MODEL_V2.md)。该合同在 Preview/Production 与客户端切换完成前保持 Target。
+
 交付项：
 
 - 为 Trip、Day、Item、TicketMeta、Document、TransportBooking、TransportSegment、Lodging、Insurance、MediaAsset、RealtimeFact、Ledger、Intelligence、Shared Task 和 AI Job 建立正式服务端模型。

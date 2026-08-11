@@ -23,7 +23,7 @@
 
 实时在线和 AI 优先是目标实现战略：账号、协作和事实实时收敛，AI 通过受限动作完成任务。它们不再作为面向用户的产品类别或固定首页构图。
 
-- **Target:** Supabase/Postgres 是账号事实源，Realtime 推送跨设备、协作和 AI job 变化。
+- **Target:** Supabase/Postgres 是账号事实源，Realtime 推送跨设备、协作和 AI job 变化；版本化 V2 数据合同与迁移状态见 [Account Cloud V2](CLOUD_DATA_MODEL_V2.md)。
 - **Target:** AI Action Gateway 是默认操作层，自动完成只读查询，并对组合写入只要求一次风险匹配的确认。
 - **Target:** 地点、路线、交通、天气、航班/铁路和票务事实统一携带来源、观测时间和有效期。
 - **Current:** IndexedDB 仍是首写层，Supabase 负责对象同步、票据文件、恢复和 Shared Trip；后续改为云端提交优先，本机只作边缘缓存和失败 outbox。
@@ -120,6 +120,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 云端状态
 
 - 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
+- P1.1 已在代码中建立 22 类账号对象、revision、mutation receipt、tombstone、受控 RPC、RLS/grants 和 Realtime publication 的增量 migration；它尚未应用到 Preview/Production，客户端也尚未启用，因此仍是 Target 而不是 Current。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。

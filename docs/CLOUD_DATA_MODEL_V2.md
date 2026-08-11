@@ -146,7 +146,15 @@ RPC 固定执行顺序：
 
 ### 6.3 多对象事务
 
-单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。后续 P1 子阶段必须增加注册 workflow mutation：服务端在一个事务中校验所有对象 revision，再全部写入或全部拒绝。客户端不能把多对象原子操作拆成若干“看起来成功”的独立写入。当前硬切换门槛在这些能力、bootstrap 和双读完成前不可打开。
+单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。P1.3b 已在本地增加首批注册 workflow mutation，但尚未部署或接入产品写路径；客户端仍不能把多对象原子操作拆成若干“看起来成功”的独立写入。当前硬切换门槛在完整 workflow 接入、bootstrap 和双读完成前不可打开。
+
+### 6.4 注册原子 Workflow（本地 Target）
+
+首批注册表只包含 `day.items.reorder@1`、`item.move@1`、`trip.import.commit@1`、`ticket.bind@1`、`ledger.batch@1`、`trip.replan.apply@1` 和 `trip.repair.apply@1`。这不是通用 batch 接口：每个 ID 固定允许的对象类型、操作、最少/最多步骤和拓扑规则；AI 修复不能借此选择任意函数、表、SQL、路由或未登记对象。
+
+`public.account_apply_workflow_v1` 是固定七参数的 `SECURITY INVOKER` 包装。私有实现从 `auth.uid()` 确定 owner/actor，复核账号哈希，拒绝未知字段、重复 step/mutation/object、服务端对象、敏感字段、超限深度/节点/字节和不合法 Ticket 关系。票据重绑还会锁定票据语义身份，并要求旧 metadata 目标及所有现存反向关联都进入同一批次。批次重试先按与单对象 RPC 相同的 object -> mutation 顺序获取 advisory lock，再检查不可读的私有 workflow receipt；所有 revision 与领域规则均在首笔写入前完成，之后对象、单步 receipt 和批次 receipt 在同一 PostgreSQL 事务提交。已完成批次只有在所有对象仍停留在其 applied revision 时才返回 `idempotent`，任一对象已前进则返回 `receipt_advanced` 冲突。
+
+当前迁移 `20260811134000_account_cloud_workflows_v1.sql` 已在本机 Supabase/PostgreSQL 从空库重放，并通过 43 项 pgTAP：实际函数授权/RLS、账号边界、敏感字段、事务异常回滚、100 次顺序幂等回放、advanced receipt、票据关系和跨账号同 ID 隔离。它未应用到 Preview/Production，尚无真实账号 bootstrap、多连接并发、网络不确定性或生产性能收据；本机 reorder/move/import/ticket/ledger/replan/repair 也尚未切换到该 RPC。删除级联和后续对象专用 workflow 必须在另一个有界子阶段补齐，不能用现有 ID 扩权。
 
 ## 7. 冲突合同
 
@@ -210,7 +218,7 @@ P1.5 需要补齐：
 - 本地 P1.3a 已增加固定表/固定字段、RLS 依赖、Supabase 会话账号哈希复核、有界分页和严格 snake-case 解码；两次完整读取必须一致后才进入 bootstrap。
 - 本地 P1.3a 已比较 legacy 与 V2，区分 exact、local-only、remote-only、payload/tombstone/schema drift、unsupported 和 pending mutation。持久化在同一 IndexedDB 事务内重新读取对象与两类 outbox，只为完全一致的 live row 或本机确实不存在的 tombstone 写 revision receipt，绝不改业务对象；Ticket 比较继续使用最小字段白名单。
 - `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 与完整写入门槛一样固定为 `false`。Preview 应用后仍需取得真实账号双读、漂移和 bootstrap 收据，才可逐账号开启 shadow。
-- 增加删除、重排、跨日移动、票据重绑、导入、账本与 AI 写入所需的注册 batch/workflow RPC。
+- 本地已增加重排、跨日移动、票据重绑、导入、账本、replan 与 AI repair 的首批注册 workflow RPC；继续补齐删除级联、对象专用 codec、本机原子 journal/rollback 接入和 Preview 并发/回滚收据。
 - 完成 Ticket 的专用读写/Blob/重绑协议，并为 Document、Booking、Lodging、Insurance 和 Ledger 建立专用 write/read codec；任何本机路径、签名 URL、自由文本秘密和正文不得进入通用表。
 - 完成字段冲突策略和用户可见恢复入口后，才允许 Preview 白名单解除代码硬门槛。
 

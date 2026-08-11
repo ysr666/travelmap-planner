@@ -78,4 +78,15 @@ describe('App trip context', () => {
       expect(shell?.getAttribute('data-trip-title')).toBe('')
     })
   })
+
+  it('canonicalizes legacy routes without leaving an intermediate route active', async () => {
+    window.location.hash = '/tickets?tripId=trip_1'
+
+    await act(async () => root?.render(<App />))
+
+    await vi.waitFor(() => {
+      expect(window.location.hash).toBe('#/documents?tripId=trip_1&tab=attachments')
+      expect(container?.textContent).toContain('资料中心')
+    })
+  })
 })

@@ -195,6 +195,16 @@ afterEach(() => {
 })
 
 describe('DayViewPage', () => {
+  it('reads params from the App route snapshot when provided', async () => {
+    const routeHash = '#/day?tripId=trip_1&dayId=day_1&view=schedule'
+
+    await act(async () => {
+      root?.render(<DayViewPage routeHash={routeHash} />)
+    })
+
+    expect(mocks.getRouteParams).toHaveBeenCalledWith(routeHash)
+  })
+
   it('renders loading skeleton when data is loading', async () => {
     mocks.useTripData.mockReturnValue({
       ...defaultTripData,

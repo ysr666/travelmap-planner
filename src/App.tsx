@@ -91,7 +91,12 @@ function App() {
     const syncRoute = () => {
       const redirect = getCanonicalHashRedirect(window.location.hash)
       if (redirect && redirect !== window.location.hash) {
-        window.location.replace(redirect)
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `${window.location.pathname}${window.location.search}${redirect}`,
+        )
+        setCurrentHash(redirect)
         return
       }
       setCurrentHash(window.location.hash)
@@ -166,8 +171,8 @@ function App() {
       {activeRoute !== 'home' ? (
         <ErrorBoundary key={activeRoute}>
           <Suspense fallback={<RouteLoading />}>
-            {activeRoute === 'trip' ? <TripWorkspacePage /> : null}
-            {activeRoute === 'day' ? <DayViewPage /> : null}
+            {activeRoute === 'trip' ? <TripWorkspacePage routeHash={currentHash} /> : null}
+            {activeRoute === 'day' ? <DayViewPage routeHash={currentHash} /> : null}
             {activeRoute === 'item' ? <ItemDetailPage /> : null}
             {activeRoute === 'trip/new' || activeRoute === 'trip/edit' ? <TripFormPage /> : null}
             {activeRoute === 'item/new' || activeRoute === 'item/edit' ? <ItemFormPage /> : null}

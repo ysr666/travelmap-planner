@@ -335,6 +335,16 @@ afterEach(() => {
 })
 
 describe('TripWorkspacePage', () => {
+  it('reads params from the App route snapshot when provided', async () => {
+    const routeHash = '#/trip?tripId=trip_1'
+
+    await act(async () => {
+      root?.render(<TripWorkspacePage routeHash={routeHash} />)
+    })
+
+    expect(mocks.getRouteParams).toHaveBeenCalledWith(routeHash)
+  })
+
   it('does not repeat the trip title inside the schedule content', async () => {
     await renderWorkspacePage()
 

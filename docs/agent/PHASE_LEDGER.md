@@ -3303,3 +3303,66 @@ Local validation:
 - `npm run typecheck:app`, `npm run lint`, `npm run build`, and `npm run check:capabilities` passed. Build gates reported 144 production-boundary files with zero fixture files; the final budget was 473.1 KiB entry, 859.0 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2485.2 KiB/126-entry precache.
 - The 5-test PWA upgrade suite and Desktop Beta smoke passed. `git diff --check` passed.
 - Supabase Preview application and real-account double-read/bootstrap receipts remain intentionally unexecuted. They require a cost-bearing Preview branch or an explicitly authorized reviewed production migration and remain mandatory before either V2 read or write gate can open.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3b Registered Atomic Workflows
+
+Status: complete locally; Supabase Preview and product-path integration remain P1 gates
+
+Goal:
+
+- Define one bounded atomic server boundary for multi-object domain operations so reorder, cross-day move, import, ticket rebind, ledger changes, replanning, and AI repair can never degrade into independently acknowledged object writes.
+- Make workflow selection closed and semantic: callers may select only a versioned workflow ID and validated object mutations, never a table, function, SQL fragment, route, owner/actor ID, or unrestricted action name.
+
+Scope:
+
+- Add a versioned TypeScript workflow registry with strict envelope/step/result parsers, workflow-specific object/operation/shape rules, duplicate prevention, bounded step and byte limits, Ticket redaction, and exact request/result correlation.
+- Add a fixed Supabase RPC adapter that sends only registered arguments, binds the captured local account hash to the authenticated server account, rejects substituted or advanced replay results, and normalizes errors without raw server details.
+- Add an additive migration with a private batch receipt ledger, a private authenticated transaction implementation, and a public security-invoker wrapper. It must validate all revisions and workflow invariants before the first write, lock object identities in deterministic order, apply all steps and receipts in one transaction, and return a single atomic result.
+- Register only explicit domain workflows needed by existing product operations. AI repair must use its own narrow workflow definition and must not gain a generic mutation escape hatch.
+- Add an executable migration/registry gate and attack-boundary tests. Keep all read/write rollout gates compile-time closed and leave production behavior on the legacy path.
+
+No-go:
+
+- No Supabase Preview/production migration application, branch creation, real account mutation, Provider call, feature enablement, UI integration, IndexedDB schema change, or claim that batch writes are Current.
+- No dynamic SQL, caller-selected function/table/column, service-role browser client, direct authenticated table write, partial result, best-effort step, dependency graph, nested workflow, duplicate object mutation, sensitive Ticket/Document/Blob/OCR payload, or unbounded import.
+- No ordinary AI workflow capable of deleting a trip, changing membership/permissions, paying, sending, or mutating server-managed media, realtime facts, or AI jobs.
+
+Likely files:
+
+- New workflow contract/client modules and tests under `src/lib/accountCloud/`, a new additive Supabase migration, migration gate scripts/tests, Account Cloud/status/capability docs, and this ledger.
+
+Validation:
+
+- Registry/SQL parity; unknown workflow/action/field rejection; workflow shape matrix; duplicate IDs and objects; max count/bytes/depth; sensitive payloads; Ticket whitelist; server-managed types; account mismatch; revision conflicts; atomic/idempotent model; 100 identical replays; mutation-ID reuse; advanced replay; response substitution; Auth/permission/unavailable/transient errors; grants/RLS/security-definer boundaries; no dynamic SQL/direct browser writes; full unit/typecheck/lint/build/capability/migration gates; relevant PWA smoke; and `git diff --check`.
+
+Risk:
+
+- Critical. A superficially generic batch API can become an arbitrary database-write surface, while a loop that writes before discovering a later conflict can permanently split one user action across devices.
+
+Stop conditions:
+
+- Stop and repair if an unregistered workflow reaches execution, any workflow can mutate an unregistered object type/operation, validation happens after the first write, a failed step can commit earlier steps, a replay can acknowledge changed server state as current, any owner/actor identity is caller-controlled, or either compile-time rollout gate becomes reachable.
+
+Local result:
+
+- Added a closed seven-action registry for day reorder, cross-day move, import commit, Ticket binding, ledger batch, replanning, and AI repair. Both TypeScript and SQL reject unknown actions, fields, object kinds, operations, IDs, duplicate targets, server-managed objects, sensitive nested keys, excessive payload depth/nodes/bytes, and unbounded step counts.
+- Added a fixed `account_apply_workflow_v1` client. It sends only the seven registered RPC arguments, verifies the active account hash before and after the request, strictly parses every result, correlates every returned step to the request, and converts transport/provider details into the existing sanitized error categories.
+- Added a private workflow receipt ledger, authenticated account-hash guard, deterministic batch/object/mutation locks, all-revision preflight, one PostgreSQL transaction for objects plus step/batch receipts, exact replay hashing, and `receipt_advanced` rejection when any previously applied object has moved on.
+- Ticket rebind uses a semantic Ticket lock and requires the prior metadata target plus every currently bound reverse item to be present in the same batch. A partial rebind cannot leave the Ticket pointing to one item while another item still retains its ID.
+- Payload traversal is bounded before recursive sensitive-key inspection. Browser roles cannot read receipts or write account-object rows directly; the exposed RPC is a fixed `SECURITY INVOKER` wrapper around the private authenticated implementation.
+- Fixed a real hash-route race found in the prior CI trace: Day/Trip pages now parse the React-owned route snapshot, and canonical redirects replace the URL and state together. A stale Day effect can no longer overwrite a newly opened Materials/Inbox route with its default map route.
+- Both Account Cloud rollout constants remain compile-time `false`. No Preview/production schema or data write, real account cloud mutation, or Provider call was made.
+
+Review:
+
+- Executing the migration against local Supabase/PostgreSQL found two defects that static SQL parsing missed: ambiguous PL/pgSQL `CASE` boundaries and JSON operator/concatenation precedence in the advisory-lock key. Both were repaired and then verified from a clean database reset.
+- The first pgTAP pass exposed an incomplete Ticket baseline that allowed a caller to omit the old bound item. The transaction now locks and validates the complete old relationship before receipt lookup or writes; the regression proves both rejection and unchanged prior state.
+- The final self-review covered arbitrary execution targets, owner/actor substitution, direct table grants, nested secret fields, depth/node exhaustion, duplicate identities, write-before-preflight, statement rollback, receipt reuse, advanced replay, account ID collision, and Ticket reverse-link drift. Remaining risk is intentionally bounded by the closed rollout gates: product workflow adapters, local atomic journals, deletion cascades, complete object codecs, multi-connection contention, and Preview receipts are not claimed here.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration, including `20260811134000_account_cloud_workflows_v1.sql`. The 43-test pgTAP suite passed actual Auth/RLS/grant, account isolation, sensitive payload, atomic rollback, 100-repeat idempotency, advanced receipt, reorder, Ticket binding, and cross-account same-ID cases.
+- Local Supabase schema lint and security advisor returned no issues. The performance advisor retained one pre-existing warning for two permissive authenticated SELECT policies on `cloud_ticket_blobs`; this migration adds neither policy and produced no new performance finding.
+- `npm run typecheck`, `npm run lint`, `npm run test:unit`, and `npm run build` passed. The complete unit suite passed 233 files and 1,884 tests; the build reported 473.3 KiB entry, 859.1 KiB initial JS, 247.3 KiB initial gzip, and 2485.4 KiB/126-entry precache.
+- Full serial Playwright passed all 194 tests in 7 minutes 24 seconds. The prior documents/inbox route race stayed closed, and a focused 3x repeat of both affected mobile specs had already passed 27/27. `git diff --check`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, and bundle gates passed.
+- Supabase Preview application, real-account stable-read/bootstrap, independent multi-connection contention, network ambiguity, and production latency receipts remain mandatory before any V2 read/write gate can open.

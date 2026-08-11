@@ -23,6 +23,7 @@
     "test:e2e:serial": "playwright test --workers=1",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "test:db:account-cloud": "supabase test db supabase/tests/account_cloud_workflows_v1.sql",
     "capture:ui-v3-goldens": "CAPTURE_UI_V3_GOLDENS=1 playwright test e2e/home-v3-visual.spec.ts --project \"Mobile 390x844\" --workers=1",
     "typecheck": "npm run typecheck:app && npm run typecheck:provider-runtime && npm run typecheck:travel-inbox-worker",
     "typecheck:app": "tsc -b --pretty false",

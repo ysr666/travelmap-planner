@@ -122,7 +122,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
 - P1.1 已在代码中建立 22 类账号对象、revision、mutation receipt、tombstone、受控 RPC、RLS/grants 和 Realtime publication 的增量 migration；RPC 还会把本机账号哈希与服务端 `auth.uid()` 原子比对，拒绝跨账号会话竞争。
 - P1.2 已在本地实现 IndexedDB v11 revision/journal、原 mutation 重放、lease generation、账号数据库绑定、可恢复的原子依赖链回滚，以及 Trip/Day/Item 单对象 adapter。Ticket 已有构建器/解析器/SQL/回填四层最小字段白名单，但完整读写、Blob 与重绑协议尚未完成，因此仍走 legacy。
-- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现；migration 尚未应用到 Preview/Production，真实 bootstrap 收据、batch workflow、Realtime 和恢复仍是 Target。
+- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现。首批 7 个注册原子 workflow 已有严格 TypeScript 合同、固定 RPC 客户端、私有批次收据和增量 SQL，并已通过本机空库 migration、43 项 PostgreSQL pgTAP、schema lint 与安全 advisor；但尚未接入本机事务协调器，也没有 Preview 可执行收据。删除级联、完整对象 codec、真实 bootstrap/多连接并发幂等、Realtime 和恢复仍是 Target。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。

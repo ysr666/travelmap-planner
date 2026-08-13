@@ -16,9 +16,12 @@ const REQUIRED_FRAGMENTS = [
   'pg_catalog.octet_length(target_steps::text) > 4194304',
   'pg_catalog.jsonb_array_length(target_steps)',
   "when 'ticket.bind@1' then 1",
+  "when 'trip.import.commit@1' then 256",
   'create or replace function tripmap_private.account_payload_shape_is_safe',
   'create or replace function tripmap_private.account_workflow_payload_is_safe',
+  'create or replace function tripmap_private.account_import_workflow_shape_is_valid',
   'not tripmap_private.account_workflow_payload_is_safe(step_payload)',
+  'not tripmap_private.account_import_workflow_shape_is_valid',
   'not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)',
   "step_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'",
   "step_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
@@ -28,6 +31,8 @@ const REQUIRED_FRAGMENTS = [
   'coalesce(pg_catalog.max(depth), 0) <= 32',
   'tripmap_private.account_mutation_receipts',
   'pg_catalog.pg_advisory_xact_lock',
+  'pg_catalog.pg_advisory_xact_lock_shared',
+  "':trip-lifecycle:'",
   "':item-day:'",
   'structural_item_count <> step_count',
   'moved_item_count <> 1',
@@ -104,7 +109,26 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
   if (!/target_account_hash\s*<>\s*pg_catalog\.left\s*\([\s\S]{0,260}current_user_id::text/i.test(privateFunction)) {
     throw new Error('The workflow RPC is missing the authenticated account-context guard.')
   }
+  const importShapeFunction = extractFunctionBody(
+    migrationSql,
+    'tripmap_private.account_import_workflow_shape_is_valid',
+  )
+  if (
+    !/security\s+invoker/i.test(importShapeFunction)
+    || /security\s+definer/i.test(importShapeFunction)
+    || !/expected_revision\s*<>\s*0/i.test(importShapeFunction)
+    || !/object_type\s*=\s*'trip'/i.test(importShapeFunction)
+    || !/object_type\s*=\s*'day'/i.test(importShapeFunction)
+    || !/object_type\s*=\s*'ticket_meta'/i.test(importShapeFunction)
+    || !/object_type\s*=\s*'ledger_expense'/i.test(importShapeFunction)
+  ) {
+    throw new Error('The import workflow must validate one closed create-only graph.')
+  }
+  if (!/target_workflow_id\s*=\s*'trip\.import\.commit@1'\s+then[\s\S]{0,260}pg_advisory_xact_lock\s*\([\s\S]{0,180}:trip-lifecycle:[\s\S]{0,220}else[\s\S]{0,180}pg_advisory_xact_lock_shared/i.test(privateFunction)) {
+    throw new Error('The import workflow must exclusively lock the trip lifecycle before ordinary workflow locks.')
+  }
   const normalizedPrivateFunction = privateFunction.toLowerCase()
+  const tripLifecycleLockMarker = normalizedPrivateFunction.indexOf(':trip-lifecycle:')
   const objectLockMarker = normalizedPrivateFunction.indexOf('-- match the single-object rpc lock order')
   const structuralDayLockMarker = normalizedPrivateFunction.indexOf(
     '-- lock every affected itinerary day after object locks and before mutation locks',
@@ -116,7 +140,8 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
     !/step_operation\s*=\s*'upsert'\s+and\s+step_object_type\s*=\s*'item'[\s\S]{0,260}jsonb_typeof\s*\(step_payload\s*->\s*'sortOrder'\)\s+is\s+distinct\s+from\s+'number'[\s\S]{0,180}step_payload\s*->>\s*'sortOrder'\s*!~\s*'\^\[0-9\]\{1,16\}\$'[\s\S]{0,180}jsonb_typeof\s*\(step_payload\s*->\s*'ticketIds'\)\s+is\s+distinct\s+from\s+'array'/i
       .test(privateFunction)
     ||
-    objectLockMarker < 0
+    tripLifecycleLockMarker < 0
+    || objectLockMarker <= tripLifecycleLockMarker
     || structuralDayLockMarker <= objectLockMarker
     || mutationLockMarker <= structuralDayLockMarker
     || !/structural_item_count\s*<>\s*step_count/i.test(privateFunction)
@@ -159,6 +184,12 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
   if (!/revoke\s+all\s+on\s+function\s+tripmap_private\.account_workflow_payload_is_safe\s*\(\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)) {
     throw new Error('The workflow payload-boundary helper must remain inaccessible to browser roles.')
   }
+  if (!/revoke\s+all\s+on\s+function\s+tripmap_private\.account_import_workflow_shape_is_valid\s*\(\s*text\s*,\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)) {
+    throw new Error('The import graph validator must remain inaccessible to browser roles.')
+  }
+  if (!/target_workflow_id\s*=\s*'trip\.import\.commit@1'\s+and\s+exists\s*\([\s\S]{0,260}prior_trip_object\.trip_id\s*=\s*target_trip_id/i.test(privateFunction)) {
+    throw new Error('The import workflow must reject a non-empty trip scope under its lifecycle lock.')
+  }
 
   const rpcSignature = String.raw`integer\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*text\s*,\s*jsonb`
   if (!new RegExp(
@@ -172,6 +203,7 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
     atomicPreflight: true,
     boundedPayloadTraversal: true,
     deterministicReplayLocks: true,
+    importGraphAtomicity: true,
     privateReceiptLedger: true,
     structuralGraphLocking: true,
     ticketBindingCompleteness: true,

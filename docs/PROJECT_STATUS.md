@@ -111,11 +111,13 @@
 
 2026-08-13 P1.3d2 本地增量收据：既有 Ticket metadata 编辑、绑定、解绑和重绑已接入完整关系 workflow；TypeScript/SQL 共同拒绝私密字段、未知字段、单对象关系旁路、遗漏反向引用和借绑定修改其他 Item 数据。完整单测 238 个文件、1,951 项，Account Cloud 聚焦回归 8 个文件、120 项，空库 migration 与 63 项 pgTAP、schema lint、typecheck/lint/build 和 194 项串行 E2E 全部通过。Ticket 创建、删除、Blob 生命周期、Supabase Preview 和真实账号仍未执行，硬门槛保持关闭。
 
+2026-08-13 P1.3d3 本地增量收据：无 Blob、最多 256 步的全新旅行导入已接入 `trip.import.commit@1`；本地与 SQL 会共同校验 create-only revision、唯一 Trip 根、Day/Item 连续顺序、Ticket 双向关系、账本引用和空旅行基线，冲突时整批回滚。完整单测 238 个文件、1,960 项，Account Cloud 聚焦回归 8 个文件、116 项，空库 migration 与 71 项 pgTAP、schema lint、typecheck/lint/build、5 项 PWA 升级及 194 项串行 E2E 全部通过。Blob、超过 256 步、合并/恢复导入、Supabase Preview 和真实账号仍走既有路径或待验证，硬门槛保持关闭。
+
 平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出；Chrome 真实构建、软件键盘、可访问性边界和 AI Sheet 也通过。旧 Chrome 103 未完成 WebAPK launcher 安装的环境限制由 5/5 built-dist PWA 生命周期测试覆盖，并已按项目所有者批准的模拟器发布标准记录。
 
-当前候选入口 JS 为 479.0 KiB，初始静态 JS 图为 864.9 KiB，gzip 248.5 KiB；全局 AI、Account workflow runtime、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
+当前候选入口 JS 为 479.4 KiB，初始静态 JS 图为 865.2 KiB，gzip 248.7 KiB；全局 AI、Account workflow runtime、导入 repository、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
-候选 Service Worker 预缓存为约 2493.5 KiB/128 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI、Account workflow runtime 和 Provider 网络执行实现保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。正式启用 Account Cloud V2 前仍须增加 runtime 受控预热并验证首次离线使用；当前代码硬门槛关闭。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
+候选 Service Worker 预缓存为约 2482.1 KiB/125 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI、Account workflow runtime、导入 repository 和设置二级详情保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。正式启用 Account Cloud V2 前仍须增加 runtime 受控预热，并明确验证导入与设置详情首次离线使用的产品策略；当前代码硬门槛关闭。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
 
 账号同步 E2E 同时确认网络离线时云端 fixture 不发生写入、对象 outbox 不提前消失；网络恢复后同一旅行快照原地更新，trip/item 对象各保持一条，自动快照状态收敛为 `synced`，刷新不会丢失离线修改。
 
@@ -125,8 +127,8 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 
 - 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
 - P1.1 已在代码中建立 22 类账号对象、revision、mutation receipt、tombstone、受控 RPC、RLS/grants 和 Realtime publication 的增量 migration；RPC 还会把本机账号哈希与服务端 `auth.uid()` 原子比对，拒绝跨账号会话竞争。
-- P1.2 已在本地实现 IndexedDB v11 revision/journal、原 mutation 重放、lease generation、账号数据库绑定、可恢复的原子依赖链回滚，以及 Trip/Day/Item 单对象 adapter。Ticket 的最小云 metadata 合同、既有 metadata 编辑和完整绑定关系 workflow 已在后续 P1.3d2 接入；Ticket 创建、删除、Blob 与缓存生命周期仍走 legacy。
-- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现。首批 7 个注册原子 workflow 已有严格 TypeScript 合同、固定 RPC 客户端、私有批次收据和增量 SQL；IndexedDB v12 也已有不可拆分的批次 journal、12 类当前对象 codec、整批 optimistic/lease/retry/Auth/ack/conflict/rollback/crash recovery 和账号切换保护。P1.3d1 已接入同日重排和跨日移动，P1.3d2 已接入既有 Ticket metadata 编辑、绑定、解绑和重绑；本机空库 migration 与 63 项 PostgreSQL pgTAP 已通过。其余四类 workflow、删除/恢复、Ticket 创建/删除/Blob、Preview 可执行收据、真实 bootstrap/多连接并发幂等、Realtime 和空设备恢复仍是 Target。
+- P1.2 已在本地实现 IndexedDB v11 revision/journal、原 mutation 重放、lease generation、账号数据库绑定、可恢复的原子依赖链回滚，以及 Trip/Day/Item 单对象 adapter。Ticket 的最小云 metadata 合同、既有 metadata 编辑和完整绑定关系 workflow 已在后续 P1.3d2 接入；P1.3d3 也已接入不含 Blob 的 create-only 新旅行导入。Ticket 创建、删除、Blob 与缓存生命周期仍走 legacy。
+- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现。首批 7 个注册原子 workflow 已有严格 TypeScript 合同、固定 RPC 客户端、私有批次收据和增量 SQL；IndexedDB v12 也已有不可拆分的批次 journal、12 类当前对象 codec、整批 optimistic/lease/retry/Auth/ack/conflict/rollback/crash recovery 和账号切换保护。P1.3d1 已接入同日重排和跨日移动，P1.3d2 已接入既有 Ticket metadata 编辑、绑定、解绑和重绑，P1.3d3 已接入符合严格闭合图合同的新旅行导入；本机空库 migration 与 71 项 PostgreSQL pgTAP 已通过。其余三类 workflow、删除/恢复、Ticket 创建/删除/Blob、Preview 可执行收据、真实 bootstrap/多连接并发幂等、Realtime 和空设备恢复仍是 Target。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。
@@ -143,7 +145,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 已知发布风险
 
 - 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
-- Account Cloud V2 的本地运行时和两条产品适配器不代表可切换版本；在 Preview SQL/RLS/并发收据、真实账号双读/bootstrap 收据、其余写入面、runtime 首次离线加载、冲突恢复和第二设备收敛完成前，禁止解除任一代码硬门槛。
+- Account Cloud V2 的本地运行时和四条注册 workflow 产品路径不代表可切换版本；在 Preview SQL/RLS/并发收据、真实账号双读/bootstrap 收据、其余写入面、runtime 与导入首次离线加载、冲突恢复和第二设备收敛完成前，禁止解除任一代码硬门槛。
 - 地点/酒店照片和航司/保险 Logo 尚无完整生产资产管线；当前真实票据缩略图能力不能被描述为已完成所有设计稿媒体效果。
 - AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
 - iPhone/Android 实体机性能、文件选择和网络差异为发布后运营观察，不再阻塞 UI V3。

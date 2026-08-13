@@ -8,10 +8,19 @@ import {
   type JsonObject,
   type JsonValue,
 } from './contract'
+import {
+  ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS,
+  ACCOUNT_WORKFLOW_MAX_BYTES,
+  ACCOUNT_WORKFLOW_MAX_STEPS,
+} from './workflowLimits'
+
+export {
+  ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS,
+  ACCOUNT_WORKFLOW_MAX_BYTES,
+  ACCOUNT_WORKFLOW_MAX_STEPS,
+} from './workflowLimits'
 
 export const ACCOUNT_WORKFLOW_SCHEMA_VERSION = 1 as const
-export const ACCOUNT_WORKFLOW_MAX_STEPS = 256
-export const ACCOUNT_WORKFLOW_MAX_BYTES = 4 * 1024 * 1024
 
 export const ACCOUNT_WORKFLOW_IDS = [
   'day.items.reorder@1',
@@ -44,7 +53,7 @@ export const ACCOUNT_WORKFLOW_DEFINITIONS = {
     'ledger_participant',
     'ledger_budget',
     'ledger_expense',
-  ], ['upsert'], 1, 256),
+  ], ['upsert'], 1, ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS),
   'ticket.bind@1': workflow(['ticket_meta', 'item'], ['upsert'], 1, 33),
   'ledger.batch@1': workflow([
     'ledger_settings',
@@ -247,7 +256,7 @@ export function parseAccountWorkflowRequestV1(input: unknown): AccountWorkflowRe
 
   const steps = record.steps.map((step, index) => parseWorkflowStep(step, tripId, deviceId, index))
   assertUniqueSteps(steps)
-  assertWorkflowShape(workflowId, steps)
+  assertWorkflowShape(workflowId, steps, tripId)
 
   const request = {
     batchMutationId,
@@ -479,7 +488,11 @@ function assertUniqueSteps(steps: AccountWorkflowStepV1[]) {
   }
 }
 
-function assertWorkflowShape(workflowId: AccountWorkflowId, steps: AccountWorkflowStepV1[]) {
+function assertWorkflowShape(
+  workflowId: AccountWorkflowId,
+  steps: AccountWorkflowStepV1[],
+  tripId: string,
+) {
   const definition = ACCOUNT_WORKFLOW_DEFINITIONS[workflowId]
   const allowedTypes = new Set<string>(definition.allowedObjectTypes)
   const allowedOperations = new Set<string>(definition.allowedOperations)
@@ -501,6 +514,10 @@ function assertWorkflowShape(workflowId: AccountWorkflowId, steps: AccountWorkfl
     ) {
       fail('workflow_shape_invalid')
     }
+  }
+
+  if (workflowId === 'trip.import.commit@1') {
+    assertTripImportShape(steps, tripId)
   }
 
   if (workflowId === 'day.items.reorder@1') {
@@ -553,6 +570,138 @@ function assertWorkflowShape(workflowId: AccountWorkflowId, steps: AccountWorkfl
   ))) {
     fail('workflow_shape_invalid')
   }
+}
+
+function assertTripImportShape(steps: AccountWorkflowStepV1[], tripId: string) {
+  if (steps.some((step) => step.operation !== 'upsert' || step.expectedRevision !== 0)) {
+    fail('workflow_shape_invalid')
+  }
+  const tripSteps = steps.filter((step) => step.objectType === 'trip')
+  if (
+    tripSteps.length !== 1
+    || tripSteps[0]?.objectId !== tripId
+    || tripSteps[0]?.payload?.id !== tripId
+  ) {
+    fail('workflow_shape_invalid')
+  }
+
+  const daySteps = steps.filter((step) => step.objectType === 'day')
+  const dayIds = new Set(daySteps.map((step) => step.objectId))
+  const dayOrders = daySteps.map((step) => step.payload?.sortOrder)
+  if (
+    dayOrders.some((order) => !Number.isSafeInteger(order) || (order as number) < 0)
+    || !hasZeroOrOneBasedContiguousOrders(dayOrders as number[])
+  ) {
+    fail('workflow_shape_invalid')
+  }
+
+  const itemSteps = steps.filter((step) => step.objectType === 'item')
+  const itemById = new Map(itemSteps.map((step) => [step.objectId, step]))
+  const itemOrdersByDay = new Map<string, number[]>()
+  for (const item of itemSteps) {
+    const dayId = item.payload?.dayId
+    const sortOrder = item.payload?.sortOrder
+    if (typeof dayId !== 'string' || !dayIds.has(dayId) || typeof sortOrder !== 'number') {
+      fail('workflow_shape_invalid')
+    }
+    const orders = itemOrdersByDay.get(dayId) ?? []
+    orders.push(sortOrder)
+    itemOrdersByDay.set(dayId, orders)
+  }
+  if ([...itemOrdersByDay.values()].some((orders) => !hasZeroOrOneBasedContiguousOrders(orders))) {
+    fail('workflow_shape_invalid')
+  }
+
+  const ticketSteps = steps.filter((step) => step.objectType === 'ticket_meta')
+  const ticketById = new Map(ticketSteps.map((step) => [step.objectId, step]))
+  for (const item of itemSteps) {
+    const ticketIds = item.payload?.ticketIds as JsonValue[]
+    for (const ticketId of ticketIds) {
+      if (typeof ticketId !== 'string') fail('workflow_shape_invalid')
+      const ticket = ticketById.get(ticketId)
+      if (ticket?.payload?.itemId !== item.objectId || ticket.payload.scope !== 'item') {
+        fail('workflow_shape_invalid')
+      }
+    }
+  }
+  for (const ticket of ticketSteps) {
+    const itemId = ticket.payload?.itemId
+    if (typeof itemId !== 'string') continue
+    const item = itemById.get(itemId)
+    if (!item || !(item.payload?.ticketIds as JsonValue[]).includes(ticket.objectId)) {
+      fail('workflow_shape_invalid')
+    }
+  }
+
+  const settingsCount = steps.filter((step) => step.objectType === 'ledger_settings').length
+  if (settingsCount > 1) fail('workflow_shape_invalid')
+  const participantIds = new Set(
+    steps.filter((step) => step.objectType === 'ledger_participant').map((step) => step.objectId),
+  )
+  const expenseIds = new Set(
+    steps.filter((step) => step.objectType === 'ledger_expense').map((step) => step.objectId),
+  )
+  for (const expense of steps.filter((step) => step.objectType === 'ledger_expense')) {
+    const payerParticipantId = expense.payload?.payerParticipantId
+    if (
+      payerParticipantId !== undefined
+      && (typeof payerParticipantId !== 'string' || !participantIds.has(payerParticipantId))
+    ) {
+      fail('workflow_shape_invalid')
+    }
+    const splitShares = expense.payload?.splitShares
+    if (!Array.isArray(splitShares)) fail('workflow_shape_invalid')
+    const splitParticipantIds: string[] = []
+    for (const share of splitShares) {
+      if (
+        !share
+        || typeof share !== 'object'
+        || Array.isArray(share)
+        || typeof share.participantId !== 'string'
+        || !participantIds.has(share.participantId)
+      ) {
+        fail('workflow_shape_invalid')
+      }
+      splitParticipantIds.push(share.participantId)
+    }
+    if (new Set(splitParticipantIds).size !== splitParticipantIds.length) {
+      fail('workflow_shape_invalid')
+    }
+    const itemIds = expense.payload?.itemIds
+    if (itemIds !== undefined && (
+      !isUniqueControlledIdList(itemIds)
+      || (itemIds as JsonValue[]).some((itemId) => typeof itemId !== 'string' || !itemById.has(itemId))
+    )) {
+      fail('workflow_shape_invalid')
+    }
+    const originalExpenseId = expense.payload?.originalExpenseId
+    if (
+      originalExpenseId !== undefined
+      && (typeof originalExpenseId !== 'string' || !expenseIds.has(originalExpenseId))
+    ) {
+      fail('workflow_shape_invalid')
+    }
+    const source = expense.payload?.source
+    if (
+      source
+      && typeof source === 'object'
+      && !Array.isArray(source)
+      && source.kind === 'ticket'
+      && source.sourceId !== undefined
+      && (typeof source.sourceId !== 'string' || !ticketById.has(source.sourceId))
+    ) {
+      fail('workflow_shape_invalid')
+    }
+  }
+}
+
+function hasZeroOrOneBasedContiguousOrders(orders: number[]) {
+  if (orders.length === 0) return true
+  const sorted = [...orders].sort((first, second) => first - second)
+  const start = sorted[0]
+  return (start === 0 || start === 1)
+    && new Set(sorted).size === sorted.length
+    && sorted.every((order, index) => order === start + index)
 }
 
 function hasContiguousItemOrders(steps: AccountWorkflowStepV1[]) {

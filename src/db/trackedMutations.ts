@@ -17,6 +17,7 @@ import {
   updateCoreAccountObjectIfEnabled,
 } from '../lib/accountCloud/runtimeLoader'
 import { executeProductAccountWorkflowIfEnabled } from '../lib/accountCloud/workflowRuntimeLoader'
+import { ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS } from '../lib/accountCloud/workflowLimits'
 import type { JsonObject } from '../lib/accountCloud/contract'
 import { redactTicketMetaForAccountCloud } from '../lib/accountCloud/ticketMetadata'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
@@ -377,7 +378,71 @@ export async function importTripPlanRecords(
   input: Parameters<typeof repo.importTripPlanRecords>[0],
   options: MarkDirtyOptions = {},
 ) {
-  const result = await repo.importTripPlanRecords(input)
+  const importRepository = await import('./tripPlanImportRepository')
+  const plan = await importRepository.prepareTripPlanImport(input)
+  if (options.markDirty !== false && plan.ticketBlobs.length === 0) {
+    const steps = [
+      {
+        objectId: plan.trip.id,
+        objectType: 'trip' as const,
+        operation: 'upsert' as const,
+        payload: plan.trip as unknown as JsonObject,
+      },
+      ...plan.days.map((day) => ({
+        objectId: day.id,
+        objectType: 'day' as const,
+        operation: 'upsert' as const,
+        payload: day as unknown as JsonObject,
+      })),
+      ...plan.itineraryItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+      ...plan.ticketMetas.map((ticket) => ({
+        objectId: ticket.id,
+        objectType: 'ticket_meta' as const,
+        operation: 'upsert' as const,
+        payload: redactTicketMetaForAccountCloud(ticket) as unknown as JsonObject,
+      })),
+      ...plan.ledgerSettings.map((settings) => ({
+        objectId: settings.id,
+        objectType: 'ledger_settings' as const,
+        operation: 'upsert' as const,
+        payload: settings as unknown as JsonObject,
+      })),
+      ...plan.ledgerParticipants.map((participant) => ({
+        objectId: participant.id,
+        objectType: 'ledger_participant' as const,
+        operation: 'upsert' as const,
+        payload: participant as unknown as JsonObject,
+      })),
+      ...plan.ledgerBudgets.map((budget) => ({
+        objectId: budget.id,
+        objectType: 'ledger_budget' as const,
+        operation: 'upsert' as const,
+        payload: budget as unknown as JsonObject,
+      })),
+      ...plan.ledgerExpenses.map((expense) => ({
+        objectId: expense.id,
+        objectType: 'ledger_expense' as const,
+        operation: 'upsert' as const,
+        payload: expense as unknown as JsonObject,
+      })),
+    ]
+    if (steps.length <= ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS) {
+      const accountCloud = await executeProductAccountWorkflowIfEnabled({
+        apply: () => importRepository.applyTripPlanImportPlan(plan),
+        steps,
+        tripId: plan.trip.id,
+        workflowId: 'trip.import.commit@1',
+      })
+      if (accountCloud.handled) return accountCloud.value
+    }
+  }
+
+  const result = await importRepository.applyTripPlanImportPlan(plan)
   if (options.markDirty !== false) {
     await enqueueTripGraph(result.tripId)
     recordTripWriteForSync(result.tripId, 'trip-plan-imported', { emitChangeEvent: false })

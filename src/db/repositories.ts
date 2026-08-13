@@ -17,6 +17,15 @@ import type {
   TripReplanRecord,
   Trip,
 } from '../types'
+import type {
+  ImportTripPlanRecordsInput,
+  TripPlanImportPlan,
+} from './tripPlanImportRepository'
+
+export type {
+  ImportTripPlanRecordsInput,
+  TripPlanImportPlan,
+} from './tripPlanImportRepository'
 
 type CreateTripInput = Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripPatch = Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
@@ -152,18 +161,6 @@ export type ImportTripBackupRecordsInput = {
   ledgerBudgets?: LedgerBudget[]
   ledgerExpenses?: LedgerExpense[]
   importedTitleSuffix: string
-}
-
-export type ImportTripPlanRecordsInput = {
-  trip: Trip
-  days: Day[]
-  itineraryItems: ItineraryItem[]
-  ticketMetas: TicketMeta[]
-  ticketBlobs: TicketBlob[]
-  ledgerSettings?: LedgerSettings[]
-  ledgerParticipants?: LedgerParticipant[]
-  ledgerBudgets?: LedgerBudget[]
-  ledgerExpenses?: LedgerExpense[]
 }
 
 export async function createTrip(input: CreateTripInput) {
@@ -1549,46 +1546,25 @@ export async function importTripBackupRecords({
   return result
 }
 
-export async function importTripPlanRecords({
-  trip,
-  days,
-  itineraryItems,
-  ticketMetas,
-  ticketBlobs,
-  ledgerSettings = [],
-  ledgerParticipants = [],
-  ledgerBudgets = [],
-  ledgerExpenses = [],
-}: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
-  assertUniqueIds('Day', days.map((day) => day.id))
-  assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
-  assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+export async function importTripPlanRecords(
+  input: ImportTripPlanRecordsInput,
+): Promise<{ title: string; tripId: string }> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.importTripPlanRecords(input)
+}
 
-  return db.transaction(
-    'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses],
-    async () => {
-      await db.trips.add(trip)
-      if (days.length > 0) {
-        await db.days.bulkAdd(days)
-      }
-      if (itineraryItems.length > 0) {
-        await db.itineraryItems.bulkAdd(itineraryItems)
-      }
-      if (ticketMetas.length > 0) {
-        await db.ticketMetas.bulkAdd(ticketMetas)
-      }
-      if (ticketBlobs.length > 0) {
-        await db.ticketBlobs.bulkAdd(ticketBlobs)
-      }
-      if (ledgerSettings.length > 0) await db.ledgerSettings.bulkAdd(ledgerSettings)
-      if (ledgerParticipants.length > 0) await db.ledgerParticipants.bulkAdd(ledgerParticipants)
-      if (ledgerBudgets.length > 0) await db.ledgerBudgets.bulkAdd(ledgerBudgets)
-      if (ledgerExpenses.length > 0) await db.ledgerExpenses.bulkAdd(ledgerExpenses)
+export async function prepareTripPlanImport(
+  input: ImportTripPlanRecordsInput,
+): Promise<TripPlanImportPlan> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.prepareTripPlanImport(input)
+}
 
-      return { title: trip.title, tripId: trip.id }
-    },
-  )
+export async function applyTripPlanImportPlan(
+  plan: TripPlanImportPlan,
+): Promise<{ title: string; tripId: string }> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.applyTripPlanImportPlan(plan)
 }
 
 export async function replaceTripPlanRecords({

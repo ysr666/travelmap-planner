@@ -25,6 +25,7 @@ describe('account cloud workflow migration gate', () => {
       atomicPreflight: true,
       boundedPayloadTraversal: true,
       deterministicReplayLocks: true,
+      importGraphAtomicity: true,
       privateReceiptLedger: true,
       structuralGraphLocking: true,
       ticketBindingCompleteness: true,
@@ -193,5 +194,27 @@ describe('account cloud workflow migration gate', () => {
         '-- Mutation lock order removed.',
       ),
     })).toThrow(/Structural workflows/)
+  })
+
+  it('rejects removal of the create-only import graph and trip lifecycle boundary', () => {
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace("when 'trip.import.commit@1' then 256", "when 'trip.import.commit@1' then 255"),
+    })).toThrow(/required contract fragment/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace('create_step.expected_revision <> 0', 'create_step.expected_revision < 0'),
+    })).toThrow(/closed create-only graph/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace("|| ':trip-lifecycle:' || target_trip_id", "|| ':removed-trip-lock:' || target_trip_id"),
+    })).toThrow(/Structural workflows|trip-lifecycle|exclusively lock/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_import_workflow_shape_is_valid(text, jsonb)',
+        'grant execute on function tripmap_private.account_import_workflow_shape_is_valid(text, jsonb)',
+      ),
+    })).toThrow(/import graph validator/)
   })
 })

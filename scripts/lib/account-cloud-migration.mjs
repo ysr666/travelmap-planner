@@ -32,6 +32,8 @@ const REQUIRED_FRAGMENTS = [
   "pg_catalog.jsonb_typeof(visibility -> 'mode') is distinct from 'string'",
   "visibility ->> 'mode' not in ('all', 'assigned')",
   'pg_advisory_xact_lock',
+  'pg_advisory_xact_lock_shared',
+  "':trip-lifecycle:'",
   "':item-day:'",
   "target_object_type = 'item'",
   "target_payload ->> 'dayId'",
@@ -133,6 +135,7 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
     throw new Error('The private account-cloud RPC must authenticate inside its security-definer body.')
   }
   const normalizedPrivateFunction = privateFunction.toLowerCase()
+  const tripLifecycleLockMarker = normalizedPrivateFunction.indexOf(':trip-lifecycle:')
   const objectLockMarker = normalizedPrivateFunction.indexOf(
     '-- lock the object before any structural day or mutation identity lock',
   )
@@ -145,7 +148,8 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   if (
     !/target_object_type\s*=\s*'item'[\s\S]{0,700}target_payload\s*->>\s*'dayId'/i
       .test(privateFunction)
-    || objectLockMarker < 0
+    || tripLifecycleLockMarker < 0
+    || objectLockMarker <= tripLifecycleLockMarker
     || structuralDayLockMarker <= objectLockMarker
     || mutationLockMarker <= structuralDayLockMarker
   ) {
@@ -182,6 +186,7 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
     receiptLedger: true,
     realtimePublished: true,
     structuralDayLocking: true,
+    tripLifecycleLocking: true,
   }
 }
 

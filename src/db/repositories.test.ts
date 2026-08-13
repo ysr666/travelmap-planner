@@ -16,6 +16,8 @@ import {
   getTicketMeta,
   getTrip,
   importTripPlanRecords,
+  prepareTripPlanImport,
+  applyTripPlanImportPlan,
   listDaysByTrip,
   listItemsByDay,
   listItemsByTrip,
@@ -764,6 +766,91 @@ describe('importTripPlanRecords', () => {
     expect(await getTrip('import-trip')).toBeTruthy()
     expect(await getDay('import-day')).toBeTruthy()
     expect(await getItineraryItem('import-item')).toBeTruthy()
+  })
+
+  it('rejects orphaned references before creating any record', async () => {
+    const now = Date.now()
+    await expect(importTripPlanRecords({
+      days: [],
+      itineraryItems: [{
+        createdAt: now,
+        dayId: 'missing-day',
+        id: 'orphan-item',
+        sortOrder: 0,
+        ticketIds: [],
+        title: 'Orphan',
+        tripId: 'invalid-import',
+        updatedAt: now,
+      }],
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip: {
+        createdAt: now,
+        destination: 'A',
+        endDate: '2026-08-11',
+        id: 'invalid-import',
+        startDate: '2026-08-11',
+        title: 'Invalid',
+        updatedAt: now,
+      },
+    })).rejects.toThrow('未导入的日期')
+    await expect(getTrip('invalid-import')).resolves.toBeUndefined()
+  })
+
+  it('rechecks the empty trip baseline inside the import transaction', async () => {
+    const now = Date.now()
+    const input = {
+      days: [{ date: '2026-08-11', id: 'planned-day', sortOrder: 0, title: 'Day 1', tripId: 'planned-trip' }],
+      itineraryItems: [],
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip: {
+        createdAt: now,
+        destination: 'A',
+        endDate: '2026-08-11',
+        id: 'planned-trip',
+        startDate: '2026-08-11',
+        title: 'Planned',
+        updatedAt: now,
+      },
+    }
+    const plan = await prepareTripPlanImport(input)
+    await db.tripIntelligenceSuggestionStates.add({
+      createdAt: now,
+      id: 'concurrent-suggestion',
+      status: 'later',
+      suggestionKey: 'concurrent-suggestion',
+      tripId: input.trip.id,
+      updatedAt: now,
+    })
+
+    await expect(applyTripPlanImportPlan(plan)).rejects.toThrow('旅行数据已变化')
+    await expect(getTrip(input.trip.id)).resolves.toBeUndefined()
+    await expect(getDay('planned-day')).resolves.toBeUndefined()
+    await expect(db.tripIntelligenceSuggestionStates.get('concurrent-suggestion')).resolves.toBeDefined()
+  })
+
+  it('rejects a prepared import whose graph changed before apply', async () => {
+    const now = Date.now()
+    const plan = await prepareTripPlanImport({
+      days: [],
+      itineraryItems: [],
+      ticketBlobs: [],
+      ticketMetas: [],
+      trip: {
+        createdAt: now,
+        destination: 'A',
+        endDate: '2026-08-11',
+        id: 'stale-import',
+        startDate: '2026-08-11',
+        title: 'Prepared',
+        updatedAt: now,
+      },
+    })
+    plan.trip.title = 'Changed after preview'
+
+    await expect(applyTripPlanImportPlan(plan)).rejects.toThrow('导入计划已变化')
+    await expect(getTrip(plan.trip.id)).resolves.toBeUndefined()
   })
 })
 

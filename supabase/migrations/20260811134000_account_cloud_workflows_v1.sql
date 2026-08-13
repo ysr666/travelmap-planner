@@ -100,6 +100,267 @@ revoke all on function tripmap_private.account_payload_shape_is_safe(jsonb)
 revoke all on function tripmap_private.account_workflow_payload_is_safe(jsonb)
   from public, anon, authenticated;
 
+create or replace function tripmap_private.account_import_workflow_shape_is_valid(
+  target_trip_id text,
+  target_steps jsonb
+)
+returns boolean
+language sql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+  with workflow_steps as (
+    select
+      step.value,
+      step.value ->> 'objectType' as object_type,
+      step.value ->> 'objectId' as object_id,
+      step.value ->> 'operation' as operation,
+      (step.value ->> 'expectedRevision')::bigint as expected_revision,
+      step.value -> 'payload' as payload
+    from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  ),
+  day_orders as (
+    select
+      pg_catalog.count(*) as order_count,
+      pg_catalog.count(distinct (day_step.payload ->> 'sortOrder')::bigint) as distinct_count,
+      pg_catalog.min((day_step.payload ->> 'sortOrder')::bigint) as minimum_order,
+      pg_catalog.max((day_step.payload ->> 'sortOrder')::bigint) as maximum_order
+    from workflow_steps as day_step
+    where day_step.object_type = 'day'
+  ),
+  item_orders as (
+    select
+      item_step.payload ->> 'dayId' as day_id,
+      pg_catalog.count(*) as order_count,
+      pg_catalog.count(distinct (item_step.payload ->> 'sortOrder')::bigint) as distinct_count,
+      pg_catalog.min((item_step.payload ->> 'sortOrder')::bigint) as minimum_order,
+      pg_catalog.max((item_step.payload ->> 'sortOrder')::bigint) as maximum_order
+    from workflow_steps as item_step
+    where item_step.object_type = 'item'
+    group by item_step.payload ->> 'dayId'
+  )
+  select
+    (
+      select pg_catalog.count(*)
+      from workflow_steps as trip_step
+      where trip_step.object_type = 'trip'
+        and trip_step.object_id = target_trip_id
+        and trip_step.payload ->> 'id' = target_trip_id
+    ) = 1
+    and (
+      select pg_catalog.count(*)
+      from workflow_steps as trip_step
+      where trip_step.object_type = 'trip'
+    ) = 1
+    and not exists (
+      select 1
+      from workflow_steps as create_step
+      where create_step.operation <> 'upsert'
+        or create_step.expected_revision <> 0
+    )
+    and not exists (
+      select 1
+      from workflow_steps as day_step
+      where day_step.object_type = 'day'
+        and (
+          pg_catalog.jsonb_typeof(day_step.payload -> 'sortOrder') is distinct from 'number'
+          or day_step.payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'
+          or (day_step.payload ->> 'sortOrder')::numeric > 9007199254740991
+        )
+    )
+    and not exists (
+      select 1
+      from day_orders
+      where order_count > 0
+        and (
+          distinct_count <> order_count
+          or minimum_order not in (0, 1)
+          or maximum_order <> minimum_order + order_count - 1
+        )
+    )
+    and not exists (
+      select 1
+      from workflow_steps as item_step
+      where item_step.object_type = 'item'
+        and not exists (
+          select 1
+          from workflow_steps as day_step
+          where day_step.object_type = 'day'
+            and day_step.object_id = item_step.payload ->> 'dayId'
+        )
+    )
+    and not exists (
+      select 1
+      from item_orders
+      where distinct_count <> order_count
+        or minimum_order not in (0, 1)
+        or maximum_order <> minimum_order + order_count - 1
+    )
+    and not exists (
+      select 1
+      from workflow_steps as item_step
+      cross join lateral pg_catalog.jsonb_array_elements(
+        item_step.payload -> 'ticketIds'
+      ) as item_ticket(value)
+      left join workflow_steps as ticket_step
+        on ticket_step.object_type = 'ticket_meta'
+        and ticket_step.object_id = item_ticket.value #>> '{}'
+      where item_step.object_type = 'item'
+        and (
+          ticket_step.object_id is null
+          or ticket_step.payload ->> 'itemId' is distinct from item_step.object_id
+          or ticket_step.payload ->> 'scope' is distinct from 'item'
+        )
+    )
+    and not exists (
+      select 1
+      from workflow_steps as ticket_step
+      where ticket_step.object_type = 'ticket_meta'
+        and ticket_step.payload ? 'itemId'
+        and not exists (
+          select 1
+          from workflow_steps as item_step
+          where item_step.object_type = 'item'
+            and item_step.object_id = ticket_step.payload ->> 'itemId'
+            and item_step.payload -> 'ticketIds' ? ticket_step.object_id
+        )
+    )
+    and (
+      select pg_catalog.count(*)
+      from workflow_steps as settings_step
+      where settings_step.object_type = 'ledger_settings'
+    ) <= 1
+    and not exists (
+      select 1
+      from workflow_steps as expense_step
+      where expense_step.object_type = 'ledger_expense'
+        and (
+          (
+            expense_step.payload ? 'payerParticipantId'
+            and (
+              pg_catalog.jsonb_typeof(expense_step.payload -> 'payerParticipantId') <> 'string'
+              or not exists (
+                select 1
+                from workflow_steps as participant_step
+                where participant_step.object_type = 'ledger_participant'
+                  and participant_step.object_id = expense_step.payload ->> 'payerParticipantId'
+              )
+            )
+          )
+          or pg_catalog.jsonb_typeof(expense_step.payload -> 'splitShares') is distinct from 'array'
+          or exists (
+            select 1
+            from pg_catalog.jsonb_array_elements(
+              case
+                when pg_catalog.jsonb_typeof(expense_step.payload -> 'splitShares') = 'array'
+                  then expense_step.payload -> 'splitShares'
+                else '[]'::jsonb
+              end
+            ) as split_share(value)
+            where pg_catalog.jsonb_typeof(split_share.value) <> 'object'
+              or pg_catalog.jsonb_typeof(split_share.value -> 'participantId') <> 'string'
+              or not exists (
+                select 1
+                from workflow_steps as participant_step
+                where participant_step.object_type = 'ledger_participant'
+                  and participant_step.object_id = split_share.value ->> 'participantId'
+              )
+          )
+          or (
+            select pg_catalog.count(*)
+            from pg_catalog.jsonb_array_elements(
+              case
+                when pg_catalog.jsonb_typeof(expense_step.payload -> 'splitShares') = 'array'
+                  then expense_step.payload -> 'splitShares'
+                else '[]'::jsonb
+              end
+            ) as split_share(value)
+          ) <> (
+            select pg_catalog.count(distinct split_share.value ->> 'participantId')
+            from pg_catalog.jsonb_array_elements(
+              case
+                when pg_catalog.jsonb_typeof(expense_step.payload -> 'splitShares') = 'array'
+                  then expense_step.payload -> 'splitShares'
+                else '[]'::jsonb
+              end
+            ) as split_share(value)
+          )
+          or (
+            expense_step.payload ? 'itemIds'
+            and (
+              pg_catalog.jsonb_typeof(expense_step.payload -> 'itemIds') <> 'array'
+              or exists (
+                select 1
+                from pg_catalog.jsonb_array_elements(
+                  case
+                    when pg_catalog.jsonb_typeof(expense_step.payload -> 'itemIds') = 'array'
+                      then expense_step.payload -> 'itemIds'
+                    else '[]'::jsonb
+                  end
+                ) as expense_item(value)
+                where pg_catalog.jsonb_typeof(expense_item.value) <> 'string'
+                  or not exists (
+                    select 1
+                    from workflow_steps as item_step
+                    where item_step.object_type = 'item'
+                      and item_step.object_id = expense_item.value #>> '{}'
+                  )
+              )
+              or (
+                select pg_catalog.count(*)
+                from pg_catalog.jsonb_array_elements(
+                  case
+                    when pg_catalog.jsonb_typeof(expense_step.payload -> 'itemIds') = 'array'
+                      then expense_step.payload -> 'itemIds'
+                    else '[]'::jsonb
+                  end
+                ) as expense_item(value)
+              ) <> (
+                select pg_catalog.count(distinct expense_item.value #>> '{}')
+                from pg_catalog.jsonb_array_elements(
+                  case
+                    when pg_catalog.jsonb_typeof(expense_step.payload -> 'itemIds') = 'array'
+                      then expense_step.payload -> 'itemIds'
+                    else '[]'::jsonb
+                  end
+                ) as expense_item(value)
+              )
+            )
+          )
+          or (
+            expense_step.payload ? 'originalExpenseId'
+            and (
+              pg_catalog.jsonb_typeof(expense_step.payload -> 'originalExpenseId') <> 'string'
+              or not exists (
+                select 1
+                from workflow_steps as original_expense
+                where original_expense.object_type = 'ledger_expense'
+                  and original_expense.object_id = expense_step.payload ->> 'originalExpenseId'
+              )
+            )
+          )
+          or (
+            expense_step.payload -> 'source' ->> 'kind' = 'ticket'
+            and expense_step.payload -> 'source' ? 'sourceId'
+            and (
+              pg_catalog.jsonb_typeof(expense_step.payload -> 'source' -> 'sourceId') <> 'string'
+              or not exists (
+                select 1
+                from workflow_steps as source_ticket
+                where source_ticket.object_type = 'ticket_meta'
+                  and source_ticket.object_id = expense_step.payload -> 'source' ->> 'sourceId'
+              )
+            )
+          )
+        )
+    );
+$$;
+
+revoke all on function tripmap_private.account_import_workflow_shape_is_valid(text, jsonb)
+  from public, anon, authenticated;
+
 create or replace function tripmap_private.account_apply_workflow_v1(
   target_schema_version integer,
   target_account_hash text,
@@ -623,6 +884,21 @@ begin
     );
   end if;
 
+  if target_workflow_id = 'trip.import.commit@1'
+     and not tripmap_private.account_import_workflow_shape_is_valid(
+       target_trip_id,
+       target_steps
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'workflow_shape_invalid'
+    );
+  end if;
+
   if target_workflow_id = 'day.items.reorder@1' and (
     (
       select pg_catalog.count(distinct reorder_step.value -> 'payload' ->> 'dayId')
@@ -775,6 +1051,25 @@ begin
     ),
     'hex'
   );
+
+  -- New-trip import owns the trip lifecycle while it proves the account has no
+  -- prior object in this scope. Other workflows share the lock with ordinary
+  -- object mutations and can still run concurrently on independent objects.
+  if target_workflow_id = 'trip.import.commit@1' then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        current_user_id::text || ':trip-lifecycle:' || target_trip_id,
+        0
+      )
+    );
+  else
+    perform pg_catalog.pg_advisory_xact_lock_shared(
+      pg_catalog.hashtextextended(
+        current_user_id::text || ':trip-lifecycle:' || target_trip_id,
+        0
+      )
+    );
+  end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
@@ -1081,6 +1376,22 @@ begin
       'workflowId', target_workflow_id,
       'tripId', target_trip_id,
       'reason', 'mutation_id_reused'
+    );
+  end if;
+
+  if target_workflow_id = 'trip.import.commit@1' and exists (
+    select 1
+    from public.tripmap_account_objects as prior_trip_object
+    where prior_trip_object.owner_id = current_user_id
+      and prior_trip_object.trip_id = target_trip_id
+  ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'workflow_shape_invalid'
     );
   end if;
 

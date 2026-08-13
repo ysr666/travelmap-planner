@@ -231,6 +231,42 @@ describe('product account workflow runtime', () => {
     await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
   })
 
+  it('rejects a new-trip import when any unsubmitted local object already uses the trip scope', async () => {
+    await db.tripIntelligenceSuggestionStates.put({
+      createdAt: 1,
+      id: 'suggestion_orphan',
+      status: 'later',
+      suggestionKey: 'suggestion_orphan',
+      tripId: 'trip_import',
+      updatedAt: 1,
+    })
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: [{
+        objectId: 'trip_import',
+        objectType: 'trip',
+        operation: 'upsert',
+        payload: {
+          createdAt: 1,
+          destination: 'United Kingdom',
+          endDate: '2026-08-20',
+          id: 'trip_import',
+          startDate: '2026-08-11',
+          title: 'UK',
+          updatedAt: 1,
+        },
+      }],
+      tripId: 'trip_import',
+      workflowId: 'trip.import.commit@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
   it('rejects a Ticket workflow that omits any current reverse-linked Item', async () => {
     const ticket = makeTicket('item_a')
     const first = { ...makeItem('item_a', 1), ticketIds: [ticket.id] }

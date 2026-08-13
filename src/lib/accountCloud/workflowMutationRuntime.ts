@@ -29,7 +29,11 @@ import {
   type AccountWorkflowStepV1,
   type AccountWorkflowId,
 } from './workflowContract'
-import { readAccountWorkflowLocalPayload } from './workflowLocalCodec'
+import {
+  ACCOUNT_WORKFLOW_LOCAL_OBJECT_TYPES,
+  getAccountWorkflowLocalObjectTable,
+  readAccountWorkflowLocalPayload,
+} from './workflowLocalCodec'
 import {
   AccountWorkflowJournalError,
   createOptimisticAccountWorkflowIntent,
@@ -227,6 +231,9 @@ async function prepareWorkflowRequest<T>(
     if (singlePending > 0 || workflowPending > 0) {
       throw new AccountCloudWorkflowWriteError('conflict')
     }
+    if (input.workflowId === 'trip.import.commit@1' && (localPayload !== null || revision)) {
+      throw new AccountCloudWorkflowWriteError('conflict')
+    }
     if (localPayload !== null && !revision) requiresLegacyFallback = true
     if (revision && (
       revision.objectId !== mutation.objectId
@@ -281,6 +288,9 @@ async function prepareWorkflowRequest<T>(
   if (input.workflowId === 'ticket.bind@1') {
     await assertCompleteTicketRelationship(input.tripId, steps, database)
   }
+  if (input.workflowId === 'trip.import.commit@1') {
+    await assertEmptyTripImportBaseline(input.tripId, accountHash, database)
+  }
   try {
     return parseAccountWorkflowRequestV1({
       batchMutationId,
@@ -292,6 +302,28 @@ async function prepareWorkflowRequest<T>(
     })
   } catch {
     throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+async function assertEmptyTripImportBaseline(
+  tripId: string,
+  accountHash: string,
+  database: TravelConsoleDatabase,
+) {
+  const counts = await Promise.all([
+    ...ACCOUNT_WORKFLOW_LOCAL_OBJECT_TYPES.map((objectType) => (
+      objectType === 'trip'
+        ? getAccountWorkflowLocalObjectTable(objectType, database).get(tripId)
+          .then((record) => record === undefined ? 0 : 1)
+        : getAccountWorkflowLocalObjectTable(objectType, database).where('tripId').equals(tripId).count()
+    )),
+    database.accountObjectRevisions.where('tripId').equals(tripId).count(),
+    database.accountMutationJournal.where('tripId').equals(tripId).count(),
+    database.accountWorkflowJournal.where('tripId').equals(tripId).count(),
+  ])
+  assertActiveAccountContext(accountHash, database)
+  if (counts.some((count) => count > 0)) {
+    throw new AccountCloudWorkflowWriteError('conflict')
   }
 }
 

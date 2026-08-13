@@ -20,6 +20,7 @@ describe('account-cloud migration contract', () => {
       receiptLedger: true,
       realtimePublished: true,
       structuralDayLocking: true,
+      tripLifecycleLocking: true,
     })
   })
 
@@ -60,6 +61,10 @@ describe('account-cloud migration contract', () => {
   })
 
   it('rejects removal of item structural validation or day locking', () => {
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace("|| ':trip-lifecycle:' || target_trip_id", "|| ':removed-trip-lock:' || target_trip_id"),
+    })).toThrow(/trip-lifecycle|structural fields and lock/)
     expect(() => validateAccountCloudMigration({
       contractSource,
       migrationSql: migrationSql.replace("|| ':item-day:'", "|| ':removed-day-lock:'"),

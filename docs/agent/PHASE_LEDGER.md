@@ -3580,3 +3580,70 @@ Remote receipt for predecessor commit `f79a61e08969ea08a8ece5c66ff238edfaf7ea4e`
 - GitHub Actions run `31688507903` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
 - Cloudflare Pages deployment/check `2a94c78b-2031-4d52-8404-8508d80b30f5` passed for the same SHA.
 - These receipts close P1.3d1 remote validation only. P1.3d2 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d3 New Trip Import Commit Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining product workflows remain P1 gates
+
+Goal:
+
+- Route eligible create-only new-trip imports through the registered `trip.import.commit@1` Account Cloud workflow so one complete metadata graph is created or rejected atomically.
+- Prove the imported Trip, Days, Items, redacted Ticket metadata and ledger records form one closed graph before any local or server write.
+
+Scope:
+
+- Refactor `importTripPlanRecords` into deterministic prepare/apply phases. Preparation validates unique identities, trip ownership, Day/Item topology, Ticket reverse links and ledger references, and records that every target ID is absent; apply rechecks the same absence and graph inside one Dexie transaction.
+- Add a strict import workflow shape shared by TypeScript and SQL: exactly one Trip root matching `tripId`, create-only `expectedRevision = 0` steps, complete referenced Days/Tickets/participants, contiguous Item order per Day, exact Ticket/Item relationship parity, and no objects outside the submitted graph.
+- Route only imports with no Ticket Blob through the lazy workflow bridge. Inputs containing copied Blob data, existing-trip merge semantics, backup ID remapping or destructive restore remain entirely on their existing legacy path before mutation until their own reviewed lifecycle contracts exist.
+- Keep the compile-time rollout gates closed. Fully eligible but not yet bootstrapped create graphs may use the V2 workflow because every object must be locally absent and have revision zero; any collision, pending journal entry, account switch or stale plan fails closed before apply.
+
+No-go:
+
+- No existing-trip AI merge, `replaceTripPlanRecords`, backup restore, Ticket Blob upload/delete, Ticket cache lifecycle, deletion, Supabase Preview/Production write, real account mutation, Provider call, or rollout-gate change.
+- No overwrite or remap through `trip.import.commit@1`, no caller-supplied revision/mutation identity, no partial graph, no orphan reference, no cross-trip record, no fallback after any imported object is visible, and no parallel legacy outbox for a V2-handled import.
+- No private Ticket fields in cloud payloads or receipts. `fileName`, locations, URLs, notes, structured extraction, Blob/OCR content and source-file material remain local-only.
+
+Likely files:
+
+- `src/db/repositories.ts` and tests; `src/db/trackedMutations.ts` and Account Cloud tests; Account Cloud workflow contracts/runtime/tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Minimal Trip import, complete Day/Item/Ticket/ledger graph, missing root, duplicate root/object, nonzero revision, existing-ID collision, cross-trip record, missing Day, non-contiguous order, asymmetric Ticket binding, missing ledger participant, private Ticket redaction, Blob legacy fallback, pending journal conflict, offline retention, terminal conflict rollback, account switch, replay idempotency, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, relevant import E2E, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. A permissive import batch can overwrite an existing account object, commit an orphaned relationship, or expose private Ticket material while still looking like one successful import in the UI.
+
+Stop conditions:
+
+- Stop and repair if any existing object can be overwritten, the Trip root can be omitted or duplicated, a referenced Day/Ticket/participant can be outside the batch, Ticket links disagree, copied Blob data reaches the workflow, an import conflict leaves any new local record behind, or a V2-handled import also enters legacy synchronization.
+
+Local result:
+
+- Extracted import preparation and apply into an on-demand repository module. Preparation validates one closed Trip graph, captures an immutable structural fingerprint and proves the complete account-local destination is empty; apply recomputes the graph and baseline inside one Dexie transaction before writing any object.
+- Eligible imports without Ticket Blob data and with at most 256 workflow steps now use `trip.import.commit@1`. The request contains only registered object kinds and redacted Ticket metadata, skips the legacy outbox/snapshot path after V2 handling, and rolls back the complete local graph on a terminal server conflict.
+- TypeScript and SQL now require exactly one matching Trip root, create-only revision zero, unique identities, contiguous Day/Item ordering, complete Item-to-Day references, exact Ticket/Item relationship parity, at most one ledger settings record and valid participant/item/original-expense/Ticket ledger references. Unknown fields, sensitive Ticket data, partial graphs and existing trip-scope objects are rejected before writes.
+- Core single-object mutations and workflows share a trip-lifecycle advisory lock. Imports take the exclusive lifecycle lock while other mutations take the shared lock, closing the race in which a concurrent object could appear between import baseline validation and commit.
+- Imports containing Blob data or more than 256 steps stay wholly on the previous legacy path before mutation. Existing-trip merge, backup ID remapping and destructive restore remain out of scope; both Account Cloud compile-time rollout gates remain `false`.
+- The import repository and secondary Settings detail pages remain dynamic runtime-cache assets. This preserves the production and E2E precache budget, but first-ever offline access to those chunks must be resolved before full cutover.
+
+Review:
+
+- Scoped local review covered arbitrary object and field injection, missing/duplicate Trip roots, orphan Day/Ticket/ledger references, asymmetric Ticket links, stale plan fingerprints, concurrent local object creation, server-side existing-scope collisions, account switching, private Ticket redaction, conflict compensation, legacy fallback before write and startup/PWA reachability.
+- The first full E2E build exceeded the 2500 KiB test-mode precache ceiling by 0.2 KiB. The import repository and three secondary Settings detail chunks were moved to the existing runtime asset cache; the clean rerun then passed all 194 tests and the production build stayed below budget.
+- Remaining risk is explicit: imports with Blob data or more than 256 steps, merge/backup/replace semantics, Supabase Preview contention, real response loss, real bootstrap, Realtime, second-device/empty-device recovery and first-use offline import have no V2 receipt. A chunking or fail-closed product decision is required before full cutover can reject the legacy path for imports above 256 steps.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 71 pgTAP checks, and `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage dynamic-SQL helper warnings.
+- Focused repository/tracked-mutation/contract/runtime/migration regression passed 8 files and 116 tests. The complete unit suite passed 238 files and 1,960 tests. `npm run typecheck`, `npm run lint`, capability alignment, Account Cloud and Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- `npm run build` passed at 479.4 KiB entry, 865.2 KiB initial JS, 248.7 KiB initial gzip, 10 startup chunks and 2482.1 KiB/125-entry precache. The workflow and import runtimes remain outside the startup graph and precache.
+- Full serial Playwright passed all 194 tests in 7.5 minutes, including import, PWA current/historical upgrades, responsive/golden coverage and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `55167b6750500b63a67bff3f9f33cc30f40b58ab`:
+
+- GitHub Actions run `31692752122` passed Build, Type Check, Lint, Unit Tests and the complete E2E job in 5 minutes 41 seconds.
+- Cloudflare Pages deployment/check `843aa52b-6e02-4c74-86fa-dffdde2fd5b0` passed for the same SHA.
+- These receipts close P1.3d2 remote validation only. P1.3d3 requires its own same-SHA receipts after commit and push.

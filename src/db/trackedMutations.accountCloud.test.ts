@@ -20,6 +20,7 @@ import {
   createItineraryItem,
   createTicketMeta,
   createTrip,
+  importTripPlanRecords,
   moveItineraryItemBetweenDays,
   reorderDayItems,
   updateItineraryItem,
@@ -139,6 +140,111 @@ describe('tracked mutations account-cloud cutover', () => {
     await expect(db.accountObjectRevisions.count()).resolves.toBe(3)
     await expect(db.accountObjectRevisions.get(`item:${item.id}`)).resolves.toMatchObject({ revision: 2 })
     await expect(db.accountObjectRevisions.get(`ticket_meta:${ticket.id}`)).resolves.toBeUndefined()
+  })
+
+  it('commits one complete new-trip import graph without a legacy write', async () => {
+    const records = makeTripImportRecords()
+
+    const result = await importTripPlanRecords(records)
+
+    expect(result).toEqual({ title: records.trip.title, tripId: records.trip.id })
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    const request = mocks.workflowCommit.mock.calls[0]?.[0] as AccountWorkflowRequestV1
+    expect(request.workflowId).toBe('trip.import.commit@1')
+    expect(request.steps).toHaveLength(8)
+    expect(request.steps.every((step) => step.expectedRevision === 0)).toBe(true)
+    expect(request.steps.map((step) => step.objectType)).toEqual([
+      'trip',
+      'day',
+      'item',
+      'ticket_meta',
+      'ledger_settings',
+      'ledger_participant',
+      'ledger_budget',
+      'ledger_expense',
+    ])
+    expect(JSON.stringify(request)).not.toMatch(/private-ticket\.pdf|private note|referenceLocation|structuredFields/)
+    await expect(db.ticketMetas.get('ticket_import')).resolves.toMatchObject({
+      fileName: 'private-ticket.pdf',
+      note: 'private note',
+      referenceLocation: '/private/ticket.pdf',
+    })
+    await expect(db.accountObjectRevisions.count()).resolves.toBe(8)
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+  })
+
+  it('rolls back every imported record when the server rejects one step', async () => {
+    const records = makeTripImportRecords()
+    mocks.workflowCommit.mockImplementationOnce(async (request: AccountWorkflowRequestV1) => ({
+      batchMutationId: request.batchMutationId,
+      conflicts: [{
+        currentObject: null,
+        currentRevision: 0,
+        mutationId: request.steps[0].mutationId,
+        objectId: request.steps[0].objectId,
+        objectType: request.steps[0].objectType,
+        stepId: request.steps[0].stepId,
+      }],
+      reason: 'revision_mismatch' as const,
+      schemaVersion: 1 as const,
+      status: 'conflict' as const,
+      tripId: request.tripId,
+      workflowId: request.workflowId,
+    }))
+
+    await expect(importTripPlanRecords(records)).rejects.toMatchObject({ code: 'conflict' })
+
+    await expect(db.trips.get(records.trip.id)).resolves.toBeUndefined()
+    await expect(db.days.where('tripId').equals(records.trip.id).count()).resolves.toBe(0)
+    await expect(db.itineraryItems.where('tripId').equals(records.trip.id).count()).resolves.toBe(0)
+    await expect(db.ticketMetas.where('tripId').equals(records.trip.id).count()).resolves.toBe(0)
+    await expect(db.ledgerExpenses.where('tripId').equals(records.trip.id).count()).resolves.toBe(0)
+    await expect(db.accountObjectRevisions.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([
+      expect.objectContaining({ optimisticResolution: 'rolled_back', status: 'conflict' }),
+    ])
+  })
+
+  it('keeps copied Ticket Blob imports entirely on the legacy lifecycle path', async () => {
+    const records = makeTripImportRecords()
+    records.ticketMetas[0] = { ...records.ticketMetas[0], storageMode: 'copy' }
+    records.ticketBlobs = [{
+      blob: new Blob(['ticket'], { type: 'application/pdf' }),
+      ticketId: records.ticketMetas[0].id,
+    }]
+
+    await importTripPlanRecords(records)
+
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.ticketBlobs.get(records.ticketMetas[0].id)).resolves.toBeDefined()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+    expect(await db.syncOutbox.count()).toBeGreaterThan(0)
+  })
+
+  it('keeps imports larger than the registered atomic workflow on the legacy path', async () => {
+    const records = makeTripImportRecords()
+    records.days = Array.from({ length: 256 }, (_, index) => ({
+      date: `2026-08-${String((index % 20) + 1).padStart(2, '0')}`,
+      id: `day_import_${index}`,
+      sortOrder: index,
+      title: `Day ${index + 1}`,
+      tripId: records.trip.id,
+    }))
+    records.itineraryItems = []
+    records.ticketMetas = []
+    records.ledgerSettings = []
+    records.ledgerParticipants = []
+    records.ledgerBudgets = []
+    records.ledgerExpenses = []
+
+    await importTripPlanRecords(records)
+
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.days.where('tripId').equals(records.trip.id).count()).resolves.toBe(256)
+    expect(await db.syncOutbox.count()).toBeGreaterThan(0)
   })
 
   it('keeps an existing object without a V2 revision on the legacy path', async () => {
@@ -477,6 +583,101 @@ describe('tracked mutations account-cloud cutover', () => {
     await expect(db.syncOutbox.count()).resolves.toBe(0)
   })
 })
+
+function makeTripImportRecords(): repo.ImportTripPlanRecordsInput {
+  const tripId = 'trip_import'
+  const now = 100
+  return {
+    days: [{
+      date: '2026-08-11',
+      id: 'day_import',
+      sortOrder: 0,
+      title: 'Arrival',
+      tripId,
+    }],
+    itineraryItems: [{
+      createdAt: now,
+      dayId: 'day_import',
+      id: 'item_import',
+      sortOrder: 0,
+      ticketIds: ['ticket_import'],
+      title: 'Edinburgh Castle',
+      tripId,
+      updatedAt: now,
+    }],
+    ledgerBudgets: [{
+      amountMinor: 100_000,
+      createdAt: now,
+      currency: 'GBP',
+      id: 'budget_import',
+      scope: 'trip',
+      tripId,
+      updatedAt: now,
+    }],
+    ledgerExpenses: [{
+      amountMinor: 2_500,
+      category: 'admission',
+      createdAt: now,
+      currency: 'GBP',
+      date: '2026-08-11',
+      id: 'expense_import',
+      itemIds: ['item_import'],
+      payerParticipantId: 'participant_import',
+      source: { kind: 'ticket', sourceId: 'ticket_import' },
+      splitMode: 'equal',
+      splitShares: [{ participantId: 'participant_import', weight: 1 }],
+      status: 'confirmed',
+      title: 'Admission',
+      tripId,
+      updatedAt: now,
+    }],
+    ledgerParticipants: [{
+      createdAt: now,
+      displayName: 'Owner',
+      id: 'participant_import',
+      isSelf: true,
+      tripId,
+      updatedAt: now,
+    }],
+    ledgerSettings: [{
+      createdAt: now,
+      homeCurrency: 'CNY',
+      id: 'settings_import',
+      settlementCurrency: 'CNY',
+      tripCurrency: 'GBP',
+      tripId,
+      updatedAt: now,
+    }],
+    ticketBlobs: [],
+    ticketMetas: [{
+      createdAt: now,
+      fileName: 'private-ticket.pdf',
+      fileType: 'pdf',
+      id: 'ticket_import',
+      itemId: 'item_import',
+      mimeType: 'application/pdf',
+      note: 'private note',
+      referenceLocation: '/private/ticket.pdf',
+      scope: 'item',
+      size: 2_048,
+      storageMode: 'reference',
+      structuredFields: { schemaVersion: 1, status: 'ready' },
+      ticketCategory: 'admission_ticket',
+      title: 'Castle admission',
+      tripId,
+      updatedAt: now,
+    }],
+    trip: {
+      createdAt: now,
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      id: tripId,
+      startDate: '2026-08-11',
+      title: 'UK',
+      updatedAt: now,
+    },
+  }
+}
 
 function successResult(mutation: AccountObjectMutationV1, revision: number) {
   return {

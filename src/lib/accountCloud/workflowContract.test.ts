@@ -163,6 +163,20 @@ describe('account workflow contract', () => {
       steps: [makeLedgerStep()],
     })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
 
+    const tripImport = makeWorkflow('trip.import.commit@1')
+    for (const steps of [
+      tripImport.steps.filter((step) => step.objectType !== 'trip'),
+      tripImport.steps.map((step) => step.objectType === 'trip'
+        ? { ...step, expectedRevision: 1 }
+        : step),
+      tripImport.steps.map((step) => step.objectType === 'item'
+        ? { ...step, payload: { ...step.payload, dayId: 'day_missing' } }
+        : step),
+    ]) {
+      expect(() => parseAccountWorkflowRequestV1({ ...tripImport, steps }))
+        .toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+    }
+
     const binding = makeWorkflow('ticket.bind@1')
     for (const ticketIds of [['ticket_a', 'ticket_a'], ['ticket_a', 1], ['invalid id']]) {
       expect(() => parseAccountWorkflowRequestV1({
@@ -283,10 +297,14 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
       steps = [makeItemStep({ payload: makeItemPayload('item_a', { dayId: 'day_b', sortOrder: 1 }) })]
       break
     case 'trip.import.commit@1':
-      steps = [{
-        ...makeItemStep(),
-        expectedRevision: 0,
-      }]
+      steps = [
+        makeTripImportStep(),
+        makeDayImportStep(),
+        makeItemStep({
+          expectedRevision: 0,
+          payload: makeItemPayload('item_a', { dayId: 'day_import', sortOrder: 0 }),
+        }),
+      ]
       break
     case 'ticket.bind@1':
       steps = [
@@ -309,6 +327,38 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
     steps,
     tripId: TRIP_ID,
     workflowId,
+  }
+}
+
+function makeTripImportStep(): AccountWorkflowStepV1 {
+  return {
+    expectedRevision: 0,
+    mutationId: '66666666-6666-4666-8666-666666666666',
+    objectId: TRIP_ID,
+    objectSchemaVersion: 1,
+    objectType: 'trip',
+    operation: 'upsert',
+    payload: { id: TRIP_ID, title: 'United Kingdom' },
+    stepId: 'trip_step',
+  }
+}
+
+function makeDayImportStep(): AccountWorkflowStepV1 {
+  return {
+    expectedRevision: 0,
+    mutationId: '77777777-7777-4777-8777-777777777777',
+    objectId: 'day_import',
+    objectSchemaVersion: 1,
+    objectType: 'day',
+    operation: 'upsert',
+    payload: {
+      date: '2026-07-10',
+      id: 'day_import',
+      sortOrder: 0,
+      title: 'Day 1',
+      tripId: TRIP_ID,
+    },
+    stepId: 'day_step',
   }
 }
 

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public, pg_temp;
 
-select plan(63);
+select plan(71);
 
 create function pg_temp.run_account_workflow(
   target_account_hash text,
@@ -57,7 +57,7 @@ insert into workflow_fixtures (fixture_name, steps) values (
       "operation": "upsert",
       "expectedRevision": 0,
       "objectSchemaVersion": 1,
-      "payload": {"id": "day_1", "tripId": "trip_1", "date": "2026-07-10"}
+	      "payload": {"id": "day_1", "tripId": "trip_1", "date": "2026-07-10", "sortOrder": 1}
     },
     {
       "stepId": "item_1",
@@ -176,6 +176,14 @@ select ok(
     'select'
   ),
   'workflow receipts are not readable by browser roles'
+);
+select ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_import_workflow_shape_is_valid(text,jsonb)',
+    'execute'
+  ),
+  'the import graph validator is not callable by browser roles'
 );
 select throws_ok(
   $$
@@ -320,6 +328,89 @@ select is(
 select is(
   pg_temp.run_account_workflow(
     'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000171',
+    'trip.import.commit@1',
+    'missing_root_trip',
+    '[{"stepId":"day","mutationId":"20000000-0000-4000-8000-000000000271","objectType":"day","objectId":"missing_root_day","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"missing_root_day","tripId":"missing_root_trip","sortOrder":0}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a create-only import requires exactly one matching Trip root'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000172',
+    'trip.import.commit@1',
+    'nonzero_import_trip',
+    '[{"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000272","objectType":"trip","objectId":"nonzero_import_trip","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"nonzero_import_trip"}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a new-trip import cannot update an existing revision'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000173',
+    'trip.import.commit@1',
+    'missing_day_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000273","objectType":"trip","objectId":"missing_day_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"missing_day_trip"}},
+      {"stepId":"item","mutationId":"20000000-0000-4000-8000-000000000274","objectType":"item","objectId":"missing_day_item","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"missing_day_item","tripId":"missing_day_trip","dayId":"missing_day","sortOrder":0,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'an imported Item must reference a Day in the same batch'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000174',
+    'trip.import.commit@1',
+    'gapped_import_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000275","objectType":"trip","objectId":"gapped_import_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"gapped_import_trip"}},
+      {"stepId":"day","mutationId":"20000000-0000-4000-8000-000000000276","objectType":"day","objectId":"gapped_import_day","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"gapped_import_day","tripId":"gapped_import_trip","sortOrder":0}},
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000277","objectType":"item","objectId":"gapped_import_item_a","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"gapped_import_item_a","tripId":"gapped_import_trip","dayId":"gapped_import_day","sortOrder":0,"ticketIds":[]}},
+      {"stepId":"item_b","mutationId":"20000000-0000-4000-8000-000000000278","objectType":"item","objectId":"gapped_import_item_b","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"gapped_import_item_b","tripId":"gapped_import_trip","dayId":"gapped_import_day","sortOrder":2,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'imported Item order must be contiguous within each Day'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000175',
+    'trip.import.commit@1',
+    'asymmetric_ticket_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000279","objectType":"trip","objectId":"asymmetric_ticket_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"asymmetric_ticket_trip"}},
+      {"stepId":"day","mutationId":"20000000-0000-4000-8000-000000000280","objectType":"day","objectId":"asymmetric_ticket_day","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"asymmetric_ticket_day","tripId":"asymmetric_ticket_trip","sortOrder":0}},
+      {"stepId":"item","mutationId":"20000000-0000-4000-8000-000000000281","objectType":"item","objectId":"asymmetric_ticket_item","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"asymmetric_ticket_item","tripId":"asymmetric_ticket_trip","dayId":"asymmetric_ticket_day","sortOrder":0,"ticketIds":["asymmetric_ticket"]}},
+      {"stepId":"ticket","mutationId":"20000000-0000-4000-8000-000000000282","objectType":"ticket_meta","objectId":"asymmetric_ticket","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"createdAt":1,"fileType":"pdf","id":"asymmetric_ticket","tripId":"asymmetric_ticket_trip","mimeType":"application/pdf","scope":"trip","size":10,"storageMode":"reference","updatedAt":1}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'Ticket and Item relationships must agree in both directions'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000176',
+    'trip.import.commit@1',
+    'orphan_ledger_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000283","objectType":"trip","objectId":"orphan_ledger_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"orphan_ledger_trip"}},
+      {"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000284","objectType":"ledger_expense","objectId":"orphan_expense","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"orphan_expense","tripId":"orphan_ledger_trip","payerParticipantId":"missing_person","splitShares":[{"participantId":"missing_person","weight":1}],"source":{"kind":"manual"}}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'imported ledger references must resolve inside the same batch'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
     '10000000-0000-4000-8000-000000000001',
     'trip.import.commit@1',
     'trip_1',
@@ -327,6 +418,17 @@ select is(
   ) ->> 'status',
   'applied',
   'a registered import commits one atomic batch'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000177',
+    'trip.import.commit@1',
+    'trip_1',
+    '[{"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000285","objectType":"trip","objectId":"trip_1","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"trip_1","title":"Overwrite"}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a new import cannot append to or overwrite an existing trip scope'
 );
 
 reset role;
@@ -452,16 +554,16 @@ select is(
     'bd7662a5eeb41614e720d477abfcb227',
     '10000000-0000-4000-8000-000000000002',
     'trip.import.commit@1',
-    'trip_1',
+    'trip_mutation_reuse',
     '[{
       "stepId":"trip",
       "mutationId":"20000000-0000-4000-8000-000000000001",
       "objectType":"trip",
-      "objectId":"trip_1",
+      "objectId":"trip_mutation_reuse",
       "operation":"upsert",
-      "expectedRevision":1,
+      "expectedRevision":0,
       "objectSchemaVersion":1,
-      "payload":{"id":"trip_1","title":"Changed"}
+      "payload":{"id":"trip_mutation_reuse","title":"Changed"}
     }]'::jsonb
   ) ->> 'reason',
   'mutation_id_reused',
@@ -472,32 +574,32 @@ select is(
     'bd7662a5eeb41614e720d477abfcb227',
     '10000000-0000-4000-8000-000000000003',
     'trip.import.commit@1',
-    'trip_1',
+    'trip_atomic_fail',
     '[
       {
-        "stepId":"day_new",
+        "stepId":"trip_new",
         "mutationId":"20000000-0000-4000-8000-000000000031",
-        "objectType":"day",
-        "objectId":"day_atomic_fail",
+        "objectType":"trip",
+        "objectId":"trip_atomic_fail",
         "operation":"upsert",
         "expectedRevision":0,
         "objectSchemaVersion":1,
-        "payload":{"id":"day_atomic_fail","tripId":"trip_1"}
+        "payload":{"id":"trip_atomic_fail","title":"Atomic"}
       },
       {
-        "stepId":"trip_stale",
+        "stepId":"day_collision",
         "mutationId":"20000000-0000-4000-8000-000000000032",
-        "objectType":"trip",
-        "objectId":"trip_1",
+        "objectType":"day",
+        "objectId":"day_1",
         "operation":"upsert",
         "expectedRevision":0,
         "objectSchemaVersion":1,
-        "payload":{"id":"trip_1","title":"Stale"}
+        "payload":{"id":"day_1","tripId":"trip_atomic_fail","sortOrder":0}
       }
     ]'::jsonb
-  ) ->> 'status',
-  'conflict',
-  'one stale step rejects the whole batch before writes'
+  ) ->> 'reason',
+  'object_trip_mismatch',
+  'one colliding object rejects the whole batch before writes'
 );
 
 reset role;
@@ -506,7 +608,7 @@ select is(
     select pg_catalog.count(*)
     from public.tripmap_account_objects
     where owner_id = '11111111-1111-4111-8111-111111111111'
-      and object_id = 'day_atomic_fail'
+      and object_id = 'trip_atomic_fail'
   ),
   0::bigint,
   'a failed batch leaves no earlier-step object behind'
@@ -957,6 +1059,26 @@ select throws_ok(
       'rollback_trip',
       '[
         {
+          "stepId":"trip",
+          "mutationId":"20000000-0000-4000-8000-000000000089",
+          "objectType":"trip",
+          "objectId":"rollback_trip",
+          "operation":"upsert",
+          "expectedRevision":0,
+          "objectSchemaVersion":1,
+          "payload":{"id":"rollback_trip","title":"Rollback"}
+        },
+        {
+          "stepId":"day",
+          "mutationId":"20000000-0000-4000-8000-000000000090",
+          "objectType":"day",
+          "objectId":"rollback_day",
+          "operation":"upsert",
+          "expectedRevision":0,
+          "objectSchemaVersion":1,
+          "payload":{"id":"rollback_day","tripId":"rollback_trip","sortOrder":0}
+        },
+        {
           "stepId":"first",
           "mutationId":"20000000-0000-4000-8000-000000000091",
           "objectType":"item",
@@ -1029,8 +1151,8 @@ select is(
     'move_trip',
     '[
       {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000110","objectType":"trip","objectId":"move_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_trip","title":"Move trip"}},
-      {"stepId":"day_1","mutationId":"20000000-0000-4000-8000-000000000111","objectType":"day","objectId":"move_day_1","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_1","tripId":"move_trip","date":"2026-08-01"}},
-      {"stepId":"day_2","mutationId":"20000000-0000-4000-8000-000000000112","objectType":"day","objectId":"move_day_2","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_2","tripId":"move_trip","date":"2026-08-02"}},
+      {"stepId":"day_1","mutationId":"20000000-0000-4000-8000-000000000111","objectType":"day","objectId":"move_day_1","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_1","tripId":"move_trip","date":"2026-08-01","sortOrder":1}},
+      {"stepId":"day_2","mutationId":"20000000-0000-4000-8000-000000000112","objectType":"day","objectId":"move_day_2","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_2","tripId":"move_trip","date":"2026-08-02","sortOrder":2}},
       {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000113","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_1","title":"A","sortOrder":1,"ticketIds":[]}},
       {"stepId":"item_b","mutationId":"20000000-0000-4000-8000-000000000114","objectType":"item","objectId":"move_item_b","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_b","tripId":"move_trip","dayId":"move_day_1","title":"B","sortOrder":2,"ticketIds":[]}},
       {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000115","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":1,"ticketIds":[]}}

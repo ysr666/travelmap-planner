@@ -697,6 +697,15 @@ begin
     'hex'
   );
 
+  -- Share the trip lifecycle lock with ordinary writes so a create-only import
+  -- can exclusively prove an empty trip scope before committing its graph.
+  perform pg_catalog.pg_advisory_xact_lock_shared(
+    pg_catalog.hashtextextended(
+      current_user_id::text || ':trip-lifecycle:' || target_trip_id,
+      0
+    )
+  );
+
   -- Lock the object before any structural day or mutation identity lock.
   -- This also serializes absent-row creates by object identity.
   perform pg_catalog.pg_advisory_xact_lock(

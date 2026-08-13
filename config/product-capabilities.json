@@ -116,9 +116,11 @@
           "src/lib/accountCloud/workflowLocalCodec.ts",
           "src/lib/accountCloud/workflowLocalStore.ts",
           "src/lib/accountCloud/workflowLocalTypes.ts",
+          "src/lib/accountCloud/workflowLimits.ts",
           "src/lib/accountCloud/workflowMutationRuntime.ts",
           "src/lib/accountCloud/workflowRuntimeLoader.ts",
           "src/db/repositories.ts",
+          "src/db/tripPlanImportRepository.ts",
           "src/db/trackedMutations.ts",
           "src/components/cloud/AccountMutationJournalController.tsx",
           "supabase/migrations/20260811092148_account_cloud_core_v2.sql",
@@ -150,7 +152,7 @@
         ],
         "receipts": ["docs/CLOUD_DATA_MODEL_V2.md"]
       },
-      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、严格分页读取、双读漂移分类、非破坏 bootstrap receipt、Ticket 最小字段白名单、Trip/Day/Item 单对象适配器、首批 7 个注册原子 workflow 及其本机整批事务协调器已实现；同日重排、跨日移动和既有 Ticket metadata 编辑/绑定已接入完整 after graph workflow，结构和关系字段不能绕过注册 workflow。读写硬门槛仍关闭；其余 4 类 workflow、删除级联、恢复、Ticket 创建/删除/Blob 与剩余对象 codec 尚未接入，workflow runtime 首次离线加载、Preview migration、真实 bootstrap/多连接并发幂等收据、Realtime、空设备恢复和生产切换均未完成"],
+      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、严格分页读取、双读漂移分类、非破坏 bootstrap receipt、Ticket 最小字段白名单、Trip/Day/Item 单对象适配器、首批 7 个注册原子 workflow 及其本机整批事务协调器已实现；同日重排、跨日移动、既有 Ticket metadata 编辑/绑定和无 Blob 的 create-only 新旅行导入已接入完整 workflow，结构、关系和非空旅行 scope 不能绕过注册合同。读写硬门槛仍关闭；其余 3 类 workflow、删除级联、恢复、Ticket 创建/删除/Blob 与剩余对象 codec 尚未接入，workflow/import runtime 首次离线加载、Preview migration、真实 bootstrap/多连接并发幂等收据、Realtime、空设备恢复和生产切换均未完成"],
       "operations": {
         "slo": "在线写入确认 P95 <= 2 秒",
         "alert": "确认失败率 > 1% 或检测到未解决的数据丢失",

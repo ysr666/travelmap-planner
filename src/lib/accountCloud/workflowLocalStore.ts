@@ -220,6 +220,14 @@ export async function createOptimisticAccountWorkflowIntent<T>({
     ? [database.days]
     : request.workflowId === 'ticket.bind@1'
       ? [database.itineraryItems]
+      : request.workflowId === 'trip.import.commit@1'
+        ? [
+            database.ticketBlobs,
+            database.tripIntelligenceAppliedChanges,
+            database.tripIntelligenceSuggestionStates,
+            database.tripReplanEvents,
+            database.tripReplanRecords,
+          ]
     : []
   const tables = [
     database.accountMutationJournal,

@@ -45,7 +45,7 @@ export const ACCOUNT_WORKFLOW_DEFINITIONS = {
     'ledger_budget',
     'ledger_expense',
   ], ['upsert'], 1, 256),
-  'ticket.bind@1': workflow(['ticket_meta', 'item'], ['upsert'], 2, 33),
+  'ticket.bind@1': workflow(['ticket_meta', 'item'], ['upsert'], 1, 33),
   'ledger.batch@1': workflow([
     'ledger_settings',
     'ledger_participant',

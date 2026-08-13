@@ -121,6 +121,27 @@ describe('account mutation builder', () => {
     expect(JSON.stringify(mutation)).not.toMatch(/secret|passport|booking 456|Users/)
   })
 
+  it('normalizes legacy Ticket scope without exposing private local fields', () => {
+    const ticket: TicketMeta = {
+      createdAt: 1,
+      fileName: 'legacy.pdf',
+      fileType: 'pdf',
+      id: 'ticket_legacy',
+      itemId: 'item_first',
+      mimeType: 'application/pdf',
+      note: 'private',
+      size: 100,
+      tripId: 'trip_uk',
+      updatedAt: 2,
+    }
+
+    expect(redactTicketMetaForAccountCloud(ticket)).toMatchObject({
+      itemId: 'item_first',
+      scope: 'item',
+    })
+    expect(JSON.stringify(redactTicketMetaForAccountCloud(ticket))).not.toContain('private')
+  })
+
   it('rejects unregistered Ticket metadata fields at the generic contract boundary', () => {
     expect(() => parseAccountObjectMutationV1({
       ...options,

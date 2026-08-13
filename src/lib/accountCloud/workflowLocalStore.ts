@@ -218,6 +218,8 @@ export async function createOptimisticAccountWorkflowIntent<T>({
   const structuralTables = request.workflowId === 'day.items.reorder@1'
     || request.workflowId === 'item.move@1'
     ? [database.days]
+    : request.workflowId === 'ticket.bind@1'
+      ? [database.itineraryItems]
     : []
   const tables = [
     database.accountMutationJournal,

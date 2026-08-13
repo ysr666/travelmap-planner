@@ -98,6 +98,40 @@ describe('account cloud mutation contract', () => {
     }
   })
 
+  it('accepts only bounded redacted Ticket metadata with a consistent item scope', () => {
+    const valid = makeMutation({
+      objectId: 'ticket_first',
+      objectType: 'ticket_meta',
+      payload: makeTicketPayload(),
+    })
+    expect(parseAccountObjectMutationV1(valid)).toEqual(valid)
+
+    const ticketWithoutItem = makeTicketPayload()
+    Reflect.deleteProperty(ticketWithoutItem, 'itemId')
+    for (const payload of [
+      ticketWithoutItem,
+      { ...makeTicketPayload(), scope: 'trip' },
+      { ...makeTicketPayload(), fileType: 'html' },
+      { ...makeTicketPayload(), mimeType: 'application/pdf\nsecret' },
+      { ...makeTicketPayload(), size: -1 },
+      { ...makeTicketPayload(), updatedAt: 0 },
+      { ...makeTicketPayload(), storageMode: 'indexeddb' },
+      { ...makeTicketPayload(), ticketCategory: 'attraction' },
+      { ...makeTicketPayload(), sharedVisibility: { mode: 'assigned', memberIds: ['member_a', 'member_a'] } },
+      { ...makeTicketPayload(), sharedVisibility: { mode: 'all', memberIds: [] } },
+      { ...makeTicketPayload(), sharedVisibility: {} },
+    ]) {
+      expectContractError(
+        () => parseAccountObjectMutationV1(makeMutation({
+          objectId: 'ticket_first',
+          objectType: 'ticket_meta',
+          payload,
+        })),
+        'sensitive_payload',
+      )
+    }
+  })
+
   it('rejects non-JSON, cyclic, and oversized payloads', () => {
     expectContractError(
       () => parseAccountObjectMutationV1(makeMutation({ payload: { ...makePayload(), invalid: new Date() } })),
@@ -170,6 +204,20 @@ describe('account cloud result contract', () => {
     }).status).toBe('conflict')
   })
 
+  it('parses the registered-workflow-required rejection without exposing server detail', () => {
+    expect(parseAccountObjectMutationResultV1({
+      mutationId: UUID_A,
+      reason: 'workflow_required',
+      schemaVersion: 1,
+      status: 'rejected',
+    })).toEqual({
+      mutationId: UUID_A,
+      reason: 'workflow_required',
+      schemaVersion: 1,
+      status: 'rejected',
+    })
+  })
+
   it('rejects unknown fields, statuses, and inconsistent tombstones', () => {
     expectContractError(
       () => parseAccountObjectMutationResultV1({
@@ -231,6 +279,24 @@ function makePayload() {
     title: 'Arrival',
     tripId: 'trip_uk',
     updatedAt: 1,
+  }
+}
+
+function makeTicketPayload() {
+  return {
+    createdAt: 1,
+    fileType: 'pdf',
+    id: 'ticket_first',
+    itemId: 'item_first',
+    mimeType: 'application/pdf',
+    scope: 'item',
+    sharedVisibility: { memberIds: ['member_a'], mode: 'assigned' },
+    size: 1024,
+    storageMode: 'copy',
+    ticketCategory: 'admission_ticket',
+    title: 'London admission',
+    tripId: 'trip_uk',
+    updatedAt: 2,
   }
 }
 

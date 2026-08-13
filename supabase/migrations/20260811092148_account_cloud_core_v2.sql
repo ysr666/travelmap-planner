@@ -206,6 +206,193 @@ begin
 end;
 $$;
 
+create or replace function tripmap_private.account_ticket_meta_payload_is_valid(
+  target_payload jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  visibility jsonb;
+begin
+  if pg_catalog.jsonb_typeof(target_payload) <> 'object'
+     or exists (
+       select 1
+       from pg_catalog.jsonb_object_keys(target_payload) as ticket_field(field_name)
+       where ticket_field.field_name not in (
+         'bookingId',
+         'createdAt',
+         'fileType',
+         'id',
+         'itemId',
+         'mimeType',
+         'scope',
+         'sharedVisibility',
+         'size',
+         'storageMode',
+         'ticketCategory',
+         'title',
+         'tripId',
+         'updatedAt'
+       )
+     )
+     or pg_catalog.jsonb_typeof(target_payload -> 'createdAt') is distinct from 'number'
+     or target_payload ->> 'createdAt' !~ '^[0-9]{1,16}$'
+     or pg_catalog.jsonb_typeof(target_payload -> 'updatedAt') is distinct from 'number'
+     or target_payload ->> 'updatedAt' !~ '^[0-9]{1,16}$'
+     or pg_catalog.jsonb_typeof(target_payload -> 'size') is distinct from 'number'
+     or target_payload ->> 'size' !~ '^[0-9]{1,16}$'
+     or pg_catalog.jsonb_typeof(target_payload -> 'fileType') is distinct from 'string'
+     or target_payload ->> 'fileType' not in ('image', 'pdf', 'other')
+     or pg_catalog.jsonb_typeof(target_payload -> 'mimeType') is distinct from 'string'
+     or pg_catalog.length(target_payload ->> 'mimeType') not between 1 and 255
+     or target_payload ->> 'mimeType' ~ '[[:cntrl:]]'
+     or (
+       target_payload ? 'title'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'title') <> 'string'
+         or pg_catalog.length(target_payload ->> 'title') not between 1 and 500
+         or target_payload ->> 'title' ~ '[[:cntrl:]]'
+       )
+     )
+     or (
+       target_payload ? 'bookingId'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'bookingId') <> 'string'
+         or pg_catalog.length(target_payload ->> 'bookingId') not between 1 and 160
+         or target_payload ->> 'bookingId' ~ '[[:cntrl:]]'
+       )
+     )
+     or (
+       target_payload ? 'itemId'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'itemId') <> 'string'
+         or target_payload ->> 'itemId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       )
+     )
+     or (
+       target_payload ? 'scope'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'scope') <> 'string'
+         or target_payload ->> 'scope' not in ('trip', 'item', 'unassigned')
+       )
+     )
+     or coalesce(target_payload ->> 'scope' = 'item', false)
+       is distinct from (target_payload ? 'itemId')
+     or (
+       target_payload ? 'storageMode'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'storageMode') <> 'string'
+         or target_payload ->> 'storageMode' not in ('copy', 'reference', 'external')
+       )
+     )
+     or (
+       target_payload ? 'ticketCategory'
+       and (
+         pg_catalog.jsonb_typeof(target_payload -> 'ticketCategory') <> 'string'
+         or target_payload ->> 'ticketCategory' not in (
+           'admission_ticket',
+           'train_ticket',
+           'flight_ticket',
+           'hotel_booking',
+           'restaurant_reservation',
+           'transport_booking',
+           'other'
+         )
+       )
+     ) then
+    return false;
+  end if;
+
+  if (target_payload ->> 'createdAt')::numeric > 9007199254740991
+     or (target_payload ->> 'updatedAt')::numeric > 9007199254740991
+     or (target_payload ->> 'size')::numeric > 9007199254740991
+     or (target_payload ->> 'updatedAt')::numeric < (target_payload ->> 'createdAt')::numeric then
+    return false;
+  end if;
+
+  if target_payload ? 'sharedVisibility' then
+    visibility := target_payload -> 'sharedVisibility';
+    if pg_catalog.jsonb_typeof(visibility) <> 'object'
+       or pg_catalog.jsonb_typeof(visibility -> 'mode') is distinct from 'string'
+       or visibility ->> 'mode' not in ('all', 'assigned')
+       or exists (
+         select 1
+         from pg_catalog.jsonb_object_keys(visibility) as visibility_field(field_name)
+         where visibility_field.field_name not in ('memberIds', 'mode')
+       ) then
+      return false;
+    end if;
+    if visibility ->> 'mode' = 'all' then
+      if visibility ? 'memberIds' then return false; end if;
+    elsif pg_catalog.jsonb_typeof(visibility -> 'memberIds') is distinct from 'array'
+       or pg_catalog.jsonb_array_length(visibility -> 'memberIds') > 64
+       or exists (
+         select 1
+         from pg_catalog.jsonb_array_elements(visibility -> 'memberIds') as member(value)
+         where pg_catalog.jsonb_typeof(member.value) <> 'string'
+           or member.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       )
+       or (
+         select pg_catalog.count(*)
+         from pg_catalog.jsonb_array_elements(visibility -> 'memberIds') as member(value)
+       ) <> (
+         select pg_catalog.count(distinct member.value #>> '{}')
+         from pg_catalog.jsonb_array_elements(visibility -> 'memberIds') as member(value)
+       ) then
+      return false;
+    end if;
+  end if;
+
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_redact_ticket_meta_payload(
+  target_payload jsonb
+)
+returns jsonb
+language sql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+  select pg_catalog.jsonb_strip_nulls(
+    pg_catalog.jsonb_build_object(
+      'bookingId', target_payload -> 'bookingId',
+      'createdAt', target_payload -> 'createdAt',
+      'fileType', target_payload -> 'fileType',
+      'id', target_payload -> 'id',
+      'itemId', target_payload -> 'itemId',
+      'mimeType', target_payload -> 'mimeType',
+      'scope', coalesce(
+        target_payload -> 'scope',
+        pg_catalog.to_jsonb(
+          case
+            when target_payload ->> 'itemId' is not null then 'item'
+            else 'unassigned'
+          end
+        )
+      ),
+      'sharedVisibility', target_payload -> 'sharedVisibility',
+      'size', target_payload -> 'size',
+      'storageMode', target_payload -> 'storageMode',
+      'ticketCategory', target_payload -> 'ticketCategory',
+      'title', target_payload -> 'title',
+      'tripId', target_payload -> 'tripId',
+      'updatedAt', target_payload -> 'updatedAt'
+    )
+  );
+$$;
+
 create or replace function tripmap_private.account_object_public_json(
   target_object public.tripmap_account_objects
 )
@@ -404,25 +591,28 @@ begin
 
   if target_operation = 'upsert'
      and target_object_type = 'ticket_meta'
-     and exists (
-       select 1
-       from pg_catalog.jsonb_object_keys(target_payload) as ticket_field(field_name)
-       where ticket_field.field_name not in (
-         'bookingId',
-         'createdAt',
-         'fileType',
-         'id',
-         'itemId',
-         'mimeType',
-         'scope',
-         'sharedVisibility',
-         'size',
-         'storageMode',
-         'ticketCategory',
-         'title',
-         'tripId',
-         'updatedAt'
+     and (
+       exists (
+         select 1
+         from pg_catalog.jsonb_object_keys(target_payload) as ticket_field(field_name)
+         where ticket_field.field_name not in (
+           'bookingId',
+           'createdAt',
+           'fileType',
+           'id',
+           'itemId',
+           'mimeType',
+           'scope',
+           'sharedVisibility',
+           'size',
+           'storageMode',
+           'ticketCategory',
+           'title',
+           'tripId',
+           'updatedAt'
+         )
        )
+       or not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)
      ) then
     return pg_catalog.jsonb_build_object(
       'schemaVersion', 1,
@@ -525,6 +715,44 @@ begin
   for update;
   has_current_object := found;
   current_revision := case when has_current_object then current_object.revision else 0 end;
+
+  if target_object_type = 'ticket_meta'
+     or (
+       target_operation = 'delete'
+       and target_object_type in ('trip', 'day', 'item')
+     )
+     or (
+       target_operation = 'upsert'
+       and target_object_type in ('trip', 'day', 'item')
+       and has_current_object
+       and current_object.tombstone
+     )
+     or (
+       target_object_type = 'item'
+       and target_operation = 'upsert'
+       and (
+         (
+           not has_current_object
+           and pg_catalog.jsonb_array_length(target_payload -> 'ticketIds') > 0
+         )
+         or (
+           has_current_object
+           and not current_object.tombstone
+           and (
+             current_object.payload -> 'dayId' is distinct from target_payload -> 'dayId'
+             or current_object.payload -> 'sortOrder' is distinct from target_payload -> 'sortOrder'
+             or current_object.payload -> 'ticketIds' is distinct from target_payload -> 'ticketIds'
+           )
+         )
+       )
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', target_mutation_id,
+      'reason', 'workflow_required'
+    );
+  end if;
 
   -- Lock every affected itinerary day after the object lock and before the
   -- mutation identity lock. Reorder and move workflows use the same namespace.
@@ -753,6 +981,10 @@ $$;
 
 revoke all on function tripmap_private.account_payload_has_forbidden_key(jsonb)
   from public, anon, authenticated;
+revoke all on function tripmap_private.account_ticket_meta_payload_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_redact_ticket_meta_payload(jsonb)
+  from public, anon, authenticated;
 revoke all on function tripmap_private.account_object_public_json(public.tripmap_account_objects)
   from public, anon, authenticated;
 revoke all on function tripmap_private.account_apply_object_mutation_v1(
@@ -793,24 +1025,8 @@ select
   legacy.object_id,
   case
     when legacy.deleted_at_ms is not null then null
-    when legacy.object_type = 'ticket_meta' then pg_catalog.jsonb_strip_nulls(
-      pg_catalog.jsonb_build_object(
-        'bookingId', legacy.payload -> 'bookingId',
-        'createdAt', legacy.payload -> 'createdAt',
-        'fileType', legacy.payload -> 'fileType',
-        'id', legacy.payload -> 'id',
-        'itemId', legacy.payload -> 'itemId',
-        'mimeType', legacy.payload -> 'mimeType',
-        'scope', legacy.payload -> 'scope',
-        'sharedVisibility', legacy.payload -> 'sharedVisibility',
-        'size', legacy.payload -> 'size',
-        'storageMode', legacy.payload -> 'storageMode',
-        'ticketCategory', legacy.payload -> 'ticketCategory',
-        'title', legacy.payload -> 'title',
-        'tripId', legacy.payload -> 'tripId',
-        'updatedAt', legacy.payload -> 'updatedAt'
-      )
-    )
+    when legacy.object_type = 'ticket_meta' then
+      tripmap_private.account_redact_ticket_meta_payload(legacy.payload)
     else legacy.payload
   end,
   1,
@@ -857,6 +1073,12 @@ where legacy.object_type in (
   'replan_record',
   'trip_intelligence_applied_change',
   'trip_intelligence_suggestion_state'
+)
+and (
+  legacy.object_type <> 'ticket_meta'
+  or tripmap_private.account_ticket_meta_payload_is_valid(
+    tripmap_private.account_redact_ticket_meta_payload(legacy.payload)
+  )
 )
 on conflict (owner_id, object_type, object_id) do nothing;
 

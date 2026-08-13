@@ -6,6 +6,8 @@ import type {
   AccountObjectRowV1,
 } from '../lib/accountCloud/contract'
 import { ACCOUNT_CLOUD_V2_REQUIRED_MIGRATION } from '../lib/accountCloud/feature'
+import { buildAccountObjectRevisionRecord } from '../lib/accountCloud/localStore'
+import { redactTicketMetaForAccountCloud } from '../lib/accountCloud/mutationBuilder'
 import type { AccountWorkflowRequestV1 } from '../lib/accountCloud/workflowContract'
 import {
   activateAccountDatabase,
@@ -380,6 +382,99 @@ describe('tracked mutations account-cloud cutover', () => {
     await expect(db.accountMutationJournal.count()).resolves.toBe(0)
     const outbox = await db.syncOutbox.toArray()
     expect(outbox.map((entry) => entry.objectType).sort()).toEqual(['item', 'ticket_meta'])
+  })
+
+  it('commits a complete existing Ticket rebind through one registered workflow', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const day = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
+    const first = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'A', tripId: trip.id })
+    const second = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: 'B', tripId: trip.id })
+    const hidden = await createItineraryItem({ dayId: day.id, sortOrder: 3, ticketIds: [], title: 'C', tripId: trip.id })
+    const ticket = await createTicketMeta({
+      fileName: 'a.pdf',
+      fileType: 'pdf',
+      itemId: first.id,
+      mimeType: 'application/pdf',
+      note: 'private note',
+      scope: 'item',
+      size: 10,
+      storageMode: 'copy',
+      tripId: trip.id,
+    })
+    await repo.updateItineraryItem(first.id, { ticketIds: [ticket.id] })
+    await repo.updateItineraryItem(hidden.id, { ticketIds: [ticket.id] })
+    await db.accountObjectRevisions.put(buildAccountObjectRevisionRecord({
+      actorId: ACTOR_ID,
+      createdAt: NOW_ISO,
+      deletedAt: null,
+      deviceId: 'device_primary',
+      mutationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      objectId: ticket.id,
+      objectSchemaVersion: 1,
+      objectType: 'ticket_meta',
+      payload: JSON.parse(JSON.stringify(redactTicketMetaForAccountCloud(ticket))),
+      revision: 1,
+      schemaVersion: 1,
+      tombstone: false,
+      tripId: trip.id,
+      updatedAt: NOW_ISO,
+    }))
+    for (const item of [first, hidden]) {
+      const current = await repo.getItineraryItem(item.id)
+      const revision = await db.accountObjectRevisions.get(`item:${item.id}`)
+      if (!current || !revision) throw new Error('Missing Ticket relationship test baseline.')
+      await db.accountObjectRevisions.put({
+        ...revision,
+        payload: JSON.parse(JSON.stringify(current)) as AccountObjectRowV1['payload'],
+      })
+    }
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+
+    const result = await updateTicketMeta(ticket.id, {
+      itemId: second.id,
+      note: 'private note',
+      scope: 'item',
+      title: 'Updated ticket',
+    })
+
+    expect(result?.ticket).toMatchObject({ itemId: second.id, title: 'Updated ticket' })
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    const request = mocks.workflowCommit.mock.calls[0]?.[0] as AccountWorkflowRequestV1
+    expect(request.workflowId).toBe('ticket.bind@1')
+    expect(request.steps).toHaveLength(4)
+    expect(request.steps.map((step) => [step.objectType, step.objectId])).toEqual(expect.arrayContaining([
+      ['ticket_meta', ticket.id],
+      ['item', first.id],
+      ['item', second.id],
+      ['item', hidden.id],
+    ]))
+    expect(JSON.stringify(request)).not.toMatch(/private note|fileName|a\.pdf/)
+    await expect(repo.getItineraryItem(first.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(repo.getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
+    await expect(repo.getItineraryItem(hidden.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+    const privateOnly = await updateTicketMeta(ticket.id, {
+      itemId: second.id,
+      note: 'updated private note',
+      scope: 'item',
+      title: 'Updated ticket',
+    })
+    expect(privateOnly?.ticket.note).toBe('updated private note')
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(mocks.workflowCommit.mock.calls[0]?.[0])).not.toContain('updated private note')
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
   })
 })
 

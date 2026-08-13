@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public, pg_temp;
 
-select plan(52);
+select plan(63);
 
 create function pg_temp.run_account_workflow(
   target_account_hash text,
@@ -102,13 +102,18 @@ insert into workflow_fixtures (fixture_name, steps) values (
       "expectedRevision": 0,
       "objectSchemaVersion": 1,
       "payload": {
+        "createdAt": 1,
+        "fileType": "pdf",
         "id": "ticket_1",
         "tripId": "trip_1",
         "title": "Entry ticket",
-        "itemId": null,
+        "mimeType": "application/pdf",
         "scope": "trip",
-        "sharedVisibility": "owner",
-        "ticketCategory": "attraction"
+        "sharedVisibility": {"mode":"all"},
+        "size": 1024,
+        "storageMode": "copy",
+        "ticketCategory": "admission_ticket",
+        "updatedAt": 1
       }
     }
   ]'::jsonb
@@ -355,6 +360,42 @@ select is(
 
 set local role authenticated;
 select is(
+  public.account_apply_object_mutation_v1(
+    1,
+    'bd7662a5eeb41614e720d477abfcb227',
+    '20000000-0000-4000-8000-000000000205',
+    'trip_1',
+    'ticket_meta',
+    'ticket_1',
+    'upsert',
+    1,
+    1,
+    'pgtap_device',
+    '{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Bypass","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":2}'::jsonb
+  ) ->> 'reason',
+  'workflow_required',
+  'single-object mutations cannot bypass the Ticket relationship workflow'
+);
+select is(
+  public.account_apply_object_mutation_v1(
+    1,
+    'bd7662a5eeb41614e720d477abfcb227',
+    '20000000-0000-4000-8000-000000000206',
+    'trip_1',
+    'item',
+    'item_1',
+    'upsert',
+    1,
+    1,
+    'pgtap_device',
+    '{"id":"item_1","tripId":"trip_1","dayId":"day_1","title":"First","sortOrder":1,"ticketIds":["ticket_1"]}'::jsonb
+  ) ->> 'reason',
+  'workflow_required',
+  'single-object mutations cannot change Item ticket relationships'
+);
+
+set local role authenticated;
+select is(
   (
     select pg_catalog.count(*)
     from pg_catalog.generate_series(1, 100)
@@ -531,6 +572,93 @@ set local role authenticated;
 select is(
   pg_temp.run_account_workflow(
     'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000204',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000207",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":1,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_2","mimeType":"application/pdf","scope":"item","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":2}
+      },
+      {
+        "stepId":"item_2",
+        "mutationId":"20000000-0000-4000-8000-000000000208",
+        "objectType":"item",
+        "objectId":"item_2",
+        "operation":"upsert",
+        "expectedRevision":2,
+        "objectSchemaVersion":1,
+        "payload":{"id":"item_2","tripId":"trip_1","dayId":"day_1","title":"Changed through binding","sortOrder":1,"ticketIds":["ticket_1"],"updatedAt":2}
+      }
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'Ticket binding cannot mutate unrelated Item fields'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000205',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000209",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":1,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_2","mimeType":"application/pdf","scope":"item","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":2}
+      },
+      {
+        "stepId":"item_2",
+        "mutationId":"20000000-0000-4000-8000-000000000210",
+        "objectType":"item",
+        "objectId":"item_2",
+        "operation":"upsert",
+        "expectedRevision":2,
+        "objectSchemaVersion":1,
+        "payload":{"id":"item_2","tripId":"trip_1","dayId":"day_1","title":"Second","sortOrder":1,"ticketIds":["ticket_1","ticket_other"],"updatedAt":2}
+      }
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'Ticket binding cannot alter unrelated Ticket memberships'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_build_object(
+      'ticketRevision', ticket.revision,
+      'itemTitle', item.payload ->> 'title',
+      'itemTicketIds', item.payload -> 'ticketIds'
+    )
+    from public.tripmap_account_objects as ticket
+    join public.tripmap_account_objects as item
+      on item.owner_id = ticket.owner_id
+      and item.object_type = 'item'
+      and item.object_id = 'item_2'
+    where ticket.owner_id = '11111111-1111-4111-8111-111111111111'
+      and ticket.object_type = 'ticket_meta'
+      and ticket.object_id = 'ticket_1'
+  ),
+  '{"ticketRevision": 1, "itemTitle": "Second", "itemTicketIds": []}'::jsonb,
+  'rejected Ticket workflow escalation attempts leave both objects unchanged'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
     '10000000-0000-4000-8000-000000000005',
     'ticket.bind@1',
     'trip_1',
@@ -543,17 +671,7 @@ select is(
         "operation":"upsert",
         "expectedRevision":1,
         "objectSchemaVersion":1,
-        "payload":{"id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_2","scope":"item","sharedVisibility":"owner","ticketCategory":"attraction"}
-      },
-      {
-        "stepId":"item_1",
-        "mutationId":"20000000-0000-4000-8000-000000000052",
-        "objectType":"item",
-        "objectId":"item_1",
-        "operation":"upsert",
-        "expectedRevision":2,
-        "objectSchemaVersion":1,
-        "payload":{"id":"item_1","tripId":"trip_1","dayId":"day_1","title":"First","sortOrder":2,"ticketIds":[]}
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_2","mimeType":"application/pdf","scope":"item","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":2}
       },
       {
         "stepId":"item_2",
@@ -607,7 +725,7 @@ select is(
         "operation":"upsert",
         "expectedRevision":2,
         "objectSchemaVersion":1,
-        "payload":{"id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_1","scope":"item","sharedVisibility":"owner","ticketCategory":"attraction"}
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Entry ticket","itemId":"item_1","mimeType":"application/pdf","scope":"item","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":3}
       },
       {
         "stepId":"item_1",
@@ -615,7 +733,7 @@ select is(
         "objectType":"item",
         "objectId":"item_1",
         "operation":"upsert",
-        "expectedRevision":3,
+        "expectedRevision":2,
         "objectSchemaVersion":1,
         "payload":{"id":"item_1","tripId":"trip_1","dayId":"day_1","title":"First","sortOrder":2,"ticketIds":["ticket_1"]}
       }
@@ -643,6 +761,144 @@ select is(
   ),
   '{"ticketItemId": "item_2", "oldItemTicketIds": ["ticket_1"]}'::jsonb,
   'a rejected partial rebind leaves the prior relationship intact'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000201',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000201",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":2,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Entry ticket","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":3}
+      },
+      {
+        "stepId":"item_2",
+        "mutationId":"20000000-0000-4000-8000-000000000202",
+        "objectType":"item",
+        "objectId":"item_2",
+        "operation":"upsert",
+        "expectedRevision":3,
+        "objectSchemaVersion":1,
+        "payload":{"id":"item_2","tripId":"trip_1","dayId":"day_1","title":"Second","sortOrder":1,"ticketIds":[]}
+      }
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'ticket unbind commits metadata and the prior reverse link together'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_build_object(
+      'ticketItemId', ticket.payload -> 'itemId',
+      'itemTicketIds', item.payload -> 'ticketIds'
+    )
+    from public.tripmap_account_objects as ticket
+    join public.tripmap_account_objects as item
+      on item.owner_id = ticket.owner_id
+      and item.object_type = 'item'
+      and item.object_id = 'item_2'
+    where ticket.owner_id = '11111111-1111-4111-8111-111111111111'
+      and ticket.object_type = 'ticket_meta'
+      and ticket.object_id = 'ticket_1'
+  ),
+  '{"ticketItemId": null, "itemTicketIds": []}'::jsonb,
+  'ticket unbind removes both relationship directions'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000202',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000203",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":3,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Updated entry ticket","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":4}
+      }
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'an existing unbound Ticket can update metadata with one bounded step'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000203',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000204",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":4,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Invalid update","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all","memberIds":[]},"size":1024,"storageMode":"indexeddb","ticketCategory":"attraction","updatedAt":5}
+      }
+    ]'::jsonb
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'Ticket metadata rejects invalid enums and visibility shape'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000209',
+    'ticket.bind@1',
+    'trip_1',
+    '[
+      {
+        "stepId":"ticket",
+        "mutationId":"20000000-0000-4000-8000-000000000219",
+        "objectType":"ticket_meta",
+        "objectId":"ticket_1",
+        "operation":"upsert",
+        "expectedRevision":4,
+        "objectSchemaVersion":1,
+        "payload":{"createdAt":1,"fileType":"pdf","id":"ticket_1","tripId":"trip_1","title":"Invalid visibility","mimeType":"application/pdf","scope":"trip","sharedVisibility":{},"size":1024,"storageMode":"copy","ticketCategory":"admission_ticket","updatedAt":5}
+      }
+    ]'::jsonb
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'Ticket metadata requires a typed visibility mode'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_build_object('revision', revision, 'title', payload ->> 'title')
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and object_type = 'ticket_meta'
+      and object_id = 'ticket_1'
+  ),
+  '{"revision": 4, "title": "Updated entry ticket"}'::jsonb,
+  'an invalid Ticket metadata request leaves the acknowledged object unchanged'
 );
 
 set local role authenticated;

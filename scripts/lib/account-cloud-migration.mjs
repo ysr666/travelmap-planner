@@ -22,7 +22,15 @@ const REQUIRED_FRAGMENTS = [
   "'mutation_id_reused'",
   "'revision_mismatch'",
   "'server_managed_object'",
+  "'workflow_required'",
   'account_payload_has_forbidden_key',
+  'create or replace function tripmap_private.account_ticket_meta_payload_is_valid',
+  'create or replace function tripmap_private.account_redact_ticket_meta_payload',
+  'not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)',
+  "target_payload ->> 'fileType' not in ('image', 'pdf', 'other')",
+  "target_payload ->> 'scope' = 'item'",
+  "pg_catalog.jsonb_typeof(visibility -> 'mode') is distinct from 'string'",
+  "visibility ->> 'mode' not in ('all', 'assigned')",
   'pg_advisory_xact_lock',
   "':item-day:'",
   "target_object_type = 'item'",
@@ -31,10 +39,12 @@ const REQUIRED_FRAGMENTS = [
   "target_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
   "pg_catalog.jsonb_typeof(target_payload -> 'ticketIds') is distinct from 'array'",
   "pg_catalog.count(distinct ticket_id.value #>> '{}')",
+  "current_object.payload -> 'ticketIds' is distinct from target_payload -> 'ticketIds'",
   'account_mutation_receipts',
   'alter publication supabase_realtime add table public.tripmap_account_objects',
   'from public.cloud_sync_objects as legacy',
-  "when legacy.object_type = 'ticket_meta' then pg_catalog.jsonb_strip_nulls",
+  "when legacy.object_type = 'ticket_meta' then tripmap_private.account_redact_ticket_meta_payload(legacy.payload)",
+  'or tripmap_private.account_ticket_meta_payload_is_valid(',
   'on conflict (owner_id, object_type, object_id) do nothing',
 ]
 
@@ -154,6 +164,12 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   }
   if (/grant\s+[^;]+on\s+table\s+tripmap_private\.account_mutation_receipts\s+to\s+(?:authenticated|anon)/i.test(migrationSql)) {
     throw new Error('Mutation receipts must remain inaccessible to browser roles.')
+  }
+  if (!/revoke\s+all\s+on\s+function\s+tripmap_private\.account_ticket_meta_payload_is_valid\s*\(\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)) {
+    throw new Error('The Ticket metadata validator must remain inaccessible to browser roles.')
+  }
+  if (!/revoke\s+all\s+on\s+function\s+tripmap_private\.account_redact_ticket_meta_payload\s*\(\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)) {
+    throw new Error('The legacy Ticket redactor must remain inaccessible to browser roles.')
   }
 
   const legacyWrite = /(?:update\s+public\.cloud_sync_objects|delete\s+from\s+public\.cloud_sync_objects|truncate\s+(?:table\s+)?public\.cloud_sync_objects)/i

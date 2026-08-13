@@ -3510,3 +3510,73 @@ Local validation:
 - `npm run build` passed at 477.5 KiB entry, 863.3 KiB initial JS, 248.2 KiB initial gzip, 10 startup chunks, and 2490.9 KiB/128-entry precache. The Account workflow runtime is neither a startup chunk nor a precached optional asset.
 - PWA upgrade passed 5/5, Desktop Beta smoke passed 1/1, and full serial Playwright passed all 194 tests in 7.3 minutes.
 - Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime, or real-account behavior.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d2 Existing Ticket Metadata and Relationship Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and remaining product workflows remain P1 gates
+
+Goal:
+
+- Route edits to an existing Ticket, including bind, unbind, and rebind, through the registered `ticket.bind@1` Account Cloud workflow for fully bootstrapped V2 accounts.
+- Keep `TicketMeta.itemId` and every itinerary Item `ticketIds` reverse reference as one stale-guarded, all-or-nothing local and server operation.
+
+Scope:
+
+- Refactor existing Ticket updates into deterministic prepare/apply plans. Preparation captures the redacted Ticket baseline, the complete current reverse-link set, and the requested target; apply re-reads the relationship graph inside one Dexie transaction before changing any record.
+- Submit exactly one Ticket step plus every current or target Item required to prove the complete relationship. Unbound metadata-only edits may use one Ticket step; bound metadata-only edits still include the bound Item so the server verifies both sides.
+- Harden TypeScript and SQL Ticket metadata validation for required identity/file fields, bounded enums and strings, safe timestamps/size, item/scope consistency, and controlled member visibility without admitting filenames, locations, URLs, notes, structured private fields, Blob/OCR content, tokens, or unknown fields.
+- Route the shared tracked `updateTicketMeta` command through the existing lazy workflow bridge. Fully bootstrapped objects use `ticket.bind@1`; any unbootstrapped object falls back before mutation; pending or stale objects fail closed.
+- Keep the compile-time rollout gates closed and preserve the existing legacy atomic path when V2 is disabled or the complete graph has not been bootstrapped.
+
+No-go:
+
+- No Ticket creation, deletion, Blob upload/delete, cache lifecycle, import binding, Supabase Preview/Production write, real account mutation, Provider call, or rollout gate change. Create/delete require a separately reviewed lifecycle workflow and compensation contract.
+- No generic Ticket payload pass-through, caller-supplied revision/mutation ID, partial reverse-link list, fallback after optimistic mutation, separate Item update, legacy outbox duplication, or local write before the complete baseline is verified.
+- No change to ticket file visibility, sharing authorization, Blob/OCR access, external URL handling, or private local-only metadata.
+
+Likely files:
+
+- `src/db/repositories.ts` and tests; `src/db/trackedMutations.ts` and Account Cloud tests; Account Cloud Ticket/workflow contracts and tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Same-target edit, bind, unbind, rebind, stale Ticket, stale target, hidden reverse-link race, cross-trip target, unbootstrapped all-or-nothing fallback, pending object, offline retention, conflict rollback, response replay, account switch, no private Ticket fields, TypeScript/SQL parity, local migration replay, pgTAP, full unit/typecheck/lint/build, relevant PWA/E2E, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. Missing one reverse-linked Item or allowing the Ticket and Item writes to use separate queues can leave a relationship that looks correct on one device and contradictory on another.
+
+Stop conditions:
+
+- Stop and repair if a current reverse-linked Item can be omitted, a stale target can be overwritten, a private Ticket field enters the workflow payload, metadata-only edits bypass relationship verification, a failed server transaction leaves cloud-visible Ticket metadata or either relationship side locally changed, or create/delete/Blob behavior is accidentally routed through this workflow. Local-only notes and structured fields remain intentionally independent from cloud compensation and must never be replaced by a redacted server snapshot.
+
+Local result:
+
+- Refactored existing Ticket edits into deterministic prepare/apply plans. Preparation captures the exact Ticket baseline, requested target, current metadata target and every reverse-linked Item; apply re-reads that full relationship graph inside one Dexie transaction and rejects a stale Ticket, target change or newly appeared hidden reverse link before any write.
+- Routed fully bootstrapped existing Ticket edits through one `ticket.bind@1` product workflow. Bind, unbind and rebind submit exactly one redacted Ticket plus the complete current/target Item set; an unbound metadata-only edit may use one Ticket step, while a bound metadata edit still includes its Item for relationship verification. Unbootstrapped graphs fall back before mutation to the prior atomic legacy path.
+- Added strict Ticket metadata parity across the TypeScript request parser, SQL RPC, workflow runtime and legacy backfill. Required timestamps, size, file type and MIME data are bounded; scope/item consistency, storage/category enums and member visibility are validated; unknown fields, invalid identifiers and control characters are rejected.
+- The single-object RPC now returns `workflow_required` for Ticket writes and structural/relationship Item changes, preventing a caller from bypassing registered transaction topology. The workflow server locks the Ticket identity, verifies immutable file metadata, requires the exact existing reverse-link set and permits each Item to change only the current Ticket membership.
+- `fileName`, local/reference locations, URLs, notes, structured extraction data, Blob/OCR content, tokens and unknown values remain absent from cloud requests, receipts and workflow snapshots. Reconciliation merges only the cloud metadata whitelist, so a redacted server response cannot erase local-only Ticket fields.
+- Preserved compatibility with historical local Item rows that omit `ticketIds` by treating the missing value as an empty relationship list. The final build also moved the small Ticket redactor into a type-only module so the protected Account Cloud contract remains lazy instead of increasing the app startup graph.
+- Both Account Cloud compile-time gates remain `false`. No Supabase Preview/Production migration, real account read/write, Provider call, cloud configuration write, Ticket create/delete or Blob operation occurred.
+
+Review:
+
+- The first PostgreSQL execution correctly rejected a nominal success fixture that included an unrelated Item. The fixture was narrowed to the exact relationship graph, while separate escalation tests continue proving that unrelated Item fields and unrelated Ticket memberships are rejected without writes.
+- Local review found and fixed one backward-compatibility regression: direct `.includes()` calls on an old Item without `ticketIds` could abort legacy Ticket editing. A repository regression now exercises the missing-field row and verifies atomic binding.
+- The final boundary review covered arbitrary/unknown workflow targets, single-object bypass, immutable Ticket fields, private-field redaction, complete reverse-link discovery, hidden-link races, same-target metadata edits, unbind/rebind, other-ticket preservation, account switching, fallback-before-write, legacy outbox duplication and startup-bundle reachability.
+- Remaining risk is explicit: product adapters cover 3 of 7 registered workflows; Ticket creation/deletion/Blob and cache lifecycle, deletion/restoration, parent lifecycle locks, Preview contention, real response loss, bootstrap, Realtime, empty-device recovery and production latency remain unverified.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 63 pgTAP checks. `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage dynamic-SQL helper warnings.
+- Focused migration/contract/runtime/repository regression passed 8 files and 120 tests. The complete unit suite passed 238 files and 1,951 tests. `npm run typecheck`, `npm run lint`, capability alignment, Account Cloud and Cloudflare migration gates, production-boundary checks, JSON parsing and `git diff --check` passed.
+- `npm run build` passed at 479.0 KiB entry, 864.9 KiB initial JS, 248.5 KiB initial gzip, 10 startup chunks and 2493.5 KiB/128-entry precache. The workflow runtime remains outside the startup graph and is emitted as an on-demand chunk.
+- Full serial Playwright passed all 194 tests in 7.0 minutes, including Ticket metadata edit/unbind, Global AI ticket binding, responsive overflow, PWA current/historical upgrades, Golden regression and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `f79a61e08969ea08a8ece5c66ff238edfaf7ea4e`:
+
+- GitHub Actions run `31688507903` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `2a94c78b-2031-4d52-8404-8508d80b30f5` passed for the same SHA.
+- These receipts close P1.3d1 remote validation only. P1.3d2 requires its own same-SHA receipts after commit and push.

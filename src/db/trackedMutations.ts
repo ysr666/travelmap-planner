@@ -18,6 +18,7 @@ import {
 } from '../lib/accountCloud/runtimeLoader'
 import { executeProductAccountWorkflowIfEnabled } from '../lib/accountCloud/workflowRuntimeLoader'
 import type { JsonObject } from '../lib/accountCloud/contract'
+import { redactTicketMetaForAccountCloud } from '../lib/accountCloud/ticketMetadata'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
 import * as ledgerRepo from './ledgerRepositories'
@@ -278,7 +279,30 @@ export async function updateTicketMeta(
   ticketId: string,
   input: Parameters<typeof repo.updateTicketMeta>[1],
 ) {
-  const result = await repo.updateTicketMeta(ticketId, input)
+  const plan = await repo.prepareTicketMetaUpdate(ticketId, input)
+  if (!plan) return undefined
+  const accountCloud = await executeProductAccountWorkflowIfEnabled({
+    apply: () => repo.applyTicketMetaUpdatePlan(plan, { touchTrip: false }),
+    steps: [
+      {
+        objectId: plan.afterTicket.id,
+        objectType: 'ticket_meta' as const,
+        operation: 'upsert' as const,
+        payload: redactTicketMetaForAccountCloud(plan.afterTicket) as unknown as JsonObject,
+      },
+      ...plan.afterRelationshipItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+    ],
+    tripId: plan.tripId,
+    workflowId: 'ticket.bind@1',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
+  const result = await repo.applyTicketMetaUpdatePlan(plan)
   if (result) {
     await Promise.all([
       enqueueObjectUpsert({ object: result.ticket, objectType: 'ticket_meta' }),

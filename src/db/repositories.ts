@@ -94,6 +94,17 @@ type UpdateTicketMetaResult = {
   changedItems: ItineraryItem[]
   ticket: TicketMeta
 }
+export type TicketMetaUpdatePlan = {
+  afterRelationshipItems: ItineraryItem[]
+  afterTicket: TicketMeta
+  beforeRelationshipItems: ItineraryItem[]
+  beforeTicket: TicketMeta
+  changedItems: ItineraryItem[]
+  targetItemId?: string
+  ticketId: string
+  tripId: string
+  updatedAt: number
+}
 type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
 type CreateTripReplanRecordInput = Omit<TripReplanRecord, 'id' | 'createdAt' | 'updatedAt'>
@@ -1128,95 +1139,146 @@ export async function updateTicketMeta(
   ticketId: string,
   input: UpdateTicketMetaInput,
 ): Promise<UpdateTicketMetaResult | undefined> {
+  const plan = await prepareTicketMetaUpdate(ticketId, input)
+  if (!plan) return undefined
+  return applyTicketMetaUpdatePlan(plan)
+}
+
+export async function prepareTicketMetaUpdate(
+  ticketId: string,
+  input: UpdateTicketMetaInput,
+): Promise<TicketMetaUpdatePlan | undefined> {
+  const ticket = await db.ticketMetas.get(ticketId)
+  if (!ticket) return undefined
+
+  if (
+    input.expectedBinding
+    && (
+      ticket.updatedAt !== input.expectedBinding.ticketUpdatedAt
+      || ticket.itemId !== input.expectedBinding.itemId
+    )
+  ) {
+    throw new TicketBaselineConflictError('票据绑定已变化，请重新生成预览。')
+  }
+
+  const targetItemId = input.scope === 'item' ? input.itemId : undefined
+
+  if (input.scope === 'item' && !targetItemId) {
+    throw new Error('请选择要绑定的行程点。')
+  }
+
+  const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
+  const updatedAt = tripItems.reduce(
+    (latest, item) => Math.max(latest, item.updatedAt + 1),
+    Math.max(Date.now(), ticket.updatedAt + 1),
+  )
+  const targetItem = targetItemId
+    ? tripItems.find((item) => item.id === targetItemId)
+    : undefined
+  if (targetItemId && !targetItem) {
+    throw new Error('绑定的行程点不存在。')
+  }
+  if (input.expectedBinding) {
+    const expectedTarget = input.expectedBinding.targetItem
+    const currentItem = input.expectedBinding.currentItem
+      ? tripItems.find((item) => item.id === input.expectedBinding?.currentItem?.id)
+      : undefined
+    if (
+      !targetItem
+      || targetItem.id !== expectedTarget.id
+      || targetItem.updatedAt !== expectedTarget.updatedAt
+      || !sameStringSet(targetItem.ticketIds ?? [], expectedTarget.ticketIds)
+      || (
+        input.expectedBinding.currentItem
+        && (
+          !currentItem
+          || currentItem.updatedAt !== input.expectedBinding.currentItem.updatedAt
+          || !sameStringSet(currentItem.ticketIds ?? [], input.expectedBinding.currentItem.ticketIds)
+        )
+      )
+    ) {
+      throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
+    }
+  }
+
+  const beforeRelationshipItems = tripItems
+    .filter((item) => item.id === targetItemId || (item.ticketIds ?? []).includes(ticket.id))
+    .sort((first, second) => first.id.localeCompare(second.id))
+  const afterRelationshipItems = beforeRelationshipItems.map((item) => {
+    const ticketIds = item.ticketIds ?? []
+    const hasTicket = ticketIds.includes(ticket.id)
+    const shouldHaveTicket = item.id === targetItemId
+    if (hasTicket === shouldHaveTicket) return item
+    return {
+      ...item,
+      ticketIds: shouldHaveTicket
+        ? [...ticketIds, ticket.id]
+        : ticketIds.filter((id) => id !== ticket.id),
+      updatedAt,
+    }
+  })
+  const changedItems = afterRelationshipItems.filter((item, index) => (
+    !sameRecord(item, beforeRelationshipItems[index])
+  ))
+  const afterTicket: TicketMeta = {
+    ...ticket,
+    itemId: targetItemId,
+    note: input.note,
+    scope: input.scope,
+    sharedVisibility: input.sharedVisibility,
+    structuredFields: Object.prototype.hasOwnProperty.call(input, 'structuredFields')
+      ? input.structuredFields
+      : ticket.structuredFields,
+    ticketCategory: input.ticketCategory,
+    title: input.title,
+    updatedAt,
+  }
+
+  return {
+    afterRelationshipItems,
+    afterTicket,
+    beforeRelationshipItems,
+    beforeTicket: ticket,
+    changedItems,
+    targetItemId,
+    ticketId,
+    tripId: ticket.tripId,
+    updatedAt,
+  }
+}
+
+export async function applyTicketMetaUpdatePlan(
+  plan: TicketMetaUpdatePlan,
+  options: ParentTripTouchOptions = {},
+): Promise<UpdateTicketMetaResult> {
+  const touchTrip = options.touchTrip ?? true
   return db.transaction(
     'rw',
-    db.ticketMetas,
-    db.itineraryItems,
-    db.trips,
+    touchTrip
+      ? [db.ticketMetas, db.itineraryItems, db.trips]
+      : [db.ticketMetas, db.itineraryItems],
     async () => {
-      const ticket = await db.ticketMetas.get(ticketId)
-      if (!ticket) return undefined
-
-      if (
-        input.expectedBinding
-        && (
-          ticket.updatedAt !== input.expectedBinding.ticketUpdatedAt
-          || ticket.itemId !== input.expectedBinding.itemId
-        )
-      ) {
+      const ticket = await db.ticketMetas.get(plan.ticketId)
+      if (!ticket || !sameRecord(ticket, plan.beforeTicket)) {
         throw new TicketBaselineConflictError('票据绑定已变化，请重新生成预览。')
       }
-
-      const now = Date.now()
-      const nextItemId = input.scope === 'item' ? input.itemId : undefined
-
-      if (input.scope === 'item' && !nextItemId) {
-        throw new Error('请选择要绑定的行程点。')
+      const tripItems = await db.itineraryItems.where('tripId').equals(plan.tripId).toArray()
+      const currentRelationshipItems = tripItems
+        .filter((item) => item.id === plan.targetItemId || (item.ticketIds ?? []).includes(plan.ticketId))
+        .sort((first, second) => first.id.localeCompare(second.id))
+      if (!sameRecords(currentRelationshipItems, plan.beforeRelationshipItems)) {
+        throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
       }
 
-      const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
-      const targetItem = nextItemId ? tripItems.find((item) => item.id === nextItemId) : undefined
-      if (nextItemId && !targetItem) {
-        throw new Error('绑定的行程点不存在。')
+      await db.ticketMetas.put(plan.afterTicket)
+      if (plan.changedItems.length > 0) {
+        await db.itineraryItems.bulkPut(plan.changedItems)
       }
-      if (input.expectedBinding) {
-        const expectedTarget = input.expectedBinding.targetItem
-        const currentItem = input.expectedBinding.currentItem
-          ? tripItems.find((item) => item.id === input.expectedBinding?.currentItem?.id)
-          : undefined
-        if (
-          !targetItem
-          || targetItem.id !== expectedTarget.id
-          || targetItem.updatedAt !== expectedTarget.updatedAt
-          || !sameStringSet(targetItem.ticketIds, expectedTarget.ticketIds)
-          || (
-            input.expectedBinding.currentItem
-            && (
-              !currentItem
-              || currentItem.updatedAt !== input.expectedBinding.currentItem.updatedAt
-              || !sameStringSet(currentItem.ticketIds, input.expectedBinding.currentItem.ticketIds)
-            )
-          )
-        ) {
-          throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
-        }
+      if (touchTrip) {
+        await db.trips.update(plan.tripId, { updatedAt: plan.updatedAt })
       }
 
-      const changedItems = tripItems.flatMap((item) => {
-        const ticketIds = item.ticketIds ?? []
-        const hasTicket = ticketIds.includes(ticket.id)
-        const shouldHaveTicket = item.id === nextItemId
-        if (hasTicket === shouldHaveTicket) return []
-        return [{
-          ...item,
-          ticketIds: shouldHaveTicket
-            ? [...ticketIds, ticket.id]
-            : ticketIds.filter((id) => id !== ticket.id),
-          updatedAt: now,
-        }]
-      })
-
-      const nextTicket: TicketMeta = {
-        ...ticket,
-        itemId: nextItemId,
-        note: input.note,
-        scope: input.scope,
-        sharedVisibility: input.sharedVisibility,
-        structuredFields: Object.prototype.hasOwnProperty.call(input, 'structuredFields')
-          ? input.structuredFields
-          : ticket.structuredFields,
-        ticketCategory: input.ticketCategory,
-        title: input.title,
-        updatedAt: now,
-      }
-
-      await db.ticketMetas.put(nextTicket)
-      if (changedItems.length > 0) {
-        await db.itineraryItems.bulkPut(changedItems)
-      }
-      await db.trips.update(ticket.tripId, { updatedAt: now })
-
-      return { changedItems, ticket: nextTicket }
+      return { changedItems: plan.changedItems, ticket: plan.afterTicket }
     },
   )
 }

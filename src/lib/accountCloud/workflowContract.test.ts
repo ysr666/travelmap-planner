@@ -178,6 +178,23 @@ describe('account workflow contract', () => {
         ? { ...step, payload: { ...step.payload, itemId: 'item_missing' } }
         : step),
     })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+
+    const unboundTicket = makeTicketStep()
+    const unboundPayload = { ...unboundTicket.payload }
+    Reflect.deleteProperty(unboundPayload, 'itemId')
+    expect(parseAccountWorkflowRequestV1({
+      ...binding,
+      steps: [{
+        ...unboundTicket,
+        payload: {
+          ...unboundPayload,
+          scope: 'unassigned',
+        },
+      }],
+    })).toMatchObject({
+      steps: [expect.objectContaining({ objectType: 'ticket_meta' })],
+      workflowId: 'ticket.bind@1',
+    })
   })
 
   it('parses and correlates an atomic success without accepting missing or substituted steps', () => {
@@ -324,11 +341,11 @@ function makeTicketStep(): AccountWorkflowStepV1 {
       id: 'ticket_a',
       itemId: 'item_a',
       mimeType: 'application/pdf',
-      scope: 'owner',
-      sharedVisibility: 'private',
+      scope: 'item',
+      sharedVisibility: { mode: 'all' },
       size: 1024,
-      storageMode: 'indexeddb',
-      ticketCategory: 'attraction',
+      storageMode: 'copy',
+      ticketCategory: 'admission_ticket',
       title: 'Edinburgh Castle',
       tripId: TRIP_ID,
       updatedAt: 1,

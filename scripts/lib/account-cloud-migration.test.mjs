@@ -85,6 +85,13 @@ describe('account-cloud migration contract', () => {
         '-- Lock removed.',
       ),
     })).toThrow('structural fields and lock')
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        "current_object.payload -> 'ticketIds' is distinct from target_payload -> 'ticketIds'",
+        'false',
+      ),
+    })).toThrow(/ticketIds/)
   })
 
   it('rejects removal of the authenticated account-context guard', () => {
@@ -97,9 +104,36 @@ describe('account-cloud migration contract', () => {
   })
 
   it('rejects Ticket metadata whitelist drift between TypeScript and SQL', () => {
-    const changed = migrationSql.replace("         'updatedAt'\n", '')
+    const changed = migrationSql.replace(
+      "           'tripId',\n           'updatedAt'\n         )\n       )\n       or not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)",
+      "           'tripId'\n         )\n       )\n       or not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)",
+    )
     expect(() => validateAccountCloudMigration({ contractSource, migrationSql: changed }))
       .toThrow('Ticket metadata fields do not match')
+  })
+
+  it('rejects removal or exposure of the Ticket metadata semantic validator', () => {
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)',
+        'false',
+      ),
+    })).toThrow(/account_ticket_meta_payload_is_valid/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_ticket_meta_payload_is_valid(jsonb)',
+        'grant execute on function tripmap_private.account_ticket_meta_payload_is_valid(jsonb)',
+      ),
+    })).toThrow(/Ticket metadata validator/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_redact_ticket_meta_payload(jsonb)',
+        'grant execute on function tripmap_private.account_redact_ticket_meta_payload(jsonb)',
+      ),
+    })).toThrow(/legacy Ticket redactor/)
   })
 
   it('rejects a stale RPC comment signature or missing overload cleanup', () => {

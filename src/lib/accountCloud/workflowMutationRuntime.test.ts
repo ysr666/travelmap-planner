@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db/database'
-import type { ItineraryItem } from '../../types'
+import type { ItineraryItem, TicketMeta } from '../../types'
 import {
   activateAccountDatabase,
   activateLegacyDatabaseForTests,
@@ -10,6 +10,7 @@ import {
 import { AccountCloudTransportError } from './client'
 import type { AccountObjectRowV1 } from './contract'
 import type { AccountWorkflowRequestV1 } from './workflowContract'
+import { redactTicketMetaForAccountCloud } from './mutationBuilder'
 import {
   AccountCloudWorkflowWriteError,
   executeProductAccountWorkflow,
@@ -230,6 +231,182 @@ describe('product account workflow runtime', () => {
     await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
   })
 
+  it('rejects a Ticket workflow that omits any current reverse-linked Item', async () => {
+    const ticket = makeTicket('item_a')
+    const first = { ...makeItem('item_a', 1), ticketIds: [ticket.id] }
+    const second = makeItem('item_b', 2)
+    await seedBootstrappedItems([first, second])
+    await seedBootstrappedTicket(ticket)
+    const afterTicket = { ...ticket, itemId: second.id, updatedAt: 2 }
+    const afterSecond = { ...second, ticketIds: [ticket.id], updatedAt: 2 }
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: [
+        {
+          objectId: ticket.id,
+          objectType: 'ticket_meta',
+          operation: 'upsert',
+          payload: redactTicketMetaForAccountCloud(afterTicket),
+        },
+        {
+          objectId: second.id,
+          objectType: 'item',
+          operation: 'upsert',
+          payload: afterSecond,
+        },
+      ],
+      tripId: 'trip_uk',
+      workflowId: 'ticket.bind@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('rejects Ticket workflows that mutate unrelated Item fields or relationships', async () => {
+    const ticket = makeTicket('item_a')
+    const first = { ...makeItem('item_a', 1), ticketIds: [ticket.id] }
+    const second = makeItem('item_b', 2)
+    await seedBootstrappedItems([first, second])
+    await seedBootstrappedTicket(ticket)
+    const afterTicket = { ...ticket, itemId: second.id, updatedAt: 2 }
+
+    for (const afterSecond of [
+      { ...second, ticketIds: [ticket.id], title: 'Changed through binding', updatedAt: 2 },
+      { ...second, ticketIds: [ticket.id, 'ticket_other'], updatedAt: 2 },
+    ]) {
+      await expect(executeProductAccountWorkflow({
+        apply: vi.fn(),
+        steps: [
+          {
+            objectId: ticket.id,
+            objectType: 'ticket_meta',
+            operation: 'upsert',
+            payload: redactTicketMetaForAccountCloud(afterTicket),
+          },
+          {
+            objectId: first.id,
+            objectType: 'item',
+            operation: 'upsert',
+            payload: { ...first, ticketIds: [], updatedAt: 2 },
+          },
+          {
+            objectId: second.id,
+            objectType: 'item',
+            operation: 'upsert',
+            payload: afterSecond,
+          },
+        ],
+        tripId: 'trip_uk',
+        workflowId: 'ticket.bind@1',
+      })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+    }
+
+    expect(mocks.commit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
+  it('allows one existing unbound Ticket step while still transacting over Item relationships', async () => {
+    const ticket = makeTicket()
+    await seedBootstrappedTicket(ticket)
+    const afterTicket = { ...ticket, title: 'Updated', updatedAt: 2 }
+
+    const result = await executeProductAccountWorkflow({
+      apply: async () => {
+        await db.ticketMetas.put(afterTicket)
+        return afterTicket
+      },
+      steps: [{
+        objectId: ticket.id,
+        objectType: 'ticket_meta',
+        operation: 'upsert',
+        payload: redactTicketMetaForAccountCloud(afterTicket),
+      }],
+      tripId: 'trip_uk',
+      workflowId: 'ticket.bind@1',
+    })
+
+    expect(result).toEqual({ handled: true, value: afterTicket })
+    expect(mocks.commit).toHaveBeenCalledTimes(1)
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
+  it('rolls back Ticket cloud metadata and relationships without erasing local-only fields', async () => {
+    const ticket = makeTicket('item_a')
+    const first = { ...makeItem('item_a', 1), ticketIds: [ticket.id] }
+    const second = makeItem('item_b', 2)
+    await seedBootstrappedItems([first, second])
+    await seedBootstrappedTicket(ticket)
+    const afterTicket = {
+      ...ticket,
+      itemId: second.id,
+      note: 'edited local note',
+      title: 'Updated admission',
+      updatedAt: 2,
+    }
+    const afterFirst = { ...first, ticketIds: [], updatedAt: 2 }
+    const afterSecond = { ...second, ticketIds: [ticket.id], updatedAt: 2 }
+    mocks.commit.mockImplementationOnce(async (request: AccountWorkflowRequestV1) => ({
+      batchMutationId: request.batchMutationId,
+      conflicts: [{
+        currentObject: makeRow(request.steps[0], request.tripId, 2),
+        currentRevision: 2,
+        mutationId: request.steps[0].mutationId,
+        objectId: request.steps[0].objectId,
+        objectType: request.steps[0].objectType,
+        stepId: request.steps[0].stepId,
+      }],
+      reason: 'revision_mismatch' as const,
+      schemaVersion: 1 as const,
+      status: 'conflict' as const,
+      tripId: request.tripId,
+      workflowId: request.workflowId,
+    }))
+
+    await expect(executeProductAccountWorkflow({
+      apply: async () => {
+        await db.ticketMetas.put(afterTicket)
+        await db.itineraryItems.bulkPut([afterFirst, afterSecond])
+        return afterTicket
+      },
+      steps: [
+        {
+          objectId: ticket.id,
+          objectType: 'ticket_meta',
+          operation: 'upsert',
+          payload: redactTicketMetaForAccountCloud(afterTicket),
+        },
+        {
+          objectId: first.id,
+          objectType: 'item',
+          operation: 'upsert',
+          payload: afterFirst,
+        },
+        {
+          objectId: second.id,
+          objectType: 'item',
+          operation: 'upsert',
+          payload: afterSecond,
+        },
+      ],
+      tripId: 'trip_uk',
+      workflowId: 'ticket.bind@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    await expect(db.ticketMetas.get(ticket.id)).resolves.toMatchObject({
+      itemId: ticket.itemId,
+      note: 'edited local note',
+      title: ticket.title,
+      updatedAt: ticket.updatedAt,
+    })
+    await expect(db.itineraryItems.bulkGet([first.id, second.id])).resolves.toEqual([first, second])
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([
+      expect.objectContaining({ optimisticResolution: 'rolled_back', status: 'conflict' }),
+    ])
+  })
+
   it('rolls back the complete local graph on a server conflict', async () => {
     const before = [makeItem('item_a', 1), makeItem('item_b', 2)]
     await seedBootstrappedItems(before)
@@ -370,6 +547,29 @@ async function seedBootstrappedItems(items: ItineraryItem[]) {
   })))
 }
 
+async function seedBootstrappedTicket(ticket: TicketMeta) {
+  const payload = JSON.parse(JSON.stringify(redactTicketMetaForAccountCloud(ticket)))
+  await db.ticketMetas.put(ticket)
+  await db.accountObjectRevisions.put({
+    acknowledgedAt: 1,
+    actorId: ACTOR_ID,
+    deletedAt: null,
+    deviceId: 'device_primary',
+    mutationId: '44444444-4444-4444-8444-444444444444',
+    objectId: ticket.id,
+    objectKey: `ticket_meta:${ticket.id}`,
+    objectSchemaVersion: 1,
+    objectType: 'ticket_meta',
+    payload,
+    revision: 1,
+    serverCreatedAt: NOW_ISO,
+    serverUpdatedAt: NOW_ISO,
+    tombstone: false,
+    tripId: ticket.tripId,
+    updatedAt: 1,
+  })
+}
+
 function makeItem(id: string, sortOrder: number): ItineraryItem {
   return {
     createdAt: 1,
@@ -378,6 +578,24 @@ function makeItem(id: string, sortOrder: number): ItineraryItem {
     sortOrder,
     ticketIds: [],
     title: id,
+    tripId: 'trip_uk',
+    updatedAt: 1,
+  }
+}
+
+function makeTicket(itemId?: string): TicketMeta {
+  return {
+    createdAt: 1,
+    fileName: 'private.pdf',
+    fileType: 'pdf',
+    id: 'ticket_a',
+    itemId,
+    mimeType: 'application/pdf',
+    note: 'private note',
+    scope: itemId ? 'item' : 'unassigned',
+    size: 100,
+    storageMode: 'copy',
+    title: 'Admission',
     tripId: 'trip_uk',
     updatedAt: 1,
   }

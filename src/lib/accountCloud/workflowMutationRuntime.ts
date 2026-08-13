@@ -26,6 +26,7 @@ import {
 import {
   ACCOUNT_WORKFLOW_DEFINITIONS,
   parseAccountWorkflowRequestV1,
+  type AccountWorkflowStepV1,
   type AccountWorkflowId,
 } from './workflowContract'
 import { readAccountWorkflowLocalPayload } from './workflowLocalCodec'
@@ -202,20 +203,26 @@ async function prepareWorkflowRequest<T>(
   let requiresLegacyFallback = false
   let movedItemCount = 0
   const moveDayIds = new Set<string>()
-  const steps = []
+  const steps: AccountWorkflowStepV1[] = []
   for (const { mutation, stepId } of candidateSteps) {
     const objectKey = buildAccountObjectKey(mutation.objectType, mutation.objectId)
-    const [revision, localPayload, singlePending, workflowPending] = await Promise.all([
-      getAccountObjectRevision(objectKey, database),
-      readAccountWorkflowLocalPayload(
-        mutation.objectType,
-        mutation.objectId,
-        input.tripId,
-        database,
-      ),
-      database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
-      database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
-    ])
+    let current
+    try {
+      current = await Promise.all([
+        getAccountObjectRevision(objectKey, database),
+        readAccountWorkflowLocalPayload(
+          mutation.objectType,
+          mutation.objectId,
+          input.tripId,
+          database,
+        ),
+        database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
+        database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
+      ])
+    } catch {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    const [revision, localPayload, singlePending, workflowPending] = current
     assertActiveAccountContext(accountHash, database)
     if (singlePending > 0 || workflowPending > 0) {
       throw new AccountCloudWorkflowWriteError('conflict')
@@ -249,6 +256,9 @@ async function prepareWorkflowRequest<T>(
       moveDayIds.add(afterDayId)
       if (beforeDayId !== afterDayId) movedItemCount += 1
     }
+    if (input.workflowId === 'ticket.bind@1' && localPayload) {
+      assertTicketWorkflowMutation(mutation, localPayload)
+    }
     steps.push({
       expectedRevision: revision?.revision ?? 0,
       mutationId: mutation.mutationId,
@@ -268,6 +278,9 @@ async function prepareWorkflowRequest<T>(
   )) {
     throw new AccountCloudWorkflowWriteError('invalid_state')
   }
+  if (input.workflowId === 'ticket.bind@1') {
+    await assertCompleteTicketRelationship(input.tripId, steps, database)
+  }
   try {
     return parseAccountWorkflowRequestV1({
       batchMutationId,
@@ -279,6 +292,132 @@ async function prepareWorkflowRequest<T>(
     })
   } catch {
     throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+function assertTicketWorkflowMutation(
+  mutation: ProductCandidateMutation,
+  localPayload: JsonObject,
+) {
+  if (!mutation.payload) throw new AccountCloudWorkflowWriteError('invalid_state')
+  if (mutation.objectType === 'ticket_meta') {
+    const immutableFields = [
+      'bookingId',
+      'createdAt',
+      'fileType',
+      'id',
+      'mimeType',
+      'size',
+      'storageMode',
+      'tripId',
+    ] as const
+    if (
+      immutableFields.some((field) => !sameJson(localPayload[field], mutation.payload?.[field]))
+      || !isLaterTimestamp(mutation.payload.updatedAt, localPayload.updatedAt)
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    return
+  }
+  if (mutation.objectType !== 'item') {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const beforeTicketIds = localPayload.ticketIds
+  const afterTicketIds = mutation.payload.ticketIds
+  if (!Array.isArray(beforeTicketIds) || !Array.isArray(afterTicketIds)) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const ticketId = afterTicketIds.find((value) => (
+    typeof value === 'string' && !beforeTicketIds.includes(value)
+  )) ?? beforeTicketIds.find((value) => (
+    typeof value === 'string' && !afterTicketIds.includes(value)
+  ))
+  if (
+    !sameJson(
+      withoutFields(localPayload, ['ticketIds', 'updatedAt']),
+      withoutFields(mutation.payload, ['ticketIds', 'updatedAt']),
+    )
+    || (
+      sameJson(beforeTicketIds, afterTicketIds)
+        ? !sameJson(localPayload, mutation.payload)
+        : !isLaterTimestamp(mutation.payload.updatedAt, localPayload.updatedAt)
+    )
+    || (
+      typeof ticketId === 'string'
+      && !sameJson(
+        beforeTicketIds.filter((value) => value !== ticketId),
+        afterTicketIds.filter((value) => value !== ticketId),
+      )
+    )
+  ) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+function withoutFields(
+  value: JsonObject,
+  fields: readonly string[],
+) {
+  const result = { ...value }
+  for (const field of fields) delete result[field]
+  return result
+}
+
+function isLaterTimestamp(after: unknown, before: unknown) {
+  return Number.isSafeInteger(after)
+    && Number.isSafeInteger(before)
+    && (after as number) > (before as number)
+}
+
+async function assertCompleteTicketRelationship(
+  tripId: string,
+  steps: AccountWorkflowStepV1[],
+  database: TravelConsoleDatabase,
+) {
+  const ticketSteps = steps.filter((step) => step.objectType === 'ticket_meta')
+  const itemSteps = steps.filter((step) => step.objectType === 'item')
+  if (ticketSteps.length !== 1 || itemSteps.length !== steps.length - 1) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const ticketStep = ticketSteps[0]
+  const ticketId = ticketStep.objectId
+  const targetItemId = typeof ticketStep.payload?.itemId === 'string'
+    ? ticketStep.payload.itemId
+    : null
+  const currentTicket = await readAccountWorkflowLocalPayload(
+    'ticket_meta',
+    ticketId,
+    tripId,
+    database,
+  )
+  const tripItems = await database.itineraryItems.where('tripId').equals(tripId).toArray()
+  const currentItemsById = new Map(tripItems.map((item) => [item.id, item]))
+  const requiredItemIds = new Set<string>()
+  if (typeof currentTicket?.itemId === 'string') requiredItemIds.add(currentTicket.itemId)
+  if (targetItemId) requiredItemIds.add(targetItemId)
+  for (const item of tripItems) {
+    if ((item.ticketIds ?? []).includes(ticketId)) requiredItemIds.add(item.id)
+  }
+  const providedItemIds = new Set(itemSteps.map((step) => step.objectId))
+  if (
+    providedItemIds.size !== requiredItemIds.size
+    || [...requiredItemIds].some((itemId) => !providedItemIds.has(itemId))
+  ) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  for (const itemStep of itemSteps) {
+    const currentItem = currentItemsById.get(itemStep.objectId)
+    const afterTicketIds = itemStep.payload?.ticketIds
+    if (
+      !currentItem
+      || !Array.isArray(afterTicketIds)
+      || !sameJson(
+        (currentItem.ticketIds ?? []).filter((value) => value !== ticketId),
+        afterTicketIds.filter((value) => value !== ticketId),
+      )
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
   }
 }
 

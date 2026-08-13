@@ -6,8 +6,10 @@ import {
   type JsonObject,
 } from './contract'
 import type { AccountObjectPayload } from './models'
-import type { RedactedTicketMetaV1 } from './models'
 import type { TicketMeta } from '../../types'
+import { redactTicketMetaForAccountCloud } from './ticketMetadata'
+
+export { redactTicketMetaForAccountCloud } from './ticketMetadata'
 
 type BuildMutationOptions = {
   deviceId: string
@@ -57,25 +59,6 @@ export function buildAccountObjectDeleteMutation(
     schemaVersion: ACCOUNT_CLOUD_SCHEMA_VERSION,
     tripId: options.tripId,
   })
-}
-
-export function redactTicketMetaForAccountCloud(ticket: TicketMeta): RedactedTicketMetaV1 {
-  return {
-    bookingId: ticket.bookingId,
-    createdAt: ticket.createdAt,
-    fileType: ticket.fileType,
-    id: ticket.id,
-    itemId: ticket.itemId,
-    mimeType: ticket.mimeType,
-    scope: ticket.scope,
-    sharedVisibility: ticket.sharedVisibility,
-    size: ticket.size,
-    storageMode: ticket.storageMode,
-    ticketCategory: ticket.ticketCategory,
-    title: ticket.title,
-    tripId: ticket.tripId,
-    updatedAt: ticket.updatedAt,
-  }
 }
 
 function toPlainJsonObject(value: object): JsonObject {

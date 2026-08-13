@@ -142,6 +142,8 @@ declare
   structural_item_count bigint := 0;
   ticket_object_id text;
   ticket_current_item_id text;
+  ticket_current_payload jsonb;
+  ticket_requested_payload jsonb;
   ticket_target_item_id text;
   conflict_results jsonb := '[]'::jsonb;
   applied_steps jsonb := '[]'::jsonb;
@@ -236,7 +238,7 @@ begin
   step_count := pg_catalog.jsonb_array_length(target_steps);
   if step_count < (case target_workflow_id
       when 'day.items.reorder@1' then 2
-      when 'ticket.bind@1' then 2
+      when 'ticket.bind@1' then 1
       else 1
     end)
     or step_count > (case target_workflow_id
@@ -483,25 +485,28 @@ begin
 
     if step_operation = 'upsert'
        and step_object_type = 'ticket_meta'
-       and exists (
-         select 1
-         from pg_catalog.jsonb_object_keys(step_payload) as ticket_field(field_name)
-         where ticket_field.field_name not in (
-           'bookingId',
-           'createdAt',
-           'fileType',
-           'id',
-           'itemId',
-           'mimeType',
-           'scope',
-           'sharedVisibility',
-           'size',
-           'storageMode',
-           'ticketCategory',
-           'title',
-           'tripId',
-           'updatedAt'
+       and (
+         exists (
+           select 1
+           from pg_catalog.jsonb_object_keys(step_payload) as ticket_field(field_name)
+           where ticket_field.field_name not in (
+             'bookingId',
+             'createdAt',
+             'fileType',
+             'id',
+             'itemId',
+             'mimeType',
+             'scope',
+             'sharedVisibility',
+             'size',
+             'storageMode',
+             'ticketCategory',
+             'title',
+             'tripId',
+             'updatedAt'
+           )
          )
+         or not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)
        ) then
       return pg_catalog.jsonb_build_object(
         'schemaVersion', 1,
@@ -870,13 +875,40 @@ begin
   end loop;
 
   if target_workflow_id = 'ticket.bind@1' then
-    select current_ticket.payload ->> 'itemId'
-    into ticket_current_item_id
+    select current_ticket.payload, current_ticket.payload ->> 'itemId'
+    into ticket_current_payload, ticket_current_item_id
     from public.tripmap_account_objects as current_ticket
     where current_ticket.owner_id = current_user_id
       and current_ticket.object_type = 'ticket_meta'
       and current_ticket.object_id = ticket_object_id
+      and current_ticket.trip_id = target_trip_id
+      and not current_ticket.tombstone
     for update;
+
+    select ticket_step.value -> 'payload'
+    into ticket_requested_payload
+    from pg_catalog.jsonb_array_elements(target_steps) as ticket_step(value)
+    where ticket_step.value ->> 'objectType' = 'ticket_meta';
+
+    if ticket_current_payload is null
+       or (
+         ticket_current_payload
+           - array['itemId', 'scope', 'sharedVisibility', 'ticketCategory', 'title', 'updatedAt']::text[]
+       ) is distinct from (
+         ticket_requested_payload
+           - array['itemId', 'scope', 'sharedVisibility', 'ticketCategory', 'title', 'updatedAt']::text[]
+       )
+       or (ticket_requested_payload ->> 'updatedAt')::numeric
+          <= (ticket_current_payload ->> 'updatedAt')::numeric then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
 
     if ticket_current_item_id is not null and not exists (
       select 1
@@ -920,6 +952,49 @@ begin
         );
       end if;
     end loop;
+
+    if exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(target_steps) as requested_item(value)
+      left join public.tripmap_account_objects as current_item
+        on current_item.owner_id = current_user_id
+        and current_item.object_type = 'item'
+        and current_item.object_id = requested_item.value ->> 'objectId'
+        and current_item.trip_id = target_trip_id
+        and not current_item.tombstone
+      where requested_item.value ->> 'objectType' = 'item'
+        and (
+          current_item.object_id is null
+          or (
+            requested_item.value ->> 'objectId' is distinct from ticket_target_item_id
+            and not (current_item.payload -> 'ticketIds' ? ticket_object_id)
+          )
+          or (
+            (requested_item.value -> 'payload' -> 'ticketIds') - ticket_object_id
+            is distinct from
+            (current_item.payload -> 'ticketIds') - ticket_object_id
+          )
+          or (
+            (requested_item.value -> 'payload') - array['ticketIds', 'updatedAt']::text[]
+            is distinct from
+            current_item.payload - array['ticketIds', 'updatedAt']::text[]
+          )
+          or (
+            requested_item.value -> 'payload' -> 'ticketIds'
+              is not distinct from current_item.payload -> 'ticketIds'
+            and requested_item.value -> 'payload' is distinct from current_item.payload
+          )
+        )
+    ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
   end if;
 
   select *

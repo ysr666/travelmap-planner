@@ -24,8 +24,10 @@ import {
   moveItineraryItemBetweenDays,
   prepareDayItemsReorder,
   prepareItineraryItemMove,
+  prepareTicketMetaUpdate,
   applyDayItemsReorderPlan,
   applyItineraryItemMovePlan,
+  applyTicketMetaUpdatePlan,
   replaceTripPlanRecords,
   reorderDayItems,
   restoreItineraryItemDeletion,
@@ -454,6 +456,30 @@ describe('Ticket CRUD', () => {
     expect((await getTicketMeta(ticket.id))?.structuredFields).toBeUndefined()
   })
 
+  it('treats a legacy item without ticketIds as an empty relationship list', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const item = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Legacy', sortOrder: 1, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      fileName: 'legacy.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      scope: 'unassigned',
+      size: 1,
+      tripId: trip.id,
+    })
+    await db.itineraryItems.put({ ...item, ticketIds: undefined as never })
+    await expect(db.itineraryItems.get(item.id)).resolves.toMatchObject({ ticketIds: undefined })
+
+    await expect(updateTicketMeta(ticket.id, {
+      itemId: item.id,
+      scope: 'item',
+    })).resolves.toMatchObject({
+      changedItems: [{ id: item.id, ticketIds: [ticket.id] }],
+      ticket: { itemId: item.id, scope: 'item' },
+    })
+  })
+
   it('rejects ticket rebinds to items outside the ticket trip without mutating metadata', async () => {
     const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
     const otherTrip = await createTrip({ title: 'Other', destination: 'B', startDate: '2025-04-01', endDate: '2025-04-03' })
@@ -562,6 +588,38 @@ describe('Ticket CRUD', () => {
     expect(unchangedTicket?.itemId).toBeUndefined()
     expect(unchangedTicket?.scope).toBe('unassigned')
     await expect(getItineraryItem(item.id)).resolves.toMatchObject({ ticketIds: ['ticket-added-elsewhere'] })
+  })
+
+  it('rejects a prepared rebind when a hidden reverse link appears before commit', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'A', sortOrder: 1, ticketIds: [] })
+    const second = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'B', sortOrder: 2, ticketIds: [] })
+    const hidden = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'C', sortOrder: 3, ticketIds: [] })
+    const ticket = await createTicketMeta({
+      tripId: trip.id,
+      itemId: first.id,
+      scope: 'item',
+      fileName: 'a.pdf',
+      fileType: 'pdf',
+      mimeType: 'application/pdf',
+      size: 1,
+    })
+    await updateItineraryItem(first.id, { ticketIds: [ticket.id] })
+    const plan = await prepareTicketMetaUpdate(ticket.id, {
+      itemId: second.id,
+      scope: 'item',
+      title: 'Rebound',
+    })
+    if (!plan) throw new Error('Missing Ticket update plan.')
+    await updateItineraryItem(hidden.id, { ticketIds: [ticket.id] })
+
+    await expect(applyTicketMetaUpdatePlan(plan)).rejects.toThrow('票据关联目标已变化')
+
+    await expect(getTicketMeta(ticket.id)).resolves.toMatchObject({ itemId: first.id, scope: 'item' })
+    await expect(getItineraryItem(first.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
+    await expect(getItineraryItem(second.id)).resolves.toMatchObject({ ticketIds: [] })
+    await expect(getItineraryItem(hidden.id)).resolves.toMatchObject({ ticketIds: [ticket.id] })
   })
 })
 

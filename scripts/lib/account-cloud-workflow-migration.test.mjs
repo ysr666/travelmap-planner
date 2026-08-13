@@ -69,7 +69,10 @@ describe('account cloud workflow migration gate', () => {
   it('rejects Ticket whitelist drift and removal of the account guard', () => {
     expect(() => validateAccountCloudWorkflowMigration({
       contractSource: combinedContract,
-      migrationSql: migrationSql.replace("           'updatedAt'\n         )", "           'updatedAt',\n           'fileName'\n         )"),
+      migrationSql: migrationSql.replace(
+        "             'tripId',\n             'updatedAt'\n           )\n         )\n         or not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)",
+        "             'tripId',\n             'updatedAt',\n             'fileName'\n           )\n         )\n         or not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)",
+      ),
     })).toThrow(/Ticket metadata fields/)
     expect(() => validateAccountCloudWorkflowMigration({
       contractSource: combinedContract,
@@ -78,6 +81,13 @@ describe('account cloud workflow migration gate', () => {
         'target_account_hash = pg_catalog.left(',
       ),
     })).toThrow(/account-context guard/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        'not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)',
+        'false',
+      ),
+    })).toThrow(/account_ticket_meta_payload_is_valid/)
   })
 
   it('rejects removal of the bounded payload traversal or its private grant boundary', () => {
@@ -138,6 +148,10 @@ describe('account cloud workflow migration gate', () => {
   it('rejects removal of the complete Ticket rebind baseline', () => {
     expect(() => validateAccountCloudWorkflowMigration({
       contractSource: combinedContract,
+      migrationSql: migrationSql.replace("when 'ticket.bind@1' then 1", "when 'ticket.bind@1' then 2"),
+    })).toThrow(/ticket.bind@1/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
       migrationSql: migrationSql.replace(
         "current_user_id::text || ':ticket-binding:' || ticket_object_id",
         "current_user_id::text || ':ticket-binding-removed:' || ticket_object_id",
@@ -150,6 +164,13 @@ describe('account cloud workflow migration gate', () => {
         'false',
       ),
     })).toThrow(/ticketIds/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "current_item.payload - array['ticketIds', 'updatedAt']::text[]",
+        "requested_item.value -> 'payload'",
+      ),
+    })).toThrow(/ticketIds|updatedAt/)
   })
 
   it('rejects removal or reordering of structural day locks and complete graph checks', () => {

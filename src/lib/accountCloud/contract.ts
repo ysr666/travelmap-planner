@@ -142,6 +142,7 @@ export type AccountObjectMutationRejection =
   | 'receipt_object_missing'
   | 'server_managed_object'
   | 'unknown_object_type'
+  | 'workflow_required'
 
 export type AccountCloudContractErrorCode =
   | 'invalid_envelope'
@@ -220,6 +221,7 @@ const REJECTION_SET = new Set<AccountObjectMutationRejection>([
   'receipt_object_missing',
   'server_managed_object',
   'unknown_object_type',
+  'workflow_required',
 ])
 const CONTROLLED_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$/
 const CONTROLLED_DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/
@@ -272,6 +274,18 @@ const TICKET_META_PAYLOAD_FIELDS = new Set([
   'title',
   'tripId',
   'updatedAt',
+])
+const TICKET_FILE_TYPES = new Set(['image', 'pdf', 'other'])
+const TICKET_SCOPES = new Set(['trip', 'item', 'unassigned'])
+const TICKET_STORAGE_MODES = new Set(['copy', 'reference', 'external'])
+const TICKET_CATEGORIES = new Set([
+  'admission_ticket',
+  'train_ticket',
+  'flight_ticket',
+  'hotel_booking',
+  'restaurant_reservation',
+  'transport_booking',
+  'other',
 ])
 
 export function parseAccountObjectMutationV1(input: unknown): AccountObjectMutationV1 {
@@ -506,6 +520,68 @@ function assertObjectSpecificPayloadBoundary(
       fail(code, `Ticket metadata contains an unregistered field ${key}.`)
     }
   }
+  if (
+    !Number.isSafeInteger(payload.createdAt)
+    || (payload.createdAt as number) < 0
+    || !Number.isSafeInteger(payload.updatedAt)
+    || (payload.updatedAt as number) < (payload.createdAt as number)
+    || !TICKET_FILE_TYPES.has(payload.fileType as string)
+    || !isBoundedString(payload.mimeType, 255)
+    || !Number.isSafeInteger(payload.size)
+    || (payload.size as number) < 0
+    || !isOptionalBoundedString(payload.bookingId, 160)
+    || !isOptionalControlledId(payload.itemId)
+    || !isOptionalBoundedString(payload.title, 500)
+    || !isOptionalEnum(payload.scope, TICKET_SCOPES)
+    || !isOptionalEnum(payload.storageMode, TICKET_STORAGE_MODES)
+    || !isOptionalEnum(payload.ticketCategory, TICKET_CATEGORIES)
+    || ((payload.scope === 'item') !== (typeof payload.itemId === 'string'))
+    || !isTicketVisibility(payload.sharedVisibility)
+  ) {
+    fail(code, 'Ticket metadata fields are invalid.')
+  }
+}
+
+function isBoundedString(input: JsonValue | undefined, maxLength: number) {
+  return typeof input === 'string'
+    && input.length > 0
+    && input.length <= maxLength
+    && !hasControlCharacter(input)
+}
+
+function hasControlCharacter(input: string) {
+  return [...input].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 0x1f || codePoint === 0x7f
+  })
+}
+
+function isOptionalBoundedString(input: JsonValue | undefined, maxLength: number) {
+  return input === undefined || isBoundedString(input, maxLength)
+}
+
+function isOptionalControlledId(input: JsonValue | undefined) {
+  return input === undefined || (typeof input === 'string' && CONTROLLED_ID.test(input))
+}
+
+function isOptionalEnum(input: JsonValue | undefined, allowed: Set<string>) {
+  return input === undefined || (typeof input === 'string' && allowed.has(input))
+}
+
+function isTicketVisibility(input: JsonValue | undefined) {
+  if (input === undefined) return true
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false
+  const fields = Object.keys(input)
+  if (input.mode === 'all') return fields.length === 1 && fields[0] === 'mode'
+  if (
+    input.mode !== 'assigned'
+    || fields.some((field) => field !== 'memberIds' && field !== 'mode')
+    || !Array.isArray(input.memberIds)
+    || input.memberIds.length > 64
+  ) {
+    return false
+  }
+  return isUniqueControlledIdList(input.memberIds)
 }
 
 function isUniqueControlledIdList(input: JsonValue | undefined) {

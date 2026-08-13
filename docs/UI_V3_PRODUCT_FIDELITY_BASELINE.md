@@ -2,9 +2,11 @@
 
 更新时间：2026-08-10
 
-状态：**Production Current；P0-P8 visual baseline verified，无未关闭 Visual P0/P1/P2**
+状态：**Visual Current；P0-P8 visual baseline verified，无未关闭 Visual P0/P1/P2；产品内容接入仍为 Partial**
 
 上游合同：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
+
+产品级后续合同：[完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)
 
 ## 1. 参考与复现合同
 

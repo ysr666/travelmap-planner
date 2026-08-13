@@ -1,111 +1,139 @@
+import { getActiveAccountHash } from '../lib/accountStorageScope'
+import { isAccountCloudV2AccountEnabled } from '../lib/accountCloud/feature'
+import { executeProductAccountWorkflowIfEnabled } from '../lib/accountCloud/workflowRuntimeLoader'
+import type { JsonObject } from '../lib/accountCloud/contract'
 import { enqueueObjectDelete, enqueueObjectUpsert } from '../lib/objectSyncLocal'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
-import { buildLedgerReviewEntries } from '../lib/ledgerReview'
-import type { LedgerExchangeRateSnapshot } from '../types'
-import { db } from './database'
-import * as repo from './ledgerRepositories'
+import type {
+  BulkLedgerReviewRecord,
+  CreateLedgerBudgetInput,
+  CreateLedgerExpenseInput,
+  CreateLedgerParticipantInput,
+  CreateLedgerSettingsInput,
+  LedgerMutationPlan,
+} from './ledgerMutationRepository'
+import type { LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings } from '../types'
 
-export type BulkLedgerReviewRecord = {
-  exchangeRate?: LedgerExchangeRateSnapshot
-  expectedUpdatedAt: number
-  id: string
+export type { BulkLedgerReviewRecord }
+
+export async function initializeLedger(input: {
+  budget: CreateLedgerBudgetInput
+  participant: CreateLedgerParticipantInput
+  settings: CreateLedgerSettingsInput
+}) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareInitializeLedger(input)
+  return executeLedgerPlan(plan, 'ledger-initialized', repo.applyLedgerMutationPlan)
 }
 
-export async function createLedgerSettings(input: repo.CreateLedgerSettingsInput) {
-  const record = await repo.createLedgerSettings(input)
-  await enqueueObjectUpsert({ object: record, objectType: 'ledger_settings' })
-  markLedgerChanged(record.tripId, 'ledger-settings-created')
-  return record
+export async function createLedgerSettings(input: CreateLedgerSettingsInput) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareCreateLedgerSettings(input)
+  return executeLedgerPlan(plan, 'ledger-settings-created', repo.applyLedgerMutationPlan)
 }
 
-export async function updateLedgerSettings(id: string, patch: Parameters<typeof repo.updateLedgerSettings>[1]) {
-  const record = await repo.updateLedgerSettings(id, patch)
-  if (record) {
-    await enqueueObjectUpsert({ object: record, objectType: 'ledger_settings' })
-    markLedgerChanged(record.tripId, 'ledger-settings-updated')
-  }
-  return record
+export async function updateLedgerSettings(
+  id: string,
+  patch: Partial<Omit<LedgerSettings, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>,
+) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareUpdateLedgerSettings(id, patch)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-settings-updated', repo.applyLedgerMutationPlan)
 }
 
-export async function createLedgerParticipant(input: repo.CreateLedgerParticipantInput) {
-  const record = await repo.createLedgerParticipant(input)
-  await enqueueObjectUpsert({ object: record, objectType: 'ledger_participant' })
-  markLedgerChanged(record.tripId, 'ledger-participant-created')
-  return record
+export async function createLedgerParticipant(input: CreateLedgerParticipantInput) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareCreateLedgerParticipant(input)
+  return executeLedgerPlan(plan, 'ledger-participant-created', repo.applyLedgerMutationPlan)
 }
 
-export async function updateLedgerParticipant(id: string, patch: Parameters<typeof repo.updateLedgerParticipant>[1]) {
-  const record = await repo.updateLedgerParticipant(id, patch)
-  if (record) {
-    await enqueueObjectUpsert({ object: record, objectType: 'ledger_participant' })
-    markLedgerChanged(record.tripId, 'ledger-participant-updated')
-  }
-  return record
+export async function createLedgerParticipants(inputs: CreateLedgerParticipantInput[]) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareCreateLedgerParticipants(inputs)
+  if (!plan) return []
+  return executeLedgerPlan(plan, 'ledger-participants-created', repo.applyLedgerMutationPlan)
+}
+
+export async function updateLedgerParticipant(
+  id: string,
+  patch: Partial<Omit<LedgerParticipant, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>,
+) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareUpdateLedgerParticipant(id, patch)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-participant-updated', repo.applyLedgerMutationPlan)
 }
 
 export async function deleteLedgerParticipant(id: string) {
-  const record = await repo.deleteLedgerParticipant(id)
-  if (record) {
-    await enqueueObjectDelete({ objectId: record.id, objectType: 'ledger_participant', tripId: record.tripId })
-    markLedgerChanged(record.tripId, 'ledger-participant-deleted')
-  }
-}
-
-export async function createLedgerBudget(input: repo.CreateLedgerBudgetInput) {
-  const record = await repo.createLedgerBudget(input)
-  await enqueueObjectUpsert({ object: record, objectType: 'ledger_budget' })
-  markLedgerChanged(record.tripId, 'ledger-budget-created')
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareDeleteLedgerParticipant(id)
+  if (!plan) return undefined
+  const record = await executeLedgerPlan(plan, 'ledger-participant-deleted', repo.applyLedgerMutationPlan)
   return record
 }
 
-export async function updateLedgerBudget(id: string, patch: Parameters<typeof repo.updateLedgerBudget>[1]) {
-  const record = await repo.updateLedgerBudget(id, patch)
-  if (record) {
-    await enqueueObjectUpsert({ object: record, objectType: 'ledger_budget' })
-    markLedgerChanged(record.tripId, 'ledger-budget-updated')
-  }
-  return record
+export async function createLedgerBudget(input: CreateLedgerBudgetInput) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareCreateLedgerBudget(input)
+  return executeLedgerPlan(plan, 'ledger-budget-created', repo.applyLedgerMutationPlan)
+}
+
+export async function updateLedgerBudget(
+  id: string,
+  patch: Partial<Omit<LedgerBudget, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>,
+) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareUpdateLedgerBudget(id, patch)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-budget-updated', repo.applyLedgerMutationPlan)
 }
 
 export async function deleteLedgerBudget(id: string) {
-  const record = await repo.deleteLedgerBudget(id)
-  if (record) {
-    await enqueueObjectDelete({ objectId: record.id, objectType: 'ledger_budget', tripId: record.tripId })
-    markLedgerChanged(record.tripId, 'ledger-budget-deleted')
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareDeleteLedgerBudget(id)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-budget-deleted', repo.applyLedgerMutationPlan)
+}
+
+export async function createLedgerExpense(input: CreateLedgerExpenseInput) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareCreateLedgerExpense(input)
+  return executeLedgerPlan(plan, 'ledger-expense-created', repo.applyLedgerMutationPlan)
+}
+
+export async function createLedgerExpenseIdempotent(input: CreateLedgerExpenseInput) {
+  const repo = await import('./ledgerMutationRepository')
+  const prepared = await repo.prepareCreateLedgerExpenseIdempotent(input)
+  if (prepared.plan) {
+    try {
+      return await executeLedgerPlan(prepared.plan, 'ledger-expense-created', repo.applyLedgerMutationPlan)
+    } catch (error) {
+      const recovered = await repo.prepareCreateLedgerExpenseIdempotent(input)
+      if (recovered.plan) throw error
+      await preserveIdempotentLedgerRecovery(recovered.result.record)
+      return recovered.result
+    }
   }
+  await preserveIdempotentLedgerRecovery(prepared.result.record)
+  return prepared.result
 }
 
-export async function createLedgerExpense(input: repo.CreateLedgerExpenseInput) {
-  const record = await repo.createLedgerExpense(input)
-  await enqueueObjectUpsert({ object: record, objectType: 'ledger_expense' })
-  markLedgerChanged(record.tripId, 'ledger-expense-created')
-  return record
-}
-
-export async function createLedgerExpenseIdempotent(input: repo.CreateLedgerExpenseInput) {
-  const result = await repo.createLedgerExpenseIdempotent(input)
-  await enqueueObjectUpsert({ object: result.record, objectType: 'ledger_expense' })
-  markLedgerChanged(result.record.tripId, result.created
-    ? 'ledger-expense-created'
-    : 'ledger-expense-recovered')
-  return result
-}
-
-export async function updateLedgerExpense(id: string, patch: Parameters<typeof repo.updateLedgerExpense>[1]) {
-  const record = await repo.updateLedgerExpense(id, patch)
-  if (record) {
-    await enqueueObjectUpsert({ object: record, objectType: 'ledger_expense' })
-    markLedgerChanged(record.tripId, 'ledger-expense-updated')
-  }
-  return record
+export async function updateLedgerExpense(
+  id: string,
+  patch: Partial<Omit<LedgerExpense, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>,
+) {
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareUpdateLedgerExpense(id, patch)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-expense-updated', repo.applyLedgerMutationPlan)
 }
 
 export async function deleteLedgerExpense(id: string) {
-  const record = await repo.deleteLedgerExpense(id)
-  if (record) {
-    await enqueueObjectDelete({ objectId: record.id, objectType: 'ledger_expense', tripId: record.tripId })
-    markLedgerChanged(record.tripId, 'ledger-expense-deleted')
-  }
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareDeleteLedgerExpense(id)
+  if (!plan) return undefined
+  return executeLedgerPlan(plan, 'ledger-expense-deleted', repo.applyLedgerMutationPlan)
 }
 
 export async function bulkReviewLedgerExpenses({
@@ -117,36 +145,71 @@ export async function bulkReviewLedgerExpenses({
   records: BulkLedgerReviewRecord[]
   tripId: string
 }) {
-  if (records.length === 0) return []
-  if (new Set(records.map((record) => record.id)).size !== records.length) throw new Error('批量审核包含重复账单，请刷新后重试。')
-  const now = Date.now()
-  const updated = await db.transaction('rw', db.ledgerExpenses, db.trips, async () => {
-    const current = await db.ledgerExpenses.where('tripId').equals(tripId).toArray()
-    const reviewById = new Map(buildLedgerReviewEntries(current).map((entry) => [entry.expense.id, entry]))
-    const selected = records.map((record) => {
-      const expense = current.find((candidate) => candidate.id === record.id)
-      if (!expense || expense.updatedAt !== record.expectedUpdatedAt) throw new Error('账单已在其他位置更新，请刷新后重试。')
-      const review = reviewById.get(record.id)
-      if (action === 'confirm' && !review?.canBulkConfirm) throw new Error(`「${expense.title}」仍有阻塞问题，不能批量确认。`)
-      if (action === 'mark_reviewed' && !review?.canMarkReviewed) throw new Error(`「${expense.title}」不属于待阅自动归档。`)
-      return { expense, record }
-    })
-    const next = selected.map(({ expense, record }, index) => ({
-      ...expense,
-      ...(action === 'confirm' ? {
-        ...(record.exchangeRate ? { exchangeRate: record.exchangeRate } : {}),
-        reviewStatus: 'reviewed' as const,
-        status: 'confirmed' as const,
-      } : { reviewStatus: 'reviewed' as const }),
-      updatedAt: Math.max(now + index, expense.updatedAt + 1),
-    }))
-    await db.ledgerExpenses.bulkPut(next)
-    await db.trips.update(tripId, { updatedAt: now })
-    return next
+  const repo = await import('./ledgerMutationRepository')
+  const plan = await repo.prepareBulkReviewLedgerExpenses({ action, records, tripId })
+  if (!plan) return []
+  return executeLedgerPlan(plan, `ledger-expenses-bulk-${action}`, repo.applyLedgerMutationPlan)
+}
+
+async function executeLedgerPlan<T>(
+  plan: LedgerMutationPlan<T>,
+  reason: string,
+  apply: <Value>(plan: LedgerMutationPlan<Value>, options?: { touchTrip?: boolean }) => Promise<Value>,
+) {
+  const accountCloudEnabled = isAccountCloudV2AccountEnabled(getActiveAccountHash())
+  const accountCloud = await executeProductAccountWorkflowIfEnabled({
+    apply: () => apply(plan, { touchTrip: false }),
+    steps: plan.changes.map((change) => ({
+      objectId: change.objectId,
+      objectType: change.objectType,
+      operation: change.operation,
+      ...(change.after ? { payload: change.after as unknown as JsonObject } : {}),
+    })),
+    tripId: plan.tripId,
+    workflowId: 'ledger.batch@1',
   })
-  for (const expense of updated) await enqueueObjectUpsert({ object: expense, objectType: 'ledger_expense' })
-  recordTripWriteForSync(tripId, `ledger-expenses-bulk-${action}`, { emitChangeEvent: true, now })
-  return updated
+  if (accountCloud.handled) return accountCloud.value
+
+  const value = await apply(plan, { touchTrip: !accountCloudEnabled })
+  await Promise.all(plan.changes.map((change) => enqueueLegacyLedgerChange(change, plan.tripId)))
+  markLedgerChanged(plan.tripId, reason)
+  return value
+}
+
+function enqueueLegacyLedgerChange(change: LedgerMutationPlan<unknown>['changes'][number], tripId: string) {
+  if (change.operation === 'delete') {
+    return enqueueObjectDelete({ objectId: change.objectId, objectType: change.objectType, tripId })
+  }
+  switch (change.objectType) {
+    case 'ledger_settings':
+      return enqueueObjectUpsert({ object: change.after as LedgerSettings, objectType: change.objectType })
+    case 'ledger_participant':
+      return enqueueObjectUpsert({ object: change.after as LedgerParticipant, objectType: change.objectType })
+    case 'ledger_budget':
+      return enqueueObjectUpsert({ object: change.after as LedgerBudget, objectType: change.objectType })
+    case 'ledger_expense':
+      return enqueueObjectUpsert({ object: change.after as LedgerExpense, objectType: change.objectType })
+  }
+}
+
+async function preserveIdempotentLedgerRecovery(record: LedgerExpense) {
+  const accountCloudEnabled = isAccountCloudV2AccountEnabled(getActiveAccountHash())
+  if (accountCloudEnabled) {
+    const objectKey = `ledger_expense:${record.id}`
+    const [{ getActiveTravelDatabase }, { getAccountObjectRevision }] = await Promise.all([
+      import('./database'),
+      import('../lib/accountCloud/localStore'),
+    ])
+    const database = getActiveTravelDatabase()
+    const [revision, singlePending, workflowPending] = await Promise.all([
+      getAccountObjectRevision(objectKey, database),
+      database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
+      database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
+    ])
+    if (revision || singlePending > 0 || workflowPending > 0) return
+  }
+  await enqueueObjectUpsert({ object: record, objectType: 'ledger_expense' })
+  markLedgerChanged(record.tripId, 'ledger-expense-recovered')
 }
 
 function markLedgerChanged(tripId: string, reason: string) {

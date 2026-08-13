@@ -17,9 +17,19 @@ import type {
   TripReplanRecord,
   Trip,
 } from '../types'
+import type {
+  ImportTripPlanRecordsInput,
+  TripPlanImportPlan,
+} from './tripPlanImportRepository'
+
+export type {
+  ImportTripPlanRecordsInput,
+  TripPlanImportPlan,
+} from './tripPlanImportRepository'
 
 type CreateTripInput = Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripPatch = Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
+type ParentTripTouchOptions = { touchTrip?: boolean }
 
 type CreateDayInput = Omit<Day, 'id'>
 type UpdateDayPatch = Partial<Omit<Day, 'id' | 'tripId'>>
@@ -28,6 +38,39 @@ type CreateItineraryItemInput = Omit<ItineraryItem, 'id' | 'createdAt' | 'update
 type UpdateItineraryItemPatch = Partial<
   Omit<ItineraryItem, 'id' | 'tripId' | 'dayId' | 'createdAt' | 'updatedAt'>
 >
+
+export type DayItemsReorderPlan = {
+  afterItems: ItineraryItem[]
+  beforeItems: ItineraryItem[]
+  changedItems: ItineraryItem[]
+  day: Day
+  dayId: string
+  orderedItemIds: string[]
+  tripId: string
+  updatedAt: number
+}
+
+export type ItineraryItemMovePlan = {
+  afterItems: ItineraryItem[]
+  beforeDestinationItems: ItineraryItem[]
+  beforeSourceItems: ItineraryItem[]
+  changedItems: ItineraryItem[]
+  destinationDay: Day
+  destinationDayId: string
+  destinationItemIds: string[]
+  itemId: string
+  movedItem: ItineraryItem
+  nextDestinationItemIds: string[]
+  sourceDay: Day
+  sourceDayId: string
+  sourceItemIds: string[]
+  tripId: string
+  updatedAt: number
+}
+
+type StructuralItemCommitOptions = {
+  touchTrip?: boolean
+}
 
 export class ItineraryBaselineConflictError extends Error {}
 export class TicketBaselineConflictError extends Error {}
@@ -59,6 +102,17 @@ type UpdateTicketMetaInput = {
 type UpdateTicketMetaResult = {
   changedItems: ItineraryItem[]
   ticket: TicketMeta
+}
+export type TicketMetaUpdatePlan = {
+  afterRelationshipItems: ItineraryItem[]
+  afterTicket: TicketMeta
+  beforeRelationshipItems: ItineraryItem[]
+  beforeTicket: TicketMeta
+  changedItems: ItineraryItem[]
+  targetItemId?: string
+  ticketId: string
+  tripId: string
+  updatedAt: number
 }
 type CreateTripDisruptionEventInput = Omit<TripDisruptionEvent, 'id' | 'createdAt' | 'updatedAt'>
 type UpdateTripDisruptionEventPatch = Partial<Omit<TripDisruptionEvent, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
@@ -107,18 +161,6 @@ export type ImportTripBackupRecordsInput = {
   ledgerBudgets?: LedgerBudget[]
   ledgerExpenses?: LedgerExpense[]
   importedTitleSuffix: string
-}
-
-export type ImportTripPlanRecordsInput = {
-  trip: Trip
-  days: Day[]
-  itineraryItems: ItineraryItem[]
-  ticketMetas: TicketMeta[]
-  ticketBlobs: TicketBlob[]
-  ledgerSettings?: LedgerSettings[]
-  ledgerParticipants?: LedgerParticipant[]
-  ledgerBudgets?: LedgerBudget[]
-  ledgerExpenses?: LedgerExpense[]
 }
 
 export async function createTrip(input: CreateTripInput) {
@@ -191,14 +233,16 @@ export async function deleteTripCascade(tripId: string) {
   )
 }
 
-export async function createDay(input: CreateDayInput) {
+export async function createDay(input: CreateDayInput, options: ParentTripTouchOptions = {}) {
   const day: Day = {
     ...input,
     id: createId('day'),
   }
 
   await db.days.add(day)
-  await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  if (options.touchTrip !== false) {
+    await db.trips.update(day.tripId, { updatedAt: Date.now() })
+  }
   return day
 }
 
@@ -210,7 +254,11 @@ export async function getDay(dayId: string) {
   return db.days.get(dayId)
 }
 
-export async function updateDay(dayId: string, patch: UpdateDayPatch) {
+export async function updateDay(
+  dayId: string,
+  patch: UpdateDayPatch,
+  options: ParentTripTouchOptions = {},
+) {
   const day = await db.days.get(dayId)
   if (!day) {
     return undefined
@@ -218,7 +266,9 @@ export async function updateDay(dayId: string, patch: UpdateDayPatch) {
 
   await db.transaction('rw', db.days, db.trips, async () => {
     await db.days.update(dayId, patch)
-    await db.trips.update(day.tripId, { updatedAt: Date.now() })
+    if (options.touchTrip !== false) {
+      await db.trips.update(day.tripId, { updatedAt: Date.now() })
+    }
   })
 
   return getDay(dayId)
@@ -255,7 +305,10 @@ export async function deleteDayCascade(dayId: string) {
   )
 }
 
-export async function createItineraryItem(input: CreateItineraryItemInput) {
+export async function createItineraryItem(
+  input: CreateItineraryItemInput,
+  options: ParentTripTouchOptions = {},
+) {
   const now = Date.now()
   const item: ItineraryItem = {
     ...input,
@@ -266,7 +319,9 @@ export async function createItineraryItem(input: CreateItineraryItemInput) {
 
   await db.transaction('rw', db.itineraryItems, db.trips, async () => {
     await db.itineraryItems.add(item)
-    await db.trips.update(item.tripId, { updatedAt: now })
+    if (options.touchTrip !== false) {
+      await db.trips.update(item.tripId, { updatedAt: now })
+    }
   })
 
   return item
@@ -332,7 +387,11 @@ export async function getItineraryItem(itemId: string) {
   return db.itineraryItems.get(itemId)
 }
 
-export async function updateItineraryItem(itemId: string, patch: UpdateItineraryItemPatch) {
+export async function updateItineraryItem(
+  itemId: string,
+  patch: UpdateItineraryItemPatch,
+  options: ParentTripTouchOptions = {},
+) {
   const item = await db.itineraryItems.get(itemId)
   if (!item) {
     return undefined
@@ -344,7 +403,9 @@ export async function updateItineraryItem(itemId: string, patch: UpdateItinerary
       ...patch,
       updatedAt,
     })
-    await db.trips.update(item.tripId, { updatedAt })
+    if (options.touchTrip !== false) {
+      await db.trips.update(item.tripId, { updatedAt })
+    }
   })
 
   return getItineraryItem(itemId)
@@ -355,6 +416,20 @@ export async function reorderDayItems(
   orderedItemIds: string[],
   expectedCurrentItemIds?: string[],
 ) {
+  const plan = await prepareDayItemsReorder(
+    dayId,
+    orderedItemIds,
+    expectedCurrentItemIds,
+  )
+  return applyDayItemsReorderPlan(plan)
+}
+
+export async function prepareDayItemsReorder(
+  dayId: string,
+  orderedItemIds: string[],
+  expectedCurrentItemIds?: string[],
+  updatedAt = Date.now(),
+): Promise<DayItemsReorderPlan> {
   if (new Set(orderedItemIds).size !== orderedItemIds.length) {
     throw new Error('排序列表包含重复行程点。')
   }
@@ -362,48 +437,63 @@ export async function reorderDayItems(
     throw new Error('排序基线包含重复行程点。')
   }
 
-  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
-    const day = await db.days.get(dayId)
-    if (!day) {
-      throw new Error('当天行程不存在。')
-    }
+  const day = await db.days.get(dayId)
+  if (!day) throw new Error('当天行程不存在。')
+  const currentItems = sortItineraryItemsByPlanOrder(
+    await db.itineraryItems.where('dayId').equals(dayId).toArray(),
+  )
+  return buildDayItemsReorderPlan({
+    currentItems,
+    day,
+    dayId,
+    expectedCurrentItemIds,
+    orderedItemIds,
+    tripId: day.tripId,
+    updatedAt,
+  })
+}
 
-    const currentItems = sortItineraryItemsByPlanOrder(await db.itineraryItems.where('dayId').equals(dayId).toArray())
-    const currentItemIds = new Set(currentItems.map((item) => item.id))
+export async function applyDayItemsReorderPlan(
+  plan: DayItemsReorderPlan,
+  options: StructuralItemCommitOptions = {},
+) {
+  const tables = options.touchTrip === false
+    ? [db.days, db.itineraryItems]
+    : [db.days, db.itineraryItems, db.trips]
+  return db.transaction('rw', tables, async () => {
+    const [currentDay, currentItems] = await Promise.all([
+      db.days.get(plan.dayId),
+      db.itineraryItems.where('dayId').equals(plan.dayId).toArray()
+        .then(sortItineraryItemsByPlanOrder),
+    ])
     if (
-      currentItems.length !== orderedItemIds.length
-      || orderedItemIds.some((itemId) => !currentItemIds.has(itemId))
-    ) {
-      throw new ItineraryBaselineConflictError('排序列表与当前行程不一致，请刷新后重试。')
-    }
-    if (
-      expectedCurrentItemIds
-      && (
-        expectedCurrentItemIds.length !== currentItems.length
-        || expectedCurrentItemIds.some((itemId, index) => itemId !== currentItems[index]?.id)
-      )
+      !currentDay
+      || !sameRecord(currentDay, plan.day)
+      || currentDay.tripId !== plan.tripId
+      || currentItems.some((item) => item.dayId !== plan.dayId || item.tripId !== plan.tripId)
+      || !sameRecords(currentItems, plan.beforeItems)
     ) {
       throw new ItineraryBaselineConflictError('当天顺序已在其他位置更新，请刷新后重试。')
     }
-    if (orderedItemIds.every((itemId, index) => itemId === currentItems[index]?.id)) {
-      return []
-    }
-
-    const itemById = new Map(currentItems.map((item) => [item.id, item]))
-    const updatedAt = Date.now()
-    const changedItems = orderedItemIds.flatMap((itemId, index) => {
-      const item = itemById.get(itemId)
-      if (!item || item.sortOrder === index + 1) return []
-      return [{ ...item, sortOrder: index + 1, updatedAt }]
+    const verified = buildDayItemsReorderPlan({
+      currentItems,
+      day: currentDay,
+      dayId: plan.dayId,
+      expectedCurrentItemIds: plan.beforeItems.map((item) => item.id),
+      orderedItemIds: plan.orderedItemIds,
+      tripId: plan.tripId,
+      updatedAt: plan.updatedAt,
     })
-
-    if (changedItems.length === 0) {
-      return []
+    if (!sameRecords(verified.afterItems, plan.afterItems)) {
+      throw new ItineraryBaselineConflictError('排序计划已变化，请重新生成预览。')
     }
-
-    await db.itineraryItems.bulkPut(changedItems)
-    await db.trips.update(day.tripId, { updatedAt })
-    return changedItems
+    if (verified.changedItems.length > 0) {
+      await db.itineraryItems.bulkPut(verified.changedItems)
+      if (options.touchTrip !== false) {
+        await db.trips.update(plan.tripId, { updatedAt: plan.updatedAt })
+      }
+    }
+    return verified.changedItems
   })
 }
 
@@ -417,6 +507,26 @@ export async function moveItineraryItemBetweenDays(
     sourceDayId: string
   },
 ) {
+  const plan = await prepareItineraryItemMove(
+    itemId,
+    destinationDayId,
+    nextDestinationItemIds,
+    options,
+  )
+  return applyItineraryItemMovePlan(plan)
+}
+
+export async function prepareItineraryItemMove(
+  itemId: string,
+  destinationDayId: string,
+  nextDestinationItemIds: string[],
+  options: {
+    expectedDestinationItemIds: string[]
+    expectedSourceItemIds: string[]
+    sourceDayId: string
+  },
+  updatedAt = Date.now(),
+): Promise<ItineraryItemMovePlan> {
   if (options.sourceDayId === destinationDayId) {
     throw new Error('跨日移动的来源日期与目标日期不能相同。')
   }
@@ -430,110 +540,266 @@ export async function moveItineraryItemBetweenDays(
     }
   }
 
-  return db.transaction('rw', db.days, db.itineraryItems, db.trips, async () => {
-    const [item, sourceDay, destinationDay] = await Promise.all([
-      db.itineraryItems.get(itemId),
-      db.days.get(options.sourceDayId),
-      db.days.get(destinationDayId),
-    ])
-    if (!item || item.dayId !== options.sourceDayId) {
-      throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
-    }
-    if (!sourceDay || !destinationDay) {
-      throw new ItineraryBaselineConflictError('来源日期或目标日期已不存在，请重新生成预览。')
-    }
-    if (
-      sourceDay.tripId !== destinationDay.tripId
-      || item.tripId !== sourceDay.tripId
-    ) {
-      throw new ItineraryBaselineConflictError('日期归属已变化，请重新生成预览。')
-    }
+  const [item, sourceDay, destinationDay] = await Promise.all([
+    db.itineraryItems.get(itemId),
+    db.days.get(options.sourceDayId),
+    db.days.get(destinationDayId),
+  ])
+  if (!item || item.dayId !== options.sourceDayId) {
+    throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
+  }
+  if (!sourceDay || !destinationDay) {
+    throw new ItineraryBaselineConflictError('来源日期或目标日期已不存在，请重新生成预览。')
+  }
+  if (sourceDay.tripId !== destinationDay.tripId || item.tripId !== sourceDay.tripId) {
+    throw new ItineraryBaselineConflictError('日期归属已变化，请重新生成预览。')
+  }
+  const [currentSourceItems, currentDestinationItems] = await Promise.all([
+    db.itineraryItems.where('dayId').equals(sourceDay.id).toArray()
+      .then(sortItineraryItemsByPlanOrder),
+    db.itineraryItems.where('dayId').equals(destinationDay.id).toArray()
+      .then(sortItineraryItemsByPlanOrder),
+  ])
+  return buildItineraryItemMovePlan({
+    currentDestinationItems,
+    currentSourceItems,
+    destinationDay,
+    destinationDayId,
+    expectedDestinationItemIds: options.expectedDestinationItemIds,
+    expectedSourceItemIds: options.expectedSourceItemIds,
+    item,
+    nextDestinationItemIds,
+    sourceDay,
+    sourceDayId: options.sourceDayId,
+    tripId: item.tripId,
+    updatedAt,
+  })
+}
 
-    const [currentSourceItems, currentDestinationItems] = await Promise.all([
-      db.itineraryItems.where('dayId').equals(sourceDay.id).toArray()
+export async function applyItineraryItemMovePlan(
+  plan: ItineraryItemMovePlan,
+  options: StructuralItemCommitOptions = {},
+) {
+  const tables = options.touchTrip === false
+    ? [db.days, db.itineraryItems]
+    : [db.days, db.itineraryItems, db.trips]
+  return db.transaction('rw', tables, async () => {
+    const [currentSourceDay, currentDestinationDay, currentSourceItems, currentDestinationItems] = await Promise.all([
+      db.days.get(plan.sourceDayId),
+      db.days.get(plan.destinationDayId),
+      db.itineraryItems.where('dayId').equals(plan.sourceDayId).toArray()
         .then(sortItineraryItemsByPlanOrder),
-      db.itineraryItems.where('dayId').equals(destinationDay.id).toArray()
+      db.itineraryItems.where('dayId').equals(plan.destinationDayId).toArray()
         .then(sortItineraryItemsByPlanOrder),
     ])
-    const currentSourceItemIds = currentSourceItems.map((candidate) => candidate.id)
-    const currentDestinationItemIds = currentDestinationItems.map((candidate) => candidate.id)
-    if (!sameOrderedIds(currentSourceItemIds, options.expectedSourceItemIds)) {
-      throw new ItineraryBaselineConflictError('来源日期行程已变化，请重新生成预览。')
-    }
-    if (!sameOrderedIds(currentDestinationItemIds, options.expectedDestinationItemIds)) {
-      throw new ItineraryBaselineConflictError('目标日期行程已变化，请重新生成预览。')
-    }
-    if (!currentSourceItemIds.includes(itemId) || currentDestinationItemIds.includes(itemId)) {
-      throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
-    }
-
-    const expectedDestinationMembers = new Set([...currentDestinationItemIds, itemId])
     if (
-      nextDestinationItemIds.length !== expectedDestinationMembers.size
-      || nextDestinationItemIds.some((candidateId) => !expectedDestinationMembers.has(candidateId))
+      !currentSourceDay
+      || !currentDestinationDay
+      || !sameRecord(currentSourceDay, plan.sourceDay)
+      || !sameRecord(currentDestinationDay, plan.destinationDay)
+      || currentSourceDay.tripId !== plan.tripId
+      || currentDestinationDay.tripId !== plan.tripId
+      || currentSourceItems.some((item) => (
+        item.dayId !== plan.sourceDayId || item.tripId !== plan.tripId
+      ))
+      || currentDestinationItems.some((item) => (
+        item.dayId !== plan.destinationDayId || item.tripId !== plan.tripId
+      ))
+      || !sameRecords(currentSourceItems, plan.beforeSourceItems)
+      || !sameRecords(currentDestinationItems, plan.beforeDestinationItems)
     ) {
-      throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
+      throw new ItineraryBaselineConflictError('来源日期或目标日期行程已变化，请重新生成预览。')
     }
-
-    const updatedAt = Date.now()
-    const nextSourceItems = currentSourceItems
-      .filter((candidate) => candidate.id !== itemId)
-      .map((candidate, index) =>
-        candidate.sortOrder === index + 1
-          ? candidate
-          : { ...candidate, sortOrder: index + 1, updatedAt },
-      )
-    const destinationItemById = new Map(
-      currentDestinationItems.map((candidate) => [candidate.id, candidate]),
-    )
-    const nextDestinationItems = nextDestinationItemIds.map((candidateId, index) => {
-      const candidate = candidateId === itemId ? item : destinationItemById.get(candidateId)
-      if (!candidate) {
-        throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
-      }
-      if (
-        candidate.dayId === destinationDay.id
-        && candidate.sortOrder === index + 1
-      ) {
-        return candidate
-      }
-      return {
-        ...candidate,
-        dayId: destinationDay.id,
-        ...(candidateId === itemId ? { executionState: undefined } : {}),
-        sortOrder: index + 1,
-        updatedAt,
-      }
+    const item = currentSourceItems.find((candidate) => candidate.id === plan.itemId)
+    if (!item) throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
+    const verified = buildItineraryItemMovePlan({
+      currentDestinationItems,
+      currentSourceItems,
+      destinationDay: currentDestinationDay,
+      destinationDayId: plan.destinationDayId,
+      expectedDestinationItemIds: plan.beforeDestinationItems.map((candidate) => candidate.id),
+      expectedSourceItemIds: plan.beforeSourceItems.map((candidate) => candidate.id),
+      item,
+      nextDestinationItemIds: plan.nextDestinationItemIds,
+      sourceDay: currentSourceDay,
+      sourceDayId: plan.sourceDayId,
+      tripId: plan.tripId,
+      updatedAt: plan.updatedAt,
     })
-    const changedItems = [
-      ...nextSourceItems.filter((candidate) => {
-        const previous = currentSourceItems.find((itemCandidate) => itemCandidate.id === candidate.id)
-        return previous?.sortOrder !== candidate.sortOrder
-      }),
-      ...nextDestinationItems.filter((candidate) => {
-        const previous = candidate.id === itemId ? item : destinationItemById.get(candidate.id)
-        return previous?.dayId !== candidate.dayId || previous?.sortOrder !== candidate.sortOrder
-      }),
-    ]
-    const movedItem = nextDestinationItems.find((candidate) => candidate.id === itemId)
-    if (!movedItem) {
-      throw new ItineraryBaselineConflictError('目标日期顺序缺少待移动行程点。')
+    if (!sameRecords(verified.afterItems, plan.afterItems)) {
+      throw new ItineraryBaselineConflictError('跨日移动计划已变化，请重新生成预览。')
     }
-
-    await db.itineraryItems.bulkPut(changedItems)
-    await db.trips.update(item.tripId, { updatedAt })
+    await db.itineraryItems.bulkPut(verified.changedItems)
+    if (options.touchTrip !== false) {
+      await db.trips.update(plan.tripId, { updatedAt: plan.updatedAt })
+    }
     return {
-      changedItems,
-      destinationItemIds: nextDestinationItemIds,
-      movedItem,
-      sourceItemIds: nextSourceItems.map((candidate) => candidate.id),
+      changedItems: verified.changedItems,
+      destinationItemIds: verified.destinationItemIds,
+      movedItem: verified.movedItem,
+      sourceItemIds: verified.sourceItemIds,
     }
   })
+}
+
+function buildDayItemsReorderPlan({
+  currentItems,
+  day,
+  dayId,
+  expectedCurrentItemIds,
+  orderedItemIds,
+  tripId,
+  updatedAt,
+}: {
+  currentItems: ItineraryItem[]
+  day: Day
+  dayId: string
+  expectedCurrentItemIds?: string[]
+  orderedItemIds: string[]
+  tripId: string
+  updatedAt: number
+}): DayItemsReorderPlan {
+  const currentItemIds = currentItems.map((item) => item.id)
+  if (
+    currentItems.length !== orderedItemIds.length
+    || !sameIdMembers(currentItemIds, orderedItemIds)
+  ) {
+    throw new ItineraryBaselineConflictError('排序列表与当前行程不一致，请刷新后重试。')
+  }
+  if (expectedCurrentItemIds && !sameOrderedIds(currentItemIds, expectedCurrentItemIds)) {
+    throw new ItineraryBaselineConflictError('当天顺序已在其他位置更新，请刷新后重试。')
+  }
+  const itemById = new Map(currentItems.map((item) => [item.id, item]))
+  const afterItems = orderedItemIds.map((itemId, index) => {
+    const item = itemById.get(itemId)
+    if (!item) throw new ItineraryBaselineConflictError('排序列表与当前行程不一致，请刷新后重试。')
+    return item.sortOrder === index + 1
+      ? item
+      : { ...item, sortOrder: index + 1, updatedAt }
+  })
+  const changedItems = afterItems.filter((item) => {
+    const previous = itemById.get(item.id)
+    return previous?.sortOrder !== item.sortOrder
+  })
+  return {
+    afterItems,
+    beforeItems: currentItems,
+    changedItems,
+    day,
+    dayId,
+    orderedItemIds: [...orderedItemIds],
+    tripId,
+    updatedAt,
+  }
+}
+
+function buildItineraryItemMovePlan({
+  currentDestinationItems,
+  currentSourceItems,
+  destinationDay,
+  destinationDayId,
+  expectedDestinationItemIds,
+  expectedSourceItemIds,
+  item,
+  nextDestinationItemIds,
+  sourceDay,
+  sourceDayId,
+  tripId,
+  updatedAt,
+}: {
+  currentDestinationItems: ItineraryItem[]
+  currentSourceItems: ItineraryItem[]
+  destinationDay: Day
+  destinationDayId: string
+  expectedDestinationItemIds: string[]
+  expectedSourceItemIds: string[]
+  item: ItineraryItem
+  nextDestinationItemIds: string[]
+  sourceDay: Day
+  sourceDayId: string
+  tripId: string
+  updatedAt: number
+}): ItineraryItemMovePlan {
+  const currentSourceItemIds = currentSourceItems.map((candidate) => candidate.id)
+  const currentDestinationItemIds = currentDestinationItems.map((candidate) => candidate.id)
+  if (!sameOrderedIds(currentSourceItemIds, expectedSourceItemIds)) {
+    throw new ItineraryBaselineConflictError('来源日期行程已变化，请重新生成预览。')
+  }
+  if (!sameOrderedIds(currentDestinationItemIds, expectedDestinationItemIds)) {
+    throw new ItineraryBaselineConflictError('目标日期行程已变化，请重新生成预览。')
+  }
+  if (!currentSourceItemIds.includes(item.id) || currentDestinationItemIds.includes(item.id)) {
+    throw new ItineraryBaselineConflictError('行程点所在日期已变化，请重新生成预览。')
+  }
+  const expectedDestinationMembers = [...currentDestinationItemIds, item.id]
+  if (!sameIdMembers(nextDestinationItemIds, expectedDestinationMembers)) {
+    throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
+  }
+  const nextSourceItems = currentSourceItems
+    .filter((candidate) => candidate.id !== item.id)
+    .map((candidate, index) => candidate.sortOrder === index + 1
+      ? candidate
+      : { ...candidate, sortOrder: index + 1, updatedAt })
+  const destinationItemById = new Map(
+    currentDestinationItems.map((candidate) => [candidate.id, candidate]),
+  )
+  const nextDestinationItems = nextDestinationItemIds.map((candidateId, index) => {
+    const candidate = candidateId === item.id ? item : destinationItemById.get(candidateId)
+    if (!candidate) {
+      throw new ItineraryBaselineConflictError('目标日期顺序与当前行程不一致，请重新生成预览。')
+    }
+    if (candidate.dayId === destinationDayId && candidate.sortOrder === index + 1) return candidate
+    return {
+      ...candidate,
+      dayId: destinationDayId,
+      ...(candidateId === item.id ? { executionState: undefined } : {}),
+      sortOrder: index + 1,
+      updatedAt,
+    }
+  })
+  const afterItems = [...nextSourceItems, ...nextDestinationItems]
+  const beforeById = new Map(
+    [...currentSourceItems, ...currentDestinationItems].map((candidate) => [candidate.id, candidate]),
+  )
+  const changedItems = afterItems.filter((candidate) => !sameRecord(beforeById.get(candidate.id), candidate))
+  const movedItem = nextDestinationItems.find((candidate) => candidate.id === item.id)
+  if (!movedItem) throw new ItineraryBaselineConflictError('目标日期顺序缺少待移动行程点。')
+  return {
+    afterItems,
+    beforeDestinationItems: currentDestinationItems,
+    beforeSourceItems: currentSourceItems,
+    changedItems,
+    destinationDay,
+    destinationDayId,
+    destinationItemIds: [...nextDestinationItemIds],
+    itemId: item.id,
+    movedItem,
+    nextDestinationItemIds: [...nextDestinationItemIds],
+    sourceDay,
+    sourceDayId,
+    sourceItemIds: nextSourceItems.map((candidate) => candidate.id),
+    tripId,
+    updatedAt,
+  }
 }
 
 function sameOrderedIds(first: string[], second: string[]) {
   return first.length === second.length
     && first.every((itemId, index) => itemId === second[index])
+}
+
+function sameIdMembers(first: string[], second: string[]) {
+  return first.length === second.length
+    && first.every((itemId) => second.includes(itemId))
+}
+
+function sameRecords(first: ItineraryItem[], second: ItineraryItem[]) {
+  return first.length === second.length
+    && first.every((record, index) => sameRecord(record, second[index]))
+}
+
+function sameRecord(first: unknown, second: unknown) {
+  return JSON.stringify(first) === JSON.stringify(second)
 }
 
 async function listOrderedDayItems(dayId: string) {
@@ -870,95 +1136,146 @@ export async function updateTicketMeta(
   ticketId: string,
   input: UpdateTicketMetaInput,
 ): Promise<UpdateTicketMetaResult | undefined> {
+  const plan = await prepareTicketMetaUpdate(ticketId, input)
+  if (!plan) return undefined
+  return applyTicketMetaUpdatePlan(plan)
+}
+
+export async function prepareTicketMetaUpdate(
+  ticketId: string,
+  input: UpdateTicketMetaInput,
+): Promise<TicketMetaUpdatePlan | undefined> {
+  const ticket = await db.ticketMetas.get(ticketId)
+  if (!ticket) return undefined
+
+  if (
+    input.expectedBinding
+    && (
+      ticket.updatedAt !== input.expectedBinding.ticketUpdatedAt
+      || ticket.itemId !== input.expectedBinding.itemId
+    )
+  ) {
+    throw new TicketBaselineConflictError('票据绑定已变化，请重新生成预览。')
+  }
+
+  const targetItemId = input.scope === 'item' ? input.itemId : undefined
+
+  if (input.scope === 'item' && !targetItemId) {
+    throw new Error('请选择要绑定的行程点。')
+  }
+
+  const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
+  const updatedAt = tripItems.reduce(
+    (latest, item) => Math.max(latest, item.updatedAt + 1),
+    Math.max(Date.now(), ticket.updatedAt + 1),
+  )
+  const targetItem = targetItemId
+    ? tripItems.find((item) => item.id === targetItemId)
+    : undefined
+  if (targetItemId && !targetItem) {
+    throw new Error('绑定的行程点不存在。')
+  }
+  if (input.expectedBinding) {
+    const expectedTarget = input.expectedBinding.targetItem
+    const currentItem = input.expectedBinding.currentItem
+      ? tripItems.find((item) => item.id === input.expectedBinding?.currentItem?.id)
+      : undefined
+    if (
+      !targetItem
+      || targetItem.id !== expectedTarget.id
+      || targetItem.updatedAt !== expectedTarget.updatedAt
+      || !sameStringSet(targetItem.ticketIds ?? [], expectedTarget.ticketIds)
+      || (
+        input.expectedBinding.currentItem
+        && (
+          !currentItem
+          || currentItem.updatedAt !== input.expectedBinding.currentItem.updatedAt
+          || !sameStringSet(currentItem.ticketIds ?? [], input.expectedBinding.currentItem.ticketIds)
+        )
+      )
+    ) {
+      throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
+    }
+  }
+
+  const beforeRelationshipItems = tripItems
+    .filter((item) => item.id === targetItemId || (item.ticketIds ?? []).includes(ticket.id))
+    .sort((first, second) => first.id.localeCompare(second.id))
+  const afterRelationshipItems = beforeRelationshipItems.map((item) => {
+    const ticketIds = item.ticketIds ?? []
+    const hasTicket = ticketIds.includes(ticket.id)
+    const shouldHaveTicket = item.id === targetItemId
+    if (hasTicket === shouldHaveTicket) return item
+    return {
+      ...item,
+      ticketIds: shouldHaveTicket
+        ? [...ticketIds, ticket.id]
+        : ticketIds.filter((id) => id !== ticket.id),
+      updatedAt,
+    }
+  })
+  const changedItems = afterRelationshipItems.filter((item, index) => (
+    !sameRecord(item, beforeRelationshipItems[index])
+  ))
+  const afterTicket: TicketMeta = {
+    ...ticket,
+    itemId: targetItemId,
+    note: input.note,
+    scope: input.scope,
+    sharedVisibility: input.sharedVisibility,
+    structuredFields: Object.prototype.hasOwnProperty.call(input, 'structuredFields')
+      ? input.structuredFields
+      : ticket.structuredFields,
+    ticketCategory: input.ticketCategory,
+    title: input.title,
+    updatedAt,
+  }
+
+  return {
+    afterRelationshipItems,
+    afterTicket,
+    beforeRelationshipItems,
+    beforeTicket: ticket,
+    changedItems,
+    targetItemId,
+    ticketId,
+    tripId: ticket.tripId,
+    updatedAt,
+  }
+}
+
+export async function applyTicketMetaUpdatePlan(
+  plan: TicketMetaUpdatePlan,
+  options: ParentTripTouchOptions = {},
+): Promise<UpdateTicketMetaResult> {
+  const touchTrip = options.touchTrip ?? true
   return db.transaction(
     'rw',
-    db.ticketMetas,
-    db.itineraryItems,
-    db.trips,
+    touchTrip
+      ? [db.ticketMetas, db.itineraryItems, db.trips]
+      : [db.ticketMetas, db.itineraryItems],
     async () => {
-      const ticket = await db.ticketMetas.get(ticketId)
-      if (!ticket) return undefined
-
-      if (
-        input.expectedBinding
-        && (
-          ticket.updatedAt !== input.expectedBinding.ticketUpdatedAt
-          || ticket.itemId !== input.expectedBinding.itemId
-        )
-      ) {
+      const ticket = await db.ticketMetas.get(plan.ticketId)
+      if (!ticket || !sameRecord(ticket, plan.beforeTicket)) {
         throw new TicketBaselineConflictError('票据绑定已变化，请重新生成预览。')
       }
-
-      const now = Date.now()
-      const nextItemId = input.scope === 'item' ? input.itemId : undefined
-
-      if (input.scope === 'item' && !nextItemId) {
-        throw new Error('请选择要绑定的行程点。')
+      const tripItems = await db.itineraryItems.where('tripId').equals(plan.tripId).toArray()
+      const currentRelationshipItems = tripItems
+        .filter((item) => item.id === plan.targetItemId || (item.ticketIds ?? []).includes(plan.ticketId))
+        .sort((first, second) => first.id.localeCompare(second.id))
+      if (!sameRecords(currentRelationshipItems, plan.beforeRelationshipItems)) {
+        throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
       }
 
-      const tripItems = await db.itineraryItems.where('tripId').equals(ticket.tripId).toArray()
-      const targetItem = nextItemId ? tripItems.find((item) => item.id === nextItemId) : undefined
-      if (nextItemId && !targetItem) {
-        throw new Error('绑定的行程点不存在。')
+      await db.ticketMetas.put(plan.afterTicket)
+      if (plan.changedItems.length > 0) {
+        await db.itineraryItems.bulkPut(plan.changedItems)
       }
-      if (input.expectedBinding) {
-        const expectedTarget = input.expectedBinding.targetItem
-        const currentItem = input.expectedBinding.currentItem
-          ? tripItems.find((item) => item.id === input.expectedBinding?.currentItem?.id)
-          : undefined
-        if (
-          !targetItem
-          || targetItem.id !== expectedTarget.id
-          || targetItem.updatedAt !== expectedTarget.updatedAt
-          || !sameStringSet(targetItem.ticketIds, expectedTarget.ticketIds)
-          || (
-            input.expectedBinding.currentItem
-            && (
-              !currentItem
-              || currentItem.updatedAt !== input.expectedBinding.currentItem.updatedAt
-              || !sameStringSet(currentItem.ticketIds, input.expectedBinding.currentItem.ticketIds)
-            )
-          )
-        ) {
-          throw new TicketBaselineConflictError('票据关联目标已变化，请重新生成预览。')
-        }
+      if (touchTrip) {
+        await db.trips.update(plan.tripId, { updatedAt: plan.updatedAt })
       }
 
-      const changedItems = tripItems.flatMap((item) => {
-        const ticketIds = item.ticketIds ?? []
-        const hasTicket = ticketIds.includes(ticket.id)
-        const shouldHaveTicket = item.id === nextItemId
-        if (hasTicket === shouldHaveTicket) return []
-        return [{
-          ...item,
-          ticketIds: shouldHaveTicket
-            ? [...ticketIds, ticket.id]
-            : ticketIds.filter((id) => id !== ticket.id),
-          updatedAt: now,
-        }]
-      })
-
-      const nextTicket: TicketMeta = {
-        ...ticket,
-        itemId: nextItemId,
-        note: input.note,
-        scope: input.scope,
-        sharedVisibility: input.sharedVisibility,
-        structuredFields: Object.prototype.hasOwnProperty.call(input, 'structuredFields')
-          ? input.structuredFields
-          : ticket.structuredFields,
-        ticketCategory: input.ticketCategory,
-        title: input.title,
-        updatedAt: now,
-      }
-
-      await db.ticketMetas.put(nextTicket)
-      if (changedItems.length > 0) {
-        await db.itineraryItems.bulkPut(changedItems)
-      }
-      await db.trips.update(ticket.tripId, { updatedAt: now })
-
-      return { changedItems, ticket: nextTicket }
+      return { changedItems: plan.changedItems, ticket: plan.afterTicket }
     },
   )
 }
@@ -1229,46 +1546,25 @@ export async function importTripBackupRecords({
   return result
 }
 
-export async function importTripPlanRecords({
-  trip,
-  days,
-  itineraryItems,
-  ticketMetas,
-  ticketBlobs,
-  ledgerSettings = [],
-  ledgerParticipants = [],
-  ledgerBudgets = [],
-  ledgerExpenses = [],
-}: ImportTripPlanRecordsInput): Promise<{ title: string; tripId: string }> {
-  assertUniqueIds('Day', days.map((day) => day.id))
-  assertUniqueIds('ItineraryItem', itineraryItems.map((item) => item.id))
-  assertUniqueIds('Ticket', ticketMetas.map((ticket) => ticket.id))
+export async function importTripPlanRecords(
+  input: ImportTripPlanRecordsInput,
+): Promise<{ title: string; tripId: string }> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.importTripPlanRecords(input)
+}
 
-  return db.transaction(
-    'rw',
-    [db.trips, db.days, db.itineraryItems, db.ticketMetas, db.ticketBlobs, db.ledgerSettings, db.ledgerParticipants, db.ledgerBudgets, db.ledgerExpenses],
-    async () => {
-      await db.trips.add(trip)
-      if (days.length > 0) {
-        await db.days.bulkAdd(days)
-      }
-      if (itineraryItems.length > 0) {
-        await db.itineraryItems.bulkAdd(itineraryItems)
-      }
-      if (ticketMetas.length > 0) {
-        await db.ticketMetas.bulkAdd(ticketMetas)
-      }
-      if (ticketBlobs.length > 0) {
-        await db.ticketBlobs.bulkAdd(ticketBlobs)
-      }
-      if (ledgerSettings.length > 0) await db.ledgerSettings.bulkAdd(ledgerSettings)
-      if (ledgerParticipants.length > 0) await db.ledgerParticipants.bulkAdd(ledgerParticipants)
-      if (ledgerBudgets.length > 0) await db.ledgerBudgets.bulkAdd(ledgerBudgets)
-      if (ledgerExpenses.length > 0) await db.ledgerExpenses.bulkAdd(ledgerExpenses)
+export async function prepareTripPlanImport(
+  input: ImportTripPlanRecordsInput,
+): Promise<TripPlanImportPlan> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.prepareTripPlanImport(input)
+}
 
-      return { title: trip.title, tripId: trip.id }
-    },
-  )
+export async function applyTripPlanImportPlan(
+  plan: TripPlanImportPlan,
+): Promise<{ title: string; tripId: string }> {
+  const repository = await import('./tripPlanImportRepository')
+  return repository.applyTripPlanImportPlan(plan)
 }
 
 export async function replaceTripPlanRecords({

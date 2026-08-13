@@ -2,17 +2,20 @@
 
 更新时间：2026-08-10
 
-状态：**Production Current; passed**
+状态：**Visual Current; passed；产品内容接入仍为 Partial**
+
+产品级后续合同：[完整产品级交付计划](docs/PRODUCT_GRADE_DELIVERY_PLAN.md)
 
 发布代码：`177f78f`（`main`，PR #34）；候选分支头：`f20cb90`
 
 ## 1. 结论
 
 - **视觉：passed。** Selected Target 的出发前今日、旅行中今日、行程和资料已按同一 `390x844` 数据语义并排审查，没有未关闭的 Visual P0/P1/P2。
-- **产品流程：passed。** 真实对象、受控媒体、有来源事实、票据直达、地点补全、地图和 AI 一次确认共同工作；错误态保持短、明确且不写入。
+- **固定验收流程：passed。** 真实 React 组件在受控 fixture、Mock Provider 和正式交互合同下完成票据直达、地点补全、地图与 AI 一次确认；该结果不代表普通生产账号已经取得相同数据。
 - **浏览器自动化：passed。** 215 个单测文件、1730 个单测、194 个串行 E2E、5 个独立 PWA 升级场景、Golden、Axe、五视口和素材门禁全部通过。
 - **模拟器：passed。** iPhone 16 / iOS 26.5 主屏 PWA 与 Android API 33 Chrome/WebView 完成发布级检查；实体机按项目决定不作为门槛。
 - **远端发布：passed。** 候选分支与合并后的 `main` 均通过 GitHub required checks；同 SHA 的 Cloudflare Preview 与 Production 部署均为 Active，Supabase 与 Provider 基础设施只读诊断已完成。
+- **产品级交付：not complete。** 本收据没有执行真实 Provider，也没有证明 E2E fixture 的酒店、保险、照片和品牌已经进入普通生产账号。
 
 ## 2. 视觉权威
 

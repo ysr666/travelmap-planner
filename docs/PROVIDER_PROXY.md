@@ -177,14 +177,20 @@ Request processing order is fixed in hardened environments (`production` and `pr
 
 Current operation minute bucket limits:
 
+- `edge_ip|`: 120 requests per 60 seconds before authentication.
 - `route|`: 60 requests per 60 seconds.
 - `search|`: 20 requests per 60 seconds.
-- `place|`: 30 requests per 60 seconds.
+- `place|`: 30 requests per 60 seconds, shared by lookup, details, and photo.
+- `weather|`: 30 requests per 60 seconds.
 - `ai_draft|`: 10 requests per 60 seconds.
-- `ai_draft_repair|`: 5 requests per 60 seconds.
+- `ai_draft_repair|` and `ai_draft_refine|`: 5 requests per 60 seconds each.
+- `ai_existing_trip_import|`: 5 requests per 60 seconds.
+- `travel_inbox_classify|`: 20 requests per 60 seconds.
+- `ai_trip_content|`, `ai_trip_daily_tip|`, and `ai_trip_operations|`: 10 requests per 60 seconds each.
+- `ai_assistant_answer|` and `ai_action_plan|`: 20 requests per 60 seconds each.
 - `ai_trip_edit|`: 10 requests per 60 seconds.
 - `fx|`: 30 requests per 60 seconds.
-- `ai_expense_extract|`: 5 requests per 60 seconds.
+- `ai_expense_extract|` and `ai_expense_query|`: 5 and 10 requests per 60 seconds respectively.
 
 `route_preview` and `route_order_suggestion` both use the `route|` bucket. Quota is consumed before any mock or real provider call; over-limit and durable-storage-failure paths return normalized HTTP 429 `quota_exceeded`.
 
@@ -192,13 +198,13 @@ Production and trusted preview also enforce a separate `edge_ip|` bucket at 120 
 
 Production daily budgets:
 
-| Scope | AI | Search | Place | Route | FX |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Account | 20 | 20 | 60 | 100 | 30 |
-| IP | 100 | 100 | 300 | 500 | 150 |
-| Global | 200 | 200 | 600 | 1000 | 300 |
+| Scope | AI | Search | Place | Route | Weather | FX |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Account | 20 | 20 | 60 | 100 | 60 | 30 |
+| IP | 100 | 100 | 300 | 500 | 300 | 150 |
+| Global | 200 | 200 | 600 | 1000 | 600 | 300 |
 
-Trusted preview uses 25% of these limits, rounded up. At 70% and 90% of a global group budget, a redacted alert event is recorded. At 100%, the request is rejected and that group is disabled until the next UTC day. `provider_controls` supports immediate `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `TRIPMAP_PROVIDER_PROXY_KILL_SWITCH` is the environment fallback.
+Trusted preview uses 25% of these limits, rounded up. At 70% and 90% of a global group budget, a redacted alert event is recorded. At 100%, the request is rejected and that group is disabled until the next UTC day. `provider_controls` supports immediate `global`, `ai`, `search`, `place`, `route`, `weather`, and `fx` controls; `TRIPMAP_PROVIDER_PROXY_KILL_SWITCH` is the environment fallback.
 
 Quota identity combines available server-side signals before hashing:
 
@@ -210,7 +216,7 @@ Rows are stored as `<bucket><sha256(identity)>`; raw IP, raw session id, request
 
 When a D1 binding is present, quota consume is a guarded atomic SQL path. The runtime does not create tables or indexes. Apply the checked-in migrations under `cloudflare/d1/migrations/`; `0002_provider_operations_hardening.sql` adds daily usage, controls, and alert events, and `0003_add_weather_provider_group.sql` extends those constrained group columns with `weather` while preserving existing rows.
 
-Production rollout status, 2026-06-22: `0002_provider_operations_hardening.sql` has been applied to `tripmap_provider_quota`; `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, and `fx` controls; `tripmap-provider-maintenance` is deployed with an hourly cron. The Target weather release additionally requires `0003_add_weather_provider_group.sql`; do not describe its production D1 rollout as Current until remote migration verification is recorded. Pages production and preview configs include `TRIPMAP_PROVIDER_PROXY_ENV`, `TRIPMAP_PROVIDER_PROXY_REQUIRE_AUTH`, and `TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS`. Production smoke confirmed missing/forged Origin is rejected before auth, and missing/forged Bearer is rejected before provider dispatch.
+Production rollout status, verified read-only on 2026-08-11: all checked-in D1 migrations, including `0003_add_weather_provider_group.sql`, are applied to `tripmap_provider_quota`; no migration is pending. `provider_controls` contains enabled `global`, `ai`, `search`, `place`, `route`, `weather`, and `fx` controls. Pages production diagnostics report production environment, enforced Origin and Auth, durable D1 quota, and configured AI, search, place, route, and weather adapters. Budget alert delivery is not configured and remains a P13 release blocker. See [`PRODUCTION_RUNTIME_STATUS.md`](PRODUCTION_RUNTIME_STATUS.md) for the bounded receipt and known gaps.
 
 The foundation table remains:
 
@@ -278,7 +284,7 @@ The `travel_search` operation is the only source-bearing web search contract. AI
 
 Current runtime behavior:
 
-- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock results and takes priority over real search env.
+- Outside production, `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock results and takes priority over real search env. Production rejects Mock Provider execution.
 - `TRIPMAP_SEARCH_PROVIDER=mock` returns deterministic mock results.
 - Mock results use `source: "mock"`, `travel.example` URLs, and warning `当前为模拟搜索结果，不代表实时网页信息。`
 - `TRIPMAP_SEARCH_PROVIDER=disabled` returns `unsupported`.
@@ -350,7 +356,7 @@ The `place_lookup` operation supports manual, per-item Google Places candidate l
 
 Runtime behavior:
 
-- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock candidates and takes priority over real place env.
+- Outside production, `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns deterministic mock candidates and takes priority over real place env. Production rejects Mock Provider execution.
 - `TRIPMAP_PLACE_PROVIDER=mock` returns deterministic mock candidates.
 - `TRIPMAP_PLACE_PROVIDER=disabled` returns `unsupported`.
 - Missing place provider env returns `provider_unavailable`.
@@ -444,7 +450,7 @@ The `ai_trip_edit_plan` operation creates a safe patch plan for an already-saved
 
 Runtime behavior:
 
-- `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns a deterministic mock patch plan.
+- Outside production, `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns a deterministic mock patch plan. Production rejects Mock Provider execution.
 - `TRIPMAP_AI_PROVIDER=openai_compatible` with complete server-side AI env calls the configured AI provider.
 - Missing AI env returns `provider_unavailable`.
 - Real provider output follows rawText → JSON extraction → `validateAiTripEditPatchPlan`.
@@ -601,7 +607,7 @@ Errors use the same normalized error codes as `route_preview`.
 
 ### Current Behavior
 
-- `TRIPMAP_PROVIDER_PROXY_MOCK=1`: Returns a deterministic mock draft using the same generator as the local mock button.
+- Outside production, `TRIPMAP_PROVIDER_PROXY_MOCK=1` returns a deterministic mock draft using the same generator as the local mock button. Production rejects Mock Provider execution.
 - `TRIPMAP_AI_PROVIDER=openai_compatible` with complete server-side env: calls the configured OpenAI-compatible AI provider.
 - No mock and incomplete AI env: returns `provider_unavailable`.
 - Real DeepSeek `deepseek-v4-flash` generation smoke has passed through this operation.
@@ -696,7 +702,7 @@ When `TRIPMAP_AI_PROVIDER=openai_compatible` and all env vars are set, the proxy
 
 The response goes through `normalizeAiDraftProviderOutput` (JSON extraction + `validateAiTripDraft`). Invalid output returns `invalid_response`; raw model text is never passed to the frontend.
 
-Mock mode (`TRIPMAP_PROVIDER_PROXY_MOCK=1`) always takes priority over real provider.
+Mock mode (`TRIPMAP_PROVIDER_PROXY_MOCK=1`) takes priority only outside production. Production ignores Mock Provider selections and returns `provider_unavailable` when no real adapter can run.
 
 Frontend behavior is unchanged: the "通过旅图服务生成草稿" button triggers the same proxy flow regardless of whether mock or real provider responds. User confirmation is still required before writing to IndexedDB.
 

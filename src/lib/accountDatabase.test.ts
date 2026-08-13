@@ -14,6 +14,7 @@ import {
   summarizeLegacyDatabase,
   activateLegacyDatabaseForTests,
 } from './accountDatabase'
+import { buildAccountWorkflowJournalEntry } from './accountCloud/workflowLocalStore'
 
 const accountIds = ['account-a', 'account-b']
 
@@ -31,15 +32,98 @@ afterEach(async () => {
 
 describe('account-scoped travel database', () => {
   it('isolates records between account database namespaces', async () => {
-    await activateAccountDatabase(accountIds[0])
+    const { accountHash } = await activateAccountDatabase(accountIds[0])
     await db.trips.put(makeTrip('trip-a'))
+    await db.accountObjectRevisions.put({
+      acknowledgedAt: 1,
+      actorId: '22222222-2222-4222-8222-222222222222',
+      deletedAt: null,
+      deviceId: 'device-a',
+      mutationId: '11111111-1111-4111-8111-111111111111',
+      objectId: 'trip-a',
+      objectKey: 'trip:trip-a',
+      objectSchemaVersion: 1,
+      objectType: 'trip',
+      payload: makeTrip('trip-a'),
+      revision: 1,
+      serverCreatedAt: '2026-08-11T10:00:00.000Z',
+      serverUpdatedAt: '2026-08-11T10:00:00.000Z',
+      tombstone: false,
+      tripId: 'trip-a',
+      updatedAt: 1,
+    })
+    await db.accountMutationJournal.put({
+      accountHash,
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device-a',
+      expectedRevision: 1,
+      mutationId: '33333333-3333-4333-8333-333333333333',
+      objectId: 'trip-a',
+      objectKey: 'trip:trip-a',
+      objectSchemaVersion: 1,
+      objectType: 'trip',
+      operation: 'upsert',
+      payload: { ...makeTrip('trip-a'), title: 'Pending' },
+      requestFingerprint: 'test-only-fingerprint',
+      status: 'pending',
+      tripId: 'trip-a',
+      updatedAt: 1,
+    })
+    await db.accountWorkflowJournal.put(buildAccountWorkflowJournalEntry({
+      batchMutationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      deviceId: 'device-a',
+      schemaVersion: 1,
+      steps: [{
+        expectedRevision: 1,
+        mutationId: '44444444-4444-4444-8444-444444444444',
+        objectId: 'item-a',
+        objectSchemaVersion: 1,
+        objectType: 'item',
+        operation: 'upsert',
+        payload: {
+          createdAt: 1,
+          dayId: 'day-a',
+          id: 'item-a',
+          sortOrder: 1,
+          ticketIds: [],
+          title: 'Pending item',
+          tripId: 'trip-a',
+          updatedAt: 2,
+        },
+        stepId: 'repair-item-a',
+      }],
+      tripId: 'trip-a',
+      workflowId: 'trip.repair.apply@1',
+    }, accountHash, [{
+      before: {
+        createdAt: 1,
+        dayId: 'day-a',
+        id: 'item-a',
+        sortOrder: 1,
+        ticketIds: [],
+        title: 'Before item',
+        tripId: 'trip-a',
+        updatedAt: 1,
+      },
+      objectId: 'item-a',
+      objectKey: 'item:item-a',
+      objectType: 'item',
+      stepId: 'repair-item-a',
+    }], 1))
 
     await activateAccountDatabase(accountIds[1])
     expect(await db.trips.count()).toBe(0)
+    expect(await db.accountObjectRevisions.count()).toBe(0)
+    expect(await db.accountMutationJournal.count()).toBe(0)
+    expect(await db.accountWorkflowJournal.count()).toBe(0)
     await db.trips.put(makeTrip('trip-b'))
 
     await activateAccountDatabase(accountIds[0])
     expect((await db.trips.toArray()).map((trip) => trip.id)).toEqual(['trip-a'])
+    expect(await db.accountObjectRevisions.count()).toBe(1)
+    expect(await db.accountMutationJournal.count()).toBe(1)
+    expect(await db.accountWorkflowJournal.count()).toBe(1)
   })
 
   it('copies domain records, rebuilds sync state, and preserves the legacy database', async () => {

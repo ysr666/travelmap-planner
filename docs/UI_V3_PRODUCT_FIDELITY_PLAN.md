@@ -2,7 +2,11 @@
 
 更新时间：2026-08-10
 
-状态：**Current；P0-P8 已完成并发布到 Production**
+状态：**Visual Current；固定视觉基线已发布，生产内容接入仍为 Partial**
+
+产品级后续合同：[完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)
+
+> 本文件只证明 UI V3 的组件、构图、响应式、自动化和模拟器视觉基线已经完成。它不再作为景点/酒店真实图片、完整品牌库、住宿/保险正式持久化、真实 Provider、完整 AI 动作面或真实账号旅程已经完成的依据。
 
 上游合同：
 
@@ -25,7 +29,7 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 
 发布边界：
 
-- UI V3 产品质感增强已作为 **Production Current** 合并并发布；阶段实施记录保留原始 Target 状态作为历史证据。
+- UI V3 的固定视觉与交互基线已作为 **Visual Current** 合并并发布；真实内容、数据、Provider 和账号验收仍按 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md) 标记为 Partial 或 Target。
 - 后续新增 Provider、schema、存储或媒体类别仍必须重新经过代码、测试、截图、模拟器和远端检查，不能沿用本轮 Current 结论。
 - 设计图不是虚构生产数据的许可。真实内容、授权、隐私、无障碍和状态正确性高于任意单个像素。
 - 本计划不自动授权真实 Provider 调用、生产 schema 修改或云端配置写入；受保护改动仍需独立 PR、预览环境和明确验证。
@@ -305,18 +309,16 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 - 数据迁移先在 Supabase 预览分支验证 RLS、grants、constraints、advisors 和恢复路径。
 - 回退只关闭新媒体/事实消费或恢复旧 ViewModel，不删除用户旅行、绑定、票据或实时事实历史。
 
-## 10. 完成定义
+## 10. 完成定义（视觉与产品分离）
 
-全部满足后，本计划才可从 Target 改为 Current：
+本子计划已满足以下 **Visual Current** 条件：
 
-1. 八个工作流均有合并代码、测试、截图和阶段收据。
-2. 四个核心页面使用真实媒体、结构化字段和有来源事实达到 Selected Target 的信息密度与视觉重心。
-3. 景点/酒店照片、航司/铁路/保险品牌、天气、航班/铁路状态和路线 ETA 均有真实来源或明确降级。
-4. 行程点、订单和资料可解释匹配，用户从 Today/Timeline 一次点击打开当前票据。
-5. AI、Provider、媒体代理、票据权限、确认、幂等和 stale guard 无旁路。
-6. 所有固定视口、长内容、浅/深色、键盘、Reduced Motion、`200%` 文本和横向溢出门槛通过。
-7. 同状态设计对照没有未关闭的 P0/P1/P2 差异；允许差异逐项记录原因。
-8. 本地全量验证、模拟器、同 SHA CI、Cloudflare 部署及必要 Supabase/Provider 诊断通过。
+1. 八个工作流的共享组件、ViewModel、固定 fixture、测试、截图和阶段收据已经合并。
+2. 所有固定视口、长内容、浅/深色、键盘、Reduced Motion、`200%` 文本和横向溢出门槛通过。
+3. 同状态设计对照没有未关闭的 Visual P0/P1/P2；动态照片、地图和平台差异已逐项说明。
+4. 本地全量验证、模拟器、同 SHA CI 和 Cloudflare 部署通过。
+
+下列原始目标尚未全部达到普通生产账号的 `Current` 标准，因此迁移到 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)：真实景点/酒店媒体、完整品牌覆盖、住宿/保险持久化、真实实时事实、正式资料/订单联动、完整 AI 动作面、真实 Provider 和真实复杂行程验收。只有总计划 P0-P15 全部退出后，才能称为完整产品级交付。
 
 ## 11. 首批可执行任务
 
@@ -331,7 +333,7 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 9. 按出发前 Today、旅行中 Today、Trip、Documents 顺序完成页面构图。
 10. 完成设计图直接对照、全量自动化、平台模拟器和远端发布收据。
 
-## 12. P8 生产收据
+## 12. P8 视觉生产收据
 
 候选分支头为 `f20cb90`，通过 PR #34 合并为 `main` 的 `177f78f`。P0-P8 的实现提交和阶段结果记录在 [阶段台账](agent/PHASE_LEDGER.md)，逐项视觉状态记录在 [产品质感基线](UI_V3_PRODUCT_FIDELITY_BASELINE.md)。
 
@@ -349,3 +351,5 @@ UI V3 M0-M6 已完成 App Shell、信息架构、响应式、无障碍和核心�
 - Supabase 只读检查确认本轮没有 schema 变更；既有 advisor 项已记录在 `design-qa.md`，没有将其误记为本轮回归。
 - Cloudflare D1 检查发现并修复 Wrangler migration 目录漏配；`0003_add_weather_provider_group.sql` 已应用到生产，当前无待执行 migration，构建会拒绝缺失目录或含显式事务的 D1 migration。
 - 本轮没有真实 AI、搜索、路线、天气或媒体 Provider 请求；Provider 行为由 mock、合同测试和既有安全边界验证。
+
+上述收据只关闭视觉子计划。E2E fixture 中的照片、酒店、保险和实时事实不构成普通生产账号能力；项目整体完成状态由 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md) 的 P0-P15 和总完成定义决定。

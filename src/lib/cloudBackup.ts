@@ -24,6 +24,9 @@ import { shouldExpectTicketBlob } from './tickets'
 import type { Day, ItineraryItem, LedgerBudget, LedgerExpense, LedgerParticipant, LedgerSettings, TicketBlob, TicketMeta, Trip } from '../types'
 import { clearOfflineAccessLease } from './appAuth'
 
+declare const __TRIPMAP_E2E__: boolean
+declare const __TRIPMAP_UNIT_TEST__: boolean
+
 export { getSupabaseConfigStatus } from './supabaseClient'
 
 const CLOUD_BACKUP_BUCKET = 'trip-backups'
@@ -1013,6 +1016,7 @@ function sortCloudBackupSummaries(backups: CloudBackupSummary[]) {
 }
 
 export function readE2eCloudFixture(): E2eCloudFixture | null {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) return null
   if (typeof window === 'undefined') {
     return null
   }
@@ -1041,6 +1045,7 @@ export function readE2eCloudFixture(): E2eCloudFixture | null {
 }
 
 export function writeE2eCloudFixture(fixture: E2eCloudFixture) {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) throw new Error('测试后端不可用。')
   const currentFixture = readE2eCloudFixture()
   if (!currentFixture?.user) {
     throw new Error('测试云端同步 fixture 不可用。')

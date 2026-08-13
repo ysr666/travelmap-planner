@@ -1,0 +1,677 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-13",
+  "productStatus": "limited_beta",
+  "sourcePlan": "docs/PRODUCT_GRADE_DELIVERY_PLAN.md",
+  "releaseReceipt": "docs/PRODUCTION_RUNTIME_STATUS.md",
+  "capabilities": [
+    {
+      "id": "ui.app-shell",
+      "title": "四项主导航与自适应应用壳层",
+      "status": "current",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "app-experience",
+      "nextPhase": null,
+      "dependencies": [],
+      "evidence": {
+        "implementation": ["src/components/AppShell.tsx"],
+        "tests": ["src/components/AppShell.test.tsx"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": [],
+      "operations": {
+        "slo": "核心导航成功率 >= 99.9%",
+        "alert": "5 分钟窗口内路由错误率 > 1%",
+        "fallback": "保留当前页面并提供可访问的一级导航"
+      }
+    },
+    {
+      "id": "ui.visual-baseline",
+      "title": "UI V3 固定视觉与响应式基线",
+      "status": "current",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "app-experience",
+      "nextPhase": null,
+      "dependencies": ["ui.app-shell"],
+      "evidence": {
+        "implementation": ["src/index.css", "src/components/home/TodayStageViews.tsx"],
+        "tests": ["e2e/product-fidelity-compositions.spec.ts", "e2e/product-fidelity-resilience.spec.ts"],
+        "receipts": ["docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md", "design-qa.md"]
+      },
+      "gaps": [],
+      "operations": {
+        "slo": "固定视口无 Visual P0/P1/P2 回归",
+        "alert": "Golden、Axe 或横向溢出门禁失败",
+        "fallback": "回退到最近一个通过 Golden 的 UI 版本"
+      }
+    },
+    {
+      "id": "pwa.lifecycle",
+      "title": "PWA 安装、升级与历史版本迁移",
+      "status": "current",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "platform-runtime",
+      "nextPhase": null,
+      "dependencies": ["ui.app-shell"],
+      "evidence": {
+        "implementation": ["src/components/PwaLifecycleController.tsx"],
+        "tests": ["src/components/PwaLifecycleController.test.tsx", "e2e/pwa-upgrade.spec.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": [],
+      "operations": {
+        "slo": "升级确认后的完成率 >= 99%",
+        "alert": "同版本升级失败率 > 1% 或出现未确认强制重载",
+        "fallback": "继续运行当前已激活版本并延后升级"
+      }
+    },
+    {
+      "id": "auth.account-session",
+      "title": "账号登录、会话刷新与恢复",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "account-platform",
+      "nextPhase": "P1",
+      "dependencies": ["ui.app-shell"],
+      "evidence": {
+        "implementation": ["src/lib/appAuth.ts", "src/components/auth/AppAuthGate.tsx"],
+        "tests": ["src/lib/appAuth.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["跨标签登出、账号切换和断网后的完整恢复矩阵尚未形成生产收据"],
+      "operations": {
+        "slo": "有效会话恢复成功率 >= 99.5%",
+        "alert": "认证恢复失败率 > 2% 或异常账号串线事件 > 0",
+        "fallback": "保持本机只读缓存并要求重新认证"
+      }
+    },
+    {
+      "id": "data.cloud-source-of-truth",
+      "title": "Supabase 云端账号事实源",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "travel-data",
+      "nextPhase": "P1",
+      "dependencies": ["auth.account-session"],
+      "evidence": {
+        "implementation": [
+          "src/lib/accountCloud/contract.ts",
+          "src/lib/accountCloud/client.ts",
+          "src/lib/accountCloud/reader.ts",
+          "src/lib/accountCloud/bootstrap.ts",
+          "src/lib/accountCloud/localStore.ts",
+          "src/lib/accountCloud/coordinator.ts",
+          "src/lib/accountCloud/coreMutationRuntime.ts",
+          "src/lib/accountCloud/runtimeLoader.ts",
+          "src/lib/accountCloud/mutationBuilder.ts",
+          "src/lib/accountCloud/ticketMetadata.ts",
+          "src/lib/accountCloud/ledgerPayload.ts",
+          "src/lib/accountCloud/ledgerGraph.ts",
+          "src/lib/accountCloud/adaptiveReplanPayload.ts",
+          "src/lib/accountCloud/workflowContract.ts",
+          "src/lib/accountCloud/workflowClient.ts",
+          "src/lib/accountCloud/workflowCoordinator.ts",
+          "src/lib/accountCloud/workflowLocalCodec.ts",
+          "src/lib/accountCloud/workflowLocalStore.ts",
+          "src/lib/accountCloud/workflowLocalTypes.ts",
+          "src/lib/accountCloud/workflowLimits.ts",
+          "src/lib/accountCloud/workflowMutationRuntime.ts",
+          "src/lib/accountCloud/workflowRuntimeLoader.ts",
+          "src/db/repositories.ts",
+          "src/db/tripPlanImportRepository.ts",
+          "src/db/ledgerMutationRepository.ts",
+          "src/db/ledgerTrackedMutations.ts",
+          "src/db/trackedMutations.ts",
+          "src/lib/adaptiveReplanActions.ts",
+          "src/lib/tripIntelligence/persistence.ts",
+          "src/components/cloud/AccountMutationJournalController.tsx",
+          "supabase/migrations/20260811092148_account_cloud_core_v2.sql",
+          "supabase/migrations/20260811134000_account_cloud_workflows_v1.sql"
+        ],
+        "tests": [
+          "src/lib/accountCloud/contract.test.ts",
+          "src/lib/accountCloud/client.test.ts",
+          "src/lib/accountCloud/reader.test.ts",
+          "src/lib/accountCloud/bootstrap.test.ts",
+          "src/lib/accountCloud/localStore.test.ts",
+          "src/lib/accountCloud/coordinator.test.ts",
+          "src/lib/accountCloud/coreMutationRuntime.test.ts",
+          "src/lib/accountCloud/mutationBuilder.test.ts",
+          "src/lib/accountCloud/ledgerPayload.test.ts",
+          "src/lib/adaptiveReplanActions.accountCloud.test.ts",
+          "src/lib/accountCloud/workflowContract.test.ts",
+          "src/lib/accountCloud/workflowClient.test.ts",
+          "src/lib/accountCloud/workflowCoordinator.test.ts",
+          "src/lib/accountCloud/workflowLocalCodec.test.ts",
+          "src/lib/accountCloud/workflowLocalStore.test.ts",
+          "src/lib/accountCloud/workflowMutationRuntime.test.ts",
+          "src/lib/accountCloud/workflowRuntimeLoader.test.ts",
+          "src/db/databaseMigration.test.ts",
+          "src/db/repositories.test.ts",
+          "src/db/ledgerMutationRepository.test.ts",
+          "src/db/trackedMutations.accountCloud.test.ts",
+          "src/components/cloud/AccountMutationJournalController.test.tsx",
+          "scripts/lib/account-cloud-migration.test.mjs",
+          "scripts/lib/account-cloud-workflow-migration.test.mjs",
+          "supabase/tests/account_cloud_workflows_v1.sql"
+        ],
+        "receipts": ["docs/CLOUD_DATA_MODEL_V2.md"]
+      },
+      "gaps": ["V2 合同、账号绑定 RPC、IndexedDB revision/journal、账号数据库绑定、租约重放、可恢复原子回滚、严格分页读取、双读漂移分类、非破坏 bootstrap receipt、Ticket 最小字段白名单、Trip/Day/Item 单对象适配器、首批 7 个注册原子 workflow 及其本机整批事务协调器已实现；同日重排、跨日移动、既有 Ticket metadata 编辑/绑定、无 Blob 的 create-only 新旅行导入、现有账本 mutation 面和已确认的自适应重排已接入完整 workflow，结构、关系、账本图、完整重排依赖基线和非空旅行 scope 不能绕过注册合同。读写硬门槛仍关闭；其余 1 类 AI repair workflow、删除级联、恢复、Ticket 创建/删除/Blob 与剩余对象 codec 尚未接入，按需 workflow/import/ledger/replan runtime 首次离线加载、Preview migration、真实 bootstrap/多连接并发幂等收据、Realtime、空设备恢复和生产切换均未完成"],
+      "operations": {
+        "slo": "在线写入确认 P95 <= 2 秒",
+        "alert": "确认失败率 > 1% 或检测到未解决的数据丢失",
+        "fallback": "写入加密 outbox，恢复后按 mutationId 去重续传"
+      }
+    },
+    {
+      "id": "data.realtime-sync",
+      "title": "跨设备 Realtime 收敛",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "travel-data",
+      "nextPhase": "P1",
+      "dependencies": ["data.cloud-source-of-truth"],
+      "evidence": {
+        "implementation": [],
+        "tests": [],
+        "receipts": []
+      },
+      "gaps": ["旅行对象、权限变化和 AI job 尚无统一 Realtime 订阅与服务端版本合同"],
+      "operations": {
+        "slo": "第二设备可见变更 P95 <= 2 秒",
+        "alert": "订阅断开 > 60 秒或版本持续分叉",
+        "fallback": "显示最后同步时间并通过增量拉取恢复"
+      }
+    },
+    {
+      "id": "import.local-materials",
+      "title": "本机文件与批量材料导入",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "travel-ingestion",
+      "nextPhase": "P2",
+      "dependencies": ["auth.account-session"],
+      "evidence": {
+        "implementation": ["src/lib/ai/existingTripImport.ts", "src/lib/travelInboxLocalFolders.ts"],
+        "tests": ["src/lib/ai/existingTripImport.test.ts", "src/lib/travelInboxLocalFolders.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["完整对象候选、字段溯源、冲突合并、跨设备恢复和真实复杂材料准确率尚未闭环"],
+      "operations": {
+        "slo": "受支持文件解析成功率 >= 98%",
+        "alert": "同一格式连续失败率 > 5% 或重复对象率 > 0.5%",
+        "fallback": "保留原文件和失败分类，允许单文件重试或手工确认"
+      }
+    },
+    {
+      "id": "import.connected-sources",
+      "title": "已授权邮件与连接器导入",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "travel-ingestion",
+      "nextPhase": "P2",
+      "dependencies": ["data.cloud-source-of-truth", "import.local-materials"],
+      "evidence": {
+        "implementation": ["src/lib/travelInboxConnectors.ts"],
+        "tests": [],
+        "receipts": []
+      },
+      "gaps": ["连接器授权、增量抓取、撤权、重连和生产验收尚未完成"],
+      "operations": {
+        "slo": "授权源增量导入延迟 P95 <= 5 分钟",
+        "alert": "授权错误或增量游标连续失败 3 次",
+        "fallback": "停止连接器读取并保留本机文件导入入口"
+      }
+    },
+    {
+      "id": "documents.ticket-library",
+      "title": "票据资料库、缩略图与直达",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "travel-documents",
+      "nextPhase": "P3",
+      "dependencies": ["import.local-materials"],
+      "evidence": {
+        "implementation": ["src/components/tickets/TicketLibraryView.tsx", "src/components/tickets/TicketThumbnail.tsx"],
+        "tests": ["src/components/tickets/TicketThumbnail.test.tsx", "e2e/ticket-library.spec.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["PDF 指定页、全文安全索引、版本关系、跨设备缓存恢复和完整文件类型降级仍不完整"],
+      "operations": {
+        "slo": "当前票据在一次操作内打开成功率 >= 99.5%",
+        "alert": "Blob 打开失败率 > 1% 或检测到原件丢失",
+        "fallback": "展示 metadata、缓存状态和重新下载入口"
+      }
+    },
+    {
+      "id": "documents.private-files",
+      "title": "私有文件、成员授权与跨设备恢复",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "travel-documents",
+      "nextPhase": "P3",
+      "dependencies": ["data.cloud-source-of-truth", "documents.ticket-library"],
+      "evidence": {
+        "implementation": ["src/lib/cloudBackup.ts"],
+        "tests": ["src/lib/cloudBackup.restore.test.ts", "e2e/cloud-backup.spec.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["成员级 metadata/原件权限、缓存撤销和完整导出恢复验证尚未闭环"],
+      "operations": {
+        "slo": "已授权文件恢复成功率 >= 99.9%",
+        "alert": "越权访问事件 > 0 或上传后无法恢复率 > 0.1%",
+        "fallback": "吊销本机 URL，保留最小 metadata 并允许安全重试"
+      }
+    },
+    {
+      "id": "objects.travel",
+      "title": "航班、铁路、住宿、门票与保险正式对象",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "travel-data",
+      "nextPhase": "P4",
+      "dependencies": ["data.cloud-source-of-truth", "import.local-materials"],
+      "evidence": {
+        "implementation": ["src/lib/travelObjects/contracts.ts", "src/lib/travelObjects/viewModel.ts"],
+        "tests": ["src/lib/travelObjects/contracts.test.ts", "src/lib/travelObjects/viewModel.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["住宿和保险正式持久化、全对象生命周期、来源历史和跨设备恢复尚未完成"],
+      "operations": {
+        "slo": "结构化对象读取成功率 >= 99.9%",
+        "alert": "对象解析失败率 > 0.5% 或权威字段发生静默分叉",
+        "fallback": "保留原始资料引用并把不可靠字段标为缺失"
+      }
+    },
+    {
+      "id": "readiness.model",
+      "title": "统一准备度问题模型",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "trip-intelligence",
+      "nextPhase": "P4",
+      "dependencies": ["objects.travel"],
+      "evidence": {
+        "implementation": ["src/lib/ai/smartTripWorkspace.ts"],
+        "tests": ["src/lib/ai/smartTripWorkspace.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["完整 issue taxonomy、对象来源、去重和 cloud-backed 状态仍未闭环"],
+      "operations": {
+        "slo": "阻塞出行的已知问题召回率 >= 99%",
+        "alert": "同一问题重复出现或修复后立即复发",
+        "fallback": "只显示确定性问题并引导到对应对象"
+      }
+    },
+    {
+      "id": "media.place",
+      "title": "地点、住宿和餐饮真实媒体",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "provider-platform",
+      "nextPhase": "P5",
+      "dependencies": ["objects.travel"],
+      "evidence": {
+        "implementation": ["server/providerProxy/placePhotoProvider.ts", "src/components/media/TravelObjectMedia.tsx"],
+        "tests": ["server/providerProxy/placePhotoProvider.test.ts", "src/components/media/TravelObjectMedia.test.tsx"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["正式账号真实 Place Photo、缓存/署名/TTL、候选排序和供应商权利验收尚未完成"],
+      "operations": {
+        "slo": "已确认地点的可用媒体加载成功率 >= 98%",
+        "alert": "错误对象照片事件 > 0 或图片代理错误率 > 5%",
+        "fallback": "使用稳定的专业无图布局，不回退到 fixture"
+      }
+    },
+    {
+      "id": "brand.registry",
+      "title": "交通、保险与住宿品牌注册表",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "app-experience",
+      "nextPhase": "P5",
+      "dependencies": ["objects.travel"],
+      "evidence": {
+        "implementation": ["src/components/media/BrandMark.tsx", "src/assets/brands/LICENSES.md"],
+        "tests": ["src/components/media/BrandMark.test.tsx"],
+        "receipts": ["docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md"]
+      },
+      "gaps": ["当前仅覆盖四个受控品牌，目标市场代码、权利和深浅色资源不完整"],
+      "operations": {
+        "slo": "已登记品牌代码正确命中率 = 100%",
+        "alert": "未知代码被误配到具体品牌事件 > 0",
+        "fallback": "展示通用类别图标和结构化品牌名称"
+      }
+    },
+    {
+      "id": "provider.place-route-weather",
+      "title": "地点、路线与天气 Provider",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "provider-platform",
+      "nextPhase": "P6",
+      "dependencies": ["auth.account-session"],
+      "evidence": {
+        "implementation": ["server/providerProxy/placeDetailsProvider.ts", "server/providerProxy/weatherProvider.ts"],
+        "tests": ["server/providerProxy/placeDetailsProvider.test.ts", "server/providerProxy/weatherProvider.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["正式登录会话的有界真实 smoke、统一适配器、成本与新鲜度监控尚未完整"],
+      "operations": {
+        "slo": "Provider 请求成功率 >= 99%，P95 <= 4 秒",
+        "alert": "5 分钟错误率 > 5%、额度达到 70% 或事实过期率 > 2%",
+        "fallback": "保留最后有效且标记时间的事实，或显示不可用"
+      }
+    },
+    {
+      "id": "provider.transport-status",
+      "title": "航班与铁路实时状态 Provider",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "provider-platform",
+      "nextPhase": "P6",
+      "dependencies": ["objects.travel", "provider.place-route-weather"],
+      "evidence": {
+        "implementation": [],
+        "tests": [],
+        "receipts": []
+      },
+      "gaps": ["尚未接入合法且可持续的航班和铁路状态来源"],
+      "operations": {
+        "slo": "临近出发状态新鲜度符合供应商刷新窗口",
+        "alert": "关键交通对象超出 TTL 或变化事件处理失败",
+        "fallback": "显示订单静态信息和官方查询入口，不声明当前状态"
+      }
+    },
+    {
+      "id": "realtime.fact-layer",
+      "title": "统一实时事实合同与缓存",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "provider-platform",
+      "nextPhase": "P6",
+      "dependencies": ["provider.place-route-weather"],
+      "evidence": {
+        "implementation": ["src/lib/realtime/realtimeFact.ts", "src/lib/realtime/realtimeFactCache.ts"],
+        "tests": ["src/lib/realtime/realtimeFact.test.ts", "src/lib/realtime/realtimeFactCache.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["事实类别覆盖、生产刷新、change event 和监测尚未完整"],
+      "operations": {
+        "slo": "用户可见当前事实 100% 有来源与 TTL",
+        "alert": "无来源事实或过期事实被显示为当前事件 > 0",
+        "fallback": "降级为静态对象或明确的 stale/unavailable 状态"
+      }
+    },
+    {
+      "id": "ai.action-gateway",
+      "title": "通用 AI Action Gateway",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "ai-runtime",
+      "nextPhase": "P7",
+      "dependencies": ["objects.travel", "realtime.fact-layer"],
+      "evidence": {
+        "implementation": ["src/lib/ai/actionGateway/registry.ts", "src/lib/ai/actionGateway/runtime.ts"],
+        "tests": ["src/lib/ai/actionGateway/runtime.test.ts", "e2e/global-ai-command-bar.spec.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["当前仅 16 个注册动作，完整产品动作目录、统一上下文入口和真实自然语言语料尚未完成"],
+      "operations": {
+        "slo": "受支持自然语言任务规划有效率 >= 95%",
+        "alert": "未知动作接受、确认绕过或敏感字段泄露事件 > 0",
+        "fallback": "使用确定性动作或短错误，不执行未登记计划"
+      }
+    },
+    {
+      "id": "ai.write-safety",
+      "title": "AI 预览、一次确认、幂等与过期保护",
+      "status": "current",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "ai-runtime",
+      "nextPhase": null,
+      "dependencies": ["ai.action-gateway"],
+      "evidence": {
+        "implementation": ["src/lib/ai/actionGateway/runtime.ts", "src/lib/ai/actionGateway/validation.ts"],
+        "tests": ["src/lib/ai/actionGateway/runtime.test.ts", "src/lib/ai/actionGateway/validation.test.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": [],
+      "operations": {
+        "slo": "可逆写入 100% 经真实预览与最终确认",
+        "alert": "未确认写入、重复成功步骤或 stale plan 执行事件 > 0",
+        "fallback": "拒绝执行并重新准备当前状态计划"
+      }
+    },
+    {
+      "id": "ai.job-runtime",
+      "title": "AI 长任务与跨设备 Job Runtime",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "ai-runtime",
+      "nextPhase": "P7",
+      "dependencies": ["ai.action-gateway", "data.realtime-sync"],
+      "evidence": {
+        "implementation": [],
+        "tests": [],
+        "receipts": []
+      },
+      "gaps": ["queued/running/needs-input/confirmation/partial/cancelled 状态与持久化尚未实现"],
+      "operations": {
+        "slo": "已接受 Job 状态可恢复率 >= 99.9%",
+        "alert": "Job 卡住超过 10 分钟或成功步骤重复执行",
+        "fallback": "暂停任务并保留已完成收据与失败项重试入口"
+      }
+    },
+    {
+      "id": "trip.smart-repair",
+      "title": "完整一键检查、修复与应变重排",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "trip-intelligence",
+      "nextPhase": "P8",
+      "dependencies": ["ai.action-gateway", "readiness.model", "realtime.fact-layer"],
+      "evidence": {
+        "implementation": ["src/lib/ai/smartTripWorkspace.ts", "src/lib/adaptiveReplanning.ts"],
+        "tests": ["src/lib/ai/smartTripWorkspace.test.ts", "src/lib/adaptiveReplanning.test.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["完整问题类别、真实 Provider 刷新、统一预览、主动影响分析和通知尚未闭环"],
+      "operations": {
+        "slo": "自动可修复问题的一次完成率 >= 98%",
+        "alert": "重复建议、静默高风险写入或修复后立即复发事件 > 0",
+        "fallback": "仅保留确定性修复并把剩余项送到对应对象"
+      }
+    },
+    {
+      "id": "ui.real-data-experience",
+      "title": "核心页面真实数据体验",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "app-experience",
+      "nextPhase": "P9",
+      "dependencies": ["objects.travel", "media.place", "realtime.fact-layer"],
+      "evidence": {
+        "implementation": ["src/components/home/TodayStageViews.tsx", "src/components/trip/DayWorkspaceView.tsx", "src/components/tickets/TicketLibraryView.tsx"],
+        "tests": ["e2e/home-v3-visual.spec.ts", "e2e/trip-v3-visual.spec.ts", "e2e/documents-v3-visual.spec.ts"],
+        "receipts": ["docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md"]
+      },
+      "gaps": ["普通生产账号尚未以真实图片、完整对象、实时事实及稀疏/失败状态重新验收"],
+      "operations": {
+        "slo": "核心任务两次操作内完成率 >= 95%",
+        "alert": "页面致命错误、固定层遮挡或横向溢出事件 > 0",
+        "fallback": "收缩为真实结构化字段与一个主操作"
+      }
+    },
+    {
+      "id": "maps.route-navigation",
+      "title": "真实地图、路线与外部导航",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "maps-runtime",
+      "nextPhase": "P10",
+      "dependencies": ["provider.place-route-weather", "objects.travel"],
+      "evidence": {
+        "implementation": ["src/lib/dayMapExperience.ts", "src/components/trip/DayMapView.tsx"],
+        "tests": ["src/lib/dayMapExperience.test.ts", "e2e/map-product-fidelity.spec.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["正式英国行程真实几何、公共交通覆盖、定位权限和弱网新鲜度尚未全面验收"],
+      "operations": {
+        "slo": "可路由行程段的有效路线成功率 >= 98%",
+        "alert": "直线被标作道路、路线错误率 > 5% 或 Provider 预算达到 70%",
+        "fallback": "展示明确的估算/不可用状态和受控外部导航"
+      }
+    },
+    {
+      "id": "ledger.travel-expenses",
+      "title": "旅行费用、预算、退款与结算",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "travel-ledger",
+      "nextPhase": "P11",
+      "dependencies": ["documents.ticket-library", "objects.travel"],
+      "evidence": {
+        "implementation": ["src/lib/ledger.ts", "src/lib/ledgerReport.ts"],
+        "tests": ["src/lib/ledger.test.ts", "src/lib/ledgerReport.test.ts", "e2e/trip-ledger.spec.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["正式对象提取、汇率来源、预算、分摊、退款/返现和旅行后结算闭环尚不完整"],
+      "operations": {
+        "slo": "确定性金额计算正确率 = 100%",
+        "alert": "重复计费或非确定性汇总差异事件 > 0",
+        "fallback": "保留原始金额并要求用户确认草稿"
+      }
+    },
+    {
+      "id": "collaboration.shared-trip",
+      "title": "同行协作、任务与最小权限",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "collaboration-platform",
+      "nextPhase": "P12",
+      "dependencies": ["data.realtime-sync", "documents.private-files"],
+      "evidence": {
+        "implementation": ["src/components/trip/SharedTripPanel.tsx", "src/lib/tripIntelligence/adapters/sharedTripAdapter.ts"],
+        "tests": ["src/components/trip/SharedTripPanel.test.tsx", "e2e/shared-trip.spec.ts"],
+        "receipts": ["docs/PROJECT_STATUS.md"]
+      },
+      "gaps": ["统一 Realtime、任务对象、成员级原件权限和撤权后缓存失效尚未闭环"],
+      "operations": {
+        "slo": "权限变化生效 P95 <= 2 秒",
+        "alert": "越权读取事件 > 0 或撤权后仍可读",
+        "fallback": "立即拒绝私有对象并刷新成员权限快照"
+      }
+    },
+    {
+      "id": "platform.product-quality",
+      "title": "移动 PWA、无障碍、性能与时区质量",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "platform-runtime",
+      "nextPhase": "P13",
+      "dependencies": ["pwa.lifecycle", "ui.real-data-experience"],
+      "evidence": {
+        "implementation": ["src/index.css", "vite.config.ts"],
+        "tests": ["e2e/product-fidelity-resilience.spec.ts", "e2e/pwa-upgrade.spec.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["真实数据下的性能、时区、locale、权限、慢网和长期运营指标尚未闭环"],
+      "operations": {
+        "slo": "LCP P75 <= 2.5 秒，INP P75 <= 200ms，CLS <= 0.1",
+        "alert": "任一核心 Web Vital 连续超标或严重 Axe 问题 > 0",
+        "fallback": "延迟非核心模块并保持离线核心旅行可读"
+      }
+    },
+    {
+      "id": "security.production-operations",
+      "title": "安全、隐私、监控与生产运维",
+      "status": "partial",
+      "releaseBlocking": true,
+      "productionEnabled": true,
+      "owner": "platform-security",
+      "nextPhase": "P14",
+      "dependencies": ["auth.account-session", "provider.place-route-weather", "ai.write-safety"],
+      "evidence": {
+        "implementation": ["server/providerProxy/providerRequestSecurity.ts", "server/providerProxy/providerOperationsGuard.ts"],
+        "tests": ["server/providerProxy/providerRequestSecurity.test.ts", "server/providerProxy/providerOperationsGuard.test.ts"],
+        "receipts": ["design-qa.md"]
+      },
+      "gaps": ["生产遥测、回滚演练、账号数据生命周期和现有 Supabase advisor 尚未全部关闭"],
+      "operations": {
+        "slo": "Critical/High 安全事件 = 0，核心监控覆盖率 = 100%",
+        "alert": "越权、secret 泄露、确认绕过或数据丢失事件 > 0",
+        "fallback": "关闭对应 Provider/AI 能力并保持旅行只读恢复"
+      }
+    },
+    {
+      "id": "release.real-uk-trip",
+      "title": "真实英国十二天行程与生产发布验收",
+      "status": "target",
+      "releaseBlocking": true,
+      "productionEnabled": false,
+      "owner": "release-program",
+      "nextPhase": "P15",
+      "dependencies": ["data.cloud-source-of-truth", "import.local-materials", "documents.private-files", "trip.smart-repair", "ui.real-data-experience", "maps.route-navigation", "ledger.travel-expenses", "collaboration.shared-trip", "platform.product-quality", "security.production-operations"],
+      "evidence": {
+        "implementation": [],
+        "tests": [],
+        "receipts": []
+      },
+      "gaps": ["尚未以正式账号、真实材料、真实 Provider 和同 SHA 发布完成七条用户旅程"],
+      "operations": {
+        "slo": "七条用户旅程通过率 = 100%",
+        "alert": "任一 Product P0/P1、Visual P0/P1/P2 或发布收据缺失",
+        "fallback": "保持 Limited Beta，不提升整体发布状态"
+      }
+    },
+    {
+      "id": "fixtures.product-fidelity",
+      "title": "产品质感 E2E 固定素材与补充对象",
+      "status": "fixture_only",
+      "releaseBlocking": false,
+      "productionEnabled": false,
+      "owner": "quality-engineering",
+      "nextPhase": "P15",
+      "dependencies": ["ui.visual-baseline"],
+      "evidence": {
+        "implementation": ["e2e/fixtures/product-fidelity-v1.json", "e2e/assets/product-fidelity/assets.json"],
+        "tests": ["e2e/product-fidelity-compositions.spec.ts", "src/lib/media/productFidelityFixture.test.ts"],
+        "receipts": ["docs/UI_V3_PRODUCT_FIDELITY_BASELINE.md"]
+      },
+      "gaps": ["只用于视觉与回归资格，不能证明普通生产账号具有对应媒体、对象或实时事实"],
+      "operations": {
+        "slo": "普通生产构建中的 fixture 路径和标识数量 = 0",
+        "alert": "生产产物检测到任一 fixture、supplement 或 E2E bypass 标识",
+        "fallback": "构建失败并阻止发布"
+      }
+    }
+  ]
+}

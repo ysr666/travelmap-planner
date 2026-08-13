@@ -1,6 +1,6 @@
 # 旅图 TripMap 路线图 v5
 
-更新时间：2026-08-06
+更新时间：2026-08-11
 
 产品定义：[产品定位与核心体验](PRODUCT_POSITIONING.md)
 
@@ -9,6 +9,8 @@
 UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 产品质感增强计划：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
+
+完整产品级交付合同：[完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)
 
 ## 总目标
 
@@ -105,11 +107,11 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 
 ## UI V3 产品质感增强 Track
 
-状态：**Target**
+状态：**Visual Current / Product Partial**
 
 执行合同：[UI V3 产品质感增强实施计划](UI_V3_PRODUCT_FIDELITY_PLAN.md)
 
-该 Track 不重新设计 App Shell，而是在现有 V3 结构上补齐 Selected Target 依赖的真实内容层：
+该 Track 已完成固定 fixture 下的构图、响应式、媒体/品牌展示组件、地图语义和视觉验收，但真实内容层尚未完整进入普通生产账号。后续不再用本 Track 的 Golden 宣称产品级完成；真实数据、媒体、Provider、AI 和账号验收统一进入 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md)。目标内容包括：
 
 - 真实地点、酒店、餐厅和交通媒体，以及受控航司、铁路和保险品牌注册表。
 - 航班、住宿、保险、门票和交通对象的完整结构化字段。
@@ -253,6 +255,8 @@ UI 规范：[UI V3 重构规范](UI_REFACTOR_V3.md)
 - 完整规范与验收门槛以 [UI V3 重构规范](UI_REFACTOR_V3.md) 为准。
 
 ## 接下来十项
+
+本节只保留路线图摘要，不是完整 worklist，也不能作为完成定义。P0-P15、完整 AI 动作目录、真实 Provider、真实账号和发布门槛以 [完整产品级交付计划](PRODUCT_GRADE_DELIVERY_PLAN.md) 为准。
 
 1. 建立 `product-fidelity` fixture、四个核心页面的设计差异台账和媒体授权清单。
 2. 为云端对象增加 revision/mutation 合同和 Realtime 订阅 PoC。

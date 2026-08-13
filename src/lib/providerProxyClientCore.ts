@@ -95,7 +95,6 @@ import {
 } from './ai/providerProxyContract'
 import { validateAiTripEditPatchPlan } from './ai/aiTripEditPatch'
 import { validateAiTripDraft } from './ai/aiTripDraft'
-import { isE2eAuthBypassEnabled } from './appAuth'
 import { getSupabaseClient } from './supabaseClient'
 import {
   getProviderProxyBrowserStorage,
@@ -103,6 +102,8 @@ import {
   ProviderProxyClientError,
   type ProviderProxyClientOptions,
 } from './providerProxyClientShared'
+
+declare const __TRIPMAP_E2E__: boolean
 
 export async function fetchProviderProxyRoutePreview(
   request: ProviderProxyRoutePreviewRequest,
@@ -2121,7 +2122,7 @@ async function buildProviderProxyHeaders(options: ProviderProxyClientOptions): P
 async function resolveProviderProxyAccessToken(options: ProviderProxyClientOptions) {
   if (options.accessToken !== undefined) return options.accessToken?.trim() || null
   if (options.accessTokenProvider) return (await options.accessTokenProvider())?.trim() || null
-  if (isE2eAuthBypassEnabled()) return 'tripmap-e2e-access-token'
+  if (__TRIPMAP_E2E__) return 'tripmap-e2e-access-token'
   const storage = options.storage ?? getProviderProxyBrowserStorage()
   const client = getSupabaseClient()
   if (!client) return readStoredSupabaseAccessToken(storage)

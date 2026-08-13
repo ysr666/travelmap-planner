@@ -25,7 +25,6 @@ import {
 import {
   createE2eAuthUser,
   hasValidOfflineAccessLease,
-  isE2eAuthBypassEnabled,
   renewOfflineAccessLease,
 } from '../../lib/appAuth'
 
@@ -69,7 +68,7 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
   }, [])
 
   const initialize = useCallback(async () => {
-    if (isE2eAuthBypassEnabled()) {
+    if (__TRIPMAP_E2E__) {
       activateLegacyDatabaseForTests()
       setState({ kind: 'ready', offline: false, user: createE2eAuthUser() })
       return
@@ -110,7 +109,7 @@ export function AppAuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     const timeout = window.setTimeout(() => void initialize(), 0)
     const client = getSupabaseClient()
-    if (!client || isE2eAuthBypassEnabled()) return () => window.clearTimeout(timeout)
+    if (!client || __TRIPMAP_E2E__) return () => window.clearTimeout(timeout)
     const { data } = client.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         deactivateAccountDatabase()

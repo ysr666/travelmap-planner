@@ -33,8 +33,8 @@ import { getRoutingConfig, ROUTING_CONFIG_CHANGED_EVENT } from '../lib/routing'
 import type { TripOperationsLocalState } from '../lib/tripOperationsState'
 import type { TicketMeta, TripDisruptionEvent, TripReplanRecord } from '../types'
 
-export function DayViewPage() {
-  const params = getRouteParams()
+export function DayViewPage({ routeHash }: { routeHash?: string } = {}) {
+  const params = getRouteParams(routeHash)
   const tripId = params.get('tripId')
   const requestedDayId = params.get('dayId')
   const view = normalizeDayView(params.get('view'))

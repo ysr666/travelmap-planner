@@ -12,6 +12,14 @@ import {
   deleteItineraryItemReversible as performReversibleItemDeletion,
   undoItineraryItemDeletion as performItemDeletionUndo,
 } from '../lib/itemDeletion'
+import {
+  createCoreAccountObjectIfEnabled,
+  updateCoreAccountObjectIfEnabled,
+} from '../lib/accountCloud/runtimeLoader'
+import { executeProductAccountWorkflowIfEnabled } from '../lib/accountCloud/workflowRuntimeLoader'
+import { ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS } from '../lib/accountCloud/workflowLimits'
+import type { JsonObject } from '../lib/accountCloud/contract'
+import { redactTicketMetaForAccountCloud } from '../lib/accountCloud/ticketMetadata'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
 import * as ledgerRepo from './ledgerRepositories'
@@ -28,6 +36,12 @@ export async function createDemoTrip() {
 }
 
 export async function createTrip(input: Parameters<typeof repo.createTrip>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createTrip(input),
+    objectType: 'trip',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const trip = await repo.createTrip(input)
   await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
   recordTripWriteForSync(trip.id, 'trip-created', { emitChangeEvent: false })
@@ -35,6 +49,14 @@ export async function createTrip(input: Parameters<typeof repo.createTrip>[0]) {
 }
 
 export async function updateTrip(tripId: string, patch: Parameters<typeof repo.updateTrip>[1]) {
+  const accountCloud = await updateCoreAccountObjectIfEnabled({
+    apply: () => repo.updateTrip(tripId, patch),
+    objectId: tripId,
+    objectType: 'trip',
+    tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const trip = await repo.updateTrip(tripId, patch)
   if (trip) {
     await enqueueObjectUpsert({ object: trip, objectType: 'trip' })
@@ -49,6 +71,13 @@ export async function deleteTripCascade(tripId: string) {
 }
 
 export async function createDay(input: Parameters<typeof repo.createDay>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createDay(input, { touchTrip: false }),
+    objectType: 'day',
+    tripId: input.tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const day = await repo.createDay(input)
   await enqueueObjectUpsert({ object: day, objectType: 'day' })
   recordTripWriteForSync(day.tripId, 'day-created', { emitChangeEvent: false })
@@ -56,6 +85,17 @@ export async function createDay(input: Parameters<typeof repo.createDay>[0]) {
 }
 
 export async function updateDay(dayId: string, patch: Parameters<typeof repo.updateDay>[1]) {
+  const existing = await repo.getDay(dayId)
+  if (existing) {
+    const accountCloud = await updateCoreAccountObjectIfEnabled({
+      apply: () => repo.updateDay(dayId, patch, { touchTrip: false }),
+      objectId: dayId,
+      objectType: 'day',
+      tripId: existing.tripId,
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
   const day = await repo.updateDay(dayId, patch)
   if (day) {
     await enqueueObjectUpsert({ object: day, objectType: 'day' })
@@ -74,6 +114,13 @@ export async function deleteDayCascade(dayId: string) {
 }
 
 export async function createItineraryItem(input: Parameters<typeof repo.createItineraryItem>[0]) {
+  const accountCloud = await createCoreAccountObjectIfEnabled({
+    apply: () => repo.createItineraryItem(input, { touchTrip: false }),
+    objectType: 'item',
+    tripId: input.tripId,
+  })
+  if (accountCloud.handled) return accountCloud.value
+
   const item = await repo.createItineraryItem(input)
   await enqueueObjectUpsert({ object: item, objectType: 'item' })
   recordTripWriteForSync(item.tripId, 'item-created', { emitChangeEvent: false })
@@ -94,6 +141,19 @@ export async function updateItineraryItem(
   itemId: string,
   patch: Parameters<typeof repo.updateItineraryItem>[1],
 ) {
+  const existing = await repo.getItineraryItem(itemId)
+  const requiresRegisteredWorkflow = Object.hasOwn(patch, 'sortOrder')
+    || Object.hasOwn(patch, 'ticketIds')
+  if (existing && !requiresRegisteredWorkflow) {
+    const accountCloud = await updateCoreAccountObjectIfEnabled({
+      apply: () => repo.updateItineraryItem(itemId, patch, { touchTrip: false }),
+      objectId: itemId,
+      objectType: 'item',
+      tripId: existing.tripId,
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
   const item = await repo.updateItineraryItem(itemId, patch)
   if (item) {
     await enqueueObjectUpsert({ object: item, objectType: 'item' })
@@ -107,7 +167,23 @@ export async function reorderDayItems(
   orderedItemIds: string[],
   expectedCurrentItemIds?: string[],
 ) {
-  const items = await repo.reorderDayItems(dayId, orderedItemIds, expectedCurrentItemIds)
+  const plan = await repo.prepareDayItemsReorder(dayId, orderedItemIds, expectedCurrentItemIds)
+  if (plan.changedItems.length > 0) {
+    const accountCloud = await executeProductAccountWorkflowIfEnabled({
+      apply: () => repo.applyDayItemsReorderPlan(plan, { touchTrip: false }),
+      steps: plan.afterItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+      tripId: plan.tripId,
+      workflowId: 'day.items.reorder@1',
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
+  const items = await repo.applyDayItemsReorderPlan(plan)
   if (items.length > 0) {
     await Promise.all(items.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' })))
     recordTripWriteForSync(items[0].tripId, 'items-reordered', { emitChangeEvent: false })
@@ -121,12 +197,26 @@ export async function moveItineraryItemBetweenDays(
   nextDestinationItemIds: string[],
   options: Parameters<typeof repo.moveItineraryItemBetweenDays>[3],
 ) {
-  const result = await repo.moveItineraryItemBetweenDays(
+  const plan = await repo.prepareItineraryItemMove(
     itemId,
     destinationDayId,
     nextDestinationItemIds,
     options,
   )
+  const accountCloud = await executeProductAccountWorkflowIfEnabled({
+    apply: () => repo.applyItineraryItemMovePlan(plan, { touchTrip: false }),
+    steps: plan.afterItems.map((item) => ({
+      objectId: item.id,
+      objectType: 'item' as const,
+      operation: 'upsert' as const,
+      payload: item as unknown as JsonObject,
+    })),
+    tripId: plan.tripId,
+    workflowId: 'item.move@1',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
+  const result = await repo.applyItineraryItemMovePlan(plan)
   await Promise.all(
     result.changedItems.map((item) =>
       enqueueObjectUpsert({ object: item, objectType: 'item' }),
@@ -190,7 +280,30 @@ export async function updateTicketMeta(
   ticketId: string,
   input: Parameters<typeof repo.updateTicketMeta>[1],
 ) {
-  const result = await repo.updateTicketMeta(ticketId, input)
+  const plan = await repo.prepareTicketMetaUpdate(ticketId, input)
+  if (!plan) return undefined
+  const accountCloud = await executeProductAccountWorkflowIfEnabled({
+    apply: () => repo.applyTicketMetaUpdatePlan(plan, { touchTrip: false }),
+    steps: [
+      {
+        objectId: plan.afterTicket.id,
+        objectType: 'ticket_meta' as const,
+        operation: 'upsert' as const,
+        payload: redactTicketMetaForAccountCloud(plan.afterTicket) as unknown as JsonObject,
+      },
+      ...plan.afterRelationshipItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+    ],
+    tripId: plan.tripId,
+    workflowId: 'ticket.bind@1',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
+  const result = await repo.applyTicketMetaUpdatePlan(plan)
   if (result) {
     await Promise.all([
       enqueueObjectUpsert({ object: result.ticket, objectType: 'ticket_meta' }),
@@ -265,7 +378,71 @@ export async function importTripPlanRecords(
   input: Parameters<typeof repo.importTripPlanRecords>[0],
   options: MarkDirtyOptions = {},
 ) {
-  const result = await repo.importTripPlanRecords(input)
+  const importRepository = await import('./tripPlanImportRepository')
+  const plan = await importRepository.prepareTripPlanImport(input)
+  if (options.markDirty !== false && plan.ticketBlobs.length === 0) {
+    const steps = [
+      {
+        objectId: plan.trip.id,
+        objectType: 'trip' as const,
+        operation: 'upsert' as const,
+        payload: plan.trip as unknown as JsonObject,
+      },
+      ...plan.days.map((day) => ({
+        objectId: day.id,
+        objectType: 'day' as const,
+        operation: 'upsert' as const,
+        payload: day as unknown as JsonObject,
+      })),
+      ...plan.itineraryItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+      ...plan.ticketMetas.map((ticket) => ({
+        objectId: ticket.id,
+        objectType: 'ticket_meta' as const,
+        operation: 'upsert' as const,
+        payload: redactTicketMetaForAccountCloud(ticket) as unknown as JsonObject,
+      })),
+      ...plan.ledgerSettings.map((settings) => ({
+        objectId: settings.id,
+        objectType: 'ledger_settings' as const,
+        operation: 'upsert' as const,
+        payload: settings as unknown as JsonObject,
+      })),
+      ...plan.ledgerParticipants.map((participant) => ({
+        objectId: participant.id,
+        objectType: 'ledger_participant' as const,
+        operation: 'upsert' as const,
+        payload: participant as unknown as JsonObject,
+      })),
+      ...plan.ledgerBudgets.map((budget) => ({
+        objectId: budget.id,
+        objectType: 'ledger_budget' as const,
+        operation: 'upsert' as const,
+        payload: budget as unknown as JsonObject,
+      })),
+      ...plan.ledgerExpenses.map((expense) => ({
+        objectId: expense.id,
+        objectType: 'ledger_expense' as const,
+        operation: 'upsert' as const,
+        payload: expense as unknown as JsonObject,
+      })),
+    ]
+    if (steps.length <= ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS) {
+      const accountCloud = await executeProductAccountWorkflowIfEnabled({
+        apply: () => importRepository.applyTripPlanImportPlan(plan),
+        steps,
+        tripId: plan.trip.id,
+        workflowId: 'trip.import.commit@1',
+      })
+      if (accountCloud.handled) return accountCloud.value
+    }
+  }
+
+  const result = await importRepository.applyTripPlanImportPlan(plan)
   if (options.markDirty !== false) {
     await enqueueTripGraph(result.tripId)
     recordTripWriteForSync(result.tripId, 'trip-plan-imported', { emitChangeEvent: false })

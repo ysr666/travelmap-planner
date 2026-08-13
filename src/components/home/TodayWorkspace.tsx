@@ -63,7 +63,7 @@ import {
 } from '../../lib/travelObjects'
 import type { ItineraryItem, TicketMeta, TransportMode } from '../../types'
 
-const E2E_MODE = import.meta.env.VITE_E2E_AUTH_BYPASS === '1'
+const E2E_MODE = __TRIPMAP_E2E__
 const E2E_USE_LIVE_MAP = import.meta.env.VITE_E2E_USE_LIVE_MAP === '1'
 const TODAY_MAP_VIEWPORT_PADDING = { top: 60, right: 76, bottom: 132, left: 60 } as const
 

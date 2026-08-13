@@ -3043,3 +3043,745 @@ P8 validation (local and simulator):
 - Cloudflare D1 release diagnostics found that `0003_add_weather_provider_group.sql` had not been discovered because the maintenance Wrangler config omitted `migrations_dir`. The config now names the repository migration directory, a build gate rejects missing migrations and explicit D1 transactions, and the production migration was applied successfully after a failed explicit-transaction attempt rolled back without changing schema or data.
 - Post-migration checks found no pending D1 migration, seven Provider controls including enabled `weather`, zero daily-usage rows, zero alert rows, and `weather` accepted by all three constrained Provider tables. No real Provider call was made.
 - P0-P8 are complete and released. Simulator acceptance is the project-approved device gate; no physical-device receipt is required.
+
+## 2026-08-11 Product-Grade Delivery W0 / P0 Capability Truth Gate
+
+Status: complete
+
+Goal:
+
+- Establish one machine-readable source for shipped, partial, fixture-only, target, and historical capabilities before implementing the wider product-grade program.
+- Make ordinary production builds fail when E2E fidelity assets, session supplements, authentication bypasses, or fixture identifiers enter the artifact.
+- Align release claims with local implementation, test, operational, and production-receipt evidence.
+
+Scope:
+
+- Add a versioned capability manifest covering UI, data, import, documents, travel objects, media, Provider, AI, repair, maps, ledger, collaboration, PWA, security, and release acceptance.
+- Add strict schema, evidence-path, dependency-cycle, status-transition, and full-product completeness validation.
+- Add a built-artifact boundary check with separate ordinary-production and explicit E2E-fixture modes.
+- Wire both checks into package scripts, the production build, and CI; correct the current product-status documentation and retain historical visual receipts.
+- Add focused tests for malformed manifests and fixture leakage.
+
+No-go:
+
+- No Supabase, D1, IndexedDB, Provider, AI planning, ticket Blob, route cache, or user-data mutation in this phase.
+- No capability may be promoted to Current from documentation alone.
+- No existing visual, simulator, CI, or deployment receipt may be deleted or rewritten as a product-level receipt.
+
+Likely files:
+
+- `config/product-capabilities.json`, `scripts/lib/capability-manifest.mjs`, `scripts/check-capability-manifest.mjs`, `scripts/lib/production-boundaries.mjs`, `scripts/check-production-boundaries.mjs`, focused script tests, `package.json`, CI, and product/status documentation.
+
+Validation:
+
+- Focused manifest and production-boundary tests; manifest CLI; ordinary production build; explicit E2E-fixture build boundary; typecheck; lint; full unit suite; `git diff --check`.
+
+Risk:
+
+- Medium. A false-positive gate could block every build; a false-negative could let test-only product fidelity data reach production.
+
+Stop conditions:
+
+- Stop and repair if the ordinary production artifact contains a fixture/bypass marker, the E2E build accepts an unregistered fixture, a Current capability lacks code/test/release evidence, manifest dependencies cycle, or existing build/PWA budgets regress.
+
+Local result:
+
+- Added `config/product-capabilities.json` as the versioned capability source of truth. It currently records 29 capabilities with owners, dependencies, implementation/test/receipt evidence, operational SLOs, alerts, fallbacks, explicit gaps, and the next product phase.
+- Added strict capability and release-claim validators. They reject unknown fields, invalid statuses, missing Current evidence, dependency cycles, evidence paths outside the repository, broad full-product claims, and status drift across the five release-facing documents.
+- Added an emitted-artifact production boundary. Ordinary builds reject product-fidelity fixtures, E2E session supplements, authentication bypasses, fixture identifiers, test-only compile markers, and mock-cloud markers; explicit E2E builds accept only the seven registered visual assets.
+- Split the product-fidelity travel-object supplement and media registry behind compile-time E2E imports. The ordinary production artifact now contains zero fixture files and zero registered fixture markers while the browser test build retains the controlled fidelity dataset.
+- Disabled Provider mock selection in production at the server boundary, including explicit `provider=mock` requests and production environments configured with mock Provider bindings. Development, unit, and E2E contracts remain available outside production.
+- Wired the capability and production-boundary checks into the build and GitHub Actions, and aligned Product Strategy, Project Status, Roadmap, Design, Design QA, and both UI fidelity documents to the Limited Beta product truth.
+
+Local validation:
+
+- Capability/release/boundary tests passed: 15/15. The manifest check reports 29 capabilities: 4 Current, 18 Partial, 1 Fixture-only, 6 Target, and 24 incomplete release blockers; all five release-facing documents are aligned.
+- Focused Provider Proxy and changed-runtime tests passed: 98/98. Full unit tests passed: 218 files and 1745 tests.
+- `npm run lint`, `npm run check:fidelity-assets`, and `git diff --check` passed.
+- Ordinary `npm run build` passed with 139 emitted files, zero fixture files, 468.3 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2444.2 KiB/121-entry precache.
+- Explicit E2E build passed with exactly seven registered fixture files, 468.4 KiB entry JS, 852.8 KiB initial JS, 245.6 KiB initial gzip, and a 2450.4 KiB/126-entry precache.
+- Full serial E2E passed 194/194 in 7.1 minutes. The dedicated PWA upgrade gate passed 5/5 in 45.8 seconds.
+
+Remote validation:
+
+- Candidate `62d995dcc4f45fee9fdd9c7c6e0ef679cf25c93c` passed GitHub Actions run `31475816551`: Build, Lint plus capability gate, Type Check, Unit Tests, and E2E Tests all succeeded; the E2E job completed in 6 minutes 41 seconds.
+- Cloudflare Preview deployment `e0545b7e-18fe-4d27-8b3d-adbc693632ce` was created from the same candidate SHA and returned HTTP 200. Current production remains `main` SHA `03fc0d025da44f5cf5987a28fb57ca29555650d3` until PR #35 is reviewed and merged.
+- Follow-up documentation candidate `0c809a0deb9f2494984bb019533c81370c1bc518` also passed all five GitHub Actions jobs in run `31476784375`; Cloudflare Preview deployment `2e7d7e30-411b-49d8-a399-c02cb9c27671` served HTTP 200 from the same SHA.
+- The production diagnostics endpoint reported production environment, enforced Origin and Auth, durable D1 quota, and configured OpenAI-compatible AI, Tavily search, Google Places/Routes, OpenRouteService, and Open-Meteo adapters. No real Provider operation was invoked.
+- Remote D1 reported no pending migration. All seven `global | ai | search | place | route | weather | fx` controls are enabled, with zero current daily-usage rows and zero pending alerts. Alert delivery itself is not configured and is explicitly retained as a P13 blocker.
+- Supabase reported `ACTIVE_HEALTHY`; its production migration list and both advisor classes were read without schema or data writes. Existing findings are recorded in `docs/PRODUCTION_RUNTIME_STATUS.md`: leaked-password protection, one intentionally closed RLS table without a policy, one multiple-permissive-policy warning, and six unused-index notices.
+- P0 exits with the repository still correctly labelled Limited Beta: four capabilities are Current, 24 release-blocking capabilities remain incomplete, and every Partial/Target item names its gap and next phase.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.1 Versioned Cloud Contract
+
+Status: complete locally; Preview database receipt remains a P1 exit requirement
+
+Goal:
+
+- Establish the additive server-side V2 object envelope and atomic mutation protocol required for cloud-first account data without disrupting the current Limited Beta sync path.
+- Make revision checks, mutation deduplication, actor attribution, tombstones, schema versions, ownership, and Realtime eligibility enforceable at the database boundary.
+
+Scope:
+
+- Add a versioned account-object registry covering trip, day, itinerary, ticket metadata, redacted document indexes and links, transport, lodging, insurance, controlled media, realtime facts, ledger, intelligence, shared tasks, replanning, and AI jobs.
+- Add an owner-scoped object table and a private mutation-receipt table with bounded identifiers and payloads, explicit grants, RLS, indexes, and Realtime publication.
+- Add one authenticated atomic mutation RPC with an expected revision, mutation ID, request fingerprint, idempotent replay result, tombstone semantics, and structured conflict result.
+- Backfill compatible legacy `cloud_sync_objects` rows additively and idempotently; retain the legacy table and current client behavior until a later cutover phase.
+- Add strict TypeScript request/response/row validators and a Supabase adapter that cannot send owner IDs, arbitrary object types, unknown fields, sensitive document payload kinds, or malformed mutations.
+- Add static migration-contract tests and focused client-contract tests before any preview database application.
+
+No-go:
+
+- No production or preview database write in this subphase; no client write-path cutover; no IndexedDB version change; no ticket Blob, encrypted vault, Storage, Provider, AI privacy, route-cache, or collaboration-permission contract change.
+- No raw passport, visa, insurance document body, OCR text, token, secret, arbitrary execution/routing URL, or raw Provider payload in the general account-object table; object-schema-approved user/source links remain a later codec responsibility.
+- No direct authenticated table insert, update, or delete; mutations must pass through the revision-gated RPC.
+- No destructive migration, legacy-row deletion, forced user re-import, service-role browser use, or status promotion to Current.
+
+Likely files:
+
+- A CLI-created migration under `supabase/migrations/`, `src/lib/accountCloud/*`, focused unit tests, a migration-contract checker and tests, package/CI wiring if needed, the product capability manifest, P1 design/runbook documentation, and this phase ledger.
+
+Validation:
+
+- Supabase changelog/current-doc review; migration filename/history checks; static SQL contract and security tests; request/row/result schema tests; adapter RPC-shape and error-normalization tests; 100-repeat idempotency model test; typecheck; lint; focused and full unit tests; production build; `git diff --check`.
+- Preview database application, SQL behavior checks, RLS/advisors, Realtime, rollback, and production drift remain required P1 receipts and will be completed in subsequent P1 subphases before P1 can exit.
+
+Risk:
+
+- High. An incorrect RPC, grant, RLS rule, backfill, or identity contract could create cross-account access, duplicate mutations, stale overwrites, or an unrecoverable migration path.
+
+Stop conditions:
+
+- Stop and repair if a client can choose `owner_id` or `actor_id`, reuse one mutation ID with different content, bypass expected revision, directly write either table, persist an unregistered or sensitive object kind, leak deleted payloads, subscribe across owners, or alter any legacy row during backfill.
+
+Local result:
+
+- Added a CLI-created additive Supabase migration with one revisioned account-object table, a private independent mutation-receipt ledger, explicit read-only browser grants, owner-only RLS, tombstones, indexes, `REPLICA IDENTITY FULL`, and conditional Realtime publication.
+- Added one private `SECURITY DEFINER` mutation implementation behind a public `SECURITY INVOKER` wrapper. The browser cannot submit owner/actor IDs, table/function names, or server-managed media/fact/job writes; the implementation authenticates with `auth.uid()`, uses empty search paths, serializes object and mutation identities, verifies request hashes, checks expected revisions, and writes the object plus receipt atomically.
+- Added a 22-kind TypeScript registry, exhaustive payload-type map, redacted document index/link, Shared Task, and AI Job models. General account payloads reject envelope forgery, secrets, credentials, Blob/OCR/document bodies, raw Provider payloads, invalid JSON, cycles, excessive depth/nodes, and payloads over 512 KiB.
+- Added a Supabase adapter that sends only the fixed RPC arguments, validates every response, rejects cross-trip/object substitution, and normalizes Auth, permission, missing-contract, transient, and malformed-response failures without exposing raw server details.
+- Added an executable migration gate that keeps the SQL table allowlist, private RPC allowlist, and TypeScript registry aligned and rejects direct authenticated writes, privileged public implementations, receipt exposure, missing revision/replay guards, or destructive legacy-table statements. Build and CI now run this gate.
+- Added `docs/CLOUD_DATA_MODEL_V2.md` as the detailed cloud-first, object, permission, conflict, Realtime, recovery, retention, staged rollout, and rollback contract. Capability and project-status evidence now point to it while retaining Target status.
+- Production was queried read-only before finalizing the backfill: 136 legacy rows, zero live rows with invalid/null payloads, maximum payload 1,544 bytes, and zero identifiers outside the additive migration bounds. No schema or data write was made.
+
+Local validation:
+
+- Focused account-cloud contract, adapter, attack-boundary, 100-repeat idempotency model, and migration tests passed: 3 files and 36 tests.
+- `npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:unit` passed: 221 files and 1,782 tests.
+- `npm run build` passed, including capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates. Ordinary output contained zero fixture files; bundle budget remained 468.3 KiB entry, 852.8 KiB initial JS, 245.6 KiB initial gzip, and 2444.4 KiB/121-entry precache.
+- `git diff --check` passed. Local SQL execution was unavailable because this Mac has no Docker daemon or Docker Desktop; the repository has no existing Supabase Preview branch. Preview migration application, SQL behavior/RLS/advisors, Realtime, and rollback remain mandatory before client cutover or any Current claim.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.2 Cloud-First Mutation Runtime
+
+Status: complete locally; Preview migration/bootstrap/full-write receipts remain P1 gates
+
+Goal:
+
+- Implement the local durable-revision, crash-journal, retry, conflict, and rollback runtime needed to make an online server ack the commit point while preserving the current production path behind a disabled rollout flag.
+- Prove the model on bounded single-object core writes before adding server-side batch mutations for reorders, moves, imports, ticket rebinds, ledger batches, or AI workflows.
+
+Scope:
+
+- Add IndexedDB v11 stores for V2 object revision receipts and exact mutation journal/outbox rows, with account-scoped isolation, leases, retry metadata, blocked states, and conflict snapshots.
+- Add strict local-store APIs that atomically record optimistic intent, mark offline/retry/auth/contract/conflict outcomes, and atomically convert an acknowledged mutation into a durable revision while removing its journal row.
+- Add a feature mode that is disabled by default and cannot silently enable V2 writes without explicit build configuration.
+- Add a cloud-first coordinator for `applied`, later `idempotent`, conflict, rejection, permission, authentication, contract-unavailable, malformed response, and transient network outcomes.
+- Integrate only bounded single-object Trip/Day/Item creates and simple updates where a safe local rollback exists. Existing records without a verified V2 revision stay on the legacy path until bootstrap; Ticket and multi-object operations stay on legacy until dedicated privacy-safe codecs and atomic protocols exist.
+- Preserve the legacy outbox, blob sync, vault, Provider, Action Gateway, route cache, and normal production behavior while the flag is disabled.
+
+No-go:
+
+- No production/Preview Supabase write; no default flag enablement; no direct table write; no mutation without the P1.1 RPC; no service-role client; no unverified revision guessed from timestamps.
+- No partial cloud execution of reorder, cross-day move, cascade delete, ticket binding, bulk ledger, import, repair, or AI workflow operations.
+- No clearing a journal row before ack, retrying permission/contract-invalid payloads as transient failures, exposing raw server errors, or claiming a local optimistic write is durable.
+- No sensitive vault/blob payload in the V2 journal or revision store.
+
+Likely files:
+
+- `src/db/database.ts`, database migration tests, `src/lib/accountCloud/localTypes.ts`, `localStore.ts`, `feature.ts`, `coordinator.ts`, focused tests, bounded tracked-mutation adapters/tests, cloud data contract/status docs, capability evidence, and this ledger.
+
+Validation:
+
+- v10 -> v11 and legacy -> v11 IndexedDB migrations; account isolation; intent/ack atomicity; crash recovery; offline queue; lease expiry; retry policy; 100 idempotent replays; conflict snapshots; rejected/permission rollback; no raw error persistence; disabled-mode behavior; existing tracked-mutation suite; typecheck, lint, full unit, build, PWA upgrade, and `git diff --check`.
+
+Risk:
+
+- High. The main hazards are a crash gap between optimistic data and its journal, deleting an outbox row before durable ack, replaying an operation with a different mutation ID, and applying a single-object protocol to a multi-object invariant.
+
+Stop conditions:
+
+- Stop and repair if an enabled online write reports success without an ack, a failed ack loses the local intent, a blocked/permission failure loops, a stale response overwrites a newer local revision, an existing unbootstrapped object guesses revision 0, a disabled production build changes legacy behavior, or any multi-object operation enters the single-object coordinator.
+
+Local result:
+
+- Added IndexedDB v11 account-object revision and mutation-journal stores. Journal rows are account-bound and retain the exact mutation content, optimistic before/after snapshots, retry state, conflict evidence, and a generation-specific lease token so a late tab cannot overwrite a newer worker's result.
+- Added a cloud mutation coordinator that treats the online server acknowledgement as the commit point, preserves the original mutation ID across ambiguous transport outcomes, retries unknown/5xx/429 failures, blocks definitive Auth/contract failures, and never accepts an advanced idempotent receipt as proof that stale local business data is current.
+- Added atomic optimistic rollback for dependent mutation chains. Definitive rejection restores the prior local state and removes the hidden replay; conflicts preserve their receipts and server snapshot; newer unrelated local edits are retained instead of being overwritten. Rollback resolution is recorded in the same transaction, and startup recovery only compensates terminal rows without that marker.
+- Added an account-context guard at every client transition and to the private SQL RPC. Each operation is bound to its captured account database instance as well as its hash; the RPC recomputes a bounded account hash from `auth.uid()`. Switching accounts during a request leaves the old journal for idempotent recovery and cannot read, acknowledge, or roll back a same-ID object in the new account.
+- Added bounded Trip/Day/Item create and simple-update adapters. Existing unbootstrapped objects, deletes, reorders, moves, imports, ledger/AI workflows, ticket writes, and every multi-object invariant continue through the legacy path and cannot be partially routed into V2.
+- Added a redacted Ticket metadata type and one aligned top-level field whitelist enforced by the mutation builder, generic contract parser, SQL RPC, and legacy backfill. It excludes filenames, local paths, URLs, notes, Blob/OCR data, structured private fields, and unregistered extras. V2 Ticket writes remain disabled until complete read, Blob, and multi-object rebind protocols exist.
+- Added an invisible journal controller for startup, reconnect, focus, visibility, and periodic drains. The controller and heavy runtime load through dynamic imports only after the feature gate passes.
+- Added a compile-time `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY = false` hard gate. Environment mode, migration receipt, and allowlist values cannot enable V2 writes in the current build; production behavior remains on the legacy path.
+- No Preview or production schema/data write and no real Provider call was made in this subphase.
+
+Review:
+
+- Independent read-only review identified seven material risks: partial V1/V2 divergence, account-switch cross-write, ambiguous-response receipt loss, advanced-idempotency stale overwrite, missing persistent rollback, Ticket metadata privacy, and expired-lease result races. A follow-up pass found a dynamic-database rollback reproduction, terminal/rollback crash gap, stale SQL signature, TypeScript narrowing error, and optional-only Ticket redaction. The implementation now binds database instances, reconciles atomically with restart receipts, cleans old RPC overloads, verifies the exact 11-argument signature, and enforces Ticket privacy on both client and server boundaries; focused regressions cover each repaired path.
+
+Local validation:
+
+- Final focused account-cloud, controller, Ticket privacy, and migration regression tests passed: 7 files and 78 tests. The complete unit suite passed: 228 files and 1,839 tests.
+- `npm run typecheck`, `npm run lint`, and `npm run build` passed. Build included capability, account-cloud migration, Cloudflare migration, production-boundary, and bundle gates; the final budget was 473.4 KiB entry, 859.0 KiB initial JS, 247.1 KiB initial gzip, and 2485.0 KiB/126-entry precache.
+- Full serial Playwright E2E passed earlier in the subphase: 194 tests. After final account-binding/privacy hardening, the 5-test PWA upgrade suite and Desktop Beta smoke both passed again; production behavior remains unchanged because the compile-time cutover gate is still closed.
+- `git diff --check` passed. Preview migration application, executable SQL/RLS/Realtime/rollback evidence, bootstrap and double-read drift receipts, and batch mutation evidence remain mandatory later P1 gates before any cutover or Current claim.
+
+Remote validation for commit `78377ead3bc7d710d236f2ec3ced96d6597e7cee`:
+
+- GitHub Actions run `31486305733` passed all five required jobs: Build, Lint, Type Check, Unit Tests, and E2E Tests. The serial E2E job completed successfully in 6 minutes 12 seconds.
+- Cloudflare Pages deployment `29273540-cc34-4b8d-b509-547e34a1cdd1` passed for the same commit. Its immutable Preview URL returned HTTP 200.
+- These are code/build receipts only. They do not replace the missing Supabase Preview SQL, RLS, Realtime, bootstrap, second-device, and rollback receipts required to exit P1.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3a Strict Read, Bootstrap, and Shadow Drift
+
+Status: complete locally; Supabase Preview receipt remains a P1 gate
+
+Goal:
+
+- Establish the strict V2 account-object read path and a non-destructive bootstrap protocol that can prove which legacy/local objects are byte-equivalent to their revisioned cloud rows.
+- Make every mismatch explicit before any existing object is allowed onto the V2 mutation path; never infer a revision from timestamps or silently use remote data to replace local data.
+
+Scope:
+
+- Add a fixed-column, RLS-dependent Supabase reader for one trip with bounded deterministic pagination, strict snake-case row decoding, response substitution checks, sanitized errors, and account-context checks before and after every network page.
+- Add a pure shadow comparator for supported legacy object types. It must classify exact matches, local-only, remote-only, payload drift, tombstone drift, unsupported types, duplicate rows, and pending-mutation blocks.
+- Add account-database-bound bootstrap persistence that writes revision receipts only for exact live matches or exact local absence plus a remote tombstone, revalidates the current local object inside the persistence transaction, and never changes business data.
+- Use the same Ticket metadata redaction codec at read/compare boundaries so filenames, paths, URLs, notes, extracted content, Blob data, and unregistered fields cannot enter V2 receipts.
+- Add a separate compile-time closed shadow-read gate requiring the exact migration receipt, `shadow` mode, and an account allowlist; it must not weaken the existing full-cutover write gate.
+- Record aggregate drift receipts in memory/return values only for this subphase. Durable cross-device bootstrap state, quarantine, full restore, Realtime, and rollout telemetry remain later P1 work.
+
+No-go:
+
+- No Preview or production Supabase write, migration application, branch creation, real account data read, Provider call, feature enablement, legacy-row mutation, local business-object overwrite, Ticket Blob/vault read, or production status promotion.
+- No `select('*')`, owner ID in a client result, caller-supplied table/column/order expression, unbounded page, raw server error, timestamp-derived revision, automatic resolution of drift, or revision receipt for an unsupported/unverified payload.
+- No V2 delete, reorder, move, import, ticket rebind, ledger batch, AI batch, or other multi-object write; those require a separately registered atomic workflow RPC.
+
+Likely files:
+
+- `src/lib/accountCloud/client.ts`, new strict read/bootstrap modules and tests, `feature.ts`, `localStore.ts`, Account Cloud V2/status/capability documentation, and this ledger.
+
+Validation:
+
+- Fixed query shape and pagination; unknown/owner fields; malformed/duplicate/substituted rows; account switch during each page; unauthorized/missing-contract/transient errors; bounded maximum; every shadow classification; Ticket redaction; pending mutation; stale local data between plan and persist; atomic receipt writes; idempotent rerun; wrong account database; and closed-gate behavior.
+- Focused account-cloud tests, typecheck, lint, full unit, build, relevant PWA/desktop E2E if shared runtime changes, migration/capability gates, and `git diff --check`.
+
+Risk:
+
+- High. A false exact match can attach the wrong revision to local data and turn a later ordinary edit into a stale overwrite; an account-switch gap can bind another account's rows to the active IndexedDB database.
+
+Stop conditions:
+
+- Stop and repair if bootstrap writes any business table, accepts owner IDs or unknown response fields, seeds a receipt without an exact payload/absence proof, ignores a pending journal row, crosses account database instances, returns a partial page set as complete, or makes the existing V2 write gate reachable.
+
+Local result:
+
+- Added a strict `tripmap_account_objects` reader with a fixed 13-column projection, fixed trip filter and sort, bounded pagination, exact response-field validation, duplicate/substitution rejection, and sanitized transport errors. The browser never asks for or accepts `owner_id`, a caller-selected table/column, wildcard fields, or a partial max-page result.
+- Bound every read page to both the captured local account hash and the current Supabase authenticated user. The account hash is checked before and after the network request, and `auth.getUser()` is revalidated before the first query and before each returned page is accepted; account or session switching discards the response.
+- Added two-pass stable reads. Bootstrap planning receives a remote snapshot only when two independently completed, strictly decoded reads are byte-equivalent; changing revision, payload, mutation receipt, tombstone, or ordering evidence fails closed.
+- Added a pure legacy/V2 drift planner for all 12 currently synchronized legacy object kinds. It reports exact, local-only, remote-only, payload, tombstone, schema, unsupported, and pending-mutation states without modifying either source.
+- Ticket comparison uses the existing minimal metadata whitelist. Filename, local path, URL, notes, OCR/extracted text, Blob data, private structured fields, and unknown top-level fields cannot enter the bootstrap payload or revision receipt.
+- Added one IndexedDB transaction that re-reads the local business object and both legacy/V2 pending queues before persisting. It writes only a server revision receipt for an exact live payload or proven local absence plus a server tombstone; it never creates, updates, deletes, or restores a business object. Exact repeat execution is idempotent, while stale local state, pending work, unsupported schema, and conflicting receipts are skipped.
+- Added a separate compile-time `ACCOUNT_CLOUD_V2_SHADOW_READ_READY = false` gate. It still requires the exact migration receipt, `shadow` mode, and account allowlist, and cannot be enabled by environment configuration in this build. The production build tree-shook the bootstrap runtime from startup output; the existing write hard gate also remains closed.
+- No Supabase Preview/production schema or data write, real account cloud read, or Provider call was made in this subphase.
+
+Review:
+
+- The final self-review focused on response substitution, Supabase-token/local-database account mismatch, page races, stale plans, existing revision conflicts, pending legacy and V2 mutations, Ticket privacy, idempotent repeats, and accidental business-table writes. Focused regressions cover each boundary, including account switches before query and before accepting a returned page.
+
+Local validation:
+
+- Final focused Account Cloud and account-database suites passed: 10 files and 93 tests. The complete unit suite passed: 230 files and 1,854 tests.
+- `npm run typecheck:app`, `npm run lint`, `npm run build`, and `npm run check:capabilities` passed. Build gates reported 144 production-boundary files with zero fixture files; the final budget was 473.1 KiB entry, 859.0 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2485.2 KiB/126-entry precache.
+- The 5-test PWA upgrade suite and Desktop Beta smoke passed. `git diff --check` passed.
+- Supabase Preview application and real-account double-read/bootstrap receipts remain intentionally unexecuted. They require a cost-bearing Preview branch or an explicitly authorized reviewed production migration and remain mandatory before either V2 read or write gate can open.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3b Registered Atomic Workflows
+
+Status: complete locally; Supabase Preview and product-path integration remain P1 gates
+
+Goal:
+
+- Define one bounded atomic server boundary for multi-object domain operations so reorder, cross-day move, import, ticket rebind, ledger changes, replanning, and AI repair can never degrade into independently acknowledged object writes.
+- Make workflow selection closed and semantic: callers may select only a versioned workflow ID and validated object mutations, never a table, function, SQL fragment, route, owner/actor ID, or unrestricted action name.
+
+Scope:
+
+- Add a versioned TypeScript workflow registry with strict envelope/step/result parsers, workflow-specific object/operation/shape rules, duplicate prevention, bounded step and byte limits, Ticket redaction, and exact request/result correlation.
+- Add a fixed Supabase RPC adapter that sends only registered arguments, binds the captured local account hash to the authenticated server account, rejects substituted or advanced replay results, and normalizes errors without raw server details.
+- Add an additive migration with a private batch receipt ledger, a private authenticated transaction implementation, and a public security-invoker wrapper. It must validate all revisions and workflow invariants before the first write, lock object identities in deterministic order, apply all steps and receipts in one transaction, and return a single atomic result.
+- Register only explicit domain workflows needed by existing product operations. AI repair must use its own narrow workflow definition and must not gain a generic mutation escape hatch.
+- Add an executable migration/registry gate and attack-boundary tests. Keep all read/write rollout gates compile-time closed and leave production behavior on the legacy path.
+
+No-go:
+
+- No Supabase Preview/production migration application, branch creation, real account mutation, Provider call, feature enablement, UI integration, IndexedDB schema change, or claim that batch writes are Current.
+- No dynamic SQL, caller-selected function/table/column, service-role browser client, direct authenticated table write, partial result, best-effort step, dependency graph, nested workflow, duplicate object mutation, sensitive Ticket/Document/Blob/OCR payload, or unbounded import.
+- No ordinary AI workflow capable of deleting a trip, changing membership/permissions, paying, sending, or mutating server-managed media, realtime facts, or AI jobs.
+
+Likely files:
+
+- New workflow contract/client modules and tests under `src/lib/accountCloud/`, a new additive Supabase migration, migration gate scripts/tests, Account Cloud/status/capability docs, and this ledger.
+
+Validation:
+
+- Registry/SQL parity; unknown workflow/action/field rejection; workflow shape matrix; duplicate IDs and objects; max count/bytes/depth; sensitive payloads; Ticket whitelist; server-managed types; account mismatch; revision conflicts; atomic/idempotent model; 100 identical replays; mutation-ID reuse; advanced replay; response substitution; Auth/permission/unavailable/transient errors; grants/RLS/security-definer boundaries; no dynamic SQL/direct browser writes; full unit/typecheck/lint/build/capability/migration gates; relevant PWA smoke; and `git diff --check`.
+
+Risk:
+
+- Critical. A superficially generic batch API can become an arbitrary database-write surface, while a loop that writes before discovering a later conflict can permanently split one user action across devices.
+
+Stop conditions:
+
+- Stop and repair if an unregistered workflow reaches execution, any workflow can mutate an unregistered object type/operation, validation happens after the first write, a failed step can commit earlier steps, a replay can acknowledge changed server state as current, any owner/actor identity is caller-controlled, or either compile-time rollout gate becomes reachable.
+
+Local result:
+
+- Added a closed seven-action registry for day reorder, cross-day move, import commit, Ticket binding, ledger batch, replanning, and AI repair. Both TypeScript and SQL reject unknown actions, fields, object kinds, operations, IDs, duplicate targets, server-managed objects, sensitive nested keys, excessive payload depth/nodes/bytes, and unbounded step counts.
+- Added a fixed `account_apply_workflow_v1` client. It sends only the seven registered RPC arguments, verifies the active account hash before and after the request, strictly parses every result, correlates every returned step to the request, and converts transport/provider details into the existing sanitized error categories.
+- Added a private workflow receipt ledger, authenticated account-hash guard, deterministic batch/object/mutation locks, all-revision preflight, one PostgreSQL transaction for objects plus step/batch receipts, exact replay hashing, and `receipt_advanced` rejection when any previously applied object has moved on.
+- Ticket rebind uses a semantic Ticket lock and requires the prior metadata target plus every currently bound reverse item to be present in the same batch. A partial rebind cannot leave the Ticket pointing to one item while another item still retains its ID.
+- Payload traversal is bounded before recursive sensitive-key inspection. Browser roles cannot read receipts or write account-object rows directly; the exposed RPC is a fixed `SECURITY INVOKER` wrapper around the private authenticated implementation.
+- Fixed a real hash-route race found in the prior CI trace: Day/Trip pages now parse the React-owned route snapshot, and canonical redirects replace the URL and state together. A stale Day effect can no longer overwrite a newly opened Materials/Inbox route with its default map route.
+- Both Account Cloud rollout constants remain compile-time `false`. No Preview/production schema or data write, real account cloud mutation, or Provider call was made.
+
+Review:
+
+- Executing the migration against local Supabase/PostgreSQL found two defects that static SQL parsing missed: ambiguous PL/pgSQL `CASE` boundaries and JSON operator/concatenation precedence in the advisory-lock key. Both were repaired and then verified from a clean database reset.
+- The first pgTAP pass exposed an incomplete Ticket baseline that allowed a caller to omit the old bound item. The transaction now locks and validates the complete old relationship before receipt lookup or writes; the regression proves both rejection and unchanged prior state.
+- The final self-review covered arbitrary execution targets, owner/actor substitution, direct table grants, nested secret fields, depth/node exhaustion, duplicate identities, write-before-preflight, statement rollback, receipt reuse, advanced replay, account ID collision, and Ticket reverse-link drift. Remaining risk is intentionally bounded by the closed rollout gates: product workflow adapters, local atomic journals, deletion cascades, complete object codecs, multi-connection contention, and Preview receipts are not claimed here.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration, including `20260811134000_account_cloud_workflows_v1.sql`. The 43-test pgTAP suite passed actual Auth/RLS/grant, account isolation, sensitive payload, atomic rollback, 100-repeat idempotency, advanced receipt, reorder, Ticket binding, and cross-account same-ID cases.
+- Local Supabase schema lint and security advisor returned no issues. The performance advisor retained one pre-existing warning for two permissive authenticated SELECT policies on `cloud_ticket_blobs`; this migration adds neither policy and produced no new performance finding.
+- `npm run typecheck`, `npm run lint`, `npm run test:unit`, and `npm run build` passed. The complete unit suite passed 233 files and 1,884 tests; the build reported 473.3 KiB entry, 859.1 KiB initial JS, 247.3 KiB initial gzip, and 2485.4 KiB/126-entry precache.
+- Full serial Playwright passed all 194 tests in 7 minutes 24 seconds. The prior documents/inbox route race stayed closed, and a focused 3x repeat of both affected mobile specs had already passed 27/27. `git diff --check`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, and bundle gates passed.
+- Supabase Preview application, real-account stable-read/bootstrap, independent multi-connection contention, network ambiguity, and production latency receipts remain mandatory before any V2 read/write gate can open.
+
+Remote validation:
+
+- Commit `f8770d83dd2b12ef7ef14328c22ae47b1204208a` passed GitHub Actions run `31493578605`: Build, Lint, Type Check, Unit Tests, and all 194 E2E tests succeeded.
+- Cloudflare Pages deployment/check `4cee2604-9bb9-4c40-8362-8c83df8cb4d8` passed for the same commit SHA. No Supabase Preview branch was created because that cost-bearing external write still requires explicit confirmation.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3c Local Atomic Workflow Runtime
+
+Status: complete locally; product-path integration and Supabase Preview remain P1 gates
+
+Goal:
+
+- Give every registered Account Cloud workflow one durable local batch identity and one all-or-nothing optimistic lifecycle across offline, retry, authentication recovery, conflict, response loss, crash recovery, acknowledgement, and rollback.
+- Prove that a multi-object workflow can never be drained as independent single-object mutations or leave a locally acknowledged partial result.
+
+Scope:
+
+- Add an IndexedDB v12 workflow journal keyed by batch mutation ID, with account/trip binding, strict request fingerprint, complete before/after snapshots, lease generation, retry metadata, sanitized terminal state, and conflict receipts.
+- Add explicit local codecs and table bindings for the object types used by the seven registered workflows. Ticket metadata must continue to use the minimal redacted payload; Blob, local path, URL, note, extracted text, unknown fields, and server-managed objects remain impossible to journal.
+- Add atomic local-store operations for intent creation, leasing, retry/auth/contract/conflict transitions, successful multi-revision acknowledgement, deterministic rollback, and crash-safe terminal reconciliation.
+- Add a workflow coordinator that always sends the original registered request, preserves one batch ID across retries, binds the captured account database and account hash, rejects stale or substituted responses, and drains only whole batches.
+- Keep the runtime callable only through an internal test seam while both Account Cloud rollout constants remain compile-time `false`. Product-path adapters, deletion-cascade workflow IDs, Preview execution, and gate enablement remain separate P1.3d/P1 Preview work.
+
+No-go:
+
+- No Supabase Preview/production write, real account mutation, Provider call, product write-path cutover, feature enablement, or claim that workflows are Current.
+- No reuse of the single-object mutation queue for workflow steps; no partial step lease, partial ack, partial rollback, best-effort continuation, regenerated retry ID, or caller-selected table/function.
+- No raw Ticket Blob, document/vault body, OCR/extracted text, local path, signed URL, secret, token, raw Provider payload, server-managed media/fact/job, or unregistered object type in local workflow snapshots.
+- No silent rollback over a user edit made after the optimistic batch. A changed local snapshot must remain visible and enter conflict recovery.
+
+Likely files:
+
+- `src/db/database.ts`, new workflow local types/store/codec/coordinator modules and tests under `src/lib/accountCloud/`, account-cloud exports, migration tests, Account Cloud/status/capability docs, and this ledger.
+
+Validation:
+
+- IndexedDB v11 -> v12 migration and account isolation; strict codec/redaction; duplicate/reused batch IDs; atomic intent; whole-batch lease generation; offline and bounded retry; Auth recovery; deterministic rejection; revision conflict; stale local snapshots; response substitution; 100 identical retries; advanced receipt; all-revision ack; rollback fault injection; crash-window recovery; drain ordering; account switch during request and response; full typecheck/lint/unit/build/capability/migration gates; `git diff --check`.
+
+Risk:
+
+- Critical. A batch journal that can acknowledge or compensate only some steps can create permanent cross-device corruption even when the server transaction itself is correct.
+
+Stop conditions:
+
+- Stop and repair if any batch can be split into single-object sends, an acknowledgement deletes the journal before every revision receipt is durable, a rollback changes only part of the local graph, a stale lease writes state, an account switch applies a response, a sensitive field enters a snapshot, a retry changes request content/identity, or either rollout constant becomes reachable.
+
+Local result:
+
+- Added IndexedDB v12 `accountWorkflowJournal` with one durable batch mutation identity, strict account/trip/object binding, canonical original request and fingerprint, complete before snapshots, whole-batch lease generation, bounded retry/Auth/contract/conflict state, and server acknowledgement metadata. The v11 -> v12 upgrade creates the store without changing existing business data.
+- Added explicit local codecs for the 12 object kinds currently used by the seven registered workflows. Ticket snapshots and comparisons retain only the cloud metadata whitelist; filename, local path, URL, note, OCR/extracted content, Blob-like values, tokens, secrets, unknown fields, and server-managed objects are rejected or excluded.
+- Optimistic business-object changes and the batch journal are created in one Dexie transaction only after every base revision and local payload exactly match. Successful responses atomically persist every revision receipt before deleting the batch; deterministic rejection rolls back the complete graph only when every optimistic after snapshot still matches.
+- A user edit made after the optimistic batch prevents all compensation writes. The journal enters `stale_local`; if the server already committed, every returned revision receipt remains durable and the acknowledged conflict cannot be replayed or silently rolled back.
+- Added a coordinator that sends only the exact original registered request under the same batch ID. Offline, 100 uncertain retries, Auth resume, malformed/substituted responses, server conflicts, stale leases, crashes, and account switches preserve the all-or-nothing boundary; independent batches continue while overlapping work remains ordered.
+- Single-object and workflow journals now mutually exclude the same object inside shared IndexedDB transactions. Bootstrap treats every workflow object as pending, and parent domain transactions include the workflow journal so a single-object intent cannot race a newly created batch.
+- Strict journal revalidation rejects unknown top-level fields, partial leases, unregistered conflict fields, changed fingerprints, malformed snapshots, and reused IDs before persistence. Account hash, active database instance, and account database name are rechecked after asynchronous writes so an account switch aborts the whole IndexedDB transaction.
+- Both Account Cloud compile-time rollout constants remain `false`. The production bundle contains the v12 database store definition needed for forward-compatible upgrades, but not the workflow coordinator, RPC client, or optimistic workflow executor. No Preview/production database write, real account mutation, or Provider call was made.
+
+Review:
+
+- The final boundary review found and fixed three defects before completion: an `inflight` entry could previously pass validation with only half of its lease pair; direct recovery could attempt to persist unnormalized conflict input before a later read rejected it; and an account switch occurring after revision `bulkPut` needed a final in-transaction guard to force rollback.
+- Fault-injection regressions prove that a mid-ack account switch and an IndexedDB error leave every prior revision and the journal intact. Success-after-local-drift proves that all server receipts are kept without overwriting the later local edit. Conflict and terminal recovery prove that no subset of the optimistic graph can roll back independently.
+- Remaining work is intentionally outside P1.3c: product adapters for all seven workflows, deletion cascades, remaining object codecs, user-facing conflict recovery, Preview execution, multi-connection server contention, Realtime, empty-device restore, and staged production rollout.
+
+Local validation:
+
+- Final focused database/account/workflow suites passed 7 files and 57 tests. The complete unit suite passed 236 files and 1,918 tests.
+- `npm run typecheck`, `npm run lint`, `npm run build`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, bundle-budget, JSON parse, and `git diff --check` passed. Build reported 473.5 KiB entry, 859.3 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2486.0 KiB/126-entry precache.
+- The focused PWA upgrade suite passed 5/5 and Desktop Beta smoke passed 1/1. Full serial Playwright passed all 194 tests in 7.0 minutes, including IndexedDB/PWA historical upgrades, offline account sync, AI confirmation gates, responsive/a11y checks, and Golden regression.
+- Supabase Preview and real-account workflow execution remain unrun by design. They require explicit approval for the cost-bearing Preview branch and remain mandatory before either V2 gate can open.
+
+Remote validation for commit `fdf9b34bd398182ebd1dc658c50edaf45f2a3368`:
+
+- GitHub Actions run `31497514987` passed Build, Lint, Type Check, Unit Tests, and the complete E2E job.
+- Cloudflare Pages Preview deployment/check `f41baf20-305d-4ebf-9035-1266df65d5ed` passed for the same commit SHA.
+- These receipts close P1.3c code/build validation only. They do not replace the outstanding Supabase Preview, real-account bootstrap, multi-connection, Realtime, recovery, or rollout receipts.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3d1 Product Workflow Bridge and Structural Item Operations
+
+Status: complete locally; Supabase Preview and the remaining product workflow adapters remain P1 gates
+
+Goal:
+
+- Establish one reusable, gate-bound product adapter from existing domain commands to the registered Account Cloud workflow runtime.
+- Move same-day reorder and cross-day move onto the all-or-nothing workflow path for fully bootstrapped V2 accounts without changing the closed-gate production path.
+
+Scope:
+
+- Add a lazy runtime loader that returns `handled: false` before importing workflow execution code unless the exact full-cutover gate and account allowlist pass.
+- Add a product workflow runtime that accepts only a registered workflow ID plus an explicit complete after graph, derives revisions and mutation IDs locally, creates one optimistic batch, executes the fixed RPC coordinator, and maps only sanitized terminal states to product errors.
+- Refactor reorder and cross-day move planning so the exact changed item set and timestamp are deterministic, baseline checked, and reusable by both the legacy repository transaction and V2 workflow adapter.
+- Route `reorderDayItems` and `moveItineraryItemBetweenDays` through the adapter first. Fully bootstrapped objects use one workflow; any unbootstrapped object falls back before mutation to the unchanged legacy atomic path. Pending/conflicted V2 work must fail closed rather than escape into legacy writes.
+- Keep parent-trip touching, legacy outbox enqueue, and snapshot dirty markers on fallback only. The V2 path may emit normal local data-change behavior but must not create a second legacy write stream.
+
+No-go:
+
+- No rollout constant change, Preview/production database write, real account mutation, Provider call, Supabase branch creation, migration change, or claim that either operation is production-enabled.
+- No ticket binding, import, ledger, replan, repair, deletion cascade, object restoration, or new workflow ID in this subphase.
+- No caller-selected RPC/function/table, implicit object discovery after the optimistic write, partial target list, mixed workflow/single-object submission, generated retry identity, legacy outbox duplication, or fallback after any V2 object has changed.
+
+Likely files:
+
+- New product workflow loader/runtime modules and tests under `src/lib/accountCloud/`; deterministic item operation planning in `src/db/repositories.ts`; routing and regressions in `src/db/trackedMutations.ts` and `src/db/trackedMutations.accountCloud.test.ts`; Account Cloud/status/capability docs and this ledger.
+
+Validation:
+
+- Closed-gate no-import/no-call behavior; registered workflow only; exact changed-object graph; unbootstrapped all-or-nothing fallback; pending object rejection; successful atomic ack; offline retention; server conflict rollback; deterministic rejection rollback; account switch; response substitution; no legacy outbox on V2; unchanged legacy behavior; reorder/move baseline races; typecheck/lint/unit/build, PWA/desktop/full E2E as warranted, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. If the planned item graph omits one shifted sibling or fallback occurs after optimistic mutation, order can diverge across devices while both local and server transactions individually appear successful.
+
+Stop conditions:
+
+- Stop and repair if the workflow after graph differs from repository output, any changed sibling lacks a step, an unbootstrapped graph is partly mutated before fallback, a V2 attempt also enters legacy outbox/snapshot sync, a terminal error leaves only part of an order applied, or either compile-time rollout gate becomes reachable.
+
+Escalated review delta:
+
+- The first local review found that a workflow could submit the complete requested graph while a concurrent single Item create or day change used no shared structural lock. Because both undeployed migrations are still behind compile-time `false` gates and had not been applied to Preview or Production, this phase expanded locally to harden the existing P1.1/P1.3b migration files before any external application.
+- The repair did not add a new public RPC, workflow ID, table, client-controlled target, deployment, or schema write. It aligned single Item and structural workflow lock order, Item field validation, complete-graph checks, and static migration gates. Preview application remains separately approval-gated.
+
+Local result:
+
+- Added a lazy product workflow loader that imports no execution runtime while the exact Account Cloud full-cutover gate is closed. The reusable bridge accepts only the seven registered workflow IDs and strict step fields, derives device/batch/step mutation identities and expected revisions locally, rejects sensitive/unknown input, and binds every async boundary to the captured account database and account hash.
+- The bridge scans every requested object before choosing fallback. An existing local object without a V2 revision causes one whole-operation legacy fallback before `apply`; pending single/workflow work, receipt/payload drift, a tombstone mismatch, or an account switch fails closed instead. A later busy object cannot be hidden by an earlier unbootstrapped object.
+- Refactored same-day reorder and cross-day move into deterministic prepare/apply plans. Apply re-reads the complete Item graph and owning Day records in one Dexie transaction, rejects sibling/day races and changed previews, and commits only the verified plan. The V2 path sends every affected Item, skips parent Trip touching, legacy outbox, and snapshot dirty markers; fallback preserves the prior behavior.
+- `day.items.reorder@1` now requires one complete day graph with unique contiguous `1..N` orders. `item.move@1` requires every source/destination sibling, contiguous order per resulting day, exactly two affected before/after days, and exactly one Item whose day changes.
+- Single Item and structural workflow RPCs now use the same deterministic `object -> affected day -> mutation` advisory-lock order. Workflow preflight counts all live Items in the locked days and rejects omitted siblings before the first write. Item `dayId`, safe integer `sortOrder`, and unique controlled `ticketIds` are validated in TypeScript, both SQL paths, and executable migration gates.
+- Generic single-object Item updates no longer carry `sortOrder` or `ticketIds`; those fields remain on legacy atomic paths until their registered product workflow adapters are connected. The single-object runtime also verifies the complete acknowledged/pending optimistic chain against current local data before applying a new V2 edit, so legacy-only drift cannot become a silent overwrite.
+- The on-demand workflow runtime remains outside startup and PWA precache budgets. It enters the existing runtime asset cache after first online load; a login-time prewarm plus never-loaded-offline test is now an explicit gate before the full-cutover constant can change.
+- Both Account Cloud compile-time gates remain `false`. No Supabase Preview/Production migration, real account read/write, Provider call, or cloud configuration change occurred.
+
+Review:
+
+- Local double review replaced the unavailable external review workers. It covered fallback-before-write, later-object pending work, local/receipt drift, account switching, unknown workflow/fields, structural Item fields, complete graph cardinality, one-moved-item semantics, deterministic lock ordering, stale Day plans, Ticket relationship bypass, legacy outbox duplication, replay identity, rollback, and production bundle reachability.
+- Clean PostgreSQL execution caught no syntax/runtime issue after hardening. The pgTAP suite now includes a separate two-day fixture proving complete move success plus rejection and no-write behavior for omitted siblings, two moved Items, non-contiguous order, and missing Item structural fields.
+- Remaining risk is explicit: product adapters still cover only 2 of 7 registered workflows; deletion/restoration and parent lifecycle locks are not complete; Preview multi-connection contention, real response loss, real bootstrap, Realtime, second-device recovery, production latency, and first-use offline runtime loading have no external receipt.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 52 pgTAP checks, and `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage helper warnings.
+- Focused product/runtime/migration regression passed 8 files and 96 tests. The complete unit suite passed 238 files and 1,940 tests. `npm run typecheck`, `npm run lint`, Account Cloud/capability/Cloudflare migration gates, production-boundary checks, and `git diff --check` passed.
+- `npm run build` passed at 477.5 KiB entry, 863.3 KiB initial JS, 248.2 KiB initial gzip, 10 startup chunks, and 2490.9 KiB/128-entry precache. The Account workflow runtime is neither a startup chunk nor a precached optional asset.
+- PWA upgrade passed 5/5, Desktop Beta smoke passed 1/1, and full serial Playwright passed all 194 tests in 7.3 minutes.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime, or real-account behavior.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d2 Existing Ticket Metadata and Relationship Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and remaining product workflows remain P1 gates
+
+Goal:
+
+- Route edits to an existing Ticket, including bind, unbind, and rebind, through the registered `ticket.bind@1` Account Cloud workflow for fully bootstrapped V2 accounts.
+- Keep `TicketMeta.itemId` and every itinerary Item `ticketIds` reverse reference as one stale-guarded, all-or-nothing local and server operation.
+
+Scope:
+
+- Refactor existing Ticket updates into deterministic prepare/apply plans. Preparation captures the redacted Ticket baseline, the complete current reverse-link set, and the requested target; apply re-reads the relationship graph inside one Dexie transaction before changing any record.
+- Submit exactly one Ticket step plus every current or target Item required to prove the complete relationship. Unbound metadata-only edits may use one Ticket step; bound metadata-only edits still include the bound Item so the server verifies both sides.
+- Harden TypeScript and SQL Ticket metadata validation for required identity/file fields, bounded enums and strings, safe timestamps/size, item/scope consistency, and controlled member visibility without admitting filenames, locations, URLs, notes, structured private fields, Blob/OCR content, tokens, or unknown fields.
+- Route the shared tracked `updateTicketMeta` command through the existing lazy workflow bridge. Fully bootstrapped objects use `ticket.bind@1`; any unbootstrapped object falls back before mutation; pending or stale objects fail closed.
+- Keep the compile-time rollout gates closed and preserve the existing legacy atomic path when V2 is disabled or the complete graph has not been bootstrapped.
+
+No-go:
+
+- No Ticket creation, deletion, Blob upload/delete, cache lifecycle, import binding, Supabase Preview/Production write, real account mutation, Provider call, or rollout gate change. Create/delete require a separately reviewed lifecycle workflow and compensation contract.
+- No generic Ticket payload pass-through, caller-supplied revision/mutation ID, partial reverse-link list, fallback after optimistic mutation, separate Item update, legacy outbox duplication, or local write before the complete baseline is verified.
+- No change to ticket file visibility, sharing authorization, Blob/OCR access, external URL handling, or private local-only metadata.
+
+Likely files:
+
+- `src/db/repositories.ts` and tests; `src/db/trackedMutations.ts` and Account Cloud tests; Account Cloud Ticket/workflow contracts and tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Same-target edit, bind, unbind, rebind, stale Ticket, stale target, hidden reverse-link race, cross-trip target, unbootstrapped all-or-nothing fallback, pending object, offline retention, conflict rollback, response replay, account switch, no private Ticket fields, TypeScript/SQL parity, local migration replay, pgTAP, full unit/typecheck/lint/build, relevant PWA/E2E, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. Missing one reverse-linked Item or allowing the Ticket and Item writes to use separate queues can leave a relationship that looks correct on one device and contradictory on another.
+
+Stop conditions:
+
+- Stop and repair if a current reverse-linked Item can be omitted, a stale target can be overwritten, a private Ticket field enters the workflow payload, metadata-only edits bypass relationship verification, a failed server transaction leaves cloud-visible Ticket metadata or either relationship side locally changed, or create/delete/Blob behavior is accidentally routed through this workflow. Local-only notes and structured fields remain intentionally independent from cloud compensation and must never be replaced by a redacted server snapshot.
+
+Local result:
+
+- Refactored existing Ticket edits into deterministic prepare/apply plans. Preparation captures the exact Ticket baseline, requested target, current metadata target and every reverse-linked Item; apply re-reads that full relationship graph inside one Dexie transaction and rejects a stale Ticket, target change or newly appeared hidden reverse link before any write.
+- Routed fully bootstrapped existing Ticket edits through one `ticket.bind@1` product workflow. Bind, unbind and rebind submit exactly one redacted Ticket plus the complete current/target Item set; an unbound metadata-only edit may use one Ticket step, while a bound metadata edit still includes its Item for relationship verification. Unbootstrapped graphs fall back before mutation to the prior atomic legacy path.
+- Added strict Ticket metadata parity across the TypeScript request parser, SQL RPC, workflow runtime and legacy backfill. Required timestamps, size, file type and MIME data are bounded; scope/item consistency, storage/category enums and member visibility are validated; unknown fields, invalid identifiers and control characters are rejected.
+- The single-object RPC now returns `workflow_required` for Ticket writes and structural/relationship Item changes, preventing a caller from bypassing registered transaction topology. The workflow server locks the Ticket identity, verifies immutable file metadata, requires the exact existing reverse-link set and permits each Item to change only the current Ticket membership.
+- `fileName`, local/reference locations, URLs, notes, structured extraction data, Blob/OCR content, tokens and unknown values remain absent from cloud requests, receipts and workflow snapshots. Reconciliation merges only the cloud metadata whitelist, so a redacted server response cannot erase local-only Ticket fields.
+- Preserved compatibility with historical local Item rows that omit `ticketIds` by treating the missing value as an empty relationship list. The final build also moved the small Ticket redactor into a type-only module so the protected Account Cloud contract remains lazy instead of increasing the app startup graph.
+- Both Account Cloud compile-time gates remain `false`. No Supabase Preview/Production migration, real account read/write, Provider call, cloud configuration write, Ticket create/delete or Blob operation occurred.
+
+Review:
+
+- The first PostgreSQL execution correctly rejected a nominal success fixture that included an unrelated Item. The fixture was narrowed to the exact relationship graph, while separate escalation tests continue proving that unrelated Item fields and unrelated Ticket memberships are rejected without writes.
+- Local review found and fixed one backward-compatibility regression: direct `.includes()` calls on an old Item without `ticketIds` could abort legacy Ticket editing. A repository regression now exercises the missing-field row and verifies atomic binding.
+- The final boundary review covered arbitrary/unknown workflow targets, single-object bypass, immutable Ticket fields, private-field redaction, complete reverse-link discovery, hidden-link races, same-target metadata edits, unbind/rebind, other-ticket preservation, account switching, fallback-before-write, legacy outbox duplication and startup-bundle reachability.
+- Remaining risk is explicit: product adapters cover 3 of 7 registered workflows; Ticket creation/deletion/Blob and cache lifecycle, deletion/restoration, parent lifecycle locks, Preview contention, real response loss, bootstrap, Realtime, empty-device recovery and production latency remain unverified.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 63 pgTAP checks. `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage dynamic-SQL helper warnings.
+- Focused migration/contract/runtime/repository regression passed 8 files and 120 tests. The complete unit suite passed 238 files and 1,951 tests. `npm run typecheck`, `npm run lint`, capability alignment, Account Cloud and Cloudflare migration gates, production-boundary checks, JSON parsing and `git diff --check` passed.
+- `npm run build` passed at 479.0 KiB entry, 864.9 KiB initial JS, 248.5 KiB initial gzip, 10 startup chunks and 2493.5 KiB/128-entry precache. The workflow runtime remains outside the startup graph and is emitted as an on-demand chunk.
+- Full serial Playwright passed all 194 tests in 7.0 minutes, including Ticket metadata edit/unbind, Global AI ticket binding, responsive overflow, PWA current/historical upgrades, Golden regression and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `f79a61e08969ea08a8ece5c66ff238edfaf7ea4e`:
+
+- GitHub Actions run `31688507903` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `2a94c78b-2031-4d52-8404-8508d80b30f5` passed for the same SHA.
+- These receipts close P1.3d1 remote validation only. P1.3d2 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d3 New Trip Import Commit Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining product workflows remain P1 gates
+
+Goal:
+
+- Route eligible create-only new-trip imports through the registered `trip.import.commit@1` Account Cloud workflow so one complete metadata graph is created or rejected atomically.
+- Prove the imported Trip, Days, Items, redacted Ticket metadata and ledger records form one closed graph before any local or server write.
+
+Scope:
+
+- Refactor `importTripPlanRecords` into deterministic prepare/apply phases. Preparation validates unique identities, trip ownership, Day/Item topology, Ticket reverse links and ledger references, and records that every target ID is absent; apply rechecks the same absence and graph inside one Dexie transaction.
+- Add a strict import workflow shape shared by TypeScript and SQL: exactly one Trip root matching `tripId`, create-only `expectedRevision = 0` steps, complete referenced Days/Tickets/participants, contiguous Item order per Day, exact Ticket/Item relationship parity, and no objects outside the submitted graph.
+- Route only imports with no Ticket Blob through the lazy workflow bridge. Inputs containing copied Blob data, existing-trip merge semantics, backup ID remapping or destructive restore remain entirely on their existing legacy path before mutation until their own reviewed lifecycle contracts exist.
+- Keep the compile-time rollout gates closed. Fully eligible but not yet bootstrapped create graphs may use the V2 workflow because every object must be locally absent and have revision zero; any collision, pending journal entry, account switch or stale plan fails closed before apply.
+
+No-go:
+
+- No existing-trip AI merge, `replaceTripPlanRecords`, backup restore, Ticket Blob upload/delete, Ticket cache lifecycle, deletion, Supabase Preview/Production write, real account mutation, Provider call, or rollout-gate change.
+- No overwrite or remap through `trip.import.commit@1`, no caller-supplied revision/mutation identity, no partial graph, no orphan reference, no cross-trip record, no fallback after any imported object is visible, and no parallel legacy outbox for a V2-handled import.
+- No private Ticket fields in cloud payloads or receipts. `fileName`, locations, URLs, notes, structured extraction, Blob/OCR content and source-file material remain local-only.
+
+Likely files:
+
+- `src/db/repositories.ts` and tests; `src/db/trackedMutations.ts` and Account Cloud tests; Account Cloud workflow contracts/runtime/tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Minimal Trip import, complete Day/Item/Ticket/ledger graph, missing root, duplicate root/object, nonzero revision, existing-ID collision, cross-trip record, missing Day, non-contiguous order, asymmetric Ticket binding, missing ledger participant, private Ticket redaction, Blob legacy fallback, pending journal conflict, offline retention, terminal conflict rollback, account switch, replay idempotency, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, relevant import E2E, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. A permissive import batch can overwrite an existing account object, commit an orphaned relationship, or expose private Ticket material while still looking like one successful import in the UI.
+
+Stop conditions:
+
+- Stop and repair if any existing object can be overwritten, the Trip root can be omitted or duplicated, a referenced Day/Ticket/participant can be outside the batch, Ticket links disagree, copied Blob data reaches the workflow, an import conflict leaves any new local record behind, or a V2-handled import also enters legacy synchronization.
+
+Local result:
+
+- Extracted import preparation and apply into an on-demand repository module. Preparation validates one closed Trip graph, captures an immutable structural fingerprint and proves the complete account-local destination is empty; apply recomputes the graph and baseline inside one Dexie transaction before writing any object.
+- Eligible imports without Ticket Blob data and with at most 256 workflow steps now use `trip.import.commit@1`. The request contains only registered object kinds and redacted Ticket metadata, skips the legacy outbox/snapshot path after V2 handling, and rolls back the complete local graph on a terminal server conflict.
+- TypeScript and SQL now require exactly one matching Trip root, create-only revision zero, unique identities, contiguous Day/Item ordering, complete Item-to-Day references, exact Ticket/Item relationship parity, at most one ledger settings record and valid participant/item/original-expense/Ticket ledger references. Unknown fields, sensitive Ticket data, partial graphs and existing trip-scope objects are rejected before writes.
+- Core single-object mutations and workflows share a trip-lifecycle advisory lock. Imports take the exclusive lifecycle lock while other mutations take the shared lock, closing the race in which a concurrent object could appear between import baseline validation and commit.
+- Imports containing Blob data or more than 256 steps stay wholly on the previous legacy path before mutation. Existing-trip merge, backup ID remapping and destructive restore remain out of scope; both Account Cloud compile-time rollout gates remain `false`.
+- The import repository and secondary Settings detail pages remain dynamic runtime-cache assets. This preserves the production and E2E precache budget, but first-ever offline access to those chunks must be resolved before full cutover.
+
+Review:
+
+- Scoped local review covered arbitrary object and field injection, missing/duplicate Trip roots, orphan Day/Ticket/ledger references, asymmetric Ticket links, stale plan fingerprints, concurrent local object creation, server-side existing-scope collisions, account switching, private Ticket redaction, conflict compensation, legacy fallback before write and startup/PWA reachability.
+- The first full E2E build exceeded the 2500 KiB test-mode precache ceiling by 0.2 KiB. The import repository and three secondary Settings detail chunks were moved to the existing runtime asset cache; the clean rerun then passed all 194 tests and the production build stayed below budget.
+- Remaining risk is explicit: imports with Blob data or more than 256 steps, merge/backup/replace semantics, Supabase Preview contention, real response loss, real bootstrap, Realtime, second-device/empty-device recovery and first-use offline import have no V2 receipt. A chunking or fail-closed product decision is required before full cutover can reject the legacy path for imports above 256 steps.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 71 pgTAP checks, and `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage dynamic-SQL helper warnings.
+- Focused repository/tracked-mutation/contract/runtime/migration regression passed 8 files and 116 tests. The complete unit suite passed 238 files and 1,960 tests. `npm run typecheck`, `npm run lint`, capability alignment, Account Cloud and Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- `npm run build` passed at 479.4 KiB entry, 865.2 KiB initial JS, 248.7 KiB initial gzip, 10 startup chunks and 2482.1 KiB/125-entry precache. The workflow and import runtimes remain outside the startup graph and precache.
+- Full serial Playwright passed all 194 tests in 7.5 minutes, including import, PWA current/historical upgrades, responsive/golden coverage and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `55167b6750500b63a67bff3f9f33cc30f40b58ab`:
+
+- GitHub Actions run `31692752122` passed Build, Type Check, Lint, Unit Tests and the complete E2E job in 5 minutes 41 seconds.
+- Cloudflare Pages deployment/check `843aa52b-6e02-4c74-86fa-dffdde2fd5b0` passed for the same SHA.
+- These receipts close P1.3d2 remote validation only. P1.3d3 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d4 Ledger Mutation Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining product workflows remain P1 gates
+
+Goal:
+
+- Route the complete existing product ledger mutation surface through the registered `ledger.batch@1` workflow for fully bootstrapped Account Cloud V2 accounts.
+- Keep settings, participants, budgets, expenses and multi-expense review changes reference-safe, stale-guarded and all-or-nothing locally and on the server.
+
+Scope:
+
+- Refactor ledger settings, participant, budget and expense create/update/delete operations into deterministic prepare/apply plans with generated identities and timestamps fixed before the cloud decision. Apply re-reads every changed object and all relationship records needed by the operation inside one Dexie transaction.
+- Route settings create/update, participant create/update/delete, budget create/update/delete, expense create/idempotent-create/update/delete and multi-expense review through `ledger.batch@1`. A V2-handled operation must not enter the legacy object outbox or trip snapshot path; an unbootstrapped graph must fall back before mutation.
+- Add strict TypeScript and SQL ledger payload contracts and topology checks: one settings row per trip; controlled currencies, enums, dates, amounts and timestamps; unique participant/source/line-item identities; valid participant, Item, Ticket and original-expense references; and deletion rejection while a submitted or existing live expense still depends on the target.
+- Preserve bulk-review eligibility checks and expected `updatedAt` guards while submitting every changed expense as one workflow. Preserve idempotent expense creation by source fingerprint without introducing a second cloud identity.
+- Keep both compile-time rollout gates closed and preserve existing UI behavior and local sync fallback when V2 is disabled or any required object lacks a trusted revision.
+
+No-go:
+
+- No payment initiation, card/bank integration, refund execution, settlement transfer, purchase, cancellation, email/message send, exchange-rate Provider call, Supabase Preview/Production write, real account mutation or rollout-gate change.
+- No arbitrary ledger object patch, caller-supplied object/mutation/revision identity, cross-trip relationship, dangling participant/Item/Ticket/original-expense reference, duplicate settings row, partial bulk-review commit, fallback after optimistic mutation or parallel legacy outbox for a V2-handled operation.
+- No expansion to archive queue internals, report export, encrypted documents, Ticket Blob/OCR, Provider payloads or free-form secrets. Existing user-authored ledger notes remain account data but must stay bounded and must not be interpreted as executable instructions.
+
+Likely files:
+
+- `src/db/ledgerRepositories.ts`, `src/db/ledgerTrackedMutations.ts` and focused tests; Account Cloud object/workflow contracts, local codec/runtime and tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Each create/update/delete path, duplicate settings, stale prepare/apply, participant in-use deletion, expense participant/Item/Ticket/original-expense references, idempotent source recovery, multi-expense review, unbootstrapped whole-operation fallback, pending object, offline retention, terminal conflict rollback, account switch, unknown/sensitive fields, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, ledger E2E, capability/migration/bundle gates and `git diff --check`.
+
+Risk:
+
+- Critical. A partial ledger commit can produce incorrect totals or settlements across devices, while a permissive reference or delete rule can silently attribute spending to the wrong traveler or leave an unrecoverable dangling record.
+
+Stop conditions:
+
+- Stop and repair if any ledger operation can write before its complete baseline is checked, a bulk review can split across queues, an expense can reference a missing or deleted object, a participant/settings invariant differs between TypeScript and SQL, a terminal error leaves only part of a batch visible, a V2-handled operation also enters legacy sync, or any path can initiate a real financial action.
+
+Local result:
+
+- Added one on-demand ledger mutation repository for setup, settings, participant, budget, expense, idempotent source recovery and multi-expense review. Preparation fixes generated IDs and timestamps, captures complete Trip/Item/Ticket/ledger fingerprints and validates the prospective graph; apply re-reads the same graph inside one Dexie transaction and rejects stale plans before any write.
+- Routed the existing ledger product surface through `ledger.batch@1`. A fully bootstrapped V2 graph submits every changed object in one registered workflow and writes neither legacy object outbox nor Trip snapshot state. A graph missing any trusted revision falls back before mutation; pending single/workflow work, revision/payload drift, account switching or stale dependency state fails closed.
+- Added exact TypeScript and SQL payload contracts for settings, participants, budgets and expenses. They reject unknown or sensitive fields, invalid IDs/currencies/enums/dates/timestamps/amounts, oversized nested collections, duplicate nested identities, unsafe URLs and control bytes. A draft may retain a recognized currency before amount extraction, while an amount without currency remains invalid.
+- Closed the complete prospective ledger graph across client and server: one settings row and self participant, unique participant provenance, budget scope and source fingerprint, and valid payer/share/Item/Ticket/original-expense references. Deleting a referenced participant or original expense is rejected, existing updates must preserve `createdAt` and advance `updatedAt`, and tombstones cannot be restored through this workflow.
+- Preserved historical compatibility without weakening new writes. A pre-existing dangling relation may remain or be reduced and keeps the whole operation on legacy sync; pairwise violation identities prevent adding another duplicate or missing reference. A Ticket source explicitly marked `available=false` remains audit metadata and is excluded from live dependency locks. New dangling references always fail before fallback or apply.
+- Ledger initialization now creates settings, self and trip budget atomically while reusing a valid partial legacy self/budget baseline. Shared-trip and traveler imports batch participant creation. Source-fingerprint idempotency coalesces concurrent creates and does not duplicate a successful V2 object or queue a second legacy write.
+- The private SQL graph validator locks the complete ledger scope and every live prospective Item/Ticket dependency before mutation. Generic single-object ledger writes return `workflow_required`; authenticated clients cannot execute private payload/graph helpers. Both compile-time rollout gates remain `false`, and no financial operation, Provider call, Preview/Production write or real account mutation occurred.
+
+Review:
+
+- Local boundary review covered arbitrary fields/functions, single-object bypass, full-graph omission, stale prepare/apply, concurrent idempotent creates, partial bulk review, dependency pending work before fallback, tombstone restoration, timestamp rollback, duplicate topology, cross-trip references, historical deleted Item/Ticket references, explicit unavailable sources, account switching, response rollback and legacy outbox duplication.
+- The first ledger E2E run exposed a contract mismatch for legitimate review drafts that know currency before amount recognition. TypeScript and SQL were aligned to accept that draft state while still rejecting amount-without-currency; focused tests, a clean database replay and the same E2E then passed.
+- Remaining risk is explicit: Preview multi-connection locking, real account bootstrap and response loss, Realtime, second-device/empty-device recovery, first-use offline loading and production latency have no external receipt. `trip.replan.apply@1`, `trip.repair.apply@1`, Ticket create/delete/Blob, delete cascades and restoration remain outside this phase.
+
+Local validation:
+
+- A clean `supabase db reset` replayed every migration. `npm run test:db:account-cloud` passed 104/104 pgTAP checks, including private-helper grants, nested scalar coercion, deterministic timestamps, immutable `createdAt` and mixed available/unavailable Ticket sources; `supabase db lint --level warning` reported no schema errors or warnings.
+- Final focused product/runtime regression passed 4 files and 63 tests; static migration gates passed 2 files and 24 tests. The complete unit suite passed 240 files and 2,001 tests. `npm run typecheck`, `npm run lint`, capability/Account Cloud/Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- `npm run build` passed at 357.2 KiB entry, 855.9 KiB initial JS, 245.7 KiB initial gzip, 12 startup chunks and 2493.4 KiB/131-entry precache. The ledger mutation repository is an on-demand chunk and is absent from both startup and precache graphs.
+- Full serial Playwright passed all 194 tests in 7.3 minutes, including the ledger archive/review flows, Action Gateway ledger actions, current and historical PWA upgrades, five responsive viewports, Golden regression and Desktop Beta smoke.
+- After the final ledger contract hardening, the focused `Mobile 390x844` ledger suite passed 2/2 again.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `bc1b333f77862416f9447e95548660b851e480b5`:
+
+- GitHub Actions run `31696395986` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `82f7c5c2-f96c-4aa2-b629-1e16f858366b` passed for the same SHA.
+- These receipts close P1.3d3 remote validation only. P1.3d4 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d5a Adaptive Replan Account Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining AI repair workflow remain P1 gates
+
+Goal:
+
+- Route the existing confirmed adaptive-replan action through the registered `trip.replan.apply@1` Account Cloud workflow for fully bootstrapped V2 accounts.
+- Preserve one real preview, one final confirmation, full stale-plan protection, idempotent replay, local atomicity and server all-or-nothing behavior across changed Items, the disruption event, the replan record and redacted execution history.
+
+Scope:
+
+- Split adaptive-replan preparation from application so every generated identity, timestamp, Item payload, event, record and history payload is fixed before the cloud decision. Re-read the complete Trip/Day/Item/Ticket/ledger-expense context and the prior idempotency marker inside the apply transaction.
+- Build a trusted, bounded dependency-revision baseline from the complete active Trip/Day/Item/Ticket/ledger-expense graph. Require the server to lock and match that exact graph before writing, so a preview prepared before another-device data change cannot commit.
+- Narrow `trip.replan.apply@1` to the product operation actually implemented: one or more existing Item upserts, exactly one new applied disruption event, exactly one new applied adaptive-replan record and exactly one new redacted intelligence change. Reject arbitrary fields, functions, URLs, object kinds, operations and unrelated Item edits.
+- Route fully bootstrapped accounts through one optimistic workflow journal and no legacy object outbox or Trip snapshot write. Fall back before mutation when any dependency lacks a trusted Account Cloud revision; keep the existing legacy transaction and sync behavior when V2 is disabled or unbootstrapped.
+- Add TypeScript/SQL parity tests, local workflow rollback and response-loss tests, and product-path tests for idempotency, stale dependencies, account switching and fallback.
+
+No-go:
+
+- No Provider call, AI planning call, Supabase Preview/Production write, rollout-gate change, Realtime claim, ticket/ledger mutation, destructive replan, payment, purchase, cancellation, permission change or external side effect.
+- No Provider-selected object ID, payload, patch, route, table, function, SQL, URL or dependency revision. The dependency baseline is derived only from locally trusted Account Cloud revision receipts.
+- No partial Item/event/record/history commit, no legacy outbox after V2 handling, no fallback after optimistic mutation, no mutation when the trip graph or selected option changed, and no silent replay if the persisted result differs from the confirmed plan.
+
+Likely files:
+
+- `src/lib/adaptiveReplanActions.ts` and focused product tests; Account Cloud object/workflow contracts, local codec/store/runtime and tests; workflow SQL migration, pgTAP and static migration gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Exact workflow shape, payload allowlists, complete dependency baseline, stale Trip/Day/Item/Ticket/ledger revision, selected-option drift, duplicate/reused identities, first apply, concurrent replay, pending journal, offline retention, terminal conflict rollback, response loss, account switch, unbootstrapped whole-operation fallback, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, focused Action Gateway E2E, capability/migration/bundle gates and `git diff --check`.
+
+Risk:
+
+- Critical. A replan prepared against stale tickets, expenses or schedule constraints can move the wrong stops; a partial or replay-unsafe commit can leave the timeline, disruption history and undo record disagreeing across devices.
+
+Stop conditions:
+
+- Stop and repair if the dependency baseline can omit an active scoped object, any non-schedule Item field can change, the event/record/history links disagree, a terminal server result leaves optimistic data behind, a second execution duplicates history, a V2-handled action also enters legacy sync, or local and SQL validators accept different payloads.
+
+Local result:
+
+- Split the confirmed adaptive-replan command into deterministic preparation and atomic application. Every generated timestamp, object ID, selected strategy, Item payload, user-report event, applied record and redacted intelligence history object is fixed before the cloud decision and rechecked inside the write transaction.
+- Routed fully bootstrapped accounts through one `trip.replan.apply@1` workflow containing exactly one Trip timestamp advance, one or more changed Items, one new applied event, one new applied record and one new redacted history object. A handled V2 operation writes neither the legacy object outbox nor the Trip snapshot queue; a disabled or unbootstrapped graph falls back before mutation and removes V2-only revision metadata.
+- Added a complete locally trusted Trip/Day/Item/Ticket/LedgerExpense revision baseline. Both local runtime and SQL reject omitted or extra active dependencies, pending single/batch work, revision or payload drift, tombstones, account switching and an outdated confirmed preview before the first write.
+- Added exact TypeScript and SQL payload/topology validators. They reject unknown or sensitive fields, arbitrary functions/routes, Provider secrets, malformed nested JSON, explicit JSON `null`, scalar-to-string coercion, duplicate identities, over-limit plans, unrelated Item edits and tombstone restoration. The server also proves the before snapshot against current Day/Item objects and proves the selected patch generates each submitted after Item.
+- Tightened response-loss and replay recovery: an existing marker is accepted only when its event, applied record, redacted history, selected strategy, preview fingerprint and current after snapshot all match the original confirmed action. Successful work is never duplicated; divergent state requires a new preview.
+- Kept both rollout constants fixed to `false`. No Provider/AI call, Preview/Production database write, real-account mutation, payment, cancellation, permission change or other external side effect occurred.
+
+Review:
+
+- The protected-boundary review found that the first SQL version matched dependency revisions but did not prove the stored before snapshot or selected patch against server objects. Added server-side object equality and patch-to-after derivation checks, plus adversarial TypeScript/pgTAP/static-gate cases for forged snapshots, patch substitution, scalar coercion and explicit nulls.
+- The first E2E build exceeded the 2500 KiB test-mode precache ceiling by 0.2 KiB. The two E2E-only dynamic entries (`e2eRuntime` and `fixtureMediaRegistry`) now use the existing on-demand asset cache and are explicitly forbidden from first-install precache; product core resources and ordinary production output remain unchanged.
+- Remaining risk is explicit: real multi-connection contention, response loss, authentication expiry, bootstrap, Realtime, second-device/empty-device convergence and production latency have no external receipt. Undo still uses the legacy path, `trip.repair.apply@1` has no product adapter, and Ticket create/delete/Blob plus lifecycle recovery remain outside this phase.
+
+Local validation:
+
+- A clean `supabase db reset` replayed every migration. `npm run test:db:account-cloud` passed 120/120 pgTAP checks, including private helper grants, arbitrary function/secret rejection, complete dependency baseline, real before snapshot, patch correlation, transaction rollback and idempotent replay. `supabase db lint --schema public,tripmap_private --level warning` reported no schema errors or warnings.
+- Focused contract/runtime/product/migration regression passed 5 files and 63 tests. The complete unit suite passed 241 files and 2,013 tests. Full typecheck, lint, capability alignment, Account Cloud/Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- Production build passed at 357.5 KiB entry, 856.1 KiB initial JS, 245.8 KiB initial gzip, 12 startup chunks and 2493.8 KiB/132-entry precache. The E2E build passed at 357.6 KiB entry, 856.2 KiB initial JS, 245.8 KiB initial gzip and 2498.4 KiB/135-entry precache.
+- Focused `Mobile 390x844` confirmed-replan and read-only What-if E2E passed 2/2. The complete built-dist PWA upgrade suite passed 5/5, and full serial Playwright passed all 194 tests in 7.3 minutes, including Action Gateway confirmation/retry, imports, tickets, ledger, maps, five responsive viewports, Golden regression and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `d8634aad7e9f80c28d1123006395b708f9f1a984`:
+
+- GitHub Actions run `31703990427` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `39b1d744-40f3-4f84-94ca-0804b0acd39e` passed for the same SHA.
+- These receipts close P1.3d4 remote validation. P1.3d5a requires its own same-SHA receipts after commit and push.

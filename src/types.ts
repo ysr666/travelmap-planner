@@ -272,6 +272,12 @@ export type TripReplanSnapshot = {
   items: ItineraryItem[]
 }
 
+export type TripReplanAccountObjectBaselineEntry = {
+  expectedRevision: number
+  objectId: string
+  objectType: 'day' | 'item' | 'ledger_expense' | 'ticket_meta' | 'trip'
+}
+
 export type TripReplanRecord = {
   id: string
   tripId: string
@@ -289,6 +295,7 @@ export type TripReplanRecord = {
   selectedDiff?: TripReplanDiff
   beforeSnapshot: TripReplanSnapshot
   afterSnapshot?: TripReplanSnapshot
+  accountObjectBaseline?: TripReplanAccountObjectBaselineEntry[]
   evidence: TripReplanSourceEvidence[]
   createdAt: number
   updatedAt: number

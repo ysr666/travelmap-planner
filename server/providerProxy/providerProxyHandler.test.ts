@@ -54,9 +54,26 @@ describe('provider proxy handler HTTP safety', () => {
       request: secureJsonRequest(validRequest()),
     })
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
     expect(consumedKeys).toEqual(['edge_ip|ip-hash', 'route|account-hash', 'route|ip-hash'])
     expect(consumedKeys.join(' ')).not.toContain('session-a')
+  })
+
+  it('never executes a mock Provider in the production runtime', async () => {
+    const response = await handleProviderProxyRequest({
+      authVerifier: vi.fn(async () => ({ ok: true as const, userId: 'verified-user' })),
+      env: {
+        TRIPMAP_PROVIDER_PROXY_ALLOWED_ORIGINS: 'https://tripmap.example',
+        TRIPMAP_PROVIDER_PROXY_ENV: 'production',
+        TRIPMAP_PROVIDER_PROXY_MOCK: '1',
+      },
+      operationsStorage: createProviderOperationsMemoryStorage(),
+      quotaStorage: createProviderProxyMemoryQuotaStorage(),
+      request: secureJsonRequest(validRequest()),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: 'provider_unavailable', ok: false })
   })
 
   it('rejects missing origins and invalid bearer tokens before provider execution', async () => {

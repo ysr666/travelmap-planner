@@ -29,6 +29,7 @@ CLAUDE.md
 .playwright-mcp/
 .wrangler/
 supabase/.temp/
+supabase/.branches/
 agentdb.rvf
 agentdb.rvf.lock
 ruvector.db

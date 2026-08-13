@@ -1,5 +1,8 @@
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js'
 
+declare const __TRIPMAP_E2E__: boolean
+declare const __TRIPMAP_UNIT_TEST__: boolean
+
 type SupabaseEnv = {
   VITE_SUPABASE_URL?: string
   VITE_SUPABASE_ANON_KEY?: string
@@ -23,14 +26,14 @@ let cachedClient: SupabaseClient | null = null
 let cachedKey = ''
 
 export function getSupabaseConfigStatus(env: SupabaseEnv = readSupabaseEnv()): SupabaseConfigStatus {
-  if (shouldForceSupabaseUnconfigured()) {
+  if ((__TRIPMAP_E2E__ || __TRIPMAP_UNIT_TEST__) && shouldForceSupabaseUnconfigured()) {
     return {
       configured: false,
       missing: ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'],
     }
   }
 
-  if (shouldUseE2eSupabaseFixture()) {
+  if ((__TRIPMAP_E2E__ || __TRIPMAP_UNIT_TEST__) && shouldUseE2eSupabaseFixture()) {
     return {
       anonKey: 'tripmap-e2e-fixture-key',
       configured: true,
@@ -92,10 +95,12 @@ export function requireSupabaseClient() {
 export type { Session, User }
 
 function shouldForceSupabaseUnconfigured() {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) return false
   return readLocalE2eFlag('tripmap:e2e:supabase-unconfigured') === '1'
 }
 
 function shouldUseE2eSupabaseFixture() {
+  if (!__TRIPMAP_E2E__ && !__TRIPMAP_UNIT_TEST__) return false
   return Boolean(readLocalE2eFlag('tripmap:e2e:cloud-fixture'))
 }
 

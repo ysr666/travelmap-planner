@@ -9,7 +9,7 @@ const fixtureMediaRegistry: Readonly<Record<string, string>> = Object.freeze({
 })
 
 export function resolveFixtureMediaAsset(assetId: string) {
-  if (import.meta.env.VITE_E2E_AUTH_BYPASS !== '1') return null
+  if (!__TRIPMAP_E2E__) return null
   return fixtureMediaRegistry[assetId] ?? null
 }
 

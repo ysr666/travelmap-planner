@@ -18,8 +18,8 @@ import { getRoutingConfig } from '../lib/routing'
 import type { TripOperationsLocalState } from '../lib/tripOperationsState'
 import type { Day } from '../types'
 
-export function TripWorkspacePage() {
-  const params = getRouteParams()
+export function TripWorkspacePage({ routeHash }: { routeHash?: string } = {}) {
+  const params = getRouteParams(routeHash)
   const tripId = params.get('tripId')
   const requestedDayId = params.get('dayId')
   const requestedView = params.get('view')

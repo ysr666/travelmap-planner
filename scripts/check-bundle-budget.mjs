@@ -18,9 +18,14 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   ['PDF parser', /(?:^|[-_.])pdf(?:[-_.]|$)/i],
   ['OCR runtime', /(?:^|[-_.])ocr(?:[-_.]|$)|tesseract/i],
   ['archive parser', /jszip/i],
+  ['trip import commit runtime', /tripPlanImportRepository/i],
+  ['ledger mutation runtime', /ledgerMutationRepository/i],
+  ['Account workflow runtime', /workflowMutationRuntime/i],
 ]
 const FORBIDDEN_PRECACHE_ASSETS = [
   ['AI draft', /^assets\/AiDraftPage-.+\.js$/],
+  ['E2E travel-object runtime', /^assets\/e2eRuntime-.+\.js$/],
+  ['E2E fixture-media registry', /^assets\/fixtureMediaRegistry-.+\.js$/],
   ['global AI', /^assets\/GlobalAiCommandBar-.+\.js$/],
   ['archive parser', /^assets\/jszip-.+\.js$/],
   ['map renderer CSS', /^assets\/maplibre-.+\.css$/],
@@ -29,6 +34,12 @@ const FORBIDDEN_PRECACHE_ASSETS = [
   ['OCR worker', /^assets\/worker\.min-.+\.js$/],
   ['PDF parser', /^assets\/pdf.+\.js$/],
   ['Provider network client', /^assets\/providerProxyClientCore-.+\.js$/],
+  ['map settings detail', /^assets\/SettingsMapsPage-.+\.js$/],
+  ['privacy settings detail', /^assets\/SettingsPrivacyPage-.+\.js$/],
+  ['route settings detail', /^assets\/SettingsRoutePage-.+\.js$/],
+  ['trip import commit runtime', /^assets\/tripPlanImportRepository-.+\.js$/],
+  ['ledger mutation runtime', /^assets\/ledgerMutationRepository-.+\.js$/],
+  ['Account workflow runtime', /^assets\/workflowMutationRuntime-.+\.js$/],
 ]
 const REQUIRED_PRECACHE_ASSETS = [
   ['application entry', /^assets\/index-.+\.js$/],
@@ -42,6 +53,8 @@ const REQUIRED_PRECACHE_ASSETS = [
 ]
 const RUNTIME_ASSET_CACHE_NAME = 'tripmap-on-demand-assets-v1'
 const PROVIDER_CLIENT_CORE_MANIFEST_KEY = 'src/lib/providerProxyClientCore.ts'
+const TRIP_IMPORT_REPOSITORY_MANIFEST_KEY = 'src/db/tripPlanImportRepository.ts'
+const LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY = 'src/db/ledgerMutationRepository.ts'
 
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
 const entries = Object.entries(manifest).filter(([, chunk]) => chunk.isEntry)
@@ -139,6 +152,24 @@ if (!providerClientCoreChunk) {
   failures.push('Provider network client is no longer behind a dynamic import')
 }
 
+const tripImportRepositoryChunk = manifest[TRIP_IMPORT_REPOSITORY_MANIFEST_KEY]
+if (!tripImportRepositoryChunk) {
+  failures.push('Trip import commit runtime is not emitted as its own on-demand chunk')
+} else if (!Object.values(manifest).some((chunk) =>
+  chunk.dynamicImports?.includes(TRIP_IMPORT_REPOSITORY_MANIFEST_KEY),
+)) {
+  failures.push('Trip import commit runtime is no longer behind a dynamic import')
+}
+
+const ledgerMutationRepositoryChunk = manifest[LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY]
+if (!ledgerMutationRepositoryChunk) {
+  failures.push('Ledger mutation runtime is not emitted as its own on-demand chunk')
+} else if (!Object.values(manifest).some((chunk) =>
+  chunk.dynamicImports?.includes(LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY),
+)) {
+  failures.push('Ledger mutation runtime is no longer behind a dynamic import')
+}
+
 const serviceWorkerSource = await readFile(path.join(DIST_DIR, 'sw.js'), 'utf8')
 const precacheUrls = extractPrecacheUrls(serviceWorkerSource)
 const duplicatePrecacheUrls = precacheUrls.filter(
@@ -182,6 +213,12 @@ for (const [label, pattern] of FORBIDDEN_PRECACHE_ASSETS) {
 
 if (providerClientCoreChunk && precacheUrls.includes(providerClientCoreChunk.file)) {
   failures.push(`Provider network client must be cached on demand (${providerClientCoreChunk.file})`)
+}
+if (tripImportRepositoryChunk && precacheUrls.includes(tripImportRepositoryChunk.file)) {
+  failures.push(`Trip import commit runtime must be cached on demand (${tripImportRepositoryChunk.file})`)
+}
+if (ledgerMutationRepositoryChunk && precacheUrls.includes(ledgerMutationRepositoryChunk.file)) {
+  failures.push(`Ledger mutation runtime must be cached on demand (${ledgerMutationRepositoryChunk.file})`)
 }
 
 if (!serviceWorkerSource.includes(RUNTIME_ASSET_CACHE_NAME)) {

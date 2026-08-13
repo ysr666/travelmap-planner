@@ -211,6 +211,73 @@ describe('account workflow contract', () => {
     })
   })
 
+  it('enforces the closed ledger batch topology before execution', () => {
+    const ledger = makeWorkflow('ledger.batch@1')
+    expect(() => parseAccountWorkflowRequestV1({
+      ...ledger,
+      steps: [{
+        expectedRevision: 1,
+        mutationId: '88888888-8888-4888-8888-888888888888',
+        objectId: 'settings_a',
+        objectSchemaVersion: 1,
+        objectType: 'ledger_settings',
+        operation: 'delete',
+        stepId: 'settings_delete',
+      }],
+    })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+
+    const budget = (id: string, mutationId: string, stepId: string): AccountWorkflowStepV1 => ({
+      expectedRevision: 0,
+      mutationId,
+      objectId: id,
+      objectSchemaVersion: 1,
+      objectType: 'ledger_budget',
+      operation: 'upsert',
+      payload: {
+        amountMinor: 1_000,
+        category: 'food',
+        createdAt: 1,
+        currency: 'GBP',
+        id,
+        scope: 'category',
+        tripId: TRIP_ID,
+        updatedAt: 1,
+      },
+      stepId,
+    })
+    expect(() => parseAccountWorkflowRequestV1({
+      ...ledger,
+      steps: [
+        budget('budget_a', '88888888-8888-4888-8888-888888888881', 'budget_a'),
+        budget('budget_b', '88888888-8888-4888-8888-888888888882', 'budget_b'),
+      ],
+    })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+
+    expect(() => parseAccountWorkflowRequestV1({
+      ...ledger,
+      steps: [
+        {
+          expectedRevision: 1,
+          mutationId: '88888888-8888-4888-8888-888888888883',
+          objectId: 'person_a',
+          objectSchemaVersion: 1,
+          objectType: 'ledger_participant',
+          operation: 'delete',
+          stepId: 'person_delete',
+        },
+        makeLedgerStep(),
+      ],
+    })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+
+    expect(() => parseAccountWorkflowRequestV1({
+      ...ledger,
+      steps: [{
+        ...makeLedgerStep(),
+        payload: { ...makeLedgerStep().payload, providerKey: 'forbidden' },
+      }],
+    })).toThrow()
+  })
+
   it('parses and correlates an atomic success without accepting missing or substituted steps', () => {
     const request = parseAccountWorkflowRequestV1(makeWorkflow('trip.repair.apply@1'))
     const result = parseAccountWorkflowRunResultV1(makeSuccess(request))

@@ -16,6 +16,7 @@ beforeAll(async () => {
 describe('account-cloud migration contract', () => {
   it('accepts the checked-in additive migration', () => {
     expect(validateAccountCloudMigration({ contractSource, migrationSql })).toEqual({
+      ledgerWorkflowBoundary: true,
       objectTypeCount: 22,
       receiptLedger: true,
       realtimePublished: true,
@@ -139,6 +140,53 @@ describe('account-cloud migration contract', () => {
         'grant execute on function tripmap_private.account_redact_ticket_meta_payload(jsonb)',
       ),
     })).toThrow(/legacy Ticket redactor/)
+  })
+
+  it('rejects removal, exposure, or bypass of the ledger workflow boundary', () => {
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'not tripmap_private.account_ledger_payload_is_valid(target_object_type, target_payload)',
+        'false',
+      ),
+    })).toThrow(/account_ledger_payload_is_valid/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_ledger_payload_is_valid(text, jsonb)',
+        'grant execute on function tripmap_private.account_ledger_payload_is_valid(text, jsonb)',
+      ),
+    })).toThrow(/ledger payload validator/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_ledger_timestamp_is_valid(text)',
+        'grant execute on function tripmap_private.account_ledger_timestamp_is_valid(text)',
+      ),
+    })).toThrow(/ledger timestamp validator/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        "or target_object_type in ('ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense')",
+        "or target_object_type = 'ledger_settings'",
+      ),
+    })).toThrow(/Ledger objects/)
+  })
+
+  it('rejects weakening required and nested ledger value types', () => {
+    const requiredTypeChecks = [
+      "pg_catalog.jsonb_typeof(target_payload -> 'homeCurrency') is distinct from 'string'",
+      "pg_catalog.jsonb_typeof(target_payload -> 'category') is distinct from 'string'",
+      "pg_catalog.jsonb_typeof(source_link.value -> 'kind') is distinct from 'string'",
+      "pg_catalog.jsonb_typeof(line_item.value -> 'title') is distinct from 'string'",
+      "pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'fetchedAt') is distinct from 'string'",
+    ]
+    for (const check of requiredTypeChecks) {
+      expect(() => validateAccountCloudMigration({
+        contractSource,
+        migrationSql: migrationSql.replace(check, 'false'),
+      })).toThrow(/required contract fragment/)
+    }
   })
 
   it('rejects a stale RPC comment signature or missing overload cleanup', () => {

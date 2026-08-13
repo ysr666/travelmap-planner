@@ -1,3 +1,5 @@
+import { assertAccountLedgerPayload } from './ledgerPayload'
+
 export const ACCOUNT_CLOUD_SCHEMA_VERSION = 1 as const
 export const ACCOUNT_OBJECT_MAX_PAYLOAD_BYTES = 512 * 1024
 
@@ -502,6 +504,19 @@ function assertObjectSpecificPayloadBoundary(
   payload: JsonObject,
   code: AccountCloudContractErrorCode = 'sensitive_payload',
 ) {
+  if (
+    objectType === 'ledger_settings'
+    || objectType === 'ledger_participant'
+    || objectType === 'ledger_budget'
+    || objectType === 'ledger_expense'
+  ) {
+    try {
+      assertAccountLedgerPayload(objectType, payload)
+    } catch {
+      fail(code, 'Ledger payload fields are invalid.')
+    }
+    return
+  }
   if (objectType === 'item') {
     if (
       typeof payload.dayId !== 'string'

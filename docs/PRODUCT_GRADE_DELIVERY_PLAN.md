@@ -1,6 +1,6 @@
 # TripMap 完整产品级交付计划
 
-更新时间：2026-08-11
+更新时间：2026-08-13
 
 状态：**Target；当前为 Limited Beta，尚未达到完整产品级交付**
 
@@ -110,6 +110,8 @@
 目标：让账号云端成为完整、可恢复、可协作的事实源。
 
 详细数据、权限、mutation、冲突、Realtime、恢复、迁移和回退合同见 [Account Cloud V2](CLOUD_DATA_MODEL_V2.md)。该合同在 Preview/Production 与客户端切换完成前保持 Target。
+
+当前本地实现进度：首批 7 个注册原子 workflow 中 5 个已有产品 adapter，包括同日重排、跨日移动、既有票据关系、新旅行 metadata 导入和现有账本 mutation 面；所有 rollout 硬门槛仍关闭，Preview、真实账号、Realtime、空设备恢复与生产切换均未完成。
 
 交付项：
 

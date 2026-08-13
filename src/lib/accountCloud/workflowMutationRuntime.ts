@@ -2,6 +2,12 @@ import {
   getActiveTravelDatabase,
   type TravelConsoleDatabase,
 } from '../../db/database'
+import type {
+  LedgerBudget,
+  LedgerExpense,
+  LedgerParticipant,
+  LedgerSettings,
+} from '../../types'
 import { buildAccountTravelDatabaseName } from '../accountDatabase'
 import { getActiveAccountHash } from '../accountStorageScope'
 import { getObjectSyncDeviceId } from '../objectSyncLocal'
@@ -15,6 +21,13 @@ import {
   type JsonObject,
 } from './contract'
 import { isAccountCloudV2AccountEnabled } from './feature'
+import {
+  assertAccountLedgerGraphPayloads,
+  assertNoNewAccountLedgerGraphViolations,
+  listActiveLedgerTicketReferences,
+  listAccountLedgerGraphViolations,
+  type AccountLedgerGraph,
+} from './ledgerGraph'
 import {
   buildAccountObjectKey,
   getAccountObjectRevision,
@@ -266,6 +279,16 @@ async function prepareWorkflowRequest<T>(
     if (input.workflowId === 'ticket.bind@1' && localPayload) {
       assertTicketWorkflowMutation(mutation, localPayload)
     }
+    if (input.workflowId === 'ledger.batch@1' && localPayload) {
+      assertLedgerWorkflowMutation(mutation, localPayload)
+    }
+    if (
+      input.workflowId === 'ledger.batch@1'
+      && mutation.operation === 'upsert'
+      && revision?.tombstone
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
     steps.push({
       expectedRevision: revision?.revision ?? 0,
       mutationId: mutation.mutationId,
@@ -279,7 +302,7 @@ async function prepareWorkflowRequest<T>(
   }
 
   assertActiveAccountContext(accountHash, database)
-  if (requiresLegacyFallback) return null
+  if (requiresLegacyFallback && input.workflowId !== 'ledger.batch@1') return null
   if (input.workflowId === 'item.move@1' && (
     movedItemCount !== 1 || moveDayIds.size !== 2
   )) {
@@ -287,6 +310,15 @@ async function prepareWorkflowRequest<T>(
   }
   if (input.workflowId === 'ticket.bind@1') {
     await assertCompleteTicketRelationship(input.tripId, steps, database)
+  }
+  if (input.workflowId === 'ledger.batch@1') {
+    requiresLegacyFallback = await hasUnbootstrappedLedgerDependency(
+      input.tripId,
+      steps,
+      accountHash,
+      database,
+    ) || requiresLegacyFallback
+    if (requiresLegacyFallback) return null
   }
   if (input.workflowId === 'trip.import.commit@1') {
     await assertEmptyTripImportBaseline(input.tripId, accountHash, database)
@@ -302,6 +334,161 @@ async function prepareWorkflowRequest<T>(
     })
   } catch {
     throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+function assertLedgerWorkflowMutation(
+  mutation: ProductCandidateMutation,
+  localPayload: JsonObject,
+) {
+  if (
+    mutation.operation === 'upsert'
+    && (
+      !mutation.payload
+      || mutation.payload.createdAt !== localPayload.createdAt
+      || !isLaterTimestamp(mutation.payload.updatedAt, localPayload.updatedAt)
+    )
+  ) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+async function hasUnbootstrappedLedgerDependency(
+  tripId: string,
+  steps: AccountWorkflowStepV1[],
+  accountHash: string,
+  database: TravelConsoleDatabase,
+) {
+  const submitted = new Set(steps.map((step) => buildAccountObjectKey(step.objectType, step.objectId)))
+  const dependencies = new Map<string, { objectId: string; objectType: ClientMutableAccountObjectType }>()
+  addLedgerDependencies(dependencies, 'trip', [tripId])
+  const [trip, settings, participants, budgets, expenses, itemIds, ticketIds] = await Promise.all([
+    database.trips.get(tripId),
+    database.ledgerSettings.where('tripId').equals(tripId).toArray(),
+    database.ledgerParticipants.where('tripId').equals(tripId).toArray(),
+    database.ledgerBudgets.where('tripId').equals(tripId).toArray(),
+    database.ledgerExpenses.where('tripId').equals(tripId).toArray(),
+    database.itineraryItems.where('tripId').equals(tripId).primaryKeys(),
+    database.ticketMetas.where('tripId').equals(tripId).primaryKeys(),
+  ])
+  assertActiveAccountContext(accountHash, database)
+  const currentGraph: AccountLedgerGraph = {
+    budgets,
+    expenses,
+    itemIds,
+    participants,
+    settings,
+    ticketIds,
+    tripExists: Boolean(trip),
+  }
+  const prospectiveGraph = applyLedgerWorkflowSteps(currentGraph, steps)
+  let needsFallback: boolean
+  try {
+    assertAccountLedgerGraphPayloads(currentGraph, tripId)
+    assertAccountLedgerGraphPayloads(prospectiveGraph, tripId)
+    assertNoNewAccountLedgerGraphViolations(currentGraph, prospectiveGraph)
+    needsFallback = listAccountLedgerGraphViolations(prospectiveGraph).length > 0
+  } catch {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  addLedgerDependencies(dependencies, 'ledger_settings', settings.map((record) => record.id))
+  addLedgerDependencies(dependencies, 'ledger_participant', participants.map((record) => record.id))
+  addLedgerDependencies(dependencies, 'ledger_budget', budgets.map((record) => record.id))
+  addLedgerDependencies(dependencies, 'ledger_expense', expenses.map((record) => record.id))
+
+  for (const expense of prospectiveGraph.expenses) {
+    addLedgerExpenseDependencies(dependencies, expense)
+  }
+
+  for (const dependency of dependencies.values()) {
+    const objectKey = buildAccountObjectKey(dependency.objectType, dependency.objectId)
+    if (submitted.has(objectKey)) continue
+    const [revision, localPayload, singlePending, workflowPending] = await Promise.all([
+      getAccountObjectRevision(objectKey, database),
+      readAccountWorkflowLocalPayload(dependency.objectType, dependency.objectId, tripId, database),
+      database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
+      database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
+    ])
+    assertActiveAccountContext(accountHash, database)
+    if (singlePending > 0 || workflowPending > 0) throw new AccountCloudWorkflowWriteError('conflict')
+    if (localPayload === null) {
+      if (needsFallback) continue
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    if (!revision) {
+      needsFallback = true
+      continue
+    }
+    if (
+      revision.objectId !== dependency.objectId
+      || revision.objectType !== dependency.objectType
+      || revision.tripId !== tripId
+      || revision.tombstone
+      || !sameJson(revision.payload, localPayload)
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+  }
+  return needsFallback
+}
+
+function applyLedgerWorkflowSteps(
+  graph: AccountLedgerGraph,
+  steps: AccountWorkflowStepV1[],
+): AccountLedgerGraph {
+  const next: AccountLedgerGraph = {
+    ...graph,
+    budgets: [...graph.budgets],
+    expenses: [...graph.expenses],
+    participants: [...graph.participants],
+    settings: [...graph.settings],
+  }
+  for (const step of steps) {
+    const key = ledgerGraphKey(step.objectType)
+    if (!key) throw new AccountCloudWorkflowWriteError('invalid_state')
+    const records = next[key] as Array<LedgerSettings | LedgerParticipant | LedgerBudget | LedgerExpense>
+    const remaining = records.filter((record) => record.id !== step.objectId)
+    next[key] = (step.operation === 'delete'
+      ? remaining
+      : [...remaining, step.payload as unknown as typeof records[number]]) as never
+  }
+  return next
+}
+
+function ledgerGraphKey(
+  objectType: ClientMutableAccountObjectType,
+): 'settings' | 'participants' | 'budgets' | 'expenses' | null {
+  switch (objectType) {
+    case 'ledger_settings': return 'settings'
+    case 'ledger_participant': return 'participants'
+    case 'ledger_budget': return 'budgets'
+    case 'ledger_expense': return 'expenses'
+    default: return null
+  }
+}
+
+function addLedgerExpenseDependencies(
+  dependencies: Map<string, { objectId: string; objectType: ClientMutableAccountObjectType }>,
+  payload: LedgerExpense,
+) {
+  const participantIds = [
+    payload.payerParticipantId,
+    ...payload.splitShares.map((share) => share.participantId),
+  ]
+  addLedgerDependencies(dependencies, 'ledger_participant', participantIds)
+  addLedgerDependencies(dependencies, 'item', payload.itemIds ?? [])
+  addLedgerDependencies(dependencies, 'ledger_expense', [payload.originalExpenseId])
+  addLedgerDependencies(dependencies, 'ticket_meta', listActiveLedgerTicketReferences(payload))
+}
+
+function addLedgerDependencies(
+  dependencies: Map<string, { objectId: string; objectType: ClientMutableAccountObjectType }>,
+  objectType: ClientMutableAccountObjectType,
+  values: readonly unknown[],
+) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    dependencies.set(buildAccountObjectKey(objectType, value), { objectId: value, objectType })
   }
 }
 

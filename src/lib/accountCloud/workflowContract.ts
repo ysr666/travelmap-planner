@@ -565,10 +565,64 @@ function assertWorkflowShape(
     }
   }
 
-  if (workflowId === 'ledger.batch@1' && steps.some((step) => (
-    step.operation === 'delete' && step.expectedRevision < 1
+  if (workflowId === 'ledger.batch@1') {
+    assertLedgerWorkflowShape(steps)
+  }
+}
+
+function assertLedgerWorkflowShape(steps: AccountWorkflowStepV1[]) {
+  if (steps.some((step) => (
+    (step.operation === 'delete' && step.expectedRevision < 1)
+    || (step.objectType === 'ledger_settings' && step.operation === 'delete')
   ))) {
     fail('workflow_shape_invalid')
+  }
+  const settings = steps.filter((step) => step.objectType === 'ledger_settings' && step.operation === 'upsert')
+  if (settings.length > 1) fail('workflow_shape_invalid')
+
+  const deletedParticipants = new Set(steps
+    .filter((step) => step.objectType === 'ledger_participant' && step.operation === 'delete')
+    .map((step) => step.objectId))
+  const deletedExpenses = new Set(steps
+    .filter((step) => step.objectType === 'ledger_expense' && step.operation === 'delete')
+    .map((step) => step.objectId))
+  const budgetKeys = new Set<string>()
+  const sourceFingerprints = new Set<string>()
+  for (const step of steps) {
+    if (step.operation !== 'upsert' || !step.payload) continue
+    if (step.objectType === 'ledger_budget') {
+      const scope = step.payload.scope
+      const key = scope === 'trip' ? 'trip' : `${scope}:${step.payload.category ?? step.payload.date}`
+      if (budgetKeys.has(key)) fail('workflow_shape_invalid')
+      budgetKeys.add(key)
+    }
+    if (step.objectType !== 'ledger_expense') continue
+    const participantIds = [
+      step.payload.payerParticipantId,
+      ...(Array.isArray(step.payload.splitShares)
+        ? step.payload.splitShares.map((share) => (
+            share && typeof share === 'object' && !Array.isArray(share) ? share.participantId : null
+          ))
+        : []),
+    ]
+    if (participantIds.some((participantId) => (
+      typeof participantId === 'string' && deletedParticipants.has(participantId)
+    ))) {
+      fail('workflow_shape_invalid')
+    }
+    const originalExpenseId = step.payload.originalExpenseId
+    if (typeof originalExpenseId === 'string' && deletedExpenses.has(originalExpenseId)) {
+      fail('workflow_shape_invalid')
+    }
+    const source = step.payload.source
+    if (source && typeof source === 'object' && !Array.isArray(source)) {
+      const fingerprint = source.fingerprint
+      if (typeof fingerprint === 'string') {
+        const key = `${source.kind}:${fingerprint}`
+        if (sourceFingerprints.has(key)) fail('workflow_shape_invalid')
+        sourceFingerprints.add(key)
+      }
+    }
   }
 }
 

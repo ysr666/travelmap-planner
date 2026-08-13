@@ -393,6 +393,352 @@ as $$
   );
 $$;
 
+create or replace function tripmap_private.account_ledger_timestamp_is_valid(
+  target_value text
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+begin
+  if pg_catalog.length(target_value) not between 1 and 100
+     or target_value ~ '[[:cntrl:]]'
+     or target_value !~ '^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(T([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9]([.][0-9]{1,3})?)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])?)?$' then
+    return false;
+  end if;
+
+  perform pg_catalog.make_date(
+    pg_catalog.substr(target_value, 1, 4)::integer,
+    pg_catalog.substr(target_value, 6, 2)::integer,
+    pg_catalog.substr(target_value, 9, 2)::integer
+  );
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_ledger_payload_is_valid(
+  target_object_type text,
+  target_payload jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  allowed_fields text[];
+  source_value jsonb;
+begin
+  if target_object_type not in (
+    'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense'
+  ) or pg_catalog.jsonb_typeof(target_payload) <> 'object'
+     or pg_catalog.jsonb_typeof(target_payload -> 'id') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(target_payload -> 'tripId') is distinct from 'string'
+     or target_payload ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+     or target_payload ->> 'tripId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+     or pg_catalog.jsonb_typeof(target_payload -> 'createdAt') is distinct from 'number'
+     or target_payload ->> 'createdAt' !~ '^[0-9]{1,16}$'
+     or pg_catalog.jsonb_typeof(target_payload -> 'updatedAt') is distinct from 'number'
+     or target_payload ->> 'updatedAt' !~ '^[0-9]{1,16}$'
+     or (target_payload ->> 'createdAt')::numeric > 9007199254740991
+     or (target_payload ->> 'updatedAt')::numeric > 9007199254740991
+     or (target_payload ->> 'updatedAt')::numeric < (target_payload ->> 'createdAt')::numeric then
+    return false;
+  end if;
+
+  if target_object_type = 'ledger_settings' then
+    allowed_fields := array['id', 'tripId', 'homeCurrency', 'tripCurrency', 'settlementCurrency', 'createdAt', 'updatedAt'];
+    if pg_catalog.jsonb_typeof(target_payload -> 'homeCurrency') is distinct from 'string'
+       or target_payload ->> 'homeCurrency' !~ '^[A-Z]{3}$'
+       or pg_catalog.jsonb_typeof(target_payload -> 'tripCurrency') is distinct from 'string'
+       or target_payload ->> 'tripCurrency' !~ '^[A-Z]{3}$'
+       or pg_catalog.jsonb_typeof(target_payload -> 'settlementCurrency') is distinct from 'string'
+       or target_payload ->> 'settlementCurrency' !~ '^[A-Z]{3}$' then return false; end if;
+  elsif target_object_type = 'ledger_participant' then
+    allowed_fields := array['id', 'tripId', 'displayName', 'isSelf', 'source', 'sourceId', 'createdAt', 'updatedAt'];
+    if pg_catalog.jsonb_typeof(target_payload -> 'displayName') is distinct from 'string'
+       or pg_catalog.length(target_payload ->> 'displayName') not between 1 and 160
+       or target_payload ->> 'displayName' ~ '[[:cntrl:]]'
+       or (target_payload ? 'isSelf' and pg_catalog.jsonb_typeof(target_payload -> 'isSelf') <> 'boolean')
+       or (target_payload ? 'source' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'source') <> 'string'
+         or target_payload ->> 'source' not in ('manual', 'shared_trip', 'traveler_profile')
+       ))
+       or (target_payload ? 'sourceId' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'sourceId') <> 'string'
+         or target_payload ->> 'sourceId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       ))
+       or (target_payload ->> 'source' = 'manual' and target_payload ? 'sourceId') then return false; end if;
+  elsif target_object_type = 'ledger_budget' then
+    allowed_fields := array['id', 'tripId', 'scope', 'amountMinor', 'currency', 'category', 'date', 'createdAt', 'updatedAt'];
+    if pg_catalog.jsonb_typeof(target_payload -> 'scope') is distinct from 'string'
+       or target_payload ->> 'scope' not in ('trip', 'category', 'date')
+       or pg_catalog.jsonb_typeof(target_payload -> 'amountMinor') is distinct from 'number'
+       or target_payload ->> 'amountMinor' !~ '^[0-9]{1,16}$'
+       or (target_payload ->> 'amountMinor')::numeric > 9007199254740991
+       or pg_catalog.jsonb_typeof(target_payload -> 'currency') is distinct from 'string'
+       or target_payload ->> 'currency' !~ '^[A-Z]{3}$'
+       or (target_payload ? 'category' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'category') <> 'string'
+         or target_payload ->> 'category' not in ('lodging', 'transport', 'admission', 'food', 'shopping', 'insurance', 'connectivity', 'other')
+       ))
+       or (target_payload ? 'date' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'date') <> 'string'
+         or target_payload ->> 'date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+       ))
+       or (target_payload ->> 'scope' = 'trip' and (target_payload ? 'category' or target_payload ? 'date'))
+       or (target_payload ->> 'scope' = 'category' and (not target_payload ? 'category' or target_payload ? 'date'))
+       or (target_payload ->> 'scope' = 'date' and (not target_payload ? 'date' or target_payload ? 'category')) then return false; end if;
+  else
+    allowed_fields := array[
+      'id', 'tripId', 'title', 'date', 'category', 'status', 'amountMinor', 'currency',
+      'payerParticipantId', 'splitMode', 'splitShares', 'source', 'sourceLinks', 'lineItems',
+      'merchant', 'city', 'orderNumber', 'itemIds', 'bookedAt', 'paidAt', 'serviceStartAt',
+      'serviceEndAt', 'cancelledAt', 'refundedAt', 'paymentStatus', 'orderStatus', 'reviewStatus',
+      'recognitionConfidence', 'autoConfirmReason', 'originalExpenseId', 'exchangeRate',
+      'duplicateAcknowledged', 'notes', 'createdAt', 'updatedAt'
+    ];
+    if pg_catalog.jsonb_typeof(target_payload -> 'title') is distinct from 'string'
+       or pg_catalog.length(target_payload ->> 'title') not between 1 and 500
+       or target_payload ->> 'title' ~ '[[:cntrl:]]'
+       or pg_catalog.jsonb_typeof(target_payload -> 'date') is distinct from 'string'
+       or target_payload ->> 'date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+       or pg_catalog.jsonb_typeof(target_payload -> 'category') is distinct from 'string'
+       or target_payload ->> 'category' not in ('lodging', 'transport', 'admission', 'food', 'shopping', 'insurance', 'connectivity', 'other')
+       or pg_catalog.jsonb_typeof(target_payload -> 'status') is distinct from 'string'
+       or target_payload ->> 'status' not in ('draft', 'confirmed', 'void')
+       or pg_catalog.jsonb_typeof(target_payload -> 'splitMode') is distinct from 'string'
+       or target_payload ->> 'splitMode' not in ('equal', 'exclude', 'weights')
+       or pg_catalog.jsonb_typeof(target_payload -> 'splitShares') is distinct from 'array'
+       or pg_catalog.jsonb_array_length(target_payload -> 'splitShares') > 128
+       or pg_catalog.jsonb_typeof(target_payload -> 'source') is distinct from 'object'
+       or (target_payload ? 'amountMinor' and not target_payload ? 'currency')
+       or (target_payload ? 'amountMinor' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'amountMinor') <> 'number'
+         or target_payload ->> 'amountMinor' !~ '^-?[0-9]{1,16}$'
+         or pg_catalog.abs((target_payload ->> 'amountMinor')::numeric) > 9007199254740991
+       ))
+       or (target_payload ? 'currency' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'currency') <> 'string'
+         or target_payload ->> 'currency' !~ '^[A-Z]{3}$'
+       ))
+       or (target_payload ? 'payerParticipantId' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'payerParticipantId') <> 'string'
+         or target_payload ->> 'payerParticipantId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       ))
+       or (target_payload ? 'originalExpenseId' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'originalExpenseId') <> 'string'
+         or target_payload ->> 'originalExpenseId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+         or target_payload ->> 'originalExpenseId' = target_payload ->> 'id'
+       ))
+       or (target_payload ? 'paymentStatus' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'paymentStatus') is distinct from 'string'
+         or target_payload ->> 'paymentStatus' not in ('unknown', 'unpaid', 'paid', 'partially_refunded', 'refunded')
+       ))
+       or (target_payload ? 'orderStatus' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'orderStatus') is distinct from 'string'
+         or target_payload ->> 'orderStatus' not in ('active', 'cancelled')
+       ))
+       or (target_payload ? 'reviewStatus' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'reviewStatus') is distinct from 'string'
+         or target_payload ->> 'reviewStatus' not in ('unreviewed', 'auto_confirmed', 'reviewed', 'needs_review')
+       ))
+       or (target_payload ? 'duplicateAcknowledged' and pg_catalog.jsonb_typeof(target_payload -> 'duplicateAcknowledged') <> 'boolean')
+       or (target_payload ? 'recognitionConfidence' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'recognitionConfidence') <> 'number'
+         or (target_payload ->> 'recognitionConfidence')::numeric not between 0 and 1
+       ))
+       or (target_payload ? 'notes' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'notes') <> 'string'
+         or pg_catalog.length(target_payload ->> 'notes') > 4000
+         or pg_catalog.replace(pg_catalog.replace(pg_catalog.replace(
+           target_payload ->> 'notes', E'\t', ''
+         ), E'\n', ''), E'\r', '') ~ '[[:cntrl:]]'
+       ))
+       or exists (
+         select 1
+         from pg_catalog.unnest(array[
+           'merchant', 'city', 'orderNumber', 'autoConfirmReason'
+         ]) as bounded_field(field_name)
+         where target_payload ? bounded_field.field_name
+           and (
+             pg_catalog.jsonb_typeof(target_payload -> bounded_field.field_name) <> 'string'
+             or pg_catalog.length(target_payload ->> bounded_field.field_name) not between 1 and 500
+             or target_payload ->> bounded_field.field_name ~ '[[:cntrl:]]'
+           )
+       )
+       or exists (
+         select 1
+         from pg_catalog.unnest(array[
+           'bookedAt', 'paidAt', 'serviceStartAt', 'serviceEndAt', 'cancelledAt', 'refundedAt'
+         ]) as timestamp_field(field_name)
+         where target_payload ? timestamp_field.field_name
+           and (
+             pg_catalog.jsonb_typeof(target_payload -> timestamp_field.field_name) <> 'string'
+             or not tripmap_private.account_ledger_timestamp_is_valid(
+               target_payload ->> timestamp_field.field_name
+             )
+           )
+       )
+       or exists (
+         select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'splitShares') as share(value)
+         where pg_catalog.jsonb_typeof(share.value) <> 'object'
+           or share.value ->> 'participantId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+           or pg_catalog.jsonb_typeof(share.value -> 'participantId') is distinct from 'string'
+           or pg_catalog.jsonb_typeof(share.value -> 'weight') is distinct from 'number'
+           or (share.value ->> 'weight')::numeric <= 0
+           or (share.value ->> 'weight')::numeric > 9007199254740991
+           or exists (select 1 from pg_catalog.jsonb_object_keys(share.value) as field(name) where field.name not in ('participantId', 'weight'))
+       )
+       or (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_payload -> 'splitShares')) <>
+          (select pg_catalog.count(distinct share.value ->> 'participantId') from pg_catalog.jsonb_array_elements(target_payload -> 'splitShares') as share(value))
+       or (target_payload ? 'itemIds' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'itemIds') <> 'array'
+         or pg_catalog.jsonb_array_length(target_payload -> 'itemIds') > 256
+         or exists (select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'itemIds') as item(value) where pg_catalog.jsonb_typeof(item.value) <> 'string' or item.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+         or (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_payload -> 'itemIds')) <> (select pg_catalog.count(distinct item.value #>> '{}') from pg_catalog.jsonb_array_elements(target_payload -> 'itemIds') as item(value))
+       ))
+       or (target_payload ? 'sourceLinks' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'sourceLinks') <> 'array'
+         or pg_catalog.jsonb_array_length(target_payload -> 'sourceLinks') > 128
+         or exists (
+           select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'sourceLinks') as source_link(value)
+           where pg_catalog.jsonb_typeof(source_link.value) <> 'object'
+             or source_link.value ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+             or pg_catalog.jsonb_typeof(source_link.value -> 'id') is distinct from 'string'
+             or pg_catalog.jsonb_typeof(source_link.value -> 'kind') is distinct from 'string'
+             or source_link.value ->> 'kind' not in ('manual', 'ticket', 'inbox', 'transport_booking', 'itinerary_note')
+             or pg_catalog.jsonb_typeof(source_link.value -> 'role') is distinct from 'string'
+             or source_link.value ->> 'role' not in ('order_confirmation', 'payment_receipt', 'invoice', 'credit_card_notice', 'cancellation_notice', 'refund_notice', 'other')
+             or (source_link.value ? 'sourceId' and (
+               pg_catalog.jsonb_typeof(source_link.value -> 'sourceId') <> 'string'
+               or source_link.value ->> 'sourceId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+             ))
+             or (source_link.value ? 'available' and pg_catalog.jsonb_typeof(source_link.value -> 'available') <> 'boolean')
+             or exists (select 1 from pg_catalog.jsonb_object_keys(source_link.value) as field(name) where field.name not in ('id', 'kind', 'sourceId', 'label', 'fingerprint', 'role', 'title', 'capturedAt', 'available'))
+         )
+         or (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_payload -> 'sourceLinks')) <> (select pg_catalog.count(distinct source_link.value ->> 'id') from pg_catalog.jsonb_array_elements(target_payload -> 'sourceLinks') as source_link(value))
+       ))
+       or (target_payload ? 'lineItems' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'lineItems') <> 'array'
+         or pg_catalog.jsonb_array_length(target_payload -> 'lineItems') > 256
+         or exists (
+           select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'lineItems') as line_item(value)
+           where pg_catalog.jsonb_typeof(line_item.value) <> 'object'
+             or line_item.value ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+             or pg_catalog.jsonb_typeof(line_item.value -> 'id') is distinct from 'string'
+             or pg_catalog.jsonb_typeof(line_item.value -> 'title') is distinct from 'string'
+             or pg_catalog.length(line_item.value ->> 'title') not between 1 and 500
+             or line_item.value ->> 'title' ~ '[[:cntrl:]]'
+             or pg_catalog.jsonb_typeof(line_item.value -> 'kind') is distinct from 'string'
+             or line_item.value ->> 'kind' not in ('base', 'tax', 'tip', 'discount', 'refund', 'other')
+             or pg_catalog.jsonb_typeof(line_item.value -> 'category') is distinct from 'string'
+             or line_item.value ->> 'category' not in ('lodging', 'transport', 'admission', 'food', 'shopping', 'insurance', 'connectivity', 'other')
+             or pg_catalog.jsonb_typeof(line_item.value -> 'amountMinor') is distinct from 'number'
+             or line_item.value ->> 'amountMinor' !~ '^-?[0-9]{1,16}$'
+             or pg_catalog.abs((line_item.value ->> 'amountMinor')::numeric) > 9007199254740991
+             or pg_catalog.jsonb_typeof(line_item.value -> 'currency') is distinct from 'string'
+             or line_item.value ->> 'currency' !~ '^[A-Z]{3}$'
+             or exists (select 1 from pg_catalog.jsonb_object_keys(line_item.value) as field(name) where field.name not in ('id', 'title', 'kind', 'category', 'amountMinor', 'currency'))
+         )
+         or (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_payload -> 'lineItems')) <> (select pg_catalog.count(distinct line_item.value ->> 'id') from pg_catalog.jsonb_array_elements(target_payload -> 'lineItems') as line_item(value))
+       ))
+       or (target_payload ? 'exchangeRate' and (
+         pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate') <> 'object'
+         or exists (select 1 from pg_catalog.jsonb_object_keys(target_payload -> 'exchangeRate') as field(name) where field.name not in ('requestedDate', 'effectiveDate', 'baseCurrency', 'tripCurrency', 'homeCurrency', 'rateToTrip', 'rateToHome', 'provider', 'sourceUrl', 'fetchedAt'))
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'requestedDate') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'requestedDate' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'effectiveDate') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'effectiveDate' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'baseCurrency') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'baseCurrency' !~ '^[A-Z]{3}$'
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'tripCurrency') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'tripCurrency' !~ '^[A-Z]{3}$'
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'homeCurrency') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'homeCurrency' !~ '^[A-Z]{3}$'
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'rateToTrip') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'rateToTrip' !~ '^(0|[1-9][0-9]{0,15})(\.[0-9]{1,18})?$'
+         or (target_payload -> 'exchangeRate' ->> 'rateToTrip')::numeric <= 0
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'rateToHome') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'rateToHome' !~ '^(0|[1-9][0-9]{0,15})(\.[0-9]{1,18})?$'
+         or (target_payload -> 'exchangeRate' ->> 'rateToHome')::numeric <= 0
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'provider') is distinct from 'string'
+         or target_payload -> 'exchangeRate' ->> 'provider' not in ('frankfurter', 'manual')
+         or pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'fetchedAt') is distinct from 'string'
+         or not tripmap_private.account_ledger_timestamp_is_valid(
+           target_payload -> 'exchangeRate' ->> 'fetchedAt'
+         )
+         or (target_payload -> 'exchangeRate' ? 'sourceUrl' and (
+           pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'sourceUrl') is distinct from 'string'
+           or pg_catalog.length(target_payload -> 'exchangeRate' ->> 'sourceUrl') not between 1 and 2048
+           or target_payload -> 'exchangeRate' ->> 'sourceUrl' ~ '[[:cntrl:]]'
+           or target_payload -> 'exchangeRate' ->> 'sourceUrl' !~ '^https://[^[:space:]/?#]+([/?#][^[:space:]]*)?$'
+         ))
+       )) then return false; end if;
+
+    source_value := target_payload -> 'source';
+    if exists (select 1 from pg_catalog.jsonb_object_keys(source_value) as field(name) where field.name not in ('kind', 'sourceId', 'label', 'fingerprint'))
+       or pg_catalog.jsonb_typeof(source_value -> 'kind') is distinct from 'string'
+       or source_value ->> 'kind' not in ('manual', 'ticket', 'inbox', 'transport_booking', 'itinerary_note')
+       or (source_value ? 'sourceId' and (
+         pg_catalog.jsonb_typeof(source_value -> 'sourceId') <> 'string'
+         or source_value ->> 'sourceId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       ))
+       or (source_value ? 'label' and (
+         pg_catalog.jsonb_typeof(source_value -> 'label') <> 'string'
+         or pg_catalog.length(source_value ->> 'label') not between 1 and 500
+         or source_value ->> 'label' ~ '[[:cntrl:]]'
+       ))
+       or (source_value ? 'fingerprint' and (
+         pg_catalog.jsonb_typeof(source_value -> 'fingerprint') <> 'string'
+         or pg_catalog.length(source_value ->> 'fingerprint') not between 1 and 500
+         or source_value ->> 'fingerprint' ~ '[[:cntrl:]]'
+       )) then return false; end if;
+
+    if target_payload ? 'sourceLinks' and exists (
+      select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'sourceLinks') as source_link(value)
+      where (source_link.value ? 'label' and (
+          pg_catalog.jsonb_typeof(source_link.value -> 'label') is distinct from 'string'
+          or pg_catalog.length(source_link.value ->> 'label') not between 1 and 500
+          or source_link.value ->> 'label' ~ '[[:cntrl:]]'
+        ))
+        or (source_link.value ? 'fingerprint' and (
+          pg_catalog.jsonb_typeof(source_link.value -> 'fingerprint') is distinct from 'string'
+          or pg_catalog.length(source_link.value ->> 'fingerprint') not between 1 and 500
+          or source_link.value ->> 'fingerprint' ~ '[[:cntrl:]]'
+        ))
+        or (source_link.value ? 'title' and (
+          pg_catalog.jsonb_typeof(source_link.value -> 'title') is distinct from 'string'
+          or pg_catalog.length(source_link.value ->> 'title') not between 1 and 500
+          or source_link.value ->> 'title' ~ '[[:cntrl:]]'
+        ))
+        or (source_link.value ? 'capturedAt' and (
+          pg_catalog.jsonb_typeof(source_link.value -> 'capturedAt') is distinct from 'string'
+          or not tripmap_private.account_ledger_timestamp_is_valid(
+            source_link.value ->> 'capturedAt'
+          )
+        ))
+    ) then return false; end if;
+  end if;
+
+  return not exists (
+    select 1 from pg_catalog.jsonb_object_keys(target_payload) as payload_field(field_name)
+    where not (payload_field.field_name = any(allowed_fields))
+  );
+exception
+  when others then
+    return false;
+end;
+$$;
+
 create or replace function tripmap_private.account_object_public_json(
   target_object public.tripmap_account_objects
 )
@@ -623,6 +969,17 @@ begin
   end if;
 
   if target_operation = 'upsert'
+     and target_object_type in ('ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense')
+     and not tripmap_private.account_ledger_payload_is_valid(target_object_type, target_payload) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', target_mutation_id,
+      'reason', 'invalid_or_sensitive_payload'
+    );
+  end if;
+
+  if target_operation = 'upsert'
      and target_object_type = 'item'
      and (
        target_payload ->> 'dayId' is null
@@ -726,6 +1083,7 @@ begin
   current_revision := case when has_current_object then current_object.revision else 0 end;
 
   if target_object_type = 'ticket_meta'
+     or target_object_type in ('ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense')
      or (
        target_operation = 'delete'
        and target_object_type in ('trip', 'day', 'item')
@@ -991,6 +1349,10 @@ $$;
 revoke all on function tripmap_private.account_payload_has_forbidden_key(jsonb)
   from public, anon, authenticated;
 revoke all on function tripmap_private.account_ticket_meta_payload_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_ledger_timestamp_is_valid(text)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_ledger_payload_is_valid(text, jsonb)
   from public, anon, authenticated;
 revoke all on function tripmap_private.account_redact_ticket_meta_payload(jsonb)
   from public, anon, authenticated;

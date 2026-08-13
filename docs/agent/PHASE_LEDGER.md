@@ -3647,3 +3647,73 @@ Remote receipt for predecessor commit `55167b6750500b63a67bff3f9f33cc30f40b58ab`
 - GitHub Actions run `31692752122` passed Build, Type Check, Lint, Unit Tests and the complete E2E job in 5 minutes 41 seconds.
 - Cloudflare Pages deployment/check `843aa52b-6e02-4c74-86fa-dffdde2fd5b0` passed for the same SHA.
 - These receipts close P1.3d2 remote validation only. P1.3d3 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d4 Ledger Mutation Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining product workflows remain P1 gates
+
+Goal:
+
+- Route the complete existing product ledger mutation surface through the registered `ledger.batch@1` workflow for fully bootstrapped Account Cloud V2 accounts.
+- Keep settings, participants, budgets, expenses and multi-expense review changes reference-safe, stale-guarded and all-or-nothing locally and on the server.
+
+Scope:
+
+- Refactor ledger settings, participant, budget and expense create/update/delete operations into deterministic prepare/apply plans with generated identities and timestamps fixed before the cloud decision. Apply re-reads every changed object and all relationship records needed by the operation inside one Dexie transaction.
+- Route settings create/update, participant create/update/delete, budget create/update/delete, expense create/idempotent-create/update/delete and multi-expense review through `ledger.batch@1`. A V2-handled operation must not enter the legacy object outbox or trip snapshot path; an unbootstrapped graph must fall back before mutation.
+- Add strict TypeScript and SQL ledger payload contracts and topology checks: one settings row per trip; controlled currencies, enums, dates, amounts and timestamps; unique participant/source/line-item identities; valid participant, Item, Ticket and original-expense references; and deletion rejection while a submitted or existing live expense still depends on the target.
+- Preserve bulk-review eligibility checks and expected `updatedAt` guards while submitting every changed expense as one workflow. Preserve idempotent expense creation by source fingerprint without introducing a second cloud identity.
+- Keep both compile-time rollout gates closed and preserve existing UI behavior and local sync fallback when V2 is disabled or any required object lacks a trusted revision.
+
+No-go:
+
+- No payment initiation, card/bank integration, refund execution, settlement transfer, purchase, cancellation, email/message send, exchange-rate Provider call, Supabase Preview/Production write, real account mutation or rollout-gate change.
+- No arbitrary ledger object patch, caller-supplied object/mutation/revision identity, cross-trip relationship, dangling participant/Item/Ticket/original-expense reference, duplicate settings row, partial bulk-review commit, fallback after optimistic mutation or parallel legacy outbox for a V2-handled operation.
+- No expansion to archive queue internals, report export, encrypted documents, Ticket Blob/OCR, Provider payloads or free-form secrets. Existing user-authored ledger notes remain account data but must stay bounded and must not be interpreted as executable instructions.
+
+Likely files:
+
+- `src/db/ledgerRepositories.ts`, `src/db/ledgerTrackedMutations.ts` and focused tests; Account Cloud object/workflow contracts, local codec/runtime and tests; workflow SQL migration, pgTAP and static gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Each create/update/delete path, duplicate settings, stale prepare/apply, participant in-use deletion, expense participant/Item/Ticket/original-expense references, idempotent source recovery, multi-expense review, unbootstrapped whole-operation fallback, pending object, offline retention, terminal conflict rollback, account switch, unknown/sensitive fields, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, ledger E2E, capability/migration/bundle gates and `git diff --check`.
+
+Risk:
+
+- Critical. A partial ledger commit can produce incorrect totals or settlements across devices, while a permissive reference or delete rule can silently attribute spending to the wrong traveler or leave an unrecoverable dangling record.
+
+Stop conditions:
+
+- Stop and repair if any ledger operation can write before its complete baseline is checked, a bulk review can split across queues, an expense can reference a missing or deleted object, a participant/settings invariant differs between TypeScript and SQL, a terminal error leaves only part of a batch visible, a V2-handled operation also enters legacy sync, or any path can initiate a real financial action.
+
+Local result:
+
+- Added one on-demand ledger mutation repository for setup, settings, participant, budget, expense, idempotent source recovery and multi-expense review. Preparation fixes generated IDs and timestamps, captures complete Trip/Item/Ticket/ledger fingerprints and validates the prospective graph; apply re-reads the same graph inside one Dexie transaction and rejects stale plans before any write.
+- Routed the existing ledger product surface through `ledger.batch@1`. A fully bootstrapped V2 graph submits every changed object in one registered workflow and writes neither legacy object outbox nor Trip snapshot state. A graph missing any trusted revision falls back before mutation; pending single/workflow work, revision/payload drift, account switching or stale dependency state fails closed.
+- Added exact TypeScript and SQL payload contracts for settings, participants, budgets and expenses. They reject unknown or sensitive fields, invalid IDs/currencies/enums/dates/timestamps/amounts, oversized nested collections, duplicate nested identities, unsafe URLs and control bytes. A draft may retain a recognized currency before amount extraction, while an amount without currency remains invalid.
+- Closed the complete prospective ledger graph across client and server: one settings row and self participant, unique participant provenance, budget scope and source fingerprint, and valid payer/share/Item/Ticket/original-expense references. Deleting a referenced participant or original expense is rejected, existing updates must preserve `createdAt` and advance `updatedAt`, and tombstones cannot be restored through this workflow.
+- Preserved historical compatibility without weakening new writes. A pre-existing dangling relation may remain or be reduced and keeps the whole operation on legacy sync; pairwise violation identities prevent adding another duplicate or missing reference. A Ticket source explicitly marked `available=false` remains audit metadata and is excluded from live dependency locks. New dangling references always fail before fallback or apply.
+- Ledger initialization now creates settings, self and trip budget atomically while reusing a valid partial legacy self/budget baseline. Shared-trip and traveler imports batch participant creation. Source-fingerprint idempotency coalesces concurrent creates and does not duplicate a successful V2 object or queue a second legacy write.
+- The private SQL graph validator locks the complete ledger scope and every live prospective Item/Ticket dependency before mutation. Generic single-object ledger writes return `workflow_required`; authenticated clients cannot execute private payload/graph helpers. Both compile-time rollout gates remain `false`, and no financial operation, Provider call, Preview/Production write or real account mutation occurred.
+
+Review:
+
+- Local boundary review covered arbitrary fields/functions, single-object bypass, full-graph omission, stale prepare/apply, concurrent idempotent creates, partial bulk review, dependency pending work before fallback, tombstone restoration, timestamp rollback, duplicate topology, cross-trip references, historical deleted Item/Ticket references, explicit unavailable sources, account switching, response rollback and legacy outbox duplication.
+- The first ledger E2E run exposed a contract mismatch for legitimate review drafts that know currency before amount recognition. TypeScript and SQL were aligned to accept that draft state while still rejecting amount-without-currency; focused tests, a clean database replay and the same E2E then passed.
+- Remaining risk is explicit: Preview multi-connection locking, real account bootstrap and response loss, Realtime, second-device/empty-device recovery, first-use offline loading and production latency have no external receipt. `trip.replan.apply@1`, `trip.repair.apply@1`, Ticket create/delete/Blob, delete cascades and restoration remain outside this phase.
+
+Local validation:
+
+- A clean `supabase db reset` replayed every migration. `npm run test:db:account-cloud` passed 104/104 pgTAP checks, including private-helper grants, nested scalar coercion, deterministic timestamps, immutable `createdAt` and mixed available/unavailable Ticket sources; `supabase db lint --level warning` reported no schema errors or warnings.
+- Final focused product/runtime regression passed 4 files and 63 tests; static migration gates passed 2 files and 24 tests. The complete unit suite passed 240 files and 2,001 tests. `npm run typecheck`, `npm run lint`, capability/Account Cloud/Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- `npm run build` passed at 357.2 KiB entry, 855.9 KiB initial JS, 245.7 KiB initial gzip, 12 startup chunks and 2493.4 KiB/131-entry precache. The ledger mutation repository is an on-demand chunk and is absent from both startup and precache graphs.
+- Full serial Playwright passed all 194 tests in 7.3 minutes, including the ledger archive/review flows, Action Gateway ledger actions, current and historical PWA upgrades, five responsive viewports, Golden regression and Desktop Beta smoke.
+- After the final ledger contract hardening, the focused `Mobile 390x844` ledger suite passed 2/2 again.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `bc1b333f77862416f9447e95548660b851e480b5`:
+
+- GitHub Actions run `31696395986` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `82f7c5c2-f96c-4aa2-b629-1e16f858366b` passed for the same SHA.
+- These receipts close P1.3d3 remote validation only. P1.3d4 requires its own same-SHA receipts after commit and push.

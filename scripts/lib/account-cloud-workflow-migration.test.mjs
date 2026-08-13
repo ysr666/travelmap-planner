@@ -26,6 +26,7 @@ describe('account cloud workflow migration gate', () => {
       boundedPayloadTraversal: true,
       deterministicReplayLocks: true,
       importGraphAtomicity: true,
+      ledgerGraphAtomicity: true,
       privateReceiptLedger: true,
       structuralGraphLocking: true,
       ticketBindingCompleteness: true,
@@ -216,5 +217,47 @@ describe('account cloud workflow migration gate', () => {
         'grant execute on function tripmap_private.account_import_workflow_shape_is_valid(text, jsonb)',
       ),
     })).toThrow(/import graph validator/)
+  })
+
+  it('rejects removal or exposure of the ledger graph and lock boundary', () => {
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        'not tripmap_private.account_ledger_payload_is_valid(step_object_type, step_payload)',
+        'false',
+      ),
+    })).toThrow(/account_ledger_payload_is_valid/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_ledger_workflow_graph_is_valid(uuid, text, jsonb)',
+        'grant execute on function tripmap_private.account_ledger_workflow_graph_is_valid(uuid, text, jsonb)',
+      ),
+    })).toThrow(/ledger workflow graph validator/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace("|| ':ledger:' || target_trip_id", "|| ':removed-ledger:' || target_trip_id"),
+    })).toThrow(/ledger|Structural workflows/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "or (step_object_type = 'ledger_settings' and step_operation = 'delete')",
+        'or false',
+      ),
+    })).toThrow(/ledger_settings/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "current_expense.object_type = 'ledger_expense'",
+        "current_expense.object_type = 'removed'",
+      ),
+    })).toThrow(/current_expense/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "step_payload -> 'createdAt' is distinct from current_object.payload -> 'createdAt'",
+        'false',
+      ),
+    })).toThrow(/createdAt/)
   })
 })

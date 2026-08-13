@@ -132,6 +132,7 @@ export default defineConfig({
           '**/GlobalAiCommandBar-*.js',
           '**/icons/icon-*.png',
           '**/jszip-*.js',
+          '**/ledgerMutationRepository-*.js',
           '**/manifest.webmanifest',
           '**/maplibre-*.css',
           '**/maplibre-*.js',

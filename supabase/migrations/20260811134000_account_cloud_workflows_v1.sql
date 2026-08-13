@@ -361,6 +361,175 @@ $$;
 revoke all on function tripmap_private.account_import_workflow_shape_is_valid(text, jsonb)
   from public, anon, authenticated;
 
+create or replace function tripmap_private.account_ledger_workflow_graph_is_valid(
+  target_owner_id uuid,
+  target_trip_id text,
+  target_steps jsonb
+)
+returns boolean
+language sql
+stable
+strict
+security invoker
+set search_path = ''
+as $$
+  with requested as (
+    select
+      step.value ->> 'objectType' as object_type,
+      step.value ->> 'objectId' as object_id,
+      step.value ->> 'operation' as operation,
+      step.value -> 'payload' as payload
+    from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+    where step.value ->> 'objectType' in (
+      'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense'
+    )
+  ),
+  prospective as (
+    select
+      current_object.object_type,
+      current_object.object_id,
+      current_object.payload
+    from public.tripmap_account_objects as current_object
+    where current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type in (
+        'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense'
+      )
+      and not current_object.tombstone
+      and not exists (
+        select 1
+        from requested
+        where requested.object_type = current_object.object_type
+          and requested.object_id = current_object.object_id
+      )
+    union all
+    select requested.object_type, requested.object_id, requested.payload
+    from requested
+    where requested.operation = 'upsert'
+  ),
+  prospective_participants as (
+    select object_id, payload
+    from prospective
+    where object_type = 'ledger_participant'
+  ),
+  prospective_expenses as (
+    select object_id, payload
+    from prospective
+    where object_type = 'ledger_expense'
+  )
+  select
+    exists (
+      select 1
+      from public.tripmap_account_objects as trip_object
+      where trip_object.owner_id = target_owner_id
+        and trip_object.trip_id = target_trip_id
+        and trip_object.object_type = 'trip'
+        and trip_object.object_id = target_trip_id
+        and not trip_object.tombstone
+    )
+    and not exists (
+      select 1
+      from prospective
+      where not tripmap_private.account_ledger_payload_is_valid(object_type, payload)
+    )
+    and (select pg_catalog.count(*) from prospective where object_type = 'ledger_settings') <= 1
+    and (select pg_catalog.count(*) from prospective_participants where coalesce((payload ->> 'isSelf')::boolean, false)) <= 1
+    and not exists (
+      select 1
+      from prospective_participants
+      where payload ? 'sourceId'
+      group by payload ->> 'source', payload ->> 'sourceId'
+      having pg_catalog.count(*) > 1
+    )
+    and not exists (
+      select 1
+      from prospective
+      where object_type = 'ledger_budget'
+      group by
+        payload ->> 'scope',
+        case when payload ->> 'scope' = 'category' then payload ->> 'category' end,
+        case when payload ->> 'scope' = 'date' then payload ->> 'date' end
+      having pg_catalog.count(*) > 1
+    )
+    and not exists (
+      select 1
+      from prospective_expenses
+      where payload -> 'source' ? 'fingerprint'
+      group by payload -> 'source' ->> 'kind', payload -> 'source' ->> 'fingerprint'
+      having pg_catalog.count(*) > 1
+    )
+    and not exists (
+      select 1
+      from prospective_expenses as expense
+      where (
+        expense.payload ? 'payerParticipantId'
+        and not exists (
+          select 1 from prospective_participants as participant
+          where participant.object_id = expense.payload ->> 'payerParticipantId'
+        )
+      ) or exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(expense.payload -> 'splitShares') as share(value)
+        where not exists (
+          select 1 from prospective_participants as participant
+          where participant.object_id = share.value ->> 'participantId'
+        )
+      ) or (
+        expense.payload ? 'originalExpenseId'
+        and not exists (
+          select 1 from prospective_expenses as original_expense
+          where original_expense.object_id = expense.payload ->> 'originalExpenseId'
+        )
+      ) or exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(coalesce(expense.payload -> 'itemIds', '[]'::jsonb)) as item_ref(value)
+        where not exists (
+          select 1 from public.tripmap_account_objects as item_object
+          where item_object.owner_id = target_owner_id
+            and item_object.trip_id = target_trip_id
+            and item_object.object_type = 'item'
+            and item_object.object_id = item_ref.value #>> '{}'
+            and not item_object.tombstone
+        )
+      ) or (
+        expense.payload -> 'source' ->> 'kind' = 'ticket'
+        and expense.payload -> 'source' ? 'sourceId'
+        and not exists (
+          select 1
+          from pg_catalog.jsonb_array_elements(coalesce(expense.payload -> 'sourceLinks', '[]'::jsonb)) as unavailable_link(value)
+          where unavailable_link.value ->> 'kind' = 'ticket'
+            and unavailable_link.value ->> 'sourceId' = expense.payload -> 'source' ->> 'sourceId'
+            and coalesce((unavailable_link.value ->> 'available')::boolean, true) = false
+        )
+        and not exists (
+          select 1 from public.tripmap_account_objects as ticket_object
+          where ticket_object.owner_id = target_owner_id
+            and ticket_object.trip_id = target_trip_id
+            and ticket_object.object_type = 'ticket_meta'
+            and ticket_object.object_id = expense.payload -> 'source' ->> 'sourceId'
+            and not ticket_object.tombstone
+        )
+      ) or exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(coalesce(expense.payload -> 'sourceLinks', '[]'::jsonb)) as source_link(value)
+        where source_link.value ->> 'kind' = 'ticket'
+          and source_link.value ? 'sourceId'
+          and coalesce((source_link.value ->> 'available')::boolean, true)
+          and not exists (
+            select 1 from public.tripmap_account_objects as ticket_object
+            where ticket_object.owner_id = target_owner_id
+              and ticket_object.trip_id = target_trip_id
+              and ticket_object.object_type = 'ticket_meta'
+              and ticket_object.object_id = source_link.value ->> 'sourceId'
+              and not ticket_object.tombstone
+          )
+      )
+    );
+$$;
+
+revoke all on function tripmap_private.account_ledger_workflow_graph_is_valid(uuid, text, jsonb)
+  from public, anon, authenticated;
+
 create or replace function tripmap_private.account_apply_workflow_v1(
   target_schema_version integer,
   target_account_hash text,
@@ -779,6 +948,19 @@ begin
       );
     end if;
 
+    if step_operation = 'upsert'
+       and step_object_type in ('ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense')
+       and not tripmap_private.account_ledger_payload_is_valid(step_object_type, step_payload) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'invalid_or_sensitive_payload'
+      );
+    end if;
+
     if (
       target_workflow_id = 'day.items.reorder@1'
       and (
@@ -807,8 +989,12 @@ begin
       )
     ) or (
       target_workflow_id = 'ledger.batch@1'
-      and step_object_type not in (
-        'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense'
+      and (
+        step_object_type not in (
+          'ledger_settings', 'ledger_participant', 'ledger_budget', 'ledger_expense'
+        )
+        or (step_object_type = 'ledger_settings' and step_operation = 'delete')
+        or (step_operation = 'delete' and step_expected_revision < 1)
       )
     ) or (
       target_workflow_id = 'trip.replan.apply@1'
@@ -1071,6 +1257,15 @@ begin
     );
   end if;
 
+  if target_workflow_id = 'ledger.batch@1' then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        current_user_id::text || ':ledger:' || target_trip_id,
+        0
+      )
+    );
+  end if;
+
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       current_user_id::text || ':workflow:' || target_batch_mutation_id,
@@ -1101,6 +1296,85 @@ begin
       pg_catalog.hashtextextended(current_user_id::text || ':' || lock_key, 0)
     );
   end loop;
+
+  if target_workflow_id = 'ledger.batch@1' then
+    for lock_key in
+      with requested_ledger as (
+        select
+          requested_step.value ->> 'objectType' as object_type,
+          requested_step.value ->> 'objectId' as object_id,
+          requested_step.value ->> 'operation' as operation,
+          requested_step.value -> 'payload' as payload
+        from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+      ),
+      prospective_expenses as (
+        select current_expense.payload
+        from public.tripmap_account_objects as current_expense
+        where current_expense.owner_id = current_user_id
+          and current_expense.trip_id = target_trip_id
+          and current_expense.object_type = 'ledger_expense'
+          and not current_expense.tombstone
+          and not exists (
+            select 1
+            from requested_ledger
+            where requested_ledger.object_type = 'ledger_expense'
+              and requested_ledger.object_id = current_expense.object_id
+          )
+        union all
+        select requested_ledger.payload
+        from requested_ledger
+        where requested_ledger.object_type = 'ledger_expense'
+          and requested_ledger.operation = 'upsert'
+      )
+      select distinct dependency.object_type || ':' || dependency.object_id
+      from (
+        select 'item'::text as object_type, item_ref.value #>> '{}' as object_id
+        from prospective_expenses as expense
+        cross join lateral pg_catalog.jsonb_array_elements(
+          case
+            when pg_catalog.jsonb_typeof(expense.payload -> 'itemIds') = 'array'
+              then expense.payload -> 'itemIds'
+            else '[]'::jsonb
+          end
+        ) as item_ref(value)
+        union all
+        select 'ticket_meta', expense.payload -> 'source' ->> 'sourceId'
+        from prospective_expenses as expense
+        where expense.payload -> 'source' ->> 'kind' = 'ticket'
+          and not exists (
+            select 1
+            from pg_catalog.jsonb_array_elements(
+              case
+                when pg_catalog.jsonb_typeof(expense.payload -> 'sourceLinks') = 'array'
+                  then expense.payload -> 'sourceLinks'
+                else '[]'::jsonb
+              end
+            ) as unavailable_link(value)
+            where unavailable_link.value ->> 'kind' = 'ticket'
+              and unavailable_link.value ->> 'sourceId' = expense.payload -> 'source' ->> 'sourceId'
+              and coalesce((unavailable_link.value ->> 'available')::boolean, true) = false
+          )
+        union all
+        select 'ticket_meta', source_link.value ->> 'sourceId'
+        from prospective_expenses as expense
+        cross join lateral pg_catalog.jsonb_array_elements(
+          case
+            when pg_catalog.jsonb_typeof(expense.payload -> 'sourceLinks') = 'array'
+              then expense.payload -> 'sourceLinks'
+            else '[]'::jsonb
+          end
+        ) as source_link(value)
+        where source_link.value ->> 'kind' = 'ticket'
+          and coalesce((source_link.value ->> 'available')::boolean, true)
+      ) as dependency
+      where dependency.object_id is not null
+      order by 1
+    loop
+      perform pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(current_user_id::text || ':' || lock_key, 0)
+      );
+    end loop;
+  end if;
 
   -- Lock every affected itinerary day after object locks and before mutation locks.
   if target_workflow_id in ('day.items.reorder@1', 'item.move@1') then
@@ -1379,6 +1653,21 @@ begin
     );
   end if;
 
+  if target_workflow_id = 'ledger.batch@1' and not tripmap_private.account_ledger_workflow_graph_is_valid(
+    current_user_id,
+    target_trip_id,
+    target_steps
+  ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'workflow_shape_invalid'
+    );
+  end if;
+
   if target_workflow_id = 'trip.import.commit@1' and exists (
     select 1
     from public.tripmap_account_objects as prior_trip_object
@@ -1541,6 +1830,25 @@ begin
        and has_current_object
        and current_object.payload ->> 'dayId' is distinct from step_payload ->> 'dayId' then
       move_detected := true;
+    end if;
+
+    if target_workflow_id = 'ledger.batch@1'
+       and step_operation = 'upsert'
+       and has_current_object
+       and (
+         current_object.tombstone
+         or step_payload -> 'createdAt' is distinct from current_object.payload -> 'createdAt'
+         or (step_payload ->> 'updatedAt')::numeric
+            <= (current_object.payload ->> 'updatedAt')::numeric
+       ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
     end if;
   end loop;
 

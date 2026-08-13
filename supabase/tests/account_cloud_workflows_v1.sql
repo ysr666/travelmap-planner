@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public, pg_temp;
 
-select plan(71);
+select plan(104);
 
 create function pg_temp.run_account_workflow(
   target_account_hash text,
@@ -177,6 +177,24 @@ select ok(
   ),
   'workflow receipts are not readable by browser roles'
 );
+select ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_ledger_timestamp_is_valid(text)',
+    'EXECUTE'
+  ),
+  'authenticated clients cannot execute the private ledger timestamp validator'
+);
+
+select ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_ledger_payload_is_valid(text,jsonb)',
+    'EXECUTE'
+  ),
+  'authenticated clients cannot execute the private ledger payload validator'
+);
+
 select ok(
   not pg_catalog.has_function_privilege(
     'authenticated',
@@ -401,7 +419,7 @@ select is(
     'orphan_ledger_trip',
     '[
       {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000283","objectType":"trip","objectId":"orphan_ledger_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"orphan_ledger_trip"}},
-      {"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000284","objectType":"ledger_expense","objectId":"orphan_expense","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"orphan_expense","tripId":"orphan_ledger_trip","payerParticipantId":"missing_person","splitShares":[{"participantId":"missing_person","weight":1}],"source":{"kind":"manual"}}}
+      {"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000284","objectType":"ledger_expense","objectId":"orphan_expense","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"orphan_expense","tripId":"orphan_ledger_trip","title":"Orphan","date":"2026-08-13","category":"other","status":"draft","splitMode":"equal","payerParticipantId":"missing_person","splitShares":[{"participantId":"missing_person","weight":1}],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}}
     ]'::jsonb
   ) ->> 'reason',
   'workflow_shape_invalid',
@@ -1291,6 +1309,383 @@ select is(
   ) ->> 'reason',
   'workflow_shape_invalid',
   'a workflow cannot bypass required Item structural fields'
+);
+
+reset role;
+
+select ok(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"ledger_draft_currency","tripId":"ledger_trip","title":"Draft","date":"2026-08-11","category":"food","status":"draft","currency":"GBP","splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  'a draft may retain its recognized currency before the amount is known'
+);
+
+select ok(
+  not tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"ledger_amount_without_currency","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"food","status":"draft","amountMinor":100,"splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  'an amount is never accepted without its currency'
+);
+
+select ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_ledger_workflow_graph_is_valid(uuid,text,jsonb)',
+    'EXECUTE'
+  ),
+  'authenticated clients cannot execute the private ledger graph validator'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000170',
+    'trip.import.commit@1',
+    'ledger_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000170","objectType":"trip","objectId":"ledger_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_trip","title":"Ledger trip"}},
+      {"stepId":"day","mutationId":"20000000-0000-4000-8000-000000000171","objectType":"day","objectId":"ledger_day","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_day","tripId":"ledger_trip","date":"2026-08-11","sortOrder":1}},
+      {"stepId":"item","mutationId":"20000000-0000-4000-8000-000000000172","objectType":"item","objectId":"ledger_item","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_item","tripId":"ledger_trip","dayId":"ledger_day","title":"Dinner","sortOrder":1,"ticketIds":[]}},
+      {"stepId":"ticket","mutationId":"20000000-0000-4000-8000-000000000173","objectType":"ticket_meta","objectId":"ledger_ticket","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"createdAt":1,"fileType":"pdf","id":"ledger_ticket","tripId":"ledger_trip","title":"Receipt","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all"},"size":1024,"storageMode":"copy","ticketCategory":"other","updatedAt":1}}
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'the ledger fixture imports its parent travel graph atomically'
+);
+
+select is(
+  public.account_apply_object_mutation_v1(
+    1,
+    'bd7662a5eeb41614e720d477abfcb227',
+    '20000000-0000-4000-8000-000000000174',
+    'ledger_trip',
+    'ledger_settings',
+    'ledger_settings_bypass',
+    'upsert',
+    0,
+    1,
+    'pgtap_device',
+    '{"id":"ledger_settings_bypass","tripId":"ledger_trip","homeCurrency":"CNY","tripCurrency":"GBP","settlementCurrency":"CNY","createdAt":1,"updatedAt":1}'::jsonb
+  ) ->> 'reason',
+  'workflow_required',
+  'a strict ledger payload still cannot bypass the registered workflow'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000175',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[
+      {"stepId":"settings","mutationId":"20000000-0000-4000-8000-000000000175","objectType":"ledger_settings","objectId":"ledger_settings","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_settings","tripId":"ledger_trip","homeCurrency":"CNY","tripCurrency":"GBP","settlementCurrency":"CNY","createdAt":1,"updatedAt":1}},
+      {"stepId":"participant","mutationId":"20000000-0000-4000-8000-000000000176","objectType":"ledger_participant","objectId":"ledger_person","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_person","tripId":"ledger_trip","displayName":"Me","isSelf":true,"source":"manual","createdAt":1,"updatedAt":1}},
+      {"stepId":"budget","mutationId":"20000000-0000-4000-8000-000000000177","objectType":"ledger_budget","objectId":"ledger_budget","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_budget","tripId":"ledger_trip","scope":"trip","amountMinor":100000,"currency":"GBP","createdAt":1,"updatedAt":1}}
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'settings, self, and trip budget initialize in one ledger workflow'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and trip_id = 'ledger_trip'
+      and object_type in ('ledger_settings', 'ledger_participant', 'ledger_budget')
+      and not tombstone
+  ),
+  3::bigint,
+  'ledger initialization persists the complete three-object baseline'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000178',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"settings","mutationId":"20000000-0000-4000-8000-000000000178","objectType":"ledger_settings","objectId":"ledger_settings_second","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_settings_second","tripId":"ledger_trip","homeCurrency":"CNY","tripCurrency":"GBP","settlementCurrency":"CNY","createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a second settings object is rejected against the complete ledger graph'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000179',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"settings","mutationId":"20000000-0000-4000-8000-000000000179","objectType":"ledger_settings","objectId":"ledger_settings","operation":"delete","expectedRevision":1,"objectSchemaVersion":1}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'ledger settings cannot be deleted through a direct batch'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000180',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"budget","mutationId":"20000000-0000-4000-8000-000000000180","objectType":"ledger_budget","objectId":"ledger_budget_unknown","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_budget_unknown","tripId":"ledger_trip","scope":"category","category":"food","amountMinor":1000,"currency":"GBP","createdAt":1,"updatedAt":1,"apiKey":"forbidden"}}]'::jsonb
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'unknown or sensitive ledger fields are rejected before locks and writes'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000181',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000181","objectType":"ledger_expense","objectId":"ledger_expense_numeric_source","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_numeric_source","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":100,"currency":"GBP","splitMode":"equal","splitShares":[],"source":{"kind":"manual","sourceId":1},"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'numeric values cannot impersonate string ledger identifiers'
+);
+
+reset role;
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_settings',
+    '{"id":"invalid_settings","tripId":"ledger_trip","tripCurrency":"GBP","settlementCurrency":"CNY","createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger settings require every currency as a JSON string'
+);
+
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"invalid_expense_category","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","status":"draft","splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger expenses require a typed category instead of accepting SQL null semantics'
+);
+
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"invalid_source_link","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"other","status":"draft","splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"sourceLinks":[{"id":"link_1","kind":"ticket","sourceId":"ledger_ticket"}],"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger source links require every nested enum field'
+);
+
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"invalid_line_item","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"other","status":"draft","splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"lineItems":[{"id":"line_1","title":123,"kind":"base","category":"other","amountMinor":100,"currency":"GBP"}],"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger line items reject scalar coercion for required strings'
+);
+
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"invalid_exchange_rate","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"other","status":"draft","splitMode":"equal","splitShares":[],"source":{"kind":"manual"},"exchangeRate":{"requestedDate":"2026-08-11","effectiveDate":"2026-08-11","baseCurrency":"GBP","tripCurrency":"GBP","homeCurrency":"CNY","rateToTrip":"1","rateToHome":"9","provider":"manual"},"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger exchange rates require a typed observation timestamp'
+);
+
+select is(
+  tripmap_private.account_ledger_payload_is_valid(
+    'ledger_expense',
+    '{"id":"invalid_split_weight","tripId":"ledger_trip","title":"Invalid","date":"2026-08-11","category":"other","status":"draft","splitMode":"weights","splitShares":[{"participantId":"ledger_person","weight":9007199254740992}],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}'::jsonb
+  ),
+  false,
+  'ledger split weights remain inside the JavaScript safe-integer boundary'
+);
+
+set local role authenticated;
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000182',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000182","objectType":"ledger_expense","objectId":"ledger_expense_missing_person","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_missing_person","tripId":"ledger_trip","title":"Missing person","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":100,"currency":"GBP","payerParticipantId":"missing_person","splitMode":"equal","splitShares":[{"participantId":"missing_person","weight":1}],"source":{"kind":"manual"},"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'an expense cannot reference a missing participant'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000183',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000183","objectType":"ledger_expense","objectId":"ledger_expense_missing_item","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_missing_item","tripId":"ledger_trip","title":"Missing item","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":100,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"manual"},"itemIds":["missing_item"],"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'an expense cannot reference a missing itinerary item'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000184',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000184","objectType":"ledger_expense","objectId":"ledger_expense_missing_ticket","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_missing_ticket","tripId":"ledger_trip","title":"Missing ticket","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":100,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"missing_ticket"},"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'an expense cannot reference a missing Ticket object'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000185',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000185","objectType":"ledger_expense","objectId":"ledger_expense_missing_original","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_missing_original","tripId":"ledger_trip","title":"Missing original","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":-100,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"manual"},"originalExpenseId":"missing_original","createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a refund cannot reference a missing original expense'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000186',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[
+      {"stepId":"expense_one","mutationId":"20000000-0000-4000-8000-000000000186","objectType":"ledger_expense","objectId":"ledger_expense_one","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_one","tripId":"ledger_trip","title":"Ticket dinner","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":2500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"ledger_ticket","fingerprint":"ticket_fingerprint_1"},"itemIds":["ledger_item"],"createdAt":1,"updatedAt":1}},
+      {"stepId":"expense_two","mutationId":"20000000-0000-4000-8000-000000000187","objectType":"ledger_expense","objectId":"ledger_expense_two","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_two","tripId":"ledger_trip","title":"Manual dinner","date":"2026-08-12","category":"food","status":"confirmed","amountMinor":1800,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"manual","fingerprint":"manual_fingerprint_1"},"createdAt":1,"updatedAt":1}}
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'valid linked expenses commit atomically in one ledger workflow'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and trip_id = 'ledger_trip'
+      and object_type = 'ledger_expense'
+      and not tombstone
+  ),
+  2::bigint,
+  'the successful ledger batch persists both expenses'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000188',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[
+      {"stepId":"expense_one","mutationId":"20000000-0000-4000-8000-000000000188","objectType":"ledger_expense","objectId":"ledger_expense_one","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_one","tripId":"ledger_trip","title":"Changed one","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":2500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"ledger_ticket","fingerprint":"ticket_fingerprint_1"},"itemIds":["ledger_item"],"createdAt":1,"updatedAt":2}},
+      {"stepId":"expense_two","mutationId":"20000000-0000-4000-8000-000000000189","objectType":"ledger_expense","objectId":"ledger_expense_two","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_two","tripId":"ledger_trip","title":"Changed two","date":"2026-08-12","category":"food","status":"confirmed","amountMinor":1800,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"manual","fingerprint":"manual_fingerprint_1"},"createdAt":1,"updatedAt":2}}
+    ]'::jsonb
+  ) ->> 'status',
+  'conflict',
+  'one stale revision conflicts the complete ledger batch'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_object_agg(object_id, payload -> 'title' order by object_id)
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and object_id in ('ledger_expense_one', 'ledger_expense_two')
+  ),
+  '{"ledger_expense_one":"Ticket dinner","ledger_expense_two":"Manual dinner"}'::jsonb,
+  'a ledger conflict writes none of the otherwise valid steps'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000190',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense_one","mutationId":"20000000-0000-4000-8000-000000000190","objectType":"ledger_expense","objectId":"ledger_expense_one","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_one","tripId":"ledger_trip","title":"Stale timestamp","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":2500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"ledger_ticket","fingerprint":"ticket_fingerprint_1"},"itemIds":["ledger_item"],"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'ledger updates require a strictly later domain timestamp'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000195',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense_one","mutationId":"20000000-0000-4000-8000-000000000195","objectType":"ledger_expense","objectId":"ledger_expense_one","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_one","tripId":"ledger_trip","title":"Rewritten creation","date":"2026-08-11","category":"food","status":"confirmed","amountMinor":2500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"ledger_ticket","fingerprint":"ticket_fingerprint_1"},"itemIds":["ledger_item"],"createdAt":2,"updatedAt":2}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'ledger updates cannot rewrite the original domain creation timestamp'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000191',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"participant","mutationId":"20000000-0000-4000-8000-000000000191","objectType":"ledger_participant","objectId":"ledger_person","operation":"delete","expectedRevision":1,"objectSchemaVersion":1}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a participant referenced by expenses cannot be deleted'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000192',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000192","objectType":"ledger_expense","objectId":"ledger_expense_duplicate","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_duplicate","tripId":"ledger_trip","title":"Duplicate","date":"2026-08-12","category":"food","status":"confirmed","amountMinor":1800,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"manual","fingerprint":"manual_fingerprint_1"},"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'the complete graph rejects a duplicate source fingerprint'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000193',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000193","objectType":"ledger_expense","objectId":"ledger_expense_unavailable_ticket","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_unavailable_ticket","tripId":"ledger_trip","title":"Historical source","date":"2026-08-12","category":"food","status":"confirmed","amountMinor":500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"deleted_ticket"},"sourceLinks":[{"id":"deleted_ticket_link","kind":"ticket","sourceId":"deleted_ticket","role":"payment_receipt","available":false}],"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'an explicitly unavailable Ticket source remains as audit metadata without a live dependency'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000194',
+    'ledger.batch@1',
+    'ledger_trip',
+    '[{"stepId":"expense","mutationId":"20000000-0000-4000-8000-000000000194","objectType":"ledger_expense","objectId":"ledger_expense_mixed_ticket","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"ledger_expense_mixed_ticket","tripId":"ledger_trip","title":"Mixed source","date":"2026-08-12","category":"food","status":"confirmed","amountMinor":500,"currency":"GBP","payerParticipantId":"ledger_person","splitMode":"equal","splitShares":[{"participantId":"ledger_person","weight":1}],"source":{"kind":"ticket","sourceId":"deleted_ticket"},"sourceLinks":[{"id":"deleted_ticket_false","kind":"ticket","sourceId":"deleted_ticket","role":"other","available":false},{"id":"deleted_ticket_true","kind":"ticket","sourceId":"deleted_ticket","role":"payment_receipt","available":true}],"createdAt":1,"updatedAt":1}}]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'an available Ticket link cannot be hidden by a second unavailable marker'
 );
 
 reset role;

@@ -19,7 +19,7 @@ import {
   createLedgerBudget,
   createLedgerExpense,
   createLedgerParticipant,
-  createLedgerSettings,
+  createLedgerParticipants,
   deleteLedgerBudget,
   deleteLedgerExpense,
   deleteLedgerParticipant,
@@ -32,6 +32,7 @@ import {
   updateLedgerBudget,
   updateLedgerExpense,
   updateLedgerParticipant,
+  initializeLedger,
 } from '../db'
 import { Button } from '../components/ui/Button'
 import { LedgerReviewQueue } from '../components/ledger/LedgerReviewQueue'
@@ -209,9 +210,16 @@ function LedgerSetup({ trip, onCreated }: { trip: Trip; onCreated: () => Promise
     if (amountMinor == null || amountMinor <= 0) return setError('请填写大于 0 的旅行总预算。')
     setBusy(true); setError('')
     try {
-      await createLedgerSettings({ homeCurrency: normalizeCurrencyCode(homeCurrency), settlementCurrency: normalizeCurrencyCode(homeCurrency), tripCurrency: normalizeCurrencyCode(tripCurrency), tripId: trip.id })
-      await createLedgerParticipant({ displayName: '我', isSelf: true, source: 'manual', tripId: trip.id })
-      await createLedgerBudget({ amountMinor, currency: normalizeCurrencyCode(tripCurrency), scope: 'trip', tripId: trip.id })
+      await initializeLedger({
+        budget: { amountMinor, currency: normalizeCurrencyCode(tripCurrency), scope: 'trip', tripId: trip.id },
+        participant: { displayName: '我', isSelf: true, source: 'manual', tripId: trip.id },
+        settings: {
+          homeCurrency: normalizeCurrencyCode(homeCurrency),
+          settlementCurrency: normalizeCurrencyCode(homeCurrency),
+          tripCurrency: normalizeCurrencyCode(tripCurrency),
+          tripId: trip.id,
+        },
+      })
       await onCreated()
     } catch (caught) { setError(getErrorMessage(caught)) } finally { setBusy(false) }
   }
@@ -624,11 +632,28 @@ function ParticipantsView({ participants, tripId, onChanged }: { participants: L
     if (!displayName.trim() || participants.some((participant) => participant.displayName.trim() === displayName.trim())) return
     await createLedgerParticipant({ displayName: displayName.trim(), source, sourceId, tripId }); await onChanged()
   }
+  async function addMany(candidates: Array<{ displayName: string; source: NonNullable<LedgerParticipant['source']>; sourceId: string }>) {
+    const existingNames = new Set(participants.map((participant) => participant.displayName.trim()))
+    const existingSources = new Set(participants
+      .filter((participant) => participant.source && participant.sourceId)
+      .map((participant) => `${participant.source}:${participant.sourceId}`))
+    const next = candidates.filter((candidate, index) => (
+      candidate.displayName.trim()
+      && !existingNames.has(candidate.displayName.trim())
+      && !existingSources.has(`${candidate.source}:${candidate.sourceId}`)
+      && candidates.findIndex((value) => (
+        value.displayName.trim() === candidate.displayName.trim()
+        || `${value.source}:${value.sourceId}` === `${candidate.source}:${candidate.sourceId}`
+      )) === index
+    ))
+    await createLedgerParticipants(next.map((candidate) => ({ ...candidate, displayName: candidate.displayName.trim(), tripId })))
+    await onChanged()
+  }
   async function importShared() {
-    try { const state = await loadOwnerSharedTripState(tripId); if (!state.configured || !state.signedIn) throw new Error('请先登录并建立同行共享。'); for (const member of state.members) await add(member.displayName || member.email || '同行人', 'shared_trip', member.userId); setMessage('已导入可用的同行共享成员。') } catch (caught) { setMessage(getErrorMessage(caught)) }
+    try { const state = await loadOwnerSharedTripState(tripId); if (!state.configured || !state.signedIn) throw new Error('请先登录并建立同行共享。'); await addMany(state.members.map((member) => ({ displayName: member.displayName || member.email || '同行人', source: 'shared_trip', sourceId: member.userId }))); setMessage('已导入可用的同行共享成员。') } catch (caught) { setMessage(getErrorMessage(caught)) }
   }
   async function importTravelers() {
-    try { const travelers = await listTravelerProfiles(); for (const traveler of travelers) await add(traveler.data.displayName, 'traveler_profile', traveler.id); setMessage('已从已解锁的旅行资料库导入显示名。') } catch (caught) { setMessage(getErrorMessage(caught)) }
+    try { const travelers = await listTravelerProfiles(); await addMany(travelers.map((traveler) => ({ displayName: traveler.data.displayName, source: 'traveler_profile', sourceId: traveler.id }))); setMessage('已从已解锁的旅行资料库导入显示名。') } catch (caught) { setMessage(getErrorMessage(caught)) }
   }
   return (
     <section className="space-y-4"><Card className="space-y-3" variant="grouped"><FormField label="同行人姓名" onChange={setName} value={name} /><Button className="w-full" icon={<UserPlus className="size-4" />} onClick={async () => { await add(name, 'manual'); setName('') }}>添加同行人</Button><div className="grid grid-cols-2 gap-2"><Button onClick={() => void importShared()} variant="secondary">导入共享成员</Button><Button onClick={() => void importTravelers()} variant="secondary">导入旅行者</Button></div>{message ? <p className="text-xs tm-muted">{message}</p> : null}</Card>{participants.map((participant) => <Card className="flex items-center gap-3" key={participant.id} variant="grouped"><UsersRound className="size-5 text-primary" /><input aria-label={`${participant.displayName} 姓名`} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" defaultValue={participant.displayName} onBlur={async (event) => { const next = event.target.value.trim(); if (next && next !== participant.displayName) { await updateLedgerParticipant(participant.id, { displayName: next }); await onChanged() } }} /><span className="text-xs tm-muted">{participant.isSelf ? '本人' : ''}</span>{!participant.isSelf ? <button aria-label={`删除 ${participant.displayName}`} className="flex size-10 items-center justify-center text-red-600" onClick={async () => { try { await deleteLedgerParticipant(participant.id); await onChanged() } catch (caught) { setMessage(getErrorMessage(caught)) } }} type="button"><Trash2 className="size-4" /></button> : null}</Card>)}</section>

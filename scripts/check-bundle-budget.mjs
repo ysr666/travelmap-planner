@@ -19,6 +19,7 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   ['OCR runtime', /(?:^|[-_.])ocr(?:[-_.]|$)|tesseract/i],
   ['archive parser', /jszip/i],
   ['trip import commit runtime', /tripPlanImportRepository/i],
+  ['ledger mutation runtime', /ledgerMutationRepository/i],
   ['Account workflow runtime', /workflowMutationRuntime/i],
 ]
 const FORBIDDEN_PRECACHE_ASSETS = [
@@ -35,6 +36,7 @@ const FORBIDDEN_PRECACHE_ASSETS = [
   ['privacy settings detail', /^assets\/SettingsPrivacyPage-.+\.js$/],
   ['route settings detail', /^assets\/SettingsRoutePage-.+\.js$/],
   ['trip import commit runtime', /^assets\/tripPlanImportRepository-.+\.js$/],
+  ['ledger mutation runtime', /^assets\/ledgerMutationRepository-.+\.js$/],
   ['Account workflow runtime', /^assets\/workflowMutationRuntime-.+\.js$/],
 ]
 const REQUIRED_PRECACHE_ASSETS = [
@@ -50,6 +52,7 @@ const REQUIRED_PRECACHE_ASSETS = [
 const RUNTIME_ASSET_CACHE_NAME = 'tripmap-on-demand-assets-v1'
 const PROVIDER_CLIENT_CORE_MANIFEST_KEY = 'src/lib/providerProxyClientCore.ts'
 const TRIP_IMPORT_REPOSITORY_MANIFEST_KEY = 'src/db/tripPlanImportRepository.ts'
+const LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY = 'src/db/ledgerMutationRepository.ts'
 
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
 const entries = Object.entries(manifest).filter(([, chunk]) => chunk.isEntry)
@@ -156,6 +159,15 @@ if (!tripImportRepositoryChunk) {
   failures.push('Trip import commit runtime is no longer behind a dynamic import')
 }
 
+const ledgerMutationRepositoryChunk = manifest[LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY]
+if (!ledgerMutationRepositoryChunk) {
+  failures.push('Ledger mutation runtime is not emitted as its own on-demand chunk')
+} else if (!Object.values(manifest).some((chunk) =>
+  chunk.dynamicImports?.includes(LEDGER_MUTATION_REPOSITORY_MANIFEST_KEY),
+)) {
+  failures.push('Ledger mutation runtime is no longer behind a dynamic import')
+}
+
 const serviceWorkerSource = await readFile(path.join(DIST_DIR, 'sw.js'), 'utf8')
 const precacheUrls = extractPrecacheUrls(serviceWorkerSource)
 const duplicatePrecacheUrls = precacheUrls.filter(
@@ -202,6 +214,9 @@ if (providerClientCoreChunk && precacheUrls.includes(providerClientCoreChunk.fil
 }
 if (tripImportRepositoryChunk && precacheUrls.includes(tripImportRepositoryChunk.file)) {
   failures.push(`Trip import commit runtime must be cached on demand (${tripImportRepositoryChunk.file})`)
+}
+if (ledgerMutationRepositoryChunk && precacheUrls.includes(ledgerMutationRepositoryChunk.file)) {
+  failures.push(`Ledger mutation runtime must be cached on demand (${ledgerMutationRepositoryChunk.file})`)
 }
 
 if (!serviceWorkerSource.includes(RUNTIME_ASSET_CACHE_NAME)) {

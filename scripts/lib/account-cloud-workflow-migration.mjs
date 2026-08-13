@@ -20,9 +20,11 @@ const REQUIRED_FRAGMENTS = [
   'create or replace function tripmap_private.account_payload_shape_is_safe',
   'create or replace function tripmap_private.account_workflow_payload_is_safe',
   'create or replace function tripmap_private.account_import_workflow_shape_is_valid',
+  'create or replace function tripmap_private.account_ledger_workflow_graph_is_valid',
   'not tripmap_private.account_workflow_payload_is_safe(step_payload)',
   'not tripmap_private.account_import_workflow_shape_is_valid',
   'not tripmap_private.account_ticket_meta_payload_is_valid(step_payload)',
+  'not tripmap_private.account_ledger_payload_is_valid(step_object_type, step_payload)',
   "step_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'",
   "step_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
   "pg_catalog.jsonb_typeof(step_payload -> 'ticketIds') is distinct from 'array'",
@@ -33,6 +35,7 @@ const REQUIRED_FRAGMENTS = [
   'pg_catalog.pg_advisory_xact_lock',
   'pg_catalog.pg_advisory_xact_lock_shared',
   "':trip-lifecycle:'",
+  "':ledger:'",
   "':item-day:'",
   'structural_item_count <> step_count',
   'moved_item_count <> 1',
@@ -51,6 +54,9 @@ const REQUIRED_FRAGMENTS = [
   'insert into public.tripmap_account_objects',
   "target_workflow_id = 'trip.repair.apply@1'",
   "or step_operation <> 'upsert'",
+  "step_object_type = 'ledger_settings' and step_operation = 'delete'",
+  "current_expense.object_type = 'ledger_expense'",
+  "step_payload -> 'createdAt' is distinct from current_object.payload -> 'createdAt'",
 ]
 
 export function validateAccountCloudWorkflowMigration({ contractSource, migrationSql }) {
@@ -127,8 +133,24 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
   if (!/target_workflow_id\s*=\s*'trip\.import\.commit@1'\s+then[\s\S]{0,260}pg_advisory_xact_lock\s*\([\s\S]{0,180}:trip-lifecycle:[\s\S]{0,220}else[\s\S]{0,180}pg_advisory_xact_lock_shared/i.test(privateFunction)) {
     throw new Error('The import workflow must exclusively lock the trip lifecycle before ordinary workflow locks.')
   }
+  const ledgerGraphFunction = extractFunctionBody(
+    migrationSql,
+    'tripmap_private.account_ledger_workflow_graph_is_valid',
+  )
+  if (
+    !/security\s+invoker/i.test(ledgerGraphFunction)
+    || /security\s+definer/i.test(ledgerGraphFunction)
+    || !/prospective_expenses/i.test(ledgerGraphFunction)
+    || !/account_ledger_payload_is_valid/i.test(ledgerGraphFunction)
+    || !/object_type\s*=\s*'trip'/i.test(ledgerGraphFunction)
+    || !/object_type\s*=\s*'ticket_meta'/i.test(ledgerGraphFunction)
+    || !/revoke\s+all\s+on\s+function\s+tripmap_private\.account_ledger_workflow_graph_is_valid\s*\(\s*uuid\s*,\s*text\s*,\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)
+  ) {
+    throw new Error('The ledger workflow graph validator must remain complete and private.')
+  }
   const normalizedPrivateFunction = privateFunction.toLowerCase()
   const tripLifecycleLockMarker = normalizedPrivateFunction.indexOf(':trip-lifecycle:')
+  const ledgerLockMarker = normalizedPrivateFunction.indexOf(':ledger:')
   const objectLockMarker = normalizedPrivateFunction.indexOf('-- match the single-object rpc lock order')
   const structuralDayLockMarker = normalizedPrivateFunction.indexOf(
     '-- lock every affected itinerary day after object locks and before mutation locks',
@@ -141,6 +163,8 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
       .test(privateFunction)
     ||
     tripLifecycleLockMarker < 0
+    || ledgerLockMarker <= tripLifecycleLockMarker
+    || objectLockMarker <= ledgerLockMarker
     || objectLockMarker <= tripLifecycleLockMarker
     || structuralDayLockMarker <= objectLockMarker
     || mutationLockMarker <= structuralDayLockMarker
@@ -204,6 +228,7 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
     boundedPayloadTraversal: true,
     deterministicReplayLocks: true,
     importGraphAtomicity: true,
+    ledgerGraphAtomicity: true,
     privateReceiptLedger: true,
     structuralGraphLocking: true,
     ticketBindingCompleteness: true,

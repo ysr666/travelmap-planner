@@ -25,8 +25,16 @@ const REQUIRED_FRAGMENTS = [
   "'workflow_required'",
   'account_payload_has_forbidden_key',
   'create or replace function tripmap_private.account_ticket_meta_payload_is_valid',
+  'create or replace function tripmap_private.account_ledger_timestamp_is_valid',
+  'create or replace function tripmap_private.account_ledger_payload_is_valid',
+  "pg_catalog.jsonb_typeof(target_payload -> 'homeCurrency') is distinct from 'string'",
+  "pg_catalog.jsonb_typeof(target_payload -> 'category') is distinct from 'string'",
+  "pg_catalog.jsonb_typeof(source_link.value -> 'kind') is distinct from 'string'",
+  "pg_catalog.jsonb_typeof(line_item.value -> 'title') is distinct from 'string'",
+  "pg_catalog.jsonb_typeof(target_payload -> 'exchangeRate' -> 'fetchedAt') is distinct from 'string'",
   'create or replace function tripmap_private.account_redact_ticket_meta_payload',
   'not tripmap_private.account_ticket_meta_payload_is_valid(target_payload)',
+  'not tripmap_private.account_ledger_payload_is_valid(target_object_type, target_payload)',
   "target_payload ->> 'fileType' not in ('image', 'pdf', 'other')",
   "target_payload ->> 'scope' = 'item'",
   "pg_catalog.jsonb_typeof(visibility -> 'mode') is distinct from 'string'",
@@ -175,6 +183,35 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   if (!/revoke\s+all\s+on\s+function\s+tripmap_private\.account_redact_ticket_meta_payload\s*\(\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)) {
     throw new Error('The legacy Ticket redactor must remain inaccessible to browser roles.')
   }
+  const ledgerValidator = extractFunctionBody(
+    migrationSql,
+    'tripmap_private.account_ledger_payload_is_valid',
+  )
+  if (
+    !/security\s+invoker/i.test(ledgerValidator)
+    || /security\s+definer/i.test(ledgerValidator)
+    || !/immutable/i.test(ledgerValidator)
+    || !/strict/i.test(ledgerValidator)
+    || !/revoke\s+all\s+on\s+function\s+tripmap_private\.account_ledger_payload_is_valid\s*\(\s*text\s*,\s*jsonb\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)
+  ) {
+    throw new Error('The ledger payload validator must remain strict, private, and non-definer.')
+  }
+  const ledgerTimestampValidator = extractFunctionBody(
+    migrationSql,
+    'tripmap_private.account_ledger_timestamp_is_valid',
+  )
+  if (
+    !/security\s+invoker/i.test(ledgerTimestampValidator)
+    || /security\s+definer/i.test(ledgerTimestampValidator)
+    || !/immutable/i.test(ledgerTimestampValidator)
+    || !/strict/i.test(ledgerTimestampValidator)
+    || !/revoke\s+all\s+on\s+function\s+tripmap_private\.account_ledger_timestamp_is_valid\s*\(\s*text\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i.test(migrationSql)
+  ) {
+    throw new Error('The ledger timestamp validator must remain deterministic and private.')
+  }
+  if (!/target_object_type\s+in\s*\(\s*'ledger_settings'\s*,\s*'ledger_participant'\s*,\s*'ledger_budget'\s*,\s*'ledger_expense'\s*\)[\s\S]{0,2500}'workflow_required'/i.test(privateFunction)) {
+    throw new Error('Ledger objects must require the registered atomic workflow.')
+  }
 
   const legacyWrite = /(?:update\s+public\.cloud_sync_objects|delete\s+from\s+public\.cloud_sync_objects|truncate\s+(?:table\s+)?public\.cloud_sync_objects)/i
   if (legacyWrite.test(migrationSql)) {
@@ -182,6 +219,7 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   }
 
   return {
+    ledgerWorkflowBoundary: true,
     objectTypeCount: contractTypes.length,
     receiptLedger: true,
     realtimePublished: true,

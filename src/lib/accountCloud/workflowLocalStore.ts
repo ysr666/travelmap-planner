@@ -228,14 +228,24 @@ export async function createOptimisticAccountWorkflowIntent<T>({
             database.tripReplanEvents,
             database.tripReplanRecords,
           ]
+        : request.workflowId === 'ledger.batch@1'
+          ? [
+              database.itineraryItems,
+              database.ticketMetas,
+              database.trips,
+              database.ledgerSettings,
+              database.ledgerParticipants,
+              database.ledgerBudgets,
+              database.ledgerExpenses,
+            ]
     : []
-  const tables = [
+  const tables = [...new Map([
     database.accountMutationJournal,
     database.accountObjectRevisions,
     database.accountWorkflowJournal,
     ...structuralTables,
     ...objectTables,
-  ]
+  ].map((table) => [table.name, table])).values()]
 
   return database.transaction('rw', tables, async () => {
     assertActiveWorkflowAccountContext(accountHash, database)

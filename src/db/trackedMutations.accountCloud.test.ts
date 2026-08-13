@@ -16,6 +16,13 @@ import {
 import { db } from './database'
 import * as repo from './repositories'
 import {
+  createLedgerBudget,
+  createLedgerExpense,
+  createLedgerExpenseIdempotent,
+  initializeLedger,
+  updateLedgerExpense,
+} from './ledgerTrackedMutations'
+import {
   createDay,
   createItineraryItem,
   createTicketMeta,
@@ -206,6 +213,257 @@ describe('tracked mutations account-cloud cutover', () => {
     await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([
       expect.objectContaining({ optimisticResolution: 'rolled_back', status: 'conflict' }),
     ])
+  })
+
+  it('commits ledger initialization and later expense updates only through the registered workflow', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+
+    const initialized = await initializeLedger({
+      budget: { amountMinor: 100_000, currency: 'GBP', scope: 'trip', tripId: trip.id },
+      participant: { displayName: 'Me', isSelf: true, source: 'manual', tripId: trip.id },
+      settings: {
+        homeCurrency: 'CNY',
+        settlementCurrency: 'CNY',
+        tripCurrency: 'GBP',
+        tripId: trip.id,
+      },
+    })
+    const expense = await createLedgerExpense({
+      amountMinor: 2_500,
+      category: 'food',
+      currency: 'GBP',
+      date: '2026-08-11',
+      payerParticipantId: initialized.participant.id,
+      source: { fingerprint: 'receipt_1', kind: 'manual' },
+      splitMode: 'equal',
+      splitShares: [{ participantId: initialized.participant.id, weight: 1 }],
+      status: 'confirmed',
+      title: 'Dinner',
+      tripId: trip.id,
+    })
+    const updated = await updateLedgerExpense(expense.id, { title: 'Dinner updated' })
+
+    expect(updated).toMatchObject({ title: 'Dinner updated' })
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(3)
+    const requests = mocks.workflowCommit.mock.calls.map(([request]) => request as AccountWorkflowRequestV1)
+    expect(requests.map((request) => request.workflowId)).toEqual([
+      'ledger.batch@1',
+      'ledger.batch@1',
+      'ledger.batch@1',
+    ])
+    expect(requests[0].steps.map((step) => step.objectType)).toEqual([
+      'ledger_settings',
+      'ledger_participant',
+      'ledger_budget',
+    ])
+    expect(requests[0].steps.every((step) => step.expectedRevision === 0)).toBe(true)
+    expect(requests[1].steps).toEqual([
+      expect.objectContaining({ expectedRevision: 0, objectType: 'ledger_expense' }),
+    ])
+    expect(requests[2].steps).toEqual([
+      expect.objectContaining({ expectedRevision: 1, objectType: 'ledger_expense' }),
+    ])
+    await expect(db.accountObjectRevisions.get(`ledger_expense:${expense.id}`)).resolves.toMatchObject({
+      revision: 2,
+    })
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+  })
+
+  it('rolls back an optimistic ledger batch when the server reports a conflict', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const initialized = await initializeLedger({
+      budget: { amountMinor: 100_000, currency: 'GBP', scope: 'trip', tripId: trip.id },
+      participant: { displayName: 'Me', isSelf: true, source: 'manual', tripId: trip.id },
+      settings: {
+        homeCurrency: 'CNY',
+        settlementCurrency: 'CNY',
+        tripCurrency: 'GBP',
+        tripId: trip.id,
+      },
+    })
+    mocks.workflowCommit.mockImplementationOnce(async (request: AccountWorkflowRequestV1) => ({
+      batchMutationId: request.batchMutationId,
+      conflicts: [{
+        currentObject: null,
+        currentRevision: 0,
+        mutationId: request.steps[0].mutationId,
+        objectId: request.steps[0].objectId,
+        objectType: request.steps[0].objectType,
+        stepId: request.steps[0].stepId,
+      }],
+      reason: 'revision_mismatch' as const,
+      schemaVersion: 1 as const,
+      status: 'conflict' as const,
+      tripId: request.tripId,
+      workflowId: request.workflowId,
+    }))
+
+    await expect(createLedgerExpense({
+      amountMinor: 2_500,
+      category: 'food',
+      currency: 'GBP',
+      date: '2026-08-11',
+      payerParticipantId: initialized.participant.id,
+      source: { kind: 'manual' },
+      splitMode: 'equal',
+      splitShares: [{ participantId: initialized.participant.id, weight: 1 }],
+      status: 'confirmed',
+      title: 'Dinner',
+      tripId: trip.id,
+    })).rejects.toMatchObject({ code: 'conflict' })
+
+    await expect(db.ledgerExpenses.where('tripId').equals(trip.id).count()).resolves.toBe(0)
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([
+      expect.objectContaining({ optimisticResolution: 'rolled_back', status: 'conflict' }),
+    ])
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+  })
+
+  it('falls back before mutation when the parent trip has no V2 revision', async () => {
+    const trip = await repo.createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'Legacy UK',
+    })
+    mocks.workflowCommit.mockClear()
+
+    await initializeLedger({
+      budget: { amountMinor: 100_000, currency: 'GBP', scope: 'trip', tripId: trip.id },
+      participant: { displayName: 'Me', isSelf: true, source: 'manual', tripId: trip.id },
+      settings: {
+        homeCurrency: 'CNY',
+        settlementCurrency: 'CNY',
+        tripCurrency: 'GBP',
+        tripId: trip.id,
+      },
+    })
+
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+    const outbox = await db.syncOutbox.toArray()
+    expect(outbox.map((entry) => entry.objectType).sort()).toEqual([
+      'ledger_budget',
+      'ledger_participant',
+      'ledger_settings',
+    ])
+  })
+
+  it('falls back when any existing ledger dependency is still on the legacy path', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    await db.ledgerParticipants.put({
+      createdAt: 1,
+      displayName: 'Legacy companion',
+      id: 'legacy_participant',
+      source: 'manual',
+      tripId: trip.id,
+      updatedAt: 1,
+    })
+    const tripUpdatedAt = trip.updatedAt
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+
+    const budget = await createLedgerBudget({
+      amountMinor: 10_000,
+      category: 'food',
+      currency: 'GBP',
+      scope: 'category',
+      tripId: trip.id,
+    })
+
+    expect(budget).toMatchObject({ category: 'food' })
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.syncOutbox.toArray()).resolves.toEqual([
+      expect.objectContaining({ objectId: budget.id, objectType: 'ledger_budget' }),
+    ])
+    await expect(db.trips.get(trip.id)).resolves.toMatchObject({ updatedAt: tripUpdatedAt })
+  })
+
+  it('keeps idempotent recovery queued until the existing expense has a trusted V2 revision', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const input = {
+      amountMinor: 1_200,
+      category: 'food' as const,
+      currency: 'GBP',
+      date: '2026-08-11',
+      source: { fingerprint: 'legacy_receipt', kind: 'manual' as const },
+      splitMode: 'equal' as const,
+      splitShares: [],
+      status: 'confirmed' as const,
+      title: 'Legacy dinner',
+      tripId: trip.id,
+    }
+    await db.ledgerExpenses.put({
+      ...input,
+      createdAt: 1,
+      id: 'legacy_expense',
+      updatedAt: 1,
+    })
+    await db.syncOutbox.clear()
+
+    const result = await createLedgerExpenseIdempotent(input)
+
+    expect(result).toMatchObject({ created: false, record: { id: 'legacy_expense' } })
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.syncOutbox.toArray()).resolves.toEqual([
+      expect.objectContaining({ objectId: 'legacy_expense', objectType: 'ledger_expense' }),
+    ])
+  })
+
+  it('coalesces concurrent idempotent expense creates onto one cloud object', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const input = {
+      amountMinor: 1_200,
+      category: 'food' as const,
+      currency: 'GBP',
+      date: '2026-08-11',
+      source: { fingerprint: 'concurrent_receipt', kind: 'manual' as const },
+      splitMode: 'equal' as const,
+      splitShares: [],
+      status: 'confirmed' as const,
+      title: 'Concurrent dinner',
+      tripId: trip.id,
+    }
+
+    const [first, second] = await Promise.all([
+      createLedgerExpenseIdempotent(input),
+      createLedgerExpenseIdempotent(input),
+    ])
+
+    expect(first.record.id).toBe(second.record.id)
+    expect([first.created, second.created].filter(Boolean)).toHaveLength(1)
+    await expect(db.ledgerExpenses.where('tripId').equals(trip.id).count()).resolves.toBe(1)
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
   })
 
   it('keeps copied Ticket Blob imports entirely on the legacy lifecycle path', async () => {

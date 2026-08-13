@@ -8,7 +8,7 @@ import {
   activateLegacyDatabaseForTests,
 } from '../accountDatabase'
 import { AccountCloudTransportError } from './client'
-import type { AccountObjectRowV1 } from './contract'
+import type { AccountObjectRowV1, JsonObject } from './contract'
 import type { AccountWorkflowRequestV1 } from './workflowContract'
 import { redactTicketMetaForAccountCloud } from './mutationBuilder'
 import {
@@ -229,6 +229,197 @@ describe('product account workflow runtime', () => {
     expect(apply).not.toHaveBeenCalled()
     expect(mocks.commit).not.toHaveBeenCalled()
     await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
+  it('rejects stale ledger timestamps and tombstone restoration before optimistic apply', async () => {
+    const participant = {
+      createdAt: 1,
+      displayName: 'Traveler',
+      id: 'participant_a',
+      source: 'manual' as const,
+      tripId: 'trip_uk',
+      updatedAt: 1,
+    }
+    await db.ledgerParticipants.put(participant)
+    await db.accountObjectRevisions.put(makeLedgerParticipantRevision(participant))
+    const staleApply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply: staleApply,
+      steps: [{
+        objectId: participant.id,
+        objectType: 'ledger_participant',
+        operation: 'upsert',
+        payload: { ...participant, displayName: 'Changed' },
+      }],
+      tripId: participant.tripId,
+      workflowId: 'ledger.batch@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+    expect(staleApply).not.toHaveBeenCalled()
+
+    await db.ledgerParticipants.delete(participant.id)
+    await db.accountObjectRevisions.put({
+      ...makeLedgerParticipantRevision(participant),
+      deletedAt: NOW_ISO,
+      payload: null,
+      revision: 2,
+      tombstone: true,
+    })
+    const restoreApply = vi.fn()
+    await expect(executeProductAccountWorkflow({
+      apply: restoreApply,
+      steps: [{
+        objectId: participant.id,
+        objectType: 'ledger_participant',
+        operation: 'upsert',
+        payload: { ...participant, updatedAt: 2 },
+      }],
+      tripId: participant.tripId,
+      workflowId: 'ledger.batch@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+    expect(restoreApply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('checks ledger dependencies for pending work before choosing legacy fallback', async () => {
+    const trip = {
+      createdAt: 1,
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      id: 'trip_uk',
+      startDate: '2026-08-11',
+      title: 'UK',
+      updatedAt: 1,
+    }
+    const participant = {
+      createdAt: 1,
+      displayName: 'Traveler',
+      id: 'participant_a',
+      source: 'manual' as const,
+      tripId: trip.id,
+      updatedAt: 1,
+    }
+    const budget = {
+      amountMinor: 10_000,
+      createdAt: 1,
+      currency: 'GBP',
+      id: 'budget_a',
+      scope: 'trip' as const,
+      tripId: trip.id,
+      updatedAt: 1,
+    }
+    await db.trips.put(trip)
+    await db.ledgerParticipants.put(participant)
+    await db.ledgerBudgets.put(budget)
+    await db.accountObjectRevisions.bulkPut([
+      makeRevision('trip', trip.id, trip.id, trip),
+      makeLedgerParticipantRevision(participant),
+    ])
+    await db.accountMutationJournal.put({
+      accountHash: '00000000000000000000000000000000',
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device_primary',
+      expectedRevision: 1,
+      mutationId: '66666666-6666-4666-8666-666666666666',
+      objectId: participant.id,
+      objectKey: `ledger_participant:${participant.id}`,
+      objectSchemaVersion: 1,
+      objectType: 'ledger_participant',
+      operation: 'upsert',
+      payload: participant,
+      requestFingerprint: 'pending',
+      status: 'pending',
+      tripId: trip.id,
+      updatedAt: 1,
+    })
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: [{
+        objectId: budget.id,
+        objectType: 'ledger_budget',
+        operation: 'upsert',
+        payload: { ...budget, amountMinor: 12_000, updatedAt: 2 },
+      }],
+      tripId: trip.id,
+      workflowId: 'ledger.batch@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('keeps historical graph violations on the legacy path without allowing new violations', async () => {
+    const trip = {
+      createdAt: 1,
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      id: 'trip_uk',
+      startDate: '2026-08-11',
+      title: 'UK',
+      updatedAt: 1,
+    }
+    const historicalExpense = {
+      category: 'food' as const,
+      createdAt: 1,
+      date: '2026-08-11',
+      id: 'expense_historical',
+      itemIds: ['deleted_item'],
+      source: { kind: 'manual' as const },
+      splitMode: 'equal' as const,
+      splitShares: [],
+      status: 'confirmed' as const,
+      title: 'Historical expense',
+      tripId: trip.id,
+      updatedAt: 1,
+    }
+    await db.trips.put(trip)
+    await db.ledgerExpenses.put(historicalExpense)
+    await db.accountObjectRevisions.bulkPut([
+      makeRevision('trip', trip.id, trip.id, trip),
+      makeRevision('ledger_expense', historicalExpense.id, trip.id, historicalExpense),
+    ])
+    const legacyApply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply: legacyApply,
+      steps: [{
+        objectId: 'budget_new',
+        objectType: 'ledger_budget',
+        operation: 'upsert',
+        payload: {
+          amountMinor: 10_000,
+          createdAt: 2,
+          currency: 'GBP',
+          id: 'budget_new',
+          scope: 'trip',
+          tripId: trip.id,
+          updatedAt: 2,
+        },
+      }],
+      tripId: trip.id,
+      workflowId: 'ledger.batch@1',
+    })).resolves.toEqual({ handled: false })
+    expect(legacyApply).not.toHaveBeenCalled()
+
+    await db.ledgerExpenses.clear()
+    await db.accountObjectRevisions.delete(`ledger_expense:${historicalExpense.id}`)
+    const invalidApply = vi.fn()
+    await expect(executeProductAccountWorkflow({
+      apply: invalidApply,
+      steps: [{
+        objectId: 'expense_new',
+        objectType: 'ledger_expense',
+        operation: 'upsert',
+        payload: { ...historicalExpense, id: 'expense_new' },
+      }],
+      tripId: trip.id,
+      workflowId: 'ledger.batch@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+    expect(invalidApply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
   })
 
   it('rejects a new-trip import when any unsubmitted local object already uses the trip scope', async () => {
@@ -615,6 +806,60 @@ function makeItem(id: string, sortOrder: number): ItineraryItem {
     ticketIds: [],
     title: id,
     tripId: 'trip_uk',
+    updatedAt: 1,
+  }
+}
+
+function makeLedgerParticipantRevision(participant: {
+  createdAt: number
+  displayName: string
+  id: string
+  source: 'manual'
+  tripId: string
+  updatedAt: number
+}) {
+  return {
+    acknowledgedAt: 1,
+    actorId: ACTOR_ID,
+    deletedAt: null,
+    deviceId: 'device_primary',
+    mutationId: '55555555-5555-4555-8555-555555555555',
+    objectId: participant.id,
+    objectKey: `ledger_participant:${participant.id}`,
+    objectSchemaVersion: 1,
+    objectType: 'ledger_participant' as const,
+    payload: participant,
+    revision: 1,
+    serverCreatedAt: NOW_ISO,
+    serverUpdatedAt: NOW_ISO,
+    tombstone: false,
+    tripId: participant.tripId,
+    updatedAt: 1,
+  }
+}
+
+function makeRevision(
+  objectType: 'ledger_expense' | 'trip',
+  objectId: string,
+  tripId: string,
+  payload: JsonObject,
+) {
+  return {
+    acknowledgedAt: 1,
+    actorId: ACTOR_ID,
+    deletedAt: null,
+    deviceId: 'device_primary',
+    mutationId: '77777777-7777-4777-8777-777777777777',
+    objectId,
+    objectKey: `${objectType}:${objectId}`,
+    objectSchemaVersion: 1,
+    objectType,
+    payload,
+    revision: 1,
+    serverCreatedAt: NOW_ISO,
+    serverUpdatedAt: NOW_ISO,
+    tombstone: false,
+    tripId,
     updatedAt: 1,
   }
 }

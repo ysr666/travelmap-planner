@@ -26,6 +26,7 @@ describe('account cloud workflow migration gate', () => {
       boundedPayloadTraversal: true,
       deterministicReplayLocks: true,
       privateReceiptLedger: true,
+      structuralGraphLocking: true,
       ticketBindingCompleteness: true,
       workflowCount: 7,
     })
@@ -100,6 +101,23 @@ describe('account cloud workflow migration gate', () => {
     })).toThrow(/payload-boundary helper/)
   })
 
+  it('rejects removal of Item structural field validation', () => {
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "pg_catalog.jsonb_typeof(step_payload -> 'ticketIds') is distinct from 'array'",
+        'false',
+      ),
+    })).toThrow(/ticketIds/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "step_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
+        'false',
+      ),
+    })).toThrow(/sortOrder|Structural workflows/)
+  })
+
   it('rejects moving the receipt lookup ahead of deterministic object and mutation locks', () => {
     const receiptLookup = `  select *
   into prior_receipt
@@ -132,5 +150,27 @@ describe('account cloud workflow migration gate', () => {
         'false',
       ),
     })).toThrow(/ticketIds/)
+  })
+
+  it('rejects removal or reordering of structural day locks and complete graph checks', () => {
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace("|| ':item-day:'", "|| ':removed-day-lock:'"),
+    })).toThrow(/Structural workflows|item-day/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace('structural_item_count <> step_count', 'false'),
+    })).toThrow(/Structural workflows|structural_item_count/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace('moved_item_count <> 1', 'moved_item_count < 0'),
+    })).toThrow(/Structural workflows|moved_item_count/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        '-- Lock each step mutation identity only after every structural day lock.',
+        '-- Mutation lock order removed.',
+      ),
+    })).toThrow(/Structural workflows/)
   })
 })

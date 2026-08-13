@@ -136,6 +136,10 @@ declare
   lock_key text;
   has_current_object boolean;
   move_detected boolean := false;
+  moved_item_count integer := 0;
+  structural_day_id text;
+  structural_day_ids text[] := array[]::text[];
+  structural_item_count bigint := 0;
   ticket_object_id text;
   ticket_current_item_id text;
   ticket_target_item_id text;
@@ -437,9 +441,9 @@ begin
     if step_operation = 'upsert' and step_object_type = 'item' and (
       step_payload ->> 'dayId' is null
       or step_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
-      or pg_catalog.jsonb_typeof(step_payload -> 'sortOrder') <> 'number'
+      or pg_catalog.jsonb_typeof(step_payload -> 'sortOrder') is distinct from 'number'
       or step_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'
-      or pg_catalog.jsonb_typeof(step_payload -> 'ticketIds') <> 'array'
+      or pg_catalog.jsonb_typeof(step_payload -> 'ticketIds') is distinct from 'array'
     ) then
       return pg_catalog.jsonb_build_object(
         'schemaVersion', 1,
@@ -623,6 +627,34 @@ begin
       select pg_catalog.count(distinct reorder_step.value -> 'payload' ->> 'sortOrder')
       from pg_catalog.jsonb_array_elements(target_steps) as reorder_step(value)
     ) <> step_count
+    or (
+      select pg_catalog.min((reorder_step.value -> 'payload' ->> 'sortOrder')::bigint)
+      from pg_catalog.jsonb_array_elements(target_steps) as reorder_step(value)
+    ) <> 1
+    or (
+      select pg_catalog.max((reorder_step.value -> 'payload' ->> 'sortOrder')::bigint)
+      from pg_catalog.jsonb_array_elements(target_steps) as reorder_step(value)
+    ) <> step_count
+  ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'workflow_shape_invalid'
+    );
+  end if;
+
+  if target_workflow_id = 'item.move@1' and exists (
+    select 1
+    from pg_catalog.jsonb_array_elements(target_steps) as moved_step(value)
+    group by moved_step.value -> 'payload' ->> 'dayId'
+    having pg_catalog.count(distinct moved_step.value -> 'payload' ->> 'sortOrder')
+        <> pg_catalog.count(*)
+      or pg_catalog.min((moved_step.value -> 'payload' ->> 'sortOrder')::bigint) <> 1
+      or pg_catalog.max((moved_step.value -> 'payload' ->> 'sortOrder')::bigint)
+        <> pg_catalog.count(*)
   ) then
     return pg_catalog.jsonb_build_object(
       'schemaVersion', 1,
@@ -770,6 +802,63 @@ begin
     );
   end loop;
 
+  -- Lock every affected itinerary day after object locks and before mutation locks.
+  if target_workflow_id in ('day.items.reorder@1', 'item.move@1') then
+    select coalesce(
+      pg_catalog.array_agg(structural_day.day_id order by structural_day.day_id),
+      array[]::text[]
+    )
+    into structural_day_ids
+    from (
+      select requested_step.value -> 'payload' ->> 'dayId' as day_id
+      from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+      union
+      select current_item.payload ->> 'dayId' as day_id
+      from public.tripmap_account_objects as current_item
+      join pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+        on requested_step.value ->> 'objectType' = 'item'
+        and requested_step.value ->> 'objectId' = current_item.object_id
+      where current_item.owner_id = current_user_id
+        and current_item.object_type = 'item'
+        and current_item.trip_id = target_trip_id
+        and not current_item.tombstone
+    ) as structural_day
+    where structural_day.day_id is not null;
+
+    if exists (
+      select 1
+      from pg_catalog.unnest(structural_day_ids) as requested_day(day_id)
+      where requested_day.day_id !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
+
+    for structural_day_id in
+      select requested_day.day_id
+      from pg_catalog.unnest(structural_day_ids) as requested_day(day_id)
+      order by requested_day.day_id
+    loop
+      perform pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+          current_user_id::text
+            || ':item-day:'
+            || target_trip_id
+            || ':'
+            || structural_day_id,
+          0
+        )
+      );
+    end loop;
+  end if;
+
+  -- Lock each step mutation identity only after every structural day lock.
   for lock_key in
     select distinct requested_step.value ->> 'mutationId'
     from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
@@ -918,6 +1007,85 @@ begin
       'tripId', target_trip_id,
       'reason', 'mutation_id_reused'
     );
+  end if;
+
+  if target_workflow_id in ('day.items.reorder@1', 'item.move@1') then
+    if (
+      target_workflow_id = 'day.items.reorder@1'
+      and pg_catalog.cardinality(structural_day_ids) <> 1
+    ) or (
+      target_workflow_id = 'item.move@1'
+      and pg_catalog.cardinality(structural_day_ids) <> 2
+    ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
+
+    select pg_catalog.count(*)
+    into structural_item_count
+    from public.tripmap_account_objects as structural_item
+    where structural_item.owner_id = current_user_id
+      and structural_item.trip_id = target_trip_id
+      and structural_item.object_type = 'item'
+      and not structural_item.tombstone
+      and structural_item.payload ->> 'dayId' = any(structural_day_ids);
+
+    if structural_item_count <> step_count or exists (
+      select 1
+      from public.tripmap_account_objects as structural_item
+      where structural_item.owner_id = current_user_id
+        and structural_item.trip_id = target_trip_id
+        and structural_item.object_type = 'item'
+        and not structural_item.tombstone
+        and structural_item.payload ->> 'dayId' = any(structural_day_ids)
+        and not exists (
+          select 1
+          from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+          where requested_step.value ->> 'objectType' = 'item'
+            and requested_step.value ->> 'objectId' = structural_item.object_id
+        )
+    ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
+  end if;
+
+  if target_workflow_id = 'item.move@1' then
+    select pg_catalog.count(*)
+    into moved_item_count
+    from public.tripmap_account_objects as current_item
+    join pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+      on requested_step.value ->> 'objectType' = 'item'
+      and requested_step.value ->> 'objectId' = current_item.object_id
+    where current_item.owner_id = current_user_id
+      and current_item.trip_id = target_trip_id
+      and current_item.object_type = 'item'
+      and not current_item.tombstone
+      and current_item.payload ->> 'dayId'
+        is distinct from requested_step.value -> 'payload' ->> 'dayId';
+
+    if moved_item_count <> 1 then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
   end if;
 
   -- Preflight every current revision and invariant before the first mutation.

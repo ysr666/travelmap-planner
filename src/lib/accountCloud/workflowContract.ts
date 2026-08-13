@@ -505,19 +505,21 @@ function assertWorkflowShape(workflowId: AccountWorkflowId, steps: AccountWorkfl
 
   if (workflowId === 'day.items.reorder@1') {
     const dayIds = new Set<string>()
-    const sortOrders = new Set<number>()
     for (const step of steps) {
       const dayId = step.payload?.dayId
-      const sortOrder = step.payload?.sortOrder
       if (step.expectedRevision < 1) fail('workflow_shape_invalid')
       dayIds.add(dayId as string)
-      sortOrders.add(sortOrder as number)
     }
-    if (dayIds.size !== 1 || sortOrders.size !== steps.length) fail('workflow_shape_invalid')
+    if (dayIds.size !== 1 || !hasContiguousItemOrders(steps)) fail('workflow_shape_invalid')
   }
 
-  if (workflowId === 'item.move@1' && steps.some((step) => step.expectedRevision < 1)) {
-    fail('workflow_shape_invalid')
+  if (workflowId === 'item.move@1') {
+    if (
+      steps.some((step) => step.expectedRevision < 1)
+      || !hasContiguousItemOrders(steps)
+    ) {
+      fail('workflow_shape_invalid')
+    }
   }
 
   if (workflowId === 'ticket.bind@1') {
@@ -551,6 +553,24 @@ function assertWorkflowShape(workflowId: AccountWorkflowId, steps: AccountWorkfl
   ))) {
     fail('workflow_shape_invalid')
   }
+}
+
+function hasContiguousItemOrders(steps: AccountWorkflowStepV1[]) {
+  const ordersByDay = new Map<string, number[]>()
+  for (const step of steps) {
+    const dayId = step.payload?.dayId
+    const sortOrder = step.payload?.sortOrder
+    if (typeof dayId !== 'string' || typeof sortOrder !== 'number') return false
+    const orders = ordersByDay.get(dayId) ?? []
+    orders.push(sortOrder)
+    ordersByDay.set(dayId, orders)
+  }
+  return [...ordersByDay.values()].every((orders) => (
+    orders.length > 0
+    && new Set(orders).size === orders.length
+    && orders.sort((left, right) => left - right)
+      .every((sortOrder, index) => sortOrder === index + 1)
+  ))
 }
 
 function isUniqueControlledIdList(input: JsonValue | undefined) {

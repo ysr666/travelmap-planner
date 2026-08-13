@@ -138,6 +138,7 @@ export default defineConfig({
           '**/ocr-*.js',
           '**/pdf*.js',
           '**/providerProxyClientCore-*.js',
+          '**/workflowMutationRuntime-*.js',
           '**/worker.min-*.js',
         ],
         navigateFallback: 'index.html',

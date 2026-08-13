@@ -18,10 +18,18 @@ const REQUIRED_FRAGMENTS = [
   'create or replace function tripmap_private.account_payload_shape_is_safe',
   'create or replace function tripmap_private.account_workflow_payload_is_safe',
   'not tripmap_private.account_workflow_payload_is_safe(step_payload)',
+  "step_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'",
+  "step_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
+  "pg_catalog.jsonb_typeof(step_payload -> 'ticketIds') is distinct from 'array'",
+  "pg_catalog.count(distinct item_ticket.value #>> '{}')",
   'pg_catalog.count(*) <= 20000',
   'coalesce(pg_catalog.max(depth), 0) <= 32',
   'tripmap_private.account_mutation_receipts',
   'pg_catalog.pg_advisory_xact_lock',
+  "':item-day:'",
+  'structural_item_count <> step_count',
+  'moved_item_count <> 1',
+  'pg_catalog.cardinality(structural_day_ids)',
   "current_user_id::text || ':ticket-binding:' || ticket_object_id",
   'ticket_current_item_id is not null and not exists',
   "bound_item.payload -> 'ticketIds' ? ticket_object_id",
@@ -91,13 +99,33 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
   if (!/target_account_hash\s*<>\s*pg_catalog\.left\s*\([\s\S]{0,260}current_user_id::text/i.test(privateFunction)) {
     throw new Error('The workflow RPC is missing the authenticated account-context guard.')
   }
+  const normalizedPrivateFunction = privateFunction.toLowerCase()
+  const objectLockMarker = normalizedPrivateFunction.indexOf('-- match the single-object rpc lock order')
+  const structuralDayLockMarker = normalizedPrivateFunction.indexOf(
+    '-- lock every affected itinerary day after object locks and before mutation locks',
+  )
+  const mutationLockMarker = normalizedPrivateFunction.indexOf(
+    '-- lock each step mutation identity only after every structural day lock',
+  )
+  if (
+    !/step_operation\s*=\s*'upsert'\s+and\s+step_object_type\s*=\s*'item'[\s\S]{0,260}jsonb_typeof\s*\(step_payload\s*->\s*'sortOrder'\)\s+is\s+distinct\s+from\s+'number'[\s\S]{0,180}step_payload\s*->>\s*'sortOrder'\s*!~\s*'\^\[0-9\]\{1,16\}\$'[\s\S]{0,180}jsonb_typeof\s*\(step_payload\s*->\s*'ticketIds'\)\s+is\s+distinct\s+from\s+'array'/i
+      .test(privateFunction)
+    ||
+    objectLockMarker < 0
+    || structuralDayLockMarker <= objectLockMarker
+    || mutationLockMarker <= structuralDayLockMarker
+    || !/structural_item_count\s*<>\s*step_count/i.test(privateFunction)
+    || !/moved_item_count\s*<>\s*1/i.test(privateFunction)
+  ) {
+    throw new Error('Structural workflows must lock affected days and validate the complete item graph before writes.')
+  }
 
-  const preflightMarker = privateFunction.toLowerCase().indexOf('-- preflight every current revision')
-  const commitMarker = privateFunction.toLowerCase().indexOf('-- no ordinary rejection path exists below this point')
-  const lockOrderMarker = privateFunction.toLowerCase().indexOf('-- match the single-object rpc lock order')
-  const receiptLookup = privateFunction.toLowerCase().indexOf('into prior_receipt')
-  const firstObjectUpdate = privateFunction.toLowerCase().indexOf('update public.tripmap_account_objects')
-  const firstObjectInsert = privateFunction.toLowerCase().indexOf('insert into public.tripmap_account_objects')
+  const preflightMarker = normalizedPrivateFunction.indexOf('-- preflight every current revision')
+  const commitMarker = normalizedPrivateFunction.indexOf('-- no ordinary rejection path exists below this point')
+  const lockOrderMarker = objectLockMarker
+  const receiptLookup = normalizedPrivateFunction.indexOf('into prior_receipt')
+  const firstObjectUpdate = normalizedPrivateFunction.indexOf('update public.tripmap_account_objects')
+  const firstObjectInsert = normalizedPrivateFunction.indexOf('insert into public.tripmap_account_objects')
   if (
     preflightMarker < 0
     || commitMarker <= preflightMarker
@@ -140,6 +168,7 @@ export function validateAccountCloudWorkflowMigration({ contractSource, migratio
     boundedPayloadTraversal: true,
     deterministicReplayLocks: true,
     privateReceiptLedger: true,
+    structuralGraphLocking: true,
     ticketBindingCompleteness: true,
     workflowCount: contractWorkflowIds.length,
   }

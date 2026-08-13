@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public, pg_temp;
 
-select plan(43);
+select plan(52);
 
 create function pg_temp.run_account_workflow(
   target_account_hash text,
@@ -763,6 +763,159 @@ select is(
 
 drop trigger account_workflow_force_second_step_failure
   on public.tripmap_account_objects;
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000110',
+    'trip.import.commit@1',
+    'move_trip',
+    '[
+      {"stepId":"trip","mutationId":"20000000-0000-4000-8000-000000000110","objectType":"trip","objectId":"move_trip","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_trip","title":"Move trip"}},
+      {"stepId":"day_1","mutationId":"20000000-0000-4000-8000-000000000111","objectType":"day","objectId":"move_day_1","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_1","tripId":"move_trip","date":"2026-08-01"}},
+      {"stepId":"day_2","mutationId":"20000000-0000-4000-8000-000000000112","objectType":"day","objectId":"move_day_2","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_day_2","tripId":"move_trip","date":"2026-08-02"}},
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000113","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_1","title":"A","sortOrder":1,"ticketIds":[]}},
+      {"stepId":"item_b","mutationId":"20000000-0000-4000-8000-000000000114","objectType":"item","objectId":"move_item_b","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_b","tripId":"move_trip","dayId":"move_day_1","title":"B","sortOrder":2,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000115","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":0,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":1,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'the move fixture imports as one atomic workflow'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000120',
+    'item.move@1',
+    'move_trip',
+    '[
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000120","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_2","title":"A","sortOrder":2,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000121","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":1,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a move cannot omit a sibling from either affected day'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_object_agg(
+      object_id,
+      pg_catalog.jsonb_build_object('dayId', payload -> 'dayId', 'sortOrder', payload -> 'sortOrder')
+      order by object_id
+    )
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and object_type = 'item'
+      and trip_id = 'move_trip'
+  ),
+  '{"move_item_a":{"dayId":"move_day_1","sortOrder":1},"move_item_b":{"dayId":"move_day_1","sortOrder":2},"move_item_c":{"dayId":"move_day_2","sortOrder":1}}'::jsonb,
+  'an incomplete move leaves the complete item graph unchanged'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000130',
+    'item.move@1',
+    'move_trip',
+    '[
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000130","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_2","title":"A","sortOrder":2,"ticketIds":[]}},
+      {"stepId":"item_b","mutationId":"20000000-0000-4000-8000-000000000131","objectType":"item","objectId":"move_item_b","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"move_item_b","tripId":"move_trip","dayId":"move_day_1","title":"B","sortOrder":1,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000132","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":1,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":1,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'status',
+  'applied',
+  'a complete cross-day move commits through the registered workflow'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_object_agg(
+      object_id,
+      pg_catalog.jsonb_build_object('dayId', payload -> 'dayId', 'sortOrder', payload -> 'sortOrder')
+      order by object_id
+    )
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and object_type = 'item'
+      and trip_id = 'move_trip'
+  ),
+  '{"move_item_a":{"dayId":"move_day_2","sortOrder":2},"move_item_b":{"dayId":"move_day_1","sortOrder":1},"move_item_c":{"dayId":"move_day_2","sortOrder":1}}'::jsonb,
+  'a successful move leaves contiguous order in both affected days'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000140',
+    'item.move@1',
+    'move_trip',
+    '[
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000140","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_2","title":"A","sortOrder":1,"ticketIds":[]}},
+      {"stepId":"item_b","mutationId":"20000000-0000-4000-8000-000000000141","objectType":"item","objectId":"move_item_b","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_b","tripId":"move_trip","dayId":"move_day_2","title":"B","sortOrder":2,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000142","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_1","title":"C","sortOrder":1,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'one move workflow cannot relocate two different items'
+);
+
+reset role;
+select is(
+  (
+    select pg_catalog.jsonb_object_agg(
+      object_id,
+      pg_catalog.jsonb_build_object('dayId', payload -> 'dayId', 'sortOrder', payload -> 'sortOrder')
+      order by object_id
+    )
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and object_type = 'item'
+      and trip_id = 'move_trip'
+  ),
+  '{"move_item_a":{"dayId":"move_day_2","sortOrder":2},"move_item_b":{"dayId":"move_day_1","sortOrder":1},"move_item_c":{"dayId":"move_day_2","sortOrder":1}}'::jsonb,
+  'a rejected two-item move leaves the prior graph intact'
+);
+
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000150',
+    'day.items.reorder@1',
+    'move_trip',
+    '[
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000150","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_2","title":"A","sortOrder":3,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000151","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":1,"ticketIds":[]}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a reorder cannot commit a non-contiguous sort order'
+);
+
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '10000000-0000-4000-8000-000000000160',
+    'day.items.reorder@1',
+    'move_trip',
+    '[
+      {"stepId":"item_a","mutationId":"20000000-0000-4000-8000-000000000160","objectType":"item","objectId":"move_item_a","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_a","tripId":"move_trip","dayId":"move_day_2","title":"A","sortOrder":1,"ticketIds":[]}},
+      {"stepId":"item_c","mutationId":"20000000-0000-4000-8000-000000000161","objectType":"item","objectId":"move_item_c","operation":"upsert","expectedRevision":2,"objectSchemaVersion":1,"payload":{"id":"move_item_c","tripId":"move_trip","dayId":"move_day_2","title":"C","sortOrder":2}}
+    ]'::jsonb
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'a workflow cannot bypass required Item structural fields'
+);
+
+reset role;
 
 select pg_catalog.set_config(
   'request.jwt.claim.sub',

@@ -488,12 +488,36 @@ function assertObjectSpecificPayloadBoundary(
   payload: JsonObject,
   code: AccountCloudContractErrorCode = 'sensitive_payload',
 ) {
+  if (objectType === 'item') {
+    if (
+      typeof payload.dayId !== 'string'
+      || !CONTROLLED_ID.test(payload.dayId)
+      || !Number.isSafeInteger(payload.sortOrder)
+      || (payload.sortOrder as number) < 0
+      || !isUniqueControlledIdList(payload.ticketIds)
+    ) {
+      fail(code, 'Itinerary item structural fields are invalid.')
+    }
+    return
+  }
   if (objectType !== 'ticket_meta') return
   for (const key of Object.keys(payload)) {
     if (!TICKET_META_PAYLOAD_FIELDS.has(key)) {
       fail(code, `Ticket metadata contains an unregistered field ${key}.`)
     }
   }
+}
+
+function isUniqueControlledIdList(input: JsonValue | undefined) {
+  if (!Array.isArray(input)) return false
+  const values = new Set<string>()
+  for (const value of input) {
+    if (typeof value !== 'string' || !CONTROLLED_ID.test(value) || values.has(value)) {
+      return false
+    }
+    values.add(value)
+  }
+  return true
 }
 
 function validateJsonValue(

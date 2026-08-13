@@ -83,6 +83,21 @@ describe('account cloud mutation contract', () => {
     )
   })
 
+  it('rejects invalid item day, order, and ticket relationship fields', () => {
+    for (const payload of [
+      { ...makePayload(), dayId: 'invalid day' },
+      { ...makePayload(), sortOrder: -1 },
+      { ...makePayload(), sortOrder: 1.5 },
+      { ...makePayload(), ticketIds: ['ticket_a', 'ticket_a'] },
+      { ...makePayload(), ticketIds: ['invalid ticket'] },
+    ]) {
+      expectContractError(
+        () => parseAccountObjectMutationV1(makeMutation({ payload })),
+        'sensitive_payload',
+      )
+    }
+  })
+
   it('rejects non-JSON, cyclic, and oversized payloads', () => {
     expectContractError(
       () => parseAccountObjectMutationV1(makeMutation({ payload: { ...makePayload(), invalid: new Date() } })),

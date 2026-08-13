@@ -1,6 +1,6 @@
 # 旅图 TripMap 项目状态
 
-更新时间：2026-08-11
+更新时间：2026-08-13
 
 ## 发布判断
 
@@ -107,11 +107,13 @@
 - 全量 Playwright：175/175 通过，串行耗时约 6.6 分钟；包括 Reduced Motion 和固定 Git 基线的四页面 Golden 像素回归。S3 另有 118/118 聚焦单测与 47/47 AI Draft/Golden 聚焦 E2E。merge SHA `9317a9a` 的 GitHub Actions run `31015131693` 五项 required jobs 与 Cloudflare Pages Production deployment `6647a145-87c9-45a3-b602-059deb450ac3` 均通过。
 - `git diff --check`：通过。
 
+2026-08-13 P1.3d1 本地增量收据：完整单测 238 个文件、1,940 项通过；Account Cloud 空库 migration 重放与 52 项 pgTAP、schema lint、完整 typecheck/lint/build、5 项 PWA 升级、Desktop Beta smoke 和 194 项串行 E2E 全部通过。Supabase Preview、真实账号与生产部署收据仍未执行，不能据此解除硬门槛。
+
 平台验收发现 Android WebView 103 不支持 `dvh/svh`；App Shell 已增加先声明的 `100vh` 回退。Android API 33 Emulator 修复后可见视口、根节点、App Shell 和底部导航底边一致，核心页面无横向溢出；Chrome 真实构建、软件键盘、可访问性边界和 AI Sheet 也通过。旧 Chrome 103 未完成 WebAPK launcher 安装的环境限制由 5/5 built-dist PWA 生命周期测试覆盖，并已按项目所有者批准的模拟器发布标准记录。
 
-候选入口 JS 为 468.2 KiB，初始静态 JS 图为 852.4 KiB，gzip 245.5 KiB；全局 AI、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不再进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
+当前候选入口 JS 为 477.5 KiB，初始静态 JS 图为 863.3 KiB，gzip 248.2 KiB；全局 AI、Account workflow runtime、Provider Proxy、MapLibre、PDF、OCR 和 JSZip 均不进入静态启动图。CI 会阻止入口超过 500 KiB、初始 JS 超过 900 KiB、初始 gzip 超过 260 KiB，或上述低频模块重新进入启动图。
 
-候选 Service Worker 预缓存为约 2337.3 KiB/114 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI 和 Provider 网络执行实现保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
+候选 Service Worker 预缓存为约 2490.9 KiB/128 项。Trip、Day、Item、票据和资料核心代码继续预缓存；MapLibre、PDF/OCR、JSZip、AI Draft、全局 AI、Account workflow runtime 和 Provider 网络执行实现保持按需运行时缓存。构建会阻止核心代码丢失、可选重资源回到预缓存、重复 URL 或预缓存超过 2500 KiB。正式启用 Account Cloud V2 前仍须增加 runtime 受控预热并验证首次离线使用；当前代码硬门槛关闭。真实构建测试同时确认连续三个当前 Service Worker 版本和两个固定历史生产产物都在用户确认前保持 waiting、确认后所有标签收敛、真实行程及离线 IndexedDB 修改保留。
 
 账号同步 E2E 同时确认网络离线时云端 fixture 不发生写入、对象 outbox 不提前消失；网络恢复后同一旅行快照原地更新，trip/item 对象各保持一条，自动快照状态收敛为 `synced`，刷新不会丢失离线修改。
 
@@ -122,7 +124,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 - 当前账号对象仍通过 outbox 自动同步，尚未切换为 cloud-first ack 和统一 Realtime 订阅。
 - P1.1 已在代码中建立 22 类账号对象、revision、mutation receipt、tombstone、受控 RPC、RLS/grants 和 Realtime publication 的增量 migration；RPC 还会把本机账号哈希与服务端 `auth.uid()` 原子比对，拒绝跨账号会话竞争。
 - P1.2 已在本地实现 IndexedDB v11 revision/journal、原 mutation 重放、lease generation、账号数据库绑定、可恢复的原子依赖链回滚，以及 Trip/Day/Item 单对象 adapter。Ticket 已有构建器/解析器/SQL/回填四层最小字段白名单，但完整读写、Blob 与重绑协议尚未完成，因此仍走 legacy。
-- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现。首批 7 个注册原子 workflow 已有严格 TypeScript 合同、固定 RPC 客户端、私有批次收据和增量 SQL，并已通过本机空库 migration、43 项 PostgreSQL pgTAP、schema lint 与安全 advisor；IndexedDB v12 也已有不可拆分的批次 journal、12 类当前对象 codec、整批 optimistic/lease/retry/Auth/ack/conflict/rollback/crash recovery 和账号切换保护。产品写路径仍未切换到该 runtime，也没有 Preview 可执行收据；删除级联、剩余对象 codec、真实 bootstrap/多连接并发幂等、Realtime 和恢复仍是 Target。
+- `ACCOUNT_CLOUD_V2_FULL_CUTOVER_READY` 与 `ACCOUNT_CLOUD_V2_SHADOW_READ_READY` 当前都固定为 `false`：环境变量和账号白名单不能启用 V2 读写。严格分页读取、Supabase 会话与本机账号哈希复核、两次稳定快照、legacy/V2 漂移分类和只写 revision receipt 的非破坏 bootstrap 已在本地/mock 实现。首批 7 个注册原子 workflow 已有严格 TypeScript 合同、固定 RPC 客户端、私有批次收据和增量 SQL；IndexedDB v12 也已有不可拆分的批次 journal、12 类当前对象 codec、整批 optimistic/lease/retry/Auth/ack/conflict/rollback/crash recovery 和账号切换保护。P1.3d1 已把同日重排和跨日移动接到完整 after graph workflow，并让单对象 Item 与结构 workflow 共用日期锁；本机空库 migration、52 项 PostgreSQL pgTAP、schema lint 与完整浏览器回归均通过。其余五类 workflow、删除/恢复、Preview 可执行收据、真实 bootstrap/多连接并发幂等、Realtime 和空设备恢复仍是 Target。
 - Provider proxy 继续执行 Origin、Bearer、Supabase Auth、D1 quota、daily budget 和 kill switch。
 - 生产 Supabase 已补齐 `account_ai_preferences`，4 条账号自有 RLS、私有更新时间 trigger 和 authenticated CRUD 授权均已验证。
 - Companion invite 的冲突修复已存在于生产 `tripmap_private` 实现；仓库补回对应历史 migration，保证新环境重建一致。
@@ -139,7 +141,7 @@ CI 同时检查全部 TypeScript runtime，失败时保留 screenshot/video/trac
 ## 已知发布风险
 
 - 当前稳定版本不等于路线图 v5 目标版本：云端不是统一实时事实源，天气、航班、铁路、票务状态和实时交通 Provider 尚未形成完整主路径。
-- Account Cloud V2 的本地运行时不代表可切换版本；在 Preview SQL/RLS 收据、真实账号双读/bootstrap 收据、完整写入面、冲突恢复和第二设备收敛完成前，禁止解除任一代码硬门槛。
+- Account Cloud V2 的本地运行时和两条产品适配器不代表可切换版本；在 Preview SQL/RLS/并发收据、真实账号双读/bootstrap 收据、其余写入面、runtime 首次离线加载、冲突恢复和第二设备收敛完成前，禁止解除任一代码硬门槛。
 - 地点/酒店照片和航司/保险 Logo 尚无完整生产资产管线；当前真实票据缩略图能力不能被描述为已完成所有设计稿媒体效果。
 - AI 仍有兼容关键词路由和动作覆盖缺口，长任务没有统一 job runtime。
 - iPhone/Android 实体机性能、文件选择和网络差异为发布后运营观察，不再阻塞 UI V3。

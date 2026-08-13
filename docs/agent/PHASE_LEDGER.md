@@ -3435,3 +3435,78 @@ Local validation:
 - `npm run typecheck`, `npm run lint`, `npm run build`, capability alignment, Account Cloud migration, Cloudflare migration, production-boundary, bundle-budget, JSON parse, and `git diff --check` passed. Build reported 473.5 KiB entry, 859.3 KiB initial JS, 247.3 KiB initial gzip, 10 startup chunks, and 2486.0 KiB/126-entry precache.
 - The focused PWA upgrade suite passed 5/5 and Desktop Beta smoke passed 1/1. Full serial Playwright passed all 194 tests in 7.0 minutes, including IndexedDB/PWA historical upgrades, offline account sync, AI confirmation gates, responsive/a11y checks, and Golden regression.
 - Supabase Preview and real-account workflow execution remain unrun by design. They require explicit approval for the cost-bearing Preview branch and remain mandatory before either V2 gate can open.
+
+Remote validation for commit `fdf9b34bd398182ebd1dc658c50edaf45f2a3368`:
+
+- GitHub Actions run `31497514987` passed Build, Lint, Type Check, Unit Tests, and the complete E2E job.
+- Cloudflare Pages Preview deployment/check `f41baf20-305d-4ebf-9035-1266df65d5ed` passed for the same commit SHA.
+- These receipts close P1.3c code/build validation only. They do not replace the outstanding Supabase Preview, real-account bootstrap, multi-connection, Realtime, recovery, or rollout receipts.
+
+## 2026-08-11 Product-Grade Delivery W1 / P1.3d1 Product Workflow Bridge and Structural Item Operations
+
+Status: complete locally; Supabase Preview and the remaining product workflow adapters remain P1 gates
+
+Goal:
+
+- Establish one reusable, gate-bound product adapter from existing domain commands to the registered Account Cloud workflow runtime.
+- Move same-day reorder and cross-day move onto the all-or-nothing workflow path for fully bootstrapped V2 accounts without changing the closed-gate production path.
+
+Scope:
+
+- Add a lazy runtime loader that returns `handled: false` before importing workflow execution code unless the exact full-cutover gate and account allowlist pass.
+- Add a product workflow runtime that accepts only a registered workflow ID plus an explicit complete after graph, derives revisions and mutation IDs locally, creates one optimistic batch, executes the fixed RPC coordinator, and maps only sanitized terminal states to product errors.
+- Refactor reorder and cross-day move planning so the exact changed item set and timestamp are deterministic, baseline checked, and reusable by both the legacy repository transaction and V2 workflow adapter.
+- Route `reorderDayItems` and `moveItineraryItemBetweenDays` through the adapter first. Fully bootstrapped objects use one workflow; any unbootstrapped object falls back before mutation to the unchanged legacy atomic path. Pending/conflicted V2 work must fail closed rather than escape into legacy writes.
+- Keep parent-trip touching, legacy outbox enqueue, and snapshot dirty markers on fallback only. The V2 path may emit normal local data-change behavior but must not create a second legacy write stream.
+
+No-go:
+
+- No rollout constant change, Preview/production database write, real account mutation, Provider call, Supabase branch creation, migration change, or claim that either operation is production-enabled.
+- No ticket binding, import, ledger, replan, repair, deletion cascade, object restoration, or new workflow ID in this subphase.
+- No caller-selected RPC/function/table, implicit object discovery after the optimistic write, partial target list, mixed workflow/single-object submission, generated retry identity, legacy outbox duplication, or fallback after any V2 object has changed.
+
+Likely files:
+
+- New product workflow loader/runtime modules and tests under `src/lib/accountCloud/`; deterministic item operation planning in `src/db/repositories.ts`; routing and regressions in `src/db/trackedMutations.ts` and `src/db/trackedMutations.accountCloud.test.ts`; Account Cloud/status/capability docs and this ledger.
+
+Validation:
+
+- Closed-gate no-import/no-call behavior; registered workflow only; exact changed-object graph; unbootstrapped all-or-nothing fallback; pending object rejection; successful atomic ack; offline retention; server conflict rollback; deterministic rejection rollback; account switch; response substitution; no legacy outbox on V2; unchanged legacy behavior; reorder/move baseline races; typecheck/lint/unit/build, PWA/desktop/full E2E as warranted, capability/migration/bundle gates, and `git diff --check`.
+
+Risk:
+
+- Critical. If the planned item graph omits one shifted sibling or fallback occurs after optimistic mutation, order can diverge across devices while both local and server transactions individually appear successful.
+
+Stop conditions:
+
+- Stop and repair if the workflow after graph differs from repository output, any changed sibling lacks a step, an unbootstrapped graph is partly mutated before fallback, a V2 attempt also enters legacy outbox/snapshot sync, a terminal error leaves only part of an order applied, or either compile-time rollout gate becomes reachable.
+
+Escalated review delta:
+
+- The first local review found that a workflow could submit the complete requested graph while a concurrent single Item create or day change used no shared structural lock. Because both undeployed migrations are still behind compile-time `false` gates and had not been applied to Preview or Production, this phase expanded locally to harden the existing P1.1/P1.3b migration files before any external application.
+- The repair did not add a new public RPC, workflow ID, table, client-controlled target, deployment, or schema write. It aligned single Item and structural workflow lock order, Item field validation, complete-graph checks, and static migration gates. Preview application remains separately approval-gated.
+
+Local result:
+
+- Added a lazy product workflow loader that imports no execution runtime while the exact Account Cloud full-cutover gate is closed. The reusable bridge accepts only the seven registered workflow IDs and strict step fields, derives device/batch/step mutation identities and expected revisions locally, rejects sensitive/unknown input, and binds every async boundary to the captured account database and account hash.
+- The bridge scans every requested object before choosing fallback. An existing local object without a V2 revision causes one whole-operation legacy fallback before `apply`; pending single/workflow work, receipt/payload drift, a tombstone mismatch, or an account switch fails closed instead. A later busy object cannot be hidden by an earlier unbootstrapped object.
+- Refactored same-day reorder and cross-day move into deterministic prepare/apply plans. Apply re-reads the complete Item graph and owning Day records in one Dexie transaction, rejects sibling/day races and changed previews, and commits only the verified plan. The V2 path sends every affected Item, skips parent Trip touching, legacy outbox, and snapshot dirty markers; fallback preserves the prior behavior.
+- `day.items.reorder@1` now requires one complete day graph with unique contiguous `1..N` orders. `item.move@1` requires every source/destination sibling, contiguous order per resulting day, exactly two affected before/after days, and exactly one Item whose day changes.
+- Single Item and structural workflow RPCs now use the same deterministic `object -> affected day -> mutation` advisory-lock order. Workflow preflight counts all live Items in the locked days and rejects omitted siblings before the first write. Item `dayId`, safe integer `sortOrder`, and unique controlled `ticketIds` are validated in TypeScript, both SQL paths, and executable migration gates.
+- Generic single-object Item updates no longer carry `sortOrder` or `ticketIds`; those fields remain on legacy atomic paths until their registered product workflow adapters are connected. The single-object runtime also verifies the complete acknowledged/pending optimistic chain against current local data before applying a new V2 edit, so legacy-only drift cannot become a silent overwrite.
+- The on-demand workflow runtime remains outside startup and PWA precache budgets. It enters the existing runtime asset cache after first online load; a login-time prewarm plus never-loaded-offline test is now an explicit gate before the full-cutover constant can change.
+- Both Account Cloud compile-time gates remain `false`. No Supabase Preview/Production migration, real account read/write, Provider call, or cloud configuration change occurred.
+
+Review:
+
+- Local double review replaced the unavailable external review workers. It covered fallback-before-write, later-object pending work, local/receipt drift, account switching, unknown workflow/fields, structural Item fields, complete graph cardinality, one-moved-item semantics, deterministic lock ordering, stale Day plans, Ticket relationship bypass, legacy outbox duplication, replay identity, rollback, and production bundle reachability.
+- Clean PostgreSQL execution caught no syntax/runtime issue after hardening. The pgTAP suite now includes a separate two-day fixture proving complete move success plus rejection and no-write behavior for omitted siblings, two moved Items, non-contiguous order, and missing Item structural fields.
+- Remaining risk is explicit: product adapters still cover only 2 of 7 registered workflows; deletion/restoration and parent lifecycle locks are not complete; Preview multi-connection contention, real response loss, real bootstrap, Realtime, second-device recovery, production latency, and first-use offline runtime loading have no external receipt.
+
+Local validation:
+
+- A clean `supabase db reset --local` replayed every migration. `npm run test:db:account-cloud` passed all 52 pgTAP checks, and `supabase db lint --local --schema public,storage --fail-on error` passed with only the pre-existing Supabase Storage helper warnings.
+- Focused product/runtime/migration regression passed 8 files and 96 tests. The complete unit suite passed 238 files and 1,940 tests. `npm run typecheck`, `npm run lint`, Account Cloud/capability/Cloudflare migration gates, production-boundary checks, and `git diff --check` passed.
+- `npm run build` passed at 477.5 KiB entry, 863.3 KiB initial JS, 248.2 KiB initial gzip, 10 startup chunks, and 2490.9 KiB/128-entry precache. The Account workflow runtime is neither a startup chunk nor a precached optional asset.
+- PWA upgrade passed 5/5, Desktop Beta smoke passed 1/1, and full serial Playwright passed all 194 tests in 7.3 minutes.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime, or real-account behavior.

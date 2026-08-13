@@ -19,6 +19,7 @@ describe('account-cloud migration contract', () => {
       objectTypeCount: 22,
       receiptLedger: true,
       realtimePublished: true,
+      structuralDayLocking: true,
     })
   })
 
@@ -56,6 +57,34 @@ describe('account-cloud migration contract', () => {
       contractSource,
       migrationSql: migrationSql.replace('prior_receipt.request_hash <> request_hash', 'prior_receipt.request_hash = request_hash'),
     })).toThrow('replay validation')
+  })
+
+  it('rejects removal of item structural validation or day locking', () => {
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace("|| ':item-day:'", "|| ':removed-day-lock:'"),
+    })).toThrow(/item-day|structural fields and lock/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        "target_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'",
+        'false',
+      ),
+    })).toThrow(/dayId|structural fields and lock/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        "pg_catalog.jsonb_typeof(target_payload -> 'ticketIds') is distinct from 'array'",
+        'false',
+      ),
+    })).toThrow(/ticketIds/)
+    expect(() => validateAccountCloudMigration({
+      contractSource,
+      migrationSql: migrationSql.replace(
+        '-- Lock the mutation identity after the object and structural day locks.',
+        '-- Lock removed.',
+      ),
+    })).toThrow('structural fields and lock')
   })
 
   it('rejects removal of the authenticated account-context guard', () => {

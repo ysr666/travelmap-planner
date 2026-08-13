@@ -267,6 +267,7 @@ declare
   next_revision bigint;
   request_hash text;
   has_current_object boolean;
+  structural_day_id text;
 begin
   current_user_id := auth.uid();
   if current_user_id is null then
@@ -431,6 +432,49 @@ begin
     );
   end if;
 
+  if target_operation = 'upsert'
+     and target_object_type = 'item'
+     and (
+       target_payload ->> 'dayId' is null
+       or target_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or pg_catalog.jsonb_typeof(target_payload -> 'sortOrder') is distinct from 'number'
+       or target_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'
+       or pg_catalog.jsonb_typeof(target_payload -> 'ticketIds') is distinct from 'array'
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', target_mutation_id,
+      'reason', 'invalid_or_sensitive_payload'
+    );
+  end if;
+
+  if target_operation = 'upsert'
+     and target_object_type = 'item'
+     and (
+       (target_payload ->> 'sortOrder')::numeric > 9007199254740991
+       or exists (
+         select 1
+         from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket_id(value)
+         where pg_catalog.jsonb_typeof(ticket_id.value) <> 'string'
+           or ticket_id.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       )
+       or (
+         select pg_catalog.count(*)
+         from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket_id(value)
+       ) <> (
+         select pg_catalog.count(distinct ticket_id.value #>> '{}')
+         from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket_id(value)
+       )
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'mutationId', target_mutation_id,
+      'reason', 'invalid_or_sensitive_payload'
+    );
+  end if;
+
   if target_operation = 'delete' and target_payload is not null then
     return pg_catalog.jsonb_build_object(
       'schemaVersion', 1,
@@ -463,14 +507,55 @@ begin
     'hex'
   );
 
-  -- Serialize absent-row creates by object identity and serialize retries by
-  -- mutation identity before consulting the receipt ledger.
+  -- Lock the object before any structural day or mutation identity lock.
+  -- This also serializes absent-row creates by object identity.
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       current_user_id::text || ':' || target_object_type || ':' || target_object_id,
       0
     )
   );
+
+  select *
+  into current_object
+  from public.tripmap_account_objects
+  where owner_id = current_user_id
+    and object_type = target_object_type
+    and object_id = target_object_id
+  for update;
+  has_current_object := found;
+  current_revision := case when has_current_object then current_object.revision else 0 end;
+
+  -- Lock every affected itinerary day after the object lock and before the
+  -- mutation identity lock. Reorder and move workflows use the same namespace.
+  if target_object_type = 'item' then
+    for structural_day_id in
+      select distinct requested_day.day_id
+      from (
+        values
+          (case when target_operation = 'upsert' then target_payload ->> 'dayId' end),
+          (case
+            when has_current_object and not current_object.tombstone
+              then current_object.payload ->> 'dayId'
+          end)
+      ) as requested_day(day_id)
+      where requested_day.day_id is not null
+      order by requested_day.day_id
+    loop
+      perform pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+          current_user_id::text
+            || ':item-day:'
+            || target_trip_id
+            || ':'
+            || structural_day_id,
+          0
+        )
+      );
+    end loop;
+  end if;
+
+  -- Lock the mutation identity after the object and structural day locks.
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       current_user_id::text || ':' || target_mutation_id,
@@ -519,16 +604,6 @@ begin
       'object', tripmap_private.account_object_public_json(current_object)
     );
   end if;
-
-  select *
-  into current_object
-  from public.tripmap_account_objects
-  where owner_id = current_user_id
-    and object_type = target_object_type
-    and object_id = target_object_id
-  for update;
-  has_current_object := found;
-  current_revision := case when has_current_object then current_object.revision else 0 end;
 
   if has_current_object and current_object.trip_id <> target_trip_id then
     return pg_catalog.jsonb_build_object(

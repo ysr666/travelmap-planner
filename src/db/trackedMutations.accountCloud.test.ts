@@ -1,8 +1,12 @@
 import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AccountObjectMutationV1 } from '../lib/accountCloud/contract'
+import type {
+  AccountObjectMutationV1,
+  AccountObjectRowV1,
+} from '../lib/accountCloud/contract'
 import { ACCOUNT_CLOUD_V2_REQUIRED_MIGRATION } from '../lib/accountCloud/feature'
+import type { AccountWorkflowRequestV1 } from '../lib/accountCloud/workflowContract'
 import {
   activateAccountDatabase,
   activateLegacyDatabaseForTests,
@@ -14,19 +18,31 @@ import {
   createItineraryItem,
   createTicketMeta,
   createTrip,
+  moveItineraryItemBetweenDays,
   reorderDayItems,
   updateItineraryItem,
   updateTicketMeta,
   updateTrip,
 } from './trackedMutations'
 
-const mocks = vi.hoisted(() => ({ commit: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  commit: vi.fn(),
+  workflowCommit: vi.fn(),
+}))
 
 vi.mock('../lib/accountCloud/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/accountCloud/client')>()
   return {
     ...actual,
     commitAccountObjectMutationV1: mocks.commit,
+  }
+})
+
+vi.mock('../lib/accountCloud/workflowClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/accountCloud/workflowClient')>()
+  return {
+    ...actual,
+    commitAccountWorkflowV1: mocks.workflowCommit,
   }
 })
 
@@ -50,8 +66,12 @@ beforeEach(async () => {
   await db.delete()
   await db.open()
   mocks.commit.mockReset()
+  mocks.workflowCommit.mockReset()
   mocks.commit.mockImplementation(async (mutation: AccountObjectMutationV1) => (
     successResult(mutation, mutation.expectedRevision + 1)
+  ))
+  mocks.workflowCommit.mockImplementation(async (request: AccountWorkflowRequestV1) => (
+    workflowSuccessResult(request)
   ))
   vi.stubEnv('VITE_ACCOUNT_CLOUD_V2_MODE', 'enabled')
   vi.stubEnv('VITE_ACCOUNT_CLOUD_V2_MIGRATION', ACCOUNT_CLOUD_V2_REQUIRED_MIGRATION)
@@ -138,7 +158,7 @@ describe('tracked mutations account-cloud cutover', () => {
     ])
   })
 
-  it('keeps multi-object reorder operations on the legacy atomic path', async () => {
+  it('keeps Item relationship and order fields off the single-object V2 path', async () => {
     const trip = await createTrip({
       destination: 'United Kingdom',
       endDate: '2026-08-20',
@@ -146,19 +166,190 @@ describe('tracked mutations account-cloud cutover', () => {
       title: 'UK',
     })
     const day = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
-    const first = await createItineraryItem({ dayId: day.id, sortOrder: 0, ticketIds: [], title: 'A', tripId: trip.id })
-    const second = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'B', tripId: trip.id })
+    const item = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'A', tripId: trip.id })
     mocks.commit.mockClear()
+    await db.syncOutbox.clear()
+
+    await expect(updateItineraryItem(item.id, { ticketIds: ['ticket_pending'] }))
+      .resolves.toMatchObject({ ticketIds: ['ticket_pending'] })
+
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.accountObjectRevisions.get(`item:${item.id}`)).resolves.toMatchObject({
+      payload: expect.objectContaining({ ticketIds: [] }),
+      revision: 1,
+    })
+    await expect(db.syncOutbox.toArray()).resolves.toEqual([
+      expect.objectContaining({ objectId: item.id, objectType: 'item', operation: 'upsert' }),
+    ])
+  })
+
+  it('commits a complete day reorder as one registered workflow without a legacy write', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const day = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
+    const first = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'A', tripId: trip.id })
+    const second = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: 'B', tripId: trip.id })
+    const tripUpdatedAt = (await db.trips.get(trip.id))?.updatedAt
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
 
     const reordered = await reorderDayItems(day.id, [second.id, first.id], [first.id, second.id])
 
     expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    const request = mocks.workflowCommit.mock.calls[0]?.[0] as AccountWorkflowRequestV1
+    expect(request).toMatchObject({
+      steps: [
+        expect.objectContaining({ expectedRevision: 1, objectId: second.id, objectType: 'item' }),
+        expect.objectContaining({ expectedRevision: 1, objectId: first.id, objectType: 'item' }),
+      ],
+      tripId: trip.id,
+      workflowId: 'day.items.reorder@1',
+    })
+    expect(request.steps.map((step) => step.payload?.sortOrder)).toEqual([1, 2])
+    expect(reordered.map((item) => item.id)).toEqual([second.id, first.id])
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
     await expect(db.accountMutationJournal.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+    await expect(db.accountObjectRevisions.bulkGet([
+      `item:${first.id}`,
+      `item:${second.id}`,
+    ])).resolves.toEqual([
+      expect.objectContaining({ revision: 2 }),
+      expect.objectContaining({ revision: 2 }),
+    ])
+    await expect(db.trips.get(trip.id)).resolves.toMatchObject({ updatedAt: tripUpdatedAt })
+  })
+
+  it('commits a cross-day move with every source and destination sibling in one workflow', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const sourceDay = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
+    const destinationDay = await createDay({ date: '2026-08-12', sortOrder: 1, title: 'London', tripId: trip.id })
+    const sourceFirst = await createItineraryItem({ dayId: sourceDay.id, sortOrder: 1, ticketIds: [], title: 'A', tripId: trip.id })
+    const target = await createItineraryItem({ dayId: sourceDay.id, sortOrder: 2, ticketIds: [], title: 'B', tripId: trip.id })
+    const sourceLast = await createItineraryItem({ dayId: sourceDay.id, sortOrder: 3, ticketIds: [], title: 'C', tripId: trip.id })
+    const destinationFirst = await createItineraryItem({ dayId: destinationDay.id, sortOrder: 1, ticketIds: [], title: 'D', tripId: trip.id })
+    const destinationLast = await createItineraryItem({ dayId: destinationDay.id, sortOrder: 2, ticketIds: [], title: 'E', tripId: trip.id })
+    const tripUpdatedAt = (await db.trips.get(trip.id))?.updatedAt
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+
+    const result = await moveItineraryItemBetweenDays(
+      target.id,
+      destinationDay.id,
+      [destinationFirst.id, target.id, destinationLast.id],
+      {
+        expectedDestinationItemIds: [destinationFirst.id, destinationLast.id],
+        expectedSourceItemIds: [sourceFirst.id, target.id, sourceLast.id],
+        sourceDayId: sourceDay.id,
+      },
+    )
+
+    expect(result.movedItem).toMatchObject({ dayId: destinationDay.id, id: target.id, sortOrder: 2 })
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).toHaveBeenCalledTimes(1)
+    const request = mocks.workflowCommit.mock.calls[0]?.[0] as AccountWorkflowRequestV1
+    expect(request.workflowId).toBe('item.move@1')
+    expect(request.steps.map((step) => step.objectId).sort()).toEqual([
+      sourceFirst.id,
+      target.id,
+      sourceLast.id,
+      destinationFirst.id,
+      destinationLast.id,
+    ].sort())
+    expect(request.steps.every((step) => step.expectedRevision === 1)).toBe(true)
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
+    await expect(db.trips.get(trip.id)).resolves.toMatchObject({ updatedAt: tripUpdatedAt })
+    const revisions = await db.accountObjectRevisions.bulkGet(
+      request.steps.map((step) => `item:${step.objectId}`),
+    )
+    expect(revisions.every((revision) => revision?.revision === 2)).toBe(true)
+  })
+
+  it('falls back before mutation when the complete reorder graph is not bootstrapped', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const day = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
+    const bootstrapped = await createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'A', tripId: trip.id })
+    const legacy = await repo.createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: 'B', tripId: trip.id })
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+
+    const reordered = await reorderDayItems(day.id, [legacy.id, bootstrapped.id], [bootstrapped.id, legacy.id])
+
+    expect(reordered.map((item) => item.id)).toEqual([legacy.id, bootstrapped.id])
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
     const outbox = await db.syncOutbox.toArray()
-    expect(outbox.length).toBeGreaterThan(0)
-    expect(outbox.every((entry) => entry.objectType === 'item')).toBe(true)
-    expect(outbox.map((entry) => entry.objectId).sort())
-      .toEqual(reordered.map((item) => item.id).sort())
+    expect(outbox.map((entry) => entry.objectId).sort()).toEqual([
+      bootstrapped.id,
+      legacy.id,
+    ].sort())
+  })
+
+  it('fails closed when a later V2 object is busy even if an earlier object needs fallback', async () => {
+    const trip = await createTrip({
+      destination: 'United Kingdom',
+      endDate: '2026-08-20',
+      startDate: '2026-08-11',
+      title: 'UK',
+    })
+    const day = await createDay({ date: '2026-08-11', sortOrder: 0, title: 'Arrival', tripId: trip.id })
+    const legacy = await repo.createItineraryItem({ dayId: day.id, sortOrder: 1, ticketIds: [], title: 'Legacy', tripId: trip.id })
+    const bootstrapped = await createItineraryItem({ dayId: day.id, sortOrder: 2, ticketIds: [], title: 'Cloud', tripId: trip.id })
+    await db.accountMutationJournal.put({
+      accountHash,
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device_primary',
+      expectedRevision: 1,
+      mutationId: '33333333-3333-4333-8333-333333333333',
+      objectId: bootstrapped.id,
+      objectKey: `item:${bootstrapped.id}`,
+      objectSchemaVersion: 1,
+      objectType: 'item',
+      operation: 'upsert',
+      payload: bootstrapped,
+      requestFingerprint: 'pending',
+      status: 'pending',
+      tripId: trip.id,
+      updatedAt: 1,
+    })
+    mocks.commit.mockClear()
+    mocks.workflowCommit.mockClear()
+    await db.syncOutbox.clear()
+
+    await expect(reorderDayItems(
+      day.id,
+      [bootstrapped.id, legacy.id],
+      [legacy.id, bootstrapped.id],
+    )).rejects.toMatchObject({ code: 'conflict' })
+
+    await expect(repo.listItemsByDay(day.id)).resolves.toMatchObject([
+      { id: legacy.id, sortOrder: 1 },
+      { id: bootstrapped.id, sortOrder: 2 },
+    ])
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
+    await expect(db.syncOutbox.count()).resolves.toBe(0)
   })
 
   it('keeps ticket binding changes on the legacy multi-object path', async () => {
@@ -185,6 +376,7 @@ describe('tracked mutations account-cloud cutover', () => {
 
     expect(result?.changedItems).toHaveLength(1)
     expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.workflowCommit).not.toHaveBeenCalled()
     await expect(db.accountMutationJournal.count()).resolves.toBe(0)
     const outbox = await db.syncOutbox.toArray()
     expect(outbox.map((entry) => entry.objectType).sort()).toEqual(['item', 'ticket_meta'])
@@ -214,5 +406,45 @@ function successResult(mutation: AccountObjectMutationV1, revision: number) {
     },
     schemaVersion: 1 as const,
     status: 'applied' as const,
+  }
+}
+
+function workflowSuccessResult(request: AccountWorkflowRequestV1) {
+  return {
+    batchMutationId: request.batchMutationId,
+    schemaVersion: 1 as const,
+    status: 'applied' as const,
+    steps: request.steps.map((step) => ({
+      appliedRevision: step.expectedRevision + 1,
+      currentRevision: step.expectedRevision + 1,
+      mutationId: step.mutationId,
+      object: workflowRow(step, request.tripId, step.expectedRevision + 1),
+      stepId: step.stepId,
+    })),
+    tripId: request.tripId,
+    workflowId: request.workflowId,
+  }
+}
+
+function workflowRow(
+  step: AccountWorkflowRequestV1['steps'][number],
+  tripId: string,
+  revision: number,
+): AccountObjectRowV1 {
+  return {
+    actorId: ACTOR_ID,
+    createdAt: NOW_ISO,
+    deletedAt: null,
+    deviceId: step.mutationId,
+    mutationId: step.mutationId,
+    objectId: step.objectId,
+    objectSchemaVersion: step.objectSchemaVersion,
+    objectType: step.objectType,
+    payload: step.payload ?? null,
+    revision,
+    schemaVersion: 1,
+    tombstone: false,
+    tripId,
+    updatedAt: NOW_ISO,
   }
 }

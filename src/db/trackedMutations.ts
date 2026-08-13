@@ -16,6 +16,8 @@ import {
   createCoreAccountObjectIfEnabled,
   updateCoreAccountObjectIfEnabled,
 } from '../lib/accountCloud/runtimeLoader'
+import { executeProductAccountWorkflowIfEnabled } from '../lib/accountCloud/workflowRuntimeLoader'
+import type { JsonObject } from '../lib/accountCloud/contract'
 import { recordTripWriteForSync } from '../lib/tripSyncQueue'
 import * as repo from './repositories'
 import * as ledgerRepo from './ledgerRepositories'
@@ -138,7 +140,9 @@ export async function updateItineraryItem(
   patch: Parameters<typeof repo.updateItineraryItem>[1],
 ) {
   const existing = await repo.getItineraryItem(itemId)
-  if (existing) {
+  const requiresRegisteredWorkflow = Object.hasOwn(patch, 'sortOrder')
+    || Object.hasOwn(patch, 'ticketIds')
+  if (existing && !requiresRegisteredWorkflow) {
     const accountCloud = await updateCoreAccountObjectIfEnabled({
       apply: () => repo.updateItineraryItem(itemId, patch, { touchTrip: false }),
       objectId: itemId,
@@ -161,7 +165,23 @@ export async function reorderDayItems(
   orderedItemIds: string[],
   expectedCurrentItemIds?: string[],
 ) {
-  const items = await repo.reorderDayItems(dayId, orderedItemIds, expectedCurrentItemIds)
+  const plan = await repo.prepareDayItemsReorder(dayId, orderedItemIds, expectedCurrentItemIds)
+  if (plan.changedItems.length > 0) {
+    const accountCloud = await executeProductAccountWorkflowIfEnabled({
+      apply: () => repo.applyDayItemsReorderPlan(plan, { touchTrip: false }),
+      steps: plan.afterItems.map((item) => ({
+        objectId: item.id,
+        objectType: 'item' as const,
+        operation: 'upsert' as const,
+        payload: item as unknown as JsonObject,
+      })),
+      tripId: plan.tripId,
+      workflowId: 'day.items.reorder@1',
+    })
+    if (accountCloud.handled) return accountCloud.value
+  }
+
+  const items = await repo.applyDayItemsReorderPlan(plan)
   if (items.length > 0) {
     await Promise.all(items.map((item) => enqueueObjectUpsert({ object: item, objectType: 'item' })))
     recordTripWriteForSync(items[0].tripId, 'items-reordered', { emitChangeEvent: false })
@@ -175,12 +195,26 @@ export async function moveItineraryItemBetweenDays(
   nextDestinationItemIds: string[],
   options: Parameters<typeof repo.moveItineraryItemBetweenDays>[3],
 ) {
-  const result = await repo.moveItineraryItemBetweenDays(
+  const plan = await repo.prepareItineraryItemMove(
     itemId,
     destinationDayId,
     nextDestinationItemIds,
     options,
   )
+  const accountCloud = await executeProductAccountWorkflowIfEnabled({
+    apply: () => repo.applyItineraryItemMovePlan(plan, { touchTrip: false }),
+    steps: plan.afterItems.map((item) => ({
+      objectId: item.id,
+      objectType: 'item' as const,
+      operation: 'upsert' as const,
+      payload: item as unknown as JsonObject,
+    })),
+    tripId: plan.tripId,
+    workflowId: 'item.move@1',
+  })
+  if (accountCloud.handled) return accountCloud.value
+
+  const result = await repo.applyItineraryItemMovePlan(plan)
   await Promise.all(
     result.changedItems.map((item) =>
       enqueueObjectUpsert({ object: item, objectType: 'item' }),

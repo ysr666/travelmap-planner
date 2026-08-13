@@ -18,6 +18,7 @@ const FORBIDDEN_INITIAL_CHUNKS = [
   ['PDF parser', /(?:^|[-_.])pdf(?:[-_.]|$)/i],
   ['OCR runtime', /(?:^|[-_.])ocr(?:[-_.]|$)|tesseract/i],
   ['archive parser', /jszip/i],
+  ['Account workflow runtime', /workflowMutationRuntime/i],
 ]
 const FORBIDDEN_PRECACHE_ASSETS = [
   ['AI draft', /^assets\/AiDraftPage-.+\.js$/],
@@ -29,6 +30,7 @@ const FORBIDDEN_PRECACHE_ASSETS = [
   ['OCR worker', /^assets\/worker\.min-.+\.js$/],
   ['PDF parser', /^assets\/pdf.+\.js$/],
   ['Provider network client', /^assets\/providerProxyClientCore-.+\.js$/],
+  ['Account workflow runtime', /^assets\/workflowMutationRuntime-.+\.js$/],
 ]
 const REQUIRED_PRECACHE_ASSETS = [
   ['application entry', /^assets\/index-.+\.js$/],

@@ -121,6 +121,20 @@ describe('account workflow contract', () => {
       ...makeWorkflow('day.items.reorder@1'),
       steps: [makeItemStep()],
     })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+    expect(() => parseAccountWorkflowRequestV1({
+      ...makeWorkflow('day.items.reorder@1'),
+      steps: makeWorkflow('day.items.reorder@1').steps.map((step, index) => ({
+        ...step,
+        payload: { ...step.payload, sortOrder: index === 0 ? 1 : 3 },
+      })),
+    })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+    const move = makeWorkflow('item.move@1')
+    expect(() => parseAccountWorkflowRequestV1({
+      ...move,
+      steps: [
+        { ...move.steps[0], payload: { ...move.steps[0].payload, sortOrder: 2 } },
+      ],
+    })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
     const reorder = makeWorkflow('day.items.reorder@1')
     expect(() => parseAccountWorkflowRequestV1({
       ...reorder,
@@ -156,7 +170,7 @@ describe('account workflow contract', () => {
         steps: binding.steps.map((step) => step.objectType === 'item'
           ? { ...step, payload: { ...step.payload, ticketIds } }
           : step),
-      })).toThrowError(expect.objectContaining({ code: 'workflow_shape_invalid' }))
+      })).toThrow()
     }
     expect(() => parseAccountWorkflowRequestV1({
       ...binding,
@@ -235,7 +249,11 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
   switch (workflowId) {
     case 'day.items.reorder@1':
       steps = [
-        makeItemStep({ objectId: 'item_a', stepId: 'item_a' }),
+        makeItemStep({
+          objectId: 'item_a',
+          payload: makeItemPayload('item_a', { sortOrder: 2 }),
+          stepId: 'item_a',
+        }),
         makeItemStep({
           mutationId: '33333333-3333-4333-8333-333333333333',
           objectId: 'item_b',
@@ -245,7 +263,7 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
       ]
       break
     case 'item.move@1':
-      steps = [makeItemStep({ payload: makeItemPayload('item_a', { dayId: 'day_b' }) })]
+      steps = [makeItemStep({ payload: makeItemPayload('item_a', { dayId: 'day_b', sortOrder: 1 }) })]
       break
     case 'trip.import.commit@1':
       steps = [{

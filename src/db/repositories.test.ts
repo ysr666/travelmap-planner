@@ -22,6 +22,10 @@ import {
   listTicketsByItem,
   listTicketsByTrip,
   moveItineraryItemBetweenDays,
+  prepareDayItemsReorder,
+  prepareItineraryItemMove,
+  applyDayItemsReorderPlan,
+  applyItineraryItemMovePlan,
   replaceTripPlanRecords,
   reorderDayItems,
   restoreItineraryItemDeletion,
@@ -210,6 +214,111 @@ describe('ItineraryItem CRUD', () => {
     await expect(getItineraryItem(target.id)).resolves.toMatchObject({
       dayId: secondDay.id,
       executionState: undefined,
+    })
+  })
+
+  it('rejects a prepared reorder after any sibling changes without a partial write', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'First', sortOrder: 1, ticketIds: [] })
+    const second = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Second', sortOrder: 2, ticketIds: [] })
+    const plan = await prepareDayItemsReorder(
+      day.id,
+      [second.id, first.id],
+      [first.id, second.id],
+      50,
+    )
+    await updateItineraryItem(first.id, { title: 'Changed elsewhere' })
+
+    await expect(applyDayItemsReorderPlan(plan)).rejects.toThrow('当天顺序已在其他位置更新')
+    await expect(listItemsByDay(day.id)).resolves.toMatchObject([
+      { id: first.id, sortOrder: 1, title: 'Changed elsewhere' },
+      { id: second.id, sortOrder: 2, title: 'Second' },
+    ])
+  })
+
+  it('rejects a prepared reorder after the owning day changes', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const day = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const first = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'First', sortOrder: 1, ticketIds: [] })
+    const second = await createItineraryItem({ tripId: trip.id, dayId: day.id, title: 'Second', sortOrder: 2, ticketIds: [] })
+    const plan = await prepareDayItemsReorder(
+      day.id,
+      [second.id, first.id],
+      [first.id, second.id],
+      50,
+    )
+    await updateDay(day.id, { title: 'Changed day' })
+
+    await expect(applyDayItemsReorderPlan(plan)).rejects.toThrow('当天顺序已在其他位置更新')
+    await expect(listItemsByDay(day.id)).resolves.toMatchObject([
+      { id: first.id, sortOrder: 1 },
+      { id: second.id, sortOrder: 2 },
+    ])
+  })
+
+  it('rejects a prepared cross-day move after a destination sibling changes', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const sourceDay = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const destinationDay = await createDay({ tripId: trip.id, date: '2025-04-02', title: 'Day 2', sortOrder: 2 })
+    const target = await createItineraryItem({ tripId: trip.id, dayId: sourceDay.id, title: 'Target', sortOrder: 1, ticketIds: [] })
+    const destination = await createItineraryItem({ tripId: trip.id, dayId: destinationDay.id, title: 'Destination', sortOrder: 1, ticketIds: [] })
+    const plan = await prepareItineraryItemMove(
+      target.id,
+      destinationDay.id,
+      [destination.id, target.id],
+      {
+        expectedDestinationItemIds: [destination.id],
+        expectedSourceItemIds: [target.id],
+        sourceDayId: sourceDay.id,
+      },
+      50,
+    )
+    await updateItineraryItem(destination.id, { title: 'Changed elsewhere' })
+
+    await expect(applyItineraryItemMovePlan(plan)).rejects.toThrow(
+      '来源日期或目标日期行程已变化',
+    )
+    await expect(getItineraryItem(target.id)).resolves.toMatchObject({
+      dayId: sourceDay.id,
+      sortOrder: 1,
+    })
+    await expect(getItineraryItem(destination.id)).resolves.toMatchObject({
+      dayId: destinationDay.id,
+      sortOrder: 1,
+      title: 'Changed elsewhere',
+    })
+  })
+
+  it('rejects a prepared cross-day move after either day changes', async () => {
+    const trip = await createTrip({ title: 'Trip', destination: 'A', startDate: '2025-04-01', endDate: '2025-04-03' })
+    const sourceDay = await createDay({ tripId: trip.id, date: '2025-04-01', title: 'Day 1', sortOrder: 1 })
+    const destinationDay = await createDay({ tripId: trip.id, date: '2025-04-02', title: 'Day 2', sortOrder: 2 })
+    const target = await createItineraryItem({ tripId: trip.id, dayId: sourceDay.id, title: 'Target', sortOrder: 1, ticketIds: [] })
+    const destination = await createItineraryItem({ tripId: trip.id, dayId: destinationDay.id, title: 'Destination', sortOrder: 1, ticketIds: [] })
+    const plan = await prepareItineraryItemMove(
+      target.id,
+      destinationDay.id,
+      [destination.id, target.id],
+      {
+        expectedDestinationItemIds: [destination.id],
+        expectedSourceItemIds: [target.id],
+        sourceDayId: sourceDay.id,
+      },
+      50,
+    )
+    await updateDay(destinationDay.id, { title: 'Changed destination' })
+
+    await expect(applyItineraryItemMovePlan(plan)).rejects.toThrow(
+      '来源日期或目标日期行程已变化',
+    )
+    await expect(getItineraryItem(target.id)).resolves.toMatchObject({
+      dayId: sourceDay.id,
+      sortOrder: 1,
+    })
+    await expect(getItineraryItem(destination.id)).resolves.toMatchObject({
+      dayId: destinationDay.id,
+      sortOrder: 1,
     })
   })
 })

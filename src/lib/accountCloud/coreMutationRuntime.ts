@@ -153,6 +153,7 @@ export async function updateCoreAccountObject<T extends CoreAccountObjectType>(
       fallback = true
       return
     }
+    assertCoreOptimisticBaseline(previous, pending, revision)
 
     assertActiveAccountContext(accountHash, database)
     const object = await input.apply()
@@ -329,6 +330,27 @@ function resolveNextExpectedRevision({
     expected += 1
   }
   return expected
+}
+
+function assertCoreOptimisticBaseline<T extends CoreAccountObjectType>(
+  current: CoreAccountObjectByType[T],
+  pending: AccountMutationJournalEntry[],
+  revision: Awaited<ReturnType<typeof getAccountObjectRevision>>,
+) {
+  let expected: unknown = revision?.payload ?? null
+  for (const entry of pending) {
+    if (
+      entry.optimisticBefore === undefined
+      || entry.optimisticAfter === undefined
+      || !sameRecord(entry.optimisticBefore, expected)
+    ) {
+      throw new AccountCloudWriteError('invalid_state')
+    }
+    expected = entry.optimisticAfter
+  }
+  if (!sameRecord(current, expected)) {
+    throw new AccountCloudWriteError('invalid_state')
+  }
 }
 
 function getCoreTable<T extends CoreAccountObjectType>(

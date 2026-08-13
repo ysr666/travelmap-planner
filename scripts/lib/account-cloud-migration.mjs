@@ -24,6 +24,13 @@ const REQUIRED_FRAGMENTS = [
   "'server_managed_object'",
   'account_payload_has_forbidden_key',
   'pg_advisory_xact_lock',
+  "':item-day:'",
+  "target_object_type = 'item'",
+  "target_payload ->> 'dayId'",
+  "target_payload ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'",
+  "target_payload ->> 'sortOrder' !~ '^[0-9]{1,16}$'",
+  "pg_catalog.jsonb_typeof(target_payload -> 'ticketIds') is distinct from 'array'",
+  "pg_catalog.count(distinct ticket_id.value #>> '{}')",
   'account_mutation_receipts',
   'alter publication supabase_realtime add table public.tripmap_account_objects',
   'from public.cloud_sync_objects as legacy',
@@ -115,6 +122,25 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
   if (!/security\s+definer/i.test(privateFunction) || !/current_user_id\s*:=\s*auth\.uid\(\)/i.test(privateFunction)) {
     throw new Error('The private account-cloud RPC must authenticate inside its security-definer body.')
   }
+  const normalizedPrivateFunction = privateFunction.toLowerCase()
+  const objectLockMarker = normalizedPrivateFunction.indexOf(
+    '-- lock the object before any structural day or mutation identity lock',
+  )
+  const structuralDayLockMarker = normalizedPrivateFunction.indexOf(
+    '-- lock every affected itinerary day after the object lock and before the',
+  )
+  const mutationLockMarker = normalizedPrivateFunction.indexOf(
+    '-- lock the mutation identity after the object and structural day locks',
+  )
+  if (
+    !/target_object_type\s*=\s*'item'[\s\S]{0,700}target_payload\s*->>\s*'dayId'/i
+      .test(privateFunction)
+    || objectLockMarker < 0
+    || structuralDayLockMarker <= objectLockMarker
+    || mutationLockMarker <= structuralDayLockMarker
+  ) {
+    throw new Error('Item writes must validate structural fields and lock the affected day after the object lock.')
+  }
   const signature = privateFunction.slice(0, privateFunction.indexOf('returns jsonb')).toLowerCase()
   if (/owner_id|actor_id/.test(signature)) {
     throw new Error('The account-cloud RPC must not accept owner or actor IDs from the client.')
@@ -139,6 +165,7 @@ export function validateAccountCloudMigration({ migrationSql, contractSource }) 
     objectTypeCount: contractTypes.length,
     receiptLedger: true,
     realtimePublished: true,
+    structuralDayLocking: true,
   }
 }
 

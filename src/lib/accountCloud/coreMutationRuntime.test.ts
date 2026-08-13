@@ -175,6 +175,29 @@ describe('core account-cloud mutation runtime', () => {
     ])
   })
 
+  it('rejects an update when local state no longer matches its acknowledged revision', async () => {
+    const created = await createCoreAccountObject({
+      apply: () => repo.createTrip(makeTripInput('Original')),
+      objectType: 'trip',
+    })
+    if (!created.handled) throw new Error('expected cloud create')
+    const trip = created.value
+    await repo.updateTrip(trip.id, { title: 'Legacy-only edit' })
+    const apply = vi.fn(() => repo.updateTrip(trip.id, { title: 'Unsafe overwrite' }))
+
+    await expect(updateCoreAccountObject({
+      apply,
+      objectId: trip.id,
+      objectType: 'trip',
+      tripId: trip.id,
+    })).rejects.toEqual(new AccountCloudWriteError('invalid_state'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).toHaveBeenCalledTimes(1)
+    await expect(db.trips.get(trip.id)).resolves.toMatchObject({ title: 'Legacy-only edit' })
+    await expect(db.accountMutationJournal.count()).resolves.toBe(0)
+  })
+
   it('never reconciles an old account write against the newly active account database', async () => {
     let objectId = ''
     mocks.commit.mockImplementationOnce(async (mutation: AccountObjectMutationV1) => {

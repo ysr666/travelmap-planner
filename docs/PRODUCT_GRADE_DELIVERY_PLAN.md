@@ -111,7 +111,7 @@
 
 详细数据、权限、mutation、冲突、Realtime、恢复、迁移和回退合同见 [Account Cloud V2](CLOUD_DATA_MODEL_V2.md)。该合同在 Preview/Production 与客户端切换完成前保持 Target。
 
-当前本地实现进度：首批 7 个注册原子 workflow 中 5 个已有产品 adapter，包括同日重排、跨日移动、既有票据关系、新旅行 metadata 导入和现有账本 mutation 面；所有 rollout 硬门槛仍关闭，Preview、真实账号、Realtime、空设备恢复与生产切换均未完成。
+当前本地实现进度：首批 7 个注册原子 workflow 中 6 个已有产品 adapter，包括同日重排、跨日移动、既有票据关系、新旅行 metadata 导入、现有账本 mutation 面和已确认的自适应重排；所有 rollout 硬门槛仍关闭，统一 AI repair、Preview、真实账号、Realtime、空设备恢复与生产切换均未完成。
 
 交付项：
 

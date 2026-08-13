@@ -2,18 +2,31 @@ import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db/database'
-import type { ItineraryItem, TicketMeta } from '../../types'
+import type {
+  Day,
+  ItineraryItem,
+  TicketMeta,
+  Trip,
+  TripDisruptionEvent,
+  TripIntelligenceAppliedChangeRecord,
+  TripReplanRecord,
+} from '../../types'
 import {
   activateAccountDatabase,
   activateLegacyDatabaseForTests,
 } from '../accountDatabase'
 import { AccountCloudTransportError } from './client'
-import type { AccountObjectRowV1, JsonObject } from './contract'
+import type {
+  AccountObjectRowV1,
+  ClientMutableAccountObjectType,
+  JsonObject,
+} from './contract'
 import type { AccountWorkflowRequestV1 } from './workflowContract'
 import { redactTicketMetaForAccountCloud } from './mutationBuilder'
 import {
   AccountCloudWorkflowWriteError,
   executeProductAccountWorkflow,
+  type ProductAccountWorkflowStep,
 } from './workflowMutationRuntime'
 
 const mocks = vi.hoisted(() => ({ commit: vi.fn() }))
@@ -705,6 +718,208 @@ describe('product account workflow runtime', () => {
     ])
   })
 
+  it('commits a fully bootstrapped adaptive replan and advances only submitted revisions', async () => {
+    const fixture = makeAdaptiveRuntimeFixture()
+    await seedAdaptiveRuntimeFixture(fixture)
+    const apply = vi.fn(async () => {
+      await db.trips.put(fixture.afterTrip)
+      await db.itineraryItems.put(fixture.afterItem)
+      await db.tripReplanEvents.put(fixture.event)
+      await db.tripReplanRecords.put(fixture.record)
+      await db.tripIntelligenceAppliedChanges.put(fixture.history)
+      return 'applied'
+    })
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).resolves.toEqual({ handled: true, value: 'applied' })
+
+    expect(apply).toHaveBeenCalledTimes(1)
+    expect(mocks.commit).toHaveBeenCalledTimes(1)
+    expect(mocks.commit.mock.calls[0]?.[0]).toMatchObject({
+      steps: expect.arrayContaining([
+        expect.objectContaining({ expectedRevision: 1, objectId: fixture.trip.id }),
+        expect.objectContaining({ expectedRevision: 1, objectId: fixture.item.id }),
+      ]),
+      workflowId: 'trip.replan.apply@1',
+    })
+    await expect(db.accountObjectRevisions.bulkGet([
+      `trip:${fixture.trip.id}`,
+      `day:${fixture.day.id}`,
+      `item:${fixture.item.id}`,
+    ])).resolves.toEqual([
+      expect.objectContaining({ revision: 2 }),
+      expect.objectContaining({ revision: 1 }),
+      expect.objectContaining({ revision: 2 }),
+    ])
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
+  it('rolls back the complete adaptive local graph on a terminal server conflict', async () => {
+    const fixture = makeAdaptiveRuntimeFixture()
+    await seedAdaptiveRuntimeFixture(fixture)
+    mocks.commit.mockImplementationOnce(async (request: AccountWorkflowRequestV1) => ({
+      batchMutationId: request.batchMutationId,
+      conflicts: [{
+        currentObject: makeRow(request.steps[0], request.tripId, 2),
+        currentRevision: 2,
+        mutationId: request.steps[0].mutationId,
+        objectId: request.steps[0].objectId,
+        objectType: request.steps[0].objectType,
+        stepId: request.steps[0].stepId,
+      }],
+      reason: 'revision_mismatch' as const,
+      schemaVersion: 1 as const,
+      status: 'conflict' as const,
+      tripId: request.tripId,
+      workflowId: request.workflowId,
+    }))
+
+    await expect(executeProductAccountWorkflow({
+      apply: async () => {
+        await db.trips.put(fixture.afterTrip)
+        await db.itineraryItems.put(fixture.afterItem)
+        await db.tripReplanEvents.put(fixture.event)
+        await db.tripReplanRecords.put(fixture.record)
+        await db.tripIntelligenceAppliedChanges.put(fixture.history)
+        return 'applied'
+      },
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    await expect(db.trips.get(fixture.trip.id)).resolves.toEqual(fixture.trip)
+    await expect(db.itineraryItems.get(fixture.item.id)).resolves.toEqual(fixture.item)
+    await expect(db.tripReplanEvents.get(fixture.event.id)).resolves.toBeUndefined()
+    await expect(db.tripReplanRecords.get(fixture.record.id)).resolves.toBeUndefined()
+    await expect(db.tripIntelligenceAppliedChanges.get(fixture.history.id)).resolves.toBeUndefined()
+    await expect(db.accountWorkflowJournal.toArray()).resolves.toEqual([
+      expect.objectContaining({ optimisticResolution: 'rolled_back', status: 'conflict' }),
+    ])
+  })
+
+  it('falls back before apply when an unsubmitted adaptive dependency is not bootstrapped', async () => {
+    const fixture = makeAdaptiveRuntimeFixture({ dayExpectedRevision: 0 })
+    await seedAdaptiveRuntimeFixture(fixture, { omitDayRevision: true })
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).resolves.toEqual({ handled: false })
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
+  it('fails closed when an adaptive dependency has pending single-object work', async () => {
+    const fixture = makeAdaptiveRuntimeFixture()
+    await seedAdaptiveRuntimeFixture(fixture)
+    await db.accountMutationJournal.put({
+      accountHash: '00000000000000000000000000000000',
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device_primary',
+      expectedRevision: 1,
+      mutationId: '35555555-5555-4555-8555-555555555555',
+      objectId: fixture.day.id,
+      objectKey: `day:${fixture.day.id}`,
+      objectSchemaVersion: 1,
+      objectType: 'day',
+      operation: 'upsert',
+      payload: fixture.day,
+      requestFingerprint: 'pending-replan-day',
+      status: 'pending',
+      tripId: fixture.trip.id,
+      updatedAt: 1,
+    })
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('checks pending adaptive dependencies before falling back for an unbootstrapped submitted object', async () => {
+    const fixture = makeAdaptiveRuntimeFixture({ tripExpectedRevision: 0 })
+    await seedAdaptiveRuntimeFixture(fixture, { omitTripRevision: true })
+    await db.accountMutationJournal.put({
+      accountHash: '00000000000000000000000000000000',
+      attempts: 0,
+      createdAt: 1,
+      deviceId: 'device_primary',
+      expectedRevision: 1,
+      mutationId: '37777777-7777-4777-8777-777777777777',
+      objectId: fixture.day.id,
+      objectKey: `day:${fixture.day.id}`,
+      objectSchemaVersion: 1,
+      objectType: 'day',
+      operation: 'upsert',
+      payload: fixture.day,
+      requestFingerprint: 'pending-before-fallback',
+      status: 'pending',
+      tripId: fixture.trip.id,
+      updatedAt: 1,
+    })
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when an adaptive baseline revision is stale', async () => {
+    const fixture = makeAdaptiveRuntimeFixture({ dayExpectedRevision: 2 })
+    await seedAdaptiveRuntimeFixture(fixture)
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('conflict'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown adaptive baseline fields before creating a workflow journal', async () => {
+    const fixture = makeAdaptiveRuntimeFixture({ baselineExtraField: true })
+    await seedAdaptiveRuntimeFixture(fixture)
+    const apply = vi.fn()
+
+    await expect(executeProductAccountWorkflow({
+      apply,
+      steps: fixture.steps,
+      tripId: fixture.trip.id,
+      workflowId: 'trip.replan.apply@1',
+    })).rejects.toEqual(new AccountCloudWorkflowWriteError('invalid_state'))
+
+    expect(apply).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+    await expect(db.accountWorkflowJournal.count()).resolves.toBe(0)
+  })
+
   it('never acknowledges a primary workflow into a newly active account database', async () => {
     const before = [makeItem('item_a', 1), makeItem('item_b', 2)]
     await seedBootstrappedItems(before)
@@ -795,6 +1010,207 @@ async function seedBootstrappedTicket(ticket: TicketMeta) {
     tripId: ticket.tripId,
     updatedAt: 1,
   })
+}
+
+function makeAdaptiveRuntimeFixture(options: {
+  baselineExtraField?: boolean
+  dayExpectedRevision?: number
+  tripExpectedRevision?: number
+} = {}) {
+  const trip: Trip = {
+    createdAt: 1,
+    destination: 'United Kingdom',
+    endDate: '2026-08-20',
+    id: 'replan_trip',
+    startDate: '2026-08-11',
+    title: 'UK',
+    updatedAt: 1,
+  }
+  const day: Day = {
+    date: '2026-08-11',
+    id: 'replan_day',
+    sortOrder: 1,
+    title: 'London',
+    tripId: trip.id,
+  }
+  const item: ItineraryItem = {
+    createdAt: 1,
+    dayId: day.id,
+    endTime: '11:00',
+    id: 'replan_item',
+    sortOrder: 1,
+    startTime: '10:00',
+    ticketIds: [],
+    title: 'Museum',
+    tripId: trip.id,
+    updatedAt: 1,
+  }
+  const afterTrip = { ...trip, updatedAt: 2 }
+  const afterItem = { ...item, endTime: '11:30', startTime: '10:30', updatedAt: 2 }
+  const event: TripDisruptionEvent = {
+    createdAt: 2,
+    dayId: day.id,
+    delayMinutes: 30,
+    evidence: [],
+    id: 'replan_event',
+    itemId: item.id,
+    kind: 'late',
+    notes: 'Arrival delay',
+    occurredAt: '2026-08-11T12:00:00.000Z',
+    reportedByRole: 'owner',
+    status: 'applied',
+    tripId: trip.id,
+    updatedAt: 2,
+  }
+  const beforeSchedule = {
+    dayId: day.id,
+    endTime: item.endTime,
+    sortOrder: item.sortOrder,
+    startTime: item.startTime,
+  }
+  const afterSchedule = {
+    dayId: day.id,
+    endTime: afterItem.endTime,
+    sortOrder: afterItem.sortOrder,
+    startTime: afterItem.startTime,
+  }
+  const diff = {
+    companionImpacts: [],
+    itemChanges: [{
+      after: afterSchedule,
+      before: beforeSchedule,
+      changeType: 'time_changed' as const,
+      itemId: item.id,
+      reason: 'Arrival delay',
+      title: item.title,
+    }],
+    ledgerImpacts: [],
+    routeImpacts: [],
+    ticketImpacts: [],
+    warnings: [],
+  }
+  const option = (strategy: 'least_change' | 'preserve_most' | 'shortest_route') => ({
+    diff,
+    id: `replan_${strategy}`,
+    itemPatches: [{ itemId: item.id, patch: { endTime: '11:30', startTime: '10:30' } }],
+    score: 100,
+    strategy,
+    summary: 'Shifted one stop',
+    title: strategy,
+  })
+  const selected = option('least_change')
+  const firstBaseline = {
+    expectedRevision: options.tripExpectedRevision ?? 1,
+    objectId: trip.id,
+    objectType: 'trip' as const,
+    ...(options.baselineExtraField ? { arbitraryFunction: 'database.run' } : {}),
+  }
+  const record: TripReplanRecord = {
+    accountObjectBaseline: [
+      firstBaseline,
+      {
+        expectedRevision: options.dayExpectedRevision ?? 1,
+        objectId: day.id,
+        objectType: 'day',
+      },
+      { expectedRevision: 1, objectId: item.id, objectType: 'item' },
+    ] as TripReplanRecord['accountObjectBaseline'],
+    afterSnapshot: { days: [day], items: [afterItem] },
+    appliedFingerprint: 'applied-fingerprint',
+    baselineFingerprint: 'baseline-fingerprint',
+    beforeSnapshot: { days: [day], items: [item] },
+    createdAt: 2,
+    eventId: event.id,
+    evidence: [{
+      id: 'user-report:replan_event',
+      kind: 'user_report',
+      label: '用户报告',
+      retrievedAt: event.occurredAt,
+      snippet: 'Arrival delay',
+      sourceType: 'unknown',
+    }],
+    id: 'replan_record',
+    operationFingerprint: 'ai-action-replan',
+    operationKind: 'adaptive_replan',
+    options: [selected, option('preserve_most'), option('shortest_route')],
+    scopeItemIds: [item.id],
+    selectedDiff: diff,
+    selectedOptionId: selected.id,
+    status: 'applied',
+    tripId: trip.id,
+    updatedAt: 2,
+  }
+  const history: TripIntelligenceAppliedChangeRecord = {
+    actionType: 'global_ai_adaptive_replan_applied',
+    dedupeKey: `${trip.id}:change`,
+    detail: 'Shifted one stop',
+    executionId: 'trip-operations-2-',
+    executionSource: 'live',
+    executionStatus: 'success',
+    executionTitle: 'Adaptive replan',
+    id: 'replan_history',
+    occurredAt: 2,
+    privacyLevel: 'private',
+    recommendationFingerprints: [],
+    sourceId: record.id,
+    sourceKind: 'live',
+    sourceLabel: 'Adaptive replan',
+    targetId: item.id,
+    targetType: 'live',
+    title: 'Replan applied',
+    tripId: trip.id,
+    updatedAt: 2,
+  }
+  const steps: ProductAccountWorkflowStep[] = [
+    { objectId: trip.id, objectType: 'trip', operation: 'upsert', payload: afterTrip },
+    { objectId: item.id, objectType: 'item', operation: 'upsert', payload: afterItem },
+    { objectId: event.id, objectType: 'replan_event', operation: 'upsert', payload: event },
+    { objectId: record.id, objectType: 'replan_record', operation: 'upsert', payload: record },
+    {
+      objectId: history.id,
+      objectType: 'trip_intelligence_applied_change',
+      operation: 'upsert',
+      payload: history,
+    },
+  ]
+  return { afterItem, afterTrip, day, event, history, item, record, steps, trip }
+}
+
+async function seedAdaptiveRuntimeFixture(
+  fixture: ReturnType<typeof makeAdaptiveRuntimeFixture>,
+  options: { omitDayRevision?: boolean; omitTripRevision?: boolean } = {},
+) {
+  await db.trips.put(fixture.trip)
+  await db.days.put(fixture.day)
+  await db.itineraryItems.put(fixture.item)
+  const objects: Array<{
+    object: Trip | Day | ItineraryItem
+    objectType: ClientMutableAccountObjectType
+  }> = [
+    ...(options.omitTripRevision
+      ? []
+      : [{ object: fixture.trip, objectType: 'trip' as const }]),
+    { object: fixture.item, objectType: 'item' },
+    ...(options.omitDayRevision ? [] : [{ object: fixture.day, objectType: 'day' as const }]),
+  ]
+  await db.accountObjectRevisions.bulkPut(objects.map(({ object, objectType }, index) => ({
+    acknowledgedAt: 1,
+    actorId: ACTOR_ID,
+    deletedAt: null,
+    deviceId: 'device_primary',
+    mutationId: `36666666-6666-4666-8666-${index.toString().padStart(12, '0')}`,
+    objectId: object.id,
+    objectKey: `${objectType}:${object.id}`,
+    objectSchemaVersion: 1,
+    objectType,
+    payload: object as unknown as JsonObject,
+    revision: 1,
+    serverCreatedAt: NOW_ISO,
+    serverUpdatedAt: NOW_ISO,
+    tombstone: false,
+    tripId: fixture.trip.id,
+    updatedAt: 1,
+  })))
 }
 
 function makeItem(id: string, sortOrder: number): ItineraryItem {

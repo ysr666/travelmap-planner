@@ -23,6 +23,7 @@ describe('account cloud workflow migration gate', () => {
       migrationSql,
     })).toEqual({
       atomicPreflight: true,
+      adaptiveReplanGraphAtomicity: true,
       boundedPayloadTraversal: true,
       deterministicReplayLocks: true,
       importGraphAtomicity: true,
@@ -259,5 +260,64 @@ describe('account cloud workflow migration gate', () => {
         'false',
       ),
     })).toThrow(/createdAt/)
+  })
+
+  it('rejects removal or exposure of the adaptive replan closed-graph boundary', () => {
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "       and tripmap_private.account_adaptive_replan_payload_is_valid(\n         step_object_type,",
+        "       and true or tripmap_private.account_adaptive_replan_payload_is_valid(\n         step_object_type,",
+      ),
+    })).toThrow(/Adaptive replan|required contract fragment/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        'revoke all on function tripmap_private.account_adaptive_replan_workflow_shape_is_valid(text, jsonb)',
+        'grant execute on function tripmap_private.account_adaptive_replan_workflow_shape_is_valid(text, jsonb)',
+      ),
+    })).toThrow(/adaptive replan workflow shape validator/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replaceAll(
+        "current_object.object_type in ('trip', 'day', 'item', 'ticket_meta', 'ledger_expense')",
+        "current_object.object_type in ('trip', 'item')",
+      ),
+    })).toThrow(/adaptive replan baseline validator/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "target_workflow_id in ('trip.import.commit@1', 'trip.replan.apply@1')",
+        "target_workflow_id = 'trip.import.commit@1'",
+      ),
+    })).toThrow(/adaptive replan|trip lifecycle/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "step_payload - 'updatedAt'",
+        'step_payload',
+      ),
+    })).toThrow(/Adaptive replan|required contract fragment/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "record_step.value -> 'payload' -> 'accountObjectBaseline'",
+        "record_step.value -> 'payload' -> 'removedBaseline'",
+      ),
+    })).toThrow(/Adaptive replan|required contract fragment/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replaceAll(
+        'current_object.payload is distinct from snapshot.value',
+        'false',
+      ),
+    })).toThrow(/adaptive replan baseline validator/)
+    expect(() => validateAccountCloudWorkflowMigration({
+      contractSource: combinedContract,
+      migrationSql: migrationSql.replace(
+        "|| (patch.value -> 'patch')",
+        "|| '{}'::jsonb",
+      ),
+    })).toThrow(/adaptive replan workflow shape validator/)
   })
 })

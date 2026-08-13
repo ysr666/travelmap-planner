@@ -24,6 +24,8 @@ const FORBIDDEN_INITIAL_CHUNKS = [
 ]
 const FORBIDDEN_PRECACHE_ASSETS = [
   ['AI draft', /^assets\/AiDraftPage-.+\.js$/],
+  ['E2E travel-object runtime', /^assets\/e2eRuntime-.+\.js$/],
+  ['E2E fixture-media registry', /^assets\/fixtureMediaRegistry-.+\.js$/],
   ['global AI', /^assets\/GlobalAiCommandBar-.+\.js$/],
   ['archive parser', /^assets\/jszip-.+\.js$/],
   ['map renderer CSS', /^assets\/maplibre-.+\.css$/],

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public, pg_temp;
 
-select plan(104);
+select plan(120);
 
 create function pg_temp.run_account_workflow(
   target_account_hash text,
@@ -1686,6 +1686,338 @@ select is(
   ) ->> 'reason',
   'workflow_shape_invalid',
   'an available Ticket link cannot be hidden by a second unavailable marker'
+);
+
+reset role;
+
+insert into public.tripmap_account_objects (
+  owner_id, trip_id, object_type, object_id, payload, schema_version, revision,
+  mutation_id, actor_id, device_id, tombstone
+) values
+  (
+    '11111111-1111-4111-8111-111111111111', 'replan_trip', 'trip', 'replan_trip',
+    '{"createdAt":1,"destination":"United Kingdom","endDate":"2026-07-10","id":"replan_trip","startDate":"2026-07-10","title":"United Kingdom","updatedAt":1}'::jsonb,
+    1, 1, '30000000-0000-4000-8000-000000000001',
+    '11111111-1111-4111-8111-111111111111', 'pgtap_device', false
+  ),
+  (
+    '11111111-1111-4111-8111-111111111111', 'replan_trip', 'day', 'replan_day',
+    '{"date":"2026-07-10","id":"replan_day","sortOrder":1,"title":"London","tripId":"replan_trip"}'::jsonb,
+    1, 1, '30000000-0000-4000-8000-000000000002',
+    '11111111-1111-4111-8111-111111111111', 'pgtap_device', false
+  ),
+  (
+    '11111111-1111-4111-8111-111111111111', 'replan_trip', 'item', 'replan_item',
+    '{"createdAt":1,"dayId":"replan_day","endTime":"11:00","id":"replan_item","sortOrder":1,"startTime":"10:00","ticketIds":[],"title":"Museum","tripId":"replan_trip","updatedAt":1}'::jsonb,
+    1, 1, '30000000-0000-4000-8000-000000000003',
+    '11111111-1111-4111-8111-111111111111', 'pgtap_device', false
+  );
+
+insert into workflow_fixtures (fixture_name, steps) values (
+  'adaptive_replan',
+  '[
+    {
+      "stepId":"trip","mutationId":"30000000-0000-4000-8000-000000000011",
+      "objectType":"trip","objectId":"replan_trip","operation":"upsert",
+      "expectedRevision":1,"objectSchemaVersion":1,
+      "payload":{"createdAt":1,"destination":"United Kingdom","endDate":"2026-07-10","id":"replan_trip","startDate":"2026-07-10","title":"United Kingdom","updatedAt":2}
+    },
+    {
+      "stepId":"item","mutationId":"30000000-0000-4000-8000-000000000012",
+      "objectType":"item","objectId":"replan_item","operation":"upsert",
+      "expectedRevision":1,"objectSchemaVersion":1,
+      "payload":{"createdAt":1,"dayId":"replan_day","endTime":"11:30","id":"replan_item","sortOrder":1,"startTime":"10:30","ticketIds":[],"title":"Museum","tripId":"replan_trip","updatedAt":2}
+    },
+    {
+      "stepId":"event","mutationId":"30000000-0000-4000-8000-000000000013",
+      "objectType":"replan_event","objectId":"replan_event","operation":"upsert",
+      "expectedRevision":0,"objectSchemaVersion":1,
+      "payload":{"createdAt":2,"dayId":"replan_day","delayMinutes":30,"evidence":[],"id":"replan_event","itemId":"replan_item","kind":"late","notes":"Arrival delay","occurredAt":"2026-08-11T12:00:00.000Z","reportedByRole":"owner","status":"applied","tripId":"replan_trip","updatedAt":2}
+    },
+    {
+      "stepId":"record","mutationId":"30000000-0000-4000-8000-000000000014",
+      "objectType":"replan_record","objectId":"replan_record","operation":"upsert",
+      "expectedRevision":0,"objectSchemaVersion":1,
+      "payload":{
+        "accountObjectBaseline":[
+          {"expectedRevision":1,"objectId":"replan_trip","objectType":"trip"},
+          {"expectedRevision":1,"objectId":"replan_day","objectType":"day"},
+          {"expectedRevision":1,"objectId":"replan_item","objectType":"item"}
+        ],
+        "afterSnapshot":{"days":[{"date":"2026-07-10","id":"replan_day","sortOrder":1,"title":"London","tripId":"replan_trip"}],"items":[{"createdAt":1,"dayId":"replan_day","endTime":"11:30","id":"replan_item","sortOrder":1,"startTime":"10:30","ticketIds":[],"title":"Museum","tripId":"replan_trip","updatedAt":2}]},
+        "appliedFingerprint":"applied-fingerprint",
+        "baselineFingerprint":"baseline-fingerprint",
+        "beforeSnapshot":{"days":[{"date":"2026-07-10","id":"replan_day","sortOrder":1,"title":"London","tripId":"replan_trip"}],"items":[{"createdAt":1,"dayId":"replan_day","endTime":"11:00","id":"replan_item","sortOrder":1,"startTime":"10:00","ticketIds":[],"title":"Museum","tripId":"replan_trip","updatedAt":1}]},
+        "createdAt":2,
+        "eventId":"replan_event",
+        "evidence":[{"id":"user-report:replan_event","kind":"user_report","label":"用户报告","retrievedAt":"2026-08-11T12:00:00.000Z","snippet":"Arrival delay","sourceType":"unknown"}],
+        "id":"replan_record",
+        "operationFingerprint":"ai-action-replan",
+        "operationKind":"adaptive_replan",
+        "options":[
+          {"diff":{"companionImpacts":[],"itemChanges":[{"after":{"dayId":"replan_day","endTime":"11:30","sortOrder":1,"startTime":"10:30"},"before":{"dayId":"replan_day","endTime":"11:00","sortOrder":1,"startTime":"10:00"},"changeType":"time_changed","itemId":"replan_item","reason":"Arrival delay","title":"Museum"}],"ledgerImpacts":[],"routeImpacts":[],"ticketImpacts":[],"warnings":[]},"id":"replan_least","itemPatches":[{"itemId":"replan_item","patch":{"endTime":"11:30","startTime":"10:30"}}],"score":100,"strategy":"least_change","summary":"Shifted one stop","title":"Least change"},
+          {"diff":{"companionImpacts":[],"itemChanges":[{"after":{"dayId":"replan_day","endTime":"11:30","sortOrder":1,"startTime":"10:30"},"before":{"dayId":"replan_day","endTime":"11:00","sortOrder":1,"startTime":"10:00"},"changeType":"time_changed","itemId":"replan_item","reason":"Arrival delay","title":"Museum"}],"ledgerImpacts":[],"routeImpacts":[],"ticketImpacts":[],"warnings":[]},"id":"replan_preserve","itemPatches":[{"itemId":"replan_item","patch":{"endTime":"11:30","startTime":"10:30"}}],"score":90,"strategy":"preserve_most","summary":"Preserved bookings","title":"Preserve most"},
+          {"diff":{"companionImpacts":[],"itemChanges":[{"after":{"dayId":"replan_day","endTime":"11:30","sortOrder":1,"startTime":"10:30"},"before":{"dayId":"replan_day","endTime":"11:00","sortOrder":1,"startTime":"10:00"},"changeType":"time_changed","itemId":"replan_item","reason":"Arrival delay","title":"Museum"}],"ledgerImpacts":[],"routeImpacts":[],"ticketImpacts":[],"warnings":[]},"id":"replan_shortest","itemPatches":[{"itemId":"replan_item","patch":{"endTime":"11:30","startTime":"10:30"}}],"score":80,"strategy":"shortest_route","summary":"Reduced travel","title":"Shortest route"}
+        ],
+        "scopeItemIds":["replan_item"],
+        "selectedDiff":{"companionImpacts":[],"itemChanges":[{"after":{"dayId":"replan_day","endTime":"11:30","sortOrder":1,"startTime":"10:30"},"before":{"dayId":"replan_day","endTime":"11:00","sortOrder":1,"startTime":"10:00"},"changeType":"time_changed","itemId":"replan_item","reason":"Arrival delay","title":"Museum"}],"ledgerImpacts":[],"routeImpacts":[],"ticketImpacts":[],"warnings":[]},
+        "selectedOptionId":"replan_least","status":"applied","tripId":"replan_trip","updatedAt":2
+      }
+    },
+    {
+      "stepId":"history","mutationId":"30000000-0000-4000-8000-000000000015",
+      "objectType":"trip_intelligence_applied_change","objectId":"replan_history","operation":"upsert",
+      "expectedRevision":0,"objectSchemaVersion":1,
+      "payload":{"actionType":"global_ai_adaptive_replan_applied","dedupeKey":"replan_trip:change","detail":"Shifted one stop","executionId":"trip-operations-2-","executionSource":"live","executionStatus":"success","executionTitle":"Adaptive replan","id":"replan_history","occurredAt":2,"privacyLevel":"private","recommendationFingerprints":[],"sourceId":"replan_record","sourceKind":"live","sourceLabel":"Adaptive replan","targetId":"replan_item","targetType":"live","title":"Replan applied","tripId":"replan_trip","updatedAt":2}
+    }
+  ]'::jsonb
+);
+
+set local role authenticated;
+select ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_adaptive_replan_payload_is_valid(text,jsonb)',
+    'execute'
+  )
+  and not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_adaptive_replan_workflow_shape_is_valid(text,jsonb)',
+    'execute'
+  )
+  and not pg_catalog.has_function_privilege(
+    'authenticated',
+    'tripmap_private.account_adaptive_replan_baseline_matches(uuid,text,jsonb)',
+    'execute'
+  ),
+  'adaptive replan validators are not callable by browser roles'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000001',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,options,0,functionName}',
+      '"database.run"'::jsonb
+    )
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'adaptive replan rejects an arbitrary nested function selector'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000002',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,options,0,providerKey}',
+      '"secret-value"'::jsonb
+    )
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'adaptive replan rejects nested Provider secrets'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000008',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,options}',
+      '{}'::jsonb
+    )
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'malformed adaptive JSON returns a bounded rejection instead of a database error'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000009',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,beforeSnapshot,days,0,title}',
+      '7'::jsonb
+    )
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'adaptive replan rejects JSON scalar coercion in its stored snapshot'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000010',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,evidence,0,snippet}',
+      'null'::jsonb
+    )
+  ) ->> 'reason',
+  'invalid_or_sensitive_payload',
+  'adaptive replan treats an explicit JSON null as invalid instead of unknown'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000011',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,options,0,itemPatches,0,patch,startTime}',
+      '"09:00"'::jsonb
+    )
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'adaptive replan binds the selected patch to the submitted Item payload'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000012',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,beforeSnapshot,days,0,title}',
+      '"Forged London"'::jsonb
+    )
+  ) ->> 'reason',
+  'revision_mismatch',
+  'adaptive replan proves its before snapshot against current server objects'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000003',
+    'trip.replan.apply@1',
+    'replan_trip',
+    (select steps - 4 from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan')
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'adaptive replan rejects a workflow missing its redacted history step'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000004',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+      '{3,payload,accountObjectBaseline,1,expectedRevision}',
+      '99'::jsonb
+    )
+  ) ->> 'reason',
+  'revision_mismatch',
+  'adaptive replan rejects a stale unsubmitted Day revision'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000005',
+    'trip.replan.apply@1',
+    'replan_trip',
+    pg_catalog.jsonb_set(
+      pg_catalog.jsonb_set(
+        (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan'),
+        '{1,payload,title}',
+        '"Changed title"'::jsonb
+      ),
+      '{3,payload,afterSnapshot,items,0,title}',
+      '"Changed title"'::jsonb
+    )
+  ) ->> 'reason',
+  'workflow_shape_invalid',
+  'adaptive replan cannot alter immutable Item content'
+);
+
+reset role;
+insert into public.tripmap_account_objects (
+  owner_id, trip_id, object_type, object_id, payload, schema_version, revision,
+  mutation_id, actor_id, device_id, tombstone
+) values (
+  '11111111-1111-4111-8111-111111111111', 'replan_trip', 'ticket_meta', 'replan_ticket',
+  '{"createdAt":1,"fileType":"pdf","id":"replan_ticket","mimeType":"application/pdf","scope":"trip","sharedVisibility":{"mode":"all"},"size":100,"storageMode":"copy","ticketCategory":"admission_ticket","title":"Ticket","tripId":"replan_trip","updatedAt":1}'::jsonb,
+  1, 1, '30000000-0000-4000-8000-000000000004',
+  '11111111-1111-4111-8111-111111111111', 'pgtap_device', false
+);
+set local role authenticated;
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000006',
+    'trip.replan.apply@1',
+    'replan_trip',
+    (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan')
+  ) ->> 'reason',
+  'revision_mismatch',
+  'adaptive replan rejects an active dependency omitted from the baseline'
+);
+reset role;
+delete from public.tripmap_account_objects
+where owner_id = '11111111-1111-4111-8111-111111111111'
+  and object_type = 'ticket_meta'
+  and object_id = 'replan_ticket';
+set local role authenticated;
+
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.tripmap_account_objects
+    where trip_id = 'replan_trip'
+      and object_type in (
+        'replan_event', 'replan_record', 'trip_intelligence_applied_change'
+      )
+  ),
+  0::bigint,
+  'rejected adaptive replans leave no partial audit objects'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000007',
+    'trip.replan.apply@1',
+    'replan_trip',
+    (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan')
+  ) ->> 'status',
+  'applied',
+  'a complete adaptive replan commits through one registered workflow'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.tripmap_account_objects
+    where owner_id = '11111111-1111-4111-8111-111111111111'
+      and trip_id = 'replan_trip'
+      and object_id in (
+        'replan_trip', 'replan_item', 'replan_event', 'replan_record', 'replan_history'
+      )
+  ),
+  5::bigint,
+  'adaptive replan persists the Trip, Item, event, record, and redacted history together'
+);
+select is(
+  pg_temp.run_account_workflow(
+    'bd7662a5eeb41614e720d477abfcb227',
+    '40000000-0000-4000-8000-000000000007',
+    'trip.replan.apply@1',
+    'replan_trip',
+    (select steps from pg_temp.workflow_fixtures where fixture_name = 'adaptive_replan')
+  ) ->> 'status',
+  'idempotent',
+  'adaptive replan replay returns its receipt without reapplying successful steps'
 );
 
 reset role;

@@ -278,6 +278,70 @@ describe('account workflow contract', () => {
     })).toThrow()
   })
 
+  it('enforces the closed adaptive replan graph and nested payload allowlists', () => {
+    const replan = makeWorkflow('trip.replan.apply@1')
+    const recordIndex = replan.steps.findIndex((step) => step.objectType === 'replan_record')
+    const historyIndex = replan.steps.findIndex((step) => (
+      step.objectType === 'trip_intelligence_applied_change'
+    ))
+    const itemIndex = replan.steps.findIndex((step) => step.objectType === 'item')
+    const mutateRecord = (mutator: (payload: Record<string, unknown>) => void) => {
+      const steps = structuredClone(replan.steps) as AccountWorkflowStepV1[]
+      const payload = steps[recordIndex].payload as Record<string, unknown>
+      mutator(payload)
+      return steps
+    }
+    const invalidCases = [
+      ['missing-history', replan.steps.filter((_, index) => index !== historyIndex)],
+      ['item-snapshot-mismatch', replan.steps.map((step, index) => index === itemIndex
+        ? { ...step, payload: { ...step.payload, title: 'Substituted title' } }
+        : step)],
+      ['function-selector', mutateRecord((payload) => {
+        const options = payload.options as Array<Record<string, unknown>>
+        options[0].functionName = 'database.run'
+      })],
+      ['provider-secret', mutateRecord((payload) => {
+        const options = payload.options as Array<Record<string, unknown>>
+        options[0].providerKey = 'forbidden'
+      })],
+      ['baseline-field', mutateRecord((payload) => {
+        const baseline = payload.accountObjectBaseline as Array<Record<string, unknown>>
+        baseline[0].arbitraryField = true
+      })],
+      ['snapshot-mismatch', mutateRecord((payload) => {
+        const snapshot = payload.afterSnapshot as Record<string, unknown>
+        const items = snapshot.items as Array<Record<string, unknown>>
+        items[0] = { ...items[0], startTime: '12:00' }
+      })],
+      ['forged-before-snapshot', mutateRecord((payload) => {
+        const snapshot = payload.beforeSnapshot as Record<string, unknown>
+        const items = snapshot.items as Array<Record<string, unknown>>
+        items[0] = { ...items[0], title: 'Forged title' }
+      })],
+      ['selected-patch-mismatch', mutateRecord((payload) => {
+        const options = payload.options as Array<Record<string, unknown>>
+        const patches = options[0].itemPatches as Array<Record<string, unknown>>
+        patches[0].patch = { endTime: '11:30', startTime: '09:00' }
+      })],
+      ['snapshot-scalar-coercion', mutateRecord((payload) => {
+        const snapshot = payload.beforeSnapshot as Record<string, unknown>
+        const days = snapshot.days as Array<Record<string, unknown>>
+        days[0] = { ...days[0], title: 7 }
+      })],
+      ['history-target-missing', replan.steps.map((step, index) => index === historyIndex
+        ? {
+            ...step,
+            payload: Object.fromEntries(
+              Object.entries(step.payload ?? {}).filter(([key]) => key !== 'targetId'),
+            ),
+          }
+        : step)],
+    ] as const
+    for (const [label, steps] of invalidCases) {
+      expect(() => parseAccountWorkflowRequestV1({ ...replan, steps }), label).toThrow()
+    }
+  })
+
   it('parses and correlates an atomic success without accepting missing or substituted steps', () => {
     const request = parseAccountWorkflowRequestV1(makeWorkflow('trip.repair.apply@1'))
     const result = parseAccountWorkflowRunResultV1(makeSuccess(request))
@@ -383,6 +447,8 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
       steps = [makeLedgerStep()]
       break
     case 'trip.replan.apply@1':
+      steps = makeAdaptiveReplanSteps()
+      break
     case 'trip.repair.apply@1':
       steps = [makeItemStep()]
       break
@@ -395,6 +461,191 @@ function makeWorkflow(workflowId: AccountWorkflowId): AccountWorkflowRequestV1 {
     tripId: TRIP_ID,
     workflowId,
   }
+}
+
+function makeAdaptiveReplanSteps(): AccountWorkflowStepV1[] {
+  const beforeItem = makeItemPayload('item_a', {
+    endTime: '11:00',
+    startTime: '10:00',
+    updatedAt: 1,
+  })
+  const afterItem = {
+    ...beforeItem,
+    endTime: '11:30',
+    startTime: '10:30',
+    updatedAt: 2,
+  }
+  const day = {
+    date: '2026-07-10',
+    id: 'day_a',
+    sortOrder: 1,
+    title: 'London',
+    tripId: TRIP_ID,
+  }
+  const beforeSchedule = {
+    dayId: day.id,
+    endTime: '11:00',
+    sortOrder: 1,
+    startTime: '10:00',
+  }
+  const afterSchedule = {
+    dayId: day.id,
+    endTime: '11:30',
+    sortOrder: 1,
+    startTime: '10:30',
+  }
+  const diff = {
+    companionImpacts: [],
+    itemChanges: [{
+      after: afterSchedule,
+      before: beforeSchedule,
+      changeType: 'time_changed',
+      itemId: 'item_a',
+      reason: 'Arrival delay',
+      title: 'Museum',
+    }],
+    ledgerImpacts: [],
+    routeImpacts: [],
+    ticketImpacts: [],
+    warnings: [],
+  }
+  const option = (strategy: 'least_change' | 'preserve_most' | 'shortest_route') => ({
+    diff,
+    id: `replan_${strategy}_a`,
+    itemPatches: [{
+      itemId: 'item_a',
+      patch: { endTime: '11:30', startTime: '10:30' },
+    }],
+    score: 100,
+    strategy,
+    summary: 'Shifted one stop',
+    title: strategy,
+  })
+  const selected = option('least_change')
+  const recordPayload = {
+    accountObjectBaseline: [
+      { expectedRevision: 1, objectId: TRIP_ID, objectType: 'trip' },
+      { expectedRevision: 1, objectId: day.id, objectType: 'day' },
+      { expectedRevision: 1, objectId: 'item_a', objectType: 'item' },
+    ],
+    afterSnapshot: { days: [day], items: [afterItem] },
+    appliedFingerprint: 'applied-fingerprint',
+    baselineFingerprint: 'baseline-fingerprint',
+    beforeSnapshot: { days: [day], items: [beforeItem] },
+    createdAt: 2,
+    eventId: 'replan_event_a',
+    evidence: [{
+      id: 'user-report:replan_event_a',
+      kind: 'user_report',
+      label: '用户报告',
+      retrievedAt: '2026-08-11T12:00:00.000Z',
+      snippet: 'Arrival delay',
+      sourceType: 'unknown',
+    }],
+    id: 'replan_record_a',
+    operationFingerprint: 'ai-action-replan-a',
+    operationKind: 'adaptive_replan',
+    options: [selected, option('preserve_most'), option('shortest_route')],
+    scopeItemIds: ['item_a'],
+    selectedDiff: diff,
+    selectedOptionId: selected.id,
+    status: 'applied',
+    tripId: TRIP_ID,
+    updatedAt: 2,
+  }
+  return [
+    {
+      expectedRevision: 1,
+      mutationId: '88888888-8888-4888-8888-888888888888',
+      objectId: TRIP_ID,
+      objectSchemaVersion: 1,
+      objectType: 'trip',
+      operation: 'upsert',
+      payload: {
+        createdAt: 1,
+        destination: 'United Kingdom',
+        endDate: '2026-07-10',
+        id: TRIP_ID,
+        startDate: '2026-07-10',
+        title: 'United Kingdom',
+        updatedAt: 2,
+      },
+      stepId: 'trip',
+    },
+    {
+      ...makeItemStep({
+        mutationId: '99999999-9999-4999-8999-999999999999',
+        objectId: 'item_a',
+        payload: afterItem,
+        stepId: 'item',
+      }),
+      expectedRevision: 1,
+    },
+    {
+      expectedRevision: 0,
+      mutationId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      objectId: 'replan_event_a',
+      objectSchemaVersion: 1,
+      objectType: 'replan_event',
+      operation: 'upsert',
+      payload: {
+        createdAt: 2,
+        dayId: day.id,
+        delayMinutes: 30,
+        evidence: [],
+        id: 'replan_event_a',
+        itemId: 'item_a',
+        kind: 'late',
+        notes: 'Arrival delay',
+        occurredAt: '2026-08-11T12:00:00.000Z',
+        reportedByRole: 'owner',
+        status: 'applied',
+        tripId: TRIP_ID,
+        updatedAt: 2,
+      },
+      stepId: 'event',
+    },
+    {
+      expectedRevision: 0,
+      mutationId: 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',
+      objectId: 'replan_record_a',
+      objectSchemaVersion: 1,
+      objectType: 'replan_record',
+      operation: 'upsert',
+      payload: recordPayload,
+      stepId: 'record',
+    },
+    {
+      expectedRevision: 0,
+      mutationId: 'cccccccc-1111-4111-8111-cccccccccccc',
+      objectId: 'trip_intelligence_change_a',
+      objectSchemaVersion: 1,
+      objectType: 'trip_intelligence_applied_change',
+      operation: 'upsert',
+      payload: {
+        actionType: 'global_ai_adaptive_replan_applied',
+        dedupeKey: `${TRIP_ID}:change-a`,
+        detail: 'Shifted one stop',
+        executionId: 'trip-operations-2-',
+        executionSource: 'live',
+        executionStatus: 'success',
+        executionTitle: 'Adaptive replan',
+        id: 'trip_intelligence_change_a',
+        occurredAt: 2,
+        privacyLevel: 'private',
+        recommendationFingerprints: [],
+        sourceId: recordPayload.id,
+        sourceKind: 'live',
+        sourceLabel: 'Adaptive replan',
+        targetId: 'item_a',
+        targetType: 'live',
+        title: 'Replan applied',
+        tripId: TRIP_ID,
+        updatedAt: 2,
+      },
+      stepId: 'history',
+    },
+  ]
 }
 
 function makeTripImportStep(): AccountWorkflowStepV1 {

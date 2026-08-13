@@ -40,6 +40,11 @@ export type AppendTripIntelligenceExecutionResultInput = {
   title: string
 }
 
+export type PreparedTripIntelligenceExecutionPersistence = {
+  appliedRecords: TripIntelligenceAppliedChangeRecord[]
+  suggestionState: TripIntelligenceSuggestionStateRecord | null
+}
+
 export type SetTripIntelligenceSuggestionStateInput = {
   now?: number
   status: 'completed' | 'ignored' | 'later'
@@ -108,6 +113,42 @@ export async function appendTripIntelligenceExecutionResult(
   input: AppendTripIntelligenceExecutionResultInput,
   now = Date.now(),
 ) {
+  const prepared = prepareTripIntelligenceExecutionPersistence(tripId, input, now)
+
+  await db.transaction(
+    'rw',
+    [db.tripIntelligenceAppliedChanges, db.tripIntelligenceSuggestionStates],
+    async () => {
+      if (prepared.appliedRecords.length > 0) {
+        await db.tripIntelligenceAppliedChanges.bulkPut(prepared.appliedRecords)
+      }
+      if (prepared.suggestionState) {
+        await db.tripIntelligenceSuggestionStates.put(prepared.suggestionState)
+      }
+    },
+  )
+  await Promise.all([
+    ...prepared.appliedRecords.map((record) => enqueueObjectUpsert({
+      object: record,
+      objectType: 'trip_intelligence_applied_change',
+    })),
+    ...(prepared.suggestionState
+      ? [enqueueObjectUpsert({
+          object: prepared.suggestionState,
+          objectType: 'trip_intelligence_suggestion_state',
+        })]
+      : []),
+  ])
+  await pruneTripIntelligencePersistence(tripId, now)
+  emitTravelDataChanged()
+  return loadPersistedStateWithoutMigration(tripId)
+}
+
+export function prepareTripIntelligenceExecutionPersistence(
+  tripId: string,
+  input: AppendTripIntelligenceExecutionResultInput,
+  now = Date.now(),
+): PreparedTripIntelligenceExecutionPersistence {
   const shouldRecordExecution = input.result.appliedChanges.length > 0
   const execution = shouldRecordExecution
     ? createTripOperationsExecutionRecord({
@@ -128,22 +169,7 @@ export async function appendTripIntelligenceExecutionResult(
         suggestion: input.suggestion,
       })
     : null
-
-  await db.transaction(
-    'rw',
-    [db.tripIntelligenceAppliedChanges, db.tripIntelligenceSuggestionStates],
-    async () => {
-      if (appliedRecords.length > 0) await db.tripIntelligenceAppliedChanges.bulkPut(appliedRecords)
-      if (suggestionState) await db.tripIntelligenceSuggestionStates.put(suggestionState)
-    },
-  )
-  await Promise.all([
-    ...appliedRecords.map((record) => enqueueObjectUpsert({ object: record, objectType: 'trip_intelligence_applied_change' })),
-    ...(suggestionState ? [enqueueObjectUpsert({ object: suggestionState, objectType: 'trip_intelligence_suggestion_state' })] : []),
-  ])
-  await pruneTripIntelligencePersistence(tripId, now)
-  emitTravelDataChanged()
-  return loadPersistedStateWithoutMigration(tripId)
+  return { appliedRecords, suggestionState }
 }
 
 export async function setTripIntelligenceSuggestionState(

@@ -101,6 +101,7 @@ const PRODUCT_STEP_FIELDS = new Set([
   'payload',
 ])
 const PRODUCT_INPUT_FIELDS = new Set(['apply', 'steps', 'tripId', 'workflowId'])
+const CONTROLLED_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$/
 
 export async function executeProductAccountWorkflow<T>(
   input: ProductAccountWorkflowInput<T>,
@@ -282,8 +283,18 @@ async function prepareWorkflowRequest<T>(
     if (input.workflowId === 'ledger.batch@1' && localPayload) {
       assertLedgerWorkflowMutation(mutation, localPayload)
     }
+    if (input.workflowId === 'trip.replan.apply@1' && localPayload) {
+      assertAdaptiveReplanWorkflowMutation(mutation, localPayload)
+    }
     if (
       input.workflowId === 'ledger.batch@1'
+      && mutation.operation === 'upsert'
+      && revision?.tombstone
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    if (
+      input.workflowId === 'trip.replan.apply@1'
       && mutation.operation === 'upsert'
       && revision?.tombstone
     ) {
@@ -302,7 +313,11 @@ async function prepareWorkflowRequest<T>(
   }
 
   assertActiveAccountContext(accountHash, database)
-  if (requiresLegacyFallback && input.workflowId !== 'ledger.batch@1') return null
+  if (
+    requiresLegacyFallback
+    && input.workflowId !== 'ledger.batch@1'
+    && input.workflowId !== 'trip.replan.apply@1'
+  ) return null
   if (input.workflowId === 'item.move@1' && (
     movedItemCount !== 1 || moveDayIds.size !== 2
   )) {
@@ -323,6 +338,15 @@ async function prepareWorkflowRequest<T>(
   if (input.workflowId === 'trip.import.commit@1') {
     await assertEmptyTripImportBaseline(input.tripId, accountHash, database)
   }
+  if (input.workflowId === 'trip.replan.apply@1') {
+    requiresLegacyFallback = await hasUnbootstrappedAdaptiveReplanDependency(
+      input.tripId,
+      steps,
+      accountHash,
+      database,
+    ) || requiresLegacyFallback
+    if (requiresLegacyFallback) return null
+  }
   try {
     return parseAccountWorkflowRequestV1({
       batchMutationId,
@@ -335,6 +359,143 @@ async function prepareWorkflowRequest<T>(
   } catch {
     throw new AccountCloudWorkflowWriteError('invalid_state')
   }
+}
+
+function assertAdaptiveReplanWorkflowMutation(
+  mutation: ProductCandidateMutation,
+  localPayload: JsonObject,
+) {
+  if (!mutation.payload || mutation.operation !== 'upsert') {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  if (mutation.objectType === 'trip') {
+    if (
+      !sameJson(withoutFields(localPayload, ['updatedAt']), withoutFields(mutation.payload, ['updatedAt']))
+      || !isLaterTimestamp(mutation.payload.updatedAt, localPayload.updatedAt)
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    return
+  }
+  if (mutation.objectType !== 'item') {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const mutableFields = [
+    'dayId',
+    'endTime',
+    'executionState',
+    'previousTransportDurationMinutes',
+    'previousTransportMode',
+    'previousTransportNote',
+    'sortOrder',
+    'startTime',
+    'updatedAt',
+  ]
+  if (
+    !sameJson(withoutFields(localPayload, mutableFields), withoutFields(mutation.payload, mutableFields))
+    || !isLaterTimestamp(mutation.payload.updatedAt, localPayload.updatedAt)
+  ) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+}
+
+async function hasUnbootstrappedAdaptiveReplanDependency(
+  tripId: string,
+  steps: AccountWorkflowStepV1[],
+  accountHash: string,
+  database: TravelConsoleDatabase,
+) {
+  const recordSteps = steps.filter((step) => step.objectType === 'replan_record')
+  if (recordSteps.length !== 1 || !recordSteps[0].payload) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const baseline = recordSteps[0].payload.accountObjectBaseline
+  if (!Array.isArray(baseline) || baseline.length === 0 || baseline.length > 512) {
+    throw new AccountCloudWorkflowWriteError('invalid_state')
+  }
+  const [trip, days, items, tickets, expenses] = await Promise.all([
+    database.trips.get(tripId),
+    database.days.where('tripId').equals(tripId).toArray(),
+    database.itineraryItems.where('tripId').equals(tripId).toArray(),
+    database.ticketMetas.where('tripId').equals(tripId).toArray(),
+    database.ledgerExpenses.where('tripId').equals(tripId).toArray(),
+  ])
+  assertActiveAccountContext(accountHash, database)
+  if (!trip) throw new AccountCloudWorkflowWriteError('conflict')
+  const expectedObjects = [
+    { objectId: trip.id, objectType: 'trip' as const },
+    ...days.map((day) => ({ objectId: day.id, objectType: 'day' as const })),
+    ...items.map((item) => ({ objectId: item.id, objectType: 'item' as const })),
+    ...tickets.map((ticket) => ({ objectId: ticket.id, objectType: 'ticket_meta' as const })),
+    ...expenses.map((expense) => ({ objectId: expense.id, objectType: 'ledger_expense' as const })),
+  ]
+  const baselineByKey = new Map<string, { expectedRevision: number; objectId: string; objectType: ClientMutableAccountObjectType }>()
+  const allowedTypes = new Set(['trip', 'day', 'item', 'ticket_meta', 'ledger_expense'])
+  for (const entry of baseline) {
+    if (
+      !entry
+      || typeof entry !== 'object'
+      || Array.isArray(entry)
+      || Object.keys(entry).some((key) => !['expectedRevision', 'objectId', 'objectType'].includes(key))
+      || typeof entry.objectId !== 'string'
+      || !CONTROLLED_ID.test(entry.objectId)
+      || typeof entry.objectType !== 'string'
+      || !allowedTypes.has(entry.objectType)
+      || !Number.isSafeInteger(entry.expectedRevision)
+      || (entry.expectedRevision as number) < 0
+    ) {
+      throw new AccountCloudWorkflowWriteError('invalid_state')
+    }
+    const objectType = entry.objectType as ClientMutableAccountObjectType
+    const key = buildAccountObjectKey(objectType, entry.objectId)
+    if (baselineByKey.has(key)) throw new AccountCloudWorkflowWriteError('invalid_state')
+    baselineByKey.set(key, {
+      expectedRevision: entry.expectedRevision as number,
+      objectId: entry.objectId,
+      objectType,
+    })
+  }
+  const expectedKeys = new Set(expectedObjects.map((object) => (
+    buildAccountObjectKey(object.objectType, object.objectId)
+  )))
+  if (
+    baselineByKey.size !== expectedKeys.size
+    || [...expectedKeys].some((key) => !baselineByKey.has(key))
+  ) {
+    throw new AccountCloudWorkflowWriteError('conflict')
+  }
+
+  let needsFallback = false
+  for (const entry of baselineByKey.values()) {
+    const objectKey = buildAccountObjectKey(entry.objectType, entry.objectId)
+    const [revision, localPayload, singlePending, workflowPending] = await Promise.all([
+      getAccountObjectRevision(objectKey, database),
+      readAccountWorkflowLocalPayload(entry.objectType, entry.objectId, tripId, database),
+      database.accountMutationJournal.where('objectKey').equals(objectKey).count(),
+      database.accountWorkflowJournal.where('objectKeys').equals(objectKey).count(),
+    ])
+    assertActiveAccountContext(accountHash, database)
+    if (singlePending > 0 || workflowPending > 0) {
+      throw new AccountCloudWorkflowWriteError('conflict')
+    }
+    if (!localPayload) throw new AccountCloudWorkflowWriteError('conflict')
+    if (!revision) {
+      if (entry.expectedRevision !== 0) throw new AccountCloudWorkflowWriteError('invalid_state')
+      needsFallback = true
+      continue
+    }
+    if (
+      revision.objectId !== entry.objectId
+      || revision.objectType !== entry.objectType
+      || revision.tripId !== tripId
+      || revision.tombstone
+      || revision.revision !== entry.expectedRevision
+      || !sameJson(revision.payload, localPayload)
+    ) {
+      throw new AccountCloudWorkflowWriteError('conflict')
+    }
+  }
+  return needsFallback
 }
 
 function assertLedgerWorkflowMutation(

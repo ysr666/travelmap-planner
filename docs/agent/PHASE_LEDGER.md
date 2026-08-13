@@ -3717,3 +3717,71 @@ Remote receipt for predecessor commit `bc1b333f77862416f9447e95548660b851e480b5`
 - GitHub Actions run `31696395986` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
 - Cloudflare Pages deployment/check `82f7c5c2-f96c-4aa2-b629-1e16f858366b` passed for the same SHA.
 - These receipts close P1.3d3 remote validation only. P1.3d4 requires its own same-SHA receipts after commit and push.
+
+## 2026-08-13 Product-Grade Delivery W1 / P1.3d5a Adaptive Replan Account Workflow
+
+Status: complete locally; Supabase Preview, real-account execution and the remaining AI repair workflow remain P1 gates
+
+Goal:
+
+- Route the existing confirmed adaptive-replan action through the registered `trip.replan.apply@1` Account Cloud workflow for fully bootstrapped V2 accounts.
+- Preserve one real preview, one final confirmation, full stale-plan protection, idempotent replay, local atomicity and server all-or-nothing behavior across changed Items, the disruption event, the replan record and redacted execution history.
+
+Scope:
+
+- Split adaptive-replan preparation from application so every generated identity, timestamp, Item payload, event, record and history payload is fixed before the cloud decision. Re-read the complete Trip/Day/Item/Ticket/ledger-expense context and the prior idempotency marker inside the apply transaction.
+- Build a trusted, bounded dependency-revision baseline from the complete active Trip/Day/Item/Ticket/ledger-expense graph. Require the server to lock and match that exact graph before writing, so a preview prepared before another-device data change cannot commit.
+- Narrow `trip.replan.apply@1` to the product operation actually implemented: one or more existing Item upserts, exactly one new applied disruption event, exactly one new applied adaptive-replan record and exactly one new redacted intelligence change. Reject arbitrary fields, functions, URLs, object kinds, operations and unrelated Item edits.
+- Route fully bootstrapped accounts through one optimistic workflow journal and no legacy object outbox or Trip snapshot write. Fall back before mutation when any dependency lacks a trusted Account Cloud revision; keep the existing legacy transaction and sync behavior when V2 is disabled or unbootstrapped.
+- Add TypeScript/SQL parity tests, local workflow rollback and response-loss tests, and product-path tests for idempotency, stale dependencies, account switching and fallback.
+
+No-go:
+
+- No Provider call, AI planning call, Supabase Preview/Production write, rollout-gate change, Realtime claim, ticket/ledger mutation, destructive replan, payment, purchase, cancellation, permission change or external side effect.
+- No Provider-selected object ID, payload, patch, route, table, function, SQL, URL or dependency revision. The dependency baseline is derived only from locally trusted Account Cloud revision receipts.
+- No partial Item/event/record/history commit, no legacy outbox after V2 handling, no fallback after optimistic mutation, no mutation when the trip graph or selected option changed, and no silent replay if the persisted result differs from the confirmed plan.
+
+Likely files:
+
+- `src/lib/adaptiveReplanActions.ts` and focused product tests; Account Cloud object/workflow contracts, local codec/store/runtime and tests; workflow SQL migration, pgTAP and static migration gates; capability/status/cloud-model docs and this ledger.
+
+Validation:
+
+- Exact workflow shape, payload allowlists, complete dependency baseline, stale Trip/Day/Item/Ticket/ledger revision, selected-option drift, duplicate/reused identities, first apply, concurrent replay, pending journal, offline retention, terminal conflict rollback, response loss, account switch, unbootstrapped whole-operation fallback, TypeScript/SQL parity, clean local migration replay, pgTAP, full unit/typecheck/lint/build, focused Action Gateway E2E, capability/migration/bundle gates and `git diff --check`.
+
+Risk:
+
+- Critical. A replan prepared against stale tickets, expenses or schedule constraints can move the wrong stops; a partial or replay-unsafe commit can leave the timeline, disruption history and undo record disagreeing across devices.
+
+Stop conditions:
+
+- Stop and repair if the dependency baseline can omit an active scoped object, any non-schedule Item field can change, the event/record/history links disagree, a terminal server result leaves optimistic data behind, a second execution duplicates history, a V2-handled action also enters legacy sync, or local and SQL validators accept different payloads.
+
+Local result:
+
+- Split the confirmed adaptive-replan command into deterministic preparation and atomic application. Every generated timestamp, object ID, selected strategy, Item payload, user-report event, applied record and redacted intelligence history object is fixed before the cloud decision and rechecked inside the write transaction.
+- Routed fully bootstrapped accounts through one `trip.replan.apply@1` workflow containing exactly one Trip timestamp advance, one or more changed Items, one new applied event, one new applied record and one new redacted history object. A handled V2 operation writes neither the legacy object outbox nor the Trip snapshot queue; a disabled or unbootstrapped graph falls back before mutation and removes V2-only revision metadata.
+- Added a complete locally trusted Trip/Day/Item/Ticket/LedgerExpense revision baseline. Both local runtime and SQL reject omitted or extra active dependencies, pending single/batch work, revision or payload drift, tombstones, account switching and an outdated confirmed preview before the first write.
+- Added exact TypeScript and SQL payload/topology validators. They reject unknown or sensitive fields, arbitrary functions/routes, Provider secrets, malformed nested JSON, explicit JSON `null`, scalar-to-string coercion, duplicate identities, over-limit plans, unrelated Item edits and tombstone restoration. The server also proves the before snapshot against current Day/Item objects and proves the selected patch generates each submitted after Item.
+- Tightened response-loss and replay recovery: an existing marker is accepted only when its event, applied record, redacted history, selected strategy, preview fingerprint and current after snapshot all match the original confirmed action. Successful work is never duplicated; divergent state requires a new preview.
+- Kept both rollout constants fixed to `false`. No Provider/AI call, Preview/Production database write, real-account mutation, payment, cancellation, permission change or other external side effect occurred.
+
+Review:
+
+- The protected-boundary review found that the first SQL version matched dependency revisions but did not prove the stored before snapshot or selected patch against server objects. Added server-side object equality and patch-to-after derivation checks, plus adversarial TypeScript/pgTAP/static-gate cases for forged snapshots, patch substitution, scalar coercion and explicit nulls.
+- The first E2E build exceeded the 2500 KiB test-mode precache ceiling by 0.2 KiB. The two E2E-only dynamic entries (`e2eRuntime` and `fixtureMediaRegistry`) now use the existing on-demand asset cache and are explicitly forbidden from first-install precache; product core resources and ordinary production output remain unchanged.
+- Remaining risk is explicit: real multi-connection contention, response loss, authentication expiry, bootstrap, Realtime, second-device/empty-device convergence and production latency have no external receipt. Undo still uses the legacy path, `trip.repair.apply@1` has no product adapter, and Ticket create/delete/Blob plus lifecycle recovery remain outside this phase.
+
+Local validation:
+
+- A clean `supabase db reset` replayed every migration. `npm run test:db:account-cloud` passed 120/120 pgTAP checks, including private helper grants, arbitrary function/secret rejection, complete dependency baseline, real before snapshot, patch correlation, transaction rollback and idempotent replay. `supabase db lint --schema public,tripmap_private --level warning` reported no schema errors or warnings.
+- Focused contract/runtime/product/migration regression passed 5 files and 63 tests. The complete unit suite passed 241 files and 2,013 tests. Full typecheck, lint, capability alignment, Account Cloud/Cloudflare migration gates, production-boundary checks and `git diff --check` passed.
+- Production build passed at 357.5 KiB entry, 856.1 KiB initial JS, 245.8 KiB initial gzip, 12 startup chunks and 2493.8 KiB/132-entry precache. The E2E build passed at 357.6 KiB entry, 856.2 KiB initial JS, 245.8 KiB initial gzip and 2498.4 KiB/135-entry precache.
+- Focused `Mobile 390x844` confirmed-replan and read-only What-if E2E passed 2/2. The complete built-dist PWA upgrade suite passed 5/5, and full serial Playwright passed all 194 tests in 7.3 minutes, including Action Gateway confirmation/retry, imports, tickets, ledger, maps, five responsive viewports, Golden regression and Desktop Beta smoke.
+- Supabase Preview remains intentionally uncreated because it is cost-bearing and requires explicit confirmation. No claim is made for Preview, production, Realtime or real-account behavior.
+
+Remote receipt for predecessor commit `d8634aad7e9f80c28d1123006395b708f9f1a984`:
+
+- GitHub Actions run `31703990427` passed Build, Type Check, Lint, Unit Tests and the complete E2E job.
+- Cloudflare Pages deployment/check `39b1d744-40f3-4f84-94ca-0804b0acd39e` passed for the same SHA.
+- These receipts close P1.3d4 remote validation. P1.3d5a requires its own same-SHA receipts after commit and push.

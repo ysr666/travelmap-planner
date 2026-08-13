@@ -129,6 +129,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
         globIgnores: [
           '**/AiDraftPage-*.js',
+          '**/e2eRuntime-*.js',
+          '**/fixtureMediaRegistry-*.js',
           '**/GlobalAiCommandBar-*.js',
           '**/icons/icon-*.png',
           '**/jszip-*.js',

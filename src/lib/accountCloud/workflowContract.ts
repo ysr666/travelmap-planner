@@ -13,6 +13,13 @@ import {
   ACCOUNT_WORKFLOW_MAX_BYTES,
   ACCOUNT_WORKFLOW_MAX_STEPS,
 } from './workflowLimits'
+import {
+  assertAdaptiveReplanEventPayload,
+  assertAdaptiveReplanHistoryPayload,
+  assertAdaptiveReplanItemPayload,
+  assertAdaptiveReplanRecordPayload,
+  assertAdaptiveReplanTripPayload,
+} from './adaptiveReplanPayload'
 
 export {
   ACCOUNT_TRIP_IMPORT_WORKFLOW_MAX_STEPS,
@@ -62,12 +69,11 @@ export const ACCOUNT_WORKFLOW_DEFINITIONS = {
     'ledger_expense',
   ], ['upsert', 'delete'], 1, 128),
   'trip.replan.apply@1': workflow([
-    'day',
+    'trip',
     'item',
     'replan_event',
     'replan_record',
     'trip_intelligence_applied_change',
-    'trip_intelligence_suggestion_state',
   ], ['upsert'], 1, 128),
   'trip.repair.apply@1': workflow([
     'item',
@@ -567,6 +573,94 @@ function assertWorkflowShape(
 
   if (workflowId === 'ledger.batch@1') {
     assertLedgerWorkflowShape(steps)
+  }
+
+  if (workflowId === 'trip.replan.apply@1') {
+    assertAdaptiveReplanWorkflowShape(steps, tripId)
+  }
+}
+
+function assertAdaptiveReplanWorkflowShape(
+  steps: AccountWorkflowStepV1[],
+  tripId: string,
+) {
+  const tripSteps = steps.filter((step) => step.objectType === 'trip')
+  const itemSteps = steps.filter((step) => step.objectType === 'item')
+  const eventSteps = steps.filter((step) => step.objectType === 'replan_event')
+  const recordSteps = steps.filter((step) => step.objectType === 'replan_record')
+  const historySteps = steps.filter((step) => (
+    step.objectType === 'trip_intelligence_applied_change'
+  ))
+  if (
+    tripSteps.length !== 1
+    || itemSteps.length < 1
+    || eventSteps.length !== 1
+    || recordSteps.length !== 1
+    || historySteps.length !== 1
+    || steps.length !== itemSteps.length + 4
+    || tripSteps[0].expectedRevision < 1
+    || itemSteps.some((step) => step.expectedRevision < 1)
+    || [...eventSteps, ...recordSteps, ...historySteps]
+      .some((step) => step.expectedRevision !== 0)
+  ) {
+    fail('workflow_shape_invalid')
+  }
+  const trip = tripSteps[0]
+  const event = eventSteps[0]
+  const record = recordSteps[0]
+  const history = historySteps[0]
+  if (!trip.payload || !event.payload || !record.payload || !history.payload) {
+    fail('workflow_shape_invalid')
+  }
+  try {
+    assertAdaptiveReplanTripPayload(trip.payload)
+    itemSteps.forEach((step) => assertAdaptiveReplanItemPayload(step.payload!))
+    assertAdaptiveReplanEventPayload(event.payload)
+    assertAdaptiveReplanRecordPayload(record.payload)
+    assertAdaptiveReplanHistoryPayload(history.payload)
+  } catch {
+    fail('workflow_shape_invalid')
+  }
+  const now = record.payload.createdAt
+  const scopeItemIds = record.payload.scopeItemIds as JsonValue[]
+  const afterSnapshot = record.payload.afterSnapshot as JsonObject
+  const afterItems = afterSnapshot.items as JsonValue[]
+  const baseline = record.payload.accountObjectBaseline as JsonValue[]
+  const itemIds = itemSteps.map((step) => step.objectId)
+  if (
+    trip.objectId !== tripId
+    || trip.payload.updatedAt !== now
+    || event.payload.tripId !== tripId
+    || event.payload.updatedAt !== now
+    || record.payload.tripId !== tripId
+    || record.payload.eventId !== event.objectId
+    || record.payload.id !== record.objectId
+    || history.payload.tripId !== tripId
+    || history.payload.sourceId !== record.objectId
+    || history.payload.updatedAt !== now
+    || !sameJson([...scopeItemIds].sort(), [...itemIds].sort())
+    || !sameJson(
+      [...afterItems]
+        .map((value) => value as JsonObject)
+        .sort((left, right) => String(left.id).localeCompare(String(right.id))),
+      itemSteps
+        .map((step) => step.payload as JsonObject)
+        .sort((left, right) => String(left.id).localeCompare(String(right.id))),
+    )
+    || !baseline.some((value) => {
+      const entry = value as JsonObject
+      return entry.objectType === 'trip' && entry.objectId === tripId
+    })
+    || itemIds.some((itemId) => !baseline.some((value) => {
+      const entry = value as JsonObject
+      return entry.objectType === 'item' && entry.objectId === itemId
+    }))
+  ) {
+    fail('workflow_shape_invalid')
+  }
+  const targetId = history.payload.targetId
+  if (targetId !== event.payload.itemId && targetId !== event.payload.dayId) {
+    fail('workflow_shape_invalid')
   }
 }
 

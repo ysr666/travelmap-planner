@@ -6,8 +6,10 @@ import type {
   LedgerExpense,
   TicketMeta,
   Trip,
+  TripIntelligenceAppliedChangeRecord,
   TripDisruptionEvent,
   TripDisruptionKind,
+  TripReplanAccountObjectBaselineEntry,
   TripReplanOption,
   TripReplanRecord,
   TripReplanSnapshot,
@@ -17,11 +19,22 @@ import {
   buildReplanFingerprint,
   buildTripReplanPreview,
 } from './adaptiveReplanning'
+import { getActiveAccountHash } from './accountStorageScope'
+import {
+  ACCOUNT_OBJECT_MAX_PAYLOAD_BYTES,
+  type JsonObject,
+} from './accountCloud/contract'
+import { isAccountCloudV2AccountEnabled } from './accountCloud/feature'
+import { executeProductAccountWorkflowIfEnabled } from './accountCloud/workflowRuntimeLoader'
+import {
+  ACCOUNT_WORKFLOW_MAX_BYTES,
+  ACCOUNT_WORKFLOW_MAX_STEPS,
+} from './accountCloud/workflowLimits'
 import { emitTravelDataChanged } from './dataEvents'
 import { enqueueObjectUpsert } from './objectSyncLocal'
 import {
-  appendTripIntelligenceExecutionResult,
   buildTripIntelligenceAppliedChangeRecordId,
+  prepareTripIntelligenceExecutionPersistence,
 } from './tripIntelligence/persistence'
 import type { TripIntelligenceAppliedChange } from './tripIntelligence/types'
 import { recordTripWriteForSync } from './tripSyncQueue'
@@ -58,6 +71,21 @@ export type AdaptiveReplanActionExecutionResult = {
   changedItemCount: number
   record?: TripReplanRecord
 }
+
+type AdaptiveReplanMutationPlan = {
+  beforeFingerprint: string
+  event: TripDisruptionEvent
+  historyRecord: TripIntelligenceAppliedChangeRecord
+  now: number
+  record: TripReplanRecord
+  trip: Trip
+  tripId: string
+  updatedItems: ItineraryItem[]
+}
+
+type PreparedAdaptiveReplanMutation =
+  | { kind: 'apply'; plan: AdaptiveReplanMutationPlan }
+  | { kind: 'replay'; record: TripReplanRecord }
 
 const ADAPTIVE_REPLAN_TRANSACTION_TABLES = [
   'trips',
@@ -165,163 +193,42 @@ export async function executeAdaptiveReplanAction(
   if (countChangedItems(prepared.selectedOption) === 0) {
     return { changed: false, changedItemCount: 0 }
   }
+  const mutation = await prepareAdaptiveReplanMutation(prepared)
+  if (mutation.kind === 'replay') {
+    return {
+      changed: false,
+      changedItemCount: countChangedItemsFromRecord(mutation.record),
+      record: mutation.record,
+    }
+  }
 
-  let output: AdaptiveReplanActionExecutionResult | undefined
-  await db.transaction(
-    'rw',
-    [...ADAPTIVE_REPLAN_TRANSACTION_TABLES],
-    async () => {
-      const context = await loadAdaptiveReplanActionContext(prepared.tripId)
-      const marker = await getAdaptiveReplanMarker(prepared)
-      if (marker) {
-        const record = await assertAdaptiveReplanActionAppliedInTransaction(
-          prepared,
-          context,
-        )
-        output = {
-          changed: false,
-          changedItemCount: countChangedItemsFromRecord(record),
-          record,
-        }
-        return
-      }
-
-      if (
-        buildAdaptiveReplanActionBaseline(context)
-        !== prepared.baselineFingerprint
-      ) {
-        throw new ItineraryBaselineConflictError(
-          '旅行、票据或账本内容已变化，请重新生成预览。',
-        )
-      }
-      const day = context.days.find((candidate) =>
-        candidate.id === prepared.dayId,
-      )
-      const item = prepared.itemId
-        ? context.items.find((candidate) => candidate.id === prepared.itemId)
-        : undefined
-      if (!day || (prepared.itemId && !item)) {
-        throw new ItineraryBaselineConflictError(
-          '突发重排目标已不存在，请重新生成预览。',
-        )
-      }
-      const latestItemUpdatedAt = context.items.reduce(
-        (latest, candidate) => Math.max(latest, candidate.updatedAt),
-        0,
-      )
-      const now = Math.max(
-        Date.now(),
-        context.trip.updatedAt + 1,
-        latestItemUpdatedAt + 1,
-      )
-      const event = buildAdaptiveReplanEvent({
-        createdAt: now,
-        dayId: day.id,
-        delayMinutes: prepared.delayMinutes,
-        disruptionKind: prepared.disruptionKind,
-        eventId: prepared.eventId,
-        itemId: item?.id,
-        occurredAt: prepared.occurredAt,
-        tripId: context.trip.id,
-      })
-      const preview = buildTripReplanPreview({
-        ...context,
-        event,
-        now: new Date(now),
-      })
-      const selectedOption = requireStrategyOption(
-        preview.options,
-        prepared.strategy,
-      )
-      if (
-        buildAdaptiveReplanOptionFingerprint(selectedOption)
-        !== prepared.previewFingerprint
-      ) {
-        throw new ItineraryBaselineConflictError(
-          '重排结果已变化，请重新生成预览。',
-        )
-      }
-      const updatedItems = applyAdaptiveReplanPatches(
-        context.items,
-        selectedOption,
-        now,
-      )
-      if (updatedItems.length === 0) {
-        output = { changed: false, changedItemCount: 0 }
-        return
-      }
-
-      const itemById = new Map(context.items.map((candidate) => [
-        candidate.id,
-        candidate,
-      ]))
-      for (const updated of updatedItems) itemById.set(updated.id, updated)
-      const scopeItemIds = selectedOption.diff.itemChanges
-        .filter((change) => change.changeType !== 'unchanged')
-        .map((change) => change.itemId)
-      const afterSnapshot = buildAdaptiveReplanScopedSnapshot(
-        context.days,
-        [...itemById.values()],
-        scopeItemIds,
-      )
-      const appliedFingerprint = buildReplanFingerprint(afterSnapshot)
-      const persistedEvent: TripDisruptionEvent = {
-        ...event,
-        status: 'applied',
-        updatedAt: now,
-      }
-      const record: TripReplanRecord = {
-        ...preview,
-        afterSnapshot,
-        appliedFingerprint,
-        createdAt: now,
-        id: prepared.recordId,
-        operationFingerprint: prepared.operationFingerprint,
-        operationKind: 'adaptive_replan',
-        scopeItemIds,
-        selectedDiff: selectedOption.diff,
-        selectedOptionId: selectedOption.id,
-        status: 'applied',
-        updatedAt: now,
-      }
-
-      await db.itineraryItems.bulkPut(updatedItems)
-      await db.tripReplanEvents.put(persistedEvent)
-      await db.tripReplanRecords.put(record)
-      await db.trips.put({ ...context.trip, updatedAt: now })
-      await Promise.all([
-        ...updatedItems.map((updated) =>
-          enqueueObjectUpsert({ object: updated, objectType: 'item' }),
-        ),
-        enqueueObjectUpsert({
-          object: persistedEvent,
-          objectType: 'replan_event',
+  const plan = mutation.plan
+  const steps = buildAdaptiveReplanWorkflowSteps(plan)
+  if (canSubmitAdaptiveReplanWorkflow(steps)) {
+    try {
+      const accountCloud = await executeProductAccountWorkflowIfEnabled({
+        apply: () => applyAdaptiveReplanMutationPlan(prepared, plan, {
+          enqueueLegacy: false,
         }),
-        enqueueObjectUpsert({
-          object: record,
-          objectType: 'replan_record',
-        }),
-      ])
-      await appendTripIntelligenceExecutionResult(context.trip.id, {
-        result: {
-          appliedChanges: [
-            buildAdaptiveReplanAppliedChange(prepared, record, now),
-          ],
-          message: 'AI 突发重排已完成。',
-          status: 'completed',
-        },
-        source: 'live',
-        title: 'AI 突发重排',
-      }, now)
-      output = {
-        changed: true,
-        changedItemCount: updatedItems.length,
-        record,
+        steps,
+        tripId: plan.tripId,
+        workflowId: 'trip.replan.apply@1',
+      })
+      if (accountCloud.handled) {
+        if (accountCloud.value.changed) emitTravelDataChanged()
+        return accountCloud.value
       }
-    },
-  )
+    } catch (error) {
+      const replay = await recoverAdaptiveReplanReplay(prepared)
+      if (replay) return replay
+      throw error
+    }
+  }
 
-  if (!output) throw new Error('突发重排事务没有返回结果。')
+  const legacyPlan = stripAdaptiveReplanAccountBaseline(plan)
+  const output = await applyAdaptiveReplanMutationPlan(prepared, legacyPlan, {
+    enqueueLegacy: true,
+  })
   if (output.changed) {
     recordTripWriteForSync(prepared.tripId, 'ai-adaptive-replan-applied', {
       emitChangeEvent: false,
@@ -348,6 +255,301 @@ export function buildAdaptiveReplanActionBaseline(
     tickets: [...context.tickets].sort(compareById),
     trip: context.trip,
   })
+}
+
+async function prepareAdaptiveReplanMutation(
+  prepared: PreparedAdaptiveReplanAction,
+): Promise<PreparedAdaptiveReplanMutation> {
+  const context = await loadAdaptiveReplanActionContext(prepared.tripId)
+  if (await getAdaptiveReplanMarker(prepared)) {
+    return {
+      kind: 'replay',
+      record: await assertAdaptiveReplanActionAppliedInTransaction(prepared, context),
+    }
+  }
+  if (buildAdaptiveReplanActionBaseline(context) !== prepared.baselineFingerprint) {
+    throw new ItineraryBaselineConflictError(
+      '旅行、票据或账本内容已变化，请重新生成预览。',
+    )
+  }
+  const day = context.days.find((candidate) => candidate.id === prepared.dayId)
+  const item = prepared.itemId
+    ? context.items.find((candidate) => candidate.id === prepared.itemId)
+    : undefined
+  if (!day || (prepared.itemId && !item)) {
+    throw new ItineraryBaselineConflictError(
+      '突发重排目标已不存在，请重新生成预览。',
+    )
+  }
+  const latestItemUpdatedAt = context.items.reduce(
+    (latest, candidate) => Math.max(latest, candidate.updatedAt),
+    0,
+  )
+  const now = Math.max(Date.now(), context.trip.updatedAt + 1, latestItemUpdatedAt + 1)
+  const event = buildAdaptiveReplanEvent({
+    createdAt: now,
+    dayId: day.id,
+    delayMinutes: prepared.delayMinutes,
+    disruptionKind: prepared.disruptionKind,
+    eventId: prepared.eventId,
+    itemId: item?.id,
+    occurredAt: prepared.occurredAt,
+    tripId: context.trip.id,
+  })
+  const preview = buildTripReplanPreview({ ...context, event, now: new Date(now) })
+  const selectedOption = requireStrategyOption(preview.options, prepared.strategy)
+  if (buildAdaptiveReplanOptionFingerprint(selectedOption) !== prepared.previewFingerprint) {
+    throw new ItineraryBaselineConflictError('重排结果已变化，请重新生成预览。')
+  }
+  const updatedItems = applyAdaptiveReplanPatches(context.items, selectedOption, now)
+  if (updatedItems.length === 0) {
+    throw new ItineraryBaselineConflictError('重排方案已不再包含可应用的修改。')
+  }
+  const itemById = new Map(context.items.map((candidate) => [candidate.id, candidate]))
+  for (const updated of updatedItems) itemById.set(updated.id, updated)
+  const scopeItemIds = selectedOption.diff.itemChanges
+    .filter((change) => change.changeType !== 'unchanged')
+    .map((change) => change.itemId)
+  const afterSnapshot = buildAdaptiveReplanScopedSnapshot(
+    context.days,
+    [...itemById.values()],
+    scopeItemIds,
+  )
+  const persistedEvent: TripDisruptionEvent = {
+    ...event,
+    status: 'applied',
+    updatedAt: now,
+  }
+  const appliedChange = buildAdaptiveReplanAppliedChange(prepared, {
+    ...preview,
+    afterSnapshot,
+    appliedFingerprint: buildReplanFingerprint(afterSnapshot),
+    createdAt: now,
+    id: prepared.recordId,
+    operationFingerprint: prepared.operationFingerprint,
+    operationKind: 'adaptive_replan',
+    scopeItemIds,
+    selectedDiff: selectedOption.diff,
+    selectedOptionId: selectedOption.id,
+    status: 'applied',
+    updatedAt: now,
+  }, now)
+  const history = prepareTripIntelligenceExecutionPersistence(context.trip.id, {
+    result: {
+      appliedChanges: [appliedChange],
+      message: 'AI 突发重排已完成。',
+      status: 'completed',
+    },
+    source: 'live',
+    title: 'AI 突发重排',
+  }, now)
+  if (history.appliedRecords.length !== 1 || history.suggestionState) {
+    throw new Error('突发重排历史记录生成失败。')
+  }
+  const accountObjectBaseline = isAccountCloudV2AccountEnabled(getActiveAccountHash())
+    ? await loadAdaptiveReplanAccountObjectBaseline(context)
+    : undefined
+  const record: TripReplanRecord = {
+    ...preview,
+    ...(accountObjectBaseline ? { accountObjectBaseline } : {}),
+    afterSnapshot,
+    appliedFingerprint: buildReplanFingerprint(afterSnapshot),
+    createdAt: now,
+    id: prepared.recordId,
+    operationFingerprint: prepared.operationFingerprint,
+    operationKind: 'adaptive_replan',
+    scopeItemIds,
+    selectedDiff: selectedOption.diff,
+    selectedOptionId: selectedOption.id,
+    status: 'applied',
+    updatedAt: now,
+  }
+  return {
+    kind: 'apply',
+    plan: {
+      beforeFingerprint: prepared.baselineFingerprint,
+      event: persistedEvent,
+      historyRecord: history.appliedRecords[0],
+      now,
+      record,
+      trip: { ...context.trip, updatedAt: now },
+      tripId: context.trip.id,
+      updatedItems,
+    },
+  }
+}
+
+async function applyAdaptiveReplanMutationPlan(
+  prepared: PreparedAdaptiveReplanAction,
+  plan: AdaptiveReplanMutationPlan,
+  options: { enqueueLegacy: boolean },
+): Promise<AdaptiveReplanActionExecutionResult> {
+  let output: AdaptiveReplanActionExecutionResult | undefined
+  const transactionTables = options.enqueueLegacy
+    ? [...ADAPTIVE_REPLAN_TRANSACTION_TABLES]
+    : [
+        db.trips,
+        db.days,
+        db.itineraryItems,
+        db.ticketMetas,
+        db.ledgerExpenses,
+        db.tripReplanEvents,
+        db.tripReplanRecords,
+        db.tripIntelligenceAppliedChanges,
+        db.accountObjectRevisions,
+      ]
+  await db.transaction('rw', transactionTables, async () => {
+    const context = await loadAdaptiveReplanActionContext(plan.tripId)
+    if (await getAdaptiveReplanMarker(prepared)) {
+      const record = await assertAdaptiveReplanActionAppliedInTransaction(prepared, context)
+      output = {
+        changed: false,
+        changedItemCount: countChangedItemsFromRecord(record),
+        record,
+      }
+      return
+    }
+    if (
+      buildAdaptiveReplanActionBaseline(context) !== plan.beforeFingerprint
+      || (
+        plan.record.accountObjectBaseline
+        && !sameJson(
+          plan.record.accountObjectBaseline,
+          await loadAdaptiveReplanAccountObjectBaseline(context),
+        )
+      )
+    ) {
+      throw new ItineraryBaselineConflictError(
+        '旅行、票据或账本内容已变化，请重新生成预览。',
+      )
+    }
+    if (
+      await db.tripReplanEvents.get(plan.event.id)
+      || await db.tripReplanRecords.get(plan.record.id)
+      || await db.tripIntelligenceAppliedChanges.get(plan.historyRecord.id)
+    ) {
+      throw new ItineraryBaselineConflictError('重排记录标识已被占用，请重新生成预览。')
+    }
+    await db.itineraryItems.bulkPut(plan.updatedItems)
+    await db.tripReplanEvents.put(plan.event)
+    await db.tripReplanRecords.put(plan.record)
+    await db.tripIntelligenceAppliedChanges.put(plan.historyRecord)
+    await db.trips.put(plan.trip)
+    if (options.enqueueLegacy) {
+      await Promise.all([
+        ...plan.updatedItems.map((updated) => enqueueObjectUpsert({ object: updated, objectType: 'item' })),
+        enqueueObjectUpsert({ object: plan.event, objectType: 'replan_event' }),
+        enqueueObjectUpsert({ object: plan.record, objectType: 'replan_record' }),
+        enqueueObjectUpsert({
+          object: plan.historyRecord,
+          objectType: 'trip_intelligence_applied_change',
+        }),
+      ])
+    }
+    output = {
+      changed: true,
+      changedItemCount: plan.updatedItems.length,
+      record: plan.record,
+    }
+  })
+  if (!output) throw new Error('突发重排事务没有返回结果。')
+  return output
+}
+
+function stripAdaptiveReplanAccountBaseline(
+  plan: AdaptiveReplanMutationPlan,
+): AdaptiveReplanMutationPlan {
+  if (!plan.record.accountObjectBaseline) return plan
+  const record = { ...plan.record }
+  delete record.accountObjectBaseline
+  return { ...plan, record }
+}
+
+function buildAdaptiveReplanWorkflowSteps(plan: AdaptiveReplanMutationPlan) {
+  return [
+    {
+      objectId: plan.trip.id,
+      objectType: 'trip' as const,
+      operation: 'upsert' as const,
+      payload: plan.trip as unknown as JsonObject,
+    },
+    ...plan.updatedItems.map((item) => ({
+      objectId: item.id,
+      objectType: 'item' as const,
+      operation: 'upsert' as const,
+      payload: item as unknown as JsonObject,
+    })),
+    {
+      objectId: plan.event.id,
+      objectType: 'replan_event' as const,
+      operation: 'upsert' as const,
+      payload: plan.event as unknown as JsonObject,
+    },
+    {
+      objectId: plan.record.id,
+      objectType: 'replan_record' as const,
+      operation: 'upsert' as const,
+      payload: plan.record as unknown as JsonObject,
+    },
+    {
+      objectId: plan.historyRecord.id,
+      objectType: 'trip_intelligence_applied_change' as const,
+      operation: 'upsert' as const,
+      payload: plan.historyRecord as unknown as JsonObject,
+    },
+  ]
+}
+
+function canSubmitAdaptiveReplanWorkflow(
+  steps: ReturnType<typeof buildAdaptiveReplanWorkflowSteps>,
+) {
+  if (steps.length > ACCOUNT_WORKFLOW_MAX_STEPS) return false
+  const encoder = new TextEncoder()
+  if (steps.some((step) => (
+    encoder.encode(JSON.stringify(step.payload)).byteLength > ACCOUNT_OBJECT_MAX_PAYLOAD_BYTES
+  ))) return false
+  const requestEnvelopeReserve = 4_096 + steps.length * 512
+  return encoder.encode(JSON.stringify(steps)).byteLength
+    <= ACCOUNT_WORKFLOW_MAX_BYTES - requestEnvelopeReserve
+}
+
+async function loadAdaptiveReplanAccountObjectBaseline(
+  context: AdaptiveReplanActionContext,
+): Promise<TripReplanAccountObjectBaselineEntry[]> {
+  const { getAccountObjectRevision } = await import('./accountCloud/localStore')
+  const objects = [
+    { objectId: context.trip.id, objectType: 'trip' as const },
+    ...context.days.map((day) => ({ objectId: day.id, objectType: 'day' as const })),
+    ...context.items.map((item) => ({ objectId: item.id, objectType: 'item' as const })),
+    ...context.tickets.map((ticket) => ({ objectId: ticket.id, objectType: 'ticket_meta' as const })),
+    ...context.ledgerExpenses.map((expense) => ({
+      objectId: expense.id,
+      objectType: 'ledger_expense' as const,
+    })),
+  ].sort((left, right) => (
+    left.objectType.localeCompare(right.objectType) || left.objectId.localeCompare(right.objectId)
+  ))
+  return Promise.all(objects.map(async (object) => ({
+    expectedRevision: (await getAccountObjectRevision(
+      `${object.objectType}:${object.objectId}`,
+    ))?.revision ?? 0,
+    ...object,
+  })))
+}
+
+async function recoverAdaptiveReplanReplay(
+  prepared: PreparedAdaptiveReplanAction,
+): Promise<AdaptiveReplanActionExecutionResult | null> {
+  try {
+    const record = await assertAdaptiveReplanActionApplied(prepared)
+    return {
+      changed: false,
+      changedItemCount: countChangedItemsFromRecord(record),
+      record,
+    }
+  } catch {
+    return null
+  }
 }
 
 function applyAdaptiveReplanPatches(
@@ -387,6 +589,7 @@ async function assertAdaptiveReplanActionAppliedInTransaction(
   prepared: PreparedAdaptiveReplanAction,
   context: AdaptiveReplanActionContext,
 ) {
+  const changeId = buildAdaptiveReplanChangeId(prepared.operationFingerprint)
   const [marker, event, record] = await Promise.all([
     getAdaptiveReplanMarker(prepared),
     db.tripReplanEvents.get(prepared.eventId),
@@ -398,6 +601,13 @@ async function assertAdaptiveReplanActionAppliedInTransaction(
     || !record
     || marker.tripId !== prepared.tripId
     || marker.actionType !== 'global_ai_adaptive_replan_applied'
+    || marker.dedupeKey !== `${prepared.tripId}:${changeId}`
+    || marker.executionSource !== 'live'
+    || marker.executionStatus !== 'success'
+    || marker.privacyLevel !== 'private'
+    || marker.sourceKind !== 'live'
+    || marker.targetId !== (prepared.itemId ?? prepared.dayId)
+    || marker.targetType !== 'live'
     || event.tripId !== prepared.tripId
     || event.dayId !== prepared.dayId
     || event.itemId !== prepared.itemId
@@ -410,6 +620,11 @@ async function assertAdaptiveReplanActionAppliedInTransaction(
     || record.status !== 'applied'
     || record.operationKind !== 'adaptive_replan'
     || record.operationFingerprint !== prepared.operationFingerprint
+    || record.createdAt !== event.createdAt
+    || record.updatedAt !== event.updatedAt
+    || marker.occurredAt !== record.updatedAt
+    || marker.sourceId !== record.id
+    || marker.updatedAt !== record.updatedAt
     || !record.appliedFingerprint
     || !record.afterSnapshot
   ) {
@@ -420,7 +635,11 @@ async function assertAdaptiveReplanActionAppliedInTransaction(
   const selectedOption = record.options.find((candidate) =>
     candidate.id === record.selectedOptionId,
   )
-  if (!selectedOption || selectedOption.strategy !== prepared.strategy) {
+  if (
+    !selectedOption
+    || selectedOption.strategy !== prepared.strategy
+    || buildAdaptiveReplanOptionFingerprint(selectedOption) !== prepared.previewFingerprint
+  ) {
     throw new ItineraryBaselineConflictError(
       '已执行的突发重排策略不一致，请重新生成预览。',
     )
@@ -662,6 +881,10 @@ function compareByItemId(
 
 function stableStringify(value: unknown) {
   return JSON.stringify(sortJson(value))
+}
+
+function sameJson(left: unknown, right: unknown) {
+  return stableStringify(left) === stableStringify(right)
 }
 
 function sortJson(value: unknown): unknown {

@@ -2,7 +2,7 @@
 
 更新时间：2026-08-13
 
-状态：**Target；P1.1 合同/migration、P1.2 单对象 mutation runtime、P1.3a 严格读取/bootstrap、P1.3b 注册 workflow、P1.3c 本机原子批次 runtime，以及 P1.3d1 重排/跨日移动、P1.3d2 既有票据编辑/绑定、P1.3d3 新旅行导入产品适配器已实现，读写硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
+状态：**Target；P1.1 合同/migration、P1.2 单对象 mutation runtime、P1.3a 严格读取/bootstrap、P1.3b 注册 workflow、P1.3c 本机原子批次 runtime，以及 P1.3d1 重排/跨日移动、P1.3d2 既有票据编辑/绑定、P1.3d3 新旅行导入、P1.3d4 账本、P1.3d5a 自适应重排产品适配器已实现，读写硬门槛关闭，尚未应用到 Supabase Preview 或 Production**
 
 上游合同：
 
@@ -23,9 +23,9 @@
 
 ## 2. 当前与目标边界
 
-| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1-P1.3d3 |
+| 范围 | 当前生产事实 | V2 目标 | 当前分支 P1.1-P1.3d5a |
 | --- | --- | --- | --- |
-| 对象写入 | IndexedDB 首写，稍后 upsert `cloud_sync_objects` | 在线 cloud-first，离线才排队 | Trip/Day/Item 单对象 adapter、同日重排/跨日移动、既有 Ticket metadata/绑定及无 Blob 的新旅行导入 workflow adapter 已写；硬切换常量为 `false`，旧生产路径未改变 |
+| 对象写入 | IndexedDB 首写，稍后 upsert `cloud_sync_objects` | 在线 cloud-first，离线才排队 | Trip/Day/Item 单对象 adapter，以及同日重排/跨日移动、既有 Ticket metadata/绑定、无 Blob 的新旅行导入、账本和已确认自适应重排 workflow adapter 已写；硬切换常量为 `false`，旧生产路径未改变 |
 | 幂等 | 当前行保留 `op_id` | 独立 mutation receipt 永久识别已完成请求 | migration 已包含私有 receipt ledger |
 | 并发 | `updated_at_ms` 与本地三方合并 | 单调 revision、字段策略、结构化冲突 | 单对象及注册批次的 revision、账号绑定、整批 lease、持久冲突快照和原子回滚已实现；字段合并与 UI 恢复待后续 P1 |
 | 删除 | `deleted_at_ms` | Realtime 可过滤的 tombstone UPDATE | 新表使用 payload 为空的 tombstone |
@@ -146,7 +146,7 @@ RPC 固定执行顺序：
 
 ### 6.3 多对象事务
 
-单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。P1.3b 已增加首批注册 workflow mutation，P1.3c 已增加 IndexedDB v12 原子批次 journal 与本机 coordinator；P1.3d1 已接入同日重排和跨日移动，P1.3d2 已接入既有 Ticket metadata 编辑、绑定、解绑和重绑，P1.3d3 已接入无 Blob 的 create-only 新旅行导入，P1.3d4 已接入完整现有账本 mutation 面。其余两类注册 workflow 和删除/恢复仍未接入，所有实现也尚未部署到 Preview。产品操作不得把一个多对象动作拆成若干“看起来成功”的单对象提交；当前硬切换门槛在完整写入面、bootstrap 和双读完成前不可打开。
+单对象 RPC 不足以安全完成删除级联、重排、跨日移动、票据重绑、整批导入、账本批次和组合 AI 操作。P1.3b 已增加首批注册 workflow mutation，P1.3c 已增加 IndexedDB v12 原子批次 journal 与本机 coordinator；P1.3d1 已接入同日重排和跨日移动，P1.3d2 已接入既有 Ticket metadata 编辑、绑定、解绑和重绑，P1.3d3 已接入无 Blob 的 create-only 新旅行导入，P1.3d4 已接入完整现有账本 mutation 面，P1.3d5a 已接入确认后的自适应重排。其余一类 AI repair workflow 和删除/恢复仍未接入，所有实现也尚未部署到 Preview。产品操作不得把一个多对象动作拆成若干“看起来成功”的单对象提交；当前硬切换门槛在完整写入面、bootstrap 和双读完成前不可打开。
 
 ### 6.4 注册原子 Workflow（本地 Target）
 
@@ -164,7 +164,9 @@ P1.3d3 把无复制 Blob、步骤不超过注册上限的新旅行导入接到 `
 
 P1.3d4 把账本建立、设置、同行人、预算、费用、来源幂等和批量审核接到 `ledger.batch@1`。客户端在计划时固定对象 ID、时间戳、before/after 指纹和完整关系图，应用时在一个 Dexie 事务内重读 Trip、Item、Ticket 与全部账本表；过期图、依赖中的 pending work、revision/payload 漂移和部分批次都会在写入前失败。SQL 只接受严格白名单字段、确定性日期时间、安全整数和一个完整 prospective graph，拒绝单对象旁路、JSON 标量冒充字符串、重复设置/本人/预算/来源、悬空参与人/Item/Ticket/原费用以及删除仍被引用的对象；现有记录更新必须保留 `createdAt`、推进 `updatedAt`，tombstone 不可复活。历史数据已经存在的悬空关系可在本机保持或减少并整体走 legacy，任何新违规仍被拒绝；只有全部同 ID Ticket 来源都明确标记 `available=false` 时才保留为无在线依赖的审计 metadata，任一可用来源仍要求真实 Ticket。
 
-当前两份 Account Cloud migration 已在本机 Supabase/PostgreSQL 从空库重放，并通过 104 项 pgTAP：实际函数授权/RLS、账号边界、敏感字段、Item 结构字段、事务异常回滚、100 次顺序幂等回放、advanced receipt、完整重排、完整跨日移动、漏项/双移动/非连续顺序拒绝、票据单对象旁路拒绝、严格 metadata、绑定/解绑/重绑拓扑、create-only 导入根/排序/关系/账本/既有 scope 拒绝、完整账本 payload/嵌套类型/确定性时间/不可变创建时间/图/依赖/回滚/历史来源语义及跨账号同 ID 隔离。本机 coordinator 另已覆盖离线、100 次原请求重放、Auth 恢复、响应替换、账号切换、成功后本机漂移、整批回滚、崩溃恢复和 IndexedDB 事务故障。它未应用到 Preview/Production，尚无真实账号 bootstrap、多连接并发、网络不确定性或生产性能收据；`trip.replan.apply@1` 和 `trip.repair.apply@1` 的产品路径仍未切换。删除级联、Ticket 创建/删除/Blob 生命周期和后续对象专用 workflow 必须在另一个有界子阶段补齐，不能用现有 ID 扩权。
+P1.3d5a 把 Action Gateway 已确认的自适应重排接到 `trip.replan.apply@1`。客户端在任何乐观写入前固定 Trip、变更 Item、用户报告事件、applied 记录和一条脱敏历史，并捕获当前 Trip/Day/Item/Ticket/LedgerExpense 的完整 revision 基线；缺少任一可信 revision 时整体走 legacy，存在 pending、revision/payload 漂移或账号切换时 fail closed。服务端取得旅行生命周期独占锁和全部依赖对象锁后，要求该基线与当前活动对象集合及 revision 完全一致，并证明 before snapshot 来自当前服务端对象、选中 patch 可逐项生成提交的 after Item。Trip 只能推进 `updatedAt`，Item 只能修改日程、执行和前序交通字段；事件、记录和历史必须为新对象且互相引用。未知/敏感字段、显式 JSON `null`、标量类型冒充字符串、伪造快照、任意函数、Provider secret、部分图和 tombstone 复活都会在首笔写入前拒绝。成功路径不写 legacy outbox，响应不确定时只接受已持久化且指纹一致的幂等回放；过大记录或超过批次上限会在本机写入前整体回退。
+
+当前两份 Account Cloud migration 已在本机 Supabase/PostgreSQL 从空库重放，并通过 120 项 pgTAP：实际函数授权/RLS、账号边界、敏感字段、Item 结构字段、事务异常回滚、100 次顺序幂等回放、advanced receipt、完整重排、完整跨日移动、漏项/双移动/非连续顺序拒绝、票据单对象旁路拒绝、严格 metadata、绑定/解绑/重绑拓扑、create-only 导入根/排序/关系/账本/既有 scope 拒绝、完整账本 payload/嵌套类型/确定性时间/不可变创建时间/图/依赖/回滚/历史来源语义、自适应重排闭合图、真实快照、patch 对应、幂等和跨账号同 ID 隔离。本机 coordinator 另已覆盖离线、100 次原请求重放、Auth 恢复、响应替换、账号切换、成功后本机漂移、整批回滚、崩溃恢复和 IndexedDB 事务故障。它未应用到 Preview/Production，尚无真实账号 bootstrap、多连接并发、网络不确定性或生产性能收据；`trip.repair.apply@1` 的产品路径仍未切换。删除级联、Ticket 创建/删除/Blob 生命周期和后续对象专用 workflow 必须在另一个有界子阶段补齐，不能用现有 ID 扩权。
 
 ## 7. 冲突合同
 
@@ -233,8 +235,9 @@ P1.5 需要补齐：
 - 本地 P1.3d1 已增加 gate-bound lazy product bridge，并把同日重排、跨日移动接到完整 after graph workflow。
 - 本地 P1.3d2 已把既有 Ticket metadata 编辑、绑定、解绑和重绑接到完整关系 workflow，并在 TypeScript、SQL、legacy backfill 与静态 gate 中统一最小 metadata 合同。
 - 本地 P1.3d3 已把无复制 Blob、最多 256 步的 create-only 新旅行 metadata 导入接到封闭图 workflow；旧 ID、跨旅行/孤儿引用、过期预览、非空旅行 scope 和服务端冲突均在整批写入边界失败。
-- 本地 P1.3d4 已把设置、同行人、预算、费用、来源幂等和批量审核接到 `ledger.batch@1`；严格 payload、完整图、历史兼容和 stale/pending 依赖共同决定 V2 提交或写入前整体 fallback。其余两类注册 workflow、Ticket 创建/删除/Blob、删除级联和恢复仍待 P1.3d 后续子阶段。
-- workflow runtime 与导入提交模块当前不进入 PWA 首装 precache，首次成功在线加载后由按需资产缓存接管。完整切换前必须增加登录后受控预热并验证“从未加载过 runtime 的离线设备”不会误回退 legacy 或丢写；首次离线导入是否列入必备缓存由 P2/P13 在真实设备验收前明确。
+- 本地 P1.3d4 已把设置、同行人、预算、费用、来源幂等和批量审核接到 `ledger.batch@1`；严格 payload、完整图、历史兼容和 stale/pending 依赖共同决定 V2 提交或写入前整体 fallback。
+- 本地 P1.3d5a 已把确认后的自适应重排接到 `trip.replan.apply@1`；完整 revision 基线、真实 before snapshot、选中 patch 与 after Item、五对象闭合图和一次执行历史均由 TypeScript 与 SQL 双重验证。其余一类 AI repair workflow、Ticket 创建/删除/Blob、删除级联和恢复仍待 P1.3d 后续子阶段。
+- workflow runtime 与导入、账本、自适应重排提交模块当前不进入 PWA 首装 precache，首次成功在线加载后由按需资产缓存接管。完整切换前必须增加登录后受控预热并验证“从未加载过 runtime 的离线设备”不会误回退 legacy 或丢写；首次离线导入是否列入必备缓存由 P2/P13 在模拟器验收前明确。
 - Preview 阶段仍需取得真实多连接并发、响应丢失、回滚和性能收据。
 - 完成 Ticket 创建、删除、Blob、缓存和恢复协议，并为 Document、Booking、Lodging 和 Insurance 建立专用 write/read codec；Ledger 已有严格 codec 与 mutation workflow，但仍需 Preview、Realtime 和空设备恢复收据。任何本机路径、签名 URL、自由文本秘密和正文不得进入通用表。
 - 完成字段冲突策略和用户可见恢复入口后，才允许 Preview 白名单解除代码硬门槛。

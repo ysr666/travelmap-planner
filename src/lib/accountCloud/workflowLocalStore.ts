@@ -238,6 +238,12 @@ export async function createOptimisticAccountWorkflowIntent<T>({
               database.ledgerBudgets,
               database.ledgerExpenses,
             ]
+          : request.workflowId === 'trip.replan.apply@1'
+            ? [
+                database.days,
+                database.ticketMetas,
+                database.ledgerExpenses,
+              ]
     : []
   const tables = [...new Map([
     database.accountMutationJournal,

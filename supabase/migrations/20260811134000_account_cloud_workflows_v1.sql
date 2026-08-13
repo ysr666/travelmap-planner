@@ -100,6 +100,1181 @@ revoke all on function tripmap_private.account_payload_shape_is_safe(jsonb)
 revoke all on function tripmap_private.account_workflow_payload_is_safe(jsonb)
   from public, anon, authenticated;
 
+create or replace function tripmap_private.account_json_is_safe_nonnegative_integer(
+  target_value jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+begin
+  if pg_catalog.jsonb_typeof(target_value) <> 'number'
+     or target_value #>> '{}' !~ '^[0-9]{1,16}$' then
+    return false;
+  end if;
+  return (target_value #>> '{}')::numeric <= 9007199254740991;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_trip_payload_is_valid(
+  target_payload jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+begin
+  return
+    pg_catalog.jsonb_typeof(target_payload) = 'object'
+    and not exists (
+      select 1 from pg_catalog.jsonb_object_keys(target_payload) as field(name)
+      where field.name not in (
+        'createdAt', 'destination', 'endDate', 'id', 'notes', 'restoredAt',
+        'restoredFromCloudBackupId', 'restoredFromCloudExportedAt',
+        'restoredFromCloudOriginalTripId', 'startDate', 'timeZone',
+        'timeZoneSource', 'title', 'updatedAt'
+      )
+    )
+    and target_payload ?& array[
+      'createdAt', 'destination', 'endDate', 'id', 'startDate', 'title', 'updatedAt'
+    ]
+    and pg_catalog.jsonb_typeof(target_payload -> 'id') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'title') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'destination') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'startDate') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'endDate') = 'string'
+    and target_payload ->> 'id' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    and pg_catalog.char_length(target_payload ->> 'title') between 1 and 500
+    and pg_catalog.char_length(target_payload ->> 'destination') between 1 and 500
+    and pg_catalog.char_length(target_payload ->> 'startDate') between 1 and 32
+    and pg_catalog.char_length(target_payload ->> 'endDate') between 1 and 32
+    and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'createdAt')
+    and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'updatedAt');
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_item_payload_is_valid(
+  target_payload jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+begin
+  return
+    pg_catalog.jsonb_typeof(target_payload) = 'object'
+    and not exists (
+      select 1 from pg_catalog.jsonb_object_keys(target_payload) as field(name)
+      where field.name not in (
+        'address', 'contentEnrichment', 'createdAt', 'dayId', 'endDate',
+        'endTime', 'endTimeZone', 'executionState', 'id', 'lat', 'lng',
+        'locationName', 'notes', 'previousTransportDurationMinutes',
+        'previousTransportMode', 'previousTransportNote', 'replanPreference',
+        'sortOrder', 'startTime', 'startTimeZone', 'ticketIds', 'title',
+        'transportMode', 'tripId', 'updatedAt'
+      )
+    )
+    and target_payload ?& array[
+      'createdAt', 'dayId', 'id', 'sortOrder', 'ticketIds', 'title', 'tripId', 'updatedAt'
+    ]
+    and pg_catalog.jsonb_typeof(target_payload -> 'id') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'tripId') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'dayId') = 'string'
+    and pg_catalog.jsonb_typeof(target_payload -> 'title') = 'string'
+    and target_payload ->> 'id' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    and target_payload ->> 'tripId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    and target_payload ->> 'dayId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    and pg_catalog.char_length(target_payload ->> 'title') between 1 and 500
+    and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'sortOrder')
+    and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'createdAt')
+    and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'updatedAt')
+    and (target_payload ->> 'updatedAt')::numeric >= (target_payload ->> 'createdAt')::numeric
+    and pg_catalog.jsonb_typeof(target_payload -> 'ticketIds') = 'array'
+    and pg_catalog.jsonb_array_length(target_payload -> 'ticketIds') <= 128
+    and not exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket(value)
+      where pg_catalog.jsonb_typeof(ticket.value) <> 'string'
+        or ticket.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket(value)
+    ) = (
+      select pg_catalog.count(distinct ticket.value #>> '{}')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'ticketIds') as ticket(value)
+    )
+    and (
+      not target_payload ? 'executionState'
+      or (
+        pg_catalog.jsonb_typeof(target_payload -> 'executionState') = 'object'
+        and not exists (
+          select 1
+          from pg_catalog.jsonb_object_keys(target_payload -> 'executionState') as field(name)
+          where field.name not in ('status', 'updatedAt')
+        )
+        and target_payload -> 'executionState' ?& array['status', 'updatedAt']
+        and target_payload -> 'executionState' ->> 'status' in ('completed', 'skipped')
+        and tripmap_private.account_json_is_safe_nonnegative_integer(
+          target_payload -> 'executionState' -> 'updatedAt'
+        )
+      )
+    )
+    and (
+      not target_payload ? 'previousTransportMode'
+      or target_payload ->> 'previousTransportMode' in (
+        'walk', 'transit', 'bus', 'car', 'train', 'flight', 'other'
+      )
+    )
+    and (
+      not target_payload ? 'previousTransportDurationMinutes'
+      or (
+        tripmap_private.account_json_is_safe_nonnegative_integer(
+          target_payload -> 'previousTransportDurationMinutes'
+        )
+        and (target_payload ->> 'previousTransportDurationMinutes')::numeric <= 100000
+      )
+    )
+    and (
+      not target_payload ? 'previousTransportNote'
+      or (
+        pg_catalog.jsonb_typeof(target_payload -> 'previousTransportNote') = 'string'
+        and pg_catalog.char_length(target_payload ->> 'previousTransportNote') between 1 and 2000
+      )
+    );
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_schedule_is_valid(
+  target_schedule jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  execution_state jsonb;
+begin
+  if pg_catalog.jsonb_typeof(target_schedule) <> 'object'
+     or target_schedule - array[
+       'dayId', 'endTime', 'executionState', 'sortOrder', 'startTime'
+     ]::text[] <> '{}'::jsonb
+     or not target_schedule ?& array['dayId', 'sortOrder']
+     or target_schedule ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+     or not tripmap_private.account_json_is_safe_nonnegative_integer(
+       target_schedule -> 'sortOrder'
+     )
+     or (target_schedule ? 'startTime' and (
+       pg_catalog.jsonb_typeof(target_schedule -> 'startTime') <> 'string'
+       or pg_catalog.char_length(target_schedule ->> 'startTime') not between 1 and 32
+     ))
+     or (target_schedule ? 'endTime' and (
+       pg_catalog.jsonb_typeof(target_schedule -> 'endTime') <> 'string'
+       or pg_catalog.char_length(target_schedule ->> 'endTime') not between 1 and 32
+     )) then
+    return false;
+  end if;
+
+  if target_schedule ? 'executionState' then
+    execution_state := target_schedule -> 'executionState';
+    if pg_catalog.jsonb_typeof(execution_state) <> 'object'
+       or execution_state - array['status', 'updatedAt']::text[] <> '{}'::jsonb
+       or not execution_state ? 'status'
+       or execution_state ->> 'status' not in ('completed', 'skipped')
+       or (execution_state ? 'updatedAt' and not tripmap_private.account_json_is_safe_nonnegative_integer(
+         execution_state -> 'updatedAt'
+       )) then
+      return false;
+    end if;
+  end if;
+
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_diff_is_valid(
+  target_diff jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  entry record;
+begin
+  if pg_catalog.jsonb_typeof(target_diff) <> 'object'
+     or target_diff - array[
+       'companionImpacts', 'itemChanges', 'ledgerImpacts', 'routeImpacts',
+       'ticketImpacts', 'warnings'
+     ]::text[] <> '{}'::jsonb
+     or not target_diff ?& array[
+       'companionImpacts', 'itemChanges', 'ledgerImpacts', 'routeImpacts',
+       'ticketImpacts', 'warnings'
+     ]
+     or pg_catalog.jsonb_typeof(target_diff -> 'itemChanges') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'itemChanges') not between 1 and 128
+     or pg_catalog.jsonb_typeof(target_diff -> 'routeImpacts') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'routeImpacts') > 128
+     or pg_catalog.jsonb_typeof(target_diff -> 'ticketImpacts') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'ticketImpacts') > 128
+     or pg_catalog.jsonb_typeof(target_diff -> 'ledgerImpacts') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'ledgerImpacts') > 128
+     or pg_catalog.jsonb_typeof(target_diff -> 'companionImpacts') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'companionImpacts') > 128
+     or pg_catalog.jsonb_typeof(target_diff -> 'warnings') <> 'array'
+     or pg_catalog.jsonb_array_length(target_diff -> 'warnings') > 128 then
+    return false;
+  end if;
+
+  for entry in select value from pg_catalog.jsonb_array_elements(target_diff -> 'itemChanges') loop
+    if pg_catalog.jsonb_typeof(entry.value) <> 'object'
+       or entry.value - array['after', 'before', 'changeType', 'itemId', 'reason', 'title']::text[] <> '{}'::jsonb
+       or not entry.value ?& array['after', 'before', 'changeType', 'itemId', 'reason', 'title']
+       or entry.value ->> 'itemId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or entry.value ->> 'changeType' not in ('time_changed', 'day_changed', 'reordered', 'skipped', 'unchanged')
+       or pg_catalog.jsonb_typeof(entry.value -> 'title') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'title') not between 1 and 500
+       or pg_catalog.jsonb_typeof(entry.value -> 'reason') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'reason') not between 1 and 2000
+       or tripmap_private.account_adaptive_replan_schedule_is_valid(entry.value -> 'before') is not true
+       or tripmap_private.account_adaptive_replan_schedule_is_valid(entry.value -> 'after') is not true then
+      return false;
+    end if;
+  end loop;
+
+  for entry in select value from pg_catalog.jsonb_array_elements(target_diff -> 'routeImpacts') loop
+    if pg_catalog.jsonb_typeof(entry.value) <> 'object'
+       or entry.value - array[
+         'afterTravelMinutes', 'beforeTravelMinutes', 'dayId', 'deltaMinutes',
+         'itemIds', 'staleRouteCache', 'summary'
+       ]::text[] <> '{}'::jsonb
+       or not entry.value ?& array['dayId', 'itemIds', 'staleRouteCache', 'summary']
+       or entry.value ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or pg_catalog.jsonb_typeof(entry.value -> 'itemIds') <> 'array'
+       or pg_catalog.jsonb_array_length(entry.value -> 'itemIds') > 128
+       or exists (
+         select 1 from pg_catalog.jsonb_array_elements(entry.value -> 'itemIds') as item_id(value)
+         where pg_catalog.jsonb_typeof(item_id.value) <> 'string'
+           or item_id.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       )
+       or pg_catalog.jsonb_typeof(entry.value -> 'staleRouteCache') <> 'boolean'
+       or pg_catalog.jsonb_typeof(entry.value -> 'summary') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'summary') not between 1 and 2000
+       or (entry.value ? 'beforeTravelMinutes' and pg_catalog.jsonb_typeof(entry.value -> 'beforeTravelMinutes') <> 'number')
+       or (entry.value ? 'afterTravelMinutes' and pg_catalog.jsonb_typeof(entry.value -> 'afterTravelMinutes') <> 'number')
+       or (entry.value ? 'deltaMinutes' and pg_catalog.jsonb_typeof(entry.value -> 'deltaMinutes') <> 'number') then
+      return false;
+    end if;
+  end loop;
+
+  for entry in select value from pg_catalog.jsonb_array_elements(target_diff -> 'ticketImpacts') loop
+    if pg_catalog.jsonb_typeof(entry.value) <> 'object'
+       or entry.value - array['impact', 'itemId', 'summary', 'ticketId', 'title']::text[] <> '{}'::jsonb
+       or not entry.value ?& array['impact', 'summary', 'ticketId', 'title']
+       or entry.value ->> 'ticketId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or (entry.value ? 'itemId' and entry.value ->> 'itemId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+       or entry.value ->> 'impact' not in ('fixed', 'time_warning', 'skip_warning', 'unaffected')
+       or pg_catalog.jsonb_typeof(entry.value -> 'title') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'title') not between 1 and 500
+       or pg_catalog.jsonb_typeof(entry.value -> 'summary') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'summary') not between 1 and 2000 then
+      return false;
+    end if;
+  end loop;
+
+  for entry in select value from pg_catalog.jsonb_array_elements(target_diff -> 'ledgerImpacts') loop
+    if pg_catalog.jsonb_typeof(entry.value) <> 'object'
+       or entry.value - array['expenseId', 'impact', 'itemIds', 'summary', 'title']::text[] <> '{}'::jsonb
+       or not entry.value ?& array['expenseId', 'impact', 'itemIds', 'summary', 'title']
+       or entry.value ->> 'expenseId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or entry.value ->> 'impact' not in ('review_needed', 'possible_refund', 'unaffected')
+       or pg_catalog.jsonb_typeof(entry.value -> 'itemIds') <> 'array'
+       or pg_catalog.jsonb_array_length(entry.value -> 'itemIds') > 128
+       or exists (
+         select 1 from pg_catalog.jsonb_array_elements(entry.value -> 'itemIds') as item_id(value)
+         where pg_catalog.jsonb_typeof(item_id.value) <> 'string'
+           or item_id.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       )
+       or pg_catalog.jsonb_typeof(entry.value -> 'title') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'title') not between 1 and 500
+       or pg_catalog.jsonb_typeof(entry.value -> 'summary') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'summary') not between 1 and 2000 then
+      return false;
+    end if;
+  end loop;
+
+  for entry in select value from pg_catalog.jsonb_array_elements(target_diff -> 'companionImpacts') loop
+    if pg_catalog.jsonb_typeof(entry.value) <> 'object'
+       or entry.value - array['itemId', 'meetingTime', 'summary', 'title']::text[] <> '{}'::jsonb
+       or not entry.value ?& array['summary', 'title']
+       or (entry.value ? 'itemId' and entry.value ->> 'itemId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+       or (entry.value ? 'meetingTime' and (
+         pg_catalog.jsonb_typeof(entry.value -> 'meetingTime') <> 'string'
+         or pg_catalog.char_length(entry.value ->> 'meetingTime') not between 1 and 32
+       ))
+       or pg_catalog.jsonb_typeof(entry.value -> 'title') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'title') not between 1 and 500
+       or pg_catalog.jsonb_typeof(entry.value -> 'summary') <> 'string'
+       or pg_catalog.char_length(entry.value ->> 'summary') not between 1 and 2000 then
+      return false;
+    end if;
+  end loop;
+
+  if exists (
+    select 1 from pg_catalog.jsonb_array_elements(target_diff -> 'warnings') as warning(value)
+    where pg_catalog.jsonb_typeof(warning.value) <> 'string'
+      or pg_catalog.char_length(warning.value #>> '{}') not between 1 and 2000
+  ) then
+    return false;
+  end if;
+
+  if (
+    select pg_catalog.count(*)
+    from pg_catalog.jsonb_array_elements(target_diff -> 'itemChanges') as change(value)
+  ) <> (
+    select pg_catalog.count(distinct change.value ->> 'itemId')
+    from pg_catalog.jsonb_array_elements(target_diff -> 'itemChanges') as change(value)
+  ) then
+    return false;
+  end if;
+
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_option_is_valid(
+  target_option jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  patch_entry record;
+  patch_value jsonb;
+  execution_state jsonb;
+begin
+  if pg_catalog.jsonb_typeof(target_option) <> 'object'
+     or target_option - array['diff', 'id', 'itemPatches', 'score', 'strategy', 'summary', 'title']::text[] <> '{}'::jsonb
+     or not target_option ?& array['diff', 'id', 'itemPatches', 'score', 'strategy', 'summary', 'title']
+     or target_option ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+     or target_option ->> 'strategy' not in ('least_change', 'preserve_most', 'shortest_route')
+     or pg_catalog.jsonb_typeof(target_option -> 'title') <> 'string'
+     or pg_catalog.char_length(target_option ->> 'title') not between 1 and 200
+     or pg_catalog.jsonb_typeof(target_option -> 'summary') <> 'string'
+     or pg_catalog.char_length(target_option ->> 'summary') not between 1 and 2000
+     or pg_catalog.jsonb_typeof(target_option -> 'score') <> 'number'
+     or pg_catalog.jsonb_typeof(target_option -> 'itemPatches') <> 'array'
+     or pg_catalog.jsonb_array_length(target_option -> 'itemPatches') > 124
+     or tripmap_private.account_adaptive_replan_diff_is_valid(target_option -> 'diff') is not true then
+    return false;
+  end if;
+
+  for patch_entry in
+    select value from pg_catalog.jsonb_array_elements(target_option -> 'itemPatches')
+  loop
+    if pg_catalog.jsonb_typeof(patch_entry.value) <> 'object'
+       or patch_entry.value - array['itemId', 'patch']::text[] <> '{}'::jsonb
+       or not patch_entry.value ?& array['itemId', 'patch']
+       or patch_entry.value ->> 'itemId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+       or pg_catalog.jsonb_typeof(patch_entry.value -> 'patch') <> 'object' then
+      return false;
+    end if;
+    patch_value := patch_entry.value -> 'patch';
+    if patch_value = '{}'::jsonb
+       or patch_value - array[
+         'dayId', 'endTime', 'executionState', 'previousTransportDurationMinutes',
+         'previousTransportMode', 'previousTransportNote', 'sortOrder', 'startTime'
+       ]::text[] <> '{}'::jsonb
+       or (patch_value ? 'dayId' and patch_value ->> 'dayId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+       or (patch_value ? 'sortOrder' and not tripmap_private.account_json_is_safe_nonnegative_integer(patch_value -> 'sortOrder'))
+       or (patch_value ? 'previousTransportMode' and patch_value ->> 'previousTransportMode' not in (
+         'walk', 'transit', 'bus', 'car', 'train', 'flight', 'other'
+       ))
+       or (patch_value ? 'previousTransportDurationMinutes' and (
+         not tripmap_private.account_json_is_safe_nonnegative_integer(
+           patch_value -> 'previousTransportDurationMinutes'
+         )
+         or (patch_value ->> 'previousTransportDurationMinutes')::numeric > 100000
+       ))
+       or (patch_value ? 'previousTransportNote' and (
+         pg_catalog.jsonb_typeof(patch_value -> 'previousTransportNote') <> 'string'
+         or pg_catalog.char_length(patch_value ->> 'previousTransportNote') not between 1 and 2000
+       ))
+       or (patch_value ? 'startTime' and (
+         pg_catalog.jsonb_typeof(patch_value -> 'startTime') <> 'string'
+         or pg_catalog.char_length(patch_value ->> 'startTime') not between 1 and 32
+       ))
+       or (patch_value ? 'endTime' and (
+         pg_catalog.jsonb_typeof(patch_value -> 'endTime') <> 'string'
+         or pg_catalog.char_length(patch_value ->> 'endTime') not between 1 and 32
+       )) then
+      return false;
+    end if;
+    if patch_value ? 'executionState' then
+      execution_state := patch_value -> 'executionState';
+      if pg_catalog.jsonb_typeof(execution_state) <> 'object'
+         or execution_state - array['status', 'updatedAt']::text[] <> '{}'::jsonb
+         or not execution_state ?& array['status', 'updatedAt']
+         or execution_state ->> 'status' not in ('completed', 'skipped')
+         or not tripmap_private.account_json_is_safe_nonnegative_integer(
+           execution_state -> 'updatedAt'
+         ) then
+        return false;
+      end if;
+    end if;
+  end loop;
+
+  if (
+    select pg_catalog.count(*)
+    from pg_catalog.jsonb_array_elements(target_option -> 'itemPatches') as patch(value)
+  ) <> (
+    select pg_catalog.count(distinct patch.value ->> 'itemId')
+    from pg_catalog.jsonb_array_elements(target_option -> 'itemPatches') as patch(value)
+  ) then
+    return false;
+  end if;
+
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_payload_is_valid(
+  target_object_type text,
+  target_payload jsonb
+)
+returns boolean
+language plpgsql
+immutable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  record_evidence jsonb;
+begin
+  if target_object_type = 'trip' then
+    return tripmap_private.account_adaptive_replan_trip_payload_is_valid(target_payload);
+  end if;
+  if target_object_type = 'item' then
+    return tripmap_private.account_adaptive_replan_item_payload_is_valid(target_payload);
+  end if;
+  if target_object_type = 'replan_event' then
+    return
+      pg_catalog.jsonb_typeof(target_payload) = 'object'
+      and not exists (
+        select 1 from pg_catalog.jsonb_object_keys(target_payload) as field(name)
+        where field.name not in (
+          'createdAt', 'dayId', 'delayMinutes', 'evidence', 'id', 'itemId',
+          'kind', 'notes', 'occurredAt', 'reportedByRole', 'status', 'tripId',
+          'updatedAt'
+        )
+      )
+      and target_payload ?& array[
+        'createdAt', 'evidence', 'id', 'kind', 'occurredAt', 'reportedByRole',
+        'status', 'tripId', 'updatedAt'
+      ]
+      and pg_catalog.jsonb_typeof(target_payload -> 'id') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'tripId') = 'string'
+      and (not target_payload ? 'dayId' or pg_catalog.jsonb_typeof(target_payload -> 'dayId') = 'string')
+      and (not target_payload ? 'itemId' or pg_catalog.jsonb_typeof(target_payload -> 'itemId') = 'string')
+      and pg_catalog.jsonb_typeof(target_payload -> 'kind') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'status') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'reportedByRole') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'occurredAt') = 'string'
+      and target_payload ->> 'id' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'tripId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and (not target_payload ? 'dayId' or target_payload ->> 'dayId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+      and (not target_payload ? 'itemId' or target_payload ->> 'itemId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$')
+      and target_payload ->> 'kind' in ('delay', 'closure', 'weather_unsuitable', 'late', 'cancelled')
+      and target_payload ->> 'status' = 'applied'
+      and target_payload ->> 'reportedByRole' = 'owner'
+      and (not target_payload ? 'notes' or (
+        pg_catalog.jsonb_typeof(target_payload -> 'notes') = 'string'
+        and pg_catalog.char_length(target_payload ->> 'notes') between 1 and 500
+      ))
+      and target_payload ->> 'occurredAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$'
+      and (not target_payload ? 'delayMinutes' or (
+        tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'delayMinutes')
+        and (target_payload ->> 'delayMinutes')::numeric between 1 and 1440
+      ))
+      and target_payload -> 'evidence' = '[]'::jsonb
+      and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'createdAt')
+      and target_payload -> 'updatedAt' = target_payload -> 'createdAt';
+  end if;
+  if target_object_type = 'trip_intelligence_applied_change' then
+    return
+      pg_catalog.jsonb_typeof(target_payload) = 'object'
+      and not exists (
+        select 1 from pg_catalog.jsonb_object_keys(target_payload) as field(name)
+        where field.name not in (
+          'actionType', 'dedupeKey', 'detail', 'executionId', 'executionSource',
+          'executionStatus', 'executionTitle', 'id', 'occurredAt', 'privacyLevel',
+          'recommendationFingerprints', 'sourceId', 'sourceKind', 'sourceLabel',
+          'targetId', 'targetType', 'title', 'tripId', 'updatedAt'
+        )
+      )
+      and target_payload ?& array[
+        'actionType', 'dedupeKey', 'executionId', 'executionSource',
+        'executionStatus', 'executionTitle', 'id', 'occurredAt', 'privacyLevel',
+        'recommendationFingerprints', 'sourceId', 'sourceKind', 'targetId',
+        'targetType', 'title', 'tripId', 'updatedAt'
+      ]
+      and pg_catalog.jsonb_typeof(target_payload -> 'actionType') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'dedupeKey') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'executionId') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'executionSource') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'executionStatus') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'executionTitle') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'id') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'privacyLevel') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'sourceId') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'sourceKind') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'targetId') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'targetType') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'title') = 'string'
+      and pg_catalog.jsonb_typeof(target_payload -> 'tripId') = 'string'
+      and target_payload ->> 'actionType' = 'global_ai_adaptive_replan_applied'
+      and target_payload ->> 'id' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'tripId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'executionId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'sourceId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'targetId' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      and target_payload ->> 'executionSource' = 'live'
+      and target_payload ->> 'executionStatus' = 'success'
+      and target_payload ->> 'privacyLevel' = 'private'
+      and target_payload ->> 'sourceKind' = 'live'
+      and target_payload ->> 'targetType' = 'live'
+      and pg_catalog.char_length(target_payload ->> 'dedupeKey') between 1 and 500
+      and pg_catalog.char_length(target_payload ->> 'executionTitle') between 1 and 200
+      and pg_catalog.char_length(target_payload ->> 'title') between 1 and 200
+      and (not target_payload ? 'sourceLabel' or (
+        pg_catalog.jsonb_typeof(target_payload -> 'sourceLabel') = 'string'
+        and pg_catalog.char_length(target_payload ->> 'sourceLabel') between 1 and 200
+      ))
+      and (not target_payload ? 'detail' or (
+        pg_catalog.jsonb_typeof(target_payload -> 'detail') = 'string'
+        and pg_catalog.char_length(target_payload ->> 'detail') between 1 and 500
+      ))
+      and pg_catalog.jsonb_typeof(target_payload -> 'recommendationFingerprints') = 'array'
+      and pg_catalog.jsonb_array_length(target_payload -> 'recommendationFingerprints') <= 50
+      and not exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(target_payload -> 'recommendationFingerprints') as fingerprint(value)
+        where pg_catalog.jsonb_typeof(fingerprint.value) <> 'string'
+          or fingerprint.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+      )
+      and tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'occurredAt')
+      and target_payload -> 'updatedAt' = target_payload -> 'occurredAt';
+  end if;
+  if target_object_type <> 'replan_record' then
+    return false;
+  end if;
+  if
+    pg_catalog.jsonb_typeof(target_payload) <> 'object'
+    or exists (
+      select 1 from pg_catalog.jsonb_object_keys(target_payload) as field(name)
+      where field.name not in (
+        'accountObjectBaseline', 'afterSnapshot', 'appliedFingerprint',
+        'baselineFingerprint', 'beforeSnapshot', 'createdAt', 'eventId',
+        'evidence', 'id', 'operationFingerprint', 'operationKind', 'options',
+        'scopeItemIds', 'selectedDiff', 'selectedOptionId', 'status', 'tripId',
+        'updatedAt'
+      )
+    )
+    or not target_payload ?& array[
+      'accountObjectBaseline', 'afterSnapshot', 'appliedFingerprint',
+      'baselineFingerprint', 'beforeSnapshot', 'createdAt', 'eventId',
+      'evidence', 'id', 'operationFingerprint', 'operationKind', 'options',
+      'scopeItemIds', 'selectedDiff', 'selectedOptionId', 'status', 'tripId',
+      'updatedAt'
+    ]
+    or pg_catalog.jsonb_typeof(target_payload -> 'id') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'tripId') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'eventId') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'operationFingerprint') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'operationKind') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'status') <> 'string'
+    or pg_catalog.jsonb_typeof(target_payload -> 'selectedOptionId') <> 'string'
+    or target_payload ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    or target_payload ->> 'tripId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    or target_payload ->> 'eventId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    or target_payload ->> 'operationFingerprint' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    or target_payload ->> 'operationKind' <> 'adaptive_replan'
+    or target_payload ->> 'status' <> 'applied'
+    or target_payload ->> 'selectedOptionId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    or pg_catalog.jsonb_typeof(target_payload -> 'baselineFingerprint') <> 'string'
+    or pg_catalog.char_length(target_payload ->> 'baselineFingerprint') not between 1 and 524288
+    or pg_catalog.jsonb_typeof(target_payload -> 'appliedFingerprint') <> 'string'
+    or pg_catalog.char_length(target_payload ->> 'appliedFingerprint') not between 1 and 524288
+    or not tripmap_private.account_json_is_safe_nonnegative_integer(target_payload -> 'createdAt')
+    or target_payload -> 'updatedAt' is distinct from target_payload -> 'createdAt'
+    or pg_catalog.jsonb_typeof(target_payload -> 'evidence') <> 'array'
+    or pg_catalog.jsonb_array_length(target_payload -> 'evidence') <> 1
+    or pg_catalog.jsonb_typeof(target_payload -> 'scopeItemIds') <> 'array'
+    or pg_catalog.jsonb_array_length(target_payload -> 'scopeItemIds') not between 1 and 124
+    or pg_catalog.jsonb_typeof(target_payload -> 'accountObjectBaseline') <> 'array'
+    or pg_catalog.jsonb_array_length(target_payload -> 'accountObjectBaseline') not between 1 and 512
+    or pg_catalog.jsonb_typeof(target_payload -> 'options') <> 'array'
+    or pg_catalog.jsonb_array_length(target_payload -> 'options') <> 3
+    or pg_catalog.jsonb_typeof(target_payload -> 'beforeSnapshot') <> 'object'
+    or pg_catalog.jsonb_typeof(target_payload -> 'afterSnapshot') <> 'object'
+    or (target_payload -> 'beforeSnapshot') - array['days', 'items']::text[] <> '{}'::jsonb
+    or (target_payload -> 'afterSnapshot') - array['days', 'items']::text[] <> '{}'::jsonb
+    or pg_catalog.jsonb_typeof(target_payload -> 'beforeSnapshot' -> 'days') <> 'array'
+    or pg_catalog.jsonb_typeof(target_payload -> 'beforeSnapshot' -> 'items') <> 'array'
+    or pg_catalog.jsonb_typeof(target_payload -> 'afterSnapshot' -> 'days') <> 'array'
+    or pg_catalog.jsonb_typeof(target_payload -> 'afterSnapshot' -> 'items') <> 'array'
+    or pg_catalog.jsonb_array_length(target_payload -> 'beforeSnapshot' -> 'days') not between 1 and 128
+    or pg_catalog.jsonb_array_length(target_payload -> 'beforeSnapshot' -> 'items') not between 1 and 124
+    or pg_catalog.jsonb_array_length(target_payload -> 'afterSnapshot' -> 'days') not between 1 and 128
+    or pg_catalog.jsonb_array_length(target_payload -> 'afterSnapshot' -> 'items') not between 1 and 124
+    or tripmap_private.account_adaptive_replan_diff_is_valid(target_payload -> 'selectedDiff') is not true
+  then
+    return false;
+  end if;
+
+  select target_payload -> 'evidence' -> 0 into record_evidence;
+  return
+    pg_catalog.jsonb_typeof(record_evidence) = 'object'
+    and record_evidence - array['id', 'kind', 'label', 'retrievedAt', 'snippet', 'sourceType']::text[] = '{}'::jsonb
+    and record_evidence ?& array['id', 'kind', 'label', 'retrievedAt', 'sourceType']
+    and pg_catalog.jsonb_typeof(record_evidence -> 'id') = 'string'
+    and pg_catalog.jsonb_typeof(record_evidence -> 'kind') = 'string'
+    and pg_catalog.jsonb_typeof(record_evidence -> 'label') = 'string'
+    and pg_catalog.jsonb_typeof(record_evidence -> 'retrievedAt') = 'string'
+    and pg_catalog.jsonb_typeof(record_evidence -> 'sourceType') = 'string'
+    and record_evidence ->> 'id' ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    and record_evidence ->> 'kind' = 'user_report'
+    and record_evidence ->> 'label' = '用户报告'
+    and record_evidence ->> 'sourceType' = 'unknown'
+    and record_evidence ->> 'retrievedAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$'
+    and (not record_evidence ? 'snippet' or (
+      pg_catalog.jsonb_typeof(record_evidence -> 'snippet') = 'string'
+      and pg_catalog.char_length(record_evidence ->> 'snippet') between 1 and 500
+    ))
+    and not exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(target_payload -> 'accountObjectBaseline') as baseline(value)
+      where pg_catalog.jsonb_typeof(baseline.value) <> 'object'
+        or baseline.value - array['expectedRevision', 'objectId', 'objectType']::text[] <> '{}'::jsonb
+        or not baseline.value ?& array['expectedRevision', 'objectId', 'objectType']
+        or baseline.value ->> 'objectId' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+        or baseline.value ->> 'objectType' not in ('trip', 'day', 'item', 'ticket_meta', 'ledger_expense')
+        or not tripmap_private.account_json_is_safe_nonnegative_integer(baseline.value -> 'expectedRevision')
+        or (baseline.value ->> 'expectedRevision')::numeric < 1
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'accountObjectBaseline') as baseline(value)
+    ) = (
+      select pg_catalog.count(distinct (baseline.value ->> 'objectType') || ':' || (baseline.value ->> 'objectId'))
+      from pg_catalog.jsonb_array_elements(target_payload -> 'accountObjectBaseline') as baseline(value)
+    )
+    and not exists (
+      select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'scopeItemIds') as item_id(value)
+      where pg_catalog.jsonb_typeof(item_id.value) <> 'string'
+        or item_id.value #>> '{}' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+    )
+    and (
+      select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_payload -> 'scopeItemIds') as item_id(value)
+    ) = (
+      select pg_catalog.count(distinct item_id.value #>> '{}')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'scopeItemIds') as item_id(value)
+    )
+    and not exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(target_payload -> 'options') as option(value)
+      where pg_catalog.jsonb_typeof(option.value) <> 'object'
+        or option.value - array['diff', 'id', 'itemPatches', 'score', 'strategy', 'summary', 'title']::text[] <> '{}'::jsonb
+        or not option.value ?& array['diff', 'id', 'itemPatches', 'score', 'strategy', 'summary', 'title']
+        or option.value ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+        or option.value ->> 'strategy' not in ('least_change', 'preserve_most', 'shortest_route')
+        or tripmap_private.account_adaptive_replan_option_is_valid(option.value) is not true
+    )
+    and (
+      select pg_catalog.count(distinct option.value ->> 'strategy')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'options') as option(value)
+    ) = 3
+    and (
+      select pg_catalog.count(distinct option.value ->> 'id')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'options') as option(value)
+    ) = 3
+    and exists (
+      select 1 from pg_catalog.jsonb_array_elements(target_payload -> 'options') as option(value)
+      where option.value ->> 'id' = target_payload ->> 'selectedOptionId'
+        and option.value -> 'diff' = target_payload -> 'selectedDiff'
+    )
+    and not exists (
+      select 1
+      from (
+        select snapshot.value
+        from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'items') as snapshot(value)
+        union all
+        select snapshot.value
+        from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'items') as snapshot(value)
+      ) as snapshot_item
+      where tripmap_private.account_adaptive_replan_item_payload_is_valid(snapshot_item.value) is not true
+        or snapshot_item.value ->> 'tripId' is distinct from target_payload ->> 'tripId'
+    )
+    and not exists (
+      select 1
+      from (
+        select snapshot.value
+        from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'days') as snapshot(value)
+        union all
+        select snapshot.value
+        from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'days') as snapshot(value)
+      ) as snapshot_day
+      where pg_catalog.jsonb_typeof(snapshot_day.value) <> 'object'
+        or snapshot_day.value - array['date', 'id', 'sortOrder', 'timeZone', 'timeZoneSource', 'title', 'tripId']::text[] <> '{}'::jsonb
+        or not snapshot_day.value ?& array['date', 'id', 'sortOrder', 'title', 'tripId']
+        or pg_catalog.jsonb_typeof(snapshot_day.value -> 'date') <> 'string'
+        or pg_catalog.jsonb_typeof(snapshot_day.value -> 'id') <> 'string'
+        or pg_catalog.jsonb_typeof(snapshot_day.value -> 'title') <> 'string'
+        or pg_catalog.jsonb_typeof(snapshot_day.value -> 'tripId') <> 'string'
+        or snapshot_day.value ->> 'id' !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,159}$'
+        or snapshot_day.value ->> 'tripId' is distinct from target_payload ->> 'tripId'
+        or pg_catalog.char_length(snapshot_day.value ->> 'date') not between 1 and 32
+        or pg_catalog.char_length(snapshot_day.value ->> 'title') not between 1 and 500
+        or not tripmap_private.account_json_is_safe_nonnegative_integer(snapshot_day.value -> 'sortOrder')
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'items') as snapshot(value)
+    ) = (
+      select pg_catalog.count(distinct snapshot.value ->> 'id')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'items') as snapshot(value)
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'items') as snapshot(value)
+    ) = (
+      select pg_catalog.count(distinct snapshot.value ->> 'id')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'items') as snapshot(value)
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'days') as snapshot(value)
+    ) = (
+      select pg_catalog.count(distinct snapshot.value ->> 'id')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'beforeSnapshot' -> 'days') as snapshot(value)
+    )
+    and (
+      select pg_catalog.count(*)
+      from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'days') as snapshot(value)
+    ) = (
+      select pg_catalog.count(distinct snapshot.value ->> 'id')
+      from pg_catalog.jsonb_array_elements(target_payload -> 'afterSnapshot' -> 'days') as snapshot(value)
+    )
+    and not exists (
+      select 1
+      from (
+        select target_payload -> 'beforeSnapshot' as snapshot
+        union all
+        select target_payload -> 'afterSnapshot' as snapshot
+      ) as scoped
+      cross join lateral pg_catalog.jsonb_array_elements(scoped.snapshot -> 'items') as item(value)
+      where not exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(scoped.snapshot -> 'days') as day(value)
+        where day.value ->> 'id' = item.value ->> 'dayId'
+      )
+    );
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function tripmap_private.account_json_is_safe_nonnegative_integer(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_trip_payload_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_item_payload_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_schedule_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_diff_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_option_is_valid(jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_payload_is_valid(text, jsonb)
+  from public, anon, authenticated;
+
+create or replace function tripmap_private.account_adaptive_replan_workflow_shape_is_valid(
+  target_trip_id text,
+  target_steps jsonb
+)
+returns boolean
+language plpgsql
+stable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  trip_step jsonb;
+  event_step jsonb;
+  record_step jsonb;
+  history_step jsonb;
+  selected_option jsonb;
+  item_count integer;
+begin
+  if pg_catalog.jsonb_typeof(target_steps) <> 'array' then
+    return false;
+  end if;
+
+  select value into trip_step
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'trip';
+  select value into event_step
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'replan_event';
+  select value into record_step
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'replan_record';
+  select value into history_step
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'trip_intelligence_applied_change';
+  select pg_catalog.count(*) into item_count
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'item';
+  select option.value into selected_option
+  from pg_catalog.jsonb_array_elements(record_step -> 'payload' -> 'options') as option(value)
+  where option.value ->> 'id' = record_step -> 'payload' ->> 'selectedOptionId';
+
+  if item_count < 1
+     or pg_catalog.jsonb_array_length(target_steps) <> item_count + 4
+     or (
+       select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' = 'trip'
+     ) <> 1
+     or (
+       select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' = 'replan_event'
+     ) <> 1
+     or (
+       select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' = 'replan_record'
+     ) <> 1
+     or (
+       select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' = 'trip_intelligence_applied_change'
+     ) <> 1
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where tripmap_private.account_adaptive_replan_payload_is_valid(
+         step.value ->> 'objectType',
+         step.value -> 'payload'
+       ) is not true
+     )
+     or trip_step ->> 'objectId' is distinct from target_trip_id
+     or not tripmap_private.account_json_is_safe_nonnegative_integer(trip_step -> 'expectedRevision')
+     or (trip_step ->> 'expectedRevision')::numeric < 1
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' = 'item'
+         and (
+           not tripmap_private.account_json_is_safe_nonnegative_integer(step.value -> 'expectedRevision')
+           or (step.value ->> 'expectedRevision')::numeric < 1
+         )
+     )
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+       where step.value ->> 'objectType' in (
+         'replan_event', 'replan_record', 'trip_intelligence_applied_change'
+       )
+         and step.value -> 'expectedRevision' <> '0'::jsonb
+     ) then
+    return false;
+  end if;
+
+  if trip_step -> 'payload' -> 'updatedAt' is distinct from record_step -> 'payload' -> 'createdAt'
+     or event_step -> 'payload' ->> 'tripId' is distinct from target_trip_id
+     or event_step -> 'payload' -> 'updatedAt' is distinct from record_step -> 'payload' -> 'createdAt'
+     or record_step -> 'payload' ->> 'tripId' is distinct from target_trip_id
+     or record_step -> 'payload' ->> 'eventId' is distinct from event_step ->> 'objectId'
+     or history_step -> 'payload' ->> 'tripId' is distinct from target_trip_id
+     or history_step -> 'payload' ->> 'sourceId' is distinct from record_step ->> 'objectId'
+     or history_step -> 'payload' -> 'updatedAt' is distinct from record_step -> 'payload' -> 'createdAt'
+     or history_step -> 'payload' ->> 'targetId' is distinct from event_step -> 'payload' ->> 'itemId'
+        and history_step -> 'payload' ->> 'targetId' is distinct from event_step -> 'payload' ->> 'dayId' then
+    return false;
+  end if;
+
+  if pg_catalog.jsonb_array_length(record_step -> 'payload' -> 'scopeItemIds') <> item_count
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as item_step(value)
+       where item_step.value ->> 'objectType' = 'item'
+         and not (record_step -> 'payload' -> 'scopeItemIds' ? (item_step.value ->> 'objectId'))
+     )
+     or pg_catalog.jsonb_array_length(record_step -> 'payload' -> 'afterSnapshot' -> 'items') <> item_count
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as item_step(value)
+       where item_step.value ->> 'objectType' = 'item'
+         and not exists (
+           select 1
+           from pg_catalog.jsonb_array_elements(
+             record_step -> 'payload' -> 'afterSnapshot' -> 'items'
+           ) as snapshot_item(value)
+           where snapshot_item.value ->> 'id' = item_step.value ->> 'objectId'
+             and snapshot_item.value = item_step.value -> 'payload'
+         )
+     )
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(record_step -> 'payload' -> 'scopeItemIds') as scoped(value)
+       where not exists (
+         select 1
+         from pg_catalog.jsonb_array_elements(
+           record_step -> 'payload' -> 'beforeSnapshot' -> 'items'
+         ) as snapshot_item(value)
+         where snapshot_item.value ->> 'id' = scoped.value #>> '{}'
+       )
+     )
+     or (
+       select pg_catalog.count(*)
+       from pg_catalog.jsonb_array_elements(selected_option -> 'diff' -> 'itemChanges') as change(value)
+       where change.value ->> 'changeType' <> 'unchanged'
+     ) <> item_count
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(record_step -> 'payload' -> 'scopeItemIds') as scoped(value)
+       where not exists (
+         select 1
+         from pg_catalog.jsonb_array_elements(selected_option -> 'diff' -> 'itemChanges') as change(value)
+         where change.value ->> 'itemId' = scoped.value #>> '{}'
+           and change.value ->> 'changeType' <> 'unchanged'
+       )
+     )
+     or pg_catalog.jsonb_array_length(selected_option -> 'itemPatches') <> item_count
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as item_step(value)
+       where item_step.value ->> 'objectType' = 'item'
+         and not exists (
+           select 1
+           from pg_catalog.jsonb_array_elements(selected_option -> 'itemPatches') as patch(value)
+           where patch.value ->> 'itemId' = item_step.value ->> 'objectId'
+         )
+     )
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as item_step(value)
+       where item_step.value ->> 'objectType' = 'item'
+         and not exists (
+           select 1
+           from pg_catalog.jsonb_array_elements(
+             record_step -> 'payload' -> 'beforeSnapshot' -> 'items'
+           ) as snapshot_item(value)
+           join pg_catalog.jsonb_array_elements(selected_option -> 'itemPatches') as patch(value)
+             on patch.value ->> 'itemId' = snapshot_item.value ->> 'id'
+           where snapshot_item.value ->> 'id' = item_step.value ->> 'objectId'
+             and (
+               snapshot_item.value
+               || (patch.value -> 'patch')
+               || pg_catalog.jsonb_build_object(
+                 'updatedAt', record_step -> 'payload' -> 'createdAt'
+               )
+               || case
+                    when patch.value -> 'patch' ? 'executionState' then
+                      pg_catalog.jsonb_build_object(
+                        'executionState',
+                        patch.value -> 'patch' -> 'executionState'
+                        || pg_catalog.jsonb_build_object(
+                          'updatedAt', record_step -> 'payload' -> 'createdAt'
+                        )
+                      )
+                    else '{}'::jsonb
+                  end
+             ) = item_step.value -> 'payload'
+         )
+     ) then
+    return false;
+  end if;
+
+  if not exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(
+         record_step -> 'payload' -> 'accountObjectBaseline'
+       ) as baseline(value)
+       where baseline.value ->> 'objectType' = 'trip'
+         and baseline.value ->> 'objectId' = target_trip_id
+         and baseline.value -> 'expectedRevision' = trip_step -> 'expectedRevision'
+     )
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(target_steps) as item_step(value)
+       where item_step.value ->> 'objectType' = 'item'
+         and not exists (
+           select 1
+           from pg_catalog.jsonb_array_elements(
+             record_step -> 'payload' -> 'accountObjectBaseline'
+           ) as baseline(value)
+           where baseline.value ->> 'objectType' = 'item'
+             and baseline.value ->> 'objectId' = item_step.value ->> 'objectId'
+             and baseline.value -> 'expectedRevision' = item_step.value -> 'expectedRevision'
+         )
+     ) then
+    return false;
+  end if;
+
+  return true;
+exception
+  when others then
+    return false;
+end;
+$$;
+
+create or replace function tripmap_private.account_adaptive_replan_baseline_matches(
+  target_owner_id uuid,
+  target_trip_id text,
+  target_steps jsonb
+)
+returns boolean
+language plpgsql
+stable
+strict
+security invoker
+set search_path = ''
+as $$
+declare
+  baseline jsonb;
+  record_payload jsonb;
+begin
+  select
+    step.value -> 'payload',
+    step.value -> 'payload' -> 'accountObjectBaseline'
+  into record_payload, baseline
+  from pg_catalog.jsonb_array_elements(target_steps) as step(value)
+  where step.value ->> 'objectType' = 'replan_record';
+
+  if pg_catalog.jsonb_typeof(baseline) <> 'array' then
+    return false;
+  end if;
+
+  return coalesce((
+    select pg_catalog.count(*)
+    from pg_catalog.jsonb_array_elements(baseline) as expected(value)
+  ) = (
+    select pg_catalog.count(*)
+    from public.tripmap_account_objects as current_object
+    where current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type in ('trip', 'day', 'item', 'ticket_meta', 'ledger_expense')
+      and not current_object.tombstone
+  ) and not exists (
+    select 1
+    from pg_catalog.jsonb_array_elements(baseline) as expected(value)
+    left join public.tripmap_account_objects as current_object
+      on current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type = expected.value ->> 'objectType'
+      and current_object.object_id = expected.value ->> 'objectId'
+      and not current_object.tombstone
+    where current_object.object_id is null
+      or current_object.revision <> (expected.value ->> 'expectedRevision')::bigint
+  ) and not exists (
+    select 1
+    from public.tripmap_account_objects as current_object
+    where current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type in ('trip', 'day', 'item', 'ticket_meta', 'ledger_expense')
+      and not current_object.tombstone
+      and not exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(baseline) as expected(value)
+        where expected.value ->> 'objectType' = current_object.object_type
+          and expected.value ->> 'objectId' = current_object.object_id
+      )
+  ) and not exists (
+    select 1
+    from pg_catalog.jsonb_array_elements(
+      record_payload -> 'beforeSnapshot' -> 'items'
+    ) as snapshot(value)
+    left join public.tripmap_account_objects as current_object
+      on current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type = 'item'
+      and current_object.object_id = snapshot.value ->> 'id'
+      and not current_object.tombstone
+    where current_object.object_id is null
+      or current_object.payload is distinct from snapshot.value
+  ) and not exists (
+    select 1
+    from (
+      select snapshot.value
+      from pg_catalog.jsonb_array_elements(
+        record_payload -> 'beforeSnapshot' -> 'days'
+      ) as snapshot(value)
+      union all
+      select snapshot.value
+      from pg_catalog.jsonb_array_elements(
+        record_payload -> 'afterSnapshot' -> 'days'
+      ) as snapshot(value)
+    ) as snapshot
+    left join public.tripmap_account_objects as current_object
+      on current_object.owner_id = target_owner_id
+      and current_object.trip_id = target_trip_id
+      and current_object.object_type = 'day'
+      and current_object.object_id = snapshot.value ->> 'id'
+      and not current_object.tombstone
+    where current_object.object_id is null
+      or current_object.payload is distinct from snapshot.value
+  ), false);
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function tripmap_private.account_adaptive_replan_workflow_shape_is_valid(text, jsonb)
+  from public, anon, authenticated;
+revoke all on function tripmap_private.account_adaptive_replan_baseline_matches(uuid, text, jsonb)
+  from public, anon, authenticated;
+
 create or replace function tripmap_private.account_import_workflow_shape_is_valid(
   target_trip_id text,
   target_steps jsonb
@@ -961,6 +2136,22 @@ begin
       );
     end if;
 
+    if target_workflow_id = 'trip.replan.apply@1'
+       and step_operation = 'upsert'
+       and tripmap_private.account_adaptive_replan_payload_is_valid(
+         step_object_type,
+         step_payload
+       ) is not true then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'invalid_or_sensitive_payload'
+      );
+    end if;
+
     if (
       target_workflow_id = 'day.items.reorder@1'
       and (
@@ -1000,9 +2191,8 @@ begin
       target_workflow_id = 'trip.replan.apply@1'
       and (
         step_object_type not in (
-          'day', 'item', 'replan_event', 'replan_record',
-          'trip_intelligence_applied_change',
-          'trip_intelligence_suggestion_state'
+          'trip', 'item', 'replan_event', 'replan_record',
+          'trip_intelligence_applied_change'
         )
         or step_operation <> 'upsert'
       )
@@ -1060,6 +2250,21 @@ begin
     group by duplicate_object.value ->> 'objectType', duplicate_object.value ->> 'objectId'
     having pg_catalog.count(*) > 1
   ) then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'rejected',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'workflow_shape_invalid'
+    );
+  end if;
+
+  if target_workflow_id = 'trip.replan.apply@1'
+     and tripmap_private.account_adaptive_replan_workflow_shape_is_valid(
+       target_trip_id,
+       target_steps
+     ) is not true then
     return pg_catalog.jsonb_build_object(
       'schemaVersion', 1,
       'status', 'rejected',
@@ -1238,10 +2443,9 @@ begin
     'hex'
   );
 
-  -- New-trip import owns the trip lifecycle while it proves the account has no
-  -- prior object in this scope. Other workflows share the lock with ordinary
-  -- object mutations and can still run concurrently on independent objects.
-  if target_workflow_id = 'trip.import.commit@1' then
+  -- Import and adaptive replan own the trip lifecycle while they prove a
+  -- closed graph. Other workflows share this lock with ordinary mutations.
+  if target_workflow_id in ('trip.import.commit@1', 'trip.replan.apply@1') then
     perform pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(
         current_user_id::text || ':trip-lifecycle:' || target_trip_id,
@@ -1285,11 +2489,25 @@ begin
   -- Match the single-object RPC lock order so batch retries cannot race an
   -- independent object mutation or acknowledge a receipt after it advanced.
   for lock_key in
-    select distinct
-      (requested_step.value ->> 'objectType')
-      || ':'
-      || (requested_step.value ->> 'objectId')
-    from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+    select distinct requested_lock.object_key
+    from (
+      select
+        (requested_step.value ->> 'objectType')
+          || ':'
+          || (requested_step.value ->> 'objectId') as object_key
+      from pg_catalog.jsonb_array_elements(target_steps) as requested_step(value)
+      union all
+      select
+        (baseline.value ->> 'objectType')
+          || ':'
+          || (baseline.value ->> 'objectId') as object_key
+      from pg_catalog.jsonb_array_elements(target_steps) as record_step(value)
+      cross join lateral pg_catalog.jsonb_array_elements(
+        record_step.value -> 'payload' -> 'accountObjectBaseline'
+      ) as baseline(value)
+      where target_workflow_id = 'trip.replan.apply@1'
+        and record_step.value ->> 'objectType' = 'replan_record'
+    ) as requested_lock
     order by 1
   loop
     perform pg_catalog.pg_advisory_xact_lock(
@@ -1636,6 +2854,44 @@ begin
     );
   end if;
 
+  if target_workflow_id = 'trip.replan.apply@1'
+     and tripmap_private.account_adaptive_replan_baseline_matches(
+       current_user_id,
+       target_trip_id,
+       target_steps
+     ) is not true then
+    return pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'status', 'conflict',
+      'batchMutationId', target_batch_mutation_id,
+      'workflowId', target_workflow_id,
+      'tripId', target_trip_id,
+      'reason', 'revision_mismatch',
+      'conflicts', pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'stepId', (
+            select candidate.value ->> 'stepId'
+            from pg_catalog.jsonb_array_elements(target_steps) as candidate(value)
+            where candidate.value ->> 'objectType' = 'replan_record'
+          ),
+          'mutationId', (
+            select candidate.value ->> 'mutationId'
+            from pg_catalog.jsonb_array_elements(target_steps) as candidate(value)
+            where candidate.value ->> 'objectType' = 'replan_record'
+          ),
+          'objectType', 'replan_record',
+          'objectId', (
+            select candidate.value ->> 'objectId'
+            from pg_catalog.jsonb_array_elements(target_steps) as candidate(value)
+            where candidate.value ->> 'objectType' = 'replan_record'
+          ),
+          'currentRevision', 0,
+          'currentObject', null
+        )
+      )
+    );
+  end if;
+
   if exists (
     select 1
     from tripmap_private.account_mutation_receipts as existing_mutation
@@ -1838,6 +3094,54 @@ begin
        and (
          current_object.tombstone
          or step_payload -> 'createdAt' is distinct from current_object.payload -> 'createdAt'
+         or (step_payload ->> 'updatedAt')::numeric
+            <= (current_object.payload ->> 'updatedAt')::numeric
+       ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
+
+    if target_workflow_id = 'trip.replan.apply@1'
+       and step_object_type = 'trip'
+       and (
+         not has_current_object
+         or current_object.tombstone
+         or step_payload - 'updatedAt'
+            is distinct from current_object.payload - 'updatedAt'
+         or (step_payload ->> 'updatedAt')::numeric
+            <= (current_object.payload ->> 'updatedAt')::numeric
+       ) then
+      return pg_catalog.jsonb_build_object(
+        'schemaVersion', 1,
+        'status', 'rejected',
+        'batchMutationId', target_batch_mutation_id,
+        'workflowId', target_workflow_id,
+        'tripId', target_trip_id,
+        'reason', 'workflow_shape_invalid'
+      );
+    end if;
+
+    if target_workflow_id = 'trip.replan.apply@1'
+       and step_object_type = 'item'
+       and (
+         not has_current_object
+         or current_object.tombstone
+         or step_payload - array[
+              'dayId', 'endTime', 'executionState',
+              'previousTransportDurationMinutes', 'previousTransportMode',
+              'previousTransportNote', 'sortOrder', 'startTime', 'updatedAt'
+            ]::text[]
+            is distinct from current_object.payload - array[
+              'dayId', 'endTime', 'executionState',
+              'previousTransportDurationMinutes', 'previousTransportMode',
+              'previousTransportNote', 'sortOrder', 'startTime', 'updatedAt'
+            ]::text[]
          or (step_payload ->> 'updatedAt')::numeric
             <= (current_object.payload ->> 'updatedAt')::numeric
        ) then
